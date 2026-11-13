@@ -1,20 +1,12 @@
 package pages
 
 import (
-	"context"
 	"embed"
 	"io/fs"
-	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/settings"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -30,44 +22,17 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Now func() float64
+	Service func(*web.Deps) *mediaapp.Service
 }
 
 type service struct {
-	deps    *web.Deps
-	now     func() float64
-	links   *media.Links
-	effects *ledger.Store
-}
-
-func (s *service) settings(ctx context.Context) media.Settings {
-	set, err := media.Load(ctx, s.deps.DB.Read, s.deps.Env)
-	if err != nil {
-		panic(err)
-	}
-	return set
-}
-
-func (s *service) artwork(set media.Settings) *media.Artwork {
-	return media.NewArtwork(s.deps.Cfg.MediaCacheDir(), set.TMDB(), set.Tuning)
-}
-
-func PublicCheck(cfg config.Config, _ config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {
-	return media.NewLinks(reg, d, cfg.MediaLinkKeyPath()).Verifier()
+	deps *web.Deps
+	app  *mediaapp.Service
 }
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		now := o.Now
-		if now == nil {
-			now = media.Now
-		}
-		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, imapclient.Opener(d.Cfg), now)
-		if err != nil {
-			panic(err)
-		}
-		d.DrainOnStop(effects.Drain)
-		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), effects: effects}
+		s := &service{deps: d, app: o.Service(d)}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)

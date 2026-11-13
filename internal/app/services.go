@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
@@ -102,6 +104,7 @@ func (a *App) scheduler(beat func()) *scheduler.Scheduler {
 		Recovered: rt.recover,
 		Work:      a.work,
 		Own:       a.own,
+		Start:     asstapp.ScheduledStart,
 	})
 }
 

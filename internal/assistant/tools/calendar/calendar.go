@@ -2,18 +2,12 @@ package calendartools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/approval"
-	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/calendar/candidates"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
+	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -25,33 +19,8 @@ var eventProperties = `"calendar":{"type":"string","enum":["icloud","google"]},"
 	`"end":{"type":"string","description":"Exclusive end, same format. Default: one hour (all-day: one day) after start."},` +
 	`"all_day":{"type":"boolean","description":"start/end are dates"},"location":{"type":"string"},"notes":{"type":"string"}`
 
-func guard(ctx context.Context, q db.Querier, target calendar.Target) error {
-	id, err := ledger.BlockedTarget(ctx, q, string(target)+":")
-	if err != nil {
-		return err
-	}
-	if id != 0 {
-		return tool.Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium effects resolve %d --outcome applied` or on the Activity page before writing to the %s calendar again", id, id, target))
-	}
-	return nil
-}
-
-func wrap(err error) error {
-	var missing calendar.NotConfigured
-	var failed calendar.Error
-	switch {
-	case err == nil:
-		return nil
-	case errors.As(err, &missing):
-		return tool.NotConfigured(missing.Error())
-	case errors.As(err, &failed):
-		return tool.Error(failed.Error())
-	}
-	var raised *tool.Raised
-	if errors.As(err, &raised) {
-		return err
-	}
-	return err
+func service(tc *tool.Context) *calapp.Service {
+	return calapp.New(tc.DB, tc.Env, tc.Ledger, tc.Now)
 }
 
 func truthy(v any) bool {
@@ -74,20 +43,34 @@ func truthy(v any) bool {
 	return true
 }
 
-func optionalText(args tool.Args, name string) (any, error) {
+func optionalText(args tool.Args, name string) (*string, error) {
 	text, ok, err := tool.TextArg(args, name, false)
 	if err != nil || !ok {
 		return nil, err
 	}
-	return text, nil
+	return &text, nil
 }
 
-func requiredText(args tool.Args, name string) (any, error) {
-	text, ok, err := tool.TextArg(args, name, true)
-	if err != nil || !ok {
-		return nil, err
+func requiredText(args tool.Args, name string) (string, error) {
+	text, _, err := tool.TextArg(args, name, true)
+	return text, err
+}
+
+func target(args tool.Args) string {
+	v, _ := args.Get("calendar")
+	s, _ := v.(string)
+	return s
+}
+
+func listed(read calapp.Listing) tool.Marked {
+	var marks tool.Marks
+	if read.Messages {
+		marks |= tool.Messages
 	}
-	return text, nil
+	if read.Untrusted {
+		marks |= tool.Untrusted
+	}
+	return tool.Marked{Value: read.Value, Marks: marks}
 }
 
 func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -99,26 +82,15 @@ func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	target, _, err := tool.TextArg(args, "calendar", false)
+	filter, _, err := tool.TextArg(args, "calendar", false)
 	if err != nil {
 		return nil, err
 	}
-	filter, err := calendar.ParseFilter(target)
+	read, err := service(tc).List(ctx, calapp.ListInput{Start: start, End: end, Calendar: filter})
 	if err != nil {
-		return nil, wrap(err)
+		return nil, tool.Fail(err)
 	}
-	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	listing, err := calendar.ListEvents(ctx, tc.Env, set, start, end, filter)
-	if err != nil {
-		return nil, wrap(err)
-	}
-	if len(listing.Events) == 0 {
-		return tool.Marked{Value: listing.Dict(), Marks: 0}, nil
-	}
-	return tool.Marked{Value: listing.Dict(), Marks: tool.Messages | tool.Untrusted}, nil
+	return listed(read.Data), nil
 }
 
 func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -126,236 +98,55 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	row, err := calendar.FindTracked(ctx, tc.DB.Write, uid)
+	change, err := service(tc).RequestDelete(ctx, calapp.DeleteInput{UID: uid, ThreadID: tc.ThreadID, RunID: tc.RunID, ProposalID: tc.ProposalID})
 	if err != nil {
-		return nil, err
+		return nil, tool.Error(application.Classify(err).Error())
 	}
-	if row == nil {
-		return nil, tool.Error("only events created through atrium can be deleted, and this uid is not one of them")
-	}
-	var stored any
-	if err := json.Unmarshal([]byte(row.Spec), &stored); err != nil {
-		return nil, err
-	}
-	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
+	return map[string]any{"deleted": change.Data.Deleted, "calendar": change.Data.Calendar}, nil
+}
+
+func proposed(change application.Change[calapp.Proposed], err error) (any, error) {
 	if err != nil {
-		return nil, err
+		return nil, tool.Fail(err)
 	}
-	rowTarget, err := calendar.ParseTarget(row.Calendar)
-	if err != nil {
-		return nil, wrap(err)
+	if !change.Data.Proposed {
+		return map[string]any{"proposed": false, "reason": change.Data.Reason}, nil
 	}
-	if err := guard(ctx, tc.DB.Read, rowTarget); err != nil {
-		return nil, err
-	}
-	target := row.Calendar + ":" + uid
-	before := jsonOf(map[string]any{"calendar": row.Calendar, "spec": stored})
-	undo := jsonOf(recreateUndo{Op: "calendar_recreate", Calendar: row.Calendar, Spec: stored})
-	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
-		Origin: "calendar", Operation: "calendar_delete", OperationKey: "calendar_delete:" + ledger.NewKey(),
-		Target: target, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID, Before: before, Undo: undo,
-		Resources: []ledger.Resource{{Key: "calendar:" + target}},
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := calendar.DeleteEvent(ctx, tc.Env, set, rowTarget, uid); err != nil {
-		state := ledger.Failed
-		if calendar.OutcomeUnknown(err) {
-			state = ledger.Unknown
+	return map[string]any{"proposed": true, "proposal_id": change.Data.ProposalID}, nil
+}
+
+func eventInput(args tool.Args) (calapp.EventInput, error) {
+	in := calapp.EventInput{Calendar: target(args)}
+	err := texts(args, []string{"title", "start", "end", "location", "notes"}, []**string{&in.Title, &in.Start, &in.End, &in.Location, &in.Notes})
+	flag, _ := args.Get("all_day")
+	in.AllDay = truthy(flag)
+	return in, err
+}
+
+func texts(args tool.Args, names []string, fields []**string) error {
+	for i, name := range names {
+		v, err := optionalText(args, name)
+		if err != nil {
+			return err
 		}
-		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Target: target, Before: before, Error: err.Error()}, nil)
-		return nil, wrap(err)
+		*fields[i] = v
 	}
-	err = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
-		State: ledger.Done, Target: target, Before: before, Undo: undo,
-	}, func(ctx context.Context, tx *sql.Tx) error {
-		return calendar.Untrack(ctx, tx, uid, tc.Now())
-	})
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"deleted": uid, "calendar": row.Calendar}, nil
+	return nil
 }
 
 func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw := map[string]any{}
-	for _, name := range []string{"title", "start", "end", "location", "notes"} {
-		v, err := optionalText(args, name)
-		if err != nil {
-			return nil, err
-		}
-		raw[name] = v
+	in, err := eventInput(args)
+	if err != nil {
+		return nil, err
 	}
-	flag, _ := args.Get("all_day")
-	target, _ := args.Get("calendar")
-	raw["all_day"], raw["calendar"] = truthy(flag), target
-	source := map[string]any{}
 	if _, hasID := args.Get("source_message_id"); hasID {
 		messageID, _, err := tool.IntArg(args, "source_message_id", true)
 		if err != nil {
 			return nil, err
 		}
-		source["message_id"] = messageID
+		in.SourceMessageID = &messageID
 	}
-	proposals := &calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}
-	id, created, err := proposals.Propose(ctx, raw, source, "")
-	var refused calendar.ProposalError
-	if errors.As(err, &refused) {
-		return nil, tool.Error(refused.Error())
-	}
-	if err != nil {
-		return nil, wrap(err)
-	}
-	if !created {
-		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
-	}
-	if stored, ok := source["message_id"]; ok {
-		messageID, _ := stored.(int64)
-		if _, err := candidates.Drafted(ctx, tc.DB, messageID, tc.Now()); err != nil {
-			return nil, err
-		}
-	}
-	return map[string]any{"proposed": true, "proposal_id": id}, nil
-}
-
-type deleteUndo struct {
-	Op       string `json:"op"`
-	Calendar string `json:"calendar"`
-	UID      string `json:"uid"`
-}
-
-type recreateUndo struct {
-	Op       string `json:"op"`
-	Calendar string `json:"calendar"`
-	Spec     any    `json:"spec"`
-}
-
-func jsonOf(v any) json.RawMessage {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return json.RawMessage(`{}`)
-	}
-	return b
-}
-
-func undoDelete(store *ledger.Store, env config.Env) ledger.Undoer {
-	return ledger.Undoer{
-		Validate: func(raw json.RawMessage) error {
-			var u deleteUndo
-			if err := json.Unmarshal(raw, &u); err != nil || u.UID == "" {
-				return ledger.Refused("calendar undo payload is invalid")
-			}
-			return nil
-		},
-		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			var u deleteUndo
-			if err := json.Unmarshal(raw, &u); err != nil {
-				return ledger.Result{}, ledger.Refused("calendar undo payload is invalid")
-			}
-			target, err := calendar.ParseTarget(u.Calendar)
-			if err != nil {
-				return ledger.Result{}, ledger.Refused(err.Error())
-			}
-			uid := u.UID
-			set, err := calendar.LoadSettings(ctx, store.DB.Read)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			if err := calendar.DeleteEvent(ctx, env, set, target, uid); err != nil {
-				var failed calendar.Error
-				if errors.As(err, &failed) {
-					return ledger.Result{State: ledger.Failed, Error: failed.Error()}, nil
-				}
-				return ledger.Result{}, err
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"deleted": uid})}, nil
-		},
-		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
-			if result.State != ledger.Done {
-				return nil
-			}
-			var u deleteUndo
-			if err := json.Unmarshal(raw, &u); err != nil {
-				return err
-			}
-			return calendar.Untrack(ctx, tx, u.UID, nowSeconds())
-		},
-	}
-}
-
-func undoRecreate(store *ledger.Store, env config.Env) ledger.Undoer {
-	return ledger.Undoer{
-		Validate: func(raw json.RawMessage) error {
-			var u recreateUndo
-			if err := json.Unmarshal(raw, &u); err != nil || u.Calendar == "" || u.Spec == nil {
-				return ledger.Refused("calendar undo payload is invalid")
-			}
-			return nil
-		},
-		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			var u recreateUndo
-			if err := json.Unmarshal(raw, &u); err != nil {
-				return ledger.Result{}, ledger.Refused("calendar undo payload is invalid")
-			}
-			target, err := calendar.ParseTarget(u.Calendar)
-			if err != nil {
-				return ledger.Result{}, ledger.Refused(err.Error())
-			}
-			restored, err := calendar.SpecOf(u.Spec)
-			if err != nil {
-				return ledger.Result{}, ledger.Refused(err.Error())
-			}
-			restored.UID = calendar.NewUID()
-			tz, err := calendar.Zone(ctx, env)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			set, err := calendar.LoadSettings(ctx, store.DB.Read)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			if _, err := calendar.CreateEvent(ctx, env, set, target, restored, tz); err != nil {
-				var failed calendar.Error
-				if errors.As(err, &failed) {
-					return ledger.Result{State: ledger.Failed, Error: failed.Error()}, nil
-				}
-				return ledger.Result{}, err
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"created": restored.UID, "spec": restored.Dict()})}, nil
-		},
-		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
-			if result.State != ledger.Done {
-				return nil
-			}
-			var u recreateUndo
-			if err := json.Unmarshal(raw, &u); err != nil {
-				return err
-			}
-			target, err := calendar.ParseTarget(u.Calendar)
-			if err != nil {
-				return err
-			}
-			var after struct {
-				Spec any `json:"spec"`
-			}
-			if err := json.Unmarshal(result.After, &after); err != nil {
-				return err
-			}
-			restored, err := calendar.SpecOf(after.Spec)
-			if err != nil {
-				return err
-			}
-			return calendar.Track(ctx, tx, restored, target, nil, nowSeconds())
-		},
-	}
-}
-
-func Undo(store *ledger.Store, env config.Env) []ledger.UndoDefinition {
-	return []ledger.UndoDefinition{
-		{Operation: "calendar_delete", Undoer: undoDelete(store, env)},
-		{Operation: "calendar_recreate", Undoer: undoRecreate(store, env)},
-	}
+	return proposed(service(tc).ProposeCreate(ctx, in))
 }
 
 func schema(properties string, required string) json.RawMessage {
@@ -425,5 +216,3 @@ func baseTools() []tool.Tool {
 		},
 	}
 }
-
-func nowSeconds() float64 { return float64(time.Now().UnixNano()) / 1e9 }

@@ -2,201 +2,46 @@ package pages
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/block"
-	"github.com/jeiang/atrium/internal/assistant/files"
-	"github.com/jeiang/atrium/internal/assistant/projects"
-	"github.com/jeiang/atrium/internal/assistant/references"
-	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/kb"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/tracking"
-	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
 )
 
-type listData struct {
-	Threads []threads.Listed   `json:"threads"`
-	Q       string             `json:"q"`
-	View    string             `json:"view"`
-	Welcome bool               `json:"welcome"`
-	Date    string             `json:"date"`
-	Digest  []block.DigestLine `json:"digest"`
-	Agenda  bool               `json:"agenda"`
-	About   *About             `json:"about"`
-
-	Defaults threads.Options `json:"defaults"`
-	Composer ComposerView    `json:"composer"`
-}
-
-type About struct {
-	Ref     string `json:"ref"`
-	Label   string `json:"label"`
-	Line    string `json:"-"`
-	Project int64  `json:"-"`
-}
-
-var (
-	aboutUID  = regexp.MustCompile(`^[A-Za-z0-9@._+-]{1,200}$`)
-	aboutFile = regexp.MustCompile(`^[A-Za-z0-9._ ()+-]{1,200}$`)
-)
-
-func eventRef(day, uid string) string {
-	if !aboutUID.MatchString(uid) {
-		return ""
-	}
-	return "event:" + day + ":" + uid
-}
-
-func (p *pages) aboutEvent(ctx context.Context, rest string) *About {
-	day, uid, _ := strings.Cut(rest, ":")
-	start, err := time.Parse(time.DateOnly, day)
-	if err != nil || eventRef(day, uid) == "" || !module.IsEnabled(p.deps.Ctx, module.Calendar) {
-		return nil
-	}
-	set, err := calendar.LoadSettings(ctx, p.deps.DB.Read)
-	check(err)
-	listing, err := calendar.ListEvents(ctx, p.deps.Env, set, day, start.AddDate(0, 0, 1).Format(time.DateOnly), calendar.Filter{})
-	if err != nil {
-		return nil
-	}
-	for _, event := range listing.Events {
-		if event.UID == uid {
-			return &About{Ref: eventRef(day, uid), Label: event.Title, Line: "About the calendar event with uid " + uid + " on " + day + "."}
-		}
-	}
-	return nil
-}
-
-func (p *pages) about(ctx context.Context, ref string) *About {
-	kind, raw, _ := strings.Cut(ref, ":")
-	if kind == "event" {
-		return p.aboutEvent(ctx, raw)
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return nil
-	}
-	number := strconv.FormatInt(id, 10)
-	a := About{Ref: kind + ":" + number}
-	switch kind {
-	case "mail":
-		a.Label, err = mail.Subject(ctx, p.deps.DB.Read, id)
-		a.Line = "About mail message " + number + "."
-	case "knowledge":
-		a.Label, err = kb.Title(ctx, p.deps.DB.Read, id)
-		a.Line = "About knowledge record " + number + "."
-	case "package":
-		a.Label, err = tracking.Label(ctx, p.deps.DB.Read, id)
-		a.Line = "About tracked package " + number + "."
-	case "file":
-		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT name, project_id FROM thread_files WHERE id = ? AND project_id IS NOT NULL", id).Scan(&a.Label, &a.Project)
-		if err == nil && !aboutFile.MatchString(a.Label) {
-			return nil
-		}
-		a.Line = "About the project file " + strconv.Quote(a.Label) + "."
-	default:
-		return nil
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	check(err)
-	if a.Label == "" {
-		a.Label = strings.TrimSuffix(strings.TrimPrefix(a.Line, "About "), ".")
-	}
-	return &a
-}
-
-func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) {
-	match := ""
-	if q != "" {
-		var err error
-		match, err = textsearch.FTSQuery(q)
-		check(err)
-	}
-	limit := config.TuningChatThreadLimit
-	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived})
-	check(err)
-	check(fillThreadCosts(r.Context(), p.deps.DB.Read, found))
-	if found == nil {
-		found = []threads.Listed{}
-	}
-	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
-	check(err)
-	data := listData{
-		Threads: found, Q: q, View: view,
-		Defaults: defaults,
-		Composer: composerData(r.Context(), defaults.Model, defaults.Effort, defaults.Thinking, defaults.ContextLimit, defaults.WebSearch, defaults.CostCapUSD, 0),
-	}
-	if web.IsPartial(r) {
-		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
-		return
-	}
-	loc, err := config.From(r.Context()).Location(p.deps.Env)
-	check(err)
-	day := time.Unix(int64(p.now()), 0).In(loc)
-	data.Date = day.Format("Monday, January 2")
-	data.Digest = p.digestLines(r.Context(), day)
-	data.Agenda = module.IsEnabled(p.deps.Ctx, module.Calendar)
-	data.About = p.about(r.Context(), web.QueryValue(r.URL.Query(), "about"))
-	data.Welcome = len(found) == 0 && q == "" && view == "" && data.About == nil
-	if data.Welcome {
-		exists, err := threads.HasChat(r.Context(), p.deps.DB.Read)
-		check(err)
-		data.Welcome = !exists
-	}
-	p.page(w, r, "chat.gohtml", data)
-}
-
 func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	view := web.QueryValue(query, "view")
-	if view != "" && view != archived && view != allThreads {
-		p.fail(w, r, http.StatusUnprocessableEntity, "unknown view")
+	partial := web.IsPartial(r)
+	read, err := p.assistant().Home(r.Context(), asstapp.HomeInput{Q: web.QueryValue(query, "q"), View: web.QueryValue(query, "view"),
+		About: web.QueryValue(query, "about"), Limit: config.TuningChatThreadLimit, List: partial})
+	if err != nil {
+		p.readFailed(w, r, err)
 		return
 	}
-	p.listing(w, r, strings.TrimSpace(web.QueryValue(query, "q")), view)
+	if partial {
+		if web.FragmentNotModified(w, r, read.Revision) {
+			return
+		}
+		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", read.Data)
+		return
+	}
+	p.page(w, r, "chat.gohtml", read.Data)
 }
 
-func attachmentBlocks(blocks []files.AttachmentBlock) []json.RawMessage {
-	out := make([]json.RawMessage, len(blocks))
-	for i, b := range blocks {
-		raw, err := json.Marshal(b)
-		check(err)
-		out[i] = raw
+func (p *pages) threadList(w http.ResponseWriter, r *http.Request, q, view string) {
+	read, err := p.assistant().Home(r.Context(), asstapp.HomeInput{Q: q, View: view, Limit: config.TuningChatThreadLimit, List: true})
+	if err != nil {
+		p.readFailed(w, r, err)
+		return
 	}
-	return out
-}
-
-func (p *pages) attach(w http.ResponseWriter, r *http.Request, thread *threads.Thread, uploads []files.UploadedFile) ([]json.RawMessage, bool) {
-	if len(uploads) == 0 {
-		return nil, true
-	}
-	limit := threads.ContextLimitOf(*thread)
-	blocks, err := files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ThreadOwner(thread.ID), &limit)
-	var refused files.FileError
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not attached", err.Error())
-		return nil, false
-	}
-	check(err)
-	return attachmentBlocks(blocks), true
+	p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", read.Data)
 }
 
 func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
@@ -215,31 +60,6 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
 		return
 	}
-	ctx := detached(r)
-	refs, err := references.Resolve(ctx, p.deps.DB.Read, 0, text)
-	if p.refused(w, r, err) {
-		return
-	}
-	if about := p.about(ctx, web.FormString(form, "about", "")); about != nil && text != "" {
-		text = about.Line + "\n\n" + text
-		if about.Project != 0 {
-			projectID = about.Project
-		}
-	}
-	var project *int64
-	if projectID != 0 {
-		found, err := projects.Get(ctx, p.deps.DB.Read, projectID)
-		check(err)
-		if found == nil || found.ID == 0 {
-			p.fail(w, r, http.StatusNotFound, "unknown project")
-			return
-		}
-		if problem, archived := archivedProject(found, "start chats in it"); archived {
-			p.failure(w, r, "Project archived", problem)
-			return
-		}
-		project = &projectID
-	}
 	webSearch := true
 	if values, ok := form["web_search"]; ok {
 		webSearch = slices.Contains(values, "1")
@@ -250,31 +70,16 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 			costCap = &value
 		}
 	}
-	threadID, err := threads.Create(ctx, p.deps.DB.Write, p.now(), threads.Spec{
-		Kind: threads.Chat, ProjectID: project,
+	started, err := p.assistant().ThreadStart(detached(r), asstapp.StartInput{
+		Kind: threads.Chat, ProjectID: projectID, About: web.FormString(form, "about", ""),
 		Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: optional(form, "context_limit"),
 		Thinking: web.FormString(form, "thinking", ""), WebSearch: &webSearch, CostCapUSD: costCap,
+		Text: text, Files: uploads, Operator: true,
 	})
-	var refused threads.OptionError
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not started", err.Error())
+	if p.refused(w, r, err) {
 		return
 	}
-	check(err)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	attached, ok := p.attach(w, r, thread, uploads)
-	if !ok {
-		check(p.svc().DeleteThread(ctx, threadID))
-		return
-	}
-	if text != "" {
-		_, err := p.svc().StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true, Files: append(attached, refs...)})
-		if p.refused(w, r, err) {
-			return
-		}
-	}
-	to := "/chat/" + strconv.FormatInt(threadID, 10)
+	to := "/chat/" + strconv.FormatInt(started.Data.ThreadID, 10)
 	if web.IsPartial(r) {
 		hxRedirect(w, to)
 		return
@@ -282,7 +87,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, to)
 }
 
-func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, set func(context.Context, db.Querier, int64, bool) (bool, error)) {
+func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, set func(context.Context, asstapp.FlagInput) (application.Change[asstapp.ThreadChanged], error)) {
 	threadID, errs := pathInt(r, "thread_id")
 	form := web.FormValues(r)
 	value := formInt(form, "body", column, 1, &errs)
@@ -290,18 +95,15 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, s
 		web.Unprocessable(w, errs...)
 		return
 	}
-	ok, err := set(detached(r), p.deps.DB.Write, threadID, value != 0)
-	check(err)
-	if !ok {
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
+	if _, err := set(detached(r), asstapp.FlagInput{ThreadID: threadID, Set: value != 0}); p.refused(w, r, err) {
 		return
 	}
 	if web.IsPartial(r) {
 		view := web.FormString(form, "view", "")
 		if view != archived {
-			view = allThreads
+			view = asstapp.AllThreads
 		}
-		p.listing(w, r, strings.TrimSpace(web.FormString(form, "q", "")), view)
+		p.threadList(w, r, web.FormString(form, "q", ""), view)
 		return
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
@@ -318,29 +120,7 @@ func (p *pages) chatProject(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	var target *int64
-	if projectID != 0 {
-		found, err := projects.Get(detached(r), p.deps.DB.Read, projectID)
-		check(err)
-		if found == nil {
-			p.fail(w, r, http.StatusNotFound, "unknown project")
-			return
-		}
-		if problem, archived := archivedProject(found, "move chats into it"); archived {
-			p.failure(w, r, "Project archived", problem)
-			return
-		}
-		target = &projectID
-	}
-	moved, err := projects.MoveThread(detached(r), p.deps.DB.Write, threadID, target)
-	var refused projects.ProjectError
-	if errors.As(err, &refused) {
-		p.fail(w, r, http.StatusNotFound, err.Error())
-		return
-	}
-	check(err)
-	if !moved {
-		p.fail(w, r, http.StatusNotFound, "unknown chat thread")
+	if _, err := p.assistant().ThreadProject(detached(r), asstapp.MoveInput{ThreadID: threadID, ProjectID: projectID}); p.refused(w, r, err) {
 		return
 	}
 	redirect(w, r, "/chat/"+strconv.FormatInt(threadID, 10))
@@ -352,15 +132,14 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	changed, err := threads.SetOptions(detached(r), p.deps.DB.Write, threadID, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
+	_, err := p.assistant().ThreadOptions(detached(r), asstapp.OptionsInput{ThreadID: threadID, Model: web.FormString(form, "model", ""),
+		Effort: web.FormString(form, "effort", ""), ContextLimit: web.FormString(form, "context_limit", "")})
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not saved", err.Error())
 		return
 	}
-	check(err)
-	if !changed {
-		p.fail(w, r, http.StatusNotFound, "unknown chat thread")
+	if p.refused(w, r, err) {
 		return
 	}
 	if !web.IsPartial(r) {
@@ -373,7 +152,7 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	thread := threadOf(view)
 	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", OptionsSaved{
-		View: view, Composer: composerData(r.Context(), thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
+		View: view, Composer: composerOf(r.Context(), thread, threadID),
 	})
 }
 
@@ -382,7 +161,7 @@ func (p *pages) chatDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if p.refused(w, r, p.svc().DeleteThread(detached(r), threadID)) {
+	if _, err := p.assistant().ThreadDelete(detached(r), asstapp.ThreadInput{ID: threadID}); p.refused(w, r, err) {
 		return
 	}
 	if web.IsPartial(r) {

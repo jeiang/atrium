@@ -2,14 +2,14 @@ package agentcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
+	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -31,15 +31,8 @@ func threadKind(run string) threads.Kind {
 
 type Open func(context.Context) (context.Context, *service.Service, func(), error)
 
-func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, open Open) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{tickCommand(open, enabled), runCommand(open), subagentsCommand(env, tools, now)}}
-}
-
-func clock(now func() float64) func() float64 {
-	if now == nil {
-		return func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
-	}
-	return now
+func Command(enabled func(module string) bool, open Open, subagents OpenService) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{tickCommand(open, enabled), runCommand(open), subagentsCommand(subagents)}}
 }
 
 func runCommand(open Open) *cli.Command {
@@ -51,6 +44,9 @@ func runCommand(open Open) *cli.Command {
 			kind := args.String("kind", string(threads.Chat), cli.Opt{Choices: Kinds})
 			toolChoice := args.String("tool-choice", "", cli.Opt{Help: "force the first request to call a tool: any, or a tool name; models that reject forcing get the request without it"})
 			return func(env *cli.Env) int {
+				if strings.TrimSpace(*text) == "" {
+					return env.UsageError("argument --text: expected text, got only whitespace")
+				}
 				var threadID *int64
 				if args.Has("thread") {
 					id := int64(*thread)
@@ -72,35 +68,30 @@ func run(env *cli.Env, open Open, threadID *int64, text, kind, toolChoice string
 		return err
 	}
 	defer closeApp()
-	if _, err := svc.ResolveClient(ctx); err != nil {
-		return err
-	}
+	app := asstapp.New(svc.DB, svc.Env, svc.Now).WithRuns(func() *service.Service { return svc })
+	var runID int64
 	if threadID == nil {
-		id, err := threads.Create(ctx, svc.DB.Write, svc.Now(), threads.Spec{Kind: threadKind(kind)})
-		if err != nil {
+		started, err := app.ThreadStart(ctx, asstapp.StartInput{Kind: threadKind(kind), Text: text, ToolChoice: toolChoice, Wait: true})
+		if runID = started.Data.RunID; runID == 0 || err != nil {
 			return err
 		}
-		threadID = &id
 	} else {
-		thread, err := threads.Get(ctx, svc.DB.Read, *threadID)
-		if err != nil {
+		in := asstapp.SendInput{ThreadID: *threadID, Text: text, ToolChoice: toolChoice, Wait: true}
+		if explicitKind {
+			in.Kind = threadKind(kind)
+		}
+		sent, err := app.MessageSend(ctx, in)
+		var unknown service.UnknownThread
+		var mismatch asstapp.KindMismatch
+		switch {
+		case errors.As(err, &unknown):
+			return fmt.Errorf("no thread %d", *threadID)
+		case errors.As(err, &mismatch):
+			return fmt.Errorf("thread %d is a %s thread; --kind %s contradicts it", *threadID, mismatch.Kind, kind)
+		}
+		if runID = sent.Data.RunID; runID == 0 || err != nil {
 			return err
 		}
-		if thread == nil {
-			return fmt.Errorf("no thread %d", *threadID)
-		}
-		if explicitKind && threadKind(kind) != thread.Kind {
-			return fmt.Errorf("thread %d is a %s thread; --kind %s contradicts it", *threadID, thread.Kind, kind)
-		}
-		kind = string(thread.Kind)
-	}
-	start := service.Start{Kind: threadKind(kind)}
-	if toolChoice != "" {
-		start.Limits.ToolChoice = &toolChoice
-	}
-	runID, err := svc.RunOnce(ctx, *threadID, text, start)
-	if runID == 0 || err != nil {
-		return err
 	}
 	out, err := service.RunDict(ctx, svc.DB.Read, runID)
 	if err != nil {

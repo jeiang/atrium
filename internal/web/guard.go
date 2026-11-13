@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
@@ -71,7 +72,6 @@ type Guard struct {
 	errPage  ErrorPage
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
-	idem     *idemCache
 }
 
 func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
@@ -89,7 +89,7 @@ func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify, idem: newIdemCache()}
+	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify}
 }
 
 func hostname(value string) string {
@@ -203,7 +203,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			token = newToken()
 		}
 		if err == nil {
-			r = r.WithContext(authapp.WithPrincipal(r.Context(), who))
+			r = r.WithContext(withIdentity(r.Context(), who, audit.UI))
 		}
 		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {
 			limit := defaultBodyCap
@@ -259,4 +259,12 @@ func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, 
 		cookie += "; Secure"
 	}
 	w.Header().Add("Set-Cookie", cookie)
+}
+
+func withIdentity(ctx context.Context, who Identity, source audit.Source) context.Context {
+	return audit.With(authapp.WithPrincipal(ctx, who), "operator", source)
+}
+
+func withAPIIdentity(ctx context.Context, who Identity) context.Context {
+	return withIdentity(ctx, who, audit.API)
 }

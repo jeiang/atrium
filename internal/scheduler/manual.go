@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 func RunNow(ctx context.Context, d *db.DB, dbPath, tz string, def Definition, wait time.Duration, fn func(context.Context, Run) (Result, error)) (Result, error) {
@@ -30,7 +31,11 @@ func RunNow(ctx context.Context, d *db.DB, dbPath, tz string, def Definition, wa
 	var result Result
 	var runErr error
 	ran := false
+	actor, source := audit.Actor(ctx), audit.SourceOf(ctx)
 	executeErr := s.execute(db.WithHeld(ctx, locks), *claim, func(ctx context.Context, run Run) (Result, error) {
+		if actor != "" && source != "" {
+			ctx = audit.With(ctx, actor, source)
+		}
 		result, runErr = fn(ctx, run)
 		if runErr == nil && result.Status == "" {
 			result.Status = StatusOK

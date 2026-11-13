@@ -162,3 +162,55 @@ func TestEmptyAppKeyFileIsRefusedAtStartup(t *testing.T) {
 		}
 	}
 }
+
+type unreadInput struct{ t *testing.T }
+
+func (r unreadInput) Read([]byte) (int, error) {
+	r.t.Error("standard input was read before the secret name was checked")
+	return 0, os.ErrClosed
+}
+
+func TestSettingAndSecretRefusalsComeBeforeTheDatabaseAndInput(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	if ran := runSettings(t, "get", "no_such_key_zz"); ran.code != cli.ExitUsage || !strings.Contains(ran.stderr, "no_such_key_zz") {
+		t.Errorf("settings get no_such_key_zz = exit %d, stderr %q", ran.code, ran.stderr)
+	}
+	if ran := runSettings(t, "get", secrets.ActionLinkKey); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "is a secret") {
+		t.Errorf("settings get %s = exit %d, stderr %q", secrets.ActionLinkKey, ran.code, ran.stderr)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("refused reads created the database: %v", err)
+	}
+	var out, errs bytes.Buffer
+	app := defaultApp(t)
+	app.Stdin = unreadInput{t}
+	if code := app.Run(context.Background(), []string{"secrets", "set", "no_such_secret_zz"}, &out, &errs); code != cli.ExitUsage || !strings.Contains(errs.String(), "no_such_secret_zz") {
+		t.Errorf("secrets set no_such_secret_zz = exit %d, stderr %q", code, errs.String())
+	}
+	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK {
+		t.Fatalf("secrets delete with nothing stored: exit %d stderr %q", del.code, del.stderr)
+	}
+	d := mustConnect(t, path, keyFor(t))
+	var outcomes []string
+	rows, err := d.Read.Query("SELECT operation || ' ' || outcome FROM operation_audit ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var row string
+		if err := rows.Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		outcomes = append(outcomes, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"settings.secret-set invalid", "settings.secret-delete noop"}; strings.Join(outcomes, ",") != strings.Join(want, ",") {
+		t.Errorf("operation audit = %v, want %v", outcomes, want)
+	}
+}

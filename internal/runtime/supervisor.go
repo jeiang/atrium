@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 var log = logx.Logger("atrium.runtime")
@@ -87,7 +88,8 @@ func (s *Supervisor) Start(ctx context.Context) error {
 	for _, def := range s.defs {
 		st := s.states[def.Name]
 		st.set(StatusStarting)
-		wg.Go(func() { s.loop(root, def, st) })
+		ctx := audit.With(root, "service:"+def.Name, audit.Job)
+		wg.Go(func() { s.loop(ctx, def, st) })
 	}
 	go func() {
 		wg.Wait()

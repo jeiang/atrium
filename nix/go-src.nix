@@ -13,6 +13,7 @@
       (root + "/tools/adapterboundary")
       (root + "/tools/e2e-loopback")
       (root + "/docs/config")
+      (root + "/docs/api")
       (root + "/docs/tools.md")
       (root + "/docs/integrations.md")
       (root + "/nix/monitoring")

@@ -284,3 +284,13 @@ func fromUnix(v *float64) *time.Time {
 	t := time.Unix(0, int64(*v*1e9)).UTC()
 	return &t
 }
+
+type Invalid struct{ Cause error }
+
+func (e *Invalid) Error() string { return e.Cause.Error() }
+func (e *Invalid) Unwrap() error { return e.Cause }
+
+type CommittedError struct{ Cause error }
+
+func (e *CommittedError) Error() string { return e.Cause.Error() }
+func (e *CommittedError) Unwrap() error { return e.Cause }

@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/mail/run"
+	mailrun "github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
@@ -79,12 +79,12 @@ func TestServeWatchesEachAccountAndRestartsOnlyTheDroppedOne(t *testing.T) {
 		t.Fatalf("drop the work IDLE connection: %v", err)
 	}
 	waitUntil(t, 60*time.Second, "the work watch to restart after its dropped connection", func() bool {
-		return serviceFailures(logs, run.WatchServiceName("work")) == 1 && serviceStarts(logs, run.WatchServiceName("work")) == 2 && work.Idling() == 1
+		return serviceFailures(logs, mailrun.WatchServiceName("work")) == 1 && serviceStarts(logs, mailrun.WatchServiceName("work")) == 2 && work.Idling() == 1
 	})
 	if !strings.Contains(logs.String(), "work connection lost") {
 		t.Errorf("the dropped connection was not logged as lost: %s", logs.String())
 	}
-	if starts, failures := serviceStarts(logs, run.WatchServiceName("home")), serviceFailures(logs, run.WatchServiceName("home")); starts != 1 || failures != 0 {
+	if starts, failures := serviceStarts(logs, mailrun.WatchServiceName("home")), serviceFailures(logs, mailrun.WatchServiceName("home")); starts != 1 || failures != 0 {
 		t.Fatalf("the home watch started %d times and failed %d times beside the work fault, want 1 and 0", starts, failures)
 	}
 	health = watchHealth(t, opsBase)
@@ -99,7 +99,7 @@ func TestServeWatchesEachAccountAndRestartsOnlyTheDroppedOne(t *testing.T) {
 	waitUntil(t, 60*time.Second, "the IDLE change to run a pass for home", func() bool {
 		return strings.Count(logs.String(), "home: 0 new, 0 gone, 0 flag changes") > passes && home.Idling() == 1
 	})
-	if starts, failures := serviceStarts(logs, run.WatchServiceName("home")), serviceFailures(logs, run.WatchServiceName("home")); starts != 1 || failures != 0 {
+	if starts, failures := serviceStarts(logs, mailrun.WatchServiceName("home")), serviceFailures(logs, mailrun.WatchServiceName("home")); starts != 1 || failures != 0 {
 		t.Fatalf("the home watch started %d times and failed %d times across its IDLE pass, want 1 and 0", starts, failures)
 	}
 	if len(home.Writes) != 0 || len(work.Writes) != 0 {
@@ -128,7 +128,7 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 		t.Fatalf("add work = %d: %.300s", code, body)
 	}
 	waitUntil(t, 60*time.Second, "the added account to get its watch", func() bool {
-		return serviceStarts(logs, run.WatchServiceName("work")) == 1 && work.Idling() == 1
+		return serviceStarts(logs, mailrun.WatchServiceName("work")) == 1 && work.Idling() == 1
 	})
 
 	update := url.Values{"label": {"Work"}, "login": {"me@work2.test"}, "password": {"work2-pass"}, "enabled": {"on"}, "auth_method": {"password"}}
@@ -136,9 +136,9 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 		t.Fatalf("re-credential work = %d: %.300s", code, body)
 	}
 	waitUntil(t, 60*time.Second, "the re-credentialed account to restart its watch", func() bool {
-		return serviceStarts(logs, run.WatchServiceName("work")) == 2 && work.Idling() == 1
+		return serviceStarts(logs, mailrun.WatchServiceName("work")) == 2 && work.Idling() == 1
 	})
-	if n := serviceFailures(logs, run.WatchServiceName("work")); n != 0 {
+	if n := serviceFailures(logs, mailrun.WatchServiceName("work")); n != 0 {
 		t.Fatalf("the work watch failed %d times across the credential change, want a clean restart", n)
 	}
 
@@ -149,7 +149,7 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 		_, present := watchHealth(t, opsBase)["mail-watch/work"]
 		return !present && work.Idling() == 0
 	})
-	if starts, failures := serviceStarts(logs, run.WatchServiceName("home")), serviceFailures(logs, run.WatchServiceName("home")); starts != 1 || failures != 0 {
+	if starts, failures := serviceStarts(logs, mailrun.WatchServiceName("home")), serviceFailures(logs, mailrun.WatchServiceName("home")); starts != 1 || failures != 0 {
 		t.Fatalf("the home watch started %d times and failed %d times across work's changes, want 1 and 0", starts, failures)
 	}
 	if health := watchHealth(t, opsBase); health["mail-watch/home"].Status != "running" {

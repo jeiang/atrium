@@ -1,0 +1,150 @@
+{
+  "areas": [
+    {
+      "area": "activity",
+      "operations": [
+        "commands.status",
+        "review.effect",
+        "review.effects",
+        "review.undoable"
+      ],
+      "required": 4,
+      "bound": 4
+    },
+    {
+      "area": "composer",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "devices",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "drafts",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "files",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "home",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "inbox",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "integrations",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "knowledge",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "mail",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "media",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "permissions",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "projects",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "proposals",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "review",
+      "operations": [
+        "review.pending"
+      ],
+      "required": 1,
+      "bound": 1
+    },
+    {
+      "area": "schedules",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "search",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "settings",
+      "operations": [
+        "auth.identity"
+      ],
+      "required": 1,
+      "bound": 1
+    },
+    {
+      "area": "tasks",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "threads",
+      "operations": [
+        "assistant.thread.list",
+        "assistant.thread.transcript"
+      ],
+      "required": 2,
+      "bound": 2
+    },
+    {
+      "area": "usage",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    },
+    {
+      "area": "wiki",
+      "operations": [],
+      "required": 0,
+      "bound": 0
+    }
+  ],
+  "total_required": 150,
+  "total_bound": 8
+}

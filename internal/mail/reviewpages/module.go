@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/application"
+
 	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/config"
@@ -23,21 +25,13 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 //go:embed templates/*.gohtml
 var templates embed.FS
-
-var directOrigins = []string{"agent", "local", "calendar", "export", "tracking", "media", "notify"}
-
-const (
-	sourceMail     = "mail"
-	sourceWrite    = "write"
-	sourceSettings = "settings"
-	categoryMail   = "mail"
-)
 
 func Templates() fs.FS {
 	sub, err := fs.Sub(templates, "templates")
@@ -67,6 +61,7 @@ type service struct {
 	ledger   *ledger.Store
 	drafts   *drafts.Store
 	registry *proposals.Registry
+	review   *reviewapp.Service
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -93,15 +88,19 @@ func newService(o Options, d *web.Deps) *service {
 	if err != nil {
 		panic(err)
 	}
+	liveSvc := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now}
+	draftStore := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now}
+	pipeline := &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled}
 	return &service{
 		deps:     d,
 		now:      now,
-		pipeline: &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled},
-		live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now},
+		pipeline: pipeline,
+		live:     liveSvc,
 		open:     open,
 		ledger:   effects,
-		drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now},
+		drafts:   draftStore,
 		registry: registry,
+		review:   reviewapp.New(reviewapp.Deps{DB: d.DB, Ledger: effects, Drafts: draftStore, Live: liveSvc, Registry: registry, Pipeline: pipeline}),
 	}
 }
 
@@ -124,7 +123,7 @@ func Module(o Options) web.Module {
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)
 		r.Post("/proposals/{proposal_id}/undo", s.proposalUndo)
 		r.Post("/proposals/{proposal_id}/resolve", s.proposalResolve)
-		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.pipeline, s.now))
+		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.phone, s.now))
 
 		r.Get("/activity", s.activityPage)
 		r.Get("/activity/recent", s.recentActivity)
@@ -213,6 +212,16 @@ func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detai
 	s.deps.Error(w, r, status, detail)
 }
 
+func (s *service) failRead(w http.ResponseWriter, r *http.Request, err error, missing string) {
+	web.Fail(w, r, err, func(status int) {
+		detail := missing
+		if status != http.StatusNotFound {
+			detail = application.Classify(err).Message
+		}
+		s.fail(w, r, status, detail)
+	})
+}
+
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
 func laxInt64(s string) (int64, bool) {
@@ -276,14 +285,4 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 		return 0, false
 	}
 	return id, true
-}
-
-func accountConfigured(ctx context.Context) map[string]bool {
-	accounts := config.From(ctx).Accounts()
-	out := make(map[string]bool, len(accounts))
-	for _, spec := range accounts {
-		_, _, ok := config.Credential(ctx, spec.Name)
-		out[spec.Name] = ok
-	}
-	return out
 }

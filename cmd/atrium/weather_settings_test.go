@@ -32,7 +32,7 @@ func TestWeatherLocationSettingsSaveAndRefuseOutOfRangeValues(t *testing.T) {
 			t.Errorf("%s = %+v, want %q from the database", key, row, value)
 		}
 	}
-	if got := runSettings(t, "set", weather.KeyLatitude, "91"); got.code != cli.ExitError || !strings.Contains(got.stderr, "weather_latitude must be between -90 and 90") {
+	if got := runSettings(t, "set", weather.KeyLatitude, "91"); got.code != cli.ExitUsage || !strings.Contains(got.stderr, "weather_latitude must be between -90 and 90") {
 		t.Fatalf("out-of-range latitude: exit %d stderr %q", got.code, got.stderr)
 	}
 	if row := runSettings(t, "get", weather.KeyLatitude).row(t); row.Value == nil || *row.Value != "10.65" {

@@ -22,10 +22,16 @@ import (
 var version = "dev"
 
 func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
 	ctx, stop := cli.SignalContext(context.Background())
-	code := newApp(config.OS).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
-	stop()
-	os.Exit(code)
+	defer stop()
+	if len(args) > 0 && args[0] == mediaAgentCommand {
+		return runMediaAgent(ctx, args, os.Stdout, os.Stderr)
+	}
+	return newApp(config.OS).Run(ctx, args, os.Stdout, os.Stderr)
 }
 
 func newApp(env config.Env) *cli.App {
@@ -89,7 +95,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	c.State = st
 	c.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
 	c.Bootstrap = bootstrap(env, reg)
-	c.Add(append(append(set.Commands(), connections.Command(env)), bind.ServeCommand(set.Pages()...))...)
+	c.Add(append(set.Commands(), bind.ServeCommand(set.Pages()...))...)
 	return c
 }
 

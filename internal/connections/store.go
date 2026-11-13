@@ -30,6 +30,17 @@ const defaultTimeout = 15 * time.Second
 
 var log = logx.Logger("atrium.connections")
 
+type Commit func(context.Context, *sql.Tx, bool) error
+
+func committed(ctx context.Context, tx *sql.Tx, changed bool, commits []Commit) error {
+	for _, commit := range commits {
+		if err := commit(ctx, tx, changed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type Store struct {
 	d       *db.DB
 	q       db.Querier
@@ -970,7 +981,7 @@ func (l *Lease) Observe(ctx context.Context, result Result) error {
 
 func (l *Lease) Close() { l.closed = true }
 
-func (s *Store) Test(ctx context.Context, id ID) (View, error) {
+func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error) {
 	lease, err := s.openLease(ctx, s.q, id, true)
 	if err != nil {
 		return View{}, err
@@ -984,10 +995,10 @@ func (s *Store) Test(ctx context.Context, id ID) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, results, true)
+	return s.record(ctx, id, lease.revision, results, true, commits...)
 }
 
-func (s *Store) record(ctx context.Context, id ID, revision int64, results []Result, tested bool) (View, error) {
+func (s *Store) record(ctx context.Context, id ID, revision int64, results []Result, tested bool, commits ...Commit) (View, error) {
 	state, reason := aggregate(results, nil)
 	raw, err := json.Marshal(results)
 	if err != nil {
@@ -1009,7 +1020,7 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 	if err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, "SELECT state FROM connections WHERE id = ? AND revision = ?", id, revision).Scan(&previous); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil
+				return committed(ctx, tx, false, commits)
 			}
 			return err
 		}
@@ -1025,21 +1036,21 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 			return err
 		}
 		updated = n > 0
-		return nil
+		return committed(ctx, tx, updated, commits)
 	}); err != nil {
 		return View{}, err
 	}
 	if !updated {
-		return s.Get(ctx, id)
+		return s.afterWrite(ctx, id)
 	}
 	s.announce(ctx, id, previous, state, reason)
-	return s.Get(ctx, id)
+	return s.afterWrite(ctx, id)
 }
 
 // Save writes operator-owned configuration and credentials without running a
 // test. It is used by the consent flows, which obtain a grant before any test
 // can succeed.
-func (s *Store) Save(ctx context.Context, id ID, cand Candidate) (View, error) {
+func (s *Store) Save(ctx context.Context, id ID, cand Candidate, commits ...Commit) (View, error) {
 	if !audit.HasActor(ctx) {
 		return View{}, audit.ErrNoActor
 	}
@@ -1070,13 +1081,13 @@ func (s *Store) Save(ctx context.Context, id ID, cand Candidate) (View, error) {
 	if err := s.requireEncrypted(merged); err != nil {
 		return View{}, err
 	}
-	if err := s.save(ctx, id, current, merged, []Result{}, Untested, ""); err != nil {
+	if err := s.save(ctx, id, current, merged, []Result{}, Untested, "", commits...); err != nil {
 		return View{}, err
 	}
-	return s.Get(ctx, id)
+	return s.afterWrite(ctx, id)
 }
 
-func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, error) {
+func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate, commits ...Commit) (View, error) {
 	if !audit.HasActor(ctx) {
 		return View{}, audit.ErrNoActor
 	}
@@ -1108,13 +1119,13 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, e
 		view.State, view.Reason, view.Results = state, reason, results
 		return view, &TestFailed{View: view}
 	}
-	if err := s.save(ctx, id, current, cand, results, state, reason); err != nil {
+	if err := s.save(ctx, id, current, cand, results, state, reason, commits...); err != nil {
 		return View{}, err
 	}
-	return s.Get(ctx, id)
+	return s.afterWrite(ctx, id)
 }
 
-func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, results []Result, state State, reason string) error {
+func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, results []Result, state State, reason string, commits ...Commit) error {
 	if err := s.requireEncrypted(cand); err != nil {
 		return err
 	}
@@ -1179,7 +1190,7 @@ func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, r
 				return err
 			}
 		}
-		return nil
+		return committed(ctx, tx, true, commits)
 	})
 	if err != nil {
 		return err
@@ -1188,7 +1199,7 @@ func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, r
 	return nil
 }
 
-func (s *Store) Disconnect(ctx context.Context, id ID) error {
+func (s *Store) Disconnect(ctx context.Context, id ID, commits ...Commit) error {
 	if !audit.HasActor(ctx) {
 		return audit.ErrNoActor
 	}
@@ -1209,7 +1220,10 @@ func (s *Store) Disconnect(ctx context.Context, id ID) error {
 		}
 		old := string(current.Config)
 		next := "{}"
-		return audit.Record(ctx, tx, audit.Entry{Key: "connection." + string(id), Old: &old, New: &next})
+		if err := audit.Record(ctx, tx, audit.Entry{Key: "connection." + string(id), Old: &old, New: &next}); err != nil {
+			return err
+		}
+		return committed(ctx, tx, true, commits)
 	})
 }
 
@@ -1315,24 +1329,24 @@ func validateCandidate(def Definition, cand Candidate, current View) error {
 		cand.Config = json.RawMessage("{}")
 	}
 	if !json.Valid(cand.Config) {
-		return errors.New("connections: config must be valid JSON")
+		return &Invalid{Cause: errors.New("connections: config must be valid JSON")}
 	}
 	if current.ConfigSource == SourceHost {
 		var want, got map[string]string
 		_ = json.Unmarshal(current.Config, &want)
 		_ = json.Unmarshal(cand.Config, &got)
 		if !sameMap(want, got) {
-			return errors.New("connections: the host owns this connection's identity and endpoints")
+			return &Invalid{Cause: errors.New("connections: the host owns this connection's identity and endpoints")}
 		}
 	}
 	if def.Validate != nil {
 		if err := def.Validate(cand); err != nil {
-			return err
+			return &Invalid{Cause: err}
 		}
 	}
 	for _, c := range cand.Credentials {
 		if c.HostFileRef != "" {
-			return errors.New("connections: a host file credential is only accepted from host configuration")
+			return &Invalid{Cause: errors.New("connections: a host file credential is only accepted from host configuration")}
 		}
 		if c.Value == "" {
 			return MissingCredential{Slot: c.Slot}
@@ -1404,3 +1418,11 @@ func fileDigest(path string) (string, error) {
 }
 
 var _ = fileDigest
+
+func (s *Store) afterWrite(ctx context.Context, id ID) (View, error) {
+	view, err := s.Get(ctx, id)
+	if err != nil {
+		return View{}, &CommittedError{Cause: err}
+	}
+	return view, nil
+}

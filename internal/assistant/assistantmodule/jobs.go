@@ -5,15 +5,16 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/digest"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
-	"github.com/jeiang/atrium/internal/kb/export"
+	"github.com/jeiang/atrium/internal/assistant/service"
+	kbapp "github.com/jeiang/atrium/internal/kb/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/tasks/remind"
+	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 )
 
 const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untrusted + " Gather, then write the review as your reply, with these " +
@@ -43,8 +44,8 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 	nightly := assistantJob(assistant.NightlyName, scheduler.JobNightly, "Nightly: gather the last day and write knowledge records (one model run).",
 		"daily 02:30", assistant.KeyNightlySchedule, 45*time.Minute, scheduler.AlwaysSpends)
 	nightly.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-		runs, err := dreaming.Run(ctx, e.Service, e.Now, e.Claim)
-		return jobworker.Result{Runs: runs}, err
+		out, err := jobService(e).Dream(ctx, asstapp.DreamInput{Claim: e.Claim})
+		return jobworker.Result{Runs: out.Data.Runs}, err
 	})
 	nightly.Recover = deps.Recover(dreaming.Admit)
 	weekly := assistantJob(assistant.WeeklyReviewName, scheduler.JobBuiltin, weeklyReviewPrompt,
@@ -54,14 +55,25 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 	nudges := assistantJob(assistant.DailyNudgesName, scheduler.JobBuiltin, "Daily: send the attention digest (no model run).",
 		"daily 08:00", assistant.KeyDailyNudges, 5*time.Minute, scheduler.ModelFree)
 	nudges.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-		_, err := digest.Run(ctx, e.Service, e.Now, e.JobRunID, deps.Sources(ctx))
+		_, err := jobService(e).Digest(ctx, asstapp.DigestInput{JobRunID: e.JobRunID})
 		return jobworker.Result{}, err
 	})
 	reminders := assistantJob(assistant.TaskRemindersName, scheduler.JobBuiltin, "Every 5 minutes: send due task reminders (no model run).",
 		"*/5 * * * *", assistant.KeyTaskReminders, 5*time.Minute, scheduler.ModelFree)
 	reminders.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-		_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
+		_, err := tasksapp.New(e.Service.DB, e.Service.Runner.Ledger, e.Now).WithEnv(e.Service.Env).Remind(ctx, tasksapp.RemindInput{})
 		return jobworker.Result{}, err
 	})
-	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), export.Job(deps)}
+	knowledgeExport := assistantJob(assistant.KnowledgeExportName, scheduler.JobBuiltin,
+		"Daily: project the knowledge base into the configured export targets (no model run).",
+		"daily 03:30", assistant.KeyKnowledgeExport, 30*time.Minute, scheduler.ModelFree)
+	knowledgeExport.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+		_, err := kbapp.New(e.Service.DB, e.Service.Runner.Ledger, e.Now).WithEnv(e.Service.Env).Export(ctx, kbapp.ExportInput{})
+		return jobworker.Result{}, err
+	})
+	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), knowledgeExport}
+}
+
+func jobService(e jobworker.Env) *asstapp.Service {
+	return asstapp.New(e.Service.DB, e.Service.Env, e.Now).WithRuns(func() *service.Service { return e.Service })
 }

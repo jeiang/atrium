@@ -46,12 +46,32 @@ behavior-parity target.
   reached at `/today`; the digest posts there and home does not show it. A
   ⌘K / Ctrl+K command palette searches threads, pages and actions. There
   is no tutorial text; guidance is `title` tooltips on controls.
-  Media is the app at `/apps/media`. The Library section holds Knowledge
+  Media is the app at `/apps/media`. Adding a torrent takes a magnet link or
+  a `.torrent` file, never both, and the page and `media_add_magnet` both
+  refuse a magnet without a v1 info hash (`xt=urn:btih:`) before any effect is
+  recorded; the refusal is audited, and the tool creates no approval card. A
+  new channel backfills only when its "download what is already out" box is
+  ticked; the box starts unticked, so the first poll just records current
+  releases. A failed backfill still shows the channel as saved and reports
+  completed downloads with the poll error. Empty polls (including job passes
+  without channels), sweeps and thumbnail passes are audited as `noop`;
+  failed passes with completed work are `partial`. The `media-sweep` job
+  ends in error when qBittorrent reports errors; `atrium media sweep` still
+  prints them in `errors` and exits 0. The Library section holds Knowledge
   (`/library/knowledge`): the operator's records with search, scope and
   state filters, checkboxes on unconfirmed rows with Confirm selected, a
   record page with confirm, edit, retract, restore and
   purge, and a profile view that renders the system
-  prompt's profile block and each pinned record's place in it. Projects
+  prompt's profile block and each pinned record's place in it. An unknown
+  scope filter is refused with a 422 and the reason instead of being reset;
+  the list, record and profile pages answer with a weak `ETag` and a 304
+  when nothing they show has changed. Confirm all on the unconfirmed or
+  imported filter confirms each record in its own step and reports how
+  many were confirmed and how many were refused (a retracted record is
+  refused); Confirm selected stops at the first refused record and keeps
+  the ones confirmed before it. Each knowledge command writes one
+  operation audit row; a refused command answers 409 and a rejected edit
+  keeps the submitted values on the 422 page. Projects
   have no pages of their own beyond create and edit, and a
   project can be marked private so its knowledge and threads stay inside
   it. The sidebar collapses to a rail; chat uses a
@@ -251,8 +271,30 @@ behavior-parity target.
   its subagent threads, lowered by the cost cap chosen in the composer when
   the thread was created. A run's spend includes its subagent runs, and every
   subagent request is also checked against each parent run's cap. An
-  Anthropic spend-cap 429 stops the run as a budget stop. The
-  catalog also records whether a model accepts a forced `tool_choice`
+  Anthropic spend-cap 429 stops the run as a budget stop.
+  Starting a thread and sending a message go through one pipeline for the
+  chat page, `/api/v1` and `atrium agent run`: the assistant module must be
+  on and the Anthropic connection configured before a run starts (else
+  the start is refused with no thread, the API answering 409
+  `not_configured`), the monthly budget is checked before the thread is
+  created, and a refused start leaves no thread behind in any interface: a
+  refusal after the thread row exists removes the row only while it has no
+  run, message, queued message or child, otherwise the thread stays.
+  References in the message are resolved against the new thread, also for
+  API starts and `agent run`; `agent run` never queues behind an active run,
+  and `agent run --text` with only whitespace exits 2.
+  A branch keeps the source thread's model, effort, context limit, thinking,
+  web search and cost cap. Regenerate, resume and answer are refused like a
+  send when the module is off or the Anthropic connection is missing, before
+  a question is consumed; send, edit and regenerate check the thread first
+  (unknown 404, subagent thread `read_only_thread`) and then the connection.
+  Stopping in an unknown thread answers 404 on the chat page as in the API.
+  An action that changed state and then failed is audited `failed`.
+  Project file uploads and deletes, and agent `file_write`, each write one
+  `operation_audit` row (`assistant.project-file.upload|delete`,
+  `assistant.file.write` naming its effect); a project upload over the body
+  cap is refused with 422 before the project is looked up.
+  The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
   message and run error on refusal (with the `stop_details` category),
@@ -298,7 +340,8 @@ behavior-parity target.
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier
-  live in `oauth_states` for ten minutes; the refresh token is stored as a
+  live in `oauth_states` for ten minutes (expired rows are deleted when a new
+  consent starts); the refresh token is stored as a
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
   Test exchanges it, and a 400 or 401
   marks the integration needs-reauth.
@@ -306,8 +349,26 @@ behavior-parity target.
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
-  and `atrium restore` (with a `--verify` dry run) restores them. The
-  persistent serve job `core/backup` (host keys `core.backup_directory`,
+  and `atrium restore` (with a `--verify` dry run) restores them.
+  `atrium backup` and `atrium db backup` write one `operation_audit` row
+  (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
+  file count only) to the source database, including refused destinations; a
+  completed `atrium restore` writes one `maintenance.restore` row to the
+  restored database. A refused or failed restore writes nothing, since it
+  leaves the database unchanged. `db check` and `restore --verify` are not
+  audited. A completed `atrium db encrypt` or `atrium db rekey` writes one
+  `maintenance.encrypt` or `maintenance.rekey` row (key ids only) into the new
+  copy before it replaces the database, if that database has
+  `operation_audit`. A completed `atrium db import-v2` writes one
+  `maintenance.import-v2` row in the import transaction. A refused or failed
+  encrypt, rekey or import writes nothing, so the database is unchanged and
+  the import target stays fresh. Each `atrium db shell` session writes one
+  `maintenance.sql` row after the input ends, once any transaction the session
+  left open is rolled back: statement and failure counts only, never the SQL.
+  The outcome is `failed` if any statement failed. Backup, restore and shell
+  audits are skipped on a database without `operation_audit`, and the import
+  freshness check ignores `maintenance.*` audit rows.
+  The persistent serve job `core/backup` (host keys `core.backup_directory`,
   `core.backup_schedule` default `daily 03:00`, `core.backup_keep` default
   5, `core.backup_keep_days` default 14; resource `backup`, 2 h, drained on
   shutdown) writes `atrium-<UTC>.backup` and, after a successful archive,
@@ -332,12 +393,29 @@ behavior-parity target.
   settings set`; a value the host file declares for one, including a
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
   application instance gets its own settings registry from the compiled
-  module declaration catalog, and every command reads the same stored operator values. There is no
+  module declaration catalog, and every command reads the same stored operator values.
+  `atrium settings`, `atrium secrets`, the settings group and section forms
+  and the assistant permission form run the same `settings.*` operations: a
+  value refused as invalid exits 2 on the command line (unknown keys, an
+  out-of-range or malformed value, an empty secret) and is answered 422 on the
+  page, a refusal (host key, pinned, secret key in `settings`, plaintext
+  database for a secret) exits 1 and is answered 409, and each change or
+  refusal of a command writes one `operation_audit` row with key names only.
+  Refused `settings get` keys are checked before opening the database; reads
+  write no audit. `secrets set` checks the name before reading standard input.
+  Section validators save their added, normalized keys, including clears.
+  Unexpected form failures show one diagnostic ID. There is no
   legacy pin file: `ATRIUM_CONFIG` is refused at startup, and so is an
   `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key or for a
   connection-owned host key (the refusal names the destination). Provider
   credentials come only from connection records: the Connections page, a
   connection `credential_files` entry in the host file, or `atrium secrets`.
+  Connections forms, `atrium connections`, Google consent (including
+  `calendar google-auth`), and health observation use `connections.*`
+  operations. Their audits contain connection IDs only, never credentials,
+  OAuth codes, states or token responses. OAuth exchange errors do not show
+  provider response bodies. The Connections credential form retains its
+  existing 422 refusal status.
   The only app key inputs are `app_keys.action_link_key_file` and
   `app_keys.link_key_file`. Saving a working integration turns its module on,
   and the settings audit rows show on the Done page.
@@ -446,11 +524,23 @@ behavior-parity target.
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
   A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
-  `import`. Every readable table has insert, update and delete triggers
+  `import`; it is the entry point that made the decision, so an `/api/v1`
+  approval records `api` and a web one `ui`. Approve, dismiss, undo and
+  resolve are the `review.*` operations shared by every entry point, each
+  audited in `operation_audit` after the ledger settles, even after caller
+  cancellation. Audit provenance comes only from the trusted invocation. Phone
+  policy and changed-plan refusals are audited; invalid, expired and used tokens
+  are not. Undo and resolve preserve the explicit proposal, effect or mail
+  namespace, including unknown ids. A malformed
+  approval selection is invalid input (`atrium proposals approve` exits 2,
+  the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
   streamed run event writes do not); the append-only
   `operation_audit` table records application commands. Both are owned by
-  `internal/application/state`.
+  `internal/application/state`. Notification inbox, channel and device controls,
+  delivery, and phone policy commands use `notifications.*` operations. The
+  inbox read is bounded to 100 items (API default 50); failed push delivery
+  remains explicit and keeps its inbox record.
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -463,7 +553,19 @@ behavior-parity target.
   `jobs`, `job_runs`, `job_run_threads` and `job_resource_leases` tables,
   seeding, claiming, recovery and the tick
   loop; `internal/assistant/jobworker` supplies the assistant's prompt runs,
-  run accounting, skip notices and recovery lookups. A job row records its
+  run accounting, skip notices and recovery lookups. Calendar mirroring
+  (`calendar sync` and the CalDAV job) and candidate drafting (`calendar
+  candidates` and its job) run as `calendar.sync` and
+  `calendar.draft-candidates`, one `operation_audit` row per pass (`noop`
+  for an empty candidate queue; a sync that is not configured or changed
+  no file writes none); the drafting run starts through
+  `assistant.thread.start`, so a missing key or exhausted budget is refused
+  before a thread exists. Nightly dreaming, the daily digest and every
+  scheduled prompt run (weekly review and cron jobs) run as
+  `assistant.dream`, `assistant.digest` (reading `attention.read`) and
+  `assistant.schedule.run`, one `operation_audit` row per pass; a scheduled
+  prompt run is refused for a missing key or the budget before its thread
+  exists, and its prompt does not resolve `@` references. A job row records its
   owning `module`; a declared job is matched by its unique
   `declaration_key` (`<module>/<name>`), never by name, and a cron job has
   none. Re-enabling a job sets `activated_at`. A run records the threads it
@@ -484,7 +586,10 @@ behavior-parity target.
   and never contributes to scheduled backoff. Manual successes do not
   reset scheduled backoff, and priming preserves a pending retry.
   A manual invocation that loses its claim exits nonzero.
-  Missing configuration records `skipped_unconfigured`, not success.
+  Missing configuration records `skipped_unconfigured`, not success;
+  consecutive unattended threadless unconfigured skips with the same error
+  coalesce into the newest run's row, which keeps the first start time, so
+  an audit row never names a later run of another job.
   The Notion mirror is the model-free `notion/notion-sync` serve job
   (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
   on shutdown). Its CLI shares the `notion-sync` resource and claim;
@@ -614,6 +719,9 @@ behavior-parity target.
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
 
+- A standalone `atrium media-agent --config FILE` process now provides authenticated rooted streaming without opening the main database. Listener peers are checked before TLS/headers, connections are capped at 256, headers at 16 KiB, and ranges at 16 parts (larger range sets are ignored). Root/state/cache overlap is checked on resolved paths and filesystem identities. SIGHUP drains and exits non-zero. This does not yet move main-side media filesystem work or deploy an agent service.
+- The media agent now supports read-only source/import/directory metadata and preparation, durable receipt-keyed filing, progress and inspection, and receipt-derived undo. Torrent plans hardlink downloads; import plans use exclusive rename; cleanup refuses remaining videos and is non-undoable. Mutations are globally serialized, preserve library-group permissions, and never copy across devices or replace destinations. Crash recovery only inspects receipts; identical replay returns the terminal result and never resumes. Main-side integration and the service unit remain pending.
+
 ## Current authority boundaries
 
 - The effect ledger (`internal/ledger`) owns the `effects`, `effect_resources`,
@@ -680,7 +788,11 @@ behavior-parity target.
   It reads the configured `ops_hosts` through the Grafana metrics
   datasource and the alerts endpoint, records typed samples in
   `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
-  alerts_firing; 14-day retention). The label selector and the five
+  alerts_firing; 14-day retention). A host whose reads fail is skipped for
+  that pass: the other hosts' samples are written together, retention and
+  supervision still run, and the `ops.sample` audit is `partial` with the
+  failing host count. A pass with no hosts or no Grafana configuration
+  writes no audit row. The label selector and the five
   queries are settings (`ops_label_selector`, `ops_query_up`,
   `ops_query_cpu`, `ops_query_mem`, `ops_query_disk`,
   `ops_query_failed_units`); each query is a single-line PromQL template
@@ -868,6 +980,7 @@ behavior-parity target.
   host's `web.trusted_proxy_cidrs` list, in which case exactly one valid
   `CF-Connecting-IP` names it; other forwarded headers are ignored.
 - The Sign-in settings tab shows the OIDC connection and session settings, and issues, lists and revokes API bearer tokens.
+  Issue and revoke write one `operation_audit` row each (`auth.bearer-issue`, `auth.bearer-revoke`; token id and kind only, never the secret) and, in the same transaction, the `settings_audit` row (`auth_token.issue`, `auth_token.revoke`; id, name and kind) that the Activity page lists; an invalid name or expiry answers 422.
 - `/api/v1` is a JSON API for a native client, available in every listener.
   It accepts nothing but a bearer token: a locally issued `atr_` token, or,
   when `oidc_api_client_id` names the client, an RFC 9068 access token from
@@ -885,9 +998,24 @@ behavior-parity target.
   feed of direct writes and undoable approvals with undo, and draft get,
   edit, send, discard and resolve. Every write calls the same pipeline,
   drafts store and writes registry as the Review pages, so approval scope,
-  the ledger, the send revision check and the mail gate are unchanged. POST
-  to create a thread, send a message, approve or send a draft honours an
-  `Idempotency-Key` header for ten minutes in memory.
+  the ledger, the send revision check and the mail gate are unchanged. Every
+  unsafe request is a durable command (`Atrium-Command-Id`,
+  `GET /api/v1/commands/{id}`); an `Idempotency-Key` is shared across
+  bearers and replays the stored result for 24 hours after the command ends,
+  bodies and fingerprints are kept only for keyed requests, retryable
+  `408`/`429`/`5xx` outcomes free the key unless an effect was recorded, and
+  rows are pruned 30 days after they end (operator behavior has the codes).
+  `GET /pending`, `/undo`, `/effects` and `/effects/{id}` return a weak
+  `ETag` with
+  `Cache-Control: private, no-cache` and answer `If-None-Match` with 304
+  when nothing they show changed; the effects revision also covers each
+  shown effect's lease times and blocked flags, so a lease renewal or a
+  stuck undo crossing its threshold is never hidden by a 304. `GET /threads`
+  and `/threads/{id}` answer the same way; each transcript page (`limit`,
+  `cursor`) has its own tag, and a new message, run or card changes it. These reads
+  and the Review pages, `atrium proposals list`, `atrium effects list|show`
+  and `atrium writes list` go through the `review.*` operations in
+  `internal/review/application`.
 - Code execution is not part of the application. The code-mode worker
   command and units are removed; coding may return as an external module.
 

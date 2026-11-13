@@ -1,11 +1,9 @@
 package pages
 
 import (
-	"encoding/base64"
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/media"
 )
@@ -179,25 +177,3 @@ func queueView(v media.View) QueueView {
 		Year: v.Year, Files: files, MovieFile: v.MovieFile, MovieDest: v.MovieDest, Error: v.Error,
 	}
 }
-
-func dlDecodeTorrent(b64 string, limit int) (data []byte, present bool, err error) {
-	b64 = strings.Join(strings.Fields(b64), "")
-	if b64 == "" {
-		return nil, false, nil
-	}
-	n := len(b64)
-	if n > limit {
-		return nil, false, dlTorrentError("the torrent file is too large")
-	}
-	b64 = strings.NewReplacer("-", "+", "_", "/").Replace(b64)
-	b64 += strings.Repeat("=", (4-n%4)%4)
-	data, err = base64.StdEncoding.DecodeString(b64)
-	if err != nil {
-		return nil, false, dlTorrentError("the torrent data is not base64")
-	}
-	return data, true, nil
-}
-
-type dlTorrentError string
-
-func (e dlTorrentError) Error() string { return string(e) }

@@ -214,6 +214,9 @@ func TestMediaFilingPlanIsInspectableAndUndoable(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	first := mediaEffectID(t, d, media.OpFile, hash, "done")
 	mediaEffectID(t, d, media.OpFile, hash, "failed")
+	if counts := mediaAudit(t, d, "media.file-item", "partial"); counts["placed"] != 1 {
+		t.Fatalf("filing counts %v", counts)
+	}
 	shown := runApp(t, "effects", "show", fmt.Sprint(first))
 	if shown.code != cli.ExitOK {
 		t.Fatalf("effects show: %d %s", shown.code, shown.stderr)
@@ -358,5 +361,95 @@ func TestRecoveredProposalWithRecordedWorkCannotBeApprovedAgain(t *testing.T) {
 	}
 	if deletes := qb.count("delete"); deletes != 1 {
 		t.Fatalf("%d deletes after undoing the recovered proposal, want 1", deletes)
+	}
+}
+
+func TestApprovedMediaChannelAddAndRemoveUndo(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	mnpMediaRoot(t, dir)
+	_, qbURL := mnpNewQbit(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	run := func(action, id string) {
+		t.Helper()
+		if got := runApp(t, "proposals", action, id); got.code != cli.ExitOK {
+			t.Fatalf("%s %s: %d %s %s", action, id, got.code, got.stdout, got.stderr)
+		}
+	}
+	count := func(want int) {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM media_channels").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != want {
+			t.Fatalf("%d channels, want %d", n, want)
+		}
+	}
+	add := func() string {
+		return proposalID(t, toolResult(t, "media_channel_add", map[string]any{
+			"imdb_id": "tt1234567", "name": "Lanterns", "regex": "1080p",
+		}))
+	}
+	first := add()
+	count(0)
+	run("approve", first)
+	count(1)
+	run("undo", first)
+	count(0)
+	second := add()
+	run("approve", second)
+	count(1)
+	var channel int64
+	var before string
+	if err := d.Read.QueryRow("SELECT id, json_array(name, imdb, tmdb_id, pattern, case_sensitive, primed, created) FROM media_channels").Scan(&channel, &before); err != nil {
+		t.Fatal(err)
+	}
+	remove := proposalID(t, toolResult(t, "media_channel_remove", map[string]any{"id": channel}))
+	count(1)
+	run("approve", remove)
+	count(0)
+	run("undo", remove)
+	count(1)
+	var after string
+	if err := d.Read.QueryRow("SELECT json_array(name, imdb, tmdb_id, pattern, case_sensitive, primed, created) FROM media_channels WHERE id = ?", channel).Scan(&after); err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("restored channel %s, want %s", after, before)
+	}
+	for _, id := range []string{first, remove} {
+		var undone *float64
+		if err := d.Read.QueryRow("SELECT undone_ts FROM proposals WHERE id = ?", id).Scan(&undone); err != nil {
+			t.Fatal(err)
+		}
+		if undone == nil {
+			t.Fatalf("proposal %s was not marked undone", id)
+		}
+	}
+}
+
+func TestApprovedMediaChannelFailureAuditsNewTarget(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	mnpMediaRoot(t, dir)
+	_, qbURL := mnpNewQbit(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
+	id := proposalID(t, toolResult(t, "media_channel_add", map[string]any{
+		"imdb_id": "tt1234567", "name": "Lanterns", "regex": "[",
+	}))
+	runApp(t, "proposals", "approve", id)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var channels int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM media_channels").Scan(&channels); err != nil {
+		t.Fatal(err)
+	}
+	var outcome, target string
+	if err := d.Read.QueryRow("SELECT outcome, target FROM operation_audit WHERE operation = 'media.channel-add' ORDER BY id DESC LIMIT 1").Scan(&outcome, &target); err != nil {
+		t.Fatal(err)
+	}
+	if channels != 0 || outcome != "invalid" || target != "channel:new" {
+		t.Fatalf("failed channel: %d channels, outcome %s, target %s", channels, outcome, target)
 	}
 }

@@ -537,7 +537,7 @@
       "--selection",
       "{\"groups\": []}"
     ],
-    "exit_code": 1,
+    "exit_code": 2,
     "name": "proposals-approve-bad-selection",
     "stderr": "proposals-approve-bad-selection.stderr",
     "stdout": "proposals-approve-bad-selection.stdout"
@@ -551,7 +551,7 @@
       "--selection",
       "{"
     ],
-    "exit_code": 1,
+    "exit_code": 2,
     "name": "proposals-approve-bad-json",
     "stderr": "proposals-approve-bad-json.stderr",
     "stdout": "proposals-approve-bad-json.stdout"

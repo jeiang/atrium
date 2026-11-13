@@ -26,10 +26,11 @@ const (
 )
 
 var (
-	ErrInvalid = errors.New("action link is not valid")
-	ErrExpired = errors.New("action link expired")
-	ErrUsed    = errors.New("action link was already used")
-	ErrRate    = errors.New("too many action links in the last hour")
+	ErrUnavailable = errors.New("action link unavailable")
+	ErrInvalid     = errors.New("action link is not valid")
+	ErrExpired     = errors.New("action link expired")
+	ErrUsed        = errors.New("action link was already used")
+	ErrRate        = errors.New("too many action links in the last hour")
 )
 
 type Claims struct {
@@ -40,11 +41,11 @@ type Claims struct {
 	Expires    float64 `json:"e"`
 }
 
-func Key(ctx context.Context, q db.Querier) ([]byte, error) {
+func Material(ctx context.Context, q db.Querier) ([]byte, error) {
 	if raw, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
 		return nil, err
 	} else if ok {
-		return hex.DecodeString(string(raw))
+		return raw, nil
 	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	raw, err := store.Value(ctx, secrets.ActionLinkKey)
@@ -57,7 +58,15 @@ func Key(ctx context.Context, q db.Querier) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return hex.DecodeString(raw)
+	return []byte(raw), nil
+}
+
+func Key(ctx context.Context, q db.Querier) ([]byte, error) {
+	raw, err := Material(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return hex.DecodeString(string(raw))
 }
 
 func Rotate(ctx context.Context, q db.Querier) error {

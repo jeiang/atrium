@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jeiang/atrium/internal/application"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
@@ -73,6 +74,7 @@ type Deps struct {
 
 	settingsPages map[string]SettingsRender
 
+	commands      func(pattern string, next http.Handler) http.Handler
 	router        chi.Router
 	routes        *[]routeRule
 	owner         string
@@ -136,6 +138,7 @@ type Options struct {
 	OnReady      func(*Deps) error
 	Bindings     map[string][]application.Binding
 	Drain        func(func(context.Context) error)
+	Commands     func(pattern string, next http.Handler) http.Handler
 }
 
 type Server struct {
@@ -143,6 +146,7 @@ type Server struct {
 	auth          Policy
 	oidc          *oidc.Service
 	bearers       *bearer.Service
+	account       *authapp.Service
 	db            *db.DB
 	render        *Renderer
 	secure        func(*http.Request) bool
@@ -187,6 +191,7 @@ func New(o Options) (*Server, error) {
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
 	if o.DB != nil {
 		s.bearers = bearer.New(o.DB, o.OIDC)
+		s.account = authapp.New(o.DB, o.OIDC, s.bearers)
 	}
 	s.mux.Use(instrument)
 	if s.errPage == nil && o.Render != nil {
@@ -195,7 +200,7 @@ func New(o Options) (*Server, error) {
 	if s.errPage == nil {
 		s.errPage = plainErrorPage
 	}
-	static := newStaticHandler(Static)
+	static := newStaticHandler(Static, Assets)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
 	core.Get(healthPath, func(w http.ResponseWriter, _ *http.Request) {
@@ -219,14 +224,13 @@ func New(o Options) (*Server, error) {
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
-		drain:  o.Drain,
-		router: core, routes: &s.routes, owner: "core", registrations: s.registrations,
+		drain:    o.Drain,
+		commands: o.Commands, router: core, routes: &s.routes, owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
 		deps.OnFrame = o.Render.OnFrame
 	}
 	deps.coreRoutes = func(d *Deps) {
-		d.API(http.MethodGet, "/me", me)
 		d.Authenticated(http.MethodGet, authSettingsPath, s.signInPage)
 		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens", s.tokenIssue)
 		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens/{id}/revoke", s.tokenRevoke)

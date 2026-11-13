@@ -2,26 +2,23 @@ package mediatools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/approval"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
 	UndoTorrent        = "media_torrent_delete"
-	UndoChannelDelete  = "media_channel_delete"
-	UndoChannelRestore = "media_channel_restore"
+	UndoChannelDelete  = mediaapp.UndoChannelDelete
+	UndoChannelRestore = mediaapp.UndoChannelRestore
 	searchLimitCeiling = media.TuningMediaSearchLimit
 )
 
@@ -77,7 +74,7 @@ func Tools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaAddMagnet, Label: "Add torrent", Icon: "download", Module: module.Media},
+			Approval:  &tool.Approval{Apply: mediaAddMagnet, Check: checkAddMagnet, Label: "Add torrent", Icon: "download", Module: module.Media},
 		}),
 		approval.Gate(tool.Tool{
 			Name:        "media_channel_add",
@@ -100,34 +97,6 @@ func Tools() []tool.Tool {
 			Approval:  &tool.Approval{Apply: mediaChannelRemove, Label: "Stop watching show", Icon: "tv", Module: module.Media},
 		}),
 	}
-}
-
-func qbitFailed(err error) error {
-	var conflict *ledger.Conflict
-	if errors.As(err, &conflict) {
-		return tool.Error("the torrent is blocked by an unresolved earlier add")
-	}
-	var status *media.QbitStatusError
-	if errors.As(err, &status) {
-		return tool.Error(status.Error())
-	}
-	return tool.Domain[media.QbitError, tool.Error](err)
-}
-
-func qbitOf(settings media.Settings) (*media.Qbit, error) {
-	qb, err := settings.Qbit()
-	if err != nil {
-		return nil, tool.NotConfigured(err.Error())
-	}
-	return qb, nil
-}
-
-func rootOf(settings media.Settings) (string, error) {
-	root, err := settings.NeedRoot()
-	if err != nil {
-		return "", tool.NotConfigured(err.Error())
-	}
-	return root, nil
 }
 
 func intArg(value any, message string) (int64, error) {
@@ -185,45 +154,27 @@ func torrentDict(t media.Torrent) map[string]any {
 }
 
 func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	read, err := mediaapp.ForTool(tc).Downloads(ctx, mediaapp.DownloadsInput{})
 	if err != nil {
-		return nil, err
+		return nil, tool.Fail(err)
 	}
-	qb, err := qbitOf(settings)
-	if err != nil {
-		return nil, err
+	if read.Data.TorrentsError != nil {
+		return nil, tool.Fail(read.Data.TorrentsError)
 	}
-	torrents, err := qb.Torrents(ctx, "", "", "")
-	if err != nil {
-		return nil, qbitFailed(err)
-	}
-	waiting := []media.Item{}
-	if settings.Root != "" {
-		if waiting, _, err = settings.Items(ctx, qb, settings.Root); err != nil {
-			return nil, err
-		}
-	}
+	torrents := read.Data.Torrents
 	torrentLimit := assistant.TuningAgentMediaTorrentLimit
 	shown := []any{}
 	for _, t := range torrents[:min(torrentLimit, len(torrents))] {
 		shown = append(shown, torrentDict(t))
 	}
 	queue := []any{}
-	for _, it := range waiting {
-		queue = append(queue, map[string]any{"id": it.ID, "name": it.Name, "torrent": it.Torrent})
+	for _, it := range read.Data.Queue {
+		queue = append(queue, map[string]any{"id": it.Item.ID, "name": it.Item.Name, "torrent": it.Item.Torrent})
 	}
 	return map[string]any{"torrents": shown, "waiting_to_file": queue, "note": "Only torrents of kind media are filed into the library, from the Media downloads page."}, nil
 }
 
 func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
-	if err != nil {
-		return nil, err
-	}
-	root, err := rootOf(settings)
-	if err != nil {
-		return nil, err
-	}
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err
@@ -232,11 +183,15 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
+	read, err := mediaapp.ForTool(tc).Library(ctx, mediaapp.LibraryInput{Query: query, Limit: int(limit)})
+	if err != nil {
+		return nil, tool.Fail(err)
+	}
 	results := []any{}
-	for _, r := range settings.Search(root, query, int(limit)) {
+	for _, r := range read.Data.Results {
 		files, urls := make([]any, len(r.Files)), make([]any, len(r.Files))
 		for i, f := range r.Files {
-			files[i], urls[i] = f, settings.VPNURL(f)
+			files[i], urls[i] = f, r.VPNURLs[i]
 		}
 		results = append(results, map[string]any{
 			"kind": r.Kind, "title": r.Title, "year": r.Year, "dir": r.Dir,
@@ -247,98 +202,54 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 }
 
 func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	rows, err := media.ListChannels(ctx, tc.DB.Read)
+	read, err := mediaapp.ForTool(tc).Channels(ctx, mediaapp.ChannelsInput{})
 	if err != nil {
-		return nil, err
-	}
-	status, err := media.ChannelStatus(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
+		return nil, tool.Fail(err)
 	}
 	listed := []any{}
-	for _, c := range rows {
+	for _, c := range read.Data.Channels {
 		listed = append(listed, channelDict(c))
 	}
-	errs := make([]any, len(status.Errors))
-	for i, e := range status.Errors {
+	errs := make([]any, len(read.Data.Status.Errors))
+	for i, e := range read.Data.Status.Errors {
 		errs[i] = e
 	}
-	return map[string]any{"channels": listed, "last_check": status.LastCheck, "errors": errs}, nil
+	return map[string]any{"channels": listed, "last_check": read.Data.Status.LastCheck, "errors": errs}, nil
 }
 
-func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func addMagnetArgs(args tool.Args) (string, bool, error) {
 	magnet, _, err := tool.TextArg(args, "magnet", true)
 	if err != nil {
-		return nil, err
+		return "", false, err
 	}
 	asMedia, err := boolArg(args, "media", true)
 	if err != nil {
+		return "", false, err
+	}
+	return magnet, asMedia, nil
+}
+
+func checkAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) error {
+	magnet, _, err := addMagnetArgs(args)
+	if err != nil {
+		return err
+	}
+	if err := mediaapp.ForTool(tc).CheckMagnet(ctx, magnet); err != nil {
+		return tool.Fail(err)
+	}
+	return nil
+}
+
+func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+	magnet, asMedia, err := addMagnetArgs(args)
+	if err != nil {
 		return nil, err
 	}
-	if !strings.HasPrefix(magnet, "magnet:?") {
-		return nil, tool.Error("magnet must be a magnet: link")
-	}
-	hash, ok := media.MagnetHash(magnet)
-	if !ok {
-		return nil, tool.Error("the magnet link has no v1 info hash (xt=urn:btih:...)")
-	}
-	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	added, err := mediaapp.ForTool(tc).Add(ctx, mediaapp.AddInput{Magnet: &mediaapp.Magnet{URI: magnet}, Media: asMedia, ProposalID: tc.ProposalID})
 	if err != nil {
-		return nil, err
+		return nil, tool.Fail(err)
 	}
-	tags := ""
-	if asMedia {
-		tags = media.TagMedia
-	}
-	scope := media.Scope{ProposalID: tc.ProposalID, ThreadID: &tc.ThreadID, RunID: &tc.RunID}
-	if _, err := settings.Add(ctx, tc.Ledger, settings, media.AddRequest{Magnet: magnet, Tags: tags, Scope: scope}); err != nil {
-		return nil, qbitFailed(err)
-	}
-	if asMedia {
-		if _, err := settings.SelectFiles(ctx, tc.Ledger, settings, scope, nil); err != nil {
-			return nil, qbitFailed(err)
-		}
-	}
-	return map[string]any{"hash": hash, "kind": kindOf(asMedia)}, nil
-}
-
-func showFromTMDB(ctx context.Context, client *media.TMDB, tmdbID int64) (string, string, error) {
-	imdb, found, err := client.ImdbOf(ctx, tmdbID)
-	if err != nil {
-		return "", "", tmdbFailed(err)
-	}
-	show, err := client.Show(ctx, tmdbID)
-	if err != nil {
-		return "", "", tmdbFailed(err)
-	}
-	if !found || len(show) == 0 {
-		return "", "", tool.Error(fmt.Sprintf("TMDB show %d has no IMDb id", tmdbID))
-	}
-	if text, isText := show["name"].(string); isText && text != "" {
-		return imdb, text, nil
-	}
-	return imdb, "tt" + imdb, nil
-}
-
-func showFromIMDB(ctx context.Context, client *media.TMDB, imdb, name string) (string, string, error) {
-	if name != "" {
-		return imdb, name, nil
-	}
-	if client == nil {
-		return imdb, "tt" + imdb, nil
-	}
-	found, err := client.ShowByImdb(ctx, imdb)
-	if err != nil {
-		return "", "", tmdbFailed(err)
-	}
-	if found != nil && found.Name != "" {
-		return imdb, found.Name, nil
-	}
-	return imdb, "tt" + imdb, nil
-}
-
-func tmdbFailed(err error) error {
-	return tool.Domain[media.TmdbError, tool.Error](err)
+	return map[string]any{"hash": added.Data.Hash, "kind": added.Data.Kind}, nil
 }
 
 func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -350,69 +261,30 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 	if err != nil {
 		return nil, err
 	}
-	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
-	if err != nil {
-		return nil, err
-	}
-	client := settings.TMDB()
 	tmdbID, hasTMDB, err := tool.IntArg(args, "tmdb_id", false)
 	if err != nil {
 		return nil, err
 	}
-	imdbText, _, err := tool.TextArg(args, "imdb_id", false)
+	imdb, _, err := tool.TextArg(args, "imdb_id", false)
 	if err != nil {
 		return nil, err
 	}
-	imdb, hasIMDB := media.IMDBDigits(imdbText)
-	var name string
-	var stored *int64
-	switch {
-	case hasTMDB:
-		id := tmdbID
-		if client == nil {
-			return nil, tool.NotConfigured("media_tmdb_token is not set; give imdb_id instead")
-		}
-		var err error
-		if imdb, name, err = showFromTMDB(ctx, client, id); err != nil {
-			return nil, err
-		}
-		stored = &id
-	case hasIMDB:
-		display, _, err := tool.TextArg(args, "name", false)
-		if err != nil {
-			return nil, err
-		}
-		if imdb, name, err = showFromIMDB(ctx, client, imdb, display); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, tool.Error("give imdb_id (tt1234567) or tmdb_id")
-	}
-	var row *media.Channel
-	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
-		Origin: "media", Operation: "media_channel_add", OperationKey: "media_channel_add:" + ledger.NewKey(),
-		Target: "channel:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
-	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-		var err error
-		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored); err != nil {
-			return ledger.Result{}, err
-		}
-		return ledger.Result{
-			State:  ledger.Done,
-			Target: fmt.Sprintf("channel:%d", row.ID),
-			After:  jsonOf(channelDict(*row)),
-			Undo:   jsonOf(channelDeleteUndo{Op: UndoChannelDelete, ID: row.ID}),
-		}, nil
-	})
+	name, _, err := tool.TextArg(args, "name", false)
 	if err != nil {
-		var failure media.ChannelError
-		if errors.As(err, &failure) {
-			return nil, tool.Error(string(failure))
-		}
 		return nil, err
 	}
-	out := channelDict(*row)
-	out["effect_id"] = effect.ID
+	in := mediaapp.ChannelAddInput{Name: name, IMDB: imdb, Pattern: pattern, CaseSensitive: caseSensitive, ResolveShow: true, ProposalID: tc.ProposalID}
+	if hasTMDB {
+		in.TMDBID = &tmdbID
+	}
+	added, err := mediaapp.ForTool(tc).ChannelAdd(ctx, in)
+	if err != nil {
+		return nil, tool.Fail(err)
+	}
+	out := channelDict(added.Data.Channel)
+	if len(added.EffectIDs) > 0 {
+		out["effect_id"] = added.EffectIDs[0]
+	}
 	out["note"] = "The first poll only records current releases; later matches are added."
 	return out, nil
 }
@@ -423,28 +295,13 @@ func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
-	var row media.Channel
-	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
-		Origin: "media", Operation: "media_channel_remove", OperationKey: "media_channel_remove:" + ledger.NewKey(),
-		Target: fmt.Sprintf("channel:%d", id), ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
-	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-		var err error
-		if row, err = media.DeleteChannel(ctx, tx, id); err != nil {
-			return ledger.Result{}, err
-		}
-		return ledger.Result{
-			State:  ledger.Done,
-			Target: fmt.Sprintf("channel:%d", id),
-			Before: jsonOf(channelDict(row)),
-			Undo:   jsonOf(channelRestoreUndo{Op: UndoChannelRestore, Row: channelUndoOf(row)}),
-		}, nil
-	})
+	removed, err := mediaapp.ForTool(tc).ChannelRemove(ctx, mediaapp.ChannelRemoveInput{ID: id, ProposalID: tc.ProposalID})
 	if err != nil {
-		var failure media.ChannelError
-		if errors.As(err, &failure) {
-			return nil, tool.Error(string(failure))
-		}
-		return nil, err
+		return nil, tool.Fail(err)
 	}
-	return map[string]any{"removed": id, "name": row.Name, "effect_id": effect.ID}, nil
+	out := map[string]any{"removed": id, "name": removed.Data.Channel.Name}
+	if len(removed.EffectIDs) > 0 {
+		out["effect_id"] = removed.EffectIDs[0]
+	}
+	return out, nil
 }

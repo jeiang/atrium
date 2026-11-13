@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/mail/run"
+	mailrun "github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/scans"
 	"github.com/jeiang/atrium/internal/passrun"
 )
@@ -47,10 +47,10 @@ func serveWatching(t *testing.T, dir string, d *db.DB, fakes ...*mailtest.FakeCl
 	started := float64(time.Now().Unix())
 	startServeIn(t, dir)
 	waitUntil(t, 30*time.Second, "serve to prime the mail sync job", func() bool {
-		due := mailJobDue(t, d, run.SyncJobKey)
+		due := mailJobDue(t, d, mailrun.SyncJobKey)
 		return due != nil && *due >= started
 	})
-	if due := mailJobDue(t, d, run.SyncJobKey); *due < started+115 || *due > float64(time.Now().Unix())+125 {
+	if due := mailJobDue(t, d, mailrun.SyncJobKey); *due < started+115 || *due > float64(time.Now().Unix())+125 {
 		t.Fatalf("mail sync next due %.0f s after serve start, want the 2 minute initial delay", *due-started)
 	}
 	if n := schedulerRuns(t, d, passrun.Sync); n != before {
@@ -74,7 +74,7 @@ func waitWatching(t *testing.T, fakes ...*mailtest.FakeClient) {
 func syncDue(t *testing.T, d *db.DB) int {
 	t.Helper()
 	manual := schedulerRuns(t, d, passrun.Sync)
-	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, run.SyncJobKey)
+	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, mailrun.SyncJobKey)
 	return manual
 }
 

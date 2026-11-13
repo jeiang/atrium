@@ -277,6 +277,9 @@
             touch $out
           '';
       }
+      // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
+        api-client-swift = pkgs.callPackage ../nix/swift-api-check.nix {};
+      }
       // lib.optionalAttrs (self'.packages ? atrium) {
         module-config = pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep];} ''
           set -euo pipefail

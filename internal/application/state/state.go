@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -83,12 +84,10 @@ type Entry struct {
 	Operation   string
 	Actor       string
 	Source      audit.Source
-	ThreadID    int64
-	RunID       int64
-	JobRunID    int64
 	Outcome     Outcome
 	Target      string
 	DetailsJSON string
+	CommandID   string
 }
 
 type Store struct {
@@ -168,12 +167,17 @@ func (s *Store) Audit(ctx context.Context, tx *sql.Tx, e Entry) (int64, error) {
 	if err := json.Unmarshal([]byte(e.DetailsJSON), &details); err != nil || details == nil {
 		return 0, errors.New("state: operation audit details must be a JSON object")
 	}
+	inv, _ := application.InvocationOf(ctx)
+	commandID := sql.NullString{String: e.CommandID, Valid: e.CommandID != ""}
+	if !commandID.Valid && inv.CommandID != "" {
+		commandID = sql.NullString{String: inv.CommandID, Valid: true}
+	}
 	var id int64
 	insert := func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO operation_audit (ts, operation, actor, source, thread_id, run_id, job_run_id, outcome, target, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			float64(e.TS.UnixNano())/1e9, e.Operation, e.Actor, string(e.Source), nullID(e.ThreadID), nullID(e.RunID), nullID(e.JobRunID),
-			string(e.Outcome), e.Target, e.DetailsJSON)
+			"INSERT INTO operation_audit (ts, operation, actor, source, thread_id, run_id, job_run_id, outcome, target, details_json, command_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			float64(e.TS.UnixNano())/1e9, e.Operation, e.Actor, string(e.Source), nullID(inv.ThreadID), nullID(inv.RunID), nullID(inv.JobRunID),
+			string(e.Outcome), e.Target, e.DetailsJSON, commandID)
 		if err != nil {
 			return err
 		}

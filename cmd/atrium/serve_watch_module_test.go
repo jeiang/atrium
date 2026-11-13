@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/mail/run"
+	mailrun "github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -43,7 +43,7 @@ func TestServeWatchStopsWithTheMailModuleAndStaysStopped(t *testing.T) {
 	if home.Idling() != 0 || work.Idling() != 0 {
 		t.Fatalf("IDLE sessions home %d work %d with mail off, want none", home.Idling(), work.Idling())
 	}
-	if starts := serviceStarts(logs, run.WatchServiceName("home")); starts != 1 {
+	if starts := serviceStarts(logs, mailrun.WatchServiceName("home")); starts != 1 {
 		t.Fatalf("the home watch started %d times, want only the start before the module was disabled", starts)
 	}
 	if n := strings.Count(logs.String(), ": 0 new, 0 gone"); n != passes {

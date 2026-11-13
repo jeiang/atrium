@@ -28,7 +28,7 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused := func(want string, args ...string) {
 		t.Helper()
 		r := runSettings(t, args...)
-		if r.code != cli.ExitError || r.stdout != "" || !strings.Contains(r.stderr, want) {
+		if r.code != cli.ExitUsage || r.stdout != "" || !strings.Contains(r.stderr, want) {
 			t.Errorf("%v: exit %d stdout %q stderr %q, want a refusal containing %q", args, r.code, r.stdout, r.stderr, want)
 		}
 	}

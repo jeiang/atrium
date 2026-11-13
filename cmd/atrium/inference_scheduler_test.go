@@ -190,4 +190,7 @@ func TestInferenceSchedulerDefersConditionalPaidWork(t *testing.T) {
 	if queued != 1 {
 		t.Errorf("the deferred candidate is no longer queued")
 	}
+	if got := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'calendar.draft-candidates' AND outcome = 'refused' AND source = 'job' AND job_run_id IS NOT NULL"); got != 1 {
+		t.Errorf("candidate failure audits = %d, want 1", got)
+	}
 }

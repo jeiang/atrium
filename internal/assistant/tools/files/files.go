@@ -2,24 +2,14 @@ package filetools
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
-	"unicode/utf8"
 
-	filestore "github.com/jeiang/atrium/internal/assistant/files"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
-
-const UndoOp = "file_restore"
 
 const (
 	readName   = "file_read"
@@ -27,325 +17,79 @@ const (
 	writeName  = "file_write"
 )
 
-var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
-
 const readSchema = `{"type":"object","properties":{"name":{"type":"string","maxLength":200,"description":"File name inside the thread or project files."}},"required":["name"],"additionalProperties":false}`
 
 const searchSchema = `{"type":"object","properties":{"query":{"type":"string","maxLength":500,"description":"Text to find in file names or contents."}},"required":["query"],"additionalProperties":false}`
 
 const writeSchema = `{"type":"object","properties":{"name":{"type":"string","maxLength":200,"description":"File name inside the thread files."},"content":{"type":"string","maxLength":100000,"description":"Full new text content."}},"required":["name","content"],"additionalProperties":false}`
 
-func Tools() []tool.Tool {
+type Service func(*tool.Context) *asstapp.Service
+
+func Tools(svc Service) []tool.Tool {
 	return []tool.Tool{
 		{
 			Name: readName, Description: "Read a text file from this thread's or its project's files directory. Returns the text; refuses binary files, paths outside the files directory and files over the size cap.",
-			InputSchema: json.RawMessage(readSchema), Handler: read, Effect: tool.Read,
+			InputSchema: json.RawMessage(readSchema), Handler: read(svc), Effect: tool.Read,
 			Marks: tool.Messages | tool.Untrusted, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{
 			Name: searchName, Description: "Search this thread's and its project's files for a text query, returning matching file names and line snippets.",
-			InputSchema: json.RawMessage(searchSchema), Handler: search, Effect: tool.Read,
+			InputSchema: json.RawMessage(searchSchema), Handler: search(svc), Effect: tool.Read,
 			Marks: tool.Messages | tool.Untrusted, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{
 			Name: writeName, Description: "Write a text file into this thread's files directory, replacing it if it exists. Undo restores the prior content or removes a new file.",
-			InputSchema: json.RawMessage(writeSchema), Handler: write, Effect: tool.WriteUndo, Undo: UndoOp,
+			InputSchema: json.RawMessage(writeSchema), Handler: write(svc), Effect: tool.WriteUndo, Undo: asstapp.FileRestoreOp,
 			Annotated: true, Channel: tool.ChannelOwn, Contexts: tool.Kinds{tool.Chat},
 		},
 	}
 }
 
-func read(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	name, err := argName(args)
-	if err != nil {
-		return nil, err
+func fail(err error) error {
+	var e *application.Error
+	if errors.As(err, &e) {
+		return tool.Fail(err)
 	}
-	path, err := resolve(ctx, tc, name)
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, tool.Error("no such file: " + name)
-	}
-	if err != nil {
-		return nil, err
-	}
-	limits, err := filestore.ReadLimits(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > limits.FileCap {
-		return nil, tool.Error(fmt.Sprintf("%s is larger than the %d byte cap", name, limits.FileCap))
-	}
-	if !utf8.Valid(data) {
-		return nil, tool.Error(name + " is not a text file")
-	}
-	return tool.Marked{Value: string(data), Marks: tool.Messages | tool.Untrusted}, nil
+	return err
 }
 
-func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw, _ := args.Get("query")
-	query, _ := raw.(string)
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return nil, tool.Error("query is required")
-	}
-	dirs, err := roots(ctx, tc)
-	if err != nil {
-		return nil, err
-	}
-	limits, err := filestore.ReadLimits(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
+func text(args tool.Args, name string) string {
+	raw, _ := args.Get(name)
+	value, _ := raw.(string)
+	return value
+}
+
+func read(svc Service) tool.Handler {
+	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+		got, err := svc(tc).FileRead(ctx, asstapp.FileReadInput{ThreadID: tc.ThreadID, Name: text(args, "name")})
 		if err != nil {
-			return nil, err
+			return nil, fail(err)
 		}
-		for _, entry := range entries {
-			if entry.IsDir() || !nameRe.MatchString(entry.Name()) {
-				continue
-			}
-			if strings.Contains(entry.Name(), query) {
-				out = append(out, entry.Name())
-			}
-			if len(out) >= 50 {
-				return out, nil
-			}
-			data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-			if err != nil || len(data) > limits.FileCap || !utf8.Valid(data) {
-				continue
-			}
-			for _, line := range strings.Split(string(data), "\n") {
-				if strings.Contains(line, query) {
-					out = append(out, entry.Name()+": "+clip(strings.TrimSpace(line), 200))
-					if len(out) >= 50 {
-						return out, nil
-					}
-				}
-			}
+		return tool.Marked{Value: got.Data.Text, Marks: tool.Messages | tool.Untrusted}, nil
+	}
+}
+
+func search(svc Service) tool.Handler {
+	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+		got, err := svc(tc).FileSearch(ctx, asstapp.FileSearchInput{ThreadID: tc.ThreadID, Query: text(args, "query")})
+		if err != nil {
+			return nil, fail(err)
 		}
-	}
-	if out == nil {
-		return tool.Marked{Value: []string{}, Marks: 0}, nil
-	}
-	return tool.Marked{Value: out, Marks: tool.Messages | tool.Untrusted}, nil
-}
-
-func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	name, err := argName(args)
-	if err != nil {
-		return nil, err
-	}
-	raw, _ := args.Get("content")
-	content, _ := raw.(string)
-	limits, err := filestore.ReadLimits(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	if len(content) > limits.FileCap {
-		return nil, tool.Error(fmt.Sprintf("content is larger than the %d byte cap", limits.FileCap))
-	}
-	dir, err := threadDir(tc)
-	if err != nil {
-		return nil, err
-	}
-	path := filepath.Join(dir, name)
-	prior, priorErr := os.ReadFile(path)
-	if priorErr != nil && !errors.Is(priorErr, os.ErrNotExist) {
-		return nil, priorErr
-	}
-	var before any
-	if priorErr == nil {
-		if !utf8.Valid(prior) {
-			return nil, tool.Error(name + " is not a text file")
+		if len(got.Data) == 0 {
+			return tool.Marked{Value: []string{}, Marks: 0}, nil
 		}
-		before = string(prior)
+		return tool.Marked{Value: got.Data, Marks: tool.Messages | tool.Untrusted}, nil
 	}
-	var parents []string
-	if priorErr != nil {
-		for parent := dir; ; parent = filepath.Dir(parent) {
-			if _, statErr := os.Stat(parent); statErr == nil {
-				break
-			}
-			parents = append(parents, parent)
-			if filepath.Dir(parent) == parent {
-				break
-			}
+}
+
+func write(svc Service) tool.Handler {
+	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+		name := text(args, "name")
+		_, err := svc(tc).FileWrite(ctx, asstapp.FileWriteInput{ThreadID: tc.ThreadID, RunID: tc.RunID, ProposalID: tc.ProposalID,
+			Name: name, Content: text(args, "content")})
+		if err != nil {
+			return nil, fail(err)
 		}
+		return "wrote " + strings.TrimSpace(name), nil
 	}
-	undo := map[string]any{"op": UndoOp, "path": path, "before": before, "sha": hash([]byte(content)), "parents": parents}
-	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
-		Origin: "agent", Operation: writeName, OperationKey: writeName + ":" + ledger.NewKey(),
-		Target: name, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
-		Before: jsonOf(before), Undo: jsonOf(undo), Resources: []ledger.Resource{{Key: "file:" + path}},
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := writeAtomic(dir, path, []byte(content)); err != nil {
-		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Failed, Target: name, Error: err.Error()}, nil)
-		return nil, err
-	}
-	if err := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
-		State: ledger.Done, Target: name, After: jsonOf(content), Undo: jsonOf(undo),
-	}, nil); err != nil {
-		return nil, err
-	}
-	return "wrote " + name, nil
-}
-
-func writeAtomic(dir, path string, content []byte) error {
-	if err := os.MkdirAll(dir, 0o777); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".atrium-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	remove := func() { _ = os.Remove(name) }
-	if _, err := tmp.Write(content); err != nil {
-		_ = tmp.Close()
-		remove()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		remove()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		remove()
-		return err
-	}
-	if err := os.Chmod(name, 0o666); err != nil {
-		remove()
-		return err
-	}
-	if err := os.Rename(name, path); err != nil {
-		remove()
-		return err
-	}
-	return nil
-}
-
-func jsonOf(v any) json.RawMessage {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return json.RawMessage(`{}`)
-	}
-	return b
-}
-
-func Undo() []ledger.UndoDefinition {
-	return []ledger.UndoDefinition{{Operation: UndoOp, Undoer: ledger.Undoer{
-		Validate: func(payload json.RawMessage) error {
-			var p struct {
-				Path string `json:"path"`
-			}
-			if err := json.Unmarshal(payload, &p); err != nil || p.Path == "" {
-				return ledger.Refused("file_restore without a path")
-			}
-			return nil
-		},
-		External: func(ctx context.Context, payload json.RawMessage) (ledger.Result, error) {
-			var p struct {
-				Path    string   `json:"path"`
-				Before  *string  `json:"before"`
-				SHA     string   `json:"sha"`
-				Parents []string `json:"parents"`
-			}
-			if err := json.Unmarshal(payload, &p); err != nil {
-				return ledger.Result{}, ledger.Refused("file_restore payload is invalid")
-			}
-			if p.Path == "" {
-				return ledger.Result{}, ledger.Refused("file_restore without a path")
-			}
-			current, err := os.ReadFile(p.Path)
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				return ledger.Result{}, err
-			}
-			if hash(current) != p.SHA {
-				return ledger.Result{}, ledger.Refused("file changed since the write; not restoring")
-			}
-			if p.Before == nil {
-				if err := os.Remove(p.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-					return ledger.Result{}, err
-				}
-				for _, parent := range p.Parents {
-					if err := os.Remove(parent); err != nil {
-						break
-					}
-				}
-				return ledger.Result{State: ledger.Done, After: jsonOf("removed")}, nil
-			}
-			if err := writeAtomic(filepath.Dir(p.Path), p.Path, []byte(*p.Before)); err != nil {
-				return ledger.Result{}, err
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf("restored")}, nil
-		},
-	}}}
-}
-
-func argName(args tool.Args) (string, error) {
-	raw, _ := args.Get("name")
-	name, _ := raw.(string)
-	name = strings.TrimSpace(name)
-	if !nameRe.MatchString(name) || strings.Contains(name, "..") {
-		return "", tool.Error("invalid file name; use a plain name inside the files directory")
-	}
-	return name, nil
-}
-
-func roots(ctx context.Context, tc *tool.Context) ([]string, error) {
-	threadDir, err := threadDir(tc)
-	if err != nil {
-		return nil, err
-	}
-	out := []string{threadDir}
-	thread, err := threads.Get(ctx, tc.DB.Read, tc.ThreadID)
-	if err != nil {
-		return nil, err
-	}
-	if thread != nil && thread.ProjectID != nil && *thread.ProjectID != 0 {
-		out = append(out, filepath.Join(tc.Cfg.FilesDir(), filestore.ProjectOwner(*thread.ProjectID).Dir()))
-	}
-	return out, nil
-}
-
-func resolve(ctx context.Context, tc *tool.Context, name string) (string, error) {
-	dirs, err := roots(ctx, tc)
-	if err != nil {
-		return "", err
-	}
-	for _, dir := range dirs {
-		path := filepath.Join(dir, name)
-		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
-			return path, nil
-		}
-	}
-	return filepath.Join(dirs[0], name), nil
-}
-
-func threadDir(tc *tool.Context) (string, error) {
-	return filepath.Join(tc.Cfg.FilesDir(), filestore.ThreadOwner(tc.ThreadID).Dir()), nil
-}
-
-func hash(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
-
-func clip(text string, max int) string {
-	if len(text) <= max {
-		return text
-	}
-	return text[:max] + "…"
 }

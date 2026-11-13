@@ -109,6 +109,46 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 	if ok, _, _ := passRows(t, dir, passrun.CardDAV); ok != 4 {
 		t.Errorf("carddav pass rows ok=%d, want 4", ok)
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'contacts.sync' AND outcome = 'ok' AND actor = 'operator' AND source = 'cli'").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits != 4 {
+		t.Fatalf("contacts sync wrote %d operator/cli success audits, want 4", audits)
+	}
+}
+
+func TestContactsSyncSkipsOffAndUnconfiguredWithoutAuditing(t *testing.T) {
+	for _, tc := range []struct {
+		name, enabled string
+	}{
+		{"off", "false"},
+		{"unconfigured", "true"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, _, _ := moduleFixture(t, flagsExcept("contacts", tc.enabled))
+			contactsDir := ""
+			if tc.name == "off" {
+				contactsDir = filepath.Join(dir, "contacts")
+			}
+			setEnv(t, settingEnv(contacts.DirKey), contactsDir)
+			got := runApp(t, "contacts", "sync")
+			if got.code != cli.ExitOK || got.stdout != "" {
+				t.Fatalf("contacts sync = %d: %s", got.code, got.stderr)
+			}
+			d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+			defer func() { _ = d.Close() }()
+			var audits int
+			if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'contacts.sync'").Scan(&audits); err != nil {
+				t.Fatal(err)
+			}
+			if audits != 0 {
+				t.Fatalf("skipped contacts sync wrote %d audits", audits)
+			}
+		})
+	}
 }
 
 func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothing(t *testing.T) {
@@ -122,6 +162,17 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	if err != nil || !strings.Contains(string(data), "SUMMARY:Dentist") {
 		t.Fatalf("mirrored event %q, %v", data, err)
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	if audits := operationAudits(t, d, "calendar.sync"); len(audits) != 1 || !strings.HasPrefix(audits[0], "ok ") {
+		t.Fatalf("calendar.sync audits after a sync that wrote an event = %q, want one ok row", audits)
+	}
+	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
+		t.Fatalf("unchanged calendar sync: %d %q", got.code, got.stderr)
+	}
+	if audits := operationAudits(t, d, "calendar.sync"); len(audits) != 1 {
+		t.Fatalf("calendar.sync audits after a sync that changed nothing = %q, want no new row", audits)
+	}
 
 	srv.RemoveObject(caldavtest.CalendarPath(0) + "dentist.ics")
 	setEnv(t, "ICLOUD_APP_PASSWORD", davPassword)
@@ -134,6 +185,9 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	}
 	if _, failed, _ := passRows(t, dir, passrun.CalDAV); failed != 1 {
 		t.Errorf("caldav failed rows = %d, want 1", failed)
+	}
+	if audits := operationAudits(t, d, "calendar.sync"); len(audits) != 2 || strings.HasPrefix(audits[1], "ok ") {
+		t.Errorf("calendar.sync audits after a failed sync = %q, want one more non-ok row", audits)
 	}
 
 	seedSettings(t, map[string]string{calendar.AppleIDKey: ""})

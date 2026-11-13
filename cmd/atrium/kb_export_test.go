@@ -677,6 +677,48 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	}
 }
 
+func TestNewNotionParentClearsAnOmittedPrivateConfirmation(t *testing.T) {
+	dir, _, d := exportFixture(t, &exportNotion{})
+	setEnv(t, settingEnv("public_url"), "https://atrium.invalid")
+	base := startServeIn(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil); status != http.StatusOK {
+		t.Fatalf("GET integrations = %d", status)
+	}
+	const named = "01234567-89ab-cdef-0123-456789abcdef"
+	form := url.Values{
+		"export_notion_enabled":    {"true"},
+		"export_notion_parent":     {"0123456789abcdef0123456789abcdef"},
+		"export_notion_kinds":      {"personal"},
+		"export_notion_private_to": {named},
+	}
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form); status != http.StatusOK {
+		t.Fatalf("POST export section = %d: %.300s", status, body)
+	}
+	if got := settingValue(t, d, kbexport.NotionPrivateKey); got != named {
+		t.Fatalf("stored private destination = %q, want %q", got, named)
+	}
+	form.Set("export_notion_parent", "fedcba9876543210fedcba9876543210")
+	form.Del("export_notion_private_to")
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form); status != http.StatusOK {
+		t.Fatalf("POST export section = %d: %.300s", status, body)
+	}
+	if got := settingValue(t, d, kbexport.NotionPrivateKey); got != "" {
+		t.Errorf("a new parent kept the private confirmation for the old one: %q", got)
+	}
+	var details string
+	if err := d.Read.QueryRow("SELECT details_json FROM operation_audit WHERE operation = 'settings.set' AND outcome = 'ok' ORDER BY id DESC LIMIT 1").Scan(&details); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(details, `"`+kbexport.NotionPrivateKey+`"`) {
+		t.Errorf("operation audit details %s do not name %s", details, kbexport.NotionPrivateKey)
+	}
+}
+
 func TestExportWithoutADestinationIsSkipped(t *testing.T) {
 	fake := &exportNotion{}
 	_, f, d := exportFixture(t, fake)

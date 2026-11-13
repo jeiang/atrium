@@ -39,6 +39,10 @@ func TestFileWriteUndoRemovesOnlyTheParentsItCreated(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id FROM effects WHERE direction = 'forward' AND operation = 'file_write' AND state = 'done' ORDER BY id DESC LIMIT 1").Scan(&id); err != nil {
 		t.Fatalf("file effect: %v", err)
 	}
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.file.write' AND outcome = 'ok' AND target = 'thread:1' AND details_json = ?", fmt.Sprintf(`{"effect_ids":[%d]}`, id)).Scan(&audits); err != nil || audits != 1 {
+		t.Fatalf("file write audits = %d, %v; want one naming effect %d", audits, err, id)
+	}
 	if ran := runApp(t, "effects", "undo", fmt.Sprint(id)); ran.code != cli.ExitOK {
 		t.Fatalf("effects undo: %d %s", ran.code, ran.stderr)
 	}

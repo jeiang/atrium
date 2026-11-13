@@ -1,17 +1,15 @@
 package web
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/auth/bearer"
+	"github.com/jeiang/atrium/internal/application"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const authSettingsPath = "/settings/auth"
@@ -43,46 +41,34 @@ type tokenView struct {
 }
 
 func (s *Server) signInPage(w http.ResponseWriter, r *http.Request) {
-	s.renderAuth(w, r, authSettingsView{})
+	s.renderAuth(w, r, http.StatusOK, authSettingsView{})
 }
 
 func (s *Server) tokenIssue(w http.ResponseWriter, r *http.Request) {
-	if s.bearers == nil {
+	if s.account == nil {
 		s.Error(w, r, http.StatusServiceUnavailable, "Service Unavailable")
 		return
 	}
 	form := FormValues(r)
-	var at *time.Time
+	in := authapp.BearerIssueInput{Name: form.Get("name")}
 	if raw := strings.TrimSpace(form.Get("expires_at")); raw != "" {
 		parsed, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
-			s.renderAuth(w, r, authSettingsView{Error: "The expiry must be an RFC 3339 timestamp."})
+			s.renderAuth(w, r, http.StatusUnprocessableEntity, authSettingsView{Error: "The expiry must be an RFC 3339 timestamp."})
 			return
 		}
-		at = &parsed
+		in.ExpiresAt = &parsed
 	}
-	ctx := audit.With(r.Context(), "operator", audit.UI)
-	issued, err := s.bearers.Issue(ctx, form.Get("name"), at)
-	switch {
-	case errors.Is(err, bearer.ErrName):
-		s.renderAuth(w, r, authSettingsView{Error: "A name of at most 100 characters is required."})
-		return
-	case errors.Is(err, bearer.ErrExpiry):
-		s.renderAuth(w, r, authSettingsView{Error: "The expiry must be in the future."})
-		return
-	case err != nil:
-		log.Error("token issue failed", logx.Err, err.Error())
-		s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
+	issued, err := s.account.BearerIssue(r.Context(), in)
+	if err != nil {
+		s.authFailed(w, r, err)
 		return
 	}
-	if err := s.recordToken(ctx, "auth_token.issue", issued.Token); err != nil {
-		log.Error("token audit failed", logx.Err, err.Error())
-	}
-	s.renderAuth(w, r, authSettingsView{Secret: issued.Secret, Notice: fmt.Sprintf("Token %d issued.", issued.Token.ID)})
+	s.renderAuth(w, r, http.StatusOK, authSettingsView{Secret: issued.Data.Secret, Notice: fmt.Sprintf("Token %d issued.", issued.Data.Token.ID)})
 }
 
 func (s *Server) tokenRevoke(w http.ResponseWriter, r *http.Request) {
-	if s.bearers == nil {
+	if s.account == nil {
 		s.Error(w, r, http.StatusServiceUnavailable, "Service Unavailable")
 		return
 	}
@@ -91,80 +77,50 @@ func (s *Server) tokenRevoke(w http.ResponseWriter, r *http.Request) {
 		s.Error(w, r, http.StatusNotFound, "Not Found")
 		return
 	}
-	ctx := audit.With(r.Context(), "operator", audit.UI)
-	tokens, err := s.bearers.List(ctx)
-	if err != nil {
-		log.Error("token list failed", logx.Err, err.Error())
-		s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
+	if _, err := s.account.BearerRevoke(r.Context(), authapp.BearerRevokeInput{ID: id}); err != nil {
+		s.authFailed(w, r, err)
 		return
 	}
-	var target bearer.Token
-	for _, tok := range tokens {
-		if tok.ID == id {
-			target = tok
-		}
-	}
-	switch err := s.bearers.Revoke(ctx, id); {
-	case errors.Is(err, bearer.ErrNotFound):
-		s.Error(w, r, http.StatusNotFound, "Not Found")
-		return
-	case err != nil:
-		log.Error("token revoke failed", logx.Err, err.Error())
-		s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
-		return
-	}
-	if target.ID != 0 && target.RevokedAt == nil {
-		if err := s.recordToken(ctx, "auth_token.revoke", target); err != nil {
-			log.Error("token audit failed", logx.Err, err.Error())
-		}
-	}
-	s.renderAuth(w, r, authSettingsView{Notice: fmt.Sprintf("Token %d revoked.", id)})
+	s.renderAuth(w, r, http.StatusOK, authSettingsView{Notice: fmt.Sprintf("Token %d revoked.", id)})
 }
 
-func (s *Server) recordToken(ctx context.Context, key string, tok bearer.Token) error {
-	if s.db == nil {
-		return nil
-	}
-	value := fmt.Sprintf("id=%d name=%s kind=%s", tok.ID, tok.Name, tok.Kind)
-	return audit.Record(ctx, s.db.Write, audit.Entry{Key: key, New: &value})
+func (s *Server) authFailed(w http.ResponseWriter, r *http.Request, err error) {
+	e := application.Classify(err)
+	Fail(w, r, e, func(status int) {
+		if status == http.StatusNotFound {
+			s.Error(w, r, status, "Not Found")
+			return
+		}
+		s.renderAuth(w, r, status, authSettingsView{Error: Message(e)})
+	})
 }
 
-func (s *Server) renderAuth(w http.ResponseWriter, r *http.Request, view authSettingsView) {
+func (s *Server) renderAuth(w http.ResponseWriter, r *http.Request, status int, view authSettingsView) {
 	noStore(w)
-	if s.oidc != nil {
-		view.Configured = true
-		cfg, err := s.oidc.Config(r.Context())
+	if s.account != nil {
+		cfg, err := s.account.Configuration(r.Context())
 		if err != nil {
-			view.Reason = err.Error()
-		} else {
-			view.Active = true
-			view.Provider = cfg.Preset.Display
-			if view.Provider == "" {
-				view.Provider = cfg.Preset.Name
-			}
-			view.Issuer = cfg.Issuer
-			view.ClientID = cfg.ClientID
-			view.Redirect = cfg.RedirectURI
+			log.Error("sign-in configuration failed", logx.Err, err.Error())
 		}
-	}
-	if s.bearers != nil {
-		tokens, err := s.bearers.List(r.Context())
+		c := cfg.Data
+		view.Configured, view.Active, view.Provider, view.Issuer, view.ClientID, view.Redirect, view.Reason = c.Configured, c.Active, c.Provider, c.Issuer, c.ClientID, c.Redirect, c.Reason
+		tokens, err := s.account.BearerList(r.Context())
 		if err != nil {
 			log.Error("token list failed", logx.Err, err.Error())
 		} else {
-			view.Tokens = tokenViews(tokens)
+			view.Tokens = tokenViews(tokens.Data)
 		}
 	}
 	f, err := s.render.Frame(r, "settings", view)
 	if err != nil {
 		panic(err)
 	}
-	if err := s.render.Page(w, r, http.StatusOK, "settings_auth.gohtml", f); err != nil {
+	if err := s.render.Page(w, r, status, "settings_auth.gohtml", f); err != nil {
 		panic(err)
 	}
 }
 
-func tokenViews(tokens []bearer.Token) []tokenView {
+func tokenViews(tokens []authapp.Token) []tokenView {
 	out := make([]tokenView, len(tokens))
 	for i, tok := range tokens {
 		owner := tok.Subject

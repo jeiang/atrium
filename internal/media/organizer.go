@@ -302,7 +302,16 @@ func (t Tuning) Plan(view View, root string) PlanResult {
 
 func (t Tuning) Planned(view View, root string) View { return t.Plan(view, root).View }
 
-func (t Tuning) Apply(ctx context.Context, store *ledger.Store, set Settings, item Item, ops []Op, root string) error {
+type PartialError struct {
+	Cause  error
+	Placed []string
+}
+
+func (e *PartialError) Error() string { return e.Cause.Error() }
+
+func (e *PartialError) Unwrap() error { return e.Cause }
+
+func (t Tuning) Apply(ctx context.Context, store *ledger.Store, set Settings, item Item, ops []Op, root string) (err error) {
 	if len(ops) == 0 {
 		return PlanError("no files to place")
 	}
@@ -326,6 +335,11 @@ func (t Tuning) Apply(ctx context.Context, store *ledger.Store, set Settings, it
 		})
 	}
 	confirmed := []string{}
+	defer func() {
+		if err != nil && len(confirmed) > 0 {
+			err = &PartialError{Cause: err, Placed: confirmed}
+		}
+	}()
 	for _, step := range plan.Steps {
 		ticket, err := store.Begin(ctx, ledger.New{
 			Origin: "media", Operation: OpFile,
@@ -342,12 +356,12 @@ func (t Tuning) Apply(ctx context.Context, store *ledger.Store, set Settings, it
 			_ = store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Failed, Target: item.ID, Error: err.Error()}, nil)
 			return err
 		}
+		confirmed = append(confirmed, step.Rel)
 		if err := store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
 			State: ledger.Done, Target: item.ID, After: jsonOf(map[string]any{"placed": step.Rel}),
 		}, nil); err != nil {
 			return err
 		}
-		confirmed = append(confirmed, step.Rel)
 	}
 	if item.Torrent {
 		if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagIgnored, false); err != nil {
@@ -384,7 +398,10 @@ func Ignore(ctx context.Context, store *ledger.Store, set Settings, item Item) e
 	if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagFiled, false); err != nil {
 		return err
 	}
-	return set.Tag(ctx, store, set, Scope{}, item.ID, TagIgnored, true)
+	if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagIgnored, true); err != nil {
+		return &PartialError{Cause: err}
+	}
+	return nil
 }
 
 type SweepResult struct {

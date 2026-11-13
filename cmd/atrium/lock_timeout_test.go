@@ -17,10 +17,16 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 )
 
-const lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
+const (
+	lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
+	execMainEnv   = "ATRIUM_TEST_EXEC_MAIN"
+)
 
 func TestMain(m *testing.M) {
 	guardExternalHosts()
+	if os.Getenv(execMainEnv) == "1" {
+		os.Exit(run(os.Args[1:]))
+	}
 	if path := os.Getenv(lockHolderEnv); path != "" {
 		lock, err := db.ResourceLocks(context.Background(), path, []string{mail.PassResource}, 0)
 		if err != nil {

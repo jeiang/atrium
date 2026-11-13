@@ -1,20 +1,22 @@
 package pages
 
 import (
+	"encoding/json"
 	"errors"
 	"math/big"
 	"net/http"
+	"reflect"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
-	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -70,16 +72,16 @@ type apiQuestion struct {
 }
 
 type apiItem struct {
-	Seq        int64                `json:"seq"`
-	RunID      *int64               `json:"run_id"`
-	CreatedAt  float64              `json:"created_at"`
-	Kind       string               `json:"kind"`
-	Text       string               `json:"text"`
-	Files      []service.Attachment `json:"files"`
-	Steps      []*service.Step      `json:"steps"`
-	Citations  []service.Citation   `json:"citations"`
-	DraftID    *int64               `json:"draft_id,omitempty"`
-	ProposalID *int64               `json:"proposal_id,omitempty"`
+	Seq        int64              `json:"seq"`
+	RunID      *int64             `json:"run_id"`
+	CreatedAt  float64            `json:"created_at"`
+	Kind       string             `json:"kind"`
+	Text       string             `json:"text"`
+	Files      []apiAttachment    `json:"files"`
+	Steps      []*apiStep         `json:"steps"`
+	Citations  []service.Citation `json:"citations"`
+	DraftID    *int64             `json:"draft_id,omitempty"`
+	ProposalID *int64             `json:"proposal_id,omitempty"`
 }
 
 type apiTranscript struct {
@@ -119,9 +121,9 @@ type seqCursor struct {
 
 func (p *pages) apiRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/threads", p.apiThreads)
-	d.API(http.MethodPost, "/threads", bindAssistant(web.Idempotent(p.apiNewThread)).ServeHTTP)
+	d.API(http.MethodPost, "/threads", bindAssistant(http.HandlerFunc(p.apiNewThread)).ServeHTTP)
 	d.API(http.MethodGet, "/threads/{thread_id}", p.apiTranscript)
-	d.API(http.MethodPost, "/threads/{thread_id}/messages", bindAssistant(web.Idempotent(p.apiMessage)).ServeHTTP)
+	d.API(http.MethodPost, "/threads/{thread_id}/messages", bindAssistant(http.HandlerFunc(p.apiMessage)).ServeHTTP)
 	d.API(http.MethodPost, "/threads/{thread_id}/stop", bindAssistant(http.HandlerFunc(p.apiStop)).ServeHTTP)
 	d.API(http.MethodPost, "/threads/{thread_id}/answer", bindAssistant(http.HandlerFunc(p.apiAnswer)).ServeHTTP)
 	d.API(http.MethodGet, "/threads/{thread_id}/runs/{run_id}/events", p.apiEvents)
@@ -157,7 +159,7 @@ func rowID(v any) *int64 {
 func itemOut(item *service.Item) apiItem {
 	out := apiItem{
 		Seq: item.Seq, RunID: item.RunID, CreatedAt: item.CreatedAt, Kind: item.Kind, Text: item.Text,
-		Files: item.Files, Steps: item.Steps, Citations: item.Citations,
+		Files: attachmentsOut(item.Files), Steps: stepsOut(item.Steps), Citations: item.Citations,
 	}
 	if item.Draft != nil {
 		out.DraftID = rowID(item.Draft["id"])
@@ -176,6 +178,9 @@ func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
 	var option threads.OptionError
 	var refused references.Refused
 	var disabled *module.OwnerDisabled
+	var archived asstapp.ArchivedProject
+	var readOnly asstapp.ReadOnlyThread
+	var app *application.Error
 	switch {
 	case err == nil:
 		return false
@@ -191,6 +196,20 @@ func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
 		web.APIError(w, http.StatusConflict, "nothing_to_edit", err.Error())
 	case errors.As(err, &unknown):
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
+	case errors.As(err, &archived):
+		web.APIError(w, http.StatusConflict, "project_archived", err.Error())
+	case errors.As(err, &readOnly):
+		web.APIError(w, http.StatusConflict, "read_only_thread", "Subagent threads are read-only.")
+	case errors.As(err, new(asstapp.NoActiveRun)):
+		web.APIError(w, http.StatusConflict, "no_active_run", err.Error())
+	case errors.As(err, new(asstapp.NoQuestion)):
+		web.APIError(w, http.StatusConflict, "no_question", err.Error())
+	case errors.As(err, new(asstapp.NotAnswered)):
+		web.APIError(w, http.StatusConflict, "not_answered", err.Error())
+	case errors.As(err, &app) && app.Code == application.NotConfigured:
+		web.APIError(w, http.StatusConflict, "not_configured", err.Error())
+	case errors.As(err, &app) && app.Code == application.NotFound:
+		web.APIError(w, http.StatusNotFound, "not_found", "Unknown project.")
 	case errors.As(err, &option):
 		web.APIError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	default:
@@ -224,31 +243,26 @@ func (p *pages) apiThreads(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	match := ""
-	if q := strings.TrimSpace(web.QueryValue(query, "q")); q != "" {
-		var err error
-		match, err = textsearch.FTSQuery(q)
-		check(err)
-	}
-	opts := threads.ListOpts{Match: match, Limit: limit + 1, Archived: view == archived, ProjectID: projectID}
+	in := asstapp.ThreadListInput{Q: strings.TrimSpace(web.QueryValue(query, "q")), Limit: limit, Archived: view == archived, ProjectID: projectID}
 	if after {
-		opts.After = &key
+		in.After = &key
 	}
-	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, opts)
-	check(err)
-	check(fillThreadCosts(r.Context(), p.deps.DB.Read, found))
+	read, err := p.assistant().ThreadList(r.Context(), in)
+	if err != nil {
+		web.APIFail(w, err)
+		return
+	}
 	out := web.List[apiListedThread]{Items: []apiListedThread{}}
-	if len(found) > limit {
-		found = found[:limit]
-		out.NextCursor = web.EncodeCursor(found[limit-1].Key())
+	if read.Data.Next != nil {
+		out.NextCursor = web.EncodeCursor(*read.Data.Next)
 	}
-	for _, t := range found {
+	for _, t := range read.Data.Items {
 		out.Items = append(out.Items, apiListedThread{
 			ID: t.ID, Title: t.Title, Pinned: bool(t.Pinned), Archived: bool(t.Archived), ProjectID: t.ProjectID,
 			ProjectName: t.ProjectName, RunState: t.RunState, CostUSD: t.Cost, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 		})
 	}
-	web.JSON(w, http.StatusOK, out)
+	web.APIRead(w, r, read.Revision, out)
 }
 
 func (p *pages) apiNewThread(w http.ResponseWriter, r *http.Request) {
@@ -257,47 +271,29 @@ func (p *pages) apiNewThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	if in.ProjectID != nil && *in.ProjectID != 0 {
-		found, err := projects.Get(ctx, p.deps.DB.Read, *in.ProjectID)
-		check(err)
-		if found == nil || found.ID == 0 {
-			web.APIError(w, http.StatusNotFound, "not_found", "Unknown project.")
-			return
-		}
-		if problem, archived := archivedProject(found, "start chats in it"); archived {
-			web.APIError(w, http.StatusConflict, "project_archived", problem)
-			return
-		}
-	} else {
-		in.ProjectID = nil
-	}
 	webSearch := true
 	if in.WebSearch != nil {
 		webSearch = *in.WebSearch
 	}
-	spec := threads.Spec{
-		Kind: threads.Chat, ProjectID: in.ProjectID, Model: in.Model, Effort: in.Effort, Thinking: in.Thinking,
-		WebSearch: &webSearch, CostCapUSD: in.CostCapUSD,
+	start := asstapp.StartInput{
+		Kind: threads.Chat, Model: in.Model, Effort: in.Effort, Thinking: in.Thinking,
+		WebSearch: &webSearch, CostCapUSD: in.CostCapUSD, Text: in.Text, Operator: true,
+	}
+	if in.ProjectID != nil {
+		start.ProjectID = *in.ProjectID
 	}
 	if in.ContextLimit != nil {
-		spec.ContextLimit = *in.ContextLimit
+		start.ContextLimit = *in.ContextLimit
 	}
-	threadID, err := threads.Create(ctx, p.deps.DB.Write, p.now(), spec)
+	started, err := p.assistant().ThreadStart(ctx, start)
 	if p.apiRefused(w, err) {
 		return
 	}
 	var runID *int64
-	if text := strings.TrimSpace(in.Text); text != "" {
-		id, err := p.svc().StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true})
-		if err != nil {
-			check(p.svc().DeleteThread(ctx, threadID))
-		}
-		if p.apiRefused(w, err) {
-			return
-		}
-		runID = &id
+	if started.Data.RunID != 0 {
+		runID = &started.Data.RunID
 	}
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
+	thread, err := threads.Get(ctx, p.deps.DB.Read, started.Data.ThreadID)
 	check(err)
 	web.JSON(w, http.StatusCreated, map[string]any{"thread": threadOut(*thread), "run_id": runID})
 }
@@ -312,38 +308,17 @@ func (p *pages) apiTranscript(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v, err := service.View(r.Context(), p.deps.DB.Read, threadID)
-	check(err)
-	if v == nil {
+	in := asstapp.TranscriptInput{ID: threadID, Limit: limit}
+	if after {
+		in.Before = cursor.Seq
+	}
+	read, err := p.assistant().Transcript(r.Context(), in)
+	if errorIs(err, application.NotFound) {
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
 		return
 	}
-	items := v.Items
-	if after {
-		end := len(items)
-		for end > 0 && items[end-1].Seq >= cursor.Seq {
-			end--
-		}
-		items = items[:end]
-	}
-	out := apiTranscript{
-		Thread: threadOut(v.Thread), ActiveRun: runOut(v.Active), Queued: []apiQueued{},
-		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{},
-	}
-	if len(items) > limit {
-		items = items[len(items)-limit:]
-		out.NextCursor = web.EncodeCursor(seqCursor{Seq: items[0].Seq})
-	}
-	for _, item := range items {
-		out.Items = append(out.Items, itemOut(item))
-	}
-	for _, q := range v.Queued {
-		out.Queued = append(out.Queued, apiQueued{ID: q.ID, Text: q.Text, CreatedAt: q.CreatedAt})
-	}
-	if v.Question != nil {
-		out.Question = &apiQuestion{RunID: v.Question.RunID, Text: v.Question.Text}
-	}
-	web.JSON(w, http.StatusOK, out)
+	check(err)
+	web.APIRead(w, r, read.Revision, transcriptOut(read.Data))
 }
 
 func (p *pages) apiMessage(w http.ResponseWriter, r *http.Request) {
@@ -360,34 +335,23 @@ func (p *pages) apiMessage(w http.ResponseWriter, r *http.Request) {
 		required(w, "text")
 		return
 	}
-	ctx := detached(r)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if thread == nil {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
-		return
-	}
-	if thread.Kind == threads.Subagent {
-		web.APIError(w, http.StatusConflict, "read_only_thread", "Subagent threads are read-only.")
-		return
-	}
+	send := p.assistant().MessageSend
 	if in.Edit {
-		runID, err := p.svc().EditLast(ctx, threadID, text, nil)
-		if p.apiRefused(w, err) {
-			return
-		}
-		web.JSON(w, http.StatusAccepted, map[string]any{"run_id": runID})
-		return
+		send = p.assistant().MessageEdit
 	}
-	sent, err := p.svc().Send(ctx, threadID, text, nil)
+	change, err := send(detached(r), asstapp.SendInput{ThreadID: threadID, Text: text, Operator: true})
 	if p.apiRefused(w, err) {
 		return
 	}
-	if sent.Queued {
-		web.JSON(w, http.StatusAccepted, map[string]any{"queued_id": sent.ID})
+	if in.Edit {
+		web.JSON(w, http.StatusAccepted, map[string]any{"run_id": change.Data.RunID})
 		return
 	}
-	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": sent.ID})
+	if change.Data.QueuedID != 0 {
+		web.JSON(w, http.StatusAccepted, map[string]any{"queued_id": change.Data.QueuedID})
+		return
+	}
+	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": change.Data.RunID})
 }
 
 func (p *pages) apiStop(w http.ResponseWriter, r *http.Request) {
@@ -395,25 +359,11 @@ func (p *pages) apiStop(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx := detached(r)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if thread == nil {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
+	stopped, err := p.assistant().RunStop(detached(r), asstapp.ThreadInput{ID: threadID})
+	if p.apiRefused(w, err) {
 		return
 	}
-	active, err := journal.ActiveRun(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	stopped := false
-	if active != nil {
-		stopped, err = journal.RequestStop(ctx, p.deps.DB.Write, active.ID)
-		check(err)
-	}
-	if !stopped {
-		web.APIError(w, http.StatusConflict, "no_active_run", "No run is running.")
-		return
-	}
-	web.JSON(w, http.StatusOK, map[string]any{"stopped": true, "run_id": active.ID})
+	web.JSON(w, http.StatusOK, map[string]any{"stopped": true, "run_id": stopped.Data.RunID})
 }
 
 func (p *pages) apiAnswer(w http.ResponseWriter, r *http.Request) {
@@ -429,18 +379,11 @@ func (p *pages) apiAnswer(w http.ResponseWriter, r *http.Request) {
 		required(w, "text")
 		return
 	}
-	ctx := detached(r)
-	question, err := service.PendingQuestion(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if question == nil {
-		web.APIError(w, http.StatusConflict, "no_question", "No question is waiting for an answer.")
+	answered, err := p.assistant().RunAnswer(detached(r), asstapp.AnswerInput{ThreadID: threadID, Text: in.Text})
+	if p.apiRefused(w, err) {
 		return
 	}
-	if err := p.svc().Answer(ctx, threadID, in.Text); err != nil {
-		web.APIError(w, http.StatusConflict, "not_answered", err.Error())
-		return
-	}
-	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": question.RunID})
+	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": answered.Data.RunID})
 }
 
 func (p *pages) apiEvents(w http.ResponseWriter, r *http.Request) {
@@ -466,11 +409,115 @@ func (p *pages) apiEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		after = n.Int64()
 	}
-	found, err := journal.GetRun(r.Context(), p.deps.DB.Read, runID)
-	check(err)
-	if found == nil || found.ThreadID != threadID {
+	read, err := p.assistant().RunEvents(r.Context(), asstapp.RunInput{ThreadID: threadID, RunID: runID, After: after})
+	if errorIs(err, application.NotFound) {
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown run.")
 		return
 	}
-	p.serveStream(w, r, runID, after)
+	check(err)
+	p.serveStream(w, r, read.Data)
+}
+
+func transcriptOut(v asstapp.Transcript) apiTranscript {
+	out := apiTranscript{
+		Thread: threadOut(v.Thread), ActiveRun: runOut(v.Active), Queued: []apiQueued{},
+		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{},
+	}
+	if v.Earlier != 0 {
+		out.NextCursor = web.EncodeCursor(seqCursor{Seq: v.Earlier})
+	}
+	for _, item := range v.Items {
+		out.Items = append(out.Items, itemOut(item))
+	}
+	for _, q := range v.Queued {
+		out.Queued = append(out.Queued, apiQueued{ID: q.ID, Text: q.Text, CreatedAt: q.CreatedAt})
+	}
+	if v.Question != nil {
+		out.Question = &apiQuestion{RunID: v.Question.RunID, Text: v.Question.Text}
+	}
+	return out
+}
+
+func errorIs(err error, code application.Code) bool {
+	return err != nil && application.Classify(err).Code == code
+}
+
+type apiAttachment struct {
+	ID        json.RawMessage `json:"id"`
+	Name      json.RawMessage `json:"name"`
+	MediaType json.RawMessage `json:"media_type"`
+	Kind      json.RawMessage `json:"kind"`
+}
+type apiSearchResult struct {
+	URL   json.RawMessage `json:"url"`
+	Title json.RawMessage `json:"title"`
+}
+type apiStep struct {
+	Kind          string            `json:"kind"`
+	Text          string            `json:"text"`
+	ID            json.RawMessage   `json:"id"`
+	Name          string            `json:"name"`
+	Args          string            `json:"args"`
+	State         *string           `json:"state"`
+	Result        *string           `json:"result"`
+	IsError       bool              `json:"is_error"`
+	ChildThreadID json.RawMessage   `json:"child_thread_id"`
+	Results       []apiSearchResult `json:"results"`
+	Error         json.RawMessage   `json:"error"`
+}
+
+func apiRaw(v any) json.RawMessage {
+	raw, err := json.Marshal(v)
+	check(err)
+	return raw
+}
+func attachmentsOut(in []service.Attachment) []apiAttachment {
+	if in == nil {
+		return nil
+	}
+	out := make([]apiAttachment, len(in))
+	for i, a := range in {
+		out[i] = apiAttachment{apiRaw(a.ID), apiRaw(a.Name), apiRaw(a.MediaType), apiRaw(a.Kind)}
+	}
+	return out
+}
+func stepsOut(in []*service.Step) []*apiStep {
+	if in == nil {
+		return nil
+	}
+	out := make([]*apiStep, len(in))
+	for i, s := range in {
+		if s == nil {
+			continue
+		}
+		var results []apiSearchResult
+		if s.Results != nil {
+			results = make([]apiSearchResult, len(s.Results))
+			for j, v := range s.Results {
+				results[j] = apiSearchResult{apiRaw(v.URL), apiRaw(v.Title)}
+			}
+		}
+		out[i] = &apiStep{Kind: s.Kind, Text: s.Text, ID: apiRaw(s.ID), Name: s.Name, Args: s.Args, State: s.State, Result: s.Result, IsError: s.IsError, ChildThreadID: apiRaw(s.ChildThreadID), Results: results, Error: apiRaw(s.Error)}
+	}
+	return out
+}
+
+type apiThreadListRequest struct {
+	Q         string `query:"q" json:"-"`
+	View      string `query:"view" json:"-"`
+	ProjectID string `query:"project_id" json:"-"`
+	Limit     string `query:"limit" json:"-"`
+	Cursor    string `query:"cursor" json:"-"`
+}
+type apiTranscriptRequest struct {
+	ThreadID int64  `path:"thread_id" json:"-"`
+	Limit    string `query:"limit" json:"-"`
+	Cursor   string `query:"cursor" json:"-"`
+}
+
+func APIReadBindings() []application.Binding {
+	return []application.Binding{
+		{Kind: application.API, Target: "GET /threads", Uses: []application.Name{asstapp.ThreadListName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiThreadListRequest](), Response: reflect.TypeFor[web.List[apiListedThread]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+		{Kind: application.API, Target: "GET /threads/{thread_id}", Uses: []application.Name{asstapp.ThreadTranscriptName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiTranscriptRequest](), Response: reflect.TypeFor[apiTranscript](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound, application.Invalid}}},
+	}
 }
