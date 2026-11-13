@@ -1,11 +1,14 @@
 package contactsmodule
 
 import (
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/web"
 )
 
 type Module struct {
@@ -31,5 +34,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Tools:      ToolDefinitions(),
 		Operations: operations,
 		Bindings:   bindings,
+		Pages:      []web.Page{{Module: func(_ chi.Router, d *web.Deps) { contactRoutes(d) }}},
 	}
 }

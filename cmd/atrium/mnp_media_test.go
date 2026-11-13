@@ -339,7 +339,6 @@ func mnpMediaRoot(t *testing.T, dir string) string {
 			t.Fatal(err)
 		}
 	}
-	setEnv(t, settingEnv(media.KeyRoot), root)
 	return root
 }
 
@@ -353,9 +352,8 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 		name  = "Lanterns.S01E08.1080p.WEB.h264-ETHEL"
 	)
 	dir := t.TempDir()
-	root := mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
+	_, root := agentLibrary(t, dir, qbURL)
 
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, name+".mkv"), make([]byte, 100))
@@ -503,17 +501,19 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 		group = "atrium_access"
 	)
 	dir := t.TempDir()
-	root := mnpMediaRoot(t, dir)
+	mnpMediaRoot(t, dir)
+	agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: dir})
+	root := filepath.Dir(agent.roots["movies"])
 	body := strings.Repeat("abcdefghij", 10)
 	mnpWrite(t, filepath.Join(root, movie), []byte(body))
 	mnpWrite(t, filepath.Join(root, "downloads", "secret.mkv"), []byte("do not serve"))
 	setEnv(t, settingEnv(config.KeyPublicURL), "https://atrium.test")
-	setEnv(t, settingEnv(media.KeyMoviesURL), "http://artemis.vpn:8084")
+	setEnv(t, settingEnv(media.KeyVPNBaseURL), "https://artemis.vpn:8443")
 	keyFile := filepath.Join(dir, "link.key")
 	if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-appkeys.toml", "[app_keys]\nlink_key_file = "+strconv.Quote(keyFile)+"\n"+defaultQbitConnection))
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-appkeys.toml", "[app_keys]\nlink_key_file = "+strconv.Quote(keyFile)+"\n"+defaultQbitConnection+agentConnectionTOML(agent.base, filepath.Join(agent.dir, "token"))))
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")

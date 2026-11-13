@@ -1,26 +1,31 @@
 package mediamodule
 
 import (
+	"context"
+
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/media/pages"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 type Module struct {
-	Now  func() float64
-	Jobs jobworker.Dependencies
+	Now       func() float64
+	Jobs      jobworker.Dependencies
+	Resources module.Resources
 }
 
 func Requirements() []module.Requirement {
 	return []module.Requirement{
-		module.HostSetting(media.KeyRoot),
+		module.Connection(string(media.KindMediaAgent), "bearer"),
 		module.Connection(string(media.KindQbittorrent)),
 	}
 }
@@ -50,8 +55,15 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Name:       module.Media,
 		Requires:   Requirements(),
 		Jobs:       mediacmd.Jobs(m.Jobs, openService),
-		Settings:   media.SettingsDefs(),
-		Host:       media.HostSettings(),
+		Services: []runtime.ServiceDefinition{{Name: "media-catalogue", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return mediaapp.New(mediaapp.Deps{DB: d, Env: mc.Env, Now: clock(m.Now)}).RefreshCatalogue(ctx)
+		}}},
+		Settings: media.SettingsDefs(),
+		Host:     media.HostSettings(),
 		Pages: []web.Page{{
 			Module:    pages.Module(pages.Options{Service: pageService(m.Now)}),
 			Templates: pages.Templates(),

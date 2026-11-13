@@ -40,7 +40,7 @@ func Builtins(d Dependencies) []module.Builder {
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
 		calendarmodule.Module{Jobs: jobs},
 		notionmodule.Module{Env: d.Env, Jobs: jobs},
-		mediamodule.Module{Now: d.Now, Jobs: jobs},
+		mediamodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
 		assistantmodule.Module{Now: d.Now, ProposeKinds: mailmodule.ProposeKinds(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
 		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},
 		grafanamodule.Module{Jobs: jobs},

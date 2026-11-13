@@ -29,7 +29,7 @@ func syncCommand(open Open) *cli.Command {
 			if err != nil {
 				return cli.Fail(e, err)
 			}
-			body, _ := json.Marshal(out)
+			body, _ := json.Marshal(out.Data)
 			_, _ = fmt.Fprintln(e.Stdout, string(body))
 			return cli.ExitOK
 		}

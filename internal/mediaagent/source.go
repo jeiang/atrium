@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -72,7 +73,7 @@ func (a *Agent) children(p protocol.Path, limit int) ([]protocol.Entry, error) {
 	}
 	defer func() { _ = f.Close() }()
 	entries, err := f.ReadDir(limit + 1)
-	if err != nil {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 	if len(entries) > limit {

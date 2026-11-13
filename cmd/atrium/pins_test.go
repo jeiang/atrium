@@ -47,7 +47,7 @@ func hostSettings(t *testing.T) (string, string) {
 	setEnv(t, "ATRIUM_CONFIG", "")
 	setEnv(t, "ATRIUM_HOST_CONFIG", "")
 	setEnv(t, "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL", "")
-	setEnv(t, "ATRIUM_MEDIA_MEDIA_ROOT", "")
+	setEnv(t, "ATRIUM_MEDIA_MEDIA_DOWNLOAD_PATH_PREFIX", "")
 	return dir, db
 }
 
@@ -56,7 +56,7 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	dir, db := hostSettings(t)
 	const key = "public_url"
 
-	host := writeFile(t, dir, "host.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n[media]\nmedia_root = \"/srv/media\"\n")
+	host := writeFile(t, dir, "host.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n[media]\nmedia_download_path_prefix = \"/srv/downloads\"\n")
 	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 
 	got := pinRowOf(t, runSettings(t, "get", key))
@@ -68,7 +68,7 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 		want string
 	}{
 		{[]string{"set", key, "https://other.example"}, "core.public_url"},
-		{[]string{"set", "media_root", "/other"}, "media.media_root"},
+		{[]string{"set", "media_download_path_prefix", "/other"}, "media.media_download_path_prefix"},
 		{[]string{"unset", key}, "core.public_url"},
 	} {
 		r := runSettings(t, verb.args...)

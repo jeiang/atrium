@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS settings_audit (
     source TEXT NOT NULL,
     CHECK (secret = 0 OR (old_value IS NULL AND new_value = 'changed'))
 );
+CREATE INDEX IF NOT EXISTS settings_audit_time ON settings_audit(ts, id);
 CREATE TRIGGER IF NOT EXISTS settings_audit_no_update BEFORE UPDATE ON settings_audit
 BEGIN SELECT RAISE(ABORT, 'settings_audit is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS settings_audit_no_delete BEFORE DELETE ON settings_audit

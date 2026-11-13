@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	"github.com/jeiang/atrium/internal/attention"
@@ -17,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/web"
 )
 
 type Module struct {
@@ -37,7 +40,7 @@ func ToolDefinitions() []module.ToolDefinition {
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	command := calendarcmd.Command(mc.Env, calendarCLI(mc.Env, mc.Tools))
-	operations, bindings := calendarOperations()
+	operations, bindings := m.calendarOperations()
 	return module.Declaration{
 		Name:      module.Calendar,
 		Settings:  slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
@@ -62,6 +65,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Connections: calendar.Connections(),
 		Operations:  operations,
 		Bindings:    bindings,
+		Pages:       []web.Page{{Module: func(_ chi.Router, d *web.Deps) { m.calendarRoutes(d) }}},
 	}
 }
 

@@ -24,7 +24,6 @@
     "ATRIUM_CONTACTS_DIR": "state/contacts",
     "ATRIUM_DB": "state/atrium.db",
     "ATRIUM_MEDIA_MOVIES_URL": "http://movies.test",
-    "ATRIUM_MEDIA_ROOT": "state/media",
     "ATRIUM_MEDIA_TV_URL": "http://tv.test",
     "ATRIUM_MODE": "live",
     "ATRIUM_NOTION_WIKI_ROOT": "00000000-0000-0000-0000-000000000900",

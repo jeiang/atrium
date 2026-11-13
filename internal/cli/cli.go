@@ -35,11 +35,12 @@ const (
 type Handler func(env *Env) int
 
 type Command struct {
-	Name     string
-	Help     string
-	Dest     string
-	Setup    func(a *Args) Handler
-	Commands []*Command
+	Name          string
+	Help          string
+	Dest          string
+	Setup         func(a *Args) Handler
+	Commands      []*Command
+	BootstrapExit int
 }
 
 func (c *Command) Add(cmds ...*Command) {
@@ -91,12 +92,9 @@ type action struct {
 type Args struct {
 	actions    []*action
 	extrasText string
-	configExit bool
 }
 
 func (a *Args) RejectExtras(message string) { a.extrasText = message }
-
-func (a *Args) ExitConfigOnRefusal() { a.configExit = true }
 
 type ConfigRefusal struct{ Err error }
 
@@ -233,8 +231,8 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if a.Bootstrap != nil {
 		if err := a.Bootstrap(ctx, stderr); err != nil {
 			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
-			if s.leaf != nil && s.leaf.configExit && errors.As(err, new(*ConfigRefusal)) {
-				return ExitConfig
+			if s.bootstrapExit != 0 && errors.As(err, new(*ConfigRefusal)) {
+				return s.bootstrapExit
 			}
 			return ExitError
 		}
@@ -269,11 +267,10 @@ func formatWidth() int {
 }
 
 type parser struct {
-	prog       string
-	actions    []*action
-	version    string
-	extras     string
-	configExit bool
+	prog    string
+	actions []*action
+	version string
+	extras  string
 }
 
 var helpAction = Opt{Help: "show this help message and exit"}
@@ -285,7 +282,6 @@ func newParser(prog string, c *Command, root bool) (*parser, Handler) {
 		h := c.Setup(&args)
 		p.actions = append(p.actions, args.actions...)
 		p.extras = args.extrasText
-		p.configExit = args.configExit
 		return p, h
 	}
 	dest := c.Dest
@@ -331,6 +327,7 @@ type session struct {
 	width          int
 	leaf           *parser
 	handler        Handler
+	bootstrapExit  int
 }
 
 func (s *session) fail(p *parser, msg string) error {
@@ -465,9 +462,10 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 			if err := s.checkChoice(p, a, name); err != nil {
 				return err
 			}
-			sub, h := newParser(p.prog+" "+name, a.cmd.find(name), false)
+			cmd := a.cmd.find(name)
+			sub, h := newParser(p.prog+" "+name, cmd, false)
 			if h != nil {
-				s.leaf, s.handler = sub, h
+				s.leaf, s.handler, s.bootstrapExit = sub, h, cmd.BootstrapExit
 			}
 			rest, err := s.parse(sub, strs[1:])
 			subExtras = append(subExtras, rest...)

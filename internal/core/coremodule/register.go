@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
@@ -92,11 +94,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
 	reviewOps, reviewBindings := reviewOperations()
 	operations, bindings = append(operations, reviewOps...), append(bindings, reviewBindings...)
-	settingOps, settingBindings := settingsOperations()
+	settingOps, settingBindings := m.settingsOperations()
 	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
 	connectionOps, connectionBindings := connectionsOperations()
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
-	maintenanceOps, maintenanceBindings := maintenanceOperations()
+	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanRebalanceName, mailapp.ScanDeletionsName, mailapp.ScanGmailLabelsName}, Composite: true})
@@ -139,7 +141,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
 			}},
-			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
+			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled, Routes: func(d *web.Deps, svc *reviewapp.Service) {
+				reviewRoutes(d, func() *reviewapp.Service { return svc })
+			}}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
@@ -147,7 +151,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(connectionService),
-			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d) }},
+			{Module: func(_ chi.Router, d *web.Deps) {
+				authRoutes(d)
+				commandRoutes(d)
+				m.settingsRoutes(d)
+				connectionRoutes(d)
+				m.maintenanceRoutes(d)
+			}},
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,

@@ -4,12 +4,13 @@
       "area": "activity",
       "operations": [
         "commands.status",
+        "review.activity",
         "review.effect",
         "review.effects",
         "review.undoable"
       ],
-      "required": 4,
-      "bound": 4
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "composer",
@@ -43,9 +44,12 @@
     },
     {
       "area": "home",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "calendar.find-slot",
+        "calendar.list"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "inbox",
@@ -59,15 +63,42 @@
     },
     {
       "area": "integrations",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "calendar.draft-candidates",
+        "calendar.sync",
+        "connections.disconnect",
+        "connections.list",
+        "connections.oauth-complete",
+        "connections.oauth-configure",
+        "connections.oauth-setup",
+        "connections.oauth-start",
+        "connections.test",
+        "connections.test-save",
+        "contacts.lookup",
+        "contacts.sync"
+      ],
+      "required": 12,
+      "bound": 12
     },
     {
       "area": "knowledge",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "knowledge.confirm",
+        "knowledge.confirm-matching",
+        "knowledge.confirm-selected",
+        "knowledge.create",
+        "knowledge.detail",
+        "knowledge.edit",
+        "knowledge.import",
+        "knowledge.list",
+        "knowledge.profile",
+        "knowledge.purge",
+        "knowledge.restore",
+        "knowledge.retract",
+        "knowledge.retract-run"
+      ],
+      "required": 13,
+      "bound": 13
     },
     {
       "area": "mail",
@@ -85,10 +116,12 @@
       "area": "permissions",
       "operations": [
         "notifications.phone-policy",
-        "notifications.revoke-links"
+        "notifications.revoke-links",
+        "review.permissions",
+        "review.permissions-update"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "projects",
@@ -98,17 +131,21 @@
     },
     {
       "area": "proposals",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "review.proposal",
+        "review.proposals"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "review",
       "operations": [
+        "attention.read",
         "review.pending"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "schedules",
@@ -125,16 +162,35 @@
     {
       "area": "settings",
       "operations": [
-        "auth.identity"
+        "auth.bearer-issue",
+        "auth.bearer-list",
+        "auth.bearer-revoke",
+        "auth.configuration",
+        "auth.identity",
+        "maintenance.backup",
+        "maintenance.check",
+        "maintenance.db-backup",
+        "maintenance.verify-archive",
+        "settings.read",
+        "settings.secret-delete",
+        "settings.secret-set",
+        "settings.secret-status",
+        "settings.set",
+        "settings.unset"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 15,
+      "bound": 15
     },
     {
       "area": "tasks",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "tasks.add",
+        "tasks.done",
+        "tasks.list",
+        "tasks.update"
+      ],
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "threads",
@@ -154,11 +210,15 @@
     },
     {
       "area": "wiki",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "wiki.detail",
+        "wiki.search",
+        "wiki.sync"
+      ],
+      "required": 3,
+      "bound": 3
     }
   ],
-  "total_required": 200,
-  "total_bound": 19
+  "total_required": 203,
+  "total_bound": 73
 }

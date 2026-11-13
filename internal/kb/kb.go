@@ -199,6 +199,12 @@ type ListFilter struct {
 	Scope string
 	State string
 	Limit int
+	After *ListKey
+}
+
+type ListKey struct {
+	UpdatedAt float64
+	ID        int64
 }
 
 func List(ctx context.Context, q db.Querier, f ListFilter) ([]Record, error) {
@@ -222,6 +228,10 @@ func List(ctx context.Context, q db.Querier, f ListFilter) ([]Record, error) {
 		where += " AND r.retracted_at IS NOT NULL"
 	case "imported":
 		where += " AND r.writer = 'import'"
+	}
+	if f.After != nil {
+		where += " AND (r.updated_at, r.id) < (?, ?)"
+		args = append(args, f.After.UpdatedAt, f.After.ID)
 	}
 	limit := f.Limit
 	if limit <= 0 {

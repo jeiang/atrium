@@ -1,12 +1,9 @@
 package media
 
 import (
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
-
+	"path"
 	"regexp"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/textutil"
 )
@@ -63,39 +60,21 @@ type SearchResult struct {
 	Files []string
 }
 
-func isDir(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
-}
-
-func isFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular()
-}
-
-func dirsOf(path string) []string {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return []string{}
-	}
+func dirsOf(snap Snapshot, root, parent string) []string {
 	out := []string{}
-	for _, e := range entries {
-		if isDir(filepath.Join(path, e.Name())) {
-			out = append(out, e.Name())
+	for _, n := range snap.list(root, parent) {
+		if n.Dir {
+			out = append(out, path.Base(n.Rel))
 		}
 	}
 	return out
 }
 
-func (t Tuning) videosOf(path string) []string {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return []string{}
-	}
-	out := []string{}
-	for _, e := range entries {
-		if t.IsVideo(e.Name()) && isFile(filepath.Join(path, e.Name())) {
-			out = append(out, e.Name())
+func (t Tuning) videosOf(snap Snapshot, root, parent string) []File {
+	out := []File{}
+	for _, n := range snap.list(root, parent) {
+		if name := path.Base(n.Rel); !n.Dir && t.IsVideo(n.Rel, n.Size) {
+			out = append(out, File{Rel: root + "/" + n.Rel, Name: name, Size: n.Size})
 		}
 	}
 	return out
@@ -110,28 +89,8 @@ func (t Tuning) entryOf(kind, name string) Entry {
 	return Entry{Dir: name, Title: title, Year: r.Year, Kind: kind}
 }
 
-func SafeRel(root, rel string) (string, bool) {
-	if rel == "" || strings.HasPrefix(rel, "/") || strings.ContainsRune(rel, 0) {
-		return "", false
-	}
-	var parts []string
-	for part := range strings.SplitSeq(rel, "/") {
-		if part != "" && part != "." {
-			parts = append(parts, part)
-		}
-	}
-	if len(parts) == 0 || (parts[0] != Movies && parts[0] != TV) || slices.Contains(parts, "..") {
-		return "", false
-	}
-	full := filepath.Join(root, rel)
-	if !isFile(full) {
-		return "", false
-	}
-	return full, true
-}
-
-func (t Tuning) MovieEntries(root string) []Entry {
-	dirs := dirsOf(filepath.Join(root, Movies))
+func (t Tuning) MovieEntries(snap Snapshot) []Entry {
+	dirs := dirsOf(snap, Movies, "")
 	out := []Entry{}
 	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
 		out = append(out, t.entryOf(KindMovie, d))
@@ -139,8 +98,8 @@ func (t Tuning) MovieEntries(root string) []Entry {
 	return out
 }
 
-func (t Tuning) ShowEntries(root string) []Entry {
-	dirs := dirsOf(filepath.Join(root, TV))
+func (t Tuning) ShowEntries(snap Snapshot) []Entry {
+	dirs := dirsOf(snap, TV, "")
 	out := []Entry{}
 	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
 		out = append(out, t.entryOf(KindShow, d))
@@ -148,27 +107,20 @@ func (t Tuning) ShowEntries(root string) []Entry {
 	return out
 }
 
-func fileOf(root, rel string) File {
-	full := filepath.Join(root, rel)
-	var size int64
-	if info, err := os.Stat(full); err == nil {
-		size = info.Size()
-	}
-	return File{Rel: rel, Name: filepath.Base(full), Size: size}
+func badName(name string) bool {
+	return name == "" || strings.Contains(name, "/") || name == "." || name == ".."
 }
 
-func badName(name string) bool { return strings.Contains(name, "/") || name == "." || name == ".." }
+func isDirIn(snap Snapshot, root, name string) bool {
+	n, ok := snap.node(root, name)
+	return ok && n.Dir
+}
 
-func (t Tuning) Movie(root, name string) (MovieView, error) {
-	path := filepath.Join(root, Movies, name)
-	if badName(name) || !isDir(path) {
+func (t Tuning) Movie(snap Snapshot, name string) (MovieView, error) {
+	if badName(name) || !isDirIn(snap, Movies, name) {
 		return MovieView{}, NotFound(name)
 	}
-	view := MovieView{Entry: t.entryOf(Movies, name), Files: []File{}}
-	for _, f := range t.videosOf(path) {
-		view.Files = append(view.Files, fileOf(root, Movies+"/"+name+"/"+f))
-	}
-	return view, nil
+	return MovieView{Entry: t.entryOf(Movies, name), Files: t.videosOf(snap, Movies, name)}, nil
 }
 
 func episodeNumber(name string) (*int, *int) {
@@ -186,13 +138,12 @@ func episodeNumber(name string) (*int, *int) {
 	return &s, &e
 }
 
-func (t Tuning) Show(root, name string) (ShowView, error) {
-	path := filepath.Join(root, TV, name)
-	if badName(name) || !isDir(path) {
+func (t Tuning) Show(snap Snapshot, name string) (ShowView, error) {
+	if badName(name) || !isDirIn(snap, TV, name) {
 		return ShowView{}, NotFound(name)
 	}
 	view := ShowView{Entry: t.entryOf(TV, name), Seasons: []Season{}}
-	for _, d := range dirsOf(path) {
+	for _, d := range dirsOf(snap, TV, name) {
 		season := Season{Dir: d, Episodes: []Episode{}}
 		if loc := seasonDir.FindStringSubmatchIndex(d); loc != nil && loc[0] == 0 {
 			if n, ok := parseInt(d[loc[2]:loc[3]]); ok {
@@ -200,34 +151,32 @@ func (t Tuning) Show(root, name string) (ShowView, error) {
 				season.Number = &v
 			}
 		}
-		for _, f := range t.videosOf(filepath.Join(path, d)) {
-			s, e := episodeNumber(f)
-			season.Episodes = append(season.Episodes, Episode{File: fileOf(root, TV+"/"+name+"/"+d+"/"+f), Season: s, Episode: e})
+		for _, f := range t.videosOf(snap, TV, name+"/"+d) {
+			s, e := episodeNumber(f.Name)
+			season.Episodes = append(season.Episodes, Episode{File: f, Season: s, Episode: e})
 		}
 		view.Seasons = append(view.Seasons, season)
 	}
 	return view, nil
 }
 
-func (t Tuning) EpisodeFilesOf(root, name string) []string {
-	tv := filepath.Join(root, TV, name)
+func (t Tuning) EpisodeFilesOf(snap Snapshot, name string) []string {
 	out := []string{}
-	for _, d := range dirsOf(tv) {
-		for _, f := range t.videosOf(filepath.Join(tv, d)) {
-			out = append(out, TV+"/"+name+"/"+d+"/"+f)
+	for _, d := range dirsOf(snap, TV, name) {
+		for _, f := range t.videosOf(snap, TV, name+"/"+d) {
+			out = append(out, f.Rel)
 		}
 	}
 	return out
 }
 
-func (t Tuning) EpisodeFiles(root string) []string {
+func (t Tuning) EpisodeFiles(snap Snapshot) []string {
 	out := []string{}
-	for _, name := range dirsOf(filepath.Join(root, TV)) {
-		out = append(out, t.EpisodeFilesOf(root, name)...)
+	for _, name := range dirsOf(snap, TV, "") {
+		out = append(out, t.EpisodeFilesOf(snap, name)...)
 	}
 	return out
 }
-
 func containsAll(hay string, words []string) bool {
 	for _, w := range words {
 		if !strings.Contains(hay, w) {
@@ -237,7 +186,7 @@ func containsAll(hay string, words []string) bool {
 	return true
 }
 
-func (t Tuning) Search(root, query string, limit int) []SearchResult {
+func (t Tuning) Search(snap Snapshot, query string, limit int) []SearchResult {
 	var words []string
 	for _, w := range strings.Fields(query) {
 		words = append(words, textutil.Casefold(w))
@@ -246,11 +195,11 @@ func (t Tuning) Search(root, query string, limit int) []SearchResult {
 	if len(words) == 0 {
 		return out
 	}
-	for _, m := range t.MovieEntries(root) {
+	for _, m := range t.MovieEntries(snap) {
 		if !containsAll(textutil.Casefold(m.Dir), words) {
 			continue
 		}
-		view, _ := t.Movie(root, m.Dir)
+		view, _ := t.Movie(snap, m.Dir)
 		files := []string{}
 		for _, f := range view.Files {
 			files = append(files, f.Rel)
@@ -260,9 +209,9 @@ func (t Tuning) Search(root, query string, limit int) []SearchResult {
 			return out[:limit]
 		}
 	}
-	for _, s := range t.ShowEntries(root) {
-		for _, rel := range t.EpisodeFilesOf(root, s.Dir) {
-			if containsAll(textutil.Casefold(s.Dir+" "+filepath.Base(rel)), words) {
+	for _, s := range t.ShowEntries(snap) {
+		for _, rel := range t.EpisodeFilesOf(snap, s.Dir) {
+			if containsAll(textutil.Casefold(s.Dir+" "+path.Base(rel)), words) {
 				out = append(out, SearchResult{Kind: KindEpisode, Title: s.Title, Year: s.Year, Dir: s.Dir, Files: []string{rel}})
 			}
 		}

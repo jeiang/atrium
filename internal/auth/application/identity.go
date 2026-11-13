@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"github.com/jeiang/atrium/internal/application"
 )
@@ -9,11 +10,12 @@ import (
 const IdentityName application.Name = "auth.identity"
 
 type Principal struct {
-	BearerID int64  `json:"-"`
-	Source   string `json:"-"`
-	Subject  string `json:"subject"`
-	Email    string `json:"email"`
-	Name     string `json:"name"`
+	BearerID int64      `json:"-"`
+	Source   string     `json:"-"`
+	Subject  string     `json:"subject"`
+	Email    string     `json:"email"`
+	Name     string     `json:"name"`
+	Expires  *time.Time `json:"-"`
 }
 
 type principalKey struct{}

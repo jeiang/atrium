@@ -220,3 +220,38 @@ func Revision(projection string, counters []Counter, input any, visibility strin
 	sum := sha256.Sum256([]byte(b.String()))
 	return hex.EncodeToString(sum[:16])
 }
+
+type AuditRow struct {
+	ID          int64
+	TS          float64
+	Operation   string
+	Actor       string
+	Source      string
+	ThreadID    *int64
+	RunID       *int64
+	Outcome     string
+	Target      string
+	DetailsJSON string
+	CommandID   *string
+}
+
+func (s *Store) AuditBefore(ctx context.Context, beforeTS float64, beforeID int64, limit int) ([]AuditRow, error) {
+	where, args := "", []any{}
+	if beforeID > 0 {
+		where, args = " WHERE (ts, id) < (?, ?)", []any{beforeTS, beforeID}
+	}
+	rows, err := s.db.Read.QueryContext(ctx, "SELECT id, ts, operation, actor, source, thread_id, run_id, outcome, target, details_json, command_id FROM operation_audit"+where+" ORDER BY ts DESC, id DESC LIMIT ?", append(args, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []AuditRow
+	for rows.Next() {
+		var r AuditRow
+		if err := rows.Scan(&r.ID, &r.TS, &r.Operation, &r.Actor, &r.Source, &r.ThreadID, &r.RunID, &r.Outcome, &r.Target, &r.DetailsJSON, &r.CommandID); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

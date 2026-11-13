@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/approval"
@@ -198,7 +199,8 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 			"files": files, "vpn_urls": urls,
 		})
 	}
-	return map[string]any{"results": results, "note": "Paths are relative to the media root; VPN URLs work on the mesh. Public links are made on the Library page."}, nil
+	return map[string]any{"results": results, "catalogue": read.Data.Catalogue.State, "catalogue_observed_at": read.Data.Catalogue.ObservedAt.UTC().Format(time.RFC3339),
+		"note": "Paths are relative to the media library; VPN URLs work on the mesh. Public links are made on the Library page. A stale catalogue means the media agent is unavailable and results are from the last complete scan."}, nil
 }
 
 func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {

@@ -771,7 +771,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	for _, tc := range []struct{ module, reason string }{
 		{module.Mail, "the embedding connection is not configured"},
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
-		{module.Media, "media_root is not set"},
+		{module.Media, "the service/media-agent connection is not configured"},
 		{module.Contacts, "contacts_dir is not set"},
 		{module.Grafana, "the Grafana connection is not configured"},
 		{module.Grafana, "needs assistant"},

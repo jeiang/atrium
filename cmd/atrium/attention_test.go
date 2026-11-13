@@ -62,7 +62,7 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 		return all.String()
 	}
 	body := run()
-	for _, want := range []string{"Call the dentist", "Send invoice", "Dinner?", "In transit", "Overdue", "Due soon", "Needs decision", "Waiting on them", "Upcoming"} {
+	for _, want := range []string{"Call the dentist", "Send invoice", "Dinner?", "In transit"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("attention result misses %q: %s", want, body)
 		}

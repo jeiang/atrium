@@ -172,8 +172,9 @@ token, never as a query parameter, and it is never sent to the image host.
 Test reads `/configuration` and then checks the image host without the token.
 The API and image URLs come from `connections."service/tmdb".config` in the
 host configuration. Media pages that show TMDB data carry the attribution.
-`media_movies_url` and `media_tv_url` remain host settings until the media
-file servers are retired.
+VPN library links use one base, `host.media.media_vpn_base_url`, served by the
+media agent's `[vpn]` listener; the retired `media_movies_url` and
+`media_tv_url` host keys are refused.
 
 ## Open-Meteo
 

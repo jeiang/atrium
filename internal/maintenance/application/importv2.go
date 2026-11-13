@@ -23,7 +23,7 @@ type ImportV2Result struct {
 }
 
 func DescribeImportV2() application.Definition {
-	return application.Describe[ImportV2Input, ImportV2Result](ImportV2Name, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
+	return application.Describe[ImportV2Input, ImportV2Result](ImportV2Name, application.Command, []application.Authority{application.Bootstrap}, application.LocalUndoable, true)
 }
 
 func (s *Service) ImportV2(ctx context.Context, in ImportV2Input) (application.Change[ImportV2Result], error) {

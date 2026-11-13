@@ -5,6 +5,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 const (
@@ -65,16 +66,17 @@ func (s *Service) queue(ctx context.Context, set media.Settings, out *Downloads)
 	if err != nil {
 		return err.Error(), nil
 	}
-	root, err := set.NeedRoot()
+	agent, err := set.Agent(protocol.CapabilityFile)
 	if err != nil {
 		return err.Error(), nil
 	}
-	found, errText, err := set.Items(ctx, client, root)
+	found, errText, err := set.Items(ctx, client, agent, set.DownloadPrefix)
 	if err != nil {
 		return "", err
 	}
+	shows := media.Shows(ctx, agent)
 	for _, it := range found {
-		out.Queue = append(out.Queue, Waiting{Item: it, View: set.Planned(set.Defaults(it, root), root)})
+		out.Queue = append(out.Queue, Waiting{Item: it, View: set.Planned(set.Defaults(it, shows))})
 	}
 	return errText, nil
 }

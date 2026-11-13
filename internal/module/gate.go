@@ -84,6 +84,11 @@ func (s *Set) settingMark(name string) string {
 	return "on"
 }
 
+func (s *Set) OfferedSetting(key string) (settingspage.Section, bool) {
+	groups, _, _ := s.settingPages()
+	return settingspage.Offered(groups, s.cat.Sections(), key)
+}
+
 func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
 	var groups []settingspage.Group
 	var generic []settingspage.Generic

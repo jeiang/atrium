@@ -31,7 +31,7 @@ services.atrium = {
   enable = true;
   host = {
     core.public_url = "https://atrium.example.org";
-    media.media_root = "/var/lib/media";
+    media.media_root = "/var/lib/media"; # accepted and ignored with a warning; the media agent's roots replace it
   };
   connections."service/qbittorrent" = {
     kind = "service/qbittorrent";
@@ -89,7 +89,7 @@ The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIU
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `media.enable` | bool | `false` | Lets `atrium.service` write the media tree named by `host.media.media_root` (required) and adds `ffmpeg-headless` to its path. |
+| `media.enable` | bool | `false` | Turns on the Media section. Until the media-agent unit lands the module still asserts `host.media.media_root`, lets `atrium.service` write that tree and adds `ffmpeg-headless` to its path; atrium accepts `media_root` but ignores it with a warning; the library roots are the media agent's `roots` (`services.atrium.mediaAgent.roots`), and the key is refused once the NixOS module has that media-agent unit. |
 | `media.group` | string | `"media"` | Group that owns the media tree. `atrium.service` writes through it with umask `0002`. |
 
 ## Backup
@@ -126,7 +126,7 @@ The module defines one unit, `atrium.service`, and no timers. `atrium.service` s
 
 `atrium.service` is a `Type=notify` unit with a systemd watchdog (`WatchdogSec` 1 min); it signals readiness after its migrations, and a command skipped because its module is off signals readiness before it exits. `atrium.service` serves the public listener, the emergency listener (with `web.emergency.enable`) and the ops listener on `127.0.0.1:9180` from one process, binds all three before it signals readiness, and runs the background services and scheduled jobs. It uses `Restart=on-failure`, `RestartSec=5s`, `TimeoutStartSec=45min` and `KillSignal=SIGTERM`. Upgrading removes every older atrium unit and timer. `atrium.service` has `TimeoutStopSec=150s` and `KillMode=mixed`: a stop sends SIGTERM to the main process only, which drains for at most 120 s (see [behavior](behavior.md#operations)); systemd kills the whole unit only after 150 s.
 
-`atrium serve` exits 0 after a clean stop, including a SIGTERM that arrives before it is ready. It exits 1 for a transient failure: an address that is not available yet, a held lock, a dependency that is down, a failed migration, a stop that was not clean, or a key or secret file that is missing, unreadable, empty or does not parse (its writer may still be writing it). It exits 78 (`EX_CONFIG`) for a permanent refusal: invalid configuration or settings (including an invalid serve flag value), a missing or wrong database key, or a database schema this build does not know. It exits 2 on a usage error. It prints the reason to stderr (the journal). `atrium.service` sets `RestartPreventExitStatus=2 78`, so a permanent refusal stops the unit until you fix the cause shown by `journalctl -u atrium` and run `systemctl start atrium.service`; transient failures restart every 5 s without limit (`StartLimitIntervalSec=0`), so the service comes up once, for example, its listen address appears.
+`atrium serve` exits 0 after a clean stop, including a SIGTERM that arrives before it is ready. It exits 1 for a transient failure: an address that is not available yet, a held lock, a dependency that is down, a failed migration, a stop that was not clean, or a key or secret file that is missing, unreadable, empty or does not parse (its writer may still be writing it). It exits 78 (`EX_CONFIG`) for a permanent refusal: invalid configuration or settings (including an invalid serve flag value and a removed host key or environment variable such as `media_movies_url`), a missing or wrong database key, or a database schema this build does not know. It exits 2 on a usage error. It prints the reason to stderr (the journal). `atrium.service` sets `RestartPreventExitStatus=2 78`, so a permanent refusal stops the unit until you fix the cause shown by `journalctl -u atrium` and run `systemctl start atrium.service`; transient failures restart every 5 s without limit (`StartLimitIntervalSec=0`), so the service comes up once, for example, its listen address appears.
 
 `atrium-run` runs the atrium binary through `systemd-run --pipe --wait` as the atrium user, with the same state directory, environment files, credentials (`LoadCredential`) and environment as the units, so CLI commands such as `atrium-run settings set` or `atrium-run db backup` read secrets from `$CREDENTIALS_DIRECTORY` like the units. The `module` flake check compares the credential map of every unit with that of `atrium-run` and refuses an unknown settings key; `module-config` loads the rendered configuration in the real binary.
 

@@ -52,6 +52,7 @@ type Options struct {
 	Clients     func(config.Config) mail.OpenFunc
 	Enabled     func(context.Context, db.Querier, string) (bool, error)
 	Tools       registry.Source
+	Routes      func(*web.Deps, *reviewapp.Service)
 }
 
 type service struct {
@@ -142,6 +143,9 @@ func Module(o Options) web.Module {
 		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
 
 		s.apiRoutes(d)
+		if o.Routes != nil {
+			o.Routes(d, s.review)
+		}
 	}
 }
 

@@ -93,7 +93,7 @@ kind = "service/notion"
 label = "Notion"
 config = { api = %q }
 capabilities = ["api"]
-`, anthropicURL, grafanaURL, notionURL)
+`, anthropicURL, grafanaURL, notionURL) + defaultAgentConnection
 	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -238,6 +238,11 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	for _, table := range []string{"agent_writes", "proposal_actions", "write_resolutions", "push_subscriptions"} {
 		if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = ?", table); n != 0 {
 			t.Errorf("retired table %s survives the import", table)
+		}
+	}
+	for _, index := range []string{"operation_audit_time", "effect_resolutions_time", "settings_audit_time"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'index' AND name = ?", index); n != 1 {
+			t.Errorf("activity index %s is missing after the import", index)
 		}
 	}
 
@@ -933,7 +938,7 @@ kind = "service/eztv"
 label = "EZTV"
 config = { url = %q }
 capabilities = ["indexer"]
-`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL)
+`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL) + defaultAgentConnection
 	hostPath := filepath.Join(dir, "media-host.toml")
 	if err := os.WriteFile(hostPath, []byte(host), 0o600); err != nil {
 		t.Fatal(err)
@@ -2932,5 +2937,57 @@ func TestImportV2DropsTheRemovedChatEndpointAndMovesTheEmbedProbe(t *testing.T) 
 	}
 	if results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(results, "embed00000000000") {
 		t.Errorf("the embed probe did not move to the embedding connection: %s", results)
+	}
+}
+
+func TestImportV2ReportsMediaHostKeyReplacements(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	seed, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]string{
+		"media_movies_url": "http://artemis.vpn:8084",
+		"media_tv_url":     "http://artemis.vpn:8085",
+		"media_root":       "/var/lib/media",
+	} {
+		if _, err := seed.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = seed.Close()
+	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := filepath.Join(dir, "media-root.toml")
+	if err := os.WriteFile(host, append(base, []byte("\n[media]\nmedia_root = \"/var/lib/media\"\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2 with media_root still in the host file: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"setting media_movies_url: drop-host -> host.media.media_vpn_base_url (choose explicitly); host requirement host.media.media_vpn_base_url (choose explicitly) = http://artemis.vpn:8084 (settings)",
+		"setting media_tv_url: drop-host -> host.media.media_vpn_base_url (choose explicitly); host requirement host.media.media_vpn_base_url (choose explicitly) = http://artemis.vpn:8085 (settings)",
+		"setting media_root: drop-host -> services.atrium.mediaAgent.roots; host requirement services.atrium.mediaAgent.roots = /var/lib/media (settings)",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	for _, key := range []string{"media_movies_url", "media_tv_url"} {
+		refused := filepath.Join(dir, key+".toml")
+		if err := os.WriteFile(refused, append(base, []byte("\n[media]\n"+key+" = \"https://artemis.vpn:8084\"\n")...), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got := runImportApp(t, importTestAppHost(t, dir, clock, refused), "connections", "list")
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "media."+key+" was removed") || !strings.Contains(got.stderr, "host.media.media_vpn_base_url") {
+			t.Errorf("%s in the host file: exit %d stderr %q", key, got.code, got.stderr)
+		}
 	}
 }

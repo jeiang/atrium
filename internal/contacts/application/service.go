@@ -29,7 +29,7 @@ func New(d *db.DB, env config.Env) *Service {
 func Describe() []application.Definition {
 	return []application.Definition{
 		application.Describe[LookupInput, Lookup](LookupName, application.Query,
-			[]application.Authority{application.Agent}, application.NoEffect, false),
+			[]application.Authority{application.Agent, application.Operator}, application.NoEffect, false),
 		application.Describe[SyncInput, SyncResult](SyncName, application.Command,
 			[]application.Authority{application.Operator, application.System}, application.NoEffect, true),
 	}

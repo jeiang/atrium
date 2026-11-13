@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -61,7 +60,7 @@ func (a *Agent) validatePlan(p protocol.FilingPlan, undo bool) error {
 			return ErrUnsafePath
 		}
 		if p.SourceKind == protocol.SourceImportCleanup {
-			if s.Kind == protocol.StepUnlink && videoTypes[strings.ToLower(path.Ext(s.Destination.Rel))] != "" {
+			if s.Kind == protocol.StepUnlink && keptVideo(s.Destination.Rel, s.Expect.Size) {
 				return refusal(protocol.CodeDestinationExists)
 			}
 			item := protocol.Path{Root: protocol.RootImport, Rel: strings.Split(s.Destination.Rel, "/")[0]}
@@ -70,7 +69,7 @@ func (a *Agent) validatePlan(p protocol.FilingPlan, undo bool) error {
 				return err
 			}
 			for _, f := range files {
-				if videoTypes[strings.ToLower(path.Ext(f.Path.Rel))] != "" {
+				if keptVideo(f.Path.Rel, f.Identity.Size) {
 					return refusal(protocol.CodeDestinationExists)
 				}
 			}
@@ -90,6 +89,7 @@ func (a *Agent) inverse(key string) (protocol.FilingPlan, error) {
 		return protocol.FilingPlan{}, refusal(protocol.CodeBusy)
 	}
 	p := protocol.FilingPlan{Version: protocol.Version, AgentID: a.state.agentID, RootRevision: a.roots.revision, SourceKind: "undo", TorrentHash: key}
+	created := map[protocol.Path]bool{}
 	for i := len(result.Steps) - 1; i >= 0; i-- {
 		res := result.Steps[i]
 		if res.State != "done" || res.After == nil {
@@ -104,7 +104,27 @@ func (a *Agent) inverse(key string) (protocol.FilingPlan, error) {
 		case protocol.StepLink:
 			s = protocol.Step{Kind: protocol.StepUnlink, Destination: s.Destination, Expect: &id, Source: s.Source}
 		case protocol.StepRename:
-			s = protocol.Step{Kind: protocol.StepRename, Source: &protocol.File{Path: s.Destination, Identity: id}, Destination: s.Source.Path}
+			back := s.Source.Path
+			st, err := a.roots.stat(s.Destination)
+			if err != nil {
+				return protocol.FilingPlan{}, err
+			}
+			if identity(st) != id || st.Mode&unix.S_IFMT != unix.S_IFREG {
+				return protocol.FilingPlan{}, refusal(protocol.CodeIdentityChanged)
+			}
+			parts := strings.Split(back.Rel, "/")
+			for j := 1; j < len(parts); j++ {
+				dir := protocol.Path{Root: back.Root, Rel: strings.Join(parts[:j], "/")}
+				if created[dir] {
+					continue
+				}
+				if _, err := a.roots.stat(dir); !errors.Is(err, ErrNotFound) {
+					continue
+				}
+				created[dir] = true
+				p.Steps = append(p.Steps, protocol.Step{Index: len(p.Steps), Kind: protocol.StepMkdir, Destination: dir})
+			}
+			s = protocol.Step{Kind: protocol.StepRename, Source: &protocol.File{Path: s.Destination, Identity: id}, Destination: back}
 		case protocol.StepMkdir:
 			s = protocol.Step{Kind: protocol.StepRmdir, Destination: s.Destination, Expect: &id}
 		default:

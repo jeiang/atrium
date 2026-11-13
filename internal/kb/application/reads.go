@@ -87,6 +87,8 @@ type ListInput struct {
 	Query string
 	Scope string
 	State string
+	Limit int
+	After *kb.ListKey
 }
 
 type List struct {
@@ -228,7 +230,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 	}
 	var found []kb.Record
 	rev, err := s.snapshot(ctx, string(ListName), pageScopes, in, func(q db.Querier) error {
-		found, err = kb.List(ctx, q, kb.ListFilter{Query: in.Query, Scope: in.Scope, State: in.State})
+		found, err = kb.List(ctx, q, kb.ListFilter{Query: in.Query, Scope: in.Scope, State: in.State, Limit: in.Limit, After: in.After})
 		return err
 	})
 	if err != nil {

@@ -186,6 +186,20 @@ func TestServeExitsWithTheConfigCodeOnAPermanentRefusal(t *testing.T) {
 	}
 }
 
+func TestServeExitsWithTheConfigCodeOnARemovedMediaHostKey(t *testing.T) {
+	for _, key := range []string{"MOVIES", "TV"} {
+		t.Run(key, func(t *testing.T) {
+			moduleFixture(t, flagsExcept("", ""))
+			name := "ATRIUM_MEDIA_MEDIA_" + key + "_URL"
+			setEnv(t, name, "https://artemis.vpn:8084")
+			got := runApp(t, "serve", "--port", "0", "--auth", "local")
+			if got.code != cli.ExitConfig || !strings.Contains(got.stderr, name) || !strings.Contains(got.stderr, "host.media.media_vpn_base_url") {
+				t.Fatalf("serve with a removed media URL key: exit %d stderr %q; want %d", got.code, got.stderr, cli.ExitConfig)
+			}
+		})
+	}
+}
+
 func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
 	for _, tc := range []struct{ name, public, emergency, ops string }{

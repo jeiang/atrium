@@ -2,14 +2,18 @@ package application
 
 import (
 	"context"
+	"errors"
 	"io"
-	"os"
-	"path/filepath"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/media/agentclient"
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 const (
@@ -17,6 +21,7 @@ const (
 	LibraryDetailName application.Name = "media.library-detail"
 	ArtName           application.Name = "media.art"
 	FileName          application.Name = "media.file"
+	ThumbnailName     application.Name = "media.thumbnail"
 )
 
 type LibraryInput struct {
@@ -25,10 +30,18 @@ type LibraryInput struct {
 }
 
 type Library struct {
-	Movies  []media.Entry
-	Shows   []media.Entry
-	Results []Found
-	Error   string
+	Movies    []media.Entry
+	Shows     []media.Entry
+	Results   []Found
+	Error     string
+	Catalogue CatalogueStatus
+}
+
+type CatalogueStatus struct {
+	State      string
+	Problem    string
+	ObservedAt time.Time
+	Generation int64
 }
 
 type Found struct {
@@ -60,10 +73,11 @@ type SeasonLinks struct {
 }
 
 type LibraryDetail struct {
-	Entry   media.Entry
-	Files   []FileLink
-	Seasons []SeasonLinks
-	LinkTTL int64
+	Entry     media.Entry
+	Files     []FileLink
+	Seasons   []SeasonLinks
+	LinkTTL   int64
+	Catalogue CatalogueStatus
 }
 
 type ArtInput struct {
@@ -74,9 +88,14 @@ type ArtInput struct {
 }
 
 type FileInput struct {
-	Rel string
-	Exp string
-	Sig string
+	Rel             string
+	Exp             string
+	Sig             string
+	Method          string
+	Range           string
+	IfRange         string
+	IfNoneMatch     string
+	IfModifiedSince string
 }
 
 type FileStream struct {
@@ -86,7 +105,11 @@ type FileStream struct {
 	ContentType string
 }
 
-const KindThumb = "thumb"
+type FileRelay struct {
+	Status int
+	Header http.Header
+	Body   io.ReadCloser
+}
 
 func DescribeLibrary() application.Definition {
 	return application.Describe[LibraryInput, Library](LibraryName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
@@ -101,7 +124,26 @@ func DescribeArt() application.Definition {
 }
 
 func DescribeFile() application.Definition {
-	return application.Describe[FileInput, *FileStream](FileName, application.Query, []application.Authority{application.PublicCapability}, application.NoEffect, false)
+	return application.Describe[FileInput, *FileRelay](FileName, application.Query, []application.Authority{application.PublicCapability}, application.NoEffect, false)
+}
+
+func (s *Service) snapshot(ctx context.Context, set media.Settings) (media.Snapshot, error) {
+	client, err := set.Agent(protocol.CapabilityFile)
+	if err != nil {
+		if errors.As(err, new(config.NotConfigured)) {
+			return media.Snapshot{}, err
+		}
+		return media.Snapshot{}, &media.LibraryUnavailable{Cause: err}
+	}
+	return s.d.Catalogue.Current(ctx, func(ctx context.Context) error { return s.d.Catalogue.Refresh(ctx, client) })
+}
+
+func catalogueStatus(snap media.Snapshot) CatalogueStatus {
+	out := CatalogueStatus{State: "current", ObservedAt: snap.Observed, Generation: snap.Generation}
+	if snap.Stale != nil {
+		out.State, out.Problem = "stale", media.CatalogueProblem(snap.Stale)
+	}
+	return out
 }
 
 func (s *Service) Library(ctx context.Context, in LibraryInput) (application.Read[Library], error) {
@@ -110,19 +152,20 @@ func (s *Service) Library(ctx context.Context, in LibraryInput) (application.Rea
 		return application.Read[Library]{}, err
 	}
 	out := Library{Movies: []media.Entry{}, Shows: []media.Entry{}, Results: []Found{}}
-	root, err := set.NeedRoot()
+	snap, err := s.snapshot(ctx, set)
 	if err != nil {
-		if strings.TrimSpace(in.Query) != "" {
+		if strings.TrimSpace(in.Query) != "" || !errors.As(err, new(config.NotConfigured)) {
 			return application.Read[Library]{}, classify(err)
 		}
 		out.Error = err.Error()
 		return s.libraryRead(ctx, in, out)
 	}
+	out.Catalogue = catalogueStatus(snap)
 	if strings.TrimSpace(in.Query) == "" {
-		out.Movies, out.Shows = set.MovieEntries(root), set.ShowEntries(root)
+		out.Movies, out.Shows = set.MovieEntries(snap), set.ShowEntries(snap)
 		return s.libraryRead(ctx, in, out)
 	}
-	for _, r := range set.Search(root, in.Query, in.Limit) {
+	for _, r := range set.Search(snap, in.Query, in.Limit) {
 		urls := make([]string, len(r.Files))
 		for i, f := range r.Files {
 			urls[i] = set.VPNURL(f)
@@ -133,7 +176,9 @@ func (s *Service) Library(ctx context.Context, in LibraryInput) (application.Rea
 }
 
 func (s *Service) libraryRead(ctx context.Context, in LibraryInput, out Library) (application.Read[Library], error) {
-	rev, err := s.revision(ctx, "media.library", in, out)
+	stable := out
+	stable.Catalogue.ObservedAt = time.Time{}
+	rev, err := s.revision(ctx, "media.library", in, stable)
 	if err != nil {
 		return application.Read[Library]{}, err
 	}
@@ -155,15 +200,18 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 	if err != nil {
 		return application.Read[LibraryDetail]{}, err
 	}
-	root, err := set.NeedRoot()
+	snap, err := s.snapshot(ctx, set)
 	if err != nil {
-		return application.Read[LibraryDetail]{}, notFound("not found")
+		if errors.As(err, new(config.NotConfigured)) {
+			return application.Read[LibraryDetail]{}, notFound("not found")
+		}
+		return application.Read[LibraryDetail]{}, classify(err)
 	}
-	out := LibraryDetail{LinkTTL: set.LinkTTL}
+	out := LibraryDetail{LinkTTL: set.LinkTTL, Catalogue: catalogueStatus(snap)}
 	var content any
 	switch in.Kind {
 	case media.KindMovie:
-		found, err := set.Movie(root, in.Name)
+		found, err := set.Movie(snap, in.Name)
 		if err != nil {
 			return application.Read[LibraryDetail]{}, notFound("not found")
 		}
@@ -177,7 +225,7 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 			out.Files[i].File = f
 		}
 	case media.KindShow:
-		found, err := set.Show(root, in.Name)
+		found, err := set.Show(snap, in.Name)
 		if err != nil {
 			return application.Read[LibraryDetail]{}, notFound("not found")
 		}
@@ -199,92 +247,137 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 	default:
 		return application.Read[LibraryDetail]{}, notFound("not found")
 	}
-	rev, err := s.revision(ctx, "media.library-detail", in, []any{content, out.LinkTTL})
+	rev, err := s.revision(ctx, "media.library-detail", in, []any{content, out.LinkTTL, snap.Generation, out.Catalogue.State, out.Catalogue.Problem})
 	if err != nil {
 		return application.Read[LibraryDetail]{}, err
 	}
 	return application.Read[LibraryDetail]{Revision: rev, Data: out}, nil
 }
 
-func open(path, contentType string) *FileStream {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil
+func relay(resp *http.Response) *FileRelay {
+	h := make(http.Header)
+	for _, name := range []string{"Accept-Ranges", "Content-Range", "Content-Length", "Content-Type", "ETag", "Last-Modified", "Content-Disposition"} {
+		if values := resp.Header.Values(name); len(values) > 0 {
+			h[name] = values
+		}
 	}
-	info, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return nil
-	}
-	return &FileStream{ReadSeekCloser: f, Name: info.Name(), ModTime: info.ModTime(), ContentType: contentType}
+	return &FileRelay{Status: resp.StatusCode, Header: h, Body: resp.Body}
 }
 
-func (s *Service) Art(ctx context.Context, in ArtInput) (*FileStream, error) {
+type ThumbnailInput struct {
+	Rel             string
+	Method          string
+	IfNoneMatch     string
+	IfModifiedSince string
+}
+
+func DescribeThumbnail() application.Definition {
+	return application.Describe[ThumbnailInput, *FileRelay](ThumbnailName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
+}
+
+func (s *Service) Thumbnail(ctx context.Context, in ThumbnailInput) (*FileRelay, error) {
+	if in.Method != http.MethodGet && in.Method != http.MethodHead {
+		return nil, notFound("not found")
+	}
+	root, rel, ok := media.SplitRel(in.Rel)
+	if !ok {
+		return nil, notFound("not found")
+	}
 	set, err := s.settings(ctx)
 	if err != nil {
 		return nil, err
 	}
-	art := media.NewArtwork(s.d.CacheDir, set.TMDB(), set.Tuning)
-	var path string
-	var ok bool
-	switch in.Kind {
-	case media.KindMovie, media.KindShow, media.KindSeason:
-		if strings.Contains(in.Name, "/") {
-			return nil, notFound("not found")
+	client, err := set.Agent(protocol.CapabilityStream)
+	if err != nil {
+		return nil, classify(err)
+	}
+	resp, err := client.Stream(ctx, agentclient.StreamRequest{
+		Resource: "thumbnail", Path: protocol.Path{Root: root, Rel: rel}, Method: in.Method,
+		IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince,
+	})
+	if err != nil {
+		return nil, &application.Error{Code: application.Unavailable, Message: "the media agent is unavailable", Cause: err}
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {
+		_ = resp.Body.Close()
+		if resp.StatusCode >= 500 {
+			return nil, &application.Error{Code: application.Unavailable, Message: "the media agent is unavailable"}
 		}
-		path, ok = art.Poster(ctx, in.Kind, in.Name, in.Season)
-	case KindThumb:
-		root, err := set.NeedRoot()
-		if err != nil {
-			return nil, nil
-		}
-		path, ok = art.Thumbnail(ctx, root, in.Rel)
-	default:
 		return nil, notFound("not found")
 	}
-	if !ok {
-		return nil, nil
-	}
-	return open(path, "image/jpeg"), nil
+	return relay(resp), nil
 }
 
-var videoTypes = map[string]string{
-	".mkv": "video/x-matroska",
-	".mp4": "video/mp4",
-	".m4v": "video/x-m4v",
-	".avi": "video/x-msvideo",
-	".mov": "video/quicktime",
-	".ts":  "video/mp2t",
-	".wmv": "video/x-ms-wmv",
-}
-
-func videoType(path string, video map[string]bool) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	if kind, ok := videoTypes[ext]; ok && video[ext] {
-		return kind
-	}
-	return "application/octet-stream"
-}
-
-func (s *Service) OpenFile(ctx context.Context, in FileInput) (*FileStream, error) {
-	if !s.d.Links.Verify(ctx, in.Rel, in.Exp, in.Sig, s.d.Now()) {
+func (s *Service) File(ctx context.Context, in FileInput) (*FileRelay, error) {
+	if (in.Method != http.MethodGet && in.Method != http.MethodHead) || !s.d.Links.Verify(ctx, in.Rel, in.Exp, in.Sig, s.d.Now()) {
 		return nil, &application.Error{Code: application.Forbidden, Message: "the link is invalid or has expired"}
 	}
+	root, rel, ok := media.SplitRel(in.Rel)
+	if !ok {
+		return nil, notFound("not found")
+	}
 	set, err := s.settings(ctx)
 	if err != nil {
 		return nil, err
 	}
-	root, err := set.NeedRoot()
+	client, err := set.Agent(protocol.CapabilityStream)
 	if err != nil {
-		return nil, notFound(err.Error())
+		return nil, classify(err)
 	}
-	full, ok := media.SafeRel(root, in.Rel)
-	if !ok {
-		return nil, notFound("not found")
+	ctx, cancel := context.WithCancel(ctx)
+	resp, err := client.Stream(ctx, agentclient.StreamRequest{
+		Resource: "file", Path: protocol.Path{Root: root, Rel: rel}, Method: in.Method,
+		Range: in.Range, IfRange: in.IfRange, IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince,
+	})
+	if err != nil {
+		cancel()
+		return nil, &application.Error{Code: application.Unavailable, Message: "the media agent is unavailable", Cause: err}
 	}
-	stream := open(full, videoType(full, set.VideoExts))
-	if stream == nil {
-		return nil, notFound("not found")
+	out := relay(resp)
+	idle := time.AfterFunc(streamIdle, cancel)
+	idle.Stop()
+	out.Body = &idleBody{body: resp.Body, idle: idle, cancel: cancel}
+	return out, nil
+}
+
+const streamIdle = time.Minute
+
+type idleBody struct {
+	body   io.ReadCloser
+	idle   *time.Timer
+	cancel context.CancelFunc
+}
+
+func (b *idleBody) Read(p []byte) (int, error) {
+	b.idle.Reset(streamIdle)
+	n, err := b.body.Read(p)
+	b.idle.Stop()
+	return n, err
+}
+
+func (b *idleBody) Close() error {
+	b.idle.Stop()
+	b.cancel()
+	return b.body.Close()
+}
+
+func (s *Service) RefreshCatalogue(ctx context.Context) error {
+	defer s.d.Catalogue.Bind(ctx)()
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
+	for {
+		if set, err := s.settings(ctx); err == nil {
+			if client, err := set.Agent(protocol.CapabilityFile); err == nil {
+				if err := s.d.Catalogue.Refresh(ctx, client); err != nil && ctx.Err() == nil {
+					logx.Logger("media").Warn("media catalogue refresh failed", logx.Err, err)
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+		case <-s.d.Catalogue.Nudges():
+		}
 	}
-	return stream, nil
 }

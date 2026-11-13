@@ -38,3 +38,9 @@ func PayloadThread(ctx context.Context, q db.Querier, id int64) (int64, bool, er
 	}
 	return thread, thread != 0, nil
 }
+
+func CountPendingKind(ctx context.Context, q db.Querier, kind string) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE kind = ? AND status = ?", kind, Pending).Scan(&n)
+	return n, err
+}

@@ -95,7 +95,13 @@ func Settings() []settings.Def {
 	return out
 }
 
-func parseDecision(value string) (Decision, bool) {
+func PermissionAxes() (channels, situations []string) { return channelKeys[:], situationKeys[:] }
+
+func PermissionFloor(channel, situation int) Decision { return floors[channel][situation] }
+
+func (d Decision) String() string { return decisionNames[d] }
+
+func ParseDecision(value string) (Decision, bool) {
 	switch value {
 	case "allow":
 		return Allowed, true
@@ -118,7 +124,7 @@ func (r *Registry) loadTable(ctx context.Context, q db.Querier) (Table, error) {
 			if err != nil {
 				return Table{}, err
 			}
-			decision, ok := parseDecision(found.Value)
+			decision, ok := ParseDecision(found.Value)
 			if !ok {
 				continue
 			}
