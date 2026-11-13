@@ -100,29 +100,60 @@ func (b *idleBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
+var errScanLimit = errors.New("multipart scan limit reached")
+
+type scanLimit struct {
+	io.Reader
+	left int
+}
+
+func (l *scanLimit) Read(p []byte) (int, error) {
+	if l.left <= 0 {
+		return 0, errScanLimit
+	}
+	if len(p) > l.left {
+		p = p[:l.left]
+	}
+	n, err := l.Reader.Read(p)
+	l.left -= n
+	return n, err
+}
+
+type scanPrefix []byte
+
+func (b *scanPrefix) Write(p []byte) (int, error) {
+	if need := len(*b) + len(p); need > cap(*b) {
+		grown := make([]byte, len(*b), min(max(2*cap(*b), need), plainBodyMax))
+		copy(grown, *b)
+		*b = grown
+	}
+	*b = append(*b, p...)
+	return len(p), nil
+}
+
 func carriesFiles(r *http.Request) bool {
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || params["boundary"] == "" {
 		return true
 	}
-	var prefix bytes.Buffer
+	var prefix scanPrefix
 	body := r.Body
 	defer func() {
 		r.Body = struct {
 			io.Reader
 			io.Closer
-		}{io.MultiReader(&prefix, body), body}
+		}{io.MultiReader(bytes.NewReader(prefix), body), body}
 	}()
-	reader := multipart.NewReader(io.TeeReader(body, &prefix), params["boundary"])
+	reader := multipart.NewReader(io.TeeReader(&scanLimit{Reader: body, left: plainBodyMax}, &prefix), params["boundary"])
 	for {
 		part, err := reader.NextPart()
-		if errors.Is(err, io.EOF) {
+		if err == io.EOF {
 			return false
 		}
 		if err != nil || part.FileName() != "" {
 			return true
 		}
-		if _, err := io.Copy(io.Discard, io.LimitReader(part, int64(plainBodyMax-prefix.Len()+1))); err != nil || prefix.Len() > plainBodyMax {
+		if _, err := io.Copy(io.Discard, part); err != nil {
 			return true
 		}
 	}
@@ -148,15 +179,17 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 		var fingerprint string
 		media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		multipartForm := media == "multipart/form-data"
-		hasFiles := multipartForm && carriesFiles(r)
-		if hasFiles {
-			body := &idleBody{ReadCloser: r.Body, controller: http.NewResponseController(w)}
-			if err := body.extend(); err != nil {
+		var idle *idleBody
+		if multipartForm {
+			idle = &idleBody{ReadCloser: r.Body, controller: http.NewResponseController(w)}
+			if err := idle.extend(); err != nil {
 				web.APIFail(w, err)
 				return
 			}
-			defer body.lift()
-			r.Body = body
+			defer idle.lift()
+			r.Body = idle
+		}
+		if multipartForm && carriesFiles(r) {
 			select {
 			case s.multipartSlots <- struct{}{}:
 				defer func() { <-s.multipartSlots }()
@@ -202,8 +235,8 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 					return
 				}
 				defer func() { _ = spool.Close(); _ = os.Remove(spool.Name()) }()
-				if body, ok := r.Body.(*idleBody); ok {
-					body.lift()
+				if idle != nil {
+					idle.lift()
 				}
 				r.Body = io.NopCloser(spool)
 				if !multipartForm {

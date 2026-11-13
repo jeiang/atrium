@@ -573,6 +573,10 @@ func TestMultipartUploadAdmission(t *testing.T) {
 	}
 	small, smallMedia := uploadBody(t, nil, "small.txt", "small")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/projects/1/files", token, small, "Content-Type", smallMedia), http.StatusTooManyRequests, "rate_limited")
+	preamble := strings.Repeat("x\r\n", 4<<20/3) + "--b--\r\n"
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", token, preamble, "Content-Type", "multipart/form-data; boundary=b"), http.StatusTooManyRequests, "rate_limited")
+	truncated := "--b\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nunfinished"
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", token, truncated, "Content-Type", "multipart/form-data; boundary=b"), http.StatusTooManyRequests, "rate_limited")
 	textOnly, textMedia := uploadBody(t, nil, "", "")
 	if reply := s.do(http.MethodPost, "/api/v1/threads", token, textOnly, "Content-Type", textMedia); reply.status != http.StatusCreated {
 		t.Fatalf("text-only multipart consumed upload admission: %d %s", reply.status, reply.body)
@@ -596,6 +600,9 @@ func TestMultipartUploadAdmission(t *testing.T) {
 	entries, err := os.ReadDir(temp)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("held upload spools remain: %v %v", entries, err)
+	}
+	if reply := s.do(http.MethodPost, "/api/v1/threads", token, preamble, "Content-Type", "multipart/form-data; boundary=b"); reply.status != http.StatusCreated {
+		t.Fatalf("preamble multipart: %d %s", reply.status, reply.body)
 	}
 	reader, writer := io.Pipe()
 	defer func() { _ = writer.Close() }()
