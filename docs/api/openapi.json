@@ -1,59 +1,6 @@
 {
   "components": {
     "schemas": {
-      "ApplicationArchive": {
-        "additionalProperties": false,
-        "properties": {
-          "created_at": {
-            "type": "string"
-          },
-          "encryption": {
-            "$ref": "#/components/schemas/ApplicationEncryption"
-          },
-          "files": {
-            "type": "integer"
-          },
-          "from_schema": {
-            "type": "integer"
-          },
-          "key_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "knn": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "path": {
-            "type": "string"
-          },
-          "tables": {
-            "items": {
-              "$ref": "#/components/schemas/ApplicationTable"
-            },
-            "type": "array"
-          },
-          "to_schema": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "path",
-          "created_at",
-          "encryption",
-          "key_ids",
-          "from_schema",
-          "to_schema",
-          "tables",
-          "knn",
-          "files"
-        ],
-        "type": "object"
-      },
       "ApplicationArg": {
         "additionalProperties": false,
         "properties": {
@@ -70,26 +17,6 @@
         ],
         "type": "object"
       },
-      "ApplicationBackup": {
-        "additionalProperties": false,
-        "properties": {
-          "dest": {
-            "type": "string"
-          },
-          "encryption": {
-            "$ref": "#/components/schemas/ApplicationEncryption"
-          },
-          "files": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "dest",
-          "encryption",
-          "files"
-        ],
-        "type": "object"
-      },
       "ApplicationBearerIssueInput": {
         "additionalProperties": false,
         "properties": {
@@ -103,29 +30,6 @@
         },
         "required": [
           "name"
-        ],
-        "type": "object"
-      },
-      "ApplicationChangeApplicationBackup": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ApplicationBackup"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
         ],
         "type": "object"
       },
@@ -359,6 +263,52 @@
         ],
         "type": "object"
       },
+      "ApplicationChangeCoremoduleBackupCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleBackupCreated"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleBackupVerified": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleBackupVerified"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
       "ApplicationChangeCoremoduleConnections": {
         "additionalProperties": false,
         "properties": {
@@ -368,6 +318,29 @@
           },
           "data": {
             "$ref": "#/components/schemas/CoremoduleConnections"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleDatabaseCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleDatabaseCheck"
           },
           "effect_ids": {
             "items": {
@@ -471,37 +444,6 @@
         },
         "required": [
           "data"
-        ],
-        "type": "object"
-      },
-      "ApplicationCheck": {
-        "additionalProperties": false,
-        "properties": {
-          "database": {
-            "type": "string"
-          },
-          "encryption": {
-            "$ref": "#/components/schemas/ApplicationEncryption"
-          },
-          "intact": {
-            "type": "boolean"
-          },
-          "opened": {
-            "type": "boolean"
-          },
-          "tables": {
-            "items": {
-              "$ref": "#/components/schemas/ApplicationTable"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "database",
-          "encryption",
-          "opened",
-          "intact",
-          "tables"
         ],
         "type": "object"
       },
@@ -743,38 +685,6 @@
         },
         "required": [
           "keys"
-        ],
-        "type": "object"
-      },
-      "ApplicationReadApplicationArchive": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ApplicationArchive"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "ApplicationReadApplicationCheck": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ApplicationCheck"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
         ],
         "type": "object"
       },
@@ -2654,15 +2564,88 @@
         ],
         "type": "object"
       },
-      "CoremoduleBackupRequest": {
+      "CoremoduleBackupCreated": {
         "additionalProperties": false,
         "properties": {
-          "dest": {
+          "encryption": {
+            "$ref": "#/components/schemas/ApplicationEncryption"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "name": {
             "type": "string"
           }
         },
         "required": [
-          "dest"
+          "name",
+          "encryption",
+          "files"
+        ],
+        "type": "object"
+      },
+      "CoremoduleBackupRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CoremoduleBackupVerified": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "encryption": {
+            "$ref": "#/components/schemas/ApplicationEncryption"
+          },
+          "files": {
+            "type": "integer"
+          },
+          "from_schema": {
+            "type": "integer"
+          },
+          "key_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "knn": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationTable"
+            },
+            "type": "array"
+          },
+          "to_schema": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "created_at",
+          "encryption",
+          "key_ids",
+          "from_schema",
+          "to_schema",
+          "tables",
+          "knn",
+          "files"
         ],
         "type": "object"
       },
@@ -2697,6 +2680,33 @@
         },
         "required": [
           "connections"
+        ],
+        "type": "object"
+      },
+      "CoremoduleDatabaseCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "encryption": {
+            "$ref": "#/components/schemas/ApplicationEncryption"
+          },
+          "intact": {
+            "type": "boolean"
+          },
+          "opened": {
+            "type": "boolean"
+          },
+          "tables": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationTable"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "encryption",
+          "opened",
+          "intact",
+          "tables"
         ],
         "type": "object"
       },
@@ -9873,22 +9883,12 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CoremoduleBackupRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplicationChangeApplicationBackup"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleBackupCreated"
                 }
               }
             },
@@ -10024,46 +10024,41 @@
       }
     },
     "/maintenance/backups/verify": {
-      "get": {
+      "post": {
         "operationId": "maintenance.verify-archive",
         "parameters": [
           {
-            "in": "query",
-            "name": "archive",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "in": "header",
-            "name": "If-None-Match",
+            "name": "Idempotency-Key",
             "schema": {
+              "maxLength": 255,
+              "minLength": 1,
               "type": "string"
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoremoduleBackupRef"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplicationReadApplicationArchive"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleBackupVerified"
                 }
               }
             },
             "description": "OK",
             "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
+              "Atrium-Command-Id": {
                 "schema": {
                   "type": "string"
                 }
@@ -10120,6 +10115,26 @@
             },
             "description": "Conflict"
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10173,13 +10188,15 @@
       }
     },
     "/maintenance/check": {
-      "get": {
+      "post": {
         "operationId": "maintenance.check",
         "parameters": [
           {
             "in": "header",
-            "name": "If-None-Match",
+            "name": "Idempotency-Key",
             "schema": {
+              "maxLength": 255,
+              "minLength": 1,
               "type": "string"
             }
           }
@@ -10189,23 +10206,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplicationReadApplicationCheck"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleDatabaseCheck"
                 }
               }
             },
             "description": "OK",
             "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
+              "Atrium-Command-Id": {
                 "schema": {
                   "type": "string"
                 }
@@ -10251,6 +10258,46 @@
               }
             },
             "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           },
           "429": {
             "content": {
@@ -10308,22 +10355,12 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CoremoduleBackupRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplicationChangeApplicationBackup"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleBackupCreated"
                 }
               }
             },

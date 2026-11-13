@@ -181,7 +181,7 @@ func TestBackupCommandSharesTheJobClaim(t *testing.T) {
 
 	manual := filepath.Join(t.TempDir(), "manual.backup")
 	got := runApp(t, "backup", manual)
-	if got.code != cli.ExitError || !strings.Contains(got.stderr, "held by another invocation") {
+	if got.code != cli.ExitError || !strings.Contains(got.stderr, "A backup or database check is already running.") {
 		t.Fatalf("backup beside the running job = (%d, %q), want exit %d and a held-lock refusal", got.code, got.stderr, cli.ExitError)
 	}
 	if _, err := os.Lstat(manual); !os.IsNotExist(err) {

@@ -69,10 +69,22 @@ func Job(env config.Env, create func(context.Context, string, func(context.Conte
 	}
 }
 
-func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now time.Time, create func(context.Context, string, func(context.Context, db.Querier) error) error) (scheduler.Result, error) {
+func Directory(ctx context.Context) (string, error) {
 	dir := strings.TrimSpace(config.HostValueFrom(ctx, KeyDirectory))
 	if dir == "" {
-		return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new("no backup directory: set host key " + module.Core + "." + KeyDirectory)}, nil
+		return "", config.NotConfigured("no backup directory: set host key " + module.Core + "." + KeyDirectory)
+	}
+	return dir, nil
+}
+
+func ArchiveName(now time.Time, ext string) string {
+	return "atrium-" + now.UTC().Format(archiveStamp) + ext
+}
+
+func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now time.Time, create func(context.Context, string, func(context.Context, db.Querier) error) error) (scheduler.Result, error) {
+	dir, err := Directory(ctx)
+	if err != nil {
+		return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(err.Error())}, nil
 	}
 	keep := hostInt(ctx, KeyKeep, defaultKeep)
 	keepDays := hostInt(ctx, KeyKeepDays, defaultKeepDays)
@@ -93,7 +105,7 @@ func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now t
 		if err := sweepStaged(dir, now.Add(-jobTimeout)); err != nil {
 			return err
 		}
-		dest := filepath.Join(dir, "atrium-"+now.UTC().Format(archiveStamp)+".backup")
+		dest := filepath.Join(dir, ArchiveName(now, ".backup"))
 		if _, err := os.Lstat(dest); err == nil {
 			return fmt.Errorf("backup destination %s already exists", dest)
 		}

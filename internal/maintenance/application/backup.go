@@ -8,7 +8,9 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/backup"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/passrun"
 )
 
 const (
@@ -98,14 +100,22 @@ func (s *Service) DBBackup(ctx context.Context, in BackupInput) (application.Cha
 	if err := db.RequireV3(ctx, d.Read); err != nil {
 		return application.Change[Backup]{}, err
 	}
-	id, err := s.settle(ctx, d, DBBackupName, in.Dest, map[string]any{"encrypted": !key.IsZero()}, copyDatabase(ctx, d, key, in.Dest))
+	id, err := s.settle(ctx, d, DBBackupName, in.Dest, map[string]any{"encrypted": !key.IsZero()}, copyDatabase(ctx, d, cfg, key, in.Dest))
 	if err != nil {
 		return application.Change[Backup]{}, err
 	}
 	return application.Change[Backup]{Data: Backup{Dest: in.Dest, Encryption: encryption(key)}, AuditID: id}, nil
 }
 
-func copyDatabase(ctx context.Context, d *db.DB, key db.Key, dest string) error {
+func copyDatabase(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest string) error {
+	if err := backup.RefuseDestination(cfg, dest); err != nil {
+		return err
+	}
+	locks, err := db.ResourceLocks(ctx, cfg.DBPath, []string{passrun.Backup}, db.ShortLockWait)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = locks.Close() }()
 	if _, err := os.Lstat(dest); err == nil {
 		return &backup.Refusal{Err: fmt.Errorf("backup destination %s already exists", dest)}
 	}

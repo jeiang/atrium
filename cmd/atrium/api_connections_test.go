@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -118,13 +117,4 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 		t.Fatalf("refused tokens were stored: %d %v", minted, err)
 	}
 
-	dest := filepath.Join(t.TempDir(), "atrium-backup.db")
-	backup := apiData(t, s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, map[string]any{"dest": dest}), http.StatusCreated)
-	if _, err := os.Stat(dest); err != nil || backup["dest"] != dest {
-		t.Fatalf("backup: %v %v", backup, err)
-	}
-	expectField(t, s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, map[string]any{"dest": 7}), "dest")
-	if checked := apiData(t, s.do(http.MethodGet, "/api/v1/maintenance/check", token, nil), http.StatusOK); len(checked) == 0 {
-		t.Fatal("maintenance check returned nothing")
-	}
 }
