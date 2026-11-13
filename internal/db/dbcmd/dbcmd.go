@@ -1,27 +1,19 @@
 package dbcmd
 
 import (
-	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	dbkey "github.com/jeiang/atrium/internal/db/key"
-	"github.com/jeiang/atrium/internal/logx"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const maxKeyInput = 1024
 
-func Command(env config.Env, now func() float64, maintenance *maintenanceapp.Service) *cli.Command {
-	s := &service{env: env, now: now, maintenance: maintenance}
+func Command(maintenance *maintenanceapp.Service) *cli.Command {
+	s := &service{maintenance: maintenance}
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
@@ -36,64 +28,22 @@ func Command(env config.Env, now func() float64, maintenance *maintenanceapp.Ser
 }
 
 type service struct {
-	env         config.Env
-	now         func() float64
 	maintenance *maintenanceapp.Service
 }
 
-func (s *service) path() (string, error) {
-	cfg, err := config.Load(s.env)
-	if err != nil {
-		return "", err
-	}
-	if _, err := os.Stat(cfg.DBPath); err != nil {
-		return "", fmt.Errorf("database %s: %w", cfg.DBPath, err)
-	}
-	return cfg.DBPath, nil
-}
-
-func (s *service) open(e *cli.Env) (*db.DB, string, db.Key, int) {
-	path, err := s.path()
-	if err != nil {
-		return nil, "", db.Key{}, cli.Fail(e, err)
-	}
-	key, err := s.currentKey(e)
-	if err != nil {
-		return nil, "", db.Key{}, cli.Fail(e, err)
-	}
-	d, err := db.Connect(path, db.WithKey(key))
-	if err != nil {
-		return nil, "", db.Key{}, cli.Fail(e, err)
-	}
-	if err := db.RequireV3(e.Ctx, d.Read); err != nil {
-		_ = d.Close()
-		return nil, "", db.Key{}, cli.Fail(e, err)
-	}
-	return d, path, key, cli.ExitOK
-}
-
-func (s *service) currentKey(e *cli.Env) (db.Key, error) {
-	return dbkey.Load(s.env, settings.From(e.Ctx))
-}
-
-func readKey(path string, stdin io.Reader) (db.Key, error) {
-	r := stdin
-	if path != "" {
-		f, err := os.Open(path)
-		if err != nil {
-			return db.Key{}, errors.New("--new-key-file could not be opened")
+func readKey(path string, stdin io.Reader) func() ([]byte, error) {
+	return func() ([]byte, error) {
+		r := stdin
+		if path != "" {
+			f, err := os.Open(path)
+			if err != nil {
+				return nil, errors.New("--new-key-file could not be opened")
+			}
+			defer func() { _ = f.Close() }()
+			r = f
 		}
-		defer func() { _ = f.Close() }()
-		r = f
+		return io.ReadAll(io.LimitReader(r, maxKeyInput+1))
 	}
-	raw, err := io.ReadAll(io.LimitReader(r, maxKeyInput+1))
-	if err != nil {
-		return db.Key{}, err
-	}
-	if len(raw) > maxKeyInput {
-		return db.Key{}, db.ErrInvalidKey
-	}
-	return db.ParseKey(strings.TrimSpace(string(raw)))
 }
 
 func (s *service) backup(a *cli.Args) cli.Handler {
@@ -129,91 +79,45 @@ func (s *service) check(*cli.Args) cli.Handler {
 	}
 }
 
-func (s *service) rekey(a *cli.Args) cli.Handler {
-	keyFile := a.String("new-key-file", "", cli.Opt{Metavar: "PATH", Help: "file holding the new 64-hex-digit key; standard input is read when omitted"})
-	a.RejectExtras("the new key must come from --new-key-file or standard input, not the command line")
+func (s *service) encrypt(a *cli.Args) cli.Handler {
+	a.RejectExtras("db encrypt takes no arguments; the key comes from the " + maintenanceapp.KeySetting + " setting")
 	return func(e *cli.Env) int {
-		old, err := s.currentKey(e)
+		res, err := s.maintenance.Encrypt(e.Ctx, maintenanceapp.EncryptInput{})
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		if old.IsZero() {
-			return cli.Fail(e, errors.New("db rekey: no database key is configured, so the database is plaintext; rekey only rotates the key of an encrypted database (set "+db.KeySetting+" first)"))
-		}
-		next, err := readKey(*keyFile, e.Stdin)
-		if err != nil {
-			return cli.Fail(e, fmt.Errorf("db rekey: new key: %w", err))
-		}
-		logx.AddSecret(hex.EncodeToString(next.Raw()))
-		oldID, newID := dbkey.ID(old), dbkey.ID(next)
-		if oldID == newID {
-			return cli.Fail(e, errors.New("db rekey: the new key is the current key"))
-		}
-		path, err := s.path()
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		lock, err := db.Exclusive(e.Ctx, path, db.ShortLockWait)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		defer func() { _ = lock.Close() }()
-		held, err := db.OpenFile(path, old)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		defer func() { _ = held.Close() }()
-		if err := db.HoldExclusive(e.Ctx, held); err != nil {
-			if errors.Is(err, db.ErrInUse) {
-				return cli.Fail(e, fmt.Errorf("db rekey: %w; the database is unchanged", err))
-			}
-			return cli.Fail(e, err)
-		}
-		if err := db.RefuseFutureSchema(e.Ctx, held); err != nil {
-			return cli.Fail(e, err)
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		staged, err := db.Stage(path, info.Mode().Perm())
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		defer staged.Discard()
-		if err := chownLike(staged.Path(), info); err != nil {
-			return cli.Fail(e, err)
-		}
-		if err := db.Backup(e.Ctx, held, staged.Path(), next); err != nil {
-			return cli.Fail(e, err)
-		}
-		want, err := db.TableCounts(e.Ctx, held)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		if err := db.Verify(e.Ctx, staged.Path(), next, want); err != nil {
-			return cli.Fail(e, fmt.Errorf("db rekey: verification of the re-encrypted copy failed, the database is unchanged: %w", err))
-		}
-		if err := recordRetired(e.Ctx, staged.Path(), next, oldID, newID); err != nil {
-			return cli.Fail(e, err)
-		}
-		if err := staged.PublishRename(); err != nil {
-			return cli.Fail(e, err)
-		}
-		_, _ = fmt.Fprintf(e.Stdout, "rekeyed %s: key id %s -> %s\n", path, oldID, newID)
+		r := res.Data
+		_, _ = fmt.Fprintf(e.Stdout, "encrypted %s: %d tables, %d rows, key id %s\n", r.Database, r.Tables, r.Rows, r.KeyID)
 		return cli.ExitOK
 	}
 }
 
-func recordRetired(ctx context.Context, path string, key db.Key, oldID, newID string) error {
-	c, err := db.OpenFile(path, key)
-	if err != nil {
-		return err
+func (s *service) rekey(a *cli.Args) cli.Handler {
+	keyFile := a.String("new-key-file", "", cli.Opt{Metavar: "PATH", Help: "file holding the new 64-hex-digit key; standard input is read when omitted"})
+	a.RejectExtras("the new key must come from --new-key-file or standard input, not the command line")
+	return func(e *cli.Env) int {
+		res, err := s.maintenance.Rekey(e.Ctx, maintenanceapp.RekeyInput{NewKey: readKey(*keyFile, e.Stdin)})
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		r := res.Data
+		_, _ = fmt.Fprintf(e.Stdout, "rekeyed %s: key id %s -> %s\n", r.Database, r.From, r.To)
+		return cli.ExitOK
 	}
-	defer func() { _ = c.Close() }()
-	if _, err := c.ExecContext(ctx, db.KeyHistoryDDL); err != nil {
-		return err
+}
+
+func (s *service) importV2(a *cli.Args) cli.Handler {
+	source := a.Arg("path", cli.Opt{Help: "path to the v2 database to import into this fresh v3 database"})
+	sourceConfig := a.String("source-config", "", cli.Opt{Metavar: "PATH", Help: "v2 configuration file holding pinned settings, as the v2 ATRIUM_CONFIG file did"})
+	sourceEnv := a.String("source-env", "", cli.Opt{Metavar: "PATH", Help: "file of v2 ATRIUM_* environment pins, one NAME=VALUE per line"})
+	return func(e *cli.Env) int {
+		res, err := s.maintenance.ImportV2(e.Ctx, maintenanceapp.ImportV2Input{Source: *source, SourceConfig: *sourceConfig, SourceEnv: *sourceEnv})
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		for _, line := range res.Data.Lines {
+			_, _ = fmt.Fprintln(e.Stdout, line)
+		}
+		return cli.ExitOK
 	}
-	_, err = c.ExecContext(ctx, "INSERT INTO db_key_history (key_id, replaced_by, retired_at) VALUES (?, ?, CAST(strftime('%s','now') AS REAL))", oldID, newID)
-	return err
 }

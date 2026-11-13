@@ -588,8 +588,11 @@ func TestImportV2LeavesApplicationStateNew(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = q.Close() }()
-	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit"); n != 0 {
-		t.Errorf("operation_audit holds %d rows after the import", n)
+	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit WHERE operation <> 'maintenance.import-v2'"); n != 0 {
+		t.Errorf("operation_audit holds %d carried rows after the import", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'maintenance.import-v2' AND outcome = 'ok' AND source = 'cli'"); n != 1 {
+		t.Errorf("operation_audit holds %d completed import rows, want 1", n)
 	}
 	for _, source := range []string{"ui", "cli"} {
 		if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE source = ?", source); n < 1 {

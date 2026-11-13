@@ -1,70 +1,21 @@
 package dbcmd
 
 import (
-	"bufio"
-	"errors"
-	"fmt"
 	"io"
 	"os"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/db"
+	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 )
 
 func (s *service) shell(*cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
-		d, _, _, code := s.open(e)
-		if code != cli.ExitOK {
-			return code
-		}
-		defer func() { _ = d.Close() }()
 		interactive := isTerminal(e.Stdin)
-		in := bufio.NewReader(e.Stdin)
-		failed := false
-		pending := ""
-		for {
-			if interactive {
-				prompt := "atrium> "
-				if strings.TrimSpace(pending) != "" {
-					prompt = "   ...> "
-				}
-				_, _ = fmt.Fprint(e.Stdout, prompt)
-			}
-			line, err := in.ReadString('\n')
-			if err != nil && !errors.Is(err, io.EOF) {
-				return cli.Fail(e, err)
-			}
-			eof := errors.Is(err, io.EOF)
-			if strings.TrimSpace(pending) == "" && strings.HasPrefix(strings.TrimSpace(line), ".") {
-				done, ok := metaCommand(e, d, strings.TrimSpace(line))
-				failed = failed || !ok
-				if done {
-					break
-				}
-			} else {
-				pending += line
-				stmts, rest := splitStatements(pending)
-				pending = rest
-				for _, stmt := range stmts {
-					if err := run(e, d, stmt); err != nil {
-						failed = true
-						_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
-					}
-				}
-			}
-			if eof {
-				if strings.TrimSpace(pending) != "" {
-					if err := run(e, d, pending); err != nil {
-						failed = true
-						_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
-					}
-				}
-				break
-			}
+		res, err := s.maintenance.SQL(e.Ctx, maintenanceapp.SQLInput{In: e.Stdin, Out: e.Stdout, Errors: e.Stderr, Interactive: interactive})
+		if err != nil {
+			return cli.Fail(e, err)
 		}
-		if failed && !interactive {
+		if res.Data.Failed > 0 && !interactive {
 			return cli.ExitError
 		}
 		return cli.ExitOK
@@ -78,175 +29,4 @@ func isTerminal(r io.Reader) bool {
 	}
 	info, err := f.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-func metaCommand(e *cli.Env, d *db.DB, line string) (done, ok bool) {
-	switch line {
-	case ".quit", ".exit":
-		return true, true
-	case ".tables":
-		if err := run(e, d, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"); err != nil {
-			_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
-			return false, false
-		}
-		return false, true
-	}
-	_, _ = fmt.Fprintf(e.Stderr, "error: unknown command %q; known commands: .tables .quit .exit\n", line)
-	return false, false
-}
-
-func run(e *cli.Env, d *db.DB, stmt string) error {
-	rows, err := d.Write.QueryContext(e.Ctx, stmt)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = rows.Close() }()
-	cols, err := rows.Columns()
-	if err != nil {
-		return err
-	}
-	vals := make([]any, len(cols))
-	ptrs := make([]any, len(cols))
-	for i := range vals {
-		ptrs[i] = &vals[i]
-	}
-	cells := make([]string, len(cols))
-	for rows.Next() {
-		if err := rows.Scan(ptrs...); err != nil {
-			return err
-		}
-		for i, v := range vals {
-			cells[i] = format(v)
-		}
-		_, _ = fmt.Fprintln(e.Stdout, strings.Join(cells, "\t"))
-	}
-	return rows.Err()
-}
-
-func format(v any) string {
-	switch x := v.(type) {
-	case nil:
-		return ""
-	case []byte:
-		if utf8.Valid(x) {
-			return string(x)
-		}
-		return fmt.Sprintf("x'%x'", x)
-	}
-	return fmt.Sprint(v)
-}
-
-func splitStatements(text string) ([]string, string) {
-	var stmts []string
-	start := 0
-	var quote byte
-	for i := 0; i < len(text); i++ {
-		c := text[i]
-		switch {
-		case quote != 0:
-			if c == quote {
-				quote = 0
-			}
-		case c == '\'' || c == '"' || c == '`':
-			quote = c
-		case c == '[':
-			quote = ']'
-		case c == '-' && i+1 < len(text) && text[i+1] == '-':
-			j := strings.IndexByte(text[i:], '\n')
-			if j < 0 {
-				return stmts, text[start:]
-			}
-			i += j
-		case c == '/' && i+1 < len(text) && text[i+1] == '*':
-			j := strings.Index(text[i+2:], "*/")
-			if j < 0 {
-				return stmts, text[start:]
-			}
-			i += j + 3
-		case c == ';':
-			stmt := strings.TrimSpace(text[start : i+1])
-			if triggerDepth(stmt) > 0 {
-				continue
-			}
-			if hasSQL(stmt) {
-				stmts = append(stmts, stmt)
-			}
-			start = i + 1
-		}
-	}
-	return stmts, text[start:]
-}
-
-func isTrigger(stmt string) bool {
-	words := strings.Fields(strings.ToUpper(stmt))
-	if len(words) < 2 || words[0] != "CREATE" {
-		return false
-	}
-	if words[1] == "TEMP" || words[1] == "TEMPORARY" {
-		words = words[1:]
-	}
-	return len(words) > 1 && words[1] == "TRIGGER"
-}
-
-func triggerDepth(stmt string) int {
-	if !isTrigger(stmt) {
-		return 0
-	}
-	depth := 0
-	for _, word := range strings.Fields(stripQuoted(stmt)) {
-		switch strings.ToUpper(strings.Trim(word, ";(),")) {
-		case "BEGIN", "CASE":
-			depth++
-		case "END":
-			depth--
-		}
-	}
-	return depth
-}
-
-func stripQuoted(text string) string {
-	var b strings.Builder
-	var quote byte
-	for i := 0; i < len(text); i++ {
-		c := text[i]
-		if quote != 0 {
-			if c == quote {
-				quote = 0
-			}
-			b.WriteByte(' ')
-			continue
-		}
-		if c == '\'' || c == '"' || c == '`' {
-			quote = c
-			b.WriteByte(' ')
-			continue
-		}
-		b.WriteByte(c)
-	}
-	return b.String()
-}
-
-func hasSQL(stmt string) bool {
-	text := stmt
-	for {
-		text = strings.TrimSpace(text)
-		switch {
-		case strings.HasPrefix(text, "--"):
-			if i := strings.IndexByte(text, '\n'); i >= 0 {
-				text = text[i+1:]
-				continue
-			}
-			return false
-		case strings.HasPrefix(text, "/*"):
-			if i := strings.Index(text[2:], "*/"); i >= 0 {
-				text = text[i+4:]
-				continue
-			}
-			return false
-		case text == "" || text == ";":
-			return false
-		default:
-			return true
-		}
-	}
 }

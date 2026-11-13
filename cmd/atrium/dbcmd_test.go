@@ -261,4 +261,10 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	if history.code != cli.ExitOK || history.stdout != wantHistory {
 		t.Errorf("recorded key history = %q (exit %d, stderr %q), want %q", history.stdout, history.code, history.stderr, wantHistory)
 	}
+	if got := strings.Join(maintenanceAudits(t, live, third, "maintenance.rekey"), ","); got != "ok:cli,ok:cli" {
+		t.Errorf("rekey audits = %q, want two completed rekeys and no refusals", got)
+	}
+	if got := strings.Join(maintenanceAudits(t, live, third, "maintenance.sql"), ","); got != "ok:cli,ok:cli,failed:cli,ok:cli" {
+		t.Errorf("shell audits = %q, want one row per session with the failed session marked", got)
+	}
 }

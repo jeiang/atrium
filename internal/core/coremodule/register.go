@@ -70,7 +70,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
 	maintenanceOps, maintenanceBindings := maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
-	maintenance := maintenanceapp.New(mc.Env)
+	maintenance := maintenanceapp.New(mc.Env, m.Now)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -123,7 +123,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),
 			secretscmd.Command(openSettings),
-			dbcmd.Command(mc.Env, m.Now, maintenance),
+			dbcmd.Command(maintenance),
 			kbcmd.Command(mc.Env),
 			dbcmd.BackupCommand(maintenance),
 			dbcmd.RestoreCommand(maintenance),

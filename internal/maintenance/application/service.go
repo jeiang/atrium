@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
@@ -17,10 +18,18 @@ import (
 
 type Service struct {
 	env config.Env
+	now func() float64
 }
 
-func New(env config.Env) *Service {
-	return &Service{env: env}
+func New(env config.Env, now func() float64) *Service {
+	return &Service{env: env, now: now}
+}
+
+func (s *Service) clock() float64 {
+	if s.now != nil {
+		return s.now()
+	}
+	return float64(time.Now().UnixNano()) / 1e9
 }
 
 type Encryption struct {

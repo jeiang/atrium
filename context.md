@@ -315,7 +315,15 @@ behavior-parity target.
   completed `atrium restore` writes one `maintenance.restore` row to the
   restored database. A refused or failed restore writes nothing, since it
   leaves the database unchanged. `db check` and `restore --verify` are not
-  audited.
+  audited. A completed `atrium db encrypt` or `atrium db rekey` writes one
+  `maintenance.encrypt` or `maintenance.rekey` row (key ids only) into the new
+  copy before it replaces the database, if that database has
+  `operation_audit`. A completed `atrium db import-v2` writes one
+  `maintenance.import-v2` row in the import transaction. A refused or failed
+  encrypt, rekey or import writes nothing, so the database is unchanged and
+  the import target stays fresh. Each `atrium db shell` session writes one
+  `maintenance.sql` row after the input ends: statement and failure counts
+  only, never the SQL. The outcome is `failed` if any statement failed.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
