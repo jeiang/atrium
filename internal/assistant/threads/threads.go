@@ -942,6 +942,7 @@ func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error
 	const runs = "SELECT id FROM runs WHERE thread_id = ?"
 	for _, stmt := range []string{
 		"DELETE FROM run_events WHERE run_id IN (" + runs + ")",
+		"DELETE FROM run_streams WHERE run_id IN (" + runs + ")",
 		"DELETE FROM context_ledger WHERE run_id IN (" + runs + ")",
 		"DELETE FROM tool_results WHERE run_id IN (" + runs + ")",
 		"DELETE FROM tool_calls WHERE run_id IN (" + runs + ")",

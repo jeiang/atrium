@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
 
@@ -54,10 +53,8 @@ type pages struct {
 }
 
 const (
-	emptyMessage    = "Type a message first."
-	archived        = "archived"
-	streamPoll      = 300 * time.Millisecond
-	streamKeepAlive = 15 * time.Second
+	emptyMessage = "Type a message first."
+	archived     = "archived"
 )
 
 func Module(o Options) web.Module {

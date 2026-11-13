@@ -247,7 +247,7 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 
 	code, events, h := w.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run), false)
 	w.want(code, http.StatusOK, events, "event: text\n")
-	if h.Get("Content-Type") != "text/event-stream; charset=utf-8" || h.Get("Cache-Control") != "no-cache" || h.Get("X-Accel-Buffering") != "no" || h.Get("X-Content-Type-Options") != "nosniff" {
+	if h.Get("Content-Type") != "text/event-stream; charset=utf-8" || h.Get("Cache-Control") != "private, no-store, no-transform" || h.Get("X-Accel-Buffering") != "no" || h.Get("X-Content-Type-Options") != "nosniff" {
 		t.Errorf("event stream headers %v", h)
 	}
 	if !strings.HasSuffix(events, "event: done\ndata: {\"state\": \"done\"}\n\n") {
