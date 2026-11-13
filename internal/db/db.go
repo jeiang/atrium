@@ -51,6 +51,11 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 		return Checkpoint{}, err
 	}
 	defer func() { _ = conn.Close() }()
+	release, err := holdGate(ctx, conn, wait)
+	if err != nil {
+		return Checkpoint{}, err
+	}
+	defer release()
 	if _, err := conn.ExecContext(ctx, busyPragma(wait)); err != nil {
 		return Checkpoint{}, err
 	}
@@ -96,7 +101,8 @@ func connect(path string, opts []Option) (*DB, error) {
 		return nil, err
 	}
 	pragmas := connPragmas()
-	w := Open(writeDSN, append(append([]string{}, pragmas...), cachePragma(smallCacheKiB))...)
+	gate := &writeGate{}
+	w := sql.OpenDB(connector{drv: openDriver(), dsn: writeDSN, pragmas: append(append([]string{}, pragmas...), cachePragma(smallCacheKiB)), gate: gate})
 	w.SetMaxOpenConns(1)
 	if err := guardEngine(w, key); err != nil {
 		_ = w.Close()
@@ -106,7 +112,7 @@ func connect(path string, opts []Option) (*DB, error) {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
-	if err := gateWrites(w, path); err != nil {
+	if gate.path, err = CanonicalPath(path); err != nil {
 		_ = w.Close()
 		return nil, err
 	}
@@ -116,7 +122,6 @@ func connect(path string, opts []Option) (*DB, error) {
 }
 
 func (d *DB) Close() error {
-	ungateWrites(d.Write)
 	return errors.Join(d.KNN.Close(), d.Read.Close(), d.Write.Close())
 }
 
@@ -146,11 +151,6 @@ func (d *DB) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
 }
 
 func (d *DB) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
-	release, err := admitWriter(ctx, d.Write)
-	if err != nil {
-		return err
-	}
-	defer release()
 	tx, err := d.Write.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -261,6 +261,7 @@ type connector struct {
 	drv     driver.Driver
 	dsn     string
 	pragmas []string
+	gate    *writeGate
 }
 
 func (c connector) Driver() driver.Driver { return c.drv }
@@ -284,7 +285,15 @@ func (c connector) Connect(ctx context.Context) (driver.Conn, error) {
 			return nil, fmt.Errorf("db: %s: %w", p, err)
 		}
 	}
-	return conn, nil
+	if c.gate == nil {
+		return conn, nil
+	}
+	g, ok := conn.(gateableConn)
+	if !ok {
+		_ = conn.Close()
+		return nil, fmt.Errorf("db: %T cannot take the write gate", conn)
+	}
+	return &gatedConn{gateableConn: g, gate: c.gate}, nil
 }
 
 func SerializeFloat32(v []float32) []byte {
