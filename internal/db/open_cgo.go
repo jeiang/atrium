@@ -9,14 +9,16 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/jeiang/atrium/internal/db/busywait"
 	sqlitevec "github.com/jeiang/atrium/third_party/sqlite-vec"
 	"github.com/mattn/go-sqlite3"
 )
 
 func init() {
 	sqlitevec.Auto()
-	registerBusyWait()
+	busywait.Register()
 	conn, err := openDriver().Open("file::memory:")
 	if err != nil {
 		panic(err)
@@ -28,6 +30,10 @@ func init() {
 }
 
 func openDriver() driver.Driver { return &sqlite3.SQLiteDriver{} }
+
+func busyWaitSQL(d time.Duration) string {
+	return fmt.Sprintf("SELECT atrium_busy_timeout(%d)", d.Milliseconds())
+}
 
 func dsn(path string, immediate bool, key Key) (string, error) {
 	var params []string

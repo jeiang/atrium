@@ -1,6 +1,4 @@
-//go:build !modernc
-
-package db
+package busywait
 
 /*
 #include <sqlite3.h>
@@ -55,13 +53,4 @@ static void atrium_busy_register(void) {
 */
 import "C"
 
-import (
-	"fmt"
-	"time"
-)
-
-func registerBusyWait() { C.atrium_busy_register() }
-
-func busyWaitSQL(d time.Duration) string {
-	return fmt.Sprintf("SELECT atrium_busy_timeout(%d)", d.Milliseconds())
-}
+func Register() { C.atrium_busy_register() }
