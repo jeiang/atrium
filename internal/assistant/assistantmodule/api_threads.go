@@ -322,7 +322,7 @@ type apiPinRequest struct {
 
 type apiArchiveRequest struct {
 	ThreadID int64 `path:"thread_id" json:"-"`
-	Archived *bool `json:"archived"`
+	Archived *bool `json:"archived" api:"required"`
 }
 
 type apiMoveRequest struct {

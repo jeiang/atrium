@@ -2532,6 +2532,9 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "archived"
+        ],
         "type": "object"
       },
       "AssistantmoduleapiAttachment": {
