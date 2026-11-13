@@ -140,6 +140,7 @@ func TestKnowledgeAPILifecycle(t *testing.T) {
 	expectField(t, s.do(http.MethodGet, "/api/v1/knowledge?scope=bogus", token, nil), "scope")
 	expectField(t, s.do(http.MethodPost, "/api/v1/knowledge", token, map[string]any{"title": "", "body": "x", "scope": "work"}), "title")
 	expectField(t, s.do(http.MethodPost, "/api/v1/knowledge/confirm-matching", token, map[string]any{"state": "all"}), "state")
+	expectField(t, s.do(http.MethodPost, "/api/v1/knowledge/confirm", token, map[string]any{"ids": make([]int64, 101)}), "ids")
 
 	kept := apiData(t, s.do(http.MethodPost, "/api/v1/knowledge", token, map[string]any{
 		"title": "Locker code", "body": "The locker code is 1234.", "scope": "personal", "aliases": []string{"locker"}, "private": true, "marks": []string{"messages", "pii"}, "pinned": true,

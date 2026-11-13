@@ -3,6 +3,7 @@ package assistantmodule
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/jeiang/atrium/internal/api"
@@ -259,6 +260,10 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Command(d, kbapp.DescribeConfirmSelected(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}},
 			"POST /knowledge/confirm", func(ctx context.Context, in KnowledgeSelectedRequest) (application.Change[KnowledgeBatch], error) {
+				if len(in.IDs) > api.LimitMax {
+					return application.Change[KnowledgeBatch]{}, &application.Error{Code: application.Invalid, Message: "Confirm at most " + strconv.Itoa(api.LimitMax) + " records at once.",
+						Fields: []application.Field{{Name: "ids", Code: string(application.Invalid), Message: "at most " + strconv.Itoa(api.LimitMax) + " ids"}}}
+				}
 				return knowledgeBatch(svc().ConfirmSelected(ctx, kbapp.SelectedInput{IDs: in.IDs}))
 			}),
 		api.Command(d, kbapp.DescribeConfirmMatching(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}},

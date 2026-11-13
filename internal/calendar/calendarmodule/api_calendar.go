@@ -3,12 +3,20 @@ package calendarmodule
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	calapp "github.com/jeiang/atrium/internal/calendar/application"
+	"github.com/jeiang/atrium/internal/calendar/candidates"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/davmirror"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -88,15 +96,12 @@ func (m Module) calendarRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Command(d, calapp.DescribePasses()[0], application.APIShape{Area: "integrations", Errors: []application.Code{application.NotConfigured, application.Unavailable, application.Conflict}},
 			"POST /calendar/sync", func(ctx context.Context, in calapp.SyncInput) (application.Change[davmirror.Stats], error) {
-				return reads().Sync(ctx, in)
+				change, err := reads().SyncManual(ctx, d.Cfg)
+				return change, syncBusy(err, "A calendar sync is already running.")
 			}),
-		api.Command(d, calapp.DescribePasses()[1], application.APIShape{Area: "integrations", Errors: []application.Code{application.NotConfigured, application.Unavailable}},
+		api.Command(d, calapp.DescribePasses()[1], application.APIShape{Area: "integrations", Errors: []application.Code{application.NotConfigured, application.Unavailable, application.Conflict, application.Refused}},
 			"POST /calendar/candidates", func(ctx context.Context, in calapp.DraftCandidatesInput) (application.Change[Candidates], error) {
-				svc, err := m.Jobs.Service(d.Ctx)
-				if err != nil {
-					return application.Change[Candidates]{}, err
-				}
-				out, err := calendarService(svc, assistant.Now, nil).DraftCandidates(ctx, in)
+				out, err := m.draftNow(ctx, d, in)
 				if err != nil {
 					return application.Change[Candidates]{}, err
 				}
@@ -107,4 +112,34 @@ func (m Module) calendarRoutes(d *web.Deps) []application.Binding {
 				return application.Change[Candidates]{Data: c, EffectIDs: out.EffectIDs, AuditID: out.AuditID}, nil
 			}),
 	}
+}
+
+func syncBusy(err error, message string) error {
+	if errors.As(err, new(*db.LockBusy)) {
+		return &application.Error{Code: application.Conflict, Message: message, Cause: err}
+	}
+	return err
+}
+
+func (m Module) draftNow(ctx context.Context, d *web.Deps, in calapp.DraftCandidatesInput) (application.Change[candidates.Result], error) {
+	def := CandidatesJob(m.Jobs)
+	for _, need := range append([]string{def.Module}, def.Needs...) {
+		if !module.IsEnabled(ctx, need) {
+			return application.Change[candidates.Result]{}, &application.Error{Code: application.Refused, Message: "Event candidates need the " + need + " module, which is off."}
+		}
+	}
+	if !def.RunsWhilePaused && safety.IsPaused(d.Cfg.PausePath()) {
+		return application.Change[candidates.Result]{}, &application.Error{Code: application.Refused, Message: "atrium is paused."}
+	}
+	var out application.Change[candidates.Result]
+	var draftErr error
+	run := m.Jobs.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+		out, draftErr = draftCandidates(ctx, e, in)
+		return jobworker.Result{RunID: out.Data.RunID}, draftErr
+	})
+	_, err := scheduler.RunNow(ctx, d.DB, d.Cfg.DBPath, config.From(ctx).TZName(d.Env), def, db.ShortLockWait, run)
+	if err == nil {
+		err = draftErr
+	}
+	return out, syncBusy(err, "Event candidates are already being drafted.")
 }

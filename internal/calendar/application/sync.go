@@ -40,16 +40,15 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[dav
 	return application.Change[davmirror.Stats]{Data: stats, AuditID: id}, err
 }
 
-func (s *Service) SyncManual(ctx context.Context, cfg config.Config) (davmirror.Stats, error) {
-	var out davmirror.Stats
+func (s *Service) SyncManual(ctx context.Context, cfg config.Config) (application.Change[davmirror.Stats], error) {
+	var out application.Change[davmirror.Stats]
 	var syncErr error
 	_, err := module.Invoke(ctx, s.db, cfg, module.Calendar+"/"+passrun.CalDAV, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
-		change, runErr := s.Sync(ctx, SyncInput{})
-		out, syncErr = change.Data, runErr
-		if missing, ok := errors.AsType[config.NotConfigured](runErr); ok {
+		out, syncErr = s.Sync(ctx, SyncInput{})
+		if missing, ok := errors.AsType[config.NotConfigured](syncErr); ok {
 			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
 		}
-		return scheduler.Result{}, runErr
+		return scheduler.Result{}, syncErr
 	})
 	if err == nil {
 		err = syncErr

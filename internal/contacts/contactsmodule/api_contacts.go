@@ -3,12 +3,14 @@ package contactsmodule
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
 	"github.com/jeiang/atrium/internal/davmirror"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -63,7 +65,11 @@ func contactRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Command(d, defs[1], application.APIShape{Area: "integrations", Errors: []application.Code{application.NotConfigured, application.Unavailable, application.Conflict}},
 			"POST /contacts/sync", func(ctx context.Context, in contactsapp.SyncInput) (application.Change[davmirror.Stats], error) {
-				return svc().Sync(ctx, in)
+				change, err := svc().SyncManual(ctx, d.Cfg)
+				if errors.As(err, new(*db.LockBusy)) {
+					return change, &application.Error{Code: application.Conflict, Message: "A contacts sync is already running.", Cause: err}
+				}
+				return change, err
 			}),
 	}
 }

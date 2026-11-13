@@ -187,6 +187,13 @@ func TestBackupCommandSharesTheJobClaim(t *testing.T) {
 	if _, err := os.Lstat(manual); !os.IsNotExist(err) {
 		t.Fatalf("refused backup left %s: %v", manual, err)
 	}
+	copied := filepath.Join(t.TempDir(), "copy.db")
+	if got := runApp(t, "db", "backup", copied); got.code != cli.ExitError || !strings.Contains(got.stderr, "A backup or database check is already running.") {
+		t.Fatalf("db backup beside the running job = (%d, %q), want exit %d and a held-lock refusal", got.code, got.stderr, cli.ExitError)
+	}
+	if _, err := os.Lstat(copied); !os.IsNotExist(err) {
+		t.Fatalf("refused db backup left %s: %v", copied, err)
+	}
 	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, backup.JobKey)
 	if ran := runApp(t, "agent", "tick"); ran.code != cli.ExitOK && ran.code != cli.ExitTempFail {
 		t.Fatalf("agent tick beside the running job: exit %d: %s", ran.code, ran.stderr)
