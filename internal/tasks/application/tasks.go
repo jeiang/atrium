@@ -129,7 +129,9 @@ func (s *Service) command(ctx context.Context, name application.Name, id int64, 
 	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		effect, err := s.ledger.ApplyLocalTx(ctx, tx, n, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 			next, res, err := apply(ctx, tx)
-			id = next
+			if err == nil {
+				id = next
+			}
 			return res, err
 		})
 		if err != nil {

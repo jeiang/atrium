@@ -145,7 +145,7 @@ func TestTaskUpdateAbsentFieldsKeepValues(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "add a task"); ran.code != cli.ExitOK {
 		t.Fatalf("task_add run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	var id int64
 	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Renew passport'").Scan(&id); err != nil {
@@ -170,5 +170,14 @@ func TestTaskUpdateAbsentFieldsKeepValues(t *testing.T) {
 			op, strconv.FormatInt(id, 10)).Scan(&n); err != nil || n != 1 {
 			t.Errorf("%s ok audit rows = %d (%v), want 1", op, n, err)
 		}
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("missing", "task_done", map[string]any{"id": 999999})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("not found")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "finish the missing task"); ran.code != cli.ExitOK {
+		t.Fatalf("missing task run: %d %s", ran.code, ran.stderr)
+	}
+	var n int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit a JOIN runs r ON r.id = a.run_id WHERE a.operation = 'tasks.done' AND a.target = '999999' AND a.outcome = 'not_found' AND a.thread_id = 1 AND r.thread_id = a.thread_id AND a.run_id = (SELECT MAX(id) FROM runs)").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("missing task audit with trusted invocation = %d (%v), want 1", n, err)
 	}
 }

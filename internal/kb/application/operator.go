@@ -137,7 +137,8 @@ func (s *Service) audit(ctx context.Context, tx *sql.Tx, name application.Name, 
 	if effectID > 0 {
 		details = jsonx.Dumps(map[string][]int64{"effect_ids": {effectID}}, jsonx.Opts{Compact: true})
 	}
-	return s.state.Audit(ctx, tx, state.Entry{Operation: string(name), Outcome: outcome, Target: target(id), DetailsJSON: details})
+	inv, _ := application.InvocationOf(ctx)
+	return s.state.Audit(ctx, tx, state.Entry{Operation: string(name), Outcome: outcome, Target: target(id), DetailsJSON: details, ThreadID: inv.ThreadID, RunID: inv.RunID, JobRunID: inv.JobRunID})
 }
 
 func outcomeOf(e *application.Error) (state.Outcome, bool) {
