@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
@@ -129,12 +130,17 @@ func TestSettingsSaveSameRefusalInCLIAndUI(t *testing.T) {
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	pinned := module.FlagKey(module.Mail)
 	seedFlagsAt(t, newTestApp(t), path, allFlagsTrue())
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host.toml", "[core]\n"+pinned+" = true\n"))
 	base := startServeIn(t, dir)
 	const key = "thread_cost_cap_usd"
 	ran := runSettings(t, "set", key, "-1")
 	if ran.code != cli.ExitUsage || !strings.HasPrefix(ran.stderr, "error: "+key+" ") {
 		t.Errorf("settings set %s -1 = exit %d, stderr %q; want exit 2 naming %s", key, ran.code, ran.stderr, key)
+	}
+	if ran := runSettings(t, "set", pinned, "false"); ran.code != cli.ExitError || !strings.Contains(ran.stderr, pinned+" is pinned") {
+		t.Errorf("settings set %s false = exit %d, stderr %q; want exit 1 naming the pin", pinned, ran.code, ran.stderr)
 	}
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -147,13 +153,37 @@ func TestSettingsSaveSameRefusalInCLIAndUI(t *testing.T) {
 	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/spending", url.Values{key: {"-1"}}); status != http.StatusUnprocessableEntity {
 		t.Errorf("POST the group with %s=-1 = %d, want 422", key, status)
 	}
+	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/spending", url.Values{pinned: {"false"}}); status >= http.StatusBadRequest {
+		t.Errorf("POST the group with the pinned %s = %d", pinned, status)
+	}
 	d := mustConnect(t, path, keyFor(t))
-	var changes int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE key = ?", key).Scan(&changes); err != nil {
+	for k, v := range map[string]string{key: "-1", pinned: "false"} {
+		var changes int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE key = ? AND COALESCE(new_value, '') = ?", k, v).Scan(&changes); err != nil {
+			t.Fatal(err)
+		}
+		if changes != 0 {
+			t.Errorf("refused saves of %s=%s wrote %d settings_audit rows", k, v, changes)
+		}
+	}
+	var refusals []string
+	refused, err := d.Read.Query("SELECT source || ' ' || details_json FROM operation_audit WHERE operation = 'settings.set' AND outcome = 'refused' AND target = ? ORDER BY id", pinned)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if changes != 0 {
-		t.Errorf("refused saves wrote %d settings_audit rows", changes)
+	defer func() { _ = refused.Close() }()
+	for refused.Next() {
+		var row string
+		if err := refused.Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		refusals = append(refusals, row)
+	}
+	if err := refused.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{`cli {"keys":["` + pinned + `"]}`}; !slices.Equal(refusals, want) {
+		t.Errorf("pinned refusal audit = %v, want %v", refusals, want)
 	}
 	rows, err := d.Read.Query("SELECT source, details_json FROM operation_audit WHERE operation = 'settings.set' AND outcome = 'invalid' AND target = ? ORDER BY id", key)
 	if err != nil {

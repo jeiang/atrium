@@ -43,6 +43,9 @@ func (c *command) list(*cli.Args) cli.Handler {
 func (c *command) get(a *cli.Args) cli.Handler {
 	key := a.Arg("key", cli.Opt{})
 	return func(e *cli.Env) int {
+		if err := settingsapp.CheckRead(e.Ctx, *key); err != nil {
+			return cli.Fail(e, err)
+		}
 		return c.with(e, func(s *settingsapp.Service) error { return show(e, s, *key) })
 	}
 }

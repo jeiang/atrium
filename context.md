@@ -332,7 +332,11 @@ behavior-parity target.
   out-of-range or malformed value, an empty secret) and is answered 422 on the
   page, a refusal (host key, pinned, secret key in `settings`, plaintext
   database for a secret) exits 1 and is answered 409, and each change or
-  refusal writes one `operation_audit` row with key names only. There is no
+  refusal of a command writes one `operation_audit` row with key names only.
+  Refused `settings get` keys are checked before opening the database; reads
+  write no audit. `secrets set` checks the name before reading standard input.
+  Section validators save their added, normalized keys, including clears.
+  Unexpected form failures show one diagnostic ID. There is no
   legacy pin file: `ATRIUM_CONFIG` is refused at startup, and so is an
   `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key or for a
   connection-owned host key (the refusal names the destination). Provider

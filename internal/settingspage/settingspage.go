@@ -212,14 +212,15 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := h.svc.Set(ctx, settingsapp.SetInput{Values: changes(fields, values)}); err != nil {
-		web.Fail(w, r, err, func(status int) {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
 			views, loadErr := h.views(ctx, group.URL)
 			if loadErr != nil {
 				panic(loadErr)
 			}
 			for i := range views {
 				if views[i].Module == module && views[i].Name == name {
-					views[i].Error = application.Classify(err).Message
+					views[i].Error = web.Message(failure)
 					for j, f := range views[i].Fields {
 						if value, ok := values[f.Key]; ok && !f.Pinned {
 							views[i].Fields[j].Value = value
@@ -306,13 +307,13 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 	values := fieldValues(s.Fields, form)
 	ctx := context.WithoutCancel(r.Context())
 	if _, err := h.svc.Set(ctx, settingsapp.SetInput{Values: changes(s.Fields, values), Validate: s.Validate}); err != nil {
-		web.Fail(w, r, err, func(status int) {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
 			view, loadErr := h.sectionViews(ctx, "/settings/"+s.Module, "")
 			if loadErr != nil {
 				panic(loadErr)
 			}
-			failure := application.Classify(err)
-			view.Error = failure.Message
+			view.Error = web.Message(failure)
 			if len(failure.Fields) > 0 {
 				view.FieldError = failure.Fields[0].Name
 			}

@@ -173,28 +173,28 @@ func (s *Store) Load(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) Delete(ctx context.Context, name string) error {
+func (s *Store) Delete(ctx context.Context, name string) (bool, error) {
 	if !audit.HasActor(ctx) {
-		return audit.ErrNoActor
+		return false, audit.ErrNoActor
 	}
 	d, err := s.def(name)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if HostOwnedKey(name) {
-		return hostOwned(name)
+		return false, hostOwned(name)
 	}
 	if d.PinnedOnly() {
-		return PinOnly(name)
+		return false, PinOnly(name)
 	}
 	res, err := s.q.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
-		return err
+		return false, err
 	}
-	return audit.Record(ctx, s.q, audit.Entry{Key: name, Secret: true})
+	return true, audit.Record(ctx, s.q, audit.Entry{Key: name, Secret: true})
 }
 
 func (s *Store) Status(ctx context.Context, name string) (Status, error) {

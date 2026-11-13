@@ -48,7 +48,7 @@ func (s *Service) revision(ctx context.Context, projection string, input any) (a
 }
 
 func (s *Service) command(ctx context.Context, name application.Name, target string, keys []string, run func(tx *sql.Tx) (bool, error)) (int64, error) {
-	details, err := json.Marshal(map[string][]string{"keys": keys})
+	details, err := detailsOf(keys)
 	if err != nil {
 		return 0, err
 	}
@@ -69,6 +69,10 @@ func (s *Service) command(ctx context.Context, name application.Name, target str
 		return id, nil
 	}
 	return 0, s.refuse(ctx, name, target, details, err)
+}
+
+func detailsOf(keys []string) ([]byte, error) {
+	return json.Marshal(map[string][]string{"keys": keys})
 }
 
 func (s *Service) refuse(ctx context.Context, name application.Name, target string, details []byte, err error) error {

@@ -29,22 +29,30 @@ func (c *command) set(a *cli.Args) cli.Handler {
 	name := a.Arg("name", cli.Opt{})
 	a.RejectExtras("the value must come from standard input, not the command line")
 	return func(e *cli.Env) int {
-		raw, err := io.ReadAll(io.LimitReader(e.Stdin, maxValue+1))
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		if len(raw) > maxValue {
-			return e.UsageError("the secret on standard input is larger than %d bytes", maxValue)
-		}
-		value := strings.TrimRight(string(raw), "\r\n")
-		return c.with(e, func(s *settingsapp.Service) error {
-			change, err := s.SetSecret(e.Ctx, settingsapp.SecretSetInput{Name: *name, Value: value})
+		oversized := false
+		code := c.with(e, func(s *settingsapp.Service) error {
+			if err := s.CheckSecret(e.Ctx, *name); err != nil {
+				return err
+			}
+			raw, err := io.ReadAll(io.LimitReader(e.Stdin, maxValue+1))
+			if err != nil {
+				return err
+			}
+			if len(raw) > maxValue {
+				oversized = true
+				return nil
+			}
+			change, err := s.SetSecret(e.Ctx, settingsapp.SecretSetInput{Name: *name, Value: strings.TrimRight(string(raw), "\r\n")})
 			if err != nil {
 				return err
 			}
 			report(e, change.Data)
 			return nil
 		})
+		if oversized {
+			return e.UsageError("the secret on standard input is larger than %d bytes", maxValue)
+		}
+		return code
 	}
 }
 

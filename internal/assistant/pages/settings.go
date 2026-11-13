@@ -78,8 +78,9 @@ func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := settingsapp.Web(p.deps.DB).Set(detached(r), settingsapp.SetInput{Values: changes}); err != nil {
-		web.Fail(w, r, err, func(status int) {
-			message := application.Classify(err).Message
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
+			message := web.Message(failure)
 			p.assistantPage(w, r, status, AssistantData{Refused: message}, toasted(notice("error", "Not saved", message)))
 		})
 		return

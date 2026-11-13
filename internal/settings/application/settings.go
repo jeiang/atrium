@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -97,6 +99,11 @@ func operatorKey(ctx context.Context, key string, writing bool) (settings.Def, e
 	return def, nil
 }
 
+func CheckRead(ctx context.Context, key string) error {
+	_, err := operatorKey(ctx, key, false)
+	return err
+}
+
 func (s *Service) Read(ctx context.Context, in ReadInput) (application.Read[Settings], error) {
 	reg := settings.From(ctx)
 	keys := in.Keys
@@ -168,30 +175,17 @@ func (s *Service) row(ctx context.Context, snap *settings.Snapshot, key string, 
 }
 
 func (s *Service) Set(ctx context.Context, in SetInput) (application.Change[Changed], error) {
-	keys := make([]string, 0, len(in.Values))
-	for _, v := range in.Values {
+	values, err := s.validated(ctx, in)
+	if err != nil {
+		return application.Change[Changed]{}, err
+	}
+	keys := make([]string, 0, len(values))
+	for _, v := range values {
 		keys = append(keys, v.Key)
 	}
-	target := ""
-	if len(keys) == 1 {
-		target = keys[0]
-	}
-	id, err := s.command(ctx, SetName, target, keys, func(tx *sql.Tx) (bool, error) {
+	id, err := s.command(ctx, SetName, targetOf(keys), keys, func(tx *sql.Tx) (bool, error) {
 		reg := settings.From(ctx)
-		if in.Validate != nil {
-			values := make(map[string]string, len(in.Values))
-			for _, v := range in.Values {
-				values[v.Key] = v.Value
-			}
-			if err := in.Validate(ctx, s.d.Read, values); err != nil {
-				return false, err
-			}
-			for i := range in.Values {
-				value := strings.TrimSpace(values[in.Values[i].Key])
-				in.Values[i].Value, in.Values[i].Unset = value, value == ""
-			}
-		}
-		for _, v := range in.Values {
+		for _, v := range values {
 			if s.operatorKeys {
 				if _, err := operatorKey(ctx, v.Key, true); err != nil {
 					return false, err
@@ -218,6 +212,47 @@ func (s *Service) Set(ctx context.Context, in SetInput) (application.Change[Chan
 		return application.Change[Changed]{}, err
 	}
 	return application.Change[Changed]{Data: Changed{Keys: keys}, AuditID: id}, nil
+}
+
+func (s *Service) validated(ctx context.Context, in SetInput) ([]Value, error) {
+	if in.Validate == nil {
+		return in.Values, nil
+	}
+	values := make(map[string]string, len(in.Values))
+	for _, v := range in.Values {
+		values[v.Key] = v.Value
+	}
+	if err := in.Validate(ctx, s.d.Read, values); err != nil {
+		keys := make([]string, 0, len(in.Values))
+		for _, v := range in.Values {
+			keys = append(keys, v.Key)
+		}
+		details, marshalErr := detailsOf(keys)
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		return nil, s.refuse(ctx, SetName, targetOf(keys), details, err)
+	}
+	out := make([]Value, 0, len(values))
+	normalized := func(key string) Value {
+		value := strings.TrimSpace(values[key])
+		return Value{Key: key, Value: value, Unset: value == ""}
+	}
+	for _, v := range in.Values {
+		out = append(out, normalized(v.Key))
+		delete(values, v.Key)
+	}
+	for _, key := range slices.Sorted(maps.Keys(values)) {
+		out = append(out, normalized(key))
+	}
+	return out, nil
+}
+
+func targetOf(keys []string) string {
+	if len(keys) == 1 {
+		return keys[0]
+	}
+	return ""
 }
 
 func (s *Service) Unset(ctx context.Context, in UnsetInput) (application.Change[Changed], error) {

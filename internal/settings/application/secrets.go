@@ -88,13 +88,32 @@ func (s *Service) secretState(ctx context.Context, st *settings.Store, name stri
 	return SecretState{Name: name, Status: string(status)}, nil
 }
 
+func (s *Service) CheckSecret(ctx context.Context, name string) error {
+	err := secretWritable(ctx, s.store, name)
+	if err == nil {
+		return nil
+	}
+	details, marshalErr := detailsOf([]string{name})
+	if marshalErr != nil {
+		return marshalErr
+	}
+	return s.refuse(ctx, SecretSetName, name, details, err)
+}
+
+func secretWritable(ctx context.Context, st *settings.Store, name string) error {
+	if err := st.Known(name); err != nil {
+		return err
+	}
+	if file, bound := secrets.FileBinding(ctx, name); bound {
+		return settings.AppKeyFile{Key: name, File: file}
+	}
+	return nil
+}
+
 func (s *Service) SetSecret(ctx context.Context, in SecretSetInput) (application.Change[SecretState], error) {
 	return s.secretCommand(ctx, SecretSetName, in.Name, func(st *settings.Store) (bool, error) {
-		if err := st.Known(in.Name); err != nil {
+		if err := secretWritable(ctx, st, in.Name); err != nil {
 			return false, err
-		}
-		if file, bound := secrets.FileBinding(ctx, in.Name); bound {
-			return false, settings.AppKeyFile{Key: in.Name, File: file}
 		}
 		return true, st.Set(ctx, in.Name, in.Value, string(audit.SourceOf(ctx)))
 	})
@@ -102,14 +121,7 @@ func (s *Service) SetSecret(ctx context.Context, in SecretSetInput) (application
 
 func (s *Service) DeleteSecret(ctx context.Context, in SecretDeleteInput) (application.Change[SecretState], error) {
 	return s.secretCommand(ctx, SecretDeleteName, in.Name, func(st *settings.Store) (bool, error) {
-		before, err := st.Status(ctx, in.Name)
-		if err != nil {
-			return false, err
-		}
-		if err := st.Delete(ctx, in.Name); err != nil {
-			return false, err
-		}
-		return before != settings.Unset, nil
+		return st.Delete(ctx, in.Name)
 	})
 }
 
