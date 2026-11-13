@@ -32,7 +32,7 @@ func threadKind(run string) threads.Kind {
 type Open func(context.Context) (context.Context, *service.Service, func(), error)
 
 func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, open Open) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(open, enabled), tickCommand(open, enabled), runCommand(open), subagentsCommand(env, tools, now)}}
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{tickCommand(open, enabled), runCommand(open), subagentsCommand(env, tools, now)}}
 }
 
 func clock(now func() float64) func() float64 {

@@ -386,7 +386,7 @@ func TestAgentTickLeavesAFullServeRecoveredJobRunAlone(t *testing.T) {
 func TestSchedulerTickAndServeStopCleanlyWhenCanceledDuringStartup(t *testing.T) {
 	t.Parallel()
 	_, _, f := moduleFixture(t, flagsExcept("", ""))
-	for _, args := range [][]string{{"agent", "scheduler"}, {"agent", "tick"}, {"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"}} {
+	for _, args := range [][]string{{"agent", "tick"}, {"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"}} {
 		for _, delay := range []time.Duration{0, time.Millisecond, 10 * time.Millisecond, 50 * time.Millisecond, 200 * time.Millisecond} {
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan appRun, 1)

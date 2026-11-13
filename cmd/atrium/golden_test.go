@@ -398,9 +398,6 @@ func TestCLIGoldens(t *testing.T) {
 				argv[i] = strings.ReplaceAll(arg, "{tmp}", tmp)
 			}
 			limit := 60 * time.Second
-			if len(argv) > 0 && argv[0] == "watch" {
-				limit = 35 * time.Second
-			}
 			ctx, cancel := context.WithTimeout(context.Background(), limit)
 			defer cancel()
 			code, stdout, stderr := f.Run(ctx, argv...)

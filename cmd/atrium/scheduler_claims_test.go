@@ -47,7 +47,9 @@ func TestSchedulerLockIdentityFollowsTheCanonicalDatabase(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	asstWaitCount(t, d, 1, weeklyRunning)
 	waitUntil(t, 20*time.Second, "the held weekly review request", func() bool { return len(api.Requests()) > before })
 
@@ -57,16 +59,15 @@ func TestSchedulerLockIdentityFollowsTheCanonicalDatabase(t *testing.T) {
 	if err := os.Symlink(dir, link); err != nil {
 		t.Fatal(err)
 	}
-	other := cliExitProcessArgs(t, []string{"agent", "scheduler"})
+	other := cliExitProcessArgs(t, []string{"agent", "tick"})
 	other.Env = append(other.Env, "ATRIUM_DB="+filepath.Join(link, "atrium.db"))
 	if err := other.Start(); err != nil {
 		t.Fatal(err)
 	}
-	waitUntil(t, 60*time.Second, "the second scheduler to run the free job", schedulerTerminal(d, "daily-nudges"))
-	if err := other.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := other.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	_ = other.Wait()
+	waitUntil(t, 60*time.Second, "the manual tick to run the free job", schedulerTerminal(d, "daily-nudges"))
 
 	if n := schedulerRuns(t, d, "weekly-review"); n != 1 {
 		t.Errorf("weekly review has %d runs, want only the held one", n)
@@ -147,7 +148,9 @@ func TestSchedulerRenewsItsClaimWhileAJobRunsPastTheLease(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	asstWaitCount(t, d, 1, weeklyRunning)
 	waitUntil(t, 20*time.Second, "the first weekly review request", func() bool { return len(api.Requests()) > before })
 
@@ -223,7 +226,9 @@ func TestSchedulerExpiredClaimantCannotClearItsSuccessor(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan appRun, 1)
-			go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+			go func() {
+				done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+			}()
 			asstWaitCount(t, d, 1, weeklyRunning)
 			waitUntil(t, 20*time.Second, "the held weekly review request", func() bool { return len(api.Requests()) > before })
 
@@ -283,7 +288,9 @@ func TestSchedulerResumesAnInterruptedJobRunUnderANewClaim(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		done <- runAppContext(t, f, ctx, "agent", "tick")
+	}()
 	asstWaitCount(t, d, 1, weeklyRunning)
 	waitUntil(t, 20*time.Second, "the held weekly review request", func() bool { return len(api.Requests()) > before })
 	held := weeklyLeaseOf(t, d)
@@ -321,7 +328,9 @@ func TestSchedulerResumesAnInterruptedJobRunUnderANewClaim(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 	done2 := make(chan appRun, 1)
-	go func() { done2 <- runAppContext(t, f, ctx2, "agent", "scheduler") }()
+	go func() {
+		done2 <- runAppContext(t, f, ctx2, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	waitUntil(t, 60*time.Second, "the resumed weekly review to finish", func() bool {
 		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE id = ? AND ended_at IS NOT NULL", held.run) == 1
 	})

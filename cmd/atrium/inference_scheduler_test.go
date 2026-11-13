@@ -16,7 +16,9 @@ func schedulerSeed(t *testing.T, f *fixture, d *db.DB) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		var n int
 		if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err == nil && n >= 12 {
@@ -33,24 +35,11 @@ func schedulerSeed(t *testing.T, f *fixture, d *db.DB) {
 
 func schedulerRun(t *testing.T, f *fixture, d *db.DB, finished func() bool) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
-	for deadline := time.Now().Add(30 * time.Second); !finished(); time.Sleep(50 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			cancel()
-			t.Fatal("the scheduler did not finish the expected runs")
-		}
+	ran := runAppContext(t, f, context.Background(), "agent", "tick")
+	if ran.code != cli.ExitOK {
+		t.Fatalf("agent tick exit %d: %s", ran.code, ran.stderr)
 	}
-	cancel()
-	select {
-	case ran := <-done:
-		if ran.code != cli.ExitOK {
-			t.Fatalf("scheduler exit %d: %s", ran.code, ran.stderr)
-		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("the scheduler ignored cancellation")
-	}
+	waitUntil(t, 30*time.Second, "the expected job runs", finished)
 }
 
 func schedulerDue(t *testing.T, d *db.DB, names ...string) {

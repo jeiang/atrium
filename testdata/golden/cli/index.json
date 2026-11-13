@@ -149,9 +149,10 @@
       "--account",
       "icloud"
     ],
-    "exit_code": 0,
+    "exit_code": 2,
     "name": "watch-one-pass",
-    "stdout": "watch-one-pass.stdout"
+    "stdout": "watch-one-pass.stdout",
+    "stderr": "watch-one-pass.stderr"
   },
   {
     "argv": [
@@ -163,7 +164,7 @@
     "env": {
       "GMAIL_APP_PASSWORD": ""
     },
-    "exit_code": 1,
+    "exit_code": 2,
     "name": "watch-missing-credentials",
     "stderr": "watch-missing-credentials.stderr",
     "stdout": "watch-missing-credentials.stdout"

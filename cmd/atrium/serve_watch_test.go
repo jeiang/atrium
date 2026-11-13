@@ -280,17 +280,3 @@ func TestServeDrainFinishesTheCurrentWatchPass(t *testing.T) {
 		t.Fatalf("drain reported work past its deadline: %s", logs.String())
 	}
 }
-
-func TestWatchCommandRefusesBesideServe(t *testing.T) {
-	m := mailSafetyFixture(t, "shadow")
-	d := mustConnect(t, m.path, keyFor(t))
-	declareJobsAndParkThem(t, d)
-	serveWatching(t, m.dir, d, m.fake)
-	ran := runApp(t, "watch")
-	if ran.code == 0 || !strings.Contains(ran.stderr, "in use by a running atrium serve") {
-		t.Fatalf("watch beside serve = (%d, %q), want a refusal naming the running serve", ran.code, ran.stderr)
-	}
-	if n := m.count(t, "SELECT COUNT(*) FROM pass_runs"); n != 0 {
-		t.Fatalf("the refused watch recorded %d pass runs", n)
-	}
-}

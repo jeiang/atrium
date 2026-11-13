@@ -192,37 +192,3 @@ func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) 
 		return nil
 	})
 }
-
-func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc, classifiers Classifier) error {
-	accounts, err := SelectAccounts(ctx, requested)
-	if err != nil {
-		return err
-	}
-	lock, err := db.TryServeLock(ctx, cfg.DBPath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = lock.Close() }()
-	d, err := connect(ctx, env, cfg)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = d.Close() }()
-	if len(accounts) == 0 {
-		return nil
-	}
-	w := &Watcher{Env: env, Cfg: cfg, DB: d, Open: open, Classifiers: classifiers}
-	defs := make([]runtime.ServiceDefinition, 0, len(accounts))
-	for _, account := range accounts {
-		defs = append(defs, w.AccountService(account))
-	}
-	sup, err := runtime.New(defs)
-	if err != nil {
-		return err
-	}
-	if err := sup.Start(ctx); err != nil {
-		return err
-	}
-	<-ctx.Done()
-	return sup.Drain(context.Background())
-}

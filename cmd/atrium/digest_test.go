@@ -43,7 +43,9 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	start := func() (context.CancelFunc, chan appRun) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan appRun, 1)
-		go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+		go func() {
+			done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+		}()
 		return cancel, done
 	}
 	cancel, done := start()

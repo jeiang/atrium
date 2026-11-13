@@ -285,45 +285,17 @@ func exportRuns(t *testing.T, d *db.DB, jobID int64) int {
 
 func runExport(t *testing.T, f *fixture, d *db.DB) {
 	t.Helper()
-	start := func() (context.CancelFunc, chan appRun) {
-		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan appRun, 1)
-		go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
-		return cancel, done
+	if ran := runAppContext(t, f, context.Background(), "agent", "tick"); ran.code != cli.ExitOK {
+		t.Fatalf("seed exports: exit %d: %s", ran.code, ran.stderr)
 	}
-	cancel, done := start()
 	var jobID int64
-	for range 100 {
-		if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = ?", "knowledge-export").Scan(&jobID); err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	cancel()
-	<-done
-	if jobID == 0 {
-		t.Fatalf("the scheduler did not create the knowledge-export job")
-	}
-	if _, err := d.Write.Exec("UPDATE jobs SET next_due = NULL WHERE id != ?", jobID); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = ?", "knowledge-export").Scan(&jobID); err != nil {
 		t.Fatal(err)
 	}
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL WHERE id != ?", jobID)
 	before := exportRuns(t, d, jobID)
-	if _, err := d.Write.Exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE id = ?",
-		float64(time.Now().Unix())-1, jobID); err != nil {
-		t.Fatal(err)
-	}
-	cancel, done = start()
-	for range 200 {
-		if exportRuns(t, d, jobID) > before {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	cancel()
-	<-done
-	if exportRuns(t, d, jobID) == before {
-		t.Fatalf("the knowledge-export job did not run")
-	}
+	schedulerDue(t, d, "knowledge-export")
+	schedulerRun(t, f, d, func() bool { return exportRuns(t, d, jobID) > before })
 }
 
 func TestKnowledgeExportsToNotionWithProvenance(t *testing.T) {

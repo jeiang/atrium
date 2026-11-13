@@ -931,8 +931,8 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if code, _, stderr := f.Run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
-			t.Fatalf("watch with calendar %s: exit %d %q", flag, code, stderr)
+		if code, _, stderr := f.Run(ctx, "sync", "--account", "icloud"); code != cli.ExitOK {
+			t.Fatalf("sync with calendar %s: exit %d %q", flag, code, stderr)
 		}
 		d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {

@@ -220,7 +220,7 @@ behavior-parity target.
   keep working, and `/settings/connections` shows the Anthropic credential as
   unset. One live-run service per process, built by the application with its
   effect ledger store and runner, serves chat pages, tools, jobs and the
-  `agent run`/`tick`/`scheduler` commands; the application drains it, then
+  `agent run`/`tick` commands; the application drains it, then
   that store, before closing the database. Serve stops in one bounded order
   of 120 s (105 s for work to finish, 15 s to settle effects and interrupted
   runs), then checkpoints and closes the database and releases the serve
@@ -924,3 +924,6 @@ behavior-parity target.
 Detailed feature scope and acceptance criteria belong in the open issues
 that carry them: #457 and #476 for the remaining v2 work, plus
 the owner gates #233 and #615. They do not belong in this file.
+
+The standalone `watch` and `agent scheduler` commands are removed. Run `serve`
+for supervised watches and scheduled work; `agent tick` remains a one-shot.

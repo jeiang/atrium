@@ -81,7 +81,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers}
 	cmds := []*cli.Command{
 		run.SyncCommand(mc.Env, m.Clients, m.classifiers),
-		run.WatchCommand(mc.Env, m.Clients, m.classifiers),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),

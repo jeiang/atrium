@@ -12,8 +12,6 @@ internal/actionlink/pages/pages.go	github.com/jeiang/atrium/internal/settings/au
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/config
-internal/assistant/agentcmd/scheduler.go	github.com/jeiang/atrium/internal/assistant/jobworker
-internal/assistant/agentcmd/scheduler.go	github.com/jeiang/atrium/internal/sdnotify
 internal/assistant/agentcmd/subagents.go	database/sql
 internal/assistant/agentcmd/subagents.go	github.com/jeiang/atrium/internal/assistant/pricing
 internal/assistant/agentcmd/subagents.go	github.com/jeiang/atrium/internal/assistant/subagents
