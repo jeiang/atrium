@@ -162,9 +162,6 @@ var importManifest = []ImportEntry{
 	{Module: "assistant", Key: "monthly_budget_usd", Class: ImportOperator, Action: ImportCarry, Target: "settings.monthly_budget_usd", Default: "150", Type: Float, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "open_meteo_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "service/weather.transport.ca_file", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "open_meteo_proxy", Class: ImportHost, Action: ImportDropHost, Target: "service/weather.transport.proxy", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "assistant", Key: "ops_condenser", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_condenser", Default: "haiku", Type: Enum, Choices: []string{"haiku", "local"}, Cutover: false},
-	{Module: "assistant", Key: "ops_condenser_max_tokens", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/serverops/tuning.go:TuningOpsCondenserMaxTokens", Default: "2000", Type: Int, Choices: nil, Cutover: false},
-	{Module: "assistant", Key: "ops_condenser_model", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_condenser_model", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "ops_worker_max_run_usd", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_worker_max_run_usd", Default: "0.10", Type: Float, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "ops_worker_monthly_usd", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_worker_monthly_usd", Default: "5", Type: Float, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "prompt_subagent", Class: ImportOperator, Action: ImportCarry, Target: "settings.prompt_subagent", Default: "", Type: String, Choices: nil, Cutover: false},
@@ -270,12 +267,6 @@ var importManifest = []ImportEntry{
 	{Module: "mail", Key: "mail_backoff_max_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBackoffMaxSeconds", Default: "300", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_backoff_start_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBackoffStartSeconds", Default: "5", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_body_cap_bytes", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBodyCapBytes", Default: "65536", Type: Int, Choices: nil, Cutover: true},
-	{Module: "mail", Key: "mail_chat_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.ca_file", Default: "", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
-	{Module: "mail", Key: "mail_chat_key", Class: ImportHost, Action: ImportCarry, Target: "settings.mail_chat_key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true, Note: "local-chat exception; no chat connection is created"},
-	{Module: "mail", Key: "mail_chat_max_tokens", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningMailChatMaxTokens", Default: "80", Type: Int, Choices: nil, Cutover: true},
-	{Module: "mail", Key: "mail_chat_model", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.model", Default: "qwen", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
-	{Module: "mail", Key: "mail_chat_proxy", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.proxy", Default: "", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
-	{Module: "mail", Key: "mail_chat_url", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.url", Default: "", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
 	{Module: "mail", Key: "mail_embed_batch", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningMailEmbedBatch", Default: "16", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_embed_body_chars", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningMailEmbedBodyChars", Default: "1500", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_embed_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "service/embedding.transport.ca_file", Default: "", Type: String, Choices: nil, Cutover: true},
@@ -476,7 +467,6 @@ var runtimeCutover = []string{
 	"weather_hourly_hours",
 	"weather_open_meteo_url",
 	"weather_timeout_seconds",
-	"ops_condenser_max_tokens",
 	"doom_loop_threshold",
 	"max_steps_chat",
 	"max_steps_cron",
@@ -599,7 +589,6 @@ var runtimeCutover = []string{
 	"mail_backoff_max_seconds",
 	"mail_backoff_start_seconds",
 	"mail_body_cap_bytes",
-	"mail_chat_max_tokens",
 	"mail_embed_batch",
 	"mail_embed_body_chars",
 	"mail_embed_ca_file",
@@ -681,11 +670,34 @@ func Manifest() []ImportEntry {
 }
 
 var retiredImport = map[string]ImportEntry{
-	"money_since":        {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
-	"oidc_access_group":  {Key: "oidc_access_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
-	"oidc_admin_group":   {Key: "oidc_admin_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
-	"oidc_admin_emails":  {Key: "oidc_admin_emails", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
-	"oidc_admin_domains": {Key: "oidc_admin_domains", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
+	"ops_condenser":            {Key: "ops_condenser", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: opsCondenserReplacement},
+	"ops_condenser_max_tokens": {Key: "ops_condenser_max_tokens", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: opsCondenserReplacement},
+	"ops_condenser_model":      {Key: "ops_condenser_model", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: opsCondenserReplacement},
+	"mail_chat_ca_file":        {Key: "mail_chat_ca_file", Module: "mail", Class: ImportOperator, Action: ImportDrop, Target: localChatReplacement},
+	"mail_chat_key":            {Key: "mail_chat_key", Module: "mail", Class: ImportOperator, Action: ImportDrop, Target: localChatReplacement, Secret: true},
+	"mail_chat_max_tokens":     {Key: "mail_chat_max_tokens", Module: "mail", Class: ImportOperator, Action: ImportDrop, Target: localChatReplacement},
+	"mail_chat_model":          {Key: "mail_chat_model", Module: "mail", Class: ImportOperator, Action: ImportDrop, Target: localChatReplacement},
+	"mail_chat_proxy":          {Key: "mail_chat_proxy", Module: "mail", Class: ImportOperator, Action: ImportDrop, Target: localChatReplacement},
+	"mail_chat_url":            {Key: "mail_chat_url", Module: "mail", Class: ImportOperator, Action: ImportDrop, Target: localChatReplacement},
+	"money_since":              {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
+	"oidc_access_group":        {Key: "oidc_access_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_group":         {Key: "oidc_admin_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_emails":        {Key: "oidc_admin_emails", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
+	"oidc_admin_domains":       {Key: "oidc_admin_domains", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
+}
+
+const localChatReplacement = "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku"
+
+const opsCondenserReplacement = "the ops_worker_monthly_usd and ops_worker_max_run_usd settings; server-ops findings use fixed-schema Haiku classification"
+
+func RemovedOperatorInputs() []ImportEntry {
+	var out []ImportEntry
+	for _, key := range slices.Sorted(maps.Keys(retiredImport)) {
+		if e := retiredImport[key]; e.Class == ImportOperator && e.Module != "" {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func RemovedHostKey(key string) (string, bool) {
@@ -806,6 +818,9 @@ func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB, pins map[string]Impo
 				return nil, summary, err
 			}
 			line := "setting " + r.key + ": dropped -> " + entry.Target
+			if pinned {
+				line += " from pin " + pin.Source
+			}
 			if entry.Secret {
 				line += " (transient state; value not kept)"
 				if err := audit.Record(ctx, tx, audit.Entry{Key: r.key, Secret: true}); err != nil {
@@ -848,7 +863,7 @@ func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB, pins map[string]Impo
 			lines = append(lines, "pin "+key+": unknown-host-requirement")
 			continue
 		}
-		if ImportSecretName(key) {
+		if ImportSecretName(key) && entry.Action != ImportDrop {
 			lines = append(lines, "pin "+key+": credential-file-binding "+entry.Target)
 			continue
 		}

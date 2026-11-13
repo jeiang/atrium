@@ -483,7 +483,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const handle = document.getElementById("panel-handle");
   if (!handle) return;
   const panel = document.getElementById("panel");
-  const measuredWidth = () => panel?.getBoundingClientRect().width || stored || 384;
+  const measuredWidth = () => panel?.getBoundingClientRect().width || stored || 320;
   const updateAria = (width) => {
     const max = Math.floor(root.getBoundingClientRect().width * 0.6);
     const clamped = Math.min(Math.max(width, PANEL_MIN), max);

@@ -33,7 +33,7 @@ func (rd *Renderer) OnFrame(fn FrameFunc) {
 
 func NewRenderer(extra tpl.Config, nav ...tpl.NavItem) (*Renderer, error) {
 	rd := &Renderer{nav: nav}
-	extra.AssetVersion = AssetVersion
+	extra.Assets = Assets
 	if extra.Globals == nil {
 		extra.Globals = map[string]any{}
 	}

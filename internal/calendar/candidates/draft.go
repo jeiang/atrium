@@ -9,7 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-const draftPrompt = "Scheduled task: turn queued mail into calendar event proposals. A local model flagged the mails below as " +
+const draftPrompt = "Scheduled task: turn queued mail into calendar event proposals. A model flagged the mails below as " +
 	"possibly mentioning an event the operator will attend. For each message id: read it with mail_read. If it " +
 	"states a concrete event with a date and start time (or an all-day date), call event_propose once with the " +
 	"calendar shown for that message id, a short title, start, end (if stated), location, and source_message_id " +

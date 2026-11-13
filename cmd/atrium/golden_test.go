@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/calendar"
 	caldav "github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
@@ -26,8 +28,9 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/golden"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 type cliGolden struct {
@@ -148,7 +151,8 @@ type fixture struct {
 	base     string
 	flags    map[string]string
 	fakes    map[string]*mailtest.FakeClient
-	llm      string
+	embedURL string
+	api      *anthropictest.Server
 }
 
 func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
@@ -156,7 +160,10 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	dir := t.TempDir()
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "contacts"), filepath.Join(dir, "contacts"))
-	srv := llmstub.Server(t, nil)
+	script := mailscript.Load(t)
+	embed := embedstub.Server(t)
+	api := anthropictest.New(t)
+	api.AnswerJSON(script.JSONAnswer)
 	caldavURL := caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"
 	vars := map[string]string{}
 	for k, v := range data.environment {
@@ -166,7 +173,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
 	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
-	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
+	vars[anthropic.BaseURLEnv] = api.URL
 	vars[calendar.CalDAVEnv] = caldavURL
 	for k, v := range extraEnv {
 		vars[k] = v
@@ -175,7 +182,6 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	qbitURL := vars["QBITTORRENT_URL"]
 	eztvURL := vars["EZTV_URL"]
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_CHAT_URL":         "ATRIUM_MAIL_MAIL_CHAT_URL",
 		"ATRIUM_MEDIA_ROOT":       "ATRIUM_MEDIA_MEDIA_ROOT",
 		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
 		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
@@ -201,7 +207,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	if value, ok := extraEnv["ANTHROPIC_API_KEY"]; ok && value == "" {
 		anthropicKey = ""
 	}
-	vars["ATRIUM_HOST_CONFIG"] = accountsFileEmbedding(t, dir, srv.URL+"/v1", anthropicKey, accounts...)
+	vars["ATRIUM_HOST_CONFIG"] = accountsFileEmbedding(t, dir, embed.URL+"/v1", anthropicKey, accounts...)
 	if qbitURL != "" {
 		hostPath := vars["ATRIUM_HOST_CONFIG"]
 		raw, err := os.ReadFile(hostPath)
@@ -259,7 +265,7 @@ capabilities = ["api"]
 	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
 		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}
-	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, llm: srv.URL + "/v1"}
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, embedURL: embed.URL + "/v1", api: api}
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"), appKey(t, env))

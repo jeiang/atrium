@@ -2,14 +2,18 @@ package mailmodule
 
 import (
 	"context"
+	"errors"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
@@ -34,18 +38,26 @@ type Module struct {
 	Jobs    jobworker.Dependencies
 }
 
+func (m Module) classifiers(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, now func() float64) (*classifier.Service, error) {
+	if m.Jobs.Classifier == nil {
+		return nil, errors.New("the mail pass is not bound to a classifier")
+	}
+	svc := service.New(ctx, d, cfg, env, nil)
+	svc.Now = now
+	return m.Jobs.Classifier(ctx, svc)
+}
+
 func AttentionSources() []attention.Source {
 	return []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()}
 }
 
 func Requirements() []module.Requirement {
 	return []module.Requirement{
-		module.Setting(endpoint.KeyChatURL),
 		{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
 			return endpoint.EmbeddingConfigured(ctx, p.Q)
 		}},
-		{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
-			return mail.ProbeFailures(ctx, p.Q)
+		{Name: "service/embedding test", Check: func(ctx context.Context, p module.Probe) (string, error) {
+			return mail.EmbeddingTestFailure(ctx, p.Q)
 		}},
 	}
 }
@@ -65,15 +77,14 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}
+	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers}
 	cmds := []*cli.Command{
-		run.SyncCommand(mc.Env, m.Clients),
-		run.WatchCommand(mc.Env, m.Clients),
+		run.SyncCommand(mc.Env, m.Clients, m.classifiers),
+		run.WatchCommand(mc.Env, m.Clients, m.classifiers),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
 		mailCmds.LiveCommand(),
-		mailCmds.EndpointsCommand(),
 		mailCmds.ReplayCommand(),
 	}
 	cmds = append(cmds, mailCmds.ScanCommands()...)
@@ -82,7 +93,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:      module.Mail,
 		Recover:   reviewpages.RecoverDrafts,
-		Settings:  slices.Concat(mail.Settings(), endpoint.SettingsDefs(), tracking.SettingsDefs()),
+		Settings:  slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:      mail.HostSettings(),
 		Attention: AttentionSources(),
 		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs)},
@@ -103,11 +114,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Groups:   SettingGroups(),
 		Commands: cmds,
 		Leaves: map[string]module.Leaf{
-			"live pause":      {Always: true},
-			"live resume":     {Always: true},
-			"live status":     {Always: true},
-			"endpoints probe": {Always: true},
-			"replay":          {Always: true},
+			"live pause":  {Always: true},
+			"live resume": {Always: true},
+			"live status": {Always: true},
+			"replay":      {Always: true},
 		},
 		Tools:        ToolDefinitions(),
 		ProposeKinds: mailtools.Proposals(),

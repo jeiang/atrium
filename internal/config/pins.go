@@ -51,6 +51,11 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 			return nil, err
 		}
 	}
+	for _, entry := range settings.RemovedOperatorInputs() {
+		if err := refuseEnvName(env, reg, entry.Module, entry.Key); err != nil {
+			return nil, err
+		}
+	}
 	for _, retired := range settings.Retired {
 		name := retired.EnvName()
 		if strings.TrimSpace(get(env, name)) == "" && strings.TrimSpace(get(env, name+strings.ToUpper(fileSuffix))) == "" {

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,45 +15,35 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/llm"
 )
 
 func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	t.Parallel()
 	data := loadGoldenData(t)
 	f := newFixture(t, data, nil, "")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	f.api.AnswerJSON(func(required []string, _ string) (json.RawMessage, error) {
+		if slices.Contains(required, "has_event") {
+			return json.RawMessage(`{"has_event":"false"}`), nil
+		}
+		return json.RawMessage(`{"person_asking":false,"deadline_or_payment_due":false,"security_event":false,"flag":false}`), nil
+	})
+	embed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
-			Input    []string `json:"input"`
-			Messages []struct {
-				Content string `json:"content"`
-			} `json:"messages"`
+			Input []string `json:"input"`
 		}
 		_ = json.NewDecoder(req.Body).Decode(&body)
-		if strings.HasSuffix(req.URL.Path, "/embeddings") {
-			vectors := make([]any, len(body.Input))
-			for i := range body.Input {
-				vector := make([]float64, config.EmbedDim)
-				vector[0] = 1
-				vectors[i] = map[string]any{"index": i, "embedding": vector}
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": vectors})
-			return
+		vectors := make([]any, len(body.Input))
+		for i := range body.Input {
+			vector := make([]float64, config.EmbedDim)
+			vector[0] = 1
+			vectors[i] = map[string]any{"index": i, "embedding": vector}
 		}
-		answer := `{"person_asking":false,"deadline_or_payment_due":false,"security_event":false,"flag":false}`
-		switch body.Messages[0].Content {
-		case llm.FolderSystem:
-			answer = `{"folder":"uncertain","confident":false}`
-		case llm.EventSystem:
-			answer = `{"has_event":"false"}`
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": answer}}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": vectors})
 	}))
-	t.Cleanup(srv.Close)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	t.Cleanup(embed.Close)
 	hostPath, _ := f.lookup("ATRIUM_HOST_CONFIG")
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, hostPath, f.dir, "host-judge.toml", map[string]string{
-		fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, f.llm): fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, srv.URL+"/v1"),
+		fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, f.embedURL): fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, embed.URL+"/v1"),
 	}))
 
 	seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
@@ -74,7 +65,7 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	code, _, stderr := f.runLogged(ctx, "watch", "--account", "icloud")
-	if code != cli.ExitOK || !strings.Contains(stderr, "event scan failed") || !strings.Contains(stderr, "has_event") {
+	if code != cli.ExitOK || !strings.Contains(stderr, "gave no usable answer") || !strings.Contains(stderr, "has_event") {
 		t.Fatalf("watch with a non-boolean judge answer: exit %d stderr %q", code, stderr)
 	}
 

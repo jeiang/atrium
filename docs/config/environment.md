@@ -30,11 +30,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_GRAFANA_OPS_QUERY_FAILED_UNITS` | `grafana.ops_query_failed_units` |
 | `ATRIUM_GRAFANA_OPS_QUERY_MEM` | `grafana.ops_query_mem` |
 | `ATRIUM_GRAFANA_OPS_QUERY_UP` | `grafana.ops_query_up` |
-| `ATRIUM_MAIL_MAIL_CHAT_CA_FILE` | `mail.mail_chat_ca_file` |
-| `ATRIUM_MAIL_MAIL_CHAT_KEY_FILE` | `mail.mail_chat_key` |
-| `ATRIUM_MAIL_MAIL_CHAT_MODEL` | `mail.mail_chat_model` |
-| `ATRIUM_MAIL_MAIL_CHAT_PROXY` | `mail.mail_chat_proxy` |
-| `ATRIUM_MAIL_MAIL_CHAT_URL` | `mail.mail_chat_url` |
 | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` | `media.media_movies_url` |
 | `ATRIUM_MEDIA_MEDIA_ROOT` | `media.media_root` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |

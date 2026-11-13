@@ -22,7 +22,7 @@ The module has a small set of typed deployment options. Host configuration goes 
 | `database.keyFile` | null or string | `null` | Host file holding the database key, delivered as the `db-key` credential and `ATRIUM_DB_KEY_FILE`. |
 | `initialTimezone` | null or string | `time.timeZone` | Time zone stored as the operator `tz` value when a fresh database has none. A stored or imported value wins, and the operator can change it afterwards. |
 | `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token is a connection credential in `connections."service/tmdb".credentialFiles.read_token`; the Grafana token is a connection credential until its owner is cut over; the Notion token is a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts reuse an iCloud mail account for their CalDAV and CardDAV login. |
-| `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
+| `embeddingServerUnits` | list of string | `[]` | Units serving the `service/embedding` endpoint. The application units start after them and want them. |
 
 The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and the `mail/<id>` connections from `mailAccounts`. It does not pin an operator setting.
 
@@ -31,7 +31,7 @@ services.atrium = {
   enable = true;
   host = {
     core.public_url = "https://atrium.example.org";
-    mail.mail_chat_url = "http://127.0.0.1:8187/v1";
+    media.media_root = "/var/lib/media";
   };
   connections."service/qbittorrent" = {
     kind = "service/qbittorrent";
@@ -58,7 +58,9 @@ These options are removed; setting one now fails evaluation as an unknown option
 - `id` → `uid`, `user` and `group`
 - `settings` → `host` for host keys; operator preferences are set in the application
 - `mode` → the operator `mail_mode` setting (a fresh import starts in `shadow`)
-- `chatUrl` → `host.mail.mail_chat_url`; `embedUrl` → `connections."service/embedding"`
+- `chatUrl` → none; the local chat endpoint is retired and mail classification uses the `service/anthropic` connection under `monthly_budget_usd`; `embedUrl` → `connections."service/embedding"`
+- `modelServerUnits` → `embeddingServerUnits` for the embedding server; the local chat server has no replacement unit
+- `host.mail.mail_chat_url`, `mail_chat_model`, `mail_chat_max_tokens`, `mail_chat_ca_file`, `mail_chat_proxy`, `mail_chat_key_file` and `secretFiles."mail.mail_chat_key"` → the `service/anthropic` connection and `monthly_budget_usd`; evaluation fails naming that replacement
 - `publicUrl` → `host.core.public_url`
 - `timeZone` → `initialTimezone`; the operator `tz` value is editable after bootstrap
 - `icloudAppleId` → the Settings page

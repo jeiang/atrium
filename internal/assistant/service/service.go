@@ -87,6 +87,8 @@ func NewInference(d *db.DB, now func() float64) *inference.Service {
 	return inference.New(d, now, scopes{})
 }
 
+var ErrTransport = errors.New("the Anthropic connection transport cannot be built")
+
 func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) {
 	if s.Client != nil {
 		return s.Client, nil
@@ -106,7 +108,7 @@ func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) 
 	}
 	client, err := lease.HTTP("url")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrTransport, err)
 	}
 	return anthropic.New(strings.TrimSpace(key), anthropicconn.Env(s.Env, lease), anthropic.HTTPClient(client))
 }

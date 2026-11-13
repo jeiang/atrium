@@ -2,7 +2,6 @@ package mailcmd
 
 import (
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/scans"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
@@ -25,11 +24,7 @@ func (o Options) ScanCommands() []*cli.Command {
 	out := make([]*cli.Command, len(scans.All))
 	for i, s := range scans.All {
 		out[i] = o.scanGroup(s.Command, func(x *exec) (scanutil.Result, error) {
-			url, err := endpoint.ChatURL(x.Ctx, x.DB.Read)
-			if err != nil {
-				return scanutil.Result{}, err
-			}
-			return s.Run(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(url))
+			return s.Run(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(x.Classifier))
 		})
 	}
 	return out
