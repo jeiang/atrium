@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -54,6 +55,7 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 	}
 	shape = defaults[I](shape, reflect.TypeFor[application.Change[O]](), body)
 	if d != nil {
+		owner := d.Owner()
 		mount(d, target, shape, func(w http.ResponseWriter, r *http.Request) {
 			var in I
 			if !decode(w, r, def.Name, &in, shape.Body, shape.IgnoreBody) {
@@ -62,7 +64,16 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 			if shape.Sensitive {
 				commands.Withhold(r.Context())
 			}
-			change, err := run(audit.With(context.WithoutCancel(r.Context()), actor, audit.API), in)
+			ctx := audit.With(context.WithoutCancel(r.Context()), actor, audit.API)
+			if owner != module.Core && !shape.Unowned {
+				bound, err := module.BindOwner(ctx, owner)
+				if err != nil {
+					web.APIFail(w, &application.Error{Code: application.Conflict, Reason: "module_disabled", Message: err.Error(), Cause: err})
+					return
+				}
+				ctx = bound
+			}
+			change, err := run(ctx, in)
 			if err != nil {
 				web.APIFail(w, err)
 				return

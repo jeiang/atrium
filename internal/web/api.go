@@ -315,3 +315,5 @@ func RequestOrigin(ctx context.Context) string {
 	origin, _ := ctx.Value(originKey{}).(string)
 	return origin
 }
+
+func (d *Deps) Owner() string { return d.owner }

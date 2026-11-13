@@ -40,6 +40,7 @@ type APIShape struct {
 	Uncached     bool
 	ReadOnlyPost bool
 	Sensitive    bool
+	Unowned      bool
 	Errors       []Code
 }
 

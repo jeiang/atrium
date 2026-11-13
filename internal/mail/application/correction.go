@@ -35,6 +35,8 @@ type CorrectInput struct {
 type CorrectResult struct {
 	Correction corrections.Correction `json:"correction"`
 	Note       string                 `json:"note"`
+	Outcome    string                 `json:"outcome"`
+	EffectIDs  []int64                `json:"effect_ids"`
 }
 
 var correctionLog = logx.Logger("atrium.web")
@@ -51,7 +53,7 @@ func (s *Service) Correct(ctx context.Context, in CorrectInput) (application.Cha
 		if err != nil {
 			return err
 		}
-		out.Data.Correction = recorded
+		out.Data.Correction, out.Data.Outcome, out.Data.EffectIDs = recorded, "deferred", []int64{}
 		if in.Mode == Immediate {
 			return nil
 		}
@@ -68,8 +70,22 @@ func (s *Service) Correct(ctx context.Context, in CorrectInput) (application.Cha
 	if in.Mode == Immediate {
 		var outcome state.Outcome
 		var effects []int64
-		out.Data.Note, outcome, effects = s.moveCorrection(ctx, out.Data.Correction.Account, in.MessageID)
+		var deferred bool
+		out.Data.Note, outcome, effects, deferred = s.moveCorrection(ctx, out.Data.Correction.Account, in.MessageID)
 		out.AuditID = s.writeAudit(ctx, CorrectName, target, outcome, effects)
+		out.EffectIDs = effects
+		out.Data.EffectIDs = append(out.Data.EffectIDs, effects...)
+		switch {
+		case outcome == state.OK && !deferred:
+			out.Data.Outcome = "ok"
+		case outcome == state.OK:
+		case outcome == state.Refused:
+			out.Data.Outcome = "refused"
+		case outcome == state.Unknown:
+			out.Data.Outcome = "unknown"
+		default:
+			out.Data.Outcome = "failed"
+		}
 	}
 	return out, nil
 }
@@ -89,15 +105,15 @@ type appliedOutcome struct {
 	unmoved int
 }
 
-func (s *Service) moveCorrection(ctx context.Context, account string, id int64) (string, state.Outcome, []int64) {
+func (s *Service) moveCorrection(ctx context.Context, account string, id int64) (string, state.Outcome, []int64, bool) {
 	ctx = context.WithoutCancel(ctx)
 	mode, err := mail.Mode(ctx, s.db.Read)
 	if err != nil {
 		correctionLog.Error(fmt.Sprintf("reading mail mode for corrected message %d failed", id), logx.Err, err.Error())
-		return "", state.Failed, nil
+		return "", state.Failed, nil, false
 	}
 	if mode != safety.Live {
-		return "", state.OK, nil
+		return "", state.OK, nil, true
 	}
 	var effects []int64
 	var unknown bool
@@ -126,7 +142,7 @@ func (s *Service) moveCorrection(ctx context.Context, account string, id int64) 
 		case errors.As(err, new(*db.LockBusy)):
 			outcome = state.Refused
 		}
-		return " It could not be moved yet: " + err.Error() + ".", outcome, effects
+		return " It could not be moved yet: " + err.Error() + ".", outcome, effects, false
 	}
 	outcome := state.OK
 	if unknown {
@@ -134,16 +150,16 @@ func (s *Service) moveCorrection(ctx context.Context, account string, id int64) 
 	}
 	switch {
 	case !out.ran:
-		return " Moving is paused; it will move after you resume.", outcome, effects
+		return " Moving is paused; it will move after you resume.", outcome, effects, true
 	case out.written > 0:
-		return " The message was moved.", outcome, effects
+		return " The message was moved.", outcome, effects, false
 	case out.unmoved > 0:
 		if !unknown {
 			outcome = state.Failed
 		}
-		return " It could not be moved; see Decisions.", outcome, effects
+		return " It could not be moved; see Decisions.", outcome, effects, false
 	}
-	return "", outcome, effects
+	return "", outcome, effects, false
 }
 
 func (s *Service) auditRefusal(ctx context.Context, name application.Name, target string, err error) error {

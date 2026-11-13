@@ -66,7 +66,17 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 	}
 	correctionPath := "/api/v1/mail/messages/" + id + "/correction"
 	expectField(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills"}), "mode")
-	apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "deferred"}), http.StatusOK)
+	expectField(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": " immediate"}), "mode")
+	if got := count("SELECT COUNT(*) FROM corrections"); got != 0 {
+		t.Fatalf("a padded mode recorded a correction: %d", got)
+	}
+	shadow := apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "immediate"}), http.StatusOK)
+	if shadow["outcome"] != "deferred" || len(m.fake.Writes) != 0 || count("SELECT COUNT(*) FROM effects") != beforeEffects {
+		t.Fatalf("an immediate correction in shadow mode attempted a move: %v %v", shadow, m.fake.Writes)
+	}
+	if got := apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "deferred"}), http.StatusOK); got["outcome"] != "deferred" {
+		t.Fatalf("deferred correction outcome: %v", got)
+	}
 	message := apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages/"+id, token, nil), http.StatusOK)
 	if message["corrected_to"] != "Bills" || count("SELECT COUNT(*) FROM effects") != beforeEffects || len(m.fake.Writes) != 0 {
 		t.Fatalf("deferred correction wrote mail: %v %v", message, m.fake.Writes)
@@ -148,8 +158,8 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.base = base
-	apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "immediate"}), http.StatusOK)
-	if n := count("SELECT COUNT(*) FROM effects"); len(m.fake.Writes) != 0 || n != beforePausedEffects {
+	paused := apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "immediate"}), http.StatusOK)
+	if n := count("SELECT COUNT(*) FROM effects"); paused["outcome"] != "deferred" || len(m.fake.Writes) != 0 || n != beforePausedEffects {
 		t.Fatalf("paused live correction: writes %v, effects %d -> %d", m.fake.Writes, beforePausedEffects, n)
 	}
 	apiData(t, s.do(http.MethodPost, livePath+"/resume", token, nil), http.StatusOK)

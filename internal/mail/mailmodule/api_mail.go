@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
@@ -271,7 +272,7 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 		service = mailPageService(d).WithLive(l).WithApplier(applier.New(l, open, syncer))
 	}
 	const area = "mail"
-	refusable := []application.Code{application.Invalid, application.Refused, application.NotFound, application.Conflict}
+	refusable := []application.Code{application.Invalid, application.Refused, application.NotFound, application.Conflict, application.Unknown}
 	return []application.Binding{
 		api.Query(d, mailapp.DescribeTriage(), application.APIShape{Area: area}, "GET /mail/triage", func(ctx context.Context, in MailTriageRequest) (application.Read[MailTriagePage], error) {
 			offset, err := mailOffset(in.Cursor)
@@ -369,7 +370,18 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 			return svc().RuleDelete(ctx, mailapp.RuleDeleteInput{ID: in.ID})
 		}),
 		api.Command(d, mailapp.DescribeCorrect(), application.APIShape{Area: area, Errors: refusable}, "POST /mail/messages/{message_id}/correction", func(ctx context.Context, in MailCorrection) (application.Change[mailapp.CorrectResult], error) {
-			return svc().Correct(ctx, mailapp.CorrectInput{MessageID: in.ID, Folder: in.Folder, Mode: in.Mode})
+			if in.Mode != mailapp.Immediate && in.Mode != mailapp.Deferred {
+				return application.Change[mailapp.CorrectResult]{}, &application.Error{Code: application.Invalid, Message: "mode must be immediate or deferred", Fields: []application.Field{{Name: "mode", Code: "invalid", Message: "Must be exactly immediate or deferred"}}}
+			}
+			done, err := svc().Correct(ctx, mailapp.CorrectInput{MessageID: in.ID, Folder: in.Folder, Mode: in.Mode})
+			if err != nil {
+				return done, err
+			}
+			code := map[string]application.Code{"refused": application.Refused, "unknown": application.Unknown, "failed": application.Conflict}[done.Data.Outcome]
+			if code == "" {
+				return done, nil
+			}
+			return done, &application.Error{Code: code, Reason: done.Data.Outcome, Message: strings.TrimSpace(done.Data.Note), EffectIDs: done.EffectIDs}
 		}),
 		api.Query(d, mailapp.DescribeAccounts(), application.APIShape{Area: area}, "GET /mail/accounts", func(ctx context.Context, in MailListRequest) (application.Read[MailAccountsPage], error) {
 			r, err := svc().Accounts(ctx, struct{}{})
@@ -396,7 +408,7 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 			r, err := svc().AccountRemove(ctx, mailapp.AccountInput{ID: in.ID})
 			return application.Change[MailAccountResult]{Data: MailAccountResult{ID: r.Data.ID}, AuditID: r.AuditID}, err
 		}),
-		api.Command(d, mailapp.DescribePause(), application.APIShape{Area: area}, "POST /mail/live/pause", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
+		api.Command(d, mailapp.DescribePause(), application.APIShape{Area: area, Unowned: true}, "POST /mail/live/pause", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
 			return svc().Pause(ctx, in)
 		}),
 		api.Command(d, mailapp.DescribeResume(), application.APIShape{Area: area}, "POST /mail/live/resume", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
