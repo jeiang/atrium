@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -211,15 +212,24 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	if public, err = build(p.Public, sessions, site.Start); err != nil {
+	var provided Provided
+	start := func(d *Deps) error {
+		if site.Start != nil {
+			if err := site.Start(d); err != nil {
+				return err
+			}
+		}
+		provided = d.Provided
+		return nil
+	}
+	if public, err = build(p.Public, sessions, start); err != nil {
 		return nil, nil, err
 	}
 	if p.Emergency == nil {
 		return public, nil, nil
 	}
-	if emergency, err = build(*p.Emergency, nil, nil); err != nil {
-		public.Close()
-		return nil, nil, err
+	if emergency, err = build(*p.Emergency, nil, func(d *Deps) error { d.Provided = provided; return nil }); err != nil {
+		return nil, nil, errors.Join(err, public.Close())
 	}
 	return public, emergency, nil
 }

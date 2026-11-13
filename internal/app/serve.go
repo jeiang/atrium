@@ -76,8 +76,10 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if err != nil {
 		return err
 	}
+	drain, startDrain := context.WithCancel(ctx)
+	defer startDrain()
 	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Start: func(d *web.Deps) error {
-		return a.start(ctx, d, o.Tools, o.Now)
+		return a.start(drain, d, o.Tools, o.Now)
 	}})
 	if err != nil {
 		return errors.Join(err, ls.close())
@@ -89,7 +91,7 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if path, _ := a.env("ATRIUM_SERVE_ADDR_FILE"); path != "" {
 		if err := os.WriteFile(path, []byte(ls.public.net.Addr().String()), 0o600); err != nil {
 			for _, s := range sites {
-				s.Close()
+				err = errors.Join(err, s.Close())
 			}
 			return errors.Join(err, ls.close())
 		}
@@ -100,12 +102,12 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	}
 	if ls.ops != nil {
 		checks := slices.Concat(a.catalog.Checks(), []ops.Check{{Name: "services", Critical: true, Run: func(context.Context, *db.DB) error { return a.ready() }}})
-		ls.ops.srv = ops.Server(ctx, a.db, a.env, a.catalog.Metrics(), checks, a.health)
+		ls.ops.srv = ops.Server(context.WithoutCancel(ctx), a.db, a.env, a.catalog.Metrics(), checks, a.health)
 	}
-	return a.run(ctx, ls, sites)
+	return a.run(drain, startDrain, ls, sites)
 }
 
-func (a *App) run(ctx context.Context, ls *listeners, sites []*web.Server) error {
+func (a *App) run(ctx context.Context, startDrain context.CancelFunc, ls *listeners, sites []*web.Server) error {
 	served := ls.all()
 	failed := make(chan error, len(served))
 	for _, l := range served {
@@ -125,6 +127,7 @@ func (a *App) run(ctx context.Context, ls *listeners, sites []*web.Server) error
 	case <-ctx.Done():
 	}
 	a.draining.Store(true)
+	startDrain()
 	if a.live != nil {
 		a.live.svc.Interrupt()
 	}
@@ -147,13 +150,14 @@ func (a *App) run(ctx context.Context, ls *listeners, sites []*web.Server) error
 		}
 	}
 	sd.last = func() error {
+		var err error
 		for _, s := range sites {
-			s.Close()
+			err = errors.Join(err, s.Close())
 		}
 		if ls.ops == nil {
-			return nil
+			return err
 		}
-		return ls.ops.shutdown(sd)
+		return errors.Join(err, ls.ops.shutdown(sd))
 	}
 	if err != nil {
 		return &uncleanStop{err}
