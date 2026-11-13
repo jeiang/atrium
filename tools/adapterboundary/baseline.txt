@@ -476,7 +476,6 @@ internal/media/mediacmd/mediacmd.go	github.com/jeiang/atrium/internal/db
 internal/media/mediacmd/mediacmd.go	github.com/jeiang/atrium/internal/mail/imapclient
 internal/media/mediacmd/mediacmd.go	github.com/jeiang/atrium/internal/media
 internal/media/mediacmd/mediacmd.go	github.com/jeiang/atrium/internal/scheduler
-internal/media/pages/add.go	github.com/jeiang/atrium/internal/media
 internal/media/pages/art.go	github.com/jeiang/atrium/internal/media
 internal/media/pages/channels.go	github.com/jeiang/atrium/internal/media
 internal/media/pages/downloads.go	github.com/jeiang/atrium/internal/media

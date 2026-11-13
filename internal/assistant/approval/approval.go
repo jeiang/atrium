@@ -51,6 +51,11 @@ func Title(a *tool.Approval, args tool.Args) string {
 }
 
 func request(ctx context.Context, tc *tool.Context, name string, a *tool.Approval, args tool.Args) (any, error) {
+	if a.Check != nil {
+		if err := a.Check(ctx, tc, args); err != nil {
+			return nil, err
+		}
+	}
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil, err

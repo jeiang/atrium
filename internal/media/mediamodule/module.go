@@ -1,6 +1,7 @@
 package mediamodule
 
 import (
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	"github.com/jeiang/atrium/internal/cli"
@@ -33,12 +34,18 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
+	var operations []application.Definition
+	var bindings []application.Binding
+	ops, binds := downloadOperations()
+	operations, bindings = append(operations, ops...), append(bindings, binds...)
 	return module.Declaration{
-		Name:     module.Media,
-		Requires: Requirements(),
-		Jobs:     mediacmd.Jobs(m.Jobs),
-		Settings: media.SettingsDefs(),
-		Host:     media.HostSettings(),
+		Operations: operations,
+		Bindings:   bindings,
+		Name:       module.Media,
+		Requires:   Requirements(),
+		Jobs:       mediacmd.Jobs(m.Jobs),
+		Settings:   media.SettingsDefs(),
+		Host:       media.HostSettings(),
 		Pages: []web.Page{{
 			Module:    pages.Module(pages.Options{Now: m.Now}),
 			Templates: pages.Templates(),

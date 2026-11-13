@@ -565,3 +565,40 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	sig := mnpSign(key, movie, far)
 	expect("signature on another route", "/apps/media/thumb/"+mnpQuote(movie)+sig[strings.Index(sig, "?"):], http.StatusForbidden)
 }
+
+func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
+	v2only := "magnet:?xt=urn:btmh:1220" + strings.Repeat("a", 64) + "&dn=Lanterns.S01E12"
+
+	dir := t.TempDir()
+	mnpMediaRoot(t, dir)
+	qb, qbURL := mnpNewQbit(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
+	seedAllFlagsIn(t, dir)
+	b := mnpNewBrowser(t, startServeIn(t, dir))
+	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {v2only}, "mode": {"media"}}, http.StatusUnprocessableEntity, "no v1 info hash")
+	if adds := qb.count("add"); adds != 0 {
+		t.Fatalf("the refused web add reached qBittorrent: %d adds", adds)
+	}
+
+	toolDir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	mnpMediaRoot(t, toolDir)
+	toolQB, toolURL := mnpNewQbit(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, toolDir, toolURL, "", "", ""))
+	result := unescape(toolResult(t, "media_add_magnet", map[string]any{"magnet": v2only}))
+	if !strings.Contains(result, `"code":"invalid"`) || !strings.Contains(result, "magnet") {
+		t.Fatalf("media_add_magnet with a v2-only magnet = %s, want an invalid tool error", result)
+	}
+	if adds := toolQB.count("add"); adds != 0 {
+		t.Fatalf("the refused tool add reached qBittorrent: %d adds", adds)
+	}
+	d := mustConnect(t, filepath.Join(toolDir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	var cards int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'media_add_magnet'").Scan(&cards); err != nil {
+		t.Fatal(err)
+	}
+	if cards != 0 {
+		t.Fatalf("the refused tool add created %d approval cards", cards)
+	}
+}

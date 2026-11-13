@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -77,7 +77,7 @@ func Tools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaAddMagnet, Label: "Add torrent", Icon: "download", Module: module.Media},
+			Approval:  &tool.Approval{Apply: mediaAddMagnet, Check: checkAddMagnet, Label: "Add torrent", Icon: "download", Module: module.Media},
 		}),
 		approval.Gate(tool.Tool{
 			Name:        "media_channel_add",
@@ -185,32 +185,22 @@ func torrentDict(t media.Torrent) map[string]any {
 }
 
 func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	read, err := mediaapp.ForTool(tc).Downloads(ctx, mediaapp.DownloadsInput{})
 	if err != nil {
-		return nil, err
+		return nil, tool.Fail(err)
 	}
-	qb, err := qbitOf(settings)
-	if err != nil {
-		return nil, err
+	if read.Data.TorrentsError != nil {
+		return nil, tool.Fail(read.Data.TorrentsError)
 	}
-	torrents, err := qb.Torrents(ctx, "", "", "")
-	if err != nil {
-		return nil, qbitFailed(err)
-	}
-	waiting := []media.Item{}
-	if settings.Root != "" {
-		if waiting, _, err = settings.Items(ctx, qb, settings.Root); err != nil {
-			return nil, err
-		}
-	}
+	torrents := read.Data.Torrents
 	torrentLimit := assistant.TuningAgentMediaTorrentLimit
 	shown := []any{}
 	for _, t := range torrents[:min(torrentLimit, len(torrents))] {
 		shown = append(shown, torrentDict(t))
 	}
 	queue := []any{}
-	for _, it := range waiting {
-		queue = append(queue, map[string]any{"id": it.ID, "name": it.Name, "torrent": it.Torrent})
+	for _, it := range read.Data.Queue {
+		queue = append(queue, map[string]any{"id": it.Item.ID, "name": it.Item.Name, "torrent": it.Item.Torrent})
 	}
 	return map[string]any{"torrents": shown, "waiting_to_file": queue, "note": "Only torrents of kind media are filed into the library, from the Media downloads page."}, nil
 }
@@ -266,40 +256,39 @@ func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, err
 	return map[string]any{"channels": listed, "last_check": status.LastCheck, "errors": errs}, nil
 }
 
-func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func addMagnetArgs(args tool.Args) (string, bool, error) {
 	magnet, _, err := tool.TextArg(args, "magnet", true)
 	if err != nil {
-		return nil, err
+		return "", false, err
 	}
 	asMedia, err := boolArg(args, "media", true)
 	if err != nil {
-		return nil, err
+		return "", false, err
 	}
-	if !strings.HasPrefix(magnet, "magnet:?") {
-		return nil, tool.Error("magnet must be a magnet: link")
+	return magnet, asMedia, nil
+}
+
+func checkAddMagnet(_ context.Context, _ *tool.Context, args tool.Args) error {
+	magnet, _, err := addMagnetArgs(args)
+	if err != nil {
+		return err
 	}
-	hash, ok := media.MagnetHash(magnet)
-	if !ok {
-		return nil, tool.Error("the magnet link has no v1 info hash (xt=urn:btih:...)")
+	if _, err := mediaapp.CheckMagnet(magnet); err != nil {
+		return tool.Fail(err)
 	}
-	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
+	return nil
+}
+
+func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+	magnet, asMedia, err := addMagnetArgs(args)
 	if err != nil {
 		return nil, err
 	}
-	tags := ""
-	if asMedia {
-		tags = media.TagMedia
+	added, err := mediaapp.ForTool(tc).Add(ctx, mediaapp.AddInput{Magnet: &mediaapp.Magnet{URI: magnet}, Media: asMedia, ProposalID: tc.ProposalID})
+	if err != nil {
+		return nil, tool.Fail(err)
 	}
-	scope := media.Scope{ProposalID: tc.ProposalID, ThreadID: &tc.ThreadID, RunID: &tc.RunID}
-	if _, err := settings.Add(ctx, tc.Ledger, settings, media.AddRequest{Magnet: magnet, Tags: tags, Scope: scope}); err != nil {
-		return nil, qbitFailed(err)
-	}
-	if asMedia {
-		if _, err := settings.SelectFiles(ctx, tc.Ledger, settings, scope, nil); err != nil {
-			return nil, qbitFailed(err)
-		}
-	}
-	return map[string]any{"hash": hash, "kind": kindOf(asMedia)}, nil
+	return map[string]any{"hash": added.Data.Hash, "kind": added.Data.Kind}, nil
 }
 
 func showFromTMDB(ctx context.Context, client *media.TMDB, tmdbID int64) (string, string, error) {

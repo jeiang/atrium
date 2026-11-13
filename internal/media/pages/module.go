@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
@@ -38,6 +39,7 @@ type service struct {
 	now     func() float64
 	links   *media.Links
 	effects *ledger.Store
+	app     *mediaapp.Service
 }
 
 func (s *service) settings(ctx context.Context) media.Settings {
@@ -67,7 +69,8 @@ func Module(o Options) web.Module {
 			panic(err)
 		}
 		d.DrainOnClose(effects.Drain)
-		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), effects: effects}
+		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), effects: effects,
+			app: mediaapp.New(mediaapp.Deps{DB: d.DB, Env: d.Env, Ledger: effects, Now: now})}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)

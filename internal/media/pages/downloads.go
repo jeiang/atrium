@@ -8,7 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -53,46 +55,24 @@ func (s *service) dlFragmentOut(w http.ResponseWriter, r *http.Request, status i
 	dlCheck(s.deps.Render.Fragment(w, r, status, name, f))
 }
 
-func (s *service) dlTorrents(ctx context.Context, set media.Settings) ([]TorrentView, string) {
-	rows := []TorrentView{}
-	client, err := set.Qbit()
-	var found []media.Torrent
-	if err == nil {
-		found, err = client.Torrents(ctx, "", "", "")
-	}
+func (s *service) dlRead(w http.ResponseWriter, r *http.Request) (mediaapp.Downloads, bool) {
+	read, err := s.app.Downloads(r.Context(), mediaapp.DownloadsInput{})
 	if err != nil {
-		text, kind := mustClassify(err)
-		if kind != backendError {
-			panic(err)
-		}
-		return rows, text
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
+		return mediaapp.Downloads{}, false
 	}
-	for _, t := range found {
-		rows = append(rows, torrentView(t))
-	}
-	return rows, ""
+	return read.Data, true
 }
 
-func (s *service) dlQueue(ctx context.Context, set media.Settings, edited *media.View) ([]QueueView, string) {
-	views := []QueueView{}
-	client, err := set.Qbit()
-	if err != nil {
-		return views, err.Error()
+func torrentRows(found mediaapp.Downloads) ([]TorrentView, string) {
+	rows := []TorrentView{}
+	for _, t := range found.Torrents {
+		rows = append(rows, torrentView(t))
 	}
-	root, err := set.NeedRoot()
-	if err != nil {
-		return views, err.Error()
+	if found.TorrentsError != nil {
+		return rows, found.TorrentsError.Error()
 	}
-	found, errText, err := set.Items(ctx, client, root)
-	dlCheck(err)
-	for _, it := range found {
-		if edited != nil && edited.ID() == it.ID {
-			views = append(views, queueView(*edited))
-		} else {
-			views = append(views, queueView(set.Planned(set.Defaults(it, root), root)))
-		}
-	}
-	return views, errText
+	return rows, ""
 }
 
 func dlAnyActive(rows []TorrentView) bool {
@@ -105,12 +85,22 @@ func dlAnyActive(rows []TorrentView) bool {
 }
 
 func (s *service) dlDownloads(w http.ResponseWriter, r *http.Request, toast *tpl.Toast, status int, edited *media.View) {
-	set := s.settings(r.Context())
-	rows, errText := s.dlTorrents(r.Context(), set)
-	waiting, queueErr := s.dlQueue(r.Context(), set, edited)
+	found, ok := s.dlRead(w, r)
+	if !ok {
+		return
+	}
+	rows, errText := torrentRows(found)
+	waiting := []QueueView{}
+	for _, it := range found.Queue {
+		if edited != nil && edited.ID() == it.Item.ID {
+			waiting = append(waiting, queueView(*edited))
+		} else {
+			waiting = append(waiting, queueView(it.View))
+		}
+	}
 	view := downloadsView{
 		Torrents: rows, Error: errText, Active: dlAnyActive(rows), Poll: dlPollSeconds,
-		Queue: waiting, QueueError: queueErr, Kinds: media.Kinds,
+		Queue: waiting, QueueError: found.QueueError, Kinds: found.Kinds,
 	}
 	s.dlPageOut(w, r, status, "media_downloads", "media_downloads.gohtml", view, toast)
 }
@@ -125,44 +115,38 @@ func (s *service) dlDownloadsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) dlTorrentsGet(w http.ResponseWriter, r *http.Request) {
-	rows, errText := s.dlTorrents(r.Context(), s.settings(r.Context()))
+	found, ok := s.dlRead(w, r)
+	if !ok {
+		return
+	}
+	rows, errText := torrentRows(found)
 	view := torrentsView{Torrents: rows, Error: errText, Active: dlAnyActive(rows), Poll: dlPollSeconds}
 	s.dlFragmentOut(w, r, http.StatusOK, "_media_torrents.gohtml", view, nil)
 }
 
-func (s *service) dlFilesError(w http.ResponseWriter, r *http.Request, hash, text string) {
-	view := filesView{Hash: hash, Files: []FileView{}, Error: text}
-	s.dlFragmentOut(w, r, http.StatusBadGateway, "_media_files.gohtml", view, nil)
+func (s *service) dlFilesError(w http.ResponseWriter, r *http.Request, hash string, err error) {
+	failure := application.Classify(err)
+	web.Fail(w, r, failure, func(status int) {
+		if status == http.StatusNotFound {
+			s.deps.Error(w, r, status, failure.Error())
+			return
+		}
+		view := filesView{Hash: hash, Files: []FileView{}, Error: failure.Error()}
+		s.dlFragmentOut(w, r, backendStatus(status), "_media_files.gohtml", view, nil)
+	})
 }
 
 func (s *service) dlFiles(w http.ResponseWriter, r *http.Request, hash string, toast *tpl.Toast) {
-	ctx := r.Context()
-	client, err := s.settings(ctx).Qbit()
-	var found *media.Torrent
-	if err == nil {
-		found, err = client.Torrent(ctx, hash)
-	}
-	if err == nil && found == nil {
-		s.deps.Error(w, r, http.StatusNotFound, "unknown torrent")
-		return
-	}
-	var files []media.TorrentFile
-	if err == nil {
-		files, err = client.Files(ctx, hash)
-	}
+	read, err := s.app.TorrentFiles(r.Context(), mediaapp.TorrentFilesInput{Hash: hash})
 	if err != nil {
-		text, kind := mustClassify(err)
-		if kind != backendError {
-			panic(err)
-		}
-		s.dlFilesError(w, r, hash, text)
+		s.dlFilesError(w, r, hash, err)
 		return
 	}
-	views := make([]FileView, len(files))
-	for i, f := range files {
+	views := make([]FileView, len(read.Data.Files))
+	for i, f := range read.Data.Files {
 		views[i] = fileView(f)
 	}
-	s.dlFragmentOut(w, r, http.StatusOK, "_media_files.gohtml", filesView{Hash: hash, TorrentName: found.Name, Files: views}, toast)
+	s.dlFragmentOut(w, r, http.StatusOK, "_media_files.gohtml", filesView{Hash: hash, TorrentName: read.Data.Torrent.Name, Files: views}, toast)
 }
 
 func (s *service) dlFilesGet(w http.ResponseWriter, r *http.Request) {
@@ -171,7 +155,6 @@ func (s *service) dlFilesGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	hash := web.PathParam(r, "hash")
-	ctx := r.Context()
 	form := web.FormValues(r)
 	var errs []web.FieldError
 	var index int64
@@ -194,28 +177,8 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	priority := media.PrioritySkip
-	if wanted != 0 {
-		priority = media.PriorityNormal
-	}
-	set := s.settings(ctx)
-	client, err := set.Qbit()
-	if err == nil {
-		var found *media.Torrent
-		if found, err = client.Torrent(ctx, hash); err == nil && (found == nil || !found.HasTag(media.TagMedia)) {
-			s.deps.Error(w, r, http.StatusNotFound, "unknown torrent")
-			return
-		}
-	}
-	if err == nil {
-		err = set.SetPriority(ctx, s.effects, set, media.Scope{}, hash, []int{int(index)}, priority)
-	}
-	if err != nil {
-		text, kind := mustClassify(err)
-		if kind != backendError {
-			panic(err)
-		}
-		s.dlFilesError(w, r, hash, text)
+	if _, err := s.app.SelectFiles(r.Context(), mediaapp.SelectFilesInput{Hash: hash, Index: index, Wanted: wanted != 0}); err != nil {
+		s.dlFilesError(w, r, hash, err)
 		return
 	}
 	s.dlFiles(w, r, hash, &tpl.Toast{Category: "success", Title: "Selection changed"})

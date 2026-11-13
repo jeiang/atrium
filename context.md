@@ -46,7 +46,10 @@ behavior-parity target.
   reached at `/today`; the digest posts there and home does not show it. A
   ⌘K / Ctrl+K command palette searches threads, pages and actions. There
   is no tutorial text; guidance is `title` tooltips on controls.
-  Media is the app at `/apps/media`. The Library section holds Knowledge
+  Media is the app at `/apps/media`. Adding a torrent takes a magnet link or
+  a `.torrent` file, never both, and the page and `media_add_magnet` both
+  refuse a magnet without a v1 info hash (`xt=urn:btih:`) before anything is
+  recorded; the tool refuses it before an approval card exists. The Library section holds Knowledge
   (`/library/knowledge`): the operator's records with search, scope and
   state filters, checkboxes on unconfirmed rows with Confirm selected, a
   record page with confirm, edit, retract, restore and
