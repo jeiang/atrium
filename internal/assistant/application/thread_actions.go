@@ -101,6 +101,10 @@ func (s *Service) inTx(ctx context.Context, name application.Name, threadID int6
 
 func (s *Service) act(ctx context.Context, name application.Name, threadID int64, apply func() (ThreadChanged, error)) (application.Change[ThreadChanged], error) {
 	changed, err := apply()
+	if err != nil && (changed.RunID != 0 || (changed.ThreadID != 0 && changed.ThreadID != threadID)) {
+		_, aerr := s.audit(ctx, nil, name, target("thread", changed.ThreadID), state.Failed)
+		return application.Change[ThreadChanged]{Data: changed}, errors.Join(classify(err), aerr)
+	}
 	if err != nil {
 		return application.Change[ThreadChanged]{}, s.reject(ctx, name, target("thread", threadID), classify(err))
 	}
@@ -179,8 +183,18 @@ func (s *Service) ThreadDelete(ctx context.Context, in ThreadInput) (application
 
 func (s *Service) ReplyRegenerate(ctx context.Context, in ThreadInput) (application.Change[ThreadChanged], error) {
 	return s.act(ctx, ReplyRegenerateName, in.ID, func() (ThreadChanged, error) {
-		ctx, err := s.admit(ctx, true)
+		ctx, err := s.admit(ctx, false)
 		if err != nil {
+			return ThreadChanged{}, err
+		}
+		thread, err := s.writable(ctx, in.ID)
+		if err != nil {
+			return ThreadChanged{}, err
+		}
+		if thread.Kind == threads.Subagent {
+			return ThreadChanged{}, ReadOnlyThread(thread.ID)
+		}
+		if err := s.connected(ctx); err != nil {
 			return ThreadChanged{}, err
 		}
 		runID, err := s.runs().Regenerate(ctx, in.ID)

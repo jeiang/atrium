@@ -533,6 +533,22 @@ func (s *Service) Discard(ctx context.Context, threadID int64) error {
 	return threads.Purge(ctx, s.DB.Write, threadID, s.now())
 }
 
+func (s *Service) DiscardUnused(ctx context.Context, threadID int64) (bool, error) {
+	discarded := false
+	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		unused, err := threads.Unused(ctx, tx, threadID)
+		if err != nil || !unused {
+			return err
+		}
+		if _, err := files.DeleteOwned(ctx, tx, s.Cfg.FilesDir(), files.ThreadOwner(threadID)); err != nil {
+			return err
+		}
+		discarded = true
+		return threads.Remove(ctx, tx, threadID)
+	})
+	return discarded && err == nil, err
+}
+
 func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, error) {
 	last, pending, err := loop.PendingUses(ctx, q, run.ThreadID)
 	if err != nil {

@@ -589,3 +589,35 @@ func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
 		t.Fatalf("refused start audits = %d, want 3", refused)
 	}
 }
+
+func TestStartRefusedAfterTheThreadRowLeavesNoThread(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	d := asstDB(t, dir)
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
+	before, requests := threads(), len(api.Requests())
+	refusedRef := "@thread/999999 compare"
+
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": refusedRef}), http.StatusUnprocessableEntity, "reference_refused")
+	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {refusedRef}}); status < http.StatusBadRequest {
+		t.Fatalf("HTML start with a refused reference = %d: %s", status, body)
+	}
+	if ran := runApp(t, "agent", "run", "--text", refusedRef); ran.code == cli.ExitOK {
+		t.Fatalf("CLI start with a refused reference: %d %s", ran.code, ran.stdout)
+	}
+	if ran := runApp(t, "agent", "run", "--text", "   "); ran.code != cli.ExitUsage {
+		t.Fatalf("CLI start with blank text = %d, want %d: %s", ran.code, cli.ExitUsage, ran.stderr)
+	}
+	if after := threads(); after != before {
+		t.Fatalf("threads = %d after starts refused once the thread existed, want %d (soft-deleted rows count)", after, before)
+	}
+	if sent := len(api.Requests()) - requests; sent != 0 {
+		t.Fatalf("%d provider requests after refused starts", sent)
+	}
+	if refused := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused' AND target = ''"); refused != 3 {
+		t.Fatalf("refused start audits without a removed thread target = %d, want 3", refused)
+	}
+}

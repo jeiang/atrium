@@ -121,8 +121,23 @@ func (s *Service) admit(ctx context.Context, run bool) (context.Context, error) 
 	if err != nil || !run {
 		return ctx, err
 	}
-	_, err = s.runs().ResolveClient(ctx)
-	return ctx, err
+	return ctx, s.connected(ctx)
+}
+
+func (s *Service) connected(ctx context.Context) error {
+	_, err := s.runs().ResolveClient(ctx)
+	return err
+}
+
+func (s *Service) writable(ctx context.Context, threadID int64) (*threads.Thread, error) {
+	thread, err := threads.Get(ctx, s.db.Read, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if thread == nil {
+		return nil, service.UnknownThread(threadID)
+	}
+	return thread, nil
 }
 
 func (s *Service) attach(ctx context.Context, thread *threads.Thread, uploads []files.UploadedFile) ([]json.RawMessage, error) {
@@ -228,7 +243,11 @@ func (s *Service) threadStart(ctx context.Context, in StartInput, started *Start
 	started.ThreadID = threadID
 	runID, err := s.firstRun(ctx, threadID, kind, text, operatorText, in)
 	if runID == 0 && err != nil {
-		return 0, errors.Join(err, s.runs().Discard(ctx, threadID))
+		discarded, derr := s.runs().DiscardUnused(context.WithoutCancel(ctx), threadID)
+		if discarded {
+			started.ThreadID = 0
+		}
+		return 0, errors.Join(err, derr)
 	}
 	return runID, err
 }

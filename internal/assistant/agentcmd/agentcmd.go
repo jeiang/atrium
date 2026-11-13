@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
@@ -53,6 +54,9 @@ func runCommand(open Open) *cli.Command {
 			kind := args.String("kind", string(threads.Chat), cli.Opt{Choices: Kinds})
 			toolChoice := args.String("tool-choice", "", cli.Opt{Help: "force the first request to call a tool: any, or a tool name; models that reject forcing get the request without it"})
 			return func(env *cli.Env) int {
+				if strings.TrimSpace(*text) == "" {
+					return env.UsageError("argument --text: expected text, got only whitespace")
+				}
 				var threadID *int64
 				if args.Has("thread") {
 					id := int64(*thread)

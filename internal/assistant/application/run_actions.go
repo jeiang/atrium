@@ -106,6 +106,10 @@ func (s *Service) RunAnswer(ctx context.Context, in AnswerInput) (application.Ch
 		if question == nil {
 			return ThreadChanged{}, NoQuestion(in.ThreadID)
 		}
+		ctx, err := s.admit(ctx, true)
+		if err != nil {
+			return ThreadChanged{}, err
+		}
 		if err := s.runs().Answer(ctx, in.ThreadID, in.Text); err != nil {
 			return ThreadChanged{}, NotAnswered{Err: err}
 		}

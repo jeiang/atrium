@@ -79,22 +79,22 @@ func (s *Service) message(ctx context.Context, name application.Name, in SendInp
 }
 
 func (s *Service) prepareMessage(ctx context.Context, in SendInput, send func(context.Context, *threads.Thread, string, []json.RawMessage) (Sent, error)) (Sent, error) {
-	ctx, err := s.admit(ctx, true)
+	ctx, err := s.admit(ctx, false)
 	if err != nil {
 		return Sent{}, err
 	}
-	thread, err := threads.Get(ctx, s.db.Read, in.ThreadID)
+	thread, err := s.writable(ctx, in.ThreadID)
 	if err != nil {
 		return Sent{}, err
-	}
-	if thread == nil {
-		return Sent{}, service.UnknownThread(in.ThreadID)
 	}
 	if in.Kind != "" && in.Kind != thread.Kind {
 		return Sent{}, KindMismatch{ThreadID: thread.ID, Kind: thread.Kind}
 	}
 	if in.Operator && thread.Kind == threads.Subagent {
 		return Sent{}, ReadOnlyThread(thread.ID)
+	}
+	if err := s.connected(ctx); err != nil {
+		return Sent{}, err
 	}
 	attached, err := s.attach(ctx, thread, in.Files)
 	if err != nil {

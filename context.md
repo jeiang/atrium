@@ -277,13 +277,19 @@ behavior-parity target.
   on and the Anthropic connection configured before a run starts (else
   the start is refused with no thread, the API answering 409
   `not_configured`), the monthly budget is checked before the thread is
-  created, and a refused start leaves no thread behind in any interface.
+  created, and a refused start leaves no thread behind in any interface: a
+  refusal after the thread row exists removes the row only while it has no
+  run, message, queued message or child, otherwise the thread stays.
   References in the message are resolved against the new thread, also for
-  API starts and `agent run`; `agent run` never queues behind an active run.
+  API starts and `agent run`; `agent run` never queues behind an active run,
+  and `agent run --text` with only whitespace exits 2.
   A branch keeps the source thread's model, effort, context limit, thinking,
-  web search and cost cap. Regenerate and resume are refused like a send
-  when the module is off or the Anthropic connection is missing; stopping
-  in an unknown thread answers 404 on the chat page as in the API.
+  web search and cost cap. Regenerate, resume and answer are refused like a
+  send when the module is off or the Anthropic connection is missing, before
+  a question is consumed; send, edit and regenerate check the thread first
+  (unknown 404, subagent thread `read_only_thread`) and then the connection.
+  Stopping in an unknown thread answers 404 on the chat page as in the API.
+  An action that changed state and then failed is audited `failed`.
   Project file uploads and deletes, and agent `file_write`, each write one
   `operation_audit` row (`assistant.project-file.upload|delete`,
   `assistant.file.write` naming its effect); a project upload over the body
