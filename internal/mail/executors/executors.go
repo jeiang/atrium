@@ -1006,7 +1006,7 @@ func (e *Executors) Undo() []ledger.UndoDefinition {
 
 func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
-		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
+		lock, err := db.ResourceLocks(ctx, syncer.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
 		if err != nil {
 			return err
 		}

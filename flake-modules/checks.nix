@@ -161,7 +161,7 @@
       assert builtins.all (dir: lib.hasInfix "ReadWritePaths=${dir}" web) ["/var/lib/media" "/var/lib/atrium-vault" "/var/backups/atrium"]; true;
     notifyUnits = ["atrium-web.service" "atrium-watch.service"];
     schedulerInServe = assert !(nixos.config.systemd.units ? "atrium-agent-scheduler.service");
-    assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-dav-sync.service" "atrium-dav-sync.timer" "atrium-notion-sync.service" "atrium-notion-sync.timer"]);
+    assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-dav-sync.service" "atrium-dav-sync.timer" "atrium-notion-sync.service" "atrium-notion-sync.timer" "atrium-sync.service" "atrium-sync.timer" "atrium-scan.service" "atrium-scan.timer"]);
     assert !(defaults.config.systemd.units ? "atrium-agent-scheduler.service");
     assert !(lib.hasInfix "--no-services" (unitText "atrium-web.service"));
     assert !(nixos.config.systemd.units ? "atrium-web-local.service");
@@ -174,8 +174,7 @@
     notifyOnLongRunning = let
       notifying = name: let t = unitText name; in lib.hasInfix "Type=notify" t && lib.hasInfix "WatchdogSec=" t;
     in
-      assert builtins.all notifying notifyUnits;
-      assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service"]); true;
+      assert builtins.all notifying notifyUnits; true;
     vaultExport = let
       scheduler = unitText "atrium-web.service";
     in

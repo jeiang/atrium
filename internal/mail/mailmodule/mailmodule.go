@@ -33,9 +33,10 @@ import (
 )
 
 type Module struct {
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
-	Jobs    jobworker.Dependencies
+	Clients   func(config.Config) mail.OpenFunc
+	Now       func() float64
+	Jobs      jobworker.Dependencies
+	Resources module.Resources
 }
 
 func (m Module) classifiers(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, now func() float64) (*classifier.Service, error) {
@@ -96,7 +97,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Settings:  slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:      mail.HostSettings(),
 		Attention: AttentionSources(),
-		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs)},
+		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
 		Requires:  Requirements(),
 		Pages: []web.Page{
 			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{

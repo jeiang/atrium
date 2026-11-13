@@ -162,7 +162,7 @@ func Command(o Options) *cli.Command {
 				if err != nil {
 					return err
 				}
-				out, err := scans.ScanAll(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(c))
+				out, err := scans.Manual(x.Ctx, x.DB, x.Cfg, x.Now(), rebalance.SuggestName(c))
 				if err != nil {
 					return err
 				}

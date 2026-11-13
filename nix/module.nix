@@ -325,39 +325,6 @@
       inherit (cfg.web) host auth;
       inherit (cfg) port;
     };
-
-    atrium-sync = {
-      description = "Reconcile the atrium mail index";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${lib.getExe cfg.package} sync";
-        TimeoutStopSec = writeTimeout;
-      };
-      timer = {
-        wantedBy = ["timers.target"];
-        timerConfig = {
-          OnActiveSec = "2m";
-          OnUnitActiveSec = "15m";
-        };
-      };
-    };
-
-    atrium-scan = {
-      description = "Scan the mailboxes for rebalance, deletion and label proposals";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${lib.getExe cfg.package} proposals scan-all";
-        TimeoutStopSec = writeTimeout;
-        TimeoutStartSec = "2h";
-      };
-      timer = {
-        wantedBy = ["timers.target"];
-        timerConfig = {
-          OnCalendar = "monthly";
-          Persistent = true;
-        };
-      };
-    };
   };
 
   unitNames = let
