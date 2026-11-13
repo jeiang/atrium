@@ -5,16 +5,19 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	mailclassify "github.com/jeiang/atrium/internal/mail/classify"
 )
 
 type Options struct {
-	Env      config.Env
-	Judge    Judge
-	Clock    func() float64
-	CacheDir string
+	Env        config.Env
+	Classifier *classifier.Service
+	Paid       *mailclassify.Deferral
+	Clock      func() float64
+	CacheDir   string
 }
 
 type RefreshResult struct {
@@ -28,6 +31,10 @@ func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (RefreshResu
 	if env == nil {
 		env = config.OS
 	}
+	paid := o.Paid
+	if paid == nil {
+		paid = &mailclassify.Deferral{}
+	}
 	reminders := &Reminders{DB: d, Now: o.Clock, Env: env}
 	steps := []struct {
 		name string
@@ -36,7 +43,7 @@ func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (RefreshResu
 		{"loops", func() (any, error) {
 			return Compute(ctx, d, o.CacheDir, now)
 		}},
-		{"commitments", func() (any, error) { return ScanCommitments(ctx, d, o.CacheDir, env, now, o.Judge) }},
+		{"commitments", func() (any, error) { return ScanCommitments(ctx, d, o.CacheDir, env, now, o.Classifier, paid) }},
 		{"reminders", func() (any, error) { return reminders.Propose(ctx, now, config.From(ctx).TZName(env)) }},
 	}
 	var out RefreshResult

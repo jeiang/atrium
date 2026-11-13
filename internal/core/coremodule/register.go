@@ -13,6 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink"
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
 	"github.com/jeiang/atrium/internal/application/commands"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/bearer"
@@ -29,6 +32,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
@@ -49,6 +53,7 @@ import (
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
+	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/writes/writescmd"
 )
@@ -59,6 +64,18 @@ type Module struct {
 	Clients   func(config.Config) mail.OpenFunc
 	Now       func() float64
 	Resources module.Resources
+	Jobs      jobworker.Dependencies
+}
+
+func (m Module) classifier(env config.Env) func(context.Context, *db.DB, config.Config) (*classifier.Service, error) {
+	return func(ctx context.Context, d *db.DB, cfg config.Config) (*classifier.Service, error) {
+		if m.Jobs.Classifier == nil {
+			return nil, errors.New("proposal scans are not bound to a classifier")
+		}
+		svc := service.New(ctx, d, cfg, env, nil)
+		svc.Now = m.Now
+		return m.Jobs.Classifier(ctx, svc)
+	}
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -93,6 +110,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
+			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
+				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
+			}},
 			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
@@ -112,7 +132,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}),
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Classifier: m.classifier(mc.Env)}),
 			settingscmd.Command(mc.Env, m.Guard),
 			bearer.Command(mc.Env),
 			secretscmd.Command(mc.Env),
@@ -125,11 +145,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	}
 }
 
-func AttentionSources() []attention.Source { return []attention.Source{attentionsources.Proposals()} }
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Proposals(), attentionsources.ClassificationBudget()}
+}
 
 func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
+		{Name: "budget", Title: "Monthly budget", Page: usagepages.URL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
 	}
 }
 

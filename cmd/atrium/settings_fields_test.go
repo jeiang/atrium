@@ -52,7 +52,7 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 		{"/settings/calendar", "/settings/sections/calendar", "work_days", "mon,tue,wed,thu,fri"},
 		{"/settings/mail", "/settings/mail/settings", "uncertain_dest", "Later"},
 		{"/settings/mail", "/settings/mail/settings", "openloops_remind_hour", "8"},
-		{"/settings/assistant", "/settings/groups/assistant/spending", "monthly_budget_usd", "200"},
+		{"/settings/usage", "/settings/groups/core/budget", "monthly_budget_usd", "200"},
 	}
 	pages := map[string]string{}
 	for _, c := range cases {
@@ -97,7 +97,7 @@ func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 		action, key, value, want string
 	}{
 		{"/settings/sections/calendar", "default_event_minutes", "0", "must be between 5 and 1440"},
-		{"/settings/groups/assistant/spending", "monthly_budget_usd", "0", "must be greater than 0"},
+		{"/settings/groups/core/budget", "monthly_budget_usd", "0", "must be greater than 0"},
 		{"/settings/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
 		{"/settings/sections/calendar", "work_days", "funday", "must be day names"},
 		{"/settings/groups/notion/wiki", "wiki_root", "nope", "must be a Notion page id"},

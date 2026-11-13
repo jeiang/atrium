@@ -16,8 +16,7 @@ summary; the sections below cover the console work atrium cannot do for you.
 |---|---|---|---|---|
 | Anthropic | `anthropic` | Console API key | Assistant model calls | Key is workspace-bound; use one workspace per instance with a monthly spend limit |
 | Grafana | `grafana` | Service account token | Read-only dashboard and datasource queries | Viewer role is enough; optional token expiry |
-| Mail chat endpoint | `mail_chat` | Optional Bearer key | Chat and routing calls to an OpenAI-compatible endpoint | A hosted endpoint sends mail content off this host |
-| Mail embed endpoint | `mail_embed` | Optional Bearer key | Embeddings for mail search and routing | Same as the chat endpoint |
+| Embedding endpoint | `service/embedding` | Optional host-file bearer | Embeddings for mail search and routing | A hosted endpoint sends mail content off this host |
 | Notion | `service/notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | A connection on `/settings/connections`; share the pages with the integration; a personal token acts as the user and lasts at most a year |
 | qBittorrent | `service/qbittorrent` | API key | Media torrent and library operations | A connection on `/settings/connections`; API keys need qBittorrent 5.2 or newer |
 | TMDB | `service/tmdb` | API read access token | Media metadata | A connection on `/settings/connections`; read-only; media pages show the attribution |
@@ -153,10 +152,11 @@ may carry an expiry.
 
 ## Mail endpoints
 
-The chat and embed endpoints are OpenAI-compatible base URLs ending in `/v1`,
-with an optional Bearer key. The probe lists models and, for embeddings, the
-dimension. A hosted endpoint warns that mail content leaves this host. The
-chat endpoint record edits `mail_chat_model`.
+The embedding endpoint is the `service/embedding` connection: an
+OpenAI-compatible base URL ending in `/v1`, with an optional host-file bearer.
+Its Test lists models and measures the dimension. A hosted endpoint warns that
+mail content leaves this host. Mail classification has no chat endpoint; it
+uses fixed-schema Haiku requests through the `service/anthropic` connection.
 
 ## qBittorrent
 

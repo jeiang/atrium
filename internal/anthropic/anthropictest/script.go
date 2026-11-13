@@ -133,3 +133,12 @@ func ToolUse(id, name string, input map[string]any) json.RawMessage {
 	}
 	return mustJSON(map[string]any{"type": "tool_use", "id": id, "name": name, "input": input})
 }
+
+func JSON(v any) Response {
+	return Reply("end_turn", Text(string(mustJSON(v))))
+}
+
+func (r Response) WithID(id string) Response {
+	r.ID = id
+	return r
+}

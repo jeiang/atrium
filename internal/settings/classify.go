@@ -20,26 +20,12 @@ func CutoverDestination(entry ImportEntry) string {
 	return Destination(entry)
 }
 
-func LocalChatKey(key string) bool {
-	switch key {
-	case "mail_chat_url", "mail_chat_model", "mail_chat_ca_file", "mail_chat_proxy", "mail_chat_key":
-		return true
-	}
-	return false
-}
-
 func HostOwnedKey(key string) bool {
-	if LocalChatKey(key) {
-		return false
-	}
 	entry, ok := ImportEntryFor(key)
 	return ok && entry.Class == ImportHost
 }
 
 func DBBacked(key string) bool {
-	if LocalChatKey(key) {
-		return true
-	}
 	class, ok := ClassOf(key)
 	return !ok || class == ImportOperator
 }

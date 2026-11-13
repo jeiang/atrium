@@ -392,7 +392,7 @@ func signals(ctx context.Context, q db.Querier, from float64) ([]signal, error) 
 	rows, err := q.QueryContext(ctx,
 		"SELECT r.thread_id, r.kind, COALESCE(r.error, '') FROM runs r "+
 			"LEFT JOIN threads t ON t.id = r.thread_id LEFT JOIN projects p ON p.id = t.project_id "+
-			"WHERE r.state = 'failed' AND r.started_at >= ? AND (t.project_id IS NULL OR p.private = 0) ORDER BY r.id DESC LIMIT 10", from)
+			"WHERE r.state = 'failed' AND r.kind <> 'classification' AND r.started_at >= ? AND (t.project_id IS NULL OR p.private = 0) ORDER BY r.id DESC LIMIT 10", from)
 	if err != nil {
 		return nil, err
 	}
