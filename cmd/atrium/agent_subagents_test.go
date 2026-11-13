@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -93,4 +95,33 @@ func TestAgentSubagentsCommandsManageDefinitions(t *testing.T) {
 	if _, ok := listed["mail"]; !ok {
 		t.Error("a built-in agent was deleted")
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	for op, want := range map[string][]string{
+		"assistant.subagent.set":     {"refused subagent:evil operator cli", "ok subagent:finance operator cli", "ok subagent:finance operator cli"},
+		"assistant.subagent.enabled": {"ok subagent:finance operator cli", "not_found subagent:nope operator cli"},
+		"assistant.subagent.delete":  {"refused subagent:mail operator cli", "ok subagent:finance operator cli"},
+		"assistant.subagent.list":    nil,
+	} {
+		if got := operationAudits(t, d, op); !slices.Equal(got, want) {
+			t.Errorf("%s audits = %q, want %q", op, got, want)
+		}
+	}
+}
+
+func operationAudits(t *testing.T, d *db.DB, operation string) []string {
+	t.Helper()
+	rows, err := d.Read.Query("SELECT outcome || ' ' || target || ' ' || actor || ' ' || source FROM operation_audit WHERE operation = ? ORDER BY id", operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var s string
+		err := r.Scan(&s)
+		return s, err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }

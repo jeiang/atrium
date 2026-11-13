@@ -5,14 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -34,15 +31,8 @@ func threadKind(run string) threads.Kind {
 
 type Open func(context.Context) (context.Context, *service.Service, func(), error)
 
-func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, open Open) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(open, enabled), tickCommand(open, enabled), runCommand(open), subagentsCommand(env, tools, now)}}
-}
-
-func clock(now func() float64) func() float64 {
-	if now == nil {
-		return func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
-	}
-	return now
+func Command(enabled func(module string) bool, open Open, subagents OpenService) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(open, enabled), tickCommand(open, enabled), runCommand(open), subagentsCommand(subagents)}}
 }
 
 func runCommand(open Open) *cli.Command {

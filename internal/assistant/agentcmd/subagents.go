@@ -2,97 +2,63 @@ package agentcmd
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 )
 
-type subagentRow struct {
-	Name    string   `json:"name"`
-	Enabled bool     `json:"enabled"`
-	Builtin bool     `json:"builtin"`
-	Effort  string   `json:"effort"`
-	Tools   []string `json:"tools"`
-}
+type OpenService func(context.Context) (*asstapp.Service, func(), error)
 
-func rowOf(a subagents.Agent) subagentRow {
-	return subagentRow{Name: a.Name, Enabled: a.Enabled, Builtin: a.Builtin, Effort: a.Effort, Tools: a.Tools}
-}
-
-func subagentsCommand(cfgEnv config.Env, tools registry.Source, now func() float64) *cli.Command {
+func subagentsCommand(open OpenService) *cli.Command {
 	return &cli.Command{Name: "subagents", Commands: []*cli.Command{
-		subagentsList(cfgEnv),
-		subagentsSet(cfgEnv, tools, now),
-		subagentsToggle(cfgEnv, "enable", true, now),
-		subagentsToggle(cfgEnv, "disable", false, now),
-		subagentsDelete(cfgEnv),
+		subagentsList(open),
+		subagentsSet(open),
+		subagentsToggle(open, "enable", true),
+		subagentsToggle(open, "disable", false),
+		subagentsDelete(open),
 	}}
 }
 
-func openDB(ctx context.Context, cfgEnv config.Env) (*db.DB, error) {
-	cfg, err := config.Load(cfgEnv)
-	if err != nil {
-		return nil, err
-	}
-	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
-	if err != nil {
-		return nil, err
-	}
-	if err := config.Boot(ctx, cfgEnv, d, cfg); err != nil {
-		_ = d.Close()
-		return nil, err
-	}
-	return d, nil
-}
-
-func withDB(env *cli.Env, cfgEnv config.Env, act func(*db.DB) error) int {
-	d, err := openDB(env.Ctx, cfgEnv)
+func withService(env *cli.Env, open OpenService, act func(*asstapp.Service) error) int {
+	svc, done, err := open(env.Ctx)
 	if err != nil {
 		return cli.Fail(env, err)
 	}
-	defer func() { _ = d.Close() }()
-	if err := act(d); err != nil {
+	defer done()
+	if err := act(svc); err != nil {
 		return cli.Fail(env, err)
 	}
 	return cli.ExitOK
 }
 
-func stamp(now func() float64) float64 { return clock(now)() }
+func printJSON(env *cli.Env, v any) error {
+	_, err := fmt.Fprintln(env.Stdout, jsonx.Dumps(v, jsonx.Opts{Indent: 2}))
+	return err
+}
 
-func unknown(name string) error { return fmt.Errorf("no subagent %q", name) }
-
-func subagentsList(cfgEnv config.Env) *cli.Command {
+func subagentsList(open OpenService) *cli.Command {
 	return &cli.Command{
 		Name: "list",
 		Help: "list subagent definitions",
 		Setup: func(*cli.Args) cli.Handler {
 			return func(env *cli.Env) int {
-				return withDB(env, cfgEnv, func(d *db.DB) error {
-					found, err := subagents.List(env.Ctx, d.Read)
+				return withService(env, open, func(svc *asstapp.Service) error {
+					found, err := svc.SubagentList(env.Ctx, asstapp.SubagentListInput{})
 					if err != nil {
 						return err
 					}
-					rows := make([]subagentRow, 0, len(found))
-					for _, a := range found {
-						rows = append(rows, rowOf(a))
-					}
-					_, err = fmt.Fprintln(env.Stdout, jsonx.Dumps(rows, jsonx.Opts{Indent: 2}))
-					return err
+					return printJSON(env, found.Data)
 				})
 			}
 		},
 	}
 }
 
-func subagentsSet(cfgEnv config.Env, tools registry.Source, now func() float64) *cli.Command {
+func subagentsSet(open OpenService) *cli.Command {
 	return &cli.Command{
 		Name: "set",
 		Help: "create or update a subagent; omitted fields keep their stored values",
@@ -107,48 +73,48 @@ func subagentsSet(cfgEnv config.Env, tools registry.Source, now func() float64) 
 				if args.Has("prompt") && args.Has("prompt-file") {
 					return env.UsageError("--prompt and --prompt-file are exclusive")
 				}
-				text := *prompt
+				in := asstapp.SubagentSetInput{Name: *name}
+				if args.Has("description") {
+					in.Description = description
+				}
+				if args.Has("prompt") {
+					in.Prompt = prompt
+				}
 				if args.Has("prompt-file") {
 					raw, err := os.ReadFile(*promptFile)
 					if err != nil {
 						return cli.Fail(env, err)
 					}
-					text = string(raw)
+					text := string(raw)
+					in.Prompt = &text
 				}
-				reg, err := tools()
-				if err != nil {
-					return cli.Fail(env, err)
+				if args.Has("effort") {
+					in.Effort = effort
 				}
-				return withDB(env, cfgEnv, func(d *db.DB) error {
-					var saved *subagents.Agent
-					err := d.WithTx(env.Ctx, func(tx *sql.Tx) error {
-						existing, err := subagents.Get(env.Ctx, tx, *name)
-						if err != nil {
-							return err
-						}
-						def := subagents.Definition{Name: *name, Description: *description, Prompt: text, Effort: *effort, Tools: *toolNames, Enabled: true}
-						if existing != nil {
-							def.Enabled = existing.Enabled
-							if !args.Has("description") {
-								def.Description = existing.Description
-							}
-							if !args.Has("prompt") && !args.Has("prompt-file") {
-								def.Prompt = existing.Prompt
-							}
-							if !args.Has("effort") {
-								def.Effort = existing.Effort
-							}
-							if !args.Has("tool") {
-								def.Tools = existing.Tools
-							}
-						}
-						saved, err = subagents.Save(env.Ctx, tx, reg, def, stamp(now))
-						return err
-					})
+				if args.Has("tool") {
+					in.Tools = append([]string{}, *toolNames...)
+				}
+				return withService(env, open, func(svc *asstapp.Service) error {
+					saved, err := svc.SubagentSet(env.Ctx, in)
 					if err != nil {
 						return err
 					}
-					_, err = fmt.Fprintln(env.Stdout, jsonx.Dumps(rowOf(*saved), jsonx.Opts{Indent: 2}))
+					return printJSON(env, saved.Data)
+				})
+			}
+		},
+	}
+}
+
+func subagentsToggle(open OpenService, verb string, enabled bool) *cli.Command {
+	return &cli.Command{
+		Name: verb,
+		Help: verb + " a subagent",
+		Setup: func(args *cli.Args) cli.Handler {
+			name := args.Arg("name", cli.Opt{})
+			return func(env *cli.Env) int {
+				return withService(env, open, func(svc *asstapp.Service) error {
+					_, err := svc.SubagentEnabled(env.Ctx, asstapp.SubagentEnabledInput{Name: *name, Enabled: enabled})
 					return err
 				})
 			}
@@ -156,44 +122,16 @@ func subagentsSet(cfgEnv config.Env, tools registry.Source, now func() float64) 
 	}
 }
 
-func subagentsToggle(cfgEnv config.Env, verb string, enabled bool, now func() float64) *cli.Command {
-	return &cli.Command{
-		Name: verb,
-		Help: verb + " a subagent",
-		Setup: func(args *cli.Args) cli.Handler {
-			name := args.Arg("name", cli.Opt{})
-			return func(env *cli.Env) int {
-				return withDB(env, cfgEnv, func(d *db.DB) error {
-					changed, err := subagents.SetEnabled(env.Ctx, d.Write, *name, enabled, stamp(now))
-					if err != nil {
-						return err
-					}
-					if !changed {
-						return unknown(*name)
-					}
-					return nil
-				})
-			}
-		},
-	}
-}
-
-func subagentsDelete(cfgEnv config.Env) *cli.Command {
+func subagentsDelete(open OpenService) *cli.Command {
 	return &cli.Command{
 		Name: "delete",
 		Help: "delete a subagent; built-in agents can only be disabled",
 		Setup: func(args *cli.Args) cli.Handler {
 			name := args.Arg("name", cli.Opt{})
 			return func(env *cli.Env) int {
-				return withDB(env, cfgEnv, func(d *db.DB) error {
-					removed, err := subagents.Delete(env.Ctx, d.Write, *name)
-					if err != nil {
-						return err
-					}
-					if !removed {
-						return unknown(*name)
-					}
-					return nil
+				return withService(env, open, func(svc *asstapp.Service) error {
+					_, err := svc.SubagentDelete(env.Ctx, asstapp.SubagentDeleteInput{Name: *name})
+					return err
 				})
 			}
 		},

@@ -74,10 +74,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	fileOps, fileBindings := fileOperations()
 	scheduleOps, scheduleBindings := scheduleOperations()
 	memoryOps, memoryBindings := memoryOperations()
+	agentOps, agentBindings := agentOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -106,7 +107,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Open), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
+		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, m.Open, subagentCLIService(mc.Env, mc.Tools, m.Now)), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
 		Leaves:   map[string]module.Leaf{"kb import": {Always: true}},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
@@ -144,8 +145,8 @@ func SettingGroups() []settings.Group {
 func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
 	for _, tools := range [][]tool.Tool{
-		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
-		webfetch.Tools(), recalltools.Tools(memoryToolService), plantools.Tools(),
+		askoperator.Tools(memoryToolService), attentiontool.Tools(), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
+		webfetch.Tools(), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
 		kbtools.Tools(knowledgeToolService), weathertools.Tools(), opstools.Tools(),
 	} {

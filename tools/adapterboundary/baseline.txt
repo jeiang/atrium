@@ -4,14 +4,9 @@ internal/actionlink/handler.go	github.com/jeiang/atrium/internal/proposals
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/settings
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/threads
-internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/config
 internal/assistant/agentcmd/scheduler.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/assistant/agentcmd/scheduler.go	github.com/jeiang/atrium/internal/sdnotify
-internal/assistant/agentcmd/subagents.go	database/sql
 internal/assistant/agentcmd/subagents.go	github.com/jeiang/atrium/internal/assistant/pricing
-internal/assistant/agentcmd/subagents.go	github.com/jeiang/atrium/internal/assistant/subagents
-internal/assistant/agentcmd/subagents.go	github.com/jeiang/atrium/internal/config
-internal/assistant/agentcmd/subagents.go	github.com/jeiang/atrium/internal/db
 internal/assistant/agentcmd/tick.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/assistant/agentcmd/tick.go	github.com/jeiang/atrium/internal/scheduler
 internal/assistant/memory/memorycmd/job.go	github.com/jeiang/atrium/internal/assistant
@@ -153,9 +148,6 @@ internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/inference
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/serverops
-internal/assistant/tools/plan/plan.go	database/sql
-internal/assistant/tools/plan/plan.go	github.com/jeiang/atrium/internal/assistant/progress
-internal/assistant/tools/plan/plan.go	github.com/jeiang/atrium/internal/assistant/workspace
 internal/assistant/tools/propose/propose.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/propose/propose.go	github.com/jeiang/atrium/internal/proposals
 internal/assistant/tools/weather/weather.go	github.com/jeiang/atrium/internal/weather

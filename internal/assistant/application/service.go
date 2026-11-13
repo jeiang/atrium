@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -28,6 +29,7 @@ type Service struct {
 	jobs          []scheduler.Definition
 	resolveClient func(context.Context) (*anthropic.Client, error)
 	inference     *inference.Service
+	tools         registry.Source
 }
 
 func New(d *db.DB, env config.Env, now func() float64) *Service {
