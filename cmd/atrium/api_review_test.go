@@ -286,7 +286,7 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); code != http.StatusOK {
 		t.Fatalf("GET /chat = %d", code)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK {
+	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK || !strings.Contains(body, `data-status="applied"`) {
 		t.Fatalf("HTML approve: %d\n%s", code, body)
 	}
 	waitUntil(t, 10*time.Second, "the connection-health service audit", func() bool {

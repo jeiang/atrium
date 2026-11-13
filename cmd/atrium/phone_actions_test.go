@@ -88,7 +88,9 @@ func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	s := newPhoneSite(t, dir, api)
 	db := filepath.Join(dir, "atrium.db")
-	s.page()
+	if body := s.page(); !strings.Contains(body, `data-phone-outstanding>0 `) {
+		t.Fatal("notifications page misses the zero outstanding count")
+	}
 
 	noFollow := &http.Client{Jar: s.client.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	code, _, header := fetch(t, noFollow, http.MethodPost, s.base+"/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": {"reminder", phoneKind, "gmail_label_merge"}})
@@ -103,14 +105,26 @@ func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 	}
 
 	s.propose(1)
-	s.page()
+	body := s.page()
+	for _, want := range []string{`id="phone-actions"`, `data-phone-outstanding>1 `, `action="/settings/phone-actions"`, `action="/settings/phone-actions/revoke"`,
+		`name="enabled" value="1" checked`, `name="kind" value="reminder" checked`, `name="kind" value="gmail_label_merge" disabled`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("notifications page misses %q", want)
+		}
+	}
+	if strings.Contains(body, `name="kind" value="memory" checked`) {
+		t.Fatal("notifications page shows an unsaved kind as enabled")
+	}
+	if strings.Contains(body, `href="/settings/phone-actions"`) {
+		t.Error("the settings tabs still link the phone actions page")
+	}
 	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/phone-actions", nil); code == http.StatusOK {
 		t.Errorf("GET /settings/phone-actions = %d, want it gone", code)
 	}
 
-	code, _ = s.post("/settings/phone-actions/revoke", nil)
-	if code != http.StatusOK {
-		t.Fatalf("revoke = %d", code)
+	code, body = s.post("/settings/phone-actions/revoke", nil)
+	if code != http.StatusOK || !strings.Contains(body, `id="phone-actions"`) || !strings.Contains(body, `data-phone-outstanding>0 `) {
+		t.Fatalf("revoke = %d, want the notifications page back with no outstanding links", code)
 	}
 	d := mustConnect(t, db, keyFor(t))
 	defer func() { _ = d.Close() }()
@@ -291,6 +305,9 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	var outstanding int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM action_links WHERE used_ts IS NULL").Scan(&outstanding); err != nil || outstanding != actionlink.RateLimit-spent {
 		t.Fatalf("outstanding links = %d, %v", outstanding, err)
+	}
+	if body := s.page(); !strings.Contains(body, fmt.Sprintf("data-phone-outstanding>%d ", actionlink.RateLimit-spent)) {
+		t.Fatalf("notifications page misses %d outstanding links", actionlink.RateLimit-spent)
 	}
 
 }

@@ -28,7 +28,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK {
+	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK || strings.Contains(body, `action="/inbox/`) {
 		t.Fatalf("empty inbox = %d: %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -36,11 +36,23 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO notifications (id, ts, title, body, channel, delivered, error) VALUES (7, 1, 'Parcel arrives today', 'Locker 4', 'assistant', 0, 'no push devices')"); err != nil {
 		t.Fatal(err)
 	}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK {
-		t.Fatalf("inbox = %d: %.300s", code, body)
+	code, inbox, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil)
+	if code != http.StatusOK {
+		t.Fatalf("inbox = %d: %.300s", code, inbox)
 	}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil); code != http.StatusOK {
-		t.Fatalf("settings = %d: %.300s", code, body)
+	for _, want := range []string{"Parcel arrives today", "Locker 4", `action="/inbox/7/resend"`} {
+		if !strings.Contains(inbox, want) {
+			t.Errorf("inbox misses %q", want)
+		}
+	}
+	code, settings, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
+	if code != http.StatusOK {
+		t.Fatalf("settings = %d: %.300s", code, settings)
+	}
+	for _, unwanted := range []string{"Parcel arrives today", "/resend"} {
+		if strings.Contains(settings, unwanted) {
+			t.Errorf("settings still lists %q", unwanted)
+		}
 	}
 	if code, _, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications/7/resend", url.Values{}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
 		t.Errorf("old resend route = %d", code)
