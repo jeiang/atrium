@@ -11,7 +11,7 @@ func (e KeyError) Error() string { return string(e) }
 
 const (
 	KeySetting    = "db.key_file, ATRIUM_DB_KEY or ATRIUM_DB_KEY_FILE"
-	KeyCredential = "db_key"
+	KeyCredential = "db-key"
 )
 
 const (

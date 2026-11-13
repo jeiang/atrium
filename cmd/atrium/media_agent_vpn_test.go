@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/media"
 )
 
@@ -235,7 +233,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	})
 }
 
-func TestRemovedMediaRootHostKeyIsIgnoredWithAWarning(t *testing.T) {
+func TestRemovedMediaRootHostKeyIsRefused(t *testing.T) {
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -245,14 +243,14 @@ func TestRemovedMediaRootHostKeyIsIgnoredWithAWarning(t *testing.T) {
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-media-root.toml", string(raw)+"\n[media]\nmedia_root = \"/var/lib/media\"\n"))
-	logs := &lockedBuffer{}
-	previous := slog.Default()
-	logx.Setup(logs)
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
-		t.Fatalf("settings list with media_root: exit %d stderr %q", got.code, got.stderr)
+	got := runApp(t, "serve", "--port", "0", "--auth", "local")
+	if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "media.media_root") || !strings.Contains(got.stderr, "services.atrium.mediaAgent.roots") {
+		t.Fatalf("serve with media_root in the host file: exit %d stderr %q; want %d", got.code, got.stderr, cli.ExitConfig)
 	}
-	if !strings.Contains(logs.String(), "ignoring a removed host key") || !strings.Contains(logs.String(), "media.media_root") || !strings.Contains(logs.String(), "services.atrium.mediaAgent.roots") {
-		t.Errorf("media_root was not warned about: %q", logs.String())
+	setEnv(t, "ATRIUM_HOST_CONFIG", defaultHostConfig)
+	setEnv(t, "ATRIUM_MEDIA_MEDIA_ROOT", "/var/lib/media")
+	got = runApp(t, "serve", "--port", "0", "--auth", "local")
+	if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "ATRIUM_MEDIA_MEDIA_ROOT") || !strings.Contains(got.stderr, "services.atrium.mediaAgent.roots") {
+		t.Fatalf("serve with ATRIUM_MEDIA_MEDIA_ROOT: exit %d stderr %q; want %d", got.code, got.stderr, cli.ExitConfig)
 	}
 }
