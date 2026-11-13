@@ -2,6 +2,7 @@ package settingspage
 
 import (
 	"context"
+	"slices"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -67,3 +68,17 @@ func (s Sections) Modules() map[string]bool {
 type DuplicateSection string
 
 func (e DuplicateSection) Error() string { return "duplicate section " + strconv.Quote(string(e)) }
+
+func Offered(groups []Group, sections Sections, key string) (Section, bool) {
+	for _, g := range groups {
+		if slices.Contains(g.Keys, key) {
+			return Section{}, true
+		}
+	}
+	for _, s := range sections {
+		if slices.ContainsFunc(s.Fields, func(f Field) bool { return f.Key == key }) {
+			return s, true
+		}
+	}
+	return Section{}, false
+}

@@ -8,8 +8,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
+	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -75,6 +77,18 @@ func valueField[T any](change application.Change[T], err error) (application.Cha
 	return change, err
 }
 
+func offered(ctx context.Context, key string) (settingspage.Section, bool) {
+	set := module.SetFrom(ctx)
+	if set == nil {
+		return settingspage.Section{}, false
+	}
+	return set.OfferedSetting(key)
+}
+
+func notOffered(key string) error {
+	return &application.Error{Code: application.Refused, Message: key + " is not offered on the settings pages and is not writable here"}
+}
+
 func (m Module) settingsRoutes(d *web.Deps) []application.Binding {
 	svc := func() *settingsapp.Service { return settingsapp.Server(d.DB, d.Settings, m.Guard) }
 	const area = "settings"
@@ -93,7 +107,7 @@ func (m Module) settingsRoutes(d *web.Deps) []application.Binding {
 				}
 				var keys []string
 				for _, def := range settings.From(ctx).Defs() {
-					if !def.IsSecret() && (in.Group == "" || def.Module == in.Group) && def.Key > after {
+					if _, ok := offered(ctx, def.Key); ok && (in.Group == "" || def.Module == in.Group) && def.Key > after {
 						keys = append(keys, def.Key)
 					}
 				}
@@ -112,10 +126,27 @@ func (m Module) settingsRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Command(d, settingsapp.DescribeSet(), application.APIShape{Area: area, Errors: refusable},
 			"PUT /settings/{key}", func(ctx context.Context, in SettingSet) (application.Change[SettingChange], error) {
-				return valueField(changed(svc().Set(ctx, settingsapp.SetInput{Values: []settingsapp.Value{{Key: in.Key, Value: in.Value}}})))
+				section, ok := offered(ctx, in.Key)
+				if !ok {
+					if err := settingsapp.CheckRead(ctx, in.Key); err != nil {
+						return application.Change[SettingChange]{}, err
+					}
+					return application.Change[SettingChange]{}, notOffered(in.Key)
+				}
+				return valueField(changed(svc().Set(ctx, settingsapp.SetInput{Values: []settingsapp.Value{{Key: in.Key, Value: in.Value}}, Validate: section.Validate})))
 			}),
 		api.Command(d, settingsapp.DescribeUnset(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable},
 			"DELETE /settings/{key}", func(ctx context.Context, in SettingKey) (application.Change[SettingChange], error) {
+				section, ok := offered(ctx, in.Key)
+				switch {
+				case !ok:
+					if err := settingsapp.CheckRead(ctx, in.Key); err != nil {
+						return application.Change[SettingChange]{}, err
+					}
+					return application.Change[SettingChange]{}, notOffered(in.Key)
+				case section.Validate != nil:
+					return valueField(changed(svc().Set(ctx, settingsapp.SetInput{Values: []settingsapp.Value{{Key: in.Key, Unset: true}}, Validate: section.Validate})))
+				}
 				return changed(svc().Unset(ctx, settingsapp.UnsetInput{Key: in.Key}))
 			}),
 		api.Query(d, settingsapp.DescribeSecretStatus(), application.APIShape{Area: area},
