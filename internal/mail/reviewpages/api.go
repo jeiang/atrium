@@ -128,12 +128,12 @@ type pendingCounts struct {
 type pendingBody struct {
 	Approvals []apiApproval `json:"approvals"`
 	Blocked   []apiApproval `json:"blocked"`
-	Drafts    []apiDraft    `json:"drafts"`
 	Counts    pendingCounts `json:"counts"`
+	Drafts    []apiDraft    `json:"drafts"`
 }
 
 func (s *service) apiPending(w http.ResponseWriter, r *http.Request) {
-	found, err := s.review.Pending(r.Context(), reviewapp.PendingInput{})
+	found, err := s.review.Pending(r.Context(), reviewapp.PendingInput{Refs: true})
 	if err != nil {
 		web.APIFail(w, err)
 		return

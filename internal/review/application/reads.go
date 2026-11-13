@@ -83,6 +83,8 @@ type Finding struct {
 
 type PendingInput struct {
 	Findings bool
+	Refs     bool
+	Limit    int
 }
 
 type Pending struct {
@@ -99,7 +101,7 @@ func (s *Service) Pending(ctx context.Context, in PendingInput) (application.Rea
 	if in.Findings {
 		scopes = append(slices.Clone(scopes), state.Ops)
 	}
-	return read(ctx, s, PendingName, scopes, in, func() (Pending, error) { return s.pending(ctx, in) }, nil)
+	return read(ctx, s, PendingName, scopes, in, func() (Pending, error) { return s.pending(ctx, in) }, func(p Pending) any { return p.Configured })
 }
 
 func (s *Service) pending(ctx context.Context, in PendingInput) (Pending, error) {
@@ -113,10 +115,19 @@ func (s *Service) pending(ctx context.Context, in PendingInput) (Pending, error)
 	if err != nil {
 		return out, err
 	}
-	if out.Approvals, err = s.cards(ctx, pending); err != nil {
+	left := in.Limit
+	take := func(n int) int {
+		if in.Limit <= 0 {
+			return n
+		}
+		n = min(n, left)
+		left -= n
+		return n
+	}
+	if out.Approvals, err = s.cards(ctx, pending[:take(len(pending))], in.Refs); err != nil {
 		return out, err
 	}
-	if out.Blocked, err = s.cards(ctx, blocked); err != nil {
+	if out.Blocked, err = s.cards(ctx, blocked[:take(len(blocked))], in.Refs); err != nil {
 		return out, err
 	}
 	open, err := s.drafts.List(ctx, drafts.Draft, DraftLimit)
@@ -129,7 +140,7 @@ func (s *Service) pending(ctx context.Context, in PendingInput) (Pending, error)
 	}
 	rows := append(unknown, open...)
 	slices.SortStableFunc(rows, func(a, b drafts.Row) int { return cmp.Compare(b.UpdatedAt, a.UpdatedAt) })
-	if out.Drafts, err = s.DraftCards(ctx, rows); err != nil {
+	if out.Drafts, err = s.DraftCards(ctx, rows[:take(len(rows))]); err != nil {
 		return out, err
 	}
 	n, err := proposals.NeedsCount(ctx, q)
@@ -179,9 +190,13 @@ func AccountConfigured(ctx context.Context) map[string]bool {
 	return out
 }
 
-func (s *Service) cards(ctx context.Context, list []*proposals.Proposal) ([]Card, error) {
+func (s *Service) cards(ctx context.Context, list []*proposals.Proposal, refs bool) ([]Card, error) {
 	out := make([]Card, len(list))
 	for i, p := range list {
+		if !refs {
+			out[i] = s.CardOf(p)
+			continue
+		}
 		full, err := proposals.Get(ctx, s.db.Read, p.ID)
 		if err != nil {
 			return nil, err
@@ -285,10 +300,7 @@ type ProposalInput struct {
 }
 
 func (s *Service) Proposal(ctx context.Context, in ProposalInput) (application.Read[Card], error) {
-	if in.ID < 1 {
-		return application.Read[Card]{}, invalid("proposal_id", "proposal_id must be a positive integer.")
-	}
-	return read(ctx, s, ProposalName, []string{state.Review, state.Effects}, in, func() (Card, error) {
+	return read(ctx, s, ProposalName, []string{state.Review, state.Effects, state.Assistant}, in, func() (Card, error) {
 		found, err := proposals.Get(ctx, s.db.Read, in.ID)
 		if err != nil {
 			return Card{}, err
@@ -514,9 +526,6 @@ func leaseMarks(effects []ledger.Effect) any {
 }
 
 func (s *Service) Effects(ctx context.Context, in EffectsInput) (application.Read[[]ledger.Effect], error) {
-	if in.BeforeID < 0 {
-		return application.Read[[]ledger.Effect]{}, invalid("before", "before must be a non-negative integer.")
-	}
 	return read(ctx, s, EffectsName, []string{state.Effects}, in, func() ([]ledger.Effect, error) {
 		return s.ledger.List(ctx, ledger.Filter{
 			Origin: in.Origin, Origins: in.Origins, Operation: in.Operation, ProposalID: in.ProposalID, ThreadID: in.ThreadID,

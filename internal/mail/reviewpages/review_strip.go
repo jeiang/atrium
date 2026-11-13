@@ -26,7 +26,7 @@ type receiptsData struct {
 }
 
 func (s *service) needsStrip(w http.ResponseWriter, r *http.Request) {
-	found, err := s.review.Pending(r.Context(), reviewapp.PendingInput{})
+	found, err := s.review.Pending(r.Context(), reviewapp.PendingInput{Limit: stripItems})
 	if err != nil {
 		s.failRead(w, r, err, "")
 		return

@@ -147,7 +147,7 @@ func (s *Service) Activity(ctx context.Context, in ActivityInput) (application.R
 	return read(ctx, s, ActivityName, []string{state.Mail, state.Effects, state.Settings}, in, func() (Activity, error) {
 		entries, next, err := s.timeline(ctx, in.Category, in.Limit, in.Offset)
 		return Activity{Entries: entries, NextOffset: next}, err
-	}, nil)
+	}, mailMarks)
 }
 
 var writeCategoryPrefixes = []struct{ Prefix, Category string }{
@@ -332,4 +332,19 @@ func MailEntry(a live.Action) ActivityEntry {
 			Undone: a.Undone, Resolved: a.Resolved, EffectiveOutcome: a.EffectiveOutcome,
 		},
 	}
+}
+
+type mailMark struct {
+	ID          int64 `json:"id"`
+	UndoBlocked bool  `json:"undo_blocked"`
+}
+
+func mailMarks(a Activity) any {
+	var out []mailMark
+	for _, e := range a.Entries {
+		if e.Mail != nil {
+			out = append(out, mailMark{ID: e.ID, UndoBlocked: e.Mail.UndoBlocked})
+		}
+	}
+	return out
 }

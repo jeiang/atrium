@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -192,6 +193,9 @@ func TestPendingRevisionChangesAfterDecision(t *testing.T) {
 	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
 	approve := proposalID(t, toolResult(t, "calendar_create", event))
 	toolResult(t, "task_add", map[string]any{"title": "Call the dentist", "due": "2026-11-09"})
+	if listed := runApp(t, "effects", "list", "--before", "-1"); listed.code != 0 || !strings.Contains(listed.stdout, "task_add") {
+		t.Fatalf("effects list --before -1: %d %s %s", listed.code, listed.stdout, listed.stderr)
+	}
 	s := startAPISite(t, dir, nil)
 	owner := s.token("owner")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
@@ -201,6 +205,10 @@ func TestPendingRevisionChangesAfterDecision(t *testing.T) {
 	tag := first.header.Get("ETag")
 	if ids := approvalIDs(t, first.json["approvals"]); first.status != http.StatusOK || tag == "" || len(ids) != 1 || ids[0] != approve {
 		t.Fatalf("pending: %d etag %q %s", first.status, tag, first.body)
+	}
+	keys := []int{strings.Index(first.body, `"approvals":`), strings.Index(first.body, `"blocked":`), strings.Index(first.body, `"counts":`), strings.Index(first.body, `"drafts":`)}
+	if !slices.IsSorted(keys) || keys[0] < 0 {
+		t.Fatalf("pending keys out of order %v: %s", keys, first.body)
 	}
 	if same := s.do(http.MethodGet, "/api/v1/pending", owner, nil, "If-None-Match", tag); same.status != http.StatusNotModified || same.body != "" || same.header.Get("ETag") != tag {
 		t.Fatalf("unchanged pending: %d etag %q %s", same.status, same.header.Get("ETag"), same.body)
