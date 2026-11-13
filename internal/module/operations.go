@@ -221,6 +221,8 @@ func checkAPIShape(b application.Binding, def application.Definition) string {
 		return "has unknown area " + string(shape.Area)
 	case safe != (def.Kind == application.Query):
 		return "uses method " + method + " for a " + string(def.Kind)
+	case shape.Body == application.BodyMultipart && shape.BodyLimit <= 0:
+		return "multipart body has no byte limit"
 	case !shape.Body.Valid():
 		return "has unknown body kind " + string(shape.Body)
 	case !slices.Contains([]int{200, 201, 202, 204, 206}, shape.Success):

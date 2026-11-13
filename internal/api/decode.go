@@ -1,6 +1,9 @@
 package api
 
 import (
+	"errors"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"reflect"
 	"slices"
@@ -106,6 +109,32 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 		}
 	}
 	switch body {
+	case application.BodyMultipart:
+		media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if media == "application/json" {
+			return web.DecodeJSON(w, r, v)
+		}
+		decoder, ok := v.(interface{ DecodeMultipart(*multipart.Reader) error })
+		if err != nil || params["boundary"] == "" || !ok {
+			web.APIError(w, http.StatusBadRequest, "bad_request", "Invalid multipart body.")
+			return false
+		}
+		err = decoder.DecodeMultipart(multipart.NewReader(r.Body, params["boundary"]))
+		var large *http.MaxBytesError
+		if errors.As(err, &large) {
+			web.APIError(w, 413, "too_large", "Request too large.")
+			return false
+		}
+		if err != nil {
+			var appErr *application.Error
+			if errors.As(err, &appErr) {
+				web.APIFail(w, err)
+			} else {
+				web.APIError(w, 400, "bad_request", "Invalid multipart body.")
+			}
+			return false
+		}
+		return true
 	case application.BodyJSON:
 		return web.DecodeJSON(w, r, v)
 	case application.BodyNone:

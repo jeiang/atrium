@@ -33,11 +33,12 @@ const (
 )
 
 type Store struct {
-	db     *db.DB
-	now    func() time.Time
-	appKey func() ([]byte, error)
-	mu     sync.Mutex
-	mac    []byte
+	db      *db.DB
+	now     func() time.Time
+	appKey  func() ([]byte, error)
+	mu      sync.Mutex
+	mac     []byte
+	tempDir string
 }
 
 func New(d *db.DB) *Store { return &Store{db: d, now: time.Now} }

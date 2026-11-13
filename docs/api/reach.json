@@ -34,9 +34,11 @@
     },
     {
       "area": "files",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.file.download"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "home",
@@ -86,9 +88,11 @@
     },
     {
       "area": "projects",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.project-file.upload"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "proposals",
@@ -169,5 +173,5 @@
     }
   ],
   "total_required": 166,
-  "total_bound": 29
+  "total_bound": 31
 }

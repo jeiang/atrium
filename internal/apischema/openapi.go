@@ -134,7 +134,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	case application.BodyMultipart:
 		op["requestBody"] = object{"required": true, "content": object{"multipart/form-data": object{"schema": object{"type": "object"}}}}
 	case application.BodyBinary:
-		op["requestBody"] = object{"required": true, "content": object{"application/octet-stream": object{"schema": object{"type": "string", "contentMediaType": "application/octet-stream"}}}}
+		if unsafe {
+			op["requestBody"] = object{"required": true, "content": object{"application/octet-stream": object{"schema": object{"type": "string", "contentMediaType": "application/octet-stream"}}}}
+		}
 	}
 	headers := object{}
 	if unsafe {
@@ -149,12 +151,23 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 			return nil, err
 		}
 		media := "application/json"
+		if shape.Body == application.BodyBinary {
+			media = "application/octet-stream"
+			schema = object{"type": "string", "format": "binary"}
+		}
 		if shape.Body == application.BodyEventStream {
 			media = "text/event-stream"
 		}
 		success["content"] = object{media: object{"schema": schema}}
 	}
 	responses := object{strconv.Itoa(shape.Success): success}
+	if shape.Body == application.BodyBinary {
+		responses["206"] = success
+		responses["416"] = object{"description": "Range Not Satisfiable"}
+	}
+	if shape.Body == application.BodyMultipart {
+		op["x-atrium-body-limit"] = shape.BodyLimit
+	}
 	if shape.Body == application.BodyEventStream {
 		responses["204"] = object{"description": http.StatusText(http.StatusNoContent)}
 		responses["410"] = object{"description": http.StatusText(http.StatusGone), "content": object{"application/json": object{"schema": object{"allOf": []any{errorRef, object{

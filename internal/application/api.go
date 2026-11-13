@@ -31,6 +31,8 @@ type APIShape struct {
 	Response  reflect.Type
 	Success   int
 	Body      BodyKind
+	BodyLimit int64
+	AllowJSON bool
 	Sensitive bool
 	Errors    []Code
 }

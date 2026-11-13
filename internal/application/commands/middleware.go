@@ -7,9 +7,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"hash"
 	"io"
+	"mime"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -61,7 +64,45 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 			return
 		}
 		var fingerprint string
-		if key != "" {
+		media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if media == "multipart/form-data" {
+			spool, err := os.CreateTemp(s.tempDir, "command-body-")
+			if err != nil {
+				web.APIFail(w, err)
+				return
+			}
+			defer func() { _ = spool.Close(); _ = os.Remove(spool.Name()) }()
+			original := r.Body
+			_, err = io.Copy(spool, original)
+			_ = original.Close()
+			var large *http.MaxBytesError
+			if errors.As(err, &large) {
+				web.APIError(w, 413, "too_large", "Request too large.")
+				return
+			}
+			if err != nil {
+				web.APIError(w, 400, "bad_request", "The request body could not be read.")
+				return
+			}
+			if _, err := spool.Seek(0, io.SeekStart); err != nil {
+				web.APIFail(w, err)
+				return
+			}
+			r.Body = io.NopCloser(spool)
+			if key != "" {
+				mac, err := s.macKey()
+				if err != nil {
+					web.APIFail(w, err)
+					return
+				}
+				fingerprint, err = fingerprintStream(r, pattern, mac, spool)
+				if err != nil {
+					web.APIFail(w, err)
+					return
+				}
+			}
+		}
+		if key != "" && media != "multipart/form-data" {
 			mac, err := s.macKey()
 			if err != nil {
 				web.APIFail(w, err)
@@ -147,12 +188,28 @@ func replay(w http.ResponseWriter, rec record, fingerprint string) {
 	}
 }
 
-func fingerprintOf(r *http.Request, pattern string, mac []byte) (string, error) {
+func fingerprintStream(r *http.Request, pattern string, mac []byte, spool *os.File) (string, error) {
+	sum := requestHash(r, pattern, mac)
+	if _, err := io.Copy(sum, spool); err != nil {
+		return "", err
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+func requestHash(r *http.Request, pattern string, mac []byte) hash.Hash {
 	sum := hmac.New(sha256.New, mac)
 	for _, part := range []string{r.Method, pattern, r.URL.EscapedPath(), r.URL.Query().Encode()} {
 		sum.Write([]byte(part))
 		sum.Write([]byte{0})
 	}
+	return sum
+}
+
+func fingerprintOf(r *http.Request, pattern string, mac []byte) (string, error) {
+	sum := requestHash(r, pattern, mac)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return "", err

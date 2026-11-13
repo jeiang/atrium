@@ -31,7 +31,9 @@ type apiPages struct {
 }
 
 func threadAPI(d *web.Deps, assistant func() *asstapp.Service) {
-	apiBindings(&apiPages{deps: d, assistant: assistant})
+	p := &apiPages{deps: d, assistant: assistant}
+	apiBindings(p)
+	fileTransportBindings(p)
 }
 
 func errorIs(err error, code application.Code) bool {
