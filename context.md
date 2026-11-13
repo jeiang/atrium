@@ -927,3 +927,5 @@ the owner gates #233 and #615. They do not belong in this file.
 
 The standalone `watch` and `agent scheduler` commands are removed. Run `serve`
 for supervised watches and scheduled work; `agent tick` remains a one-shot.
+
+The NixOS module ships one `atrium.service` unit and no atrium timers; the emergency listener options are `web.emergency.*`.

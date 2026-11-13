@@ -7,7 +7,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: atrium's ops listener is not being scraped or atrium-web is down.
+          summary: atrium's ops listener is not being scraped or atrium.service is down.
       - alert: AtriumNotReady
         expr: atrium_readiness_check_ok == 0
         for: 10m
