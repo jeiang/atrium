@@ -46,6 +46,10 @@ type Agent struct {
 	receipts    map[string]*receipt
 	quarantined []string
 	imports     importSnapshots
+	library     librarySnapshots
+	thumbs      *thumbnailer
+	work        context.Context
+	stopWork    context.CancelFunc
 	filings     sync.WaitGroup
 }
 
@@ -91,6 +95,8 @@ func New(c Config) (*Agent, error) {
 		_ = a.state.close()
 		return nil, err
 	}
+	a.thumbs = newThumbnailer()
+	a.work, a.stopWork = context.WithCancel(context.Background())
 	a.settled.Store(true)
 	return a, nil
 }
@@ -128,6 +134,7 @@ func (a *Agent) Serve(ctx context.Context, ln net.Listener, stopping func()) err
 	case <-ctx.Done():
 	}
 	a.draining.Store(true)
+	a.stopWork()
 	if stopping != nil {
 		stopping()
 	}
@@ -184,7 +191,7 @@ func (a *Agent) Handler() http.Handler {
 				a.serveFile(w, r)
 			}
 		default:
-			if !a.filingRoutes(w, r) {
+			if !a.filingRoutes(w, r) && !a.libraryRoutes(w, r) {
 				problem(w, http.StatusNotFound, protocol.CodeNotFound, "no such endpoint")
 			}
 		}
@@ -234,7 +241,7 @@ func (a *Agent) serveHealth(w http.ResponseWriter) {
 		Protocol:     protocol.Version,
 		AgentID:      a.state.agentID,
 		RootRevision: a.roots.revision,
-		Capabilities: []string{protocol.CapabilityFile, protocol.CapabilityStream},
+		Capabilities: a.capabilities(),
 		Ready:        true,
 	}
 	switch {
@@ -260,4 +267,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (a *Agent) capabilities() []string {
+	c := []string{protocol.CapabilityFile, protocol.CapabilityScan, protocol.CapabilityStream}
+	if a.thumbs != nil {
+		c = append(c, protocol.CapabilityThumbnail)
+	}
+	return c
 }

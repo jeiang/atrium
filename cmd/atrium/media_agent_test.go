@@ -288,7 +288,7 @@ func TestMediaAgentStartsWithoutAnyDatabase(t *testing.T) {
 	if err := json.Unmarshal(body, &h); err != nil {
 		t.Fatal(err)
 	}
-	if h.Protocol != 1 || !h.Ready || h.ReasonCode != "" || !slices.Equal(h.Capabilities, []string{"file", "stream"}) {
+	if h.Protocol != 1 || !h.Ready || h.ReasonCode != "" || !slices.Equal(slices.DeleteFunc(h.Capabilities, func(c string) bool { return c == "thumbnail" }), []string{"file", "scan", "stream"}) {
 		t.Fatalf("health = %+v", h)
 	}
 	if !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(h.AgentID) || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(h.RootRevision) {

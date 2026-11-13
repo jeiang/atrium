@@ -208,10 +208,8 @@ func (a *Agent) executeStep(dir string, s protocol.Step, undo bool) (protocol.St
 		if err := unix.Fstat(sp, &parent); err != nil {
 			return result, false, err
 		}
-		id := identity(parent)
-		prepared.SourceParent = &id
-		id = s.Source.Identity
-		result.Before = &id
+		sourceParent, sourceID := identity(parent), s.Source.Identity
+		prepared.SourceParent, result.Before = &sourceParent, &sourceID
 	}
 	var existing unix.Stat_t
 	err = unix.Fstatat(dp, leaf, &existing, unix.AT_SYMLINK_NOFOLLOW)
