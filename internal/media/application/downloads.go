@@ -14,7 +14,9 @@ const (
 	SelectFilesName  application.Name = "media.select-files"
 )
 
-type DownloadsInput struct{}
+type DownloadsInput struct {
+	TorrentsOnly bool
+}
 
 type Waiting struct {
 	Item media.Item
@@ -51,8 +53,10 @@ func (s *Service) Downloads(ctx context.Context, in DownloadsInput) (application
 		}
 		out.Torrents, out.TorrentsError = []media.Torrent{}, appErr
 	}
-	if out.QueueError, err = s.queue(ctx, set, &out); err != nil {
-		return application.Read[Downloads]{}, err
+	if !in.TorrentsOnly {
+		if out.QueueError, err = s.queue(ctx, set, &out); err != nil {
+			return application.Read[Downloads]{}, err
+		}
 	}
 	rev, err := s.revision(ctx, string(DownloadsName), in, out)
 	if err != nil {
