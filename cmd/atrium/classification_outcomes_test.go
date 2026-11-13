@@ -30,7 +30,7 @@ var stopReplies = []struct {
 
 const ageFailures = "UPDATE runs SET started_at = started_at - 7200 WHERE kind = 'classification' AND state = 'failed'"
 
-var accountingTables = map[string]bool{"runs": true, "threads": true, "thread_messages": true, "usage": true, "inference_classification_deferrals": true}
+var accountingTables = map[string]bool{"runs": true, "threads": true, "thread_messages": true, "usage": true, "inference_classification_deferrals": true, "read_revisions": true}
 
 func domainDigests(t *testing.T, path string) map[string]string {
 	t.Helper()
