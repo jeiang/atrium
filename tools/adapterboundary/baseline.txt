@@ -483,12 +483,6 @@ internal/notify/web.go	github.com/jeiang/atrium/internal/settings
 internal/notify/web.go	github.com/jeiang/atrium/internal/settings/audit
 internal/notion/command.go	github.com/jeiang/atrium/internal/config
 internal/notion/command.go	github.com/jeiang/atrium/internal/db
-internal/notion/command.go	github.com/jeiang/atrium/internal/embed
-internal/notion/command.go	github.com/jeiang/atrium/internal/passrun
-internal/notion/pages/notion.go	github.com/jeiang/atrium/internal/notion
-internal/notion/pages/views.go	github.com/jeiang/atrium/internal/notion
-internal/notion/pages/wiki.go	github.com/jeiang/atrium/internal/config
-internal/notion/pages/wiki.go	github.com/jeiang/atrium/internal/notion
 internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/internal/config
 internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/internal/db
 internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/internal/endpoint

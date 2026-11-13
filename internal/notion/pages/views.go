@@ -4,7 +4,7 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/jeiang/atrium/internal/notion"
+	notionapp "github.com/jeiang/atrium/internal/notion/application"
 	"github.com/jeiang/atrium/internal/urlx"
 )
 
@@ -54,7 +54,7 @@ type articleData struct {
 	NotionPage pageView `json:"notion_page"`
 }
 
-func crumbs(path []notion.PathPart) []crumb {
+func crumbs(path []notionapp.PathPart) []crumb {
 	out := make([]crumb, len(path))
 	for i, part := range path {
 		out[i] = crumb{Title: part.Title}
@@ -62,7 +62,7 @@ func crumbs(path []notion.PathPart) []crumb {
 	return out
 }
 
-func newPageView(v *notion.View, body template.HTML) pageView {
+func newPageView(v *notionapp.Page, body template.HTML) pageView {
 	rows := make([]property, len(v.Properties))
 	for i, row := range v.Properties {
 		rows[i] = property{Name: row.Name, Value: row.Value}
@@ -73,7 +73,7 @@ func newPageView(v *notion.View, body template.HTML) pageView {
 	}
 }
 
-func newRelated(found []notion.Related) []related {
+func newRelated(found []notionapp.Related) []related {
 	out := make([]related, len(found))
 	for i, r := range found {
 		out[i] = related{
