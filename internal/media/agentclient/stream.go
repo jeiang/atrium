@@ -29,6 +29,9 @@ func (c *Client) Stream(ctx context.Context, in StreamRequest) (*http.Response, 
 		return nil, errors.New("unsupported media resource")
 	}
 	q := url.Values{"root": {in.Path.Root}, "path": {in.Path.Rel}}
+	if in.Resource == "thumbnail" {
+		q.Set("generate", "0")
+	}
 	req, err := http.NewRequestWithContext(ctx, in.Method, c.base+resource+"?"+q.Encode(), nil)
 	if err != nil {
 		return nil, ErrUnavailable

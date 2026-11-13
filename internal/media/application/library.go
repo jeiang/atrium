@@ -39,6 +39,7 @@ type Library struct {
 
 type CatalogueStatus struct {
 	State      string
+	Problem    string
 	ObservedAt time.Time
 	Generation int64
 }
@@ -137,11 +138,11 @@ func (s *Service) snapshot(ctx context.Context, set media.Settings) (media.Snaps
 }
 
 func catalogueStatus(snap media.Snapshot) CatalogueStatus {
-	state := "current"
+	out := CatalogueStatus{State: "current", ObservedAt: snap.Observed, Generation: snap.Generation}
 	if snap.Stale != nil {
-		state = "stale"
+		out.State, out.Problem = "stale", media.CatalogueProblem(snap.Stale)
 	}
-	return CatalogueStatus{State: state, ObservedAt: snap.Observed, Generation: snap.Generation}
+	return out
 }
 
 func (s *Service) Library(ctx context.Context, in LibraryInput) (application.Read[Library], error) {
@@ -360,6 +361,7 @@ func (b *idleBody) Close() error {
 }
 
 func (s *Service) RefreshCatalogue(ctx context.Context) error {
+	defer s.d.Catalogue.Bind(ctx)()
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
 	for {

@@ -16,6 +16,8 @@ const (
 	artPlaceholderSVG   = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 3"><rect width="2" height="3" fill="#80808033"/></svg>`
 	artImageCache       = "private, max-age=86400"
 	artPlaceholderCache = "private, max-age=600"
+	thumbPendingCache   = "private, max-age=60"
+	placeholderNoStore  = "no-store"
 )
 
 func (s *service) registerFiles(r chi.Router) {
@@ -26,10 +28,10 @@ func (s *service) registerFiles(r chi.Router) {
 	r.Head(media.FilePrefix+"*", s.serveFile)
 }
 
-func writeArtPlaceholder(w http.ResponseWriter) {
+func writeArtPlaceholder(w http.ResponseWriter, cache string) {
 	h := w.Header()
 	h.Set("Content-Type", "image/svg+xml")
-	h.Set("Cache-Control", artPlaceholderCache)
+	h.Set("Cache-Control", cache)
 	_, _ = w.Write([]byte(artPlaceholderSVG))
 }
 
@@ -49,7 +51,7 @@ func (s *service) serveArtOf(w http.ResponseWriter, r *http.Request, in mediaapp
 		return
 	}
 	if stream == nil {
-		writeArtPlaceholder(w)
+		writeArtPlaceholder(w, artPlaceholderCache)
 		return
 	}
 	w.Header().Set("Cache-Control", artImageCache)
@@ -81,8 +83,11 @@ func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		switch application.Classify(err).Code {
-		case application.NotFound, application.Unavailable, application.NotConfigured:
-			writeArtPlaceholder(w)
+		case application.NotFound:
+			writeArtPlaceholder(w, thumbPendingCache)
+			return
+		case application.Unavailable, application.NotConfigured:
+			writeArtPlaceholder(w, placeholderNoStore)
 			return
 		}
 		panic(err)

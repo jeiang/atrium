@@ -25,7 +25,32 @@ const (
 
 type LibraryUnavailable struct{ Cause error }
 
-func (e *LibraryUnavailable) Error() string { return "the media library is unavailable" }
+func (e *LibraryUnavailable) Error() string {
+	if cause := catalogueCause(e.Cause); cause != "" {
+		return "the media library could not be listed: " + cause
+	}
+	return "the media library is unavailable"
+}
+
+func catalogueCause(err error) string {
+	var e *agentclient.Error
+	if errors.As(err, &e) {
+		switch e.Status {
+		case http.StatusConflict:
+			return "the library kept changing while the media agent listed it"
+		case http.StatusRequestEntityTooLarge:
+			return "the library has more entries than the media agent will list"
+		}
+	}
+	return ""
+}
+
+func CatalogueProblem(err error) string {
+	if cause := catalogueCause(err); cause != "" {
+		return strings.ToUpper(cause[:1]) + cause[1:] + "."
+	}
+	return "The media agent is unavailable."
+}
 
 func (e *LibraryUnavailable) Unwrap() error { return e.Cause }
 
@@ -77,6 +102,32 @@ type Catalogue struct {
 	stale  error
 	flight *flight
 	nudge  chan struct{}
+	life   context.Context
+}
+
+func (c *Catalogue) Bind(ctx context.Context) func() {
+	c.mu.Lock()
+	c.life = ctx
+	c.mu.Unlock()
+	return func() {
+		c.mu.Lock()
+		if c.life == ctx {
+			c.life = nil
+		}
+		c.mu.Unlock()
+	}
+}
+
+func (c *Catalogue) scanContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	scan, cancel := context.WithTimeout(context.WithoutCancel(ctx), catalogueDeadline)
+	if c.life == nil {
+		return scan, cancel
+	}
+	stop := context.AfterFunc(c.life, cancel)
+	return scan, func() {
+		stop()
+		cancel()
+	}
 }
 
 var catalogues sync.Map
@@ -100,18 +151,24 @@ func (c *Catalogue) Nudges() <-chan struct{} { return c.nudge }
 
 func (c *Catalogue) Refresh(ctx context.Context, client *agentclient.Client) error {
 	c.mu.Lock()
-	if f := c.flight; f != nil {
-		c.mu.Unlock()
-		select {
-		case <-f.done:
-			return f.err
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	f := c.flight
+	if f == nil {
+		f = &flight{done: make(chan struct{})}
+		c.flight = f
+		scan, cancel := c.scanContext(ctx)
+		go c.fly(scan, cancel, f, client)
 	}
-	f := &flight{done: make(chan struct{})}
-	c.flight = f
 	c.mu.Unlock()
+	select {
+	case <-f.done:
+		return f.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *Catalogue) fly(ctx context.Context, cancel context.CancelFunc, f *flight, client *agentclient.Client) {
+	defer cancel()
 	page, nodes, err := scanLibrary(ctx, client)
 	c.mu.Lock()
 	if err != nil {
@@ -134,15 +191,12 @@ func (c *Catalogue) Refresh(ctx context.Context, client *agentclient.Client) err
 	c.flight = nil
 	close(f.done)
 	c.mu.Unlock()
-	return err
 }
 
 func scanLibrary(ctx context.Context, client *agentclient.Client) (protocol.LibraryPage, []protocol.Node, error) {
-	ctx, cancel := context.WithTimeout(ctx, catalogueDeadline)
-	defer cancel()
 	page, nodes, err := libraryPages(ctx, client)
 	var gone *agentclient.Error
-	if errors.As(err, &gone) && gone.Status == http.StatusGone {
+	if errors.As(err, &gone) && (gone.Status == http.StatusGone || gone.Status == http.StatusConflict) {
 		page, nodes, err = libraryPages(ctx, client)
 	}
 	return page, nodes, err
@@ -173,7 +227,7 @@ func libraryPages(ctx context.Context, client *agentclient.Client) (protocol.Lib
 
 func (c *Catalogue) Current(ctx context.Context, refresh func(context.Context) error) (Snapshot, error) {
 	c.mu.Lock()
-	snap, busy := c.snap, c.flight != nil
+	snap, busy, bound := c.snap, c.flight != nil, c.life != nil
 	c.mu.Unlock()
 	if snap == nil {
 		err := refresh(ctx)
@@ -187,11 +241,11 @@ func (c *Catalogue) Current(ctx context.Context, refresh func(context.Context) e
 			return Snapshot{}, &LibraryUnavailable{Cause: err}
 		}
 	} else if !busy && time.Since(snap.Observed) > catalogueRevalidate {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), catalogueDeadline)
-			defer cancel()
-			_ = refresh(ctx)
-		}()
+		if bound {
+			c.Nudge()
+		} else {
+			go func() { _ = refresh(context.WithoutCancel(ctx)) }()
+		}
 	}
 	c.mu.Lock()
 	out := *snap

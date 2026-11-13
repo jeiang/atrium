@@ -76,7 +76,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		if c.Observe != nil {
+		if c.Observe != nil && req.Context().Err() == nil {
 			c.Observe(req.Context(), connections.Failing, "unavailable")
 		}
 		return nil, ErrUnavailable

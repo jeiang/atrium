@@ -43,7 +43,7 @@ func (s *service) libraryIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	page := LibraryPage{Error: read.Data.Error, Catalogue: read.Data.Catalogue.State, Movies: libEntries(read.Data.Movies), Shows: libEntries(read.Data.Shows)}
 	if read.Data.Catalogue.State == "stale" {
-		page.Stale = "The media agent is unavailable. Showing the library as of " + read.Data.Catalogue.ObservedAt.Local().Format("2006-01-02 15:04") + "."
+		page.Stale = read.Data.Catalogue.Problem + " Showing the library as of " + read.Data.Catalogue.ObservedAt.Local().Format("2006-01-02 15:04") + "."
 	}
 	s.libRender(w, r, "media_library.gohtml", page)
 }
