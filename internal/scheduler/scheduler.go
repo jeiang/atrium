@@ -75,6 +75,8 @@ func interrupted(ctx context.Context, err error) bool {
 func (s *Scheduler) admit(gate Gate) Admit {
 	return func(job Job) Status {
 		switch {
+		case s.moduleDisabled(job):
+			return StatusSkippedModule
 		case gate.Paused:
 			return StatusSkippedPause
 		case gate.OverBudget && SpendOf(s.jobs, job) == AlwaysSpends:
@@ -159,6 +161,13 @@ func (s *Scheduler) recoverRuns(ctx context.Context) error {
 		if s.stopping() {
 			return nil
 		}
+		if s.moduleDisabled(p.job) {
+			if _, err := s.db.Write.ExecContext(ctx, "UPDATE job_runs SET status = ? WHERE id = ? AND ended_at IS NULL AND status IN (?, ?) AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND (lease_until IS NULL OR lease_until < ?))",
+				StatusSkippedModule, p.jobRunID, StatusRunning, StatusSkippedModule, p.job.ID, now); err != nil {
+				return err
+			}
+			continue
+		}
 		resources := claimResources(s.jobs, p.job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
@@ -207,7 +216,7 @@ func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, f
 		defer release()
 		defer s.finished(job)
 		defer func() { _ = locks.Close() }()
-		s.execute(db.WithHeld(job, locks), claim, fn)
+		_ = s.execute(db.WithHeld(job, locks), claim, fn)
 	})
 }
 
@@ -238,6 +247,25 @@ func (s *Scheduler) finished(ctx context.Context) {
 	s.checkpoint(ctx)
 }
 
+func (s *Scheduler) moduleDisabled(job Job) bool {
+	if s.deps.Enabled == nil {
+		return false
+	}
+	def, declared := Declared(s.jobs, job)
+	if !declared {
+		return !s.deps.Enabled("assistant")
+	}
+	if !s.deps.Enabled(def.Module) {
+		return true
+	}
+	for _, owner := range def.Needs {
+		if !s.deps.Enabled(owner) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Scheduler) work(job Job) func(context.Context, Run) (Result, error) {
 	def, declared := Declared(s.jobs, job)
 	if !declared && !job.Fixed() {
@@ -256,7 +284,7 @@ func (s *Scheduler) work(job Job) func(context.Context, Run) (Result, error) {
 	return def.Run
 }
 
-func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error)) {
+func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error)) error {
 	timeout := 2 * time.Hour
 	if def, ok := Declared(s.jobs, claim.Job); ok {
 		timeout = def.Timeout
@@ -291,30 +319,38 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 	switch {
 	case lost.Load():
 		log.Warn(fmt.Sprintf("job %d lost its claim; it stopped and leaves the run to its successor", id), logx.Job, id)
-		return
+		return ErrClaimLost
 	case err != nil && (interrupted(ctx, err) || errors.Is(err, ErrInterrupted)):
+		if claim.manual {
+			text := "interrupted"
+			return s.Finish(done, claim, Result{Status: StatusError, ThreadID: result.ThreadID, Error: &text})
+		}
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", id), logx.Job, id)
 		if err := s.handOver(done, claim); err != nil {
 			log.Error(fmt.Sprintf("job %d: interrupting its runs failed", id), logx.Job, id, logx.Err, err)
 		}
-		s.settle(done, claim, s.release(done, claim))
-		return
+		released := s.release(done, claim)
+		s.settle(done, claim, released)
+		return released
 	case err != nil && errors.Is(context.Cause(limited), errTimedOut):
 		text := fmt.Sprintf("timed out after %s", timeout)
 		log.Error(fmt.Sprintf("job %d %s", id, text), logx.Job, id)
 		if aerr := s.abandon(done, claim, text); aerr != nil {
 			s.settle(done, claim, aerr)
-			return
+			return aerr
 		}
 		result = Result{Status: StatusError, ThreadID: result.ThreadID, Error: &text}
 	case err != nil:
 		log.Error(fmt.Sprintf("job %d crashed", id), logx.Job, id, logx.Err, err)
 		result = Result{Status: StatusError, ThreadID: result.ThreadID, Error: new(err.Error())}
 	case result.Status == StatusRunning:
-		s.settle(done, claim, s.release(done, claim))
-		return
+		released := s.release(done, claim)
+		s.settle(done, claim, released)
+		return released
 	}
-	s.settle(done, claim, s.Finish(done, claim, result))
+	finished := s.Finish(done, claim, result)
+	s.settle(done, claim, finished)
+	return finished
 }
 
 var (

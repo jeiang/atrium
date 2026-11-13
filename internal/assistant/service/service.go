@@ -233,6 +233,10 @@ func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now
 }
 
 func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now float64, o Start) (int64, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return 0, err
+	}
 	thread, err := Load(ctx, s.DB.Read, s.Env, threadID, now)
 	if err != nil {
 		return 0, err
@@ -330,6 +334,10 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 }
 
 func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return nil, err
+	}
 	client, err := s.ResolveClient(ctx)
 	var nc config.NotConfigured
 	if errors.As(err, &nc) {
@@ -365,6 +373,10 @@ func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error
 }
 
 func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return 0, err
+	}
 	runID, err := s.Prepare(ctx, threadID, text, s.now(), o)
 	if err != nil {
 		return 0, err

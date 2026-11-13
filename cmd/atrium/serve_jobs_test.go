@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -159,5 +160,66 @@ func TestManualInvocationAndTickNeverOverlap(t *testing.T) {
 	}
 	if got := sweepNextDue(t, d); got == nil || *got <= due {
 		t.Fatalf("media sweep next due %v after the scheduled run, want later than %v", got, due)
+	}
+}
+
+func TestInterruptedManualRunReleasesItsClaim(t *testing.T) {
+	qbit := newHeldQBittorrent(t, true)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbit.URL, "", "", ""))
+	d := asstDB(t, dir)
+	declareJobsAndParkThem(t, d)
+	manual := cliExitProcessArgs(t, []string{"media", "sweep"})
+	var stderr bytes.Buffer
+	manual.Stderr = &stderr
+	if err := manual.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, 30*time.Second, "the manual sweep request", func() bool { return qbit.listed.Load() == 1 })
+	if err := manual.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if code := exitWithin(t, manual, 30*time.Second); code != cli.ExitInterrupt {
+		t.Fatalf("interrupted manual sweep exit %d: %s", code, stderr.String())
+	}
+	if status, text := schedulerStatus(t, d, media.JobSweep); status != "error" || text != "interrupted" {
+		t.Fatalf("manual sweep = %s (%s), want error interrupted", status, text)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_resource_leases"); n != 0 {
+		t.Fatalf("%d leases after manual interruption", n)
+	}
+	close(qbit.release)
+	if ran := runApp(t, "media", "sweep"); ran.code != cli.ExitOK {
+		t.Fatalf("next manual sweep refused: %d %s", ran.code, ran.stderr)
+	}
+	if n := sweepRuns(t, d); n != 2 {
+		t.Fatalf("%d manual runs, want interrupted and successful", n)
+	}
+	if due := sweepNextDue(t, d); due != nil {
+		t.Fatalf("manual interruption changed next_due to %v", due)
+	}
+}
+
+func TestManualRunReportsALostClaim(t *testing.T) {
+	qbit := newHeldQBittorrent(t, true)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbit.URL, "", "", ""))
+	d := asstDB(t, dir)
+	declareJobsAndParkThem(t, d)
+	manual := cliExitProcessArgs(t, []string{"media", "sweep"})
+	var stderr bytes.Buffer
+	manual.Stderr = &stderr
+	if err := manual.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, 30*time.Second, "the manual sweep request", func() bool { return qbit.listed.Load() == 1 })
+	asstExec(t, d, "UPDATE job_runs SET owner = 'successor' WHERE job_id = (SELECT id FROM jobs WHERE name = ?)", media.JobSweep)
+	asstExec(t, d, "UPDATE jobs SET lease_owner = 'successor' WHERE name = ?", media.JobSweep)
+	close(qbit.release)
+	if code := exitWithin(t, manual, 30*time.Second); code == cli.ExitOK || !strings.Contains(stderr.String(), "claim") {
+		t.Fatalf("manual sweep after losing its claim exit %d: %s", code, stderr.String())
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE owner = 'successor' AND status = 'running'"); n != 1 {
+		t.Fatalf("stale manual run changed the successor's run: %d running", n)
 	}
 }

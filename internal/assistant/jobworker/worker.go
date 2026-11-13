@@ -221,6 +221,10 @@ func prompt(ctx context.Context, svc *service.Service, run scheduler.Run, text s
 }
 
 func refused(threadID *int64, err error) (scheduler.Result, error) {
+	var off *module.OwnerDisabled
+	if errors.As(err, &off) {
+		return scheduler.Result{Status: scheduler.StatusSkippedModule, ThreadID: threadID, Error: new(off.Error())}, nil
+	}
 	var missing config.NotConfigured
 	if errors.As(err, &missing) {
 		return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, ThreadID: threadID, Error: new(missing.Error())}, nil

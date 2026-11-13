@@ -36,7 +36,15 @@ func declaredSchedule(ctx context.Context, q db.Querier, def Definition) (string
 		return EveryText(def.Every), false, nil
 	case def.ScheduleHost != "":
 		if value := strings.TrimSpace(config.HostValueFrom(ctx, def.ScheduleHost)); value != "" {
-			return value, false, nil
+			if err := RecurringSchedule(value); err == nil {
+				_, _, err = Validate(ctx, q, value, "UTC", 0, true)
+				if err == nil {
+					return value, false, nil
+				}
+				log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
+			} else {
+				log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
+			}
 		}
 		return def.Schedule, false, nil
 	}
@@ -150,6 +158,15 @@ func prime(ctx context.Context, q db.Querier, defs []Definition, now float64) er
 	for _, def := range defs {
 		if def.Persistent {
 			continue
+		}
+		if def.Backoff.Initial > 0 {
+			var retry bool
+			if err := q.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM jobs j JOIN job_runs r ON r.id = (SELECT MAX(id) FROM job_runs WHERE job_id = j.id AND COALESCE(owner, '') NOT LIKE 'manual/%') WHERE j.declaration_key = ? AND r.status = ? AND j.next_due IS NOT NULL)", def.Key, StatusError).Scan(&retry); err != nil {
+				return err
+			}
+			if retry {
+				continue
+			}
 		}
 		if def.Every > 0 {
 			if _, err := q.ExecContext(ctx, "UPDATE jobs SET next_due = ? WHERE declaration_key = ? AND state = ?",

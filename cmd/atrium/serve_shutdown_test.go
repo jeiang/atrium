@@ -404,3 +404,61 @@ func TestSchedulerTickAndServeStopCleanlyWhenCanceledDuringStartup(t *testing.T)
 		}
 	}
 }
+
+func TestDisabledAssistantParksInterruptedCronUntilAClaimCanResumeIt(t *testing.T) {
+	t.Parallel()
+	d, api, f, before := startWeeklyReview(t, asstReply("reviewed"), asstReply("resumed"))
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
+	now := float64(time.Now().Unix())
+	asstExec(t, d, "INSERT INTO jobs (name, kind, prompt, schedule, tz, state, next_due, created_by, created_at, module, activated_at) VALUES ('recovery-cron', 'cron', 'Say hi', 'daily 12:00', 'UTC', 'active', ?, 'operator', ?, 'assistant', ?)", now-1, now, now)
+	g, seen := holdJobRequests(t, api, 1)
+	tick, stderr := tickProcess(t)
+	waitUntil(t, 30*time.Second, "the held cron request", func() bool { return seen.Load() == 1 })
+	if err := tick.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	_ = tick.Wait()
+	g.release(0)
+	var run int64
+	if err := d.Read.QueryRow("SELECT last_run_id FROM jobs WHERE name = 'recovery-cron'").Scan(&run); err != nil {
+		t.Fatalf("cron run: %v: %s", err, stderr)
+	}
+	asstSet(t, "assistant_enabled", "false")
+	serve := serveCLIProcess(t, f.dir)
+	waitUntil(t, 30*time.Second, "the interrupted cron to wait for the assistant", func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE id = ? AND status = 'skipped_module' AND ended_at IS NULL", run) == 1
+	})
+	if n := len(api.Requests()) - before; n != 1 {
+		t.Fatalf("%d cron requests while disabled, want only the interrupted one", n)
+	}
+	var unclaimed atomic.Bool
+	previous := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
+		previous(r)
+		var n int
+		err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs j JOIN job_runs r ON r.id = j.last_run_id WHERE r.id = ? AND r.status = 'running' AND j.lease_owner = r.owner AND j.lease_until > ?", run, float64(time.Now().Unix())).Scan(&n)
+		if err != nil || n != 1 {
+			unclaimed.Store(true)
+		}
+	})
+	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+		t.Fatalf("disabled serve exit %d: %s", code, serve.stderr.String())
+	}
+	asstSet(t, "assistant_enabled", "true")
+	serve = restartServe(t, f.dir)
+	waitUntil(t, 60*time.Second, "the cron to resume through its job claim", func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE id = ? AND status = 'ok' AND ended_at IS NOT NULL", run) == 1
+	})
+	if unclaimed.Load() {
+		t.Fatal("the interrupted cron resumed outside its job claim")
+	}
+	if n := schedulerRuns(t, d, "recovery-cron"); n != 1 {
+		t.Fatalf("%d cron job runs, want the resumed original", n)
+	}
+	if n := len(api.Requests()) - before; n != 2 {
+		t.Fatalf("%d cron requests, want interrupted then resumed", n)
+	}
+	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+		t.Fatalf("serve exit %d: %s", code, serve.stderr.String())
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -51,7 +52,7 @@ func takeLeases(ctx context.Context, tx *sql.Tx, resources []string, owner strin
 }
 
 const claimable = "state = ? AND next_due IS NOT NULL AND next_due <= ? AND (lease_until IS NULL OR lease_until < ?) " +
-	"AND NOT EXISTS (SELECT 1 FROM job_runs WHERE job_runs.job_id = jobs.id AND job_runs.status = ?)"
+	"AND NOT EXISTS (SELECT 1 FROM job_runs WHERE job_runs.job_id = jobs.id AND (job_runs.status = ? OR (job_runs.status = 'skipped_module' AND job_runs.ended_at IS NULL)))"
 
 func DueJobs(ctx context.Context, q db.Querier, now float64) ([]Job, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE "+claimable+" ORDER BY next_due, id",
@@ -99,6 +100,23 @@ func claimJob(ctx context.Context, d *db.DB, jobID int64, resources []string, no
 			}
 		}
 		if status := admit(job); status != "" {
+			if status == StatusSkippedModule {
+				var runID int64
+				err := tx.QueryRowContext(ctx, "SELECT id FROM job_runs WHERE job_id = ? AND status = ? AND ended_at IS NOT NULL AND id = (SELECT MAX(id) FROM job_runs WHERE job_id = ?) AND NOT EXISTS (SELECT 1 FROM job_run_threads WHERE job_run_id = job_runs.id)", job.ID, status, job.ID).Scan(&runID)
+				if err == nil {
+					if _, err := tx.ExecContext(ctx, "UPDATE job_runs SET due_at = ?, ended_at = ? WHERE id = ?", dueAt, now, runID); err != nil {
+						return err
+					}
+					if _, err := tx.ExecContext(ctx, "UPDATE jobs SET next_due = ?, state = ?, last_run_id = ? WHERE id = ?", following, nextState(following), runID, job.ID); err != nil {
+						return err
+					}
+					skipped = &Skipped{Job: job, JobRunID: runID, Status: status}
+					return nil
+				}
+				if !errors.Is(err, sql.ErrNoRows) {
+					return err
+				}
+			}
 			res, err := tx.ExecContext(ctx, "INSERT INTO job_runs (job_id, due_at, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?)",
 				job.ID, dueAt, now, now, status)
 			if err != nil {
@@ -152,7 +170,7 @@ type expiredRun struct {
 
 func expiredRuns(ctx context.Context, q db.Querier, now float64) ([]expiredRun, error) {
 	rows, err := q.QueryContext(ctx, "SELECT r.id, r.job_id, r.due_at, COALESCE(r.started_at, r.due_at) FROM job_runs r JOIN jobs j ON j.id = r.job_id "+
-		"WHERE r.status = ? AND (j.lease_until IS NULL OR j.lease_until < ?) ORDER BY r.id", StatusRunning, now)
+		"WHERE (r.status = ? OR (r.status = 'skipped_module' AND r.ended_at IS NULL)) AND (j.lease_until IS NULL OR j.lease_until < ?) ORDER BY r.id", StatusRunning, now)
 	if err != nil {
 		return nil, err
 	}
@@ -185,14 +203,18 @@ func takeOver(ctx context.Context, d *db.DB, p expiredRun, resources []string, n
 			return err
 		}
 		var previous string
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(owner, '') FROM job_runs WHERE id = ? AND job_id = ? AND status = ?",
+		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(owner, '') FROM job_runs WHERE id = ? AND job_id = ? AND (status = ? OR (status = 'skipped_module' AND ended_at IS NULL))",
 			p.jobRunID, job.ID, StatusRunning).Scan(&previous); errors.Is(err, sql.ErrNoRows) {
 			return nil
 		} else if err != nil {
 			return err
 		}
-		ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE job_runs SET owner = ?, heartbeat_at = ? WHERE id = ? AND job_id = ? AND status = ?",
-			owner, now, p.jobRunID, job.ID, StatusRunning))
+		manual := strings.HasPrefix(previous, "manual/")
+		if manual {
+			owner = "manual/" + owner
+		}
+		ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE job_runs SET owner = ?, heartbeat_at = ?, status = ? WHERE id = ? AND job_id = ? AND (status = ? OR (status = 'skipped_module' AND ended_at IS NULL))",
+			owner, now, StatusRunning, p.jobRunID, job.ID, StatusRunning))
 		if err != nil || !ok {
 			return err
 		}
@@ -207,7 +229,7 @@ func takeOver(ctx context.Context, d *db.DB, p expiredRun, resources []string, n
 			return err
 		}
 		claim = &Claim{Job: job, JobRunID: p.jobRunID, Owner: owner, DueAt: p.dueAt, Missed: missed(p.startedAt, p.dueAt), StartedAt: p.startedAt, Previous: previous,
-			resources: resources, until: leaseUntil(now)}
+			resources: resources, until: leaseUntil(now), manual: manual}
 		return nil
 	})
 	if errors.Is(err, errLeaseHeld) {
@@ -278,8 +300,8 @@ func (s *Scheduler) Finish(ctx context.Context, c Claim, o Result) error {
 
 func backOff(ctx context.Context, tx *sql.Tx, jobID int64, b runtime.Backoff, now float64) error {
 	var failures int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM job_runs WHERE job_id = ? AND status = ? AND id > "+
-		"COALESCE((SELECT MAX(id) FROM job_runs WHERE job_id = ? AND status NOT IN (?, ?)), 0)",
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM job_runs WHERE job_id = ? AND COALESCE(owner, '') NOT LIKE 'manual/%' AND status = ? AND id > "+
+		"COALESCE((SELECT MAX(id) FROM job_runs WHERE job_id = ? AND COALESCE(owner, '') NOT LIKE 'manual/%' AND status NOT IN (?, ?)), 0)",
 		jobID, StatusError, jobID, StatusError, StatusRunning).Scan(&failures); err != nil {
 		return err
 	}
@@ -313,7 +335,7 @@ func clearClaim(ctx context.Context, tx *sql.Tx, c Claim, set string) error {
 }
 
 func ClaimedThreads(ctx context.Context, q db.Querier) (map[int64]bool, error) {
-	rows, err := q.QueryContext(ctx, "SELECT t.thread_id FROM job_run_threads t JOIN job_runs r ON r.id = t.job_run_id WHERE r.status = ?", StatusRunning)
+	rows, err := q.QueryContext(ctx, "SELECT t.thread_id FROM job_run_threads t JOIN job_runs r ON r.id = t.job_run_id WHERE r.status = ? OR (r.status = 'skipped_module' AND r.ended_at IS NULL)", StatusRunning)
 	if err != nil {
 		return nil, err
 	}

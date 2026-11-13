@@ -459,8 +459,15 @@ behavior-parity target.
   an error. It has no
   ticker or service notification; declared invocation deadlines still apply.
   A job that reaches its own declared timeout fails its unsettled runs and
-  ends `error` ("timed out after …"); only shutdown or cancellation releases
-  it for resume.
+  ends `error` ("timed out after …"); scheduled shutdown or cancellation
+  releases it for resume. An interrupted assistant job waits as
+  `skipped_module` with no end timestamp while its dependencies are off;
+  its threads remain reserved to that job and resume only under a claim.
+  Consecutive threadless disabled-module skips coalesce into one row.
+  Manual interruption ends `error` ("interrupted"), releases the claim,
+  and never contributes to scheduled backoff. Manual successes do not
+  reset scheduled backoff, and priming preserves a pending retry.
+  A manual invocation that loses its claim exits nonzero.
   Missing configuration records `skipped_unconfigured`, not success. Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first

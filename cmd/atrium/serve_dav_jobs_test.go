@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -175,10 +176,31 @@ func TestFailedDAVRunRetriesAfterItsBackoff(t *testing.T) {
 			if due := davNextDue(t, d, davJobKeys[i]); due == nil || *due < before+delay-1 || *due > float64(time.Now().Unix())+delay+1 {
 				t.Fatalf("attempt %d: %s next due %v, want %.0f s after the failure", attempt, name, due, delay)
 			}
-			if _, failed, _ := passRows(t, dir, name); failed != attempt+1 {
-				t.Fatalf("attempt %d: %s failed pass rows %d, want %d", attempt, name, failed, attempt+1)
+			if _, failed, _ := passRows(t, dir, name); failed != attempt*2+1 {
+				t.Fatalf("attempt %d: %s failed pass rows %d, want %d", attempt, name, failed, attempt*2+1)
 			}
 		}
+		if attempt == 0 {
+			for i, command := range []string{"calendar", "contacts"} {
+				due := *davNextDue(t, d, davJobKeys[i])
+				if ran := runApp(t, command, "sync"); ran.code == cli.ExitOK || !strings.Contains(ran.stderr, "401") {
+					t.Fatalf("manual %s sync = %d %s, want 401", command, ran.code, ran.stderr)
+				}
+				if got := davNextDue(t, d, davJobKeys[i]); got == nil || *got != due {
+					t.Fatalf("manual failure changed %s retry from %f to %v", command, due, got)
+				}
+			}
+		}
+	}
+	retries := []float64{*davNextDue(t, d, davJobKeys[0]), *davNextDue(t, d, davJobKeys[1])}
+	serve := serveCLIProcess(t, dir)
+	for i, key := range davJobKeys {
+		if due := davNextDue(t, d, key); due == nil || *due != retries[i] {
+			t.Fatalf("restart changed %s pending retry from %f to %v", key, retries[i], due)
+		}
+	}
+	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+		t.Fatalf("serve exit %d: %s", code, serve.stderr.String())
 	}
 	if _, err := os.Stat(filepath.Join(dir, "calendars", "cal0", "dentist.ics")); !os.IsNotExist(err) {
 		t.Fatalf("a failed sync wrote the mirror: %v", err)

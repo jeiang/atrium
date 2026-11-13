@@ -30,7 +30,7 @@ func RunNow(ctx context.Context, d *db.DB, dbPath, tz string, def Definition, wa
 	var result Result
 	var runErr error
 	ran := false
-	s.execute(db.WithHeld(ctx, locks), *claim, func(ctx context.Context, run Run) (Result, error) {
+	executeErr := s.execute(db.WithHeld(ctx, locks), *claim, func(ctx context.Context, run Run) (Result, error) {
 		result, runErr = fn(ctx, run)
 		if runErr == nil && result.Status == "" {
 			result.Status = StatusOK
@@ -38,6 +38,9 @@ func RunNow(ctx context.Context, d *db.DB, dbPath, tz string, def Definition, wa
 		ran = true
 		return result, runErr
 	})
+	if executeErr != nil {
+		return result, executeErr
+	}
 	if !ran && runErr == nil {
 		runErr = fmt.Errorf("%s crashed", def.Key)
 	}
@@ -72,7 +75,7 @@ func claimManual(ctx context.Context, d *db.DB, jobID int64, resources []string,
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		var job Job
 		err := tx.QueryRowContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE id = ? AND (lease_until IS NULL OR lease_until < ?) "+
-			"AND NOT EXISTS (SELECT 1 FROM job_runs WHERE job_runs.job_id = jobs.id AND job_runs.status = ?)",
+			"AND NOT EXISTS (SELECT 1 FROM job_runs WHERE job_runs.job_id = jobs.id AND (job_runs.status = ? OR (job_runs.status = 'skipped_module' AND job_runs.ended_at IS NULL)))",
 			jobID, now, StatusRunning).Scan(job.fields()...)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errLeaseHeld
