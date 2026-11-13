@@ -341,21 +341,6 @@
         };
       };
 
-      atrium-notion-sync = {
-        description = "Mirror Notion into the atrium index";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${lib.getExe cfg.package} notion sync";
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnActiveSec = "3m";
-            OnUnitActiveSec = "15m";
-          };
-        };
-      };
-
       atrium-scan = {
         description = "Scan the mailboxes for rebalance, deletion and label proposals";
         serviceConfig = {

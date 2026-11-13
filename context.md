@@ -468,7 +468,12 @@ behavior-parity target.
   and never contributes to scheduled backoff. Manual successes do not
   reset scheduled backoff, and priming preserves a pending retry.
   A manual invocation that loses its claim exits nonzero.
-  Missing configuration records `skipped_unconfigured`, not success. Nightly
+  Missing configuration records `skipped_unconfigured`, not success.
+  The Notion mirror is the model-free `notion/notion-sync` serve job
+  (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
+  on shutdown). Its CLI shares the `notion-sync` resource and claim;
+  unconfigured skips record no pass row. The former systemd service and
+  timer are removed when this job is activated. Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
   executes; immediately before a child runs, on the first pass or in
