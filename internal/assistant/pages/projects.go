@@ -1,18 +1,15 @@
 package pages
 
 import (
-	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/files"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/projects"
-	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -26,7 +23,7 @@ type ProjectFormValues struct {
 }
 
 type ProjectFormData struct {
-	Project       *projects.Project `json:"project"`
+	Project       *asstapp.Project  `json:"project"`
 	Values        ProjectFormValues `json:"values"`
 	Efforts       []string          `json:"efforts"`
 	ContextLimits []int64           `json:"context_limits"`
@@ -34,17 +31,17 @@ type ProjectFormData struct {
 }
 
 type ProjectEditData struct {
-	Form  ProjectFormData `json:"form"`
-	Files []files.Row     `json:"files"`
+	Form  ProjectFormData       `json:"form"`
+	Files []asstapp.ProjectFile `json:"files"`
 }
 
-func projectValues(found projects.Project) ProjectFormValues {
+func projectValues(found asstapp.Project) ProjectFormValues {
 	limit := found.ContextLimit
-	return ProjectFormValues{Name: found.Name, Instructions: found.Instructions, Effort: found.Effort, ContextLimit: &limit, Private: bool(found.Private)}
+	return ProjectFormValues{Name: found.Name, Instructions: found.Instructions, Effort: found.Effort, ContextLimit: &limit, Private: found.Private}
 }
 
-func submittedProject(form url.Values) projects.Fields {
-	return projects.Fields{
+func submittedProject(form url.Values) asstapp.ProjectFields {
+	return asstapp.ProjectFields{
 		Name:         web.FormString(form, "name", ""),
 		Instructions: web.FormString(form, "instructions", ""),
 		Effort:       web.FormString(form, "effort", ""),
@@ -53,24 +50,14 @@ func submittedProject(form url.Values) projects.Fields {
 	}
 }
 
-func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormValues {
+func submittedValues(cfg asstapp.Configuration, f asstapp.ProjectFields, fallback ProjectFormValues) ProjectFormValues {
 	effort := fallback.Effort
-	for _, choice := range pricing.Efforts {
-		if f.Effort == choice {
-			effort = f.Effort
-			break
-		}
+	if slices.Contains(cfg.Efforts, f.Effort) {
+		effort = f.Effort
 	}
 	limit := *fallback.ContextLimit
-	if raw, ok := f.ContextLimit.(string); ok {
-		if submitted, valid := numx.LaxInt64(raw); valid {
-			for _, choice := range assistant.ContextLimits {
-				if submitted == choice {
-					limit = submitted
-					break
-				}
-			}
-		}
+	if submitted, valid := numx.LaxInt64(f.ContextLimit); valid && slices.Contains(cfg.ContextLimits, submitted) {
+		limit = submitted
 	}
 	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: effort, ContextLimit: &limit, Private: f.Private}
 }
@@ -85,90 +72,97 @@ func (p *pages) projectRoutes(r chi.Router) {
 	r.Post("/projects/{project_id}/archive", p.projectArchive)
 }
 
-func formData(project *projects.Project, values ProjectFormValues, problem *string) ProjectFormData {
-	return ProjectFormData{Project: project, Values: values, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits, Error: problem}
-}
-
-func (p *pages) defaultValues(r *http.Request) ProjectFormValues {
-	chosen, err := threads.Defaults(r.Context(), p.deps.DB.Read)
+func (p *pages) configuration(r *http.Request) asstapp.Configuration {
+	read, err := p.assistant().Configuration(r.Context(), asstapp.ConfigurationInput{})
 	check(err)
-	limit := chosen.ContextLimit
-	return ProjectFormValues{Effort: chosen.Effort, ContextLimit: &limit}
+	return read.Data
 }
 
-func (p *pages) projectPage(w http.ResponseWriter, r *http.Request, status int, data ProjectFormData) {
+func formData(cfg asstapp.Configuration, project *asstapp.Project, values ProjectFormValues, problem *string) ProjectFormData {
+	return ProjectFormData{Project: project, Values: values, Efforts: cfg.Efforts, ContextLimits: cfg.ContextLimits, Error: problem}
+}
+
+func defaultValues(cfg asstapp.Configuration) ProjectFormValues {
+	limit := cfg.Defaults.ContextLimit
+	return ProjectFormValues{Effort: cfg.Defaults.Effort, ContextLimit: &limit}
+}
+
+func (p *pages) projectPage(w http.ResponseWriter, r *http.Request, status int, data ProjectFormData, attached []asstapp.ProjectFile) {
 	if data.Project == nil {
 		p.render(w, r, status, "projects", "project_new.gohtml", data, nil)
 		return
-	}
-	attached, err := files.OfProject(r.Context(), p.deps.DB.Read, data.Project.ID)
-	check(err)
-	if attached == nil {
-		attached = []files.Row{}
 	}
 	p.render(w, r, status, "projects", "project_edit.gohtml", ProjectEditData{Form: data, Files: attached}, nil)
 }
 
 func (p *pages) projectNew(w http.ResponseWriter, r *http.Request) {
-	p.projectPage(w, r, http.StatusOK, formData(nil, p.defaultValues(r), nil))
+	cfg := p.configuration(r)
+	p.projectPage(w, r, http.StatusOK, formData(cfg, nil, defaultValues(cfg), nil), nil)
+}
+
+func (p *pages) projectDetail(w http.ResponseWriter, r *http.Request) (asstapp.ProjectDetail, bool) {
+	id, ok := pathID(w, r, "project_id")
+	if !ok {
+		return asstapp.ProjectDetail{}, false
+	}
+	read, err := p.assistant().ProjectDetail(r.Context(), asstapp.ProjectInput{ID: id})
+	if err != nil {
+		web.Fail(w, r, err, func(status int) { p.fail(w, r, status, application.Classify(err).Error()) })
+		return asstapp.ProjectDetail{}, false
+	}
+	return read.Data, true
 }
 
 func (p *pages) projectEdit(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "project_id")
+	found, ok := p.projectDetail(w, r)
 	if !ok {
 		return
 	}
-	found, ok := p.loadProject(w, r, id)
-	if !ok {
-		return
-	}
-	p.projectPage(w, r, http.StatusOK, formData(found, projectValues(*found), nil))
+	p.projectPage(w, r, http.StatusOK, formData(p.configuration(r), &found.Project, projectValues(found.Project), nil), found.Files)
 }
 
-func (p *pages) projectRefused(w http.ResponseWriter, r *http.Request, project *projects.Project, fields projects.Fields, err error) {
-	fallback := p.defaultValues(r)
-	if project != nil {
-		fallback = projectValues(*project)
-	}
-	problem := err.Error()
-	data := formData(project, submittedValues(fields, fallback), &problem)
-	if web.IsPartial(r) {
-		p.renderFragment(w, r, http.StatusUnprocessableEntity, "_project_form.gohtml", data, nil)
-		return
-	}
-	p.projectPage(w, r, http.StatusUnprocessableEntity, data)
+func (p *pages) projectFailed(w http.ResponseWriter, r *http.Request, found *asstapp.ProjectDetail, fields asstapp.ProjectFields, err error) {
+	web.Fail(w, r, err, func(status int) {
+		problem := application.Classify(err).Error()
+		if status != http.StatusUnprocessableEntity {
+			p.fail(w, r, status, problem)
+			return
+		}
+		cfg := p.configuration(r)
+		fallback, project, attached := defaultValues(cfg), (*asstapp.Project)(nil), []asstapp.ProjectFile(nil)
+		if found != nil {
+			fallback, project, attached = projectValues(found.Project), &found.Project, found.Files
+		}
+		data := formData(cfg, project, submittedValues(cfg, fields, fallback), &problem)
+		if web.IsPartial(r) {
+			p.renderFragment(w, r, status, "_project_form.gohtml", data, nil)
+			return
+		}
+		p.projectPage(w, r, status, data, attached)
+	})
 }
 
 func (p *pages) projectCreate(w http.ResponseWriter, r *http.Request) {
 	fields := submittedProject(web.FormValues(r))
-	id, err := projects.Create(detached(r), p.deps.DB.Write, p.now(), fields)
-	var refused projects.ProjectError
-	if errors.As(err, &refused) {
-		p.projectRefused(w, r, nil, fields, err)
+	changed, err := p.assistant().ProjectCreate(detached(r), fields)
+	if err != nil {
+		p.projectFailed(w, r, nil, fields, err)
 		return
 	}
-	check(err)
-	navigate(w, r, editPath(id))
+	navigate(w, r, editPath(changed.Data.ID))
 }
 
 func (p *pages) projectUpdate(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "project_id")
+	found, ok := p.projectDetail(w, r)
 	if !ok {
 		return
 	}
 	fields := submittedProject(web.FormValues(r))
-	found, ok := p.loadProject(w, r, id)
-	if !ok {
+	if _, err := p.assistant().ProjectEdit(detached(r), asstapp.ProjectEditInput{ID: found.Project.ID, ProjectFields: fields}); err != nil {
+		p.projectFailed(w, r, &found, fields, err)
 		return
 	}
-	_, err := projects.Update(detached(r), p.deps.DB.Write, id, p.now(), fields)
-	var refused projects.ProjectError
-	if errors.As(err, &refused) {
-		p.projectRefused(w, r, found, fields, err)
-		return
-	}
-	check(err)
-	navigate(w, r, editPath(id))
+	navigate(w, r, editPath(found.Project.ID))
 }
 
 func (p *pages) projectArchive(w http.ResponseWriter, r *http.Request) {
@@ -178,10 +172,8 @@ func (p *pages) projectArchive(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	found, err := projects.SetArchived(detached(r), p.deps.DB.Write, id, flag != 0)
-	check(err)
-	if !found {
-		p.fail(w, r, http.StatusNotFound, "unknown project")
+	if _, err := p.assistant().ProjectArchive(detached(r), asstapp.ProjectArchiveInput{ID: id, Archived: flag != 0}); err != nil {
+		web.Fail(w, r, err, func(status int) { p.fail(w, r, status, application.Classify(err).Error()) })
 		return
 	}
 	to := editPath(id)

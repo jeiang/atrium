@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -41,12 +42,14 @@ func Templates() fs.FS {
 type Options struct {
 	Service   func(context.Context) (*service.Service, error)
 	Knowledge func(*web.Deps) *kbapp.Service
+	Assistant func(*web.Deps) *asstapp.Service
 }
 
 type pages struct {
 	deps      *web.Deps
 	svc       func() *service.Service
 	knowledge func() *kbapp.Service
+	assistant func() *asstapp.Service
 	now       func() float64
 	jobs      []scheduler.Definition
 }
@@ -68,7 +71,7 @@ func Module(o Options) web.Module {
 			}
 			return svc
 		})
-		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
+		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d) }), now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)

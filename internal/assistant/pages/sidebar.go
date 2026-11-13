@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/projects"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -24,7 +24,7 @@ func (p *pages) sidebar(ctx context.Context, f *tpl.Frame) error {
 	if err := fillThreadCosts(ctx, p.deps.DB.Read, listed); err != nil {
 		return err
 	}
-	shelved, err := projects.List(ctx, p.deps.DB.Read, true)
+	shelved, err := p.assistant().ProjectList(ctx, asstapp.ProjectListInput{Archived: true})
 	if err != nil {
 		return err
 	}
@@ -32,8 +32,8 @@ func (p *pages) sidebar(ctx context.Context, f *tpl.Frame) error {
 	if err != nil {
 		return err
 	}
-	hidden := make(map[int64]bool, len(shelved))
-	for _, project := range shelved {
+	hidden := make(map[int64]bool, len(shelved.Data))
+	for _, project := range shelved.Data {
 		hidden[project.ID] = true
 	}
 	f.Threads = sidebarOf(listed, hidden, time.Unix(int64(p.now()), 0).In(loc))

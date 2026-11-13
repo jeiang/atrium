@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
@@ -40,8 +41,8 @@ type listData struct {
 	Agenda  bool               `json:"agenda"`
 	About   *About             `json:"about"`
 
-	Defaults threads.Options `json:"defaults"`
-	Composer ComposerView    `json:"composer"`
+	Defaults threads.Options      `json:"defaults"`
+	Composer asstapp.ComposerView `json:"composer"`
 }
 
 type About struct {
@@ -142,7 +143,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 	data := listData{
 		Threads: found, Q: q, View: view,
 		Defaults: defaults,
-		Composer: composerData(r.Context(), defaults.Model, defaults.Effort, defaults.Thinking, defaults.ContextLimit, defaults.WebSearch, defaults.CostCapUSD, 0),
+		Composer: asstapp.DefaultComposer(r.Context(), defaults),
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
@@ -373,7 +374,7 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	thread := threadOf(view)
 	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", OptionsSaved{
-		View: view, Composer: composerData(r.Context(), thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
+		View: view, Composer: composerOf(r.Context(), thread, threadID),
 	})
 }
 

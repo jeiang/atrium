@@ -67,10 +67,11 @@ type Module struct {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	knowledgeOps, knowledgeBindings := knowledgeOperations()
 	taskOps, taskBindings := taskOperations()
+	projectOps, projectBindings := projectOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -86,7 +87,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService}),
+			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -59,7 +60,7 @@ func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID i
 	}
 	t := threadOf(view)
 	return &ThreadPage{View: view, ThreadID: threadID, History: p.hasHistory(r.Context(), threadID),
-		Composer: composerData(r.Context(), t.Model, t.Effort, t.Thinking, threads.ContextLimitOf(t), bool(t.WebSearch), t.CostCapUSD, threadID)}, true
+		Composer: composerOf(r.Context(), t, threadID)}, true
 }
 
 func (p *pages) transcript(w http.ResponseWriter, r *http.Request, threadID int64, reswap string) {
@@ -367,4 +368,9 @@ func (p *pages) chatAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.transcript(w, r, threadID, "")
+}
+
+func composerOf(ctx context.Context, t threads.Thread, live int64) asstapp.ComposerView {
+	return asstapp.Composer(ctx, asstapp.ComposerState{Model: t.Model, Effort: t.Effort, Thinking: t.Thinking,
+		ContextLimit: threads.ContextLimitOf(t), WebSearch: bool(t.WebSearch), CostCap: t.CostCapUSD, Live: live})
 }

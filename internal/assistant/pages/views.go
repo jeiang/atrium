@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
@@ -121,13 +122,13 @@ type QueuedView struct {
 }
 
 type ThreadPage struct {
-	View     *ThreadData        `json:"view"`
-	ThreadID int64              `json:"thread_id"`
-	History  bool               `json:"history"`
-	Composer ComposerView       `json:"composer"`
-	Work     WorkView           `json:"work"`
-	Projects []projects.Project `json:"projects"`
-	Project  *projects.Project  `json:"project"`
+	View     *ThreadData          `json:"view"`
+	ThreadID int64                `json:"thread_id"`
+	History  bool                 `json:"history"`
+	Composer asstapp.ComposerView `json:"composer"`
+	Work     WorkView             `json:"work"`
+	Projects []projects.Project   `json:"projects"`
+	Project  *projects.Project    `json:"project"`
 }
 
 type QueuedData struct {
@@ -165,8 +166,8 @@ type ProjectFiles struct {
 }
 
 type OptionsSaved struct {
-	View     *ThreadData  `json:"view"`
-	Composer ComposerView `json:"composer"`
+	View     *ThreadData          `json:"view"`
+	Composer asstapp.ComposerView `json:"composer"`
 }
 
 type RunStarted struct {
