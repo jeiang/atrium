@@ -859,9 +859,13 @@ behavior-parity target.
   feed of direct writes and undoable approvals with undo, and draft get,
   edit, send, discard and resolve. Every write calls the same pipeline,
   drafts store and writes registry as the Review pages, so approval scope,
-  the ledger, the send revision check and the mail gate are unchanged. POST
-  to create a thread, send a message, approve or send a draft honours an
-  `Idempotency-Key` header for ten minutes in memory.
+  the ledger, the send revision check and the mail gate are unchanged. Every
+  unsafe request is a durable command (`Atrium-Command-Id`,
+  `GET /api/v1/commands/{id}`); an `Idempotency-Key` is shared across
+  bearers and replays the stored result for 24 hours after the command ends,
+  bodies and fingerprints are kept only for keyed requests, retryable
+  `408`/`429`/`5xx` outcomes free the key unless an effect was recorded, and
+  rows are pruned 30 days after they end (operator behavior has the codes).
 - Code execution is not part of the application. The code-mode worker
   command and units are removed; coding may return as an external module.
 

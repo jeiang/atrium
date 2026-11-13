@@ -150,11 +150,7 @@ func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {
 	if err != nil {
 		return err
 	}
-	interrupted, err := commands.New(d).Recover(ctx)
-	if interrupted > 0 {
-		log.Warn("marked interrupted API commands", "count", interrupted)
-	}
-	return err
+	return commands.New(d).Prune(ctx)
 }
 
 func (m Module) services(mc module.Context) []runtime.ServiceDefinition {

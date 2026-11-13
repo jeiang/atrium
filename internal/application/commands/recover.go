@@ -2,12 +2,24 @@ package commands
 
 import (
 	"context"
+	"crypto/hkdf"
+	"crypto/sha256"
 	"database/sql"
+	"time"
+
+	"github.com/jeiang/atrium/internal/db"
 )
 
-func (s *Store) Recover(ctx context.Context) (int64, error) {
+const (
+	ReplayWindow = 24 * time.Hour
+	Retention    = 30 * 24 * time.Hour
+)
+
+func Open(ctx context.Context, d *db.DB, appKey func() ([]byte, error)) (*Store, error) {
+	s := New(d)
+	s.appKey = appKey
 	var n int64
-	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, "UPDATE commands SET state = ?, ended_at = ? WHERE state = ?", string(Interrupted), seconds(s.now()), string(Running))
 		if err != nil {
 			return err
@@ -15,5 +27,37 @@ func (s *Store) Recover(ctx context.Context) (int64, error) {
 		n, err = res.RowsAffected()
 		return err
 	})
-	return n, err
+	if n > 0 {
+		log.Warn("marked interrupted API commands", "count", n)
+	}
+	return s, err
+}
+
+func (s *Store) Prune(ctx context.Context) error {
+	now := seconds(s.now())
+	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE commands SET "+released+" WHERE idempotency_key IS NOT NULL AND ended_at < ?", now-ReplayWindow.Seconds()); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, "DELETE FROM commands WHERE ended_at < ?", now-Retention.Seconds())
+		return err
+	})
+}
+
+func (s *Store) macKey() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mac != nil {
+		return s.mac, nil
+	}
+	raw, err := s.appKey()
+	if err != nil {
+		return nil, err
+	}
+	mac, err := hkdf.Key(sha256.New, raw, nil, "atrium/commands/fingerprint/v1", sha256.Size)
+	if err != nil {
+		return nil, err
+	}
+	s.mac = mac
+	return mac, nil
 }

@@ -3,14 +3,13 @@ package commands
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
-	"mime"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -61,16 +60,23 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 				web.FieldError{Type: "string_too_long", Loc: []string{"header", IdempotencyHeader}, Msg: "At most 255 characters"})
 			return
 		}
-		fingerprint, cleanup, err := fingerprintOf(r, pattern)
-		defer cleanup()
-		var tooLarge *http.MaxBytesError
-		switch {
-		case errors.As(err, &tooLarge):
-			web.APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
-			return
-		case err != nil:
-			web.APIError(w, http.StatusBadRequest, "bad_request", "The request body could not be read.")
-			return
+		var fingerprint string
+		if key != "" {
+			mac, err := s.macKey()
+			if err != nil {
+				web.APIFail(w, err)
+				return
+			}
+			fingerprint, err = fingerprintOf(r, pattern, mac)
+			var tooLarge *http.MaxBytesError
+			switch {
+			case errors.As(err, &tooLarge):
+				web.APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+				return
+			case err != nil:
+				web.APIError(w, http.StatusBadRequest, "bad_request", "The request body could not be read.")
+				return
+			}
 		}
 		rec, fresh, err := s.admit(r.Context(), key, r.Method, pattern, fingerprint)
 		if err != nil {
@@ -105,7 +111,8 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 					kept[name] = values
 				}
 			}
-			if err := s.finish(context.WithoutCancel(ctx), rec.id, status, kept, bytes.Clone(body), ctl.withhold); err != nil {
+			res := result{keyed: key != "", status: status, headers: kept, body: bytes.Clone(body), withheld: ctl.withhold}
+			if err := s.finish(context.WithoutCancel(ctx), rec.id, res); err != nil {
 				log.Error("command result not stored", "command_id", rec.id, logx.Err, err.Error())
 			}
 			if p != nil {
@@ -140,37 +147,17 @@ func replay(w http.ResponseWriter, rec record, fingerprint string) {
 	}
 }
 
-func fingerprintOf(r *http.Request, pattern string) (string, func(), error) {
-	sum := sha256.New()
+func fingerprintOf(r *http.Request, pattern string, mac []byte) (string, error) {
+	sum := hmac.New(sha256.New, mac)
 	for _, part := range []string{r.Method, pattern, r.URL.EscapedPath(), r.URL.Query().Encode()} {
 		sum.Write([]byte(part))
 		sum.Write([]byte{0})
 	}
-	cleanup := func() {}
-	media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if strings.HasPrefix(media, "multipart/") {
-		f, err := os.CreateTemp("", "atrium-command-*")
-		if err != nil {
-			return "", cleanup, err
-		}
-		cleanup = func() {
-			_ = f.Close()
-			_ = os.Remove(f.Name())
-		}
-		if _, err := io.Copy(io.MultiWriter(f, sum), r.Body); err != nil {
-			return "", cleanup, err
-		}
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return "", cleanup, err
-		}
-		r.Body = f
-		return hex.EncodeToString(sum.Sum(nil)), cleanup, nil
-	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return "", cleanup, err
+		return "", err
 	}
 	sum.Write(body)
 	r.Body = io.NopCloser(bytes.NewReader(body))
-	return hex.EncodeToString(sum.Sum(nil)), cleanup, nil
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }

@@ -7,6 +7,8 @@ import (
 	"os"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/actionlink"
+
 	"github.com/jeiang/atrium/internal/application/commands"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -72,6 +74,10 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
+	cmds, err := commands.Open(ctx, a.db, func() ([]byte, error) { return actionlink.Material(ctx, a.db.Write) })
+	if err != nil {
+		return err
+	}
 	a.work, a.stopWork = context.WithCancelCause(context.WithoutCancel(ctx))
 	ls, err := bind(o.Plan, ops.Address(ctx))
 	if err != nil {
@@ -79,7 +85,7 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	}
 	drain, startDrain := context.WithCancel(ctx)
 	defer startDrain()
-	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Commands: commands.New(a.db).Middleware, Start: func(d *web.Deps) error {
+	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Commands: cmds.Middleware, Start: func(d *web.Deps) error {
 		return a.start(drain, d, o.Tools, o.Now)
 	}})
 	if err != nil {

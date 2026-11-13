@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -32,8 +33,11 @@ const (
 )
 
 type Store struct {
-	db  *db.DB
-	now func() time.Time
+	db     *db.DB
+	now    func() time.Time
+	appKey func() ([]byte, error)
+	mu     sync.Mutex
+	mac    []byte
 }
 
 func New(d *db.DB) *Store { return &Store{db: d, now: time.Now} }
@@ -52,16 +56,24 @@ func newID() string { return "cmd_" + strings.ToLower(rand.Text()) }
 
 func seconds(t time.Time) float64 { return float64(t.UnixNano()) / 1e9 }
 
+const released = "idempotency_key = NULL, fingerprint = '', headers_json = NULL, body = NULL"
+
 func (s *Store) admit(ctx context.Context, key, method, pattern, fingerprint string) (record, bool, error) {
 	var rec record
 	fresh := false
 	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		now := seconds(s.now())
 		if key != "" {
+			var ended sql.NullFloat64
 			var status sql.NullInt64
 			var headers sql.NullString
-			err := tx.QueryRowContext(ctx, "SELECT id, fingerprint, state, status, headers_json, body, withheld FROM commands WHERE idempotency_key = ?", key).
-				Scan(&rec.id, &rec.fingerprint, &rec.state, &status, &headers, &rec.body, &rec.withheld)
+			err := tx.QueryRowContext(ctx, "SELECT id, fingerprint, state, ended_at, status, headers_json, body, withheld FROM commands WHERE idempotency_key = ?", key).
+				Scan(&rec.id, &rec.fingerprint, &rec.state, &ended, &status, &headers, &rec.body, &rec.withheld)
 			switch {
+			case err == nil && ended.Valid && ended.Float64 < now-ReplayWindow.Seconds():
+				if _, err := tx.ExecContext(ctx, "UPDATE commands SET "+released+" WHERE id = ?", rec.id); err != nil {
+					return err
+				}
 			case err == nil:
 				rec.status = int(status.Int64)
 				if headers.Valid {
@@ -78,27 +90,60 @@ func (s *Store) admit(ctx context.Context, key, method, pattern, fingerprint str
 			stored = key
 		}
 		_, err := tx.ExecContext(ctx, "INSERT INTO commands (id, idempotency_key, method, pattern, fingerprint, state, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			rec.id, stored, method, pattern, fingerprint, string(Running), seconds(s.now()))
+			rec.id, stored, method, pattern, fingerprint, string(Running), now)
 		return err
 	})
 	return rec, fresh, err
 }
 
-func (s *Store) finish(ctx context.Context, id string, status int, headers http.Header, body []byte, withheld bool) error {
+type result struct {
+	keyed    bool
+	status   int
+	headers  http.Header
+	body     []byte
+	withheld bool
+}
+
+func retryable(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+}
+
+func reportsEffects(body []byte) bool {
+	var failure struct {
+		Error struct {
+			EffectIDs []int64 `json:"effect_ids"`
+		} `json:"error"`
+	}
+	return json.Unmarshal(body, &failure) == nil && len(failure.Error.EffectIDs) > 0
+}
+
+func (s *Store) finish(ctx context.Context, id string, res result) error {
 	state := Succeeded
-	if status >= http.StatusBadRequest {
+	if res.status >= http.StatusBadRequest {
 		state = Failed
 	}
-	raw, err := json.Marshal(headers)
-	if err != nil {
-		return err
-	}
-	if withheld {
-		body = nil
+	withheld := res.keyed && res.withheld && state == Succeeded
+	var headers, body any
+	if res.keyed && !withheld {
+		raw, err := json.Marshal(res.headers)
+		if err != nil {
+			return err
+		}
+		headers, body = string(raw), res.body
 	}
 	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, "UPDATE commands SET state = ?, ended_at = ?, status = ?, headers_json = ?, body = ?, withheld = ? WHERE id = ? AND state = ?",
-			string(state), seconds(s.now()), status, string(raw), body, withheld, id, string(Running))
+		if _, err := tx.ExecContext(ctx, "UPDATE commands SET state = ?, ended_at = ?, status = ?, headers_json = ?, body = ?, withheld = ? WHERE id = ? AND state = ?",
+			string(state), seconds(s.now()), res.status, headers, body, withheld, id, string(Running)); err != nil {
+			return err
+		}
+		if !res.keyed || !retryable(res.status) || reportsEffects(res.body) {
+			return nil
+		}
+		var effects bool
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM operation_audit a, json_each(a.details_json, '$.effect_ids') e WHERE a.command_id = ?)", id).Scan(&effects); err != nil || effects {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE commands SET "+released+" WHERE id = ?", id)
 		return err
 	})
 }

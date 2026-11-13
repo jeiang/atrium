@@ -215,6 +215,8 @@ func checkAPIShape(b application.Binding, def application.Definition) string {
 	switch {
 	case b.Kind != application.API:
 		return "is not an API binding"
+	case !application.RequiresAPI(def.Authority):
+		return "binds an operation no operator can reach"
 	case !shape.Area.Valid():
 		return "has unknown area " + string(shape.Area)
 	case safe != (def.Kind == application.Query):
