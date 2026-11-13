@@ -236,10 +236,8 @@ internal/assistant/tools/mail/undo.go	github.com/jeiang/atrium/internal/safety
 internal/assistant/tools/mail/watches.go	github.com/jeiang/atrium/internal/contacts
 internal/assistant/tools/mail/watches.go	github.com/jeiang/atrium/internal/mail/birthdays
 internal/assistant/tools/mail/watches.go	github.com/jeiang/atrium/internal/mail/watches
-internal/assistant/tools/media/media.go	database/sql
 internal/assistant/tools/media/media.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/tools/media/media.go	github.com/jeiang/atrium/internal/assistant/approval
-internal/assistant/tools/media/media.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/tools/media/media.go	github.com/jeiang/atrium/internal/media
 internal/assistant/tools/media/undo.go	database/sql
 internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/config

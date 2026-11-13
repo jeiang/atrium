@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
@@ -31,14 +32,6 @@ func skippable(run job) job {
 }
 
 var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
-	found, err := media.ListChannels(ctx, d.Write)
-	if err != nil || len(found) == 0 {
-		return map[string]any{}, err
-	}
-	settings, err := media.Load(ctx, d.Read, env)
-	if err != nil {
-		return nil, err
-	}
 	cfg, err := config.Load(env)
 	if err != nil {
 		return nil, err
@@ -47,11 +40,14 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 	if err != nil {
 		return nil, err
 	}
-	result, err := media.Poll(ctx, d, store, env, settings, media.PollOptions{Now: now})
+	polled, err := mediaapp.New(mediaapp.Deps{DB: d, Env: env, Ledger: store, Now: now}).Poll(ctx, mediaapp.PollInput{SkipWithoutChannels: true})
 	if err != nil {
 		return nil, err
 	}
-	return result.Dict(), nil
+	if !polled.Data.Ran {
+		return map[string]any{}, nil
+	}
+	return polled.Data.Result.Dict(), nil
 })
 
 var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
