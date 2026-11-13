@@ -73,7 +73,7 @@ func SettingGroups() []settings.Group {
 }
 
 func ToolDefinitions() []module.ToolDefinition {
-	return mailtools.Definitions()
+	return mailtools.Definitions(mailToolService)
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -90,8 +90,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	cmds = append(cmds, mailCmds.ScanCommands()...)
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
+	operations, bindings := mailReadOperations()
 	return module.Declaration{
-		Name:      module.Mail,
+		Name:       module.Mail,
+		Operations: operations, Bindings: bindings,
 		Recover:   reviewpages.RecoverDrafts,
 		Settings:  slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:      mail.HostSettings(),
@@ -99,7 +101,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs)},
 		Requires:  Requirements(),
 		Pages: []web.Page{
-			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+			{Module: pages.Module(mailPageService), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},

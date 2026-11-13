@@ -7,14 +7,15 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func Definitions() []module.ToolDefinition {
-	tools := Tools()
+func Definitions(svc func(*tool.Context) *mailapp.Service) []module.ToolDefinition {
+	tools := Tools(svc)
 	defs := make([]module.ToolDefinition, len(tools))
 	for i, t := range tools {
 		defs[i] = module.ToolDefinition{Tool: t}
@@ -22,9 +23,9 @@ func Definitions() []module.ToolDefinition {
 	return defs
 }
 
-func Tools() []tool.Tool {
+func Tools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	var out []tool.Tool
-	for _, group := range [][]tool.Tool{mailTools(), folderTools(), draftTools(), openLoopTools(), watchTools(), trackingTools()} {
+	for _, group := range [][]tool.Tool{mailTools(svc), folderTools(), draftTools(), openLoopTools(), watchTools(), trackingTools()} {
 		out = append(out, group...)
 	}
 	return out

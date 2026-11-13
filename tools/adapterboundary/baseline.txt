@@ -178,11 +178,8 @@ internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/mail/
 internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/mail/mailops
 internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/safety
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/assistant
-internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/embed
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/httpx
-internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/mail
-internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/mail/message
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/mail/search
 internal/assistant/tools/mail/openloops.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/tools/mail/openloops.go	github.com/jeiang/atrium/internal/mail/openloops
@@ -327,15 +324,12 @@ internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail/router
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail/rules
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail/sync
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/safety
-internal/mail/pages/rules.go	github.com/jeiang/atrium/internal/config
 internal/mail/pages/rules.go	github.com/jeiang/atrium/internal/mail/ruleedit
 internal/mail/pages/rules.go	github.com/jeiang/atrium/internal/mail/rules
 internal/mail/pages/rules.go	github.com/jeiang/atrium/internal/mail/triage
-internal/mail/pages/triage.go	github.com/jeiang/atrium/internal/contacts
 internal/mail/pages/triage.go	github.com/jeiang/atrium/internal/mail/triage
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/drafts
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/message
-internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/rules
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/triage
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/ledger
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/mail/drafts
