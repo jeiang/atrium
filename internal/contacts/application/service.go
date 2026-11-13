@@ -36,13 +36,11 @@ func Describe() []application.Definition {
 }
 
 func (s *Service) audit(ctx context.Context, name application.Name, outcome state.Outcome, details map[string]any) int64 {
-	inv, _ := application.InvocationOf(ctx)
 	body, err := json.Marshal(details)
 	if err == nil {
 		var id int64
 		id, err = s.state.Audit(context.WithoutCancel(ctx), nil, state.Entry{
 			Operation: string(name), Outcome: outcome, DetailsJSON: string(body),
-			ThreadID: inv.ThreadID, RunID: inv.RunID, JobRunID: inv.JobRunID,
 		})
 		if err == nil {
 			return id

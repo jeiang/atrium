@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -75,10 +76,14 @@ func TestMediaSweepJobFailsWhenQbittorrentFails(t *testing.T) {
 		t.Fatalf("media-sweep job status %q, want error", status)
 	}
 	var outcome string
-	if err := d.Read.QueryRow("SELECT outcome FROM operation_audit WHERE operation = 'media.sweep' ORDER BY id DESC LIMIT 1").Scan(&outcome); err != nil {
+	var jobRun sql.NullInt64
+	if err := d.Read.QueryRow("SELECT outcome, job_run_id FROM operation_audit WHERE operation = 'media.sweep' ORDER BY id DESC LIMIT 1").Scan(&outcome, &jobRun); err != nil {
 		t.Fatal(err)
 	}
 	if outcome == "ok" {
 		t.Fatalf("media.sweep audit outcome %q, want a failure", outcome)
+	}
+	if jobRun.Int64 != run {
+		t.Fatalf("media.sweep audit job run %v, want %d", jobRun, run)
 	}
 }

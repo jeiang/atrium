@@ -58,14 +58,12 @@ func (s *Service) read(ctx context.Context, name application.Name, scopes []stri
 }
 
 func (s *Service) audit(ctx context.Context, tx *sql.Tx, name application.Name, outcome state.Outcome, target string, details map[string]any) (int64, error) {
-	inv, _ := application.InvocationOf(ctx)
 	body, err := json.Marshal(details)
 	if err != nil {
 		return 0, err
 	}
 	return s.state.Audit(ctx, tx, state.Entry{
 		Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: string(body),
-		ThreadID: inv.ThreadID, RunID: inv.RunID, JobRunID: inv.JobRunID,
 	})
 }
 

@@ -270,8 +270,7 @@ func (s *Service) audit(ctx context.Context, name application.Name, target strin
 			details = string(raw)
 		}
 	}
-	inv, _ := application.InvocationOf(ctx)
-	id, err := s.state.Audit(context.WithoutCancel(ctx), nil, state.Entry{ThreadID: inv.ThreadID, RunID: inv.RunID, JobRunID: inv.JobRunID, Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: details})
+	id, err := s.state.Audit(context.WithoutCancel(ctx), nil, state.Entry{Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: details})
 	if err != nil {
 		log.Error("operation audit failed", "operation", string(name), logx.Err, err.Error())
 	}

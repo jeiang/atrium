@@ -103,8 +103,7 @@ func auditEntry(ctx context.Context, name application.Name, target string, outco
 		raw, _ := json.Marshal(map[string][]int64{"notification_ids": ids})
 		details = string(raw)
 	}
-	inv, _ := application.InvocationOf(ctx)
-	return state.Entry{Operation: string(name), Target: target, Outcome: outcome, ThreadID: inv.ThreadID, RunID: inv.RunID, JobRunID: inv.JobRunID, DetailsJSON: details}
+	return state.Entry{Operation: string(name), Target: target, Outcome: outcome, DetailsJSON: details}
 }
 func (s *Service) mutate(ctx context.Context, name application.Name, target string, fn func(*sql.Tx) error) (int64, error) {
 	var id int64

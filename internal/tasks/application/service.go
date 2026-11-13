@@ -55,8 +55,7 @@ func (s *Service) audit(ctx context.Context, tx *sql.Tx, name application.Name, 
 	if id > 0 {
 		target = strconv.FormatInt(id, 10)
 	}
-	inv, _ := application.InvocationOf(ctx)
-	return s.state.Audit(ctx, tx, state.Entry{Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: details, ThreadID: inv.ThreadID, RunID: inv.RunID, JobRunID: inv.JobRunID})
+	return s.state.Audit(ctx, tx, state.Entry{Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: details})
 }
 
 type undoDelete struct {

@@ -70,9 +70,6 @@ func (s *Service) recordOutcome(ctx context.Context, name application.Name, targ
 		return 0, merr
 	}
 	entry := state.Entry{Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: string(raw)}
-	if inv, ok := application.InvocationOf(ctx); ok {
-		entry.ThreadID, entry.RunID, entry.JobRunID = inv.ThreadID, inv.RunID, inv.JobRunID
-	}
 	id, aerr := s.state.Audit(ctx, nil, entry)
 	if aerr != nil {
 		logx.Logger("media").Error("operation audit failed", "operation", string(name), "err", aerr)
@@ -161,9 +158,6 @@ func (s *Service) local(ctx context.Context, name application.Name, details map[
 			return err
 		}
 		entry := state.Entry{Operation: string(name), Outcome: state.OK, Target: target, DetailsJSON: string(raw)}
-		if inv, ok := application.InvocationOf(ctx); ok {
-			entry.ThreadID, entry.RunID, entry.JobRunID = inv.ThreadID, inv.RunID, inv.JobRunID
-		}
 		id, err = s.state.Audit(ctx, tx, entry)
 		return err
 	})
