@@ -185,3 +185,61 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 		t.Fatalf("draft after send: %d %s", got.status, got.body)
 	}
 }
+
+func TestPendingRevisionChangesAfterDecision(t *testing.T) {
+	dir, dav := davFixture(t)
+	reviewSMTP(t, dir)
+	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
+	approve := proposalID(t, toolResult(t, "calendar_create", event))
+	toolResult(t, "task_add", map[string]any{"title": "Call the dentist", "due": "2026-11-09"})
+	s := startAPISite(t, dir, nil)
+	owner := s.token("owner")
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+
+	first := s.do(http.MethodGet, "/api/v1/pending", owner, nil)
+	tag := first.header.Get("ETag")
+	if ids := approvalIDs(t, first.json["approvals"]); first.status != http.StatusOK || tag == "" || len(ids) != 1 || ids[0] != approve {
+		t.Fatalf("pending: %d etag %q %s", first.status, tag, first.body)
+	}
+	if same := s.do(http.MethodGet, "/api/v1/pending", owner, nil, "If-None-Match", tag); same.status != http.StatusNotModified || same.body != "" || same.header.Get("ETag") != tag {
+		t.Fatalf("unchanged pending: %d etag %q %s", same.status, same.header.Get("ETag"), same.body)
+	}
+	if done := s.do(http.MethodPost, "/api/v1/approvals/"+approve+"/approve", owner, nil); done.status != http.StatusOK || done.json["outcome"] != "applied" {
+		t.Fatalf("approve: %d %s", done.status, done.body)
+	}
+	if len(dav.Puts) != 1 {
+		t.Fatalf("approval wrote %d events, want 1", len(dav.Puts))
+	}
+	stale := s.do(http.MethodGet, "/api/v1/pending", owner, nil, "If-None-Match", tag)
+	fresh := stale.header.Get("ETag")
+	if stale.status != http.StatusOK || len(approvalIDs(t, stale.json["approvals"])) != 0 || fresh == "" || fresh == tag {
+		t.Fatalf("pending after the decision with the old etag: %d etag %q %s", stale.status, fresh, stale.body)
+	}
+	if current := s.do(http.MethodGet, "/api/v1/pending", owner, nil, "If-None-Match", fresh); current.status != http.StatusNotModified {
+		t.Fatalf("pending with the current etag: %d %s", current.status, current.body)
+	}
+
+	effects := s.do(http.MethodGet, "/api/v1/effects", owner, nil)
+	effectsTag := effects.header.Get("ETag")
+	if items, _ := effects.json["items"].([]any); effects.status != http.StatusOK || effectsTag == "" || len(items) == 0 {
+		t.Fatalf("effects: %d etag %q %s", effects.status, effectsTag, effects.body)
+	}
+	if same := s.do(http.MethodGet, "/api/v1/effects", owner, nil, "If-None-Match", effectsTag); same.status != http.StatusNotModified {
+		t.Fatalf("unchanged effects: %d %s", same.status, same.body)
+	}
+	if _, err := d.Write.Exec("UPDATE effects SET lease_at = lease_at + 1 WHERE id = (SELECT MAX(id) FROM effects)"); err != nil {
+		t.Fatal(err)
+	}
+	renewed := s.do(http.MethodGet, "/api/v1/effects", owner, nil, "If-None-Match", effectsTag)
+	if renewed.status != http.StatusOK || renewed.header.Get("ETag") == effectsTag {
+		t.Fatalf("effects after a lease renewal answered %d with etag %q (was %q)", renewed.status, renewed.header.Get("ETag"), effectsTag)
+	}
+	undo := s.do(http.MethodGet, "/api/v1/undo", owner, nil)
+	if undo.status != http.StatusOK || undo.header.Get("ETag") == "" {
+		t.Fatalf("undo feed: %d %s", undo.status, undo.body)
+	}
+	if same := s.do(http.MethodGet, "/api/v1/undo", owner, nil, "If-None-Match", undo.header.Get("ETag")); same.status != http.StatusNotModified {
+		t.Fatalf("unchanged undo feed: %d %s", same.status, same.body)
+	}
+}

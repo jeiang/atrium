@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -18,18 +19,14 @@ func (s *service) proposalLink(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx := r.Context()
-	found, err := proposals.Get(ctx, s.deps.DB.Read, id)
-	check(err)
-	if found == nil {
-		s.fail(w, r, http.StatusNotFound, "unknown proposal")
+	found, err := s.review.Proposal(r.Context(), reviewapp.ProposalInput{ID: id})
+	if err != nil {
+		s.failRead(w, r, err, "unknown proposal")
 		return
 	}
-	thread, known, err := proposals.ThreadOf(ctx, s.deps.DB.Read, id)
-	check(err)
 	target := fmt.Sprintf("/review#proposal-%d", id)
-	if known {
-		target = fmt.Sprintf("/chat/%d#proposal-%d", thread, id)
+	if found.Data.LinkThread != nil {
+		target = fmt.Sprintf("/chat/%d#proposal-%d", *found.Data.LinkThread, id)
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
@@ -46,18 +43,16 @@ func rowView(r *http.Request) bool {
 }
 
 func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice *tpl.Toast) {
-	found, err := proposals.Get(r.Context(), s.deps.DB.Read, id)
-	check(err)
-	if found == nil {
-		s.fail(w, r, http.StatusNotFound, "unknown proposal")
+	found, err := s.review.Proposal(r.Context(), reviewapp.ProposalInput{ID: id})
+	if err != nil {
+		s.failRead(w, r, err, "unknown proposal")
 		return
 	}
-	if r.Method == http.MethodGet && web.QueryValue(r.URL.Query(), "poll") != "" && found.Status == proposals.Pending {
+	if r.Method == http.MethodGet && web.QueryValue(r.URL.Query(), "poll") != "" && found.Data.Status == proposals.Pending {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	kind, _ := s.registry.Kind(found.Kind)
-	view := proposalView(found, kind)
+	view := proposalView(found.Data)
 	if rowView(r) {
 		s.fragment(w, r, http.StatusOK, "_proposal_row.gohtml", proposalCardData{Proposal: view, PendingOOB: true}, notice)
 		return

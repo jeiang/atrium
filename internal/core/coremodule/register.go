@@ -60,6 +60,8 @@ type Module struct {
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
+	reviewOps, reviewBindings := reviewOperations()
+	operations, bindings = append(operations, reviewOps...), append(bindings, reviewBindings...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {

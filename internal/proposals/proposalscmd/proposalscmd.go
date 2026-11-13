@@ -23,6 +23,7 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -82,15 +83,6 @@ type exec struct {
 
 func (x *exec) Now() float64 { return x.opts.now() }
 
-type proposalRow struct {
-	ID       int64   `json:"id"`
-	Kind     string  `json:"kind"`
-	Account  *string `json:"account"`
-	Status   string  `json:"status"`
-	Title    string  `json:"title"`
-	Undoable bool    `json:"undoable"`
-}
-
 type dismissView struct {
 	ID        int64 `json:"id"`
 	Dismissed bool  `json:"dismissed"`
@@ -98,7 +90,7 @@ type dismissView struct {
 
 func (x *exec) JSON(value any) {
 	switch value.(type) {
-	case proposals.ProposalView, []proposalRow, dismissView:
+	case proposals.ProposalView, []reviewapp.ProposalSummary, dismissView:
 		enc := json.NewEncoder(x.Stdout)
 		enc.SetEscapeHTML(false)
 		enc.SetIndent("", "  ")
@@ -182,15 +174,11 @@ func Command(o Options) *cli.Command {
 			status := a.String("status", "", cli.Opt{Choices: proposals.Statuses[:]})
 			kind := a.String("kind", "", cli.Opt{})
 			return func(x *exec) error {
-				list, err := proposals.List(x.Ctx, x.DB.Read, *status, *kind)
+				found, err := reviewapp.New(reviewapp.Deps{DB: x.DB}).Proposals(x.Ctx, reviewapp.ProposalsInput{Status: *status, Kind: *kind})
 				if err != nil {
 					return err
 				}
-				out := make([]proposalRow, len(list))
-				for i, p := range list {
-					out[i] = proposalRow{ID: p.ID, Kind: p.Kind, Account: p.Account, Status: p.Status, Title: p.Title, Undoable: p.Undoable}
-				}
-				x.JSON(out)
+				x.JSON(found.Data)
 				return nil
 			}
 		}),

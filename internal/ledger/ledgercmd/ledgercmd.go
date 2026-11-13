@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
 type Options struct {
@@ -64,7 +65,7 @@ func list(o Options) *cli.Command {
 				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
 					return cli.Fail(e, err)
 				}
-				f := ledger.Filter{Origin: *origin, Operation: *operation, BeforeID: int64(*before), Limit: *limit, BlockedOnly: *blocked}
+				f := reviewapp.EffectsInput{Origin: *origin, Operation: *operation, BeforeID: int64(*before), Limit: *limit, BlockedOnly: *blocked}
 				if a.Has("proposal") {
 					id := int64(*proposal)
 					f.ProposalID = &id
@@ -77,11 +78,11 @@ func list(o Options) *cli.Command {
 					id := int64(*run)
 					f.RunID = &id
 				}
-				found, err := s.List(e.Ctx, f)
+				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Effects(e.Ctx, f)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				return write(e, found)
+				return write(e, found.Data)
 			}
 		},
 	}
@@ -102,11 +103,11 @@ func show(o Options) *cli.Command {
 				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
 					return cli.Fail(e, err)
 				}
-				found, err := s.Get(e.Ctx, int64(*id))
+				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Effect(e.Ctx, reviewapp.EffectInput{ID: int64(*id)})
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				return write(e, found)
+				return write(e, found.Data)
 			}
 		},
 	}

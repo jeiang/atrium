@@ -855,7 +855,15 @@ behavior-parity target.
   drafts store and writes registry as the Review pages, so approval scope,
   the ledger, the send revision check and the mail gate are unchanged. POST
   to create a thread, send a message, approve or send a draft honours an
-  `Idempotency-Key` header for ten minutes in memory.
+  `Idempotency-Key` header for ten minutes in memory. `GET /pending`,
+  `/undo`, `/effects` and `/effects/{id}` return a weak `ETag` with
+  `Cache-Control: private, no-cache` and answer `If-None-Match` with 304
+  when nothing they show changed; the effects revision also covers each
+  shown effect's lease times and blocked flags, so a lease renewal or a
+  stuck undo crossing its threshold is never hidden by a 304. These reads
+  and the Review pages, `atrium proposals list`, `atrium effects list|show`
+  and `atrium writes list` go through the `review.*` operations in
+  `internal/review/application`.
 - Code execution is not part of the application. The code-mode worker
   command and units are removed; coding may return as an external module.
 

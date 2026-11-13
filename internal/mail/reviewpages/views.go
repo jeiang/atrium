@@ -1,120 +1,49 @@
 package reviewpages
 
 import (
-	"fmt"
-	"slices"
-	"strings"
-	"unicode/utf8"
-
-	"github.com/jeiang/atrium/internal/assistant/permission"
-	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/textx"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
 type ProposalView struct {
-	ID            int64    `json:"id"`
-	Kind          string   `json:"kind"`
-	KindLabel     string   `json:"kind_label"`
-	KindIcon      string   `json:"kind_icon"`
-	Status        string   `json:"status"`
-	Account       *string  `json:"account"`
-	Title         string   `json:"title"`
-	CreatedTS     float64  `json:"created_ts"`
-	DecidedTS     *float64 `json:"decided_ts"`
-	AppliedTS     *float64 `json:"applied_ts"`
-	Undoable      bool     `json:"undoable"`
-	Blocked       bool     `json:"blocked"`
-	BlockedEffect bool     `json:"blocked_effect"`
-	BlockedUndo   bool     `json:"blocked_undo"`
-	BlockedError  string   `json:"blocked_error"`
-	Preview       any      `json:"preview"`
-	Result        any      `json:"result"`
-	Approval      bool     `json:"approval"`
-	Args          []Arg    `json:"args"`
+	ID            int64           `json:"id"`
+	Kind          string          `json:"kind"`
+	KindLabel     string          `json:"kind_label"`
+	KindIcon      string          `json:"kind_icon"`
+	Status        string          `json:"status"`
+	Account       *string         `json:"account"`
+	Title         string          `json:"title"`
+	CreatedTS     float64         `json:"created_ts"`
+	DecidedTS     *float64        `json:"decided_ts"`
+	AppliedTS     *float64        `json:"applied_ts"`
+	Undoable      bool            `json:"undoable"`
+	Blocked       bool            `json:"blocked"`
+	BlockedEffect bool            `json:"blocked_effect"`
+	BlockedUndo   bool            `json:"blocked_undo"`
+	BlockedError  string          `json:"blocked_error"`
+	Preview       any             `json:"preview"`
+	Result        any             `json:"result"`
+	Approval      bool            `json:"approval"`
+	Args          []reviewapp.Arg `json:"args"`
 }
 
-type Arg struct {
-	Label string `json:"label"`
-	Value string `json:"value"`
-}
-
-func proposalView(p *proposals.Proposal, kind proposals.Kind) ProposalView {
+func proposalView(c reviewapp.Card) ProposalView {
 	v := ProposalView{
-		ID: p.ID, Kind: p.Kind, KindLabel: kind.Label, KindIcon: kind.Icon, Status: p.Status, Account: p.Account, Title: p.Title,
-		CreatedTS: p.CreatedTS, DecidedTS: p.DecidedTS, AppliedTS: p.AppliedTS, Undoable: p.Undoable, Blocked: p.Blocked,
-		BlockedEffect: p.BlockedEffect, BlockedUndo: p.BlockedUndo, BlockedError: p.BlockedError,
-		Preview: plainJSON(p.Preview), Result: plainJSON(p.Result), Approval: kind.Approval,
+		ID: c.ID, Kind: c.Kind, KindLabel: c.KindLabel, KindIcon: c.KindIcon, Status: c.Status, Account: c.Account, Title: c.Title,
+		CreatedTS: c.CreatedAt, DecidedTS: c.DecidedAt, AppliedTS: c.AppliedAt, Undoable: c.Undoable, Blocked: c.Blocked,
+		BlockedEffect: c.BlockedEffect, BlockedUndo: c.BlockedUndo, BlockedError: c.BlockedError,
+		Preview: c.Preview, Result: c.Result, Approval: c.Approval,
 	}
-	if kind.Approval {
-		v.Args = approvalArgs(p.Preview, p.Kind != permission.Kind)
-	}
-	return v
-}
-
-func approvalArgs(preview any, clip bool) []Arg {
-	d, _ := preview.(map[string]any)
-	args, _ := d["args"].(map[string]any)
-	keys := make([]string, 0, len(args))
-	for k := range args {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	out := make([]Arg, 0, len(keys))
-	for _, k := range keys {
-		label := strings.ReplaceAll(k, "_", " ")
-		r, size := utf8.DecodeRuneInString(label)
-		out = append(out, Arg{Label: strings.ToUpper(string(r)) + label[size:], Value: argText(args[k], clip)})
-	}
-	return out
-}
-
-func argText(v any, clip bool) string {
-	var text string
-	switch x := v.(type) {
-	case string:
-		text = x
-	case bool:
-		text = "No"
-		if x {
-			text = "Yes"
-		}
-	case int64:
-		text = fmt.Sprint(x)
-	default:
-		text = jsonx.Dumps(x)
-	}
-	if clip && utf8.RuneCountInString(text) > 200 {
-		return textx.Clip(text, 199) + "…"
-	}
-	return text
-}
-
-func plainJSON(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(x))
-		for k, val := range x {
-			out[k] = plainJSON(val)
-		}
-		return out
-	case []any:
-		out := make([]any, len(x))
-		for i, e := range x {
-			out[i] = plainJSON(e)
-		}
-		return out
+	if c.Approval {
+		v.Args = c.Args
 	}
 	return v
 }
 
-func proposalViews(list []*proposals.Proposal, registry *proposals.Registry) []ProposalView {
+func proposalViews(list []reviewapp.Card) []ProposalView {
 	out := make([]ProposalView, len(list))
-	for i, p := range list {
-		kind, _ := registry.Kind(p.Kind)
-		out[i] = proposalView(p, kind)
+	for i, c := range list {
+		out[i] = proposalView(c)
 	}
 	return out
 }
@@ -124,89 +53,16 @@ type proposalCardData struct {
 	PendingOOB bool         `json:"pending_oob"`
 }
 
-type ActivityEntry struct {
-	Source   string            `json:"source"`
-	ID       int64             `json:"id"`
-	Category string            `json:"category"`
-	TS       float64           `json:"ts"`
-	Mail     *MailActivity     `json:"mail,omitempty"`
-	Write    *WriteActivity    `json:"write,omitempty"`
-	Settings *SettingsActivity `json:"settings,omitempty"`
-	Phone    *PhoneActivity    `json:"phone,omitempty"`
-}
-
-type PhoneActivity struct {
-	Actor  string `json:"actor"`
-	Kind   string `json:"kind"`
-	Status string `json:"status"`
-	Target string `json:"target"`
-}
-
-type MailActivity struct {
-	MessageID        int64   `json:"message_id"`
-	Subject          *string `json:"subject"`
-	Kind             string  `json:"kind"`
-	FromName         *string `json:"from_name"`
-	FromAddr         *string `json:"from_addr"`
-	Account          string  `json:"account"`
-	Src              *string `json:"src"`
-	Dest             *string `json:"dest"`
-	Status           string  `json:"status"`
-	Error            *string `json:"error"`
-	Undoable         bool    `json:"undoable"`
-	State            string  `json:"state"`
-	Blocked          bool    `json:"blocked"`
-	UndoBlocked      bool    `json:"undo_blocked"`
-	Undone           bool    `json:"undone"`
-	Resolved         bool    `json:"resolved"`
-	EffectiveOutcome string  `json:"effective_outcome,omitempty"`
-}
-
-type WriteActivity struct {
-	Tool       string   `json:"tool"`
-	Target     string   `json:"target"`
-	ThreadID   *int64   `json:"thread_id"`
-	ThreadKind *string  `json:"thread_kind"`
-	UndoneAt   *float64 `json:"undone_at"`
-	Before     string   `json:"before"`
-	After      string   `json:"after"`
-	State      string   `json:"state"`
-	Error      *string  `json:"error"`
-	Undoable   bool     `json:"undoable"`
-	Resolved   bool     `json:"resolved"`
-}
-
-type SettingsActivity struct {
-	Tool     string `json:"tool"`
-	ThreadID *int64 `json:"thread_id"`
-	Actor    string `json:"actor"`
-	Origin   string `json:"origin"`
-	Before   string `json:"before"`
-	After    string `json:"after"`
-}
-
-func mailEntry(a live.Action) ActivityEntry {
-	return ActivityEntry{
-		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS,
-		Mail: &MailActivity{
-			MessageID: a.MessageID, Subject: a.Subject, Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr,
-			Account: a.Account, Src: a.Src, Dest: a.Dest, Status: a.Status, Error: a.Error,
-			Undoable: a.Undoable && !a.Blocked && !a.UndoBlocked, Blocked: a.Blocked || a.UndoBlocked, UndoBlocked: a.UndoBlocked,
-			Undone: a.Undone, Resolved: a.Resolved, EffectiveOutcome: a.EffectiveOutcome,
-		},
-	}
-}
-
 type activityPage struct {
-	Entries    []ActivityEntry `json:"entries"`
-	Category   string          `json:"category"`
-	Categories []string        `json:"categories"`
-	NextOffset int             `json:"next_offset"`
-	Offset     int             `json:"offset"`
+	Entries    []reviewapp.ActivityEntry `json:"entries"`
+	Category   string                    `json:"category"`
+	Categories []string                  `json:"categories"`
+	NextOffset int                       `json:"next_offset"`
+	Offset     int                       `json:"offset"`
 }
 
 type activityRowData struct {
-	E ActivityEntry `json:"e"`
+	E reviewapp.ActivityEntry `json:"e"`
 }
 
 type DraftView struct {
@@ -223,6 +79,14 @@ type DraftView struct {
 	Subject            string   `json:"subject"`
 	Body               string   `json:"body"`
 	SMTPResult         *string  `json:"smtp_result"`
+}
+
+func draftViews(cards []reviewapp.DraftCard) []DraftView {
+	out := make([]DraftView, len(cards))
+	for i, c := range cards {
+		out[i] = draftView(c.Row, c.Unexpected)
+	}
+	return out
 }
 
 func draftView(row drafts.Row, unexpected []string) DraftView {

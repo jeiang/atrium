@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
+
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
@@ -15,8 +17,6 @@ import (
 )
 
 var statusFilters = []drafts.Status{drafts.Draft, drafts.Unknown, drafts.Sent, drafts.Discarded}
-
-const draftLimit = 100
 
 func statusNames() []string {
 	out := make([]string, len(statusFilters))
@@ -27,19 +27,15 @@ func statusNames() []string {
 }
 
 func (s *service) draftViews(r *http.Request, rows []drafts.Row) []DraftView {
-	unexpected, err := s.drafts.UnexpectedRecipientsBatch(r.Context(), rows)
+	cards, err := s.review.DraftCards(r.Context(), rows)
 	check(err)
-	out := make([]DraftView, len(rows))
-	for i, row := range rows {
-		out[i] = draftView(row, unexpected[i])
-	}
-	return out
+	return draftViews(cards)
 }
 
 func (s *service) showDrafts(w http.ResponseWriter, r *http.Request, status drafts.Status, code int, notice *tpl.Toast) {
-	rows, err := s.drafts.List(r.Context(), status, draftLimit)
+	rows, err := s.drafts.List(r.Context(), status, reviewapp.DraftLimit)
 	check(err)
-	data := draftsPage{Drafts: s.draftViews(r, rows), Status: string(status), Statuses: statusNames(), Configured: accountConfigured(r.Context())}
+	data := draftsPage{Drafts: s.draftViews(r, rows), Status: string(status), Statuses: statusNames(), Configured: reviewapp.AccountConfigured(r.Context())}
 	s.page(w, r, code, "drafts", "drafts.gohtml", data, notice)
 }
 
@@ -54,7 +50,7 @@ func (s *service) draftCard(w http.ResponseWriter, r *http.Request, id int64, co
 }
 
 func (s *service) renderDraftCard(w http.ResponseWriter, r *http.Request, view DraftView, code int, notice *tpl.Toast) {
-	data := draftCardData{D: view, Configured: accountConfigured(r.Context()), Partial: true}
+	data := draftCardData{D: view, Configured: reviewapp.AccountConfigured(r.Context()), Partial: true}
 	s.fragment(w, r, code, "_draft.gohtml", data, notice)
 }
 
@@ -90,7 +86,7 @@ func (s *service) draftPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := s.draftViews(r, []drafts.Row{*row})[0]
-	configured := accountConfigured(r.Context())
+	configured := reviewapp.AccountConfigured(r.Context())
 	if web.IsPartial(r) {
 		s.fragment(w, r, http.StatusOK, "_draft_preview.gohtml", draftCardData{D: view, Configured: configured}, nil)
 		return
@@ -149,7 +145,7 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 				s.renderDraftCard(w, r, view, http.StatusUnprocessableEntity, toast("error", "Not saved", err.Error()))
 			} else {
 				s.page(w, r, http.StatusUnprocessableEntity, "drafts", "drafts.gohtml",
-					draftsPage{Drafts: []DraftView{view}, Status: view.Status, Statuses: statusNames(), Configured: accountConfigured(r.Context())},
+					draftsPage{Drafts: []DraftView{view}, Status: view.Status, Statuses: statusNames(), Configured: reviewapp.AccountConfigured(r.Context())},
 					toast("error", "Not saved", err.Error()))
 			}
 			return
