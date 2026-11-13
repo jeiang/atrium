@@ -35,11 +35,12 @@ const (
 type Handler func(env *Env) int
 
 type Command struct {
-	Name     string
-	Help     string
-	Dest     string
-	Setup    func(a *Args) Handler
-	Commands []*Command
+	Name          string
+	Help          string
+	Dest          string
+	Setup         func(a *Args) Handler
+	Commands      []*Command
+	BootstrapExit int
 }
 
 func (c *Command) Add(cmds ...*Command) {
@@ -224,6 +225,9 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if a.Bootstrap != nil {
 		if err := a.Bootstrap(ctx, stderr); err != nil {
 			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
+			if s.bootstrapExit != 0 {
+				return s.bootstrapExit
+			}
 			return ExitError
 		}
 	}
@@ -317,6 +321,7 @@ type session struct {
 	width          int
 	leaf           *parser
 	handler        Handler
+	bootstrapExit  int
 }
 
 func (s *session) fail(p *parser, msg string) error {
@@ -451,9 +456,10 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 			if err := s.checkChoice(p, a, name); err != nil {
 				return err
 			}
-			sub, h := newParser(p.prog+" "+name, a.cmd.find(name), false)
+			cmd := a.cmd.find(name)
+			sub, h := newParser(p.prog+" "+name, cmd, false)
 			if h != nil {
-				s.leaf, s.handler = sub, h
+				s.leaf, s.handler, s.bootstrapExit = sub, h, cmd.BootstrapExit
 			}
 			rest, err := s.parse(sub, strs[1:])
 			subExtras = append(subExtras, rest...)

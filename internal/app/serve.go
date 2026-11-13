@@ -32,7 +32,8 @@ type ListenOptions struct {
 
 func (b *Bindings) ServeCommand(pages ...web.Page) *cli.Command {
 	return &cli.Command{
-		Name: "serve",
+		Name:          "serve",
+		BootstrapExit: cli.ExitConfig,
 		Setup: func(args *cli.Args) cli.Handler {
 			flags := web.DefineServeFlags(args)
 			return func(env *cli.Env) int {
