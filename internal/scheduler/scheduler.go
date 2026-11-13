@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/jeiang/atrium/internal/settings/audit"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 type Recovery func(context.Context, Run, []int64) (Result, error)
