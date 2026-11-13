@@ -24,7 +24,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/logx"
 )
+
+var log = logx.Logger("atrium.agent.application")
 
 const (
 	ProjectFileUploadName application.Name = "assistant.project-file.upload"
@@ -321,6 +324,7 @@ func (s *Service) ProjectFileUpload(ctx context.Context, in ProjectUploadInput) 
 func (s *Service) ProjectFileDelete(ctx context.Context, in FileInput) (application.Change[FileChanged], error) {
 	tgt := target("project", in.ProjectID)
 	var auditID int64
+	var path string
 	err := func() error {
 		found, err := s.locate(ctx, s.db.Read, FileInput{ProjectID: in.ProjectID, FileID: in.FileID})
 		if err != nil {
@@ -330,16 +334,21 @@ func (s *Service) ProjectFileDelete(ctx context.Context, in FileInput) (applicat
 			return err
 		}
 		return s.db.WithTx(ctx, func(tx *sql.Tx) error {
-			if _, err := files.DeleteOne(ctx, tx, found.ID); err != nil {
+			var err error
+			if path, _, err = files.DeleteRow(ctx, tx, found.ID); err != nil {
 				return err
 			}
-			var err error
 			auditID, err = s.audit(ctx, tx, ProjectFileDeleteName, tgt, state.OK)
 			return err
 		})
 	}()
 	if err != nil {
 		return application.Change[FileChanged]{}, s.reject(ctx, ProjectFileDeleteName, tgt, classify(err))
+	}
+	if path != "" {
+		if err := files.RemoveFile(path); err != nil {
+			log.Warn("could not remove a deleted project file from disk", logx.Err, err.Error())
+		}
 	}
 	return application.Change[FileChanged]{Data: FileChanged{ProjectID: in.ProjectID, FileIDs: []int64{in.FileID}}, AuditID: auditID}, nil
 }

@@ -540,13 +540,19 @@ func (s *Service) DiscardUnused(ctx context.Context, threadID int64) (bool, erro
 		if err != nil || !unused {
 			return err
 		}
-		if _, err := files.DeleteOwned(ctx, tx, s.Cfg.FilesDir(), files.ThreadOwner(threadID)); err != nil {
+		if _, err := files.DeleteOwnedRows(ctx, tx, files.ThreadOwner(threadID)); err != nil {
 			return err
 		}
 		discarded = true
 		return threads.Remove(ctx, tx, threadID)
 	})
-	return discarded && err == nil, err
+	if err != nil || !discarded {
+		return false, err
+	}
+	if err := files.RemoveOwned(s.Cfg.FilesDir(), files.ThreadOwner(threadID)); err != nil {
+		log.Warn("could not remove the files of a discarded thread", logx.ThreadID, threadID, logx.Err, err.Error())
+	}
+	return true, nil
 }
 
 func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, error) {
