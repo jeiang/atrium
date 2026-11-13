@@ -71,12 +71,21 @@
   in {${k.table}."${k.name}" = "\${CREDENTIALS_DIRECTORY}/${key}";})
   (lib.filterAttrs (key: _: appKeyFiles ? ${key}) cfg.secretFiles));
 
+  coreHost =
+    lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {otel_traces_endpoint = cfg.observability.tracesEndpoint;}
+    // lib.optionalAttrs cfg.backup.enable {
+      backup_directory = cfg.backup.directory;
+      backup_keep = cfg.backup.keep;
+      backup_keep_days = cfg.backup.keepDays;
+      backup_schedule = cfg.backup.schedule;
+    };
+
   renderedHost = lib.recursiveUpdate hostValues (
     {
       calendar.calendar_dir = "${mirrorDir}/calendars";
       contacts.contacts_dir = "${mirrorDir}/contacts";
     }
-    // lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {core.otel_traces_endpoint = cfg.observability.tracesEndpoint;}
+    // lib.optionalAttrs (coreHost != {}) {core = coreHost;}
     // lib.optionalAttrs (cfg.web.trustedProxyCidrs != []) {web.trusted_proxy_cidrs = lib.concatStringsSep "," cfg.web.trustedProxyCidrs;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
     // lib.optionalAttrs (cfg.connections != {} || cfg.mailAccounts != {}) {connections = renderedConnections;}
@@ -238,34 +247,13 @@
   mediaWriter = lib.optionalAttrs cfg.media.enable {
     SupplementaryGroups = [cfg.media.group];
     UMask = "0002";
-    ReadWritePaths = [mediaRoot];
   };
 
-  exportWriter = lib.optionalAttrs (obsidianDir != null) {
-    ReadWritePaths = lib.optional cfg.media.enable mediaRoot ++ [obsidianDir];
-  };
+  writePaths = lib.optional cfg.media.enable mediaRoot ++ lib.optional (obsidianDir != null) obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
 
   mediaPath = lib.optional cfg.media.enable pkgs.ffmpeg-headless;
 
   writeTimeout = "45min";
-
-  backupScript = pkgs.writeShellScript "atrium-backup" ''
-    set -euo pipefail
-    exec ${lib.getExe cfg.package} backup "${cfg.backup.directory}/atrium-$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ).backup"
-  '';
-
-  backupPruneScript = pkgs.writeShellScript "atrium-backup-prune" ''
-    set -euo pipefail
-    cutoff=$(( $(${pkgs.coreutils}/bin/date +%s) - ${toString (cfg.backup.keepDays * 86400)} ))
-    ${pkgs.findutils}/bin/find ${lib.escapeShellArg cfg.backup.directory} -maxdepth 1 -type f -name '*.backup' -printf '%T@ %p\0' \
-      | ${pkgs.coreutils}/bin/sort -z -rn \
-      | ${pkgs.coreutils}/bin/tail -z -n +${toString (cfg.backup.keep + 1)} \
-      | while IFS=' ' read -r -d "" stamp path; do
-        if (( ''${stamp%.*} < cutoff )); then
-          ${pkgs.coreutils}/bin/rm -f -- "$path"
-        fi
-      done
-  '';
 
   authArgs = auth: lib.concatMapStringsSep " " (mode: "--auth ${mode}") (lib.splitString "+" auth);
 
@@ -282,7 +270,7 @@
     path = mediaPath;
     serviceConfig =
       mediaWriter
-      // exportWriter
+      // lib.optionalAttrs (writePaths != []) {ReadWritePaths = writePaths;}
       // {
         ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString cfg.web.local.enable " --emergency-host 127.0.0.1 --emergency-port ${toString cfg.web.local.port}";
         Type = "notify";
@@ -303,80 +291,60 @@
     serviceConfig = hardening;
   };
 
-  units =
-    {
-      atrium-watch = {
-        description = "Watch the atrium mailboxes for new mail";
-        serviceConfig = {
-          ExecStart = "${lib.getExe cfg.package} watch";
-          Type = "notify";
-          WatchdogSec = writeTimeout;
-          TimeoutStartSec = writeTimeout;
-          TimeoutStopSec = writeTimeout;
-          Restart = "on-failure";
-          RestartSec = 10;
-        };
-        wantedBy = ["multi-user.target"];
+  units = {
+    atrium-watch = {
+      description = "Watch the atrium mailboxes for new mail";
+      serviceConfig = {
+        ExecStart = "${lib.getExe cfg.package} watch";
+        Type = "notify";
+        WatchdogSec = writeTimeout;
+        TimeoutStartSec = writeTimeout;
+        TimeoutStopSec = writeTimeout;
+        Restart = "on-failure";
+        RestartSec = 10;
       };
+      wantedBy = ["multi-user.target"];
+    };
 
-      atrium-web = webUnit {
-        description = "atrium web UI";
-        inherit (cfg.web) host auth;
-        inherit (cfg) port;
-      };
+    atrium-web = webUnit {
+      description = "atrium web UI";
+      inherit (cfg.web) host auth;
+      inherit (cfg) port;
+    };
 
-      atrium-sync = {
-        description = "Reconcile the atrium mail index";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${lib.getExe cfg.package} sync";
-          TimeoutStopSec = writeTimeout;
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnActiveSec = "2m";
-            OnUnitActiveSec = "15m";
-          };
-        };
+    atrium-sync = {
+      description = "Reconcile the atrium mail index";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe cfg.package} sync";
+        TimeoutStopSec = writeTimeout;
       };
-
-      atrium-scan = {
-        description = "Scan the mailboxes for rebalance, deletion and label proposals";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${lib.getExe cfg.package} proposals scan-all";
-          TimeoutStopSec = writeTimeout;
-          TimeoutStartSec = "2h";
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnCalendar = "monthly";
-            Persistent = true;
-          };
-        };
-      };
-    }
-    // lib.optionalAttrs cfg.backup.enable {
-      atrium-backup = {
-        description = "Write an atrium backup archive";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = backupScript;
-          ExecStartPost = backupPruneScript;
-          ReadWritePaths = [cfg.backup.directory];
-          TimeoutStartSec = "2h";
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnCalendar = cfg.backup.onCalendar;
-            Persistent = true;
-          };
+      timer = {
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnActiveSec = "2m";
+          OnUnitActiveSec = "15m";
         };
       };
     };
+
+    atrium-scan = {
+      description = "Scan the mailboxes for rebalance, deletion and label proposals";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe cfg.package} proposals scan-all";
+        TimeoutStopSec = writeTimeout;
+        TimeoutStartSec = "2h";
+      };
+      timer = {
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnCalendar = "monthly";
+          Persistent = true;
+        };
+      };
+    };
+  };
 
   unitNames = let
     timers = lib.filterAttrs (_: unit: unit ? timer) units;
@@ -607,7 +575,7 @@ in {
     };
 
     backup = {
-      enable = mkEnableOption "the atrium-backup timer that writes an `atrium backup` archive to backup.directory";
+      enable = mkEnableOption "the backup job in `atrium serve` that writes an `atrium backup` archive to backup.directory and prunes old archives";
 
       directory = mkOption {
         type = types.str;
@@ -615,10 +583,10 @@ in {
         description = "Directory that receives one timestamped archive per run; owned by the atrium user. Off-host copies are left to the host.";
       };
 
-      onCalendar = mkOption {
+      schedule = mkOption {
         type = types.str;
-        default = "daily";
-        description = "systemd OnCalendar expression of the backup timer.";
+        default = "daily 03:00";
+        description = "When the backup job runs, in the atrium schedule grammar (for example `daily 03:00`, `weekly mon 02:30`, `monthly 1 04:00`), in the operator time zone. A missed run while atrium was down runs once at start. An invalid value logs a warning and the job keeps `daily 03:00`. Rendered as host key core.backup_schedule.";
       };
 
       keep = mkOption {

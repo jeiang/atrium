@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 const JobKey = module.Notion + "/" + passrun.NotionSync
@@ -84,18 +83,7 @@ func run(env *cli.Env, o Options, fn func(context.Context, *db.DB, config.Config
 }
 
 func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	var out Summary
-	var syncErr error
-	_, err := module.Invoke(ctx, d, cfg, JobKey, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
-		out, syncErr = o.Pass(ctx, d)
-		if missing, skip := errors.AsType[config.NotConfigured](syncErr); skip {
-			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
-		}
-		return scheduler.Result{}, syncErr
-	})
-	if err == nil {
-		err = syncErr
-	}
+	out, err := o.invokeSync(ctx, d, cfg)
 	if err != nil {
 		return err
 	}

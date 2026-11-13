@@ -308,9 +308,14 @@ behavior-parity target.
   `files/`; the Notion wiki also has external state. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
   and `atrium restore` (with a `--verify` dry run) restores them. The
-  module's optional `atrium-backup` timer prunes `*.backup` files in its
-  directory after each successful run, keeping the newest `backup.keep`
-  (default 5) plus any from the last `backup.keepDays` (default 14) days.
+  persistent serve job `core/backup` (host keys `core.backup_directory`,
+  `core.backup_schedule` default `daily 03:00`, `core.backup_keep` default
+  5, `core.backup_keep_days` default 14; resource `backup`, 2 h, drained on
+  shutdown) writes `atrium-<UTC>.backup` and, after a successful archive,
+  prunes `atrium-*.backup` beyond the newest keep that are older than
+  keep_days. No directory means `skipped_unconfigured`. `atrium backup`
+  shares the job's claim. NixOS `backup.schedule` replaced `onCalendar`;
+  there is no backup unit.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB

@@ -363,3 +363,18 @@ func claimResources(defs []Definition, job Job) []string {
 	slices.Sort(resources)
 	return slices.Compact(resources)
 }
+
+func (c Claim) RemoveFrom(ctx context.Context, q db.Querier) error {
+	if c.JobRunID == 0 {
+		return nil
+	}
+	if _, err := q.ExecContext(ctx, "DELETE FROM job_resource_leases WHERE job_run_id = ?", c.JobRunID); err != nil {
+		return err
+	}
+	if _, err := q.ExecContext(ctx, "UPDATE jobs SET lease_owner = NULL, lease_until = NULL, last_run_id = (SELECT MAX(id) FROM job_runs WHERE job_id = jobs.id AND id <> ?) WHERE id = ? AND last_run_id = ?",
+		c.JobRunID, c.Job.ID, c.JobRunID); err != nil {
+		return err
+	}
+	_, err := q.ExecContext(ctx, "DELETE FROM job_runs WHERE id = ?", c.JobRunID)
+	return err
+}
