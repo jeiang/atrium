@@ -99,8 +99,8 @@ func TestAppKeyFilesSignLinksAcrossRestarts(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil); code != http.StatusOK {
 		t.Fatalf("GET notifications = %d", code)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{}); code != http.StatusInternalServerError || !strings.Contains(body, "action_link_key_file") {
-		t.Errorf("revoke with a host action key = %d %q, want a refusal naming the host file", code, body)
+	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{}); code != http.StatusOK {
+		t.Errorf("revoke with a host action key = %d %q, want success", code, body)
 	}
 
 	var status string

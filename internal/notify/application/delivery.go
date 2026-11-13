@@ -3,10 +3,12 @@ package application
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
@@ -17,12 +19,17 @@ type Message = notify.Message
 func PushLabel(userAgent string) string { return notify.PushLabel(userAgent) }
 
 type ChannelContentInput struct{ Name, Content string }
-type SubscribeInput struct{ Endpoint, P256DH, Auth, Label string }
+type SubscribeInput struct{ Transport, Endpoint, P256DH, Auth, Label string }
 type UnsubscribeInput struct {
 	Endpoint string
 	DeviceID *int64
 }
 type ResendInput struct{ ID int64 }
+type MarkInput struct {
+	ID   int64
+	Read bool
+}
+type Subscribed struct{ ID int64 }
 type SendInput struct {
 	Message notify.Message
 	RunKind *tool.Kind
@@ -41,9 +48,28 @@ func (s *Service) ChannelContent(ctx context.Context, in ChannelContentInput) (a
 	id, err := s.mutate(ctx, ChannelContentName, "channel", func(tx *sql.Tx) error { return notify.SetContent(ctx, tx, in.Name, in.Content) })
 	return application.Change[Empty]{AuditID: id}, err
 }
-func (s *Service) Subscribe(ctx context.Context, in SubscribeInput) (application.Change[Empty], error) {
-	id, err := s.mutate(ctx, SubscribeName, "push-device", func(tx *sql.Tx) error { return notify.Subscribe(ctx, tx, in.Endpoint, in.P256DH, in.Auth, in.Label) })
+func (s *Service) Mark(ctx context.Context, in MarkInput) (application.Change[Empty], error) {
+	id, err := s.mutate(ctx, MarkName, notificationTarget(in.ID), func(tx *sql.Tx) error {
+		found, err := notify.MarkRead(ctx, tx, in.ID, in.Read, stamp())
+		if err == nil && !found {
+			err = &application.Error{Code: application.NotFound, Message: "No such notification."}
+		}
+		return err
+	})
 	return application.Change[Empty]{AuditID: id}, err
+}
+func (s *Service) Subscribe(ctx context.Context, in SubscribeInput) (application.Change[Subscribed], error) {
+	if in.Transport == "" {
+		in.Transport = notify.TransportWebPush
+	}
+	principal, _ := authapp.PrincipalOf(ctx)
+	var device int64
+	id, err := s.mutate(ctx, SubscribeName, "push-device", func(tx *sql.Tx) error {
+		var err error
+		device, err = notify.RegisterDevice(ctx, tx, notify.RegisterDeviceInput{BearerID: principal.BearerID, Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: in.Label})
+		return err
+	})
+	return application.Change[Subscribed]{Data: Subscribed{ID: device}, AuditID: id}, err
 }
 func (s *Service) Unsubscribe(ctx context.Context, in UnsubscribeInput) (application.Change[Empty], error) {
 	id, err := s.mutate(ctx, UnsubscribeName, "push-device", func(tx *sql.Tx) error {
@@ -70,7 +96,10 @@ func (s *Service) Test(ctx context.Context, _ Empty) (application.Change[TestRes
 	return application.Change[TestResult]{Data: TestResult{Sent: n, Failure: failure, Outcome: outcome}, AuditID: id}, err
 }
 func (s *Service) Resend(ctx context.Context, in ResendInput) (application.Change[Delivery], error) {
-	sent, err := notify.Resend(ctx, s.db, in.ID)
+	sent, err := notify.Resend(ctx, s.db, in.ID, s.present)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = &application.Error{Code: application.NotFound, Message: "No such notification.", Cause: err}
+	}
 	outcome := "delivered"
 	if !sent.Delivered {
 		outcome = "not_delivered"

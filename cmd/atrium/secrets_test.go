@@ -119,7 +119,7 @@ func TestSecretsRefuseAndReportAFileBackedAppKey(t *testing.T) {
 	}
 }
 
-func TestRotateRefusesWhenAnAppKeyFileSuppliesTheKey(t *testing.T) {
+func TestPhoneRevokeWorksWhenAnAppKeyFileSuppliesTheKey(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	keyPath := filepath.Join(dir, "action-link.key")
 	if err := os.WriteFile(keyPath, []byte("file-key\n"), 0o600); err != nil {
@@ -137,7 +137,7 @@ func TestRotateRefusesWhenAnAppKeyFileSuppliesTheKey(t *testing.T) {
 		t.Fatalf("notifications page = %d", code)
 	}
 	code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{})
-	if code != http.StatusInternalServerError || !strings.Contains(body, "app_keys.action_link_key_file") {
+	if code != http.StatusOK {
 		t.Fatalf("rotate with an app key file: %d %q", code, body)
 	}
 }

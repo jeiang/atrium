@@ -7,10 +7,9 @@ import (
 
 func notificationOperations() ([]application.Definition, []application.Binding) {
 	uses := func(name application.Name) []application.Name { return []application.Name{name} }
-	return notifyapp.Describe(), []application.Binding{
+	return notifyapp.Describe(), append(notificationRoutes(nil, nil), []application.Binding{
 		{Kind: application.HTML, Target: "GET /settings/notifications", Uses: uses(notifyapp.ConfigurationName)},
 		{Kind: application.HTML, Target: "GET /inbox", Uses: uses(notifyapp.InboxName)},
-		{Kind: application.API, Target: "GET /inbox", Uses: uses(notifyapp.InboxName)},
 		{Kind: application.HTML, Target: "POST /settings/notifications/channels/{name}/content", Uses: uses(notifyapp.ChannelContentName)},
 		{Kind: application.HTML, Target: "POST /settings/notifications/push/subscriptions", Uses: uses(notifyapp.SubscribeName)},
 		{Kind: application.HTML, Target: "POST /settings/notifications/push/unsubscribe", Uses: uses(notifyapp.UnsubscribeName)},
@@ -21,5 +20,5 @@ func notificationOperations() ([]application.Definition, []application.Binding) 
 		{Kind: application.HTML, Target: "POST /settings/phone-actions/revoke", Uses: uses(notifyapp.RevokeLinksName)},
 		{Kind: application.Tool, Target: "notify", Uses: uses(notifyapp.SendName)},
 		{Kind: application.Service, Target: "notifications-monitor", Uses: uses(notifyapp.SendName)},
-	}
+	}...)
 }

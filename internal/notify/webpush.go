@@ -4,13 +4,11 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -22,17 +20,12 @@ import (
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
-	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/netguard"
-	"github.com/jeiang/atrium/internal/obs"
-	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
@@ -59,16 +52,6 @@ type pushBlocked string
 
 func (e pushBlocked) Error() string { return string(e) }
 
-type PushDevice struct {
-	ID        int64    `json:"id"`
-	Endpoint  string   `json:"endpoint"`
-	Label     string   `json:"label"`
-	CreatedTS float64  `json:"created_ts"`
-	LastOKTS  *float64 `json:"last_ok_ts"`
-	Failures  int      `json:"failure_count"`
-	LastError *string  `json:"last_error"`
-}
-
 type pushAction struct {
 	Action string `json:"action"`
 	Title  string `json:"title"`
@@ -83,12 +66,6 @@ type pushPayload struct {
 }
 
 type pushKeys struct{ private, public string }
-
-type pushOutcome struct {
-	delivered bool
-	removed   bool
-	failure   string
-}
 
 func UsePushAddresses(allow func(netip.Addr) bool) (restore func()) {
 	previous := pushAllowed.Swap(&allow)
@@ -249,58 +226,6 @@ func PushLabel(userAgent string) string {
 	return "Browser"
 }
 
-func Subscribe(ctx context.Context, q db.Querier, endpoint, p256dh, auth, label string) error {
-	endpoint = strings.TrimSpace(endpoint)
-	if err := checkEndpoint(endpoint); err != nil {
-		return err
-	}
-	public, err := pushKey(p256dh)
-	if err != nil {
-		return PushError("p256dh must be base64url")
-	}
-	if _, err := ecdh.P256().NewPublicKey(public); err != nil {
-		return PushError("p256dh is not a P-256 public key")
-	}
-	secret, err := pushKey(auth)
-	if err != nil || len(secret) != 16 {
-		return PushError("auth must be 16 bytes of base64url")
-	}
-	if err := ledger.CheckAdmission(ctx); err != nil {
-		return err
-	}
-	_, err = q.ExecContext(ctx, `INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, created_ts) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, label = excluded.label, failure_count = 0, last_error = NULL`,
-		endpoint, base64.RawURLEncoding.EncodeToString(public), base64.RawURLEncoding.EncodeToString(secret), Plain(label, pushLabelChars), stamp())
-	return err
-}
-
-func Unsubscribe(ctx context.Context, q db.Querier, endpoint string) error {
-	if err := ledger.CheckAdmission(ctx); err != nil {
-		return err
-	}
-	_, err := q.ExecContext(ctx, "DELETE FROM push_subscriptions WHERE endpoint = ?", strings.TrimSpace(endpoint))
-	return err
-}
-
-func RemoveDevice(ctx context.Context, q db.Querier, id int64) error {
-	if err := ledger.CheckAdmission(ctx); err != nil {
-		return err
-	}
-	_, err := q.ExecContext(ctx, "DELETE FROM push_subscriptions WHERE id = ?", id)
-	return err
-}
-
-func Devices(ctx context.Context, q db.Querier) ([]PushDevice, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, endpoint, label, created_ts, last_ok_ts, failure_count, last_error FROM push_subscriptions ORDER BY id")
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (PushDevice, error) {
-		var d PushDevice
-		return d, r.Scan(&d.ID, &d.Endpoint, &d.Label, &d.CreatedTS, &d.LastOKTS, &d.Failures, &d.LastError)
-	})
-}
-
 func urgency(priority int) webpush.Urgency {
 	switch {
 	case priority >= 4:
@@ -330,166 +255,6 @@ func pushActions(actions []Action) []pushAction {
 		}
 	}
 	return out
-}
-
-func deliverPush(ctx context.Context, d *db.DB, m delivery, link string) (tried, delivered bool, failure string, err error) {
-	if m.channel == "" {
-		m.channel = Assistant
-	}
-	var n int
-	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM push_subscriptions").Scan(&n); err != nil || n == 0 {
-		return false, false, "", err
-	}
-	c, err := GetChannel(ctx, d.Read, m.channel)
-	if err != nil {
-		return true, false, "", err
-	}
-	title, body := m.title, tool.Clip(m.body, pushBodyChars)
-	if !c.FullText() {
-		title, body = privateTitle, privateBody
-	}
-	payload, err := json.Marshal(pushPayload{Title: title, Body: body, URL: pushURL(link, m.click), Actions: pushActions(m.actions)})
-	if err != nil {
-		return true, false, "", err
-	}
-	sent, failure, err := pushAll(ctx, d, m.channel, payload, urgency(m.priority))
-	return true, sent > 0, failure, err
-}
-
-func PushTest(ctx context.Context, d *db.DB) (int, string, error) {
-	payload, err := json.Marshal(pushPayload{Title: "atrium test", Body: "Test push notification.", URL: pushInbox})
-	if err != nil {
-		return 0, "", err
-	}
-	if err := ledger.CheckAdmission(ctx); err != nil {
-		return 0, "", err
-	}
-	return pushAll(ctx, d, System, payload, webpush.UrgencyNormal)
-}
-
-type pushTarget struct {
-	id                    int64
-	endpoint, key, secret string
-}
-
-func pushTargets(ctx context.Context, q db.Querier) ([]pushTarget, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, endpoint, p256dh, auth FROM push_subscriptions ORDER BY id")
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (pushTarget, error) {
-		var t pushTarget
-		return t, r.Scan(&t.id, &t.endpoint, &t.key, &t.secret)
-	})
-}
-
-func pushAll(ctx context.Context, d *db.DB, channel string, payload []byte, level webpush.Urgency) (sent int, failure string, err error) {
-	targets, err := pushTargets(ctx, d.Read)
-	if err != nil || len(targets) == 0 {
-		return 0, "", err
-	}
-	lease, err := pushConnection(ctx, d)
-	if err != nil {
-		return 0, "", err
-	}
-	defer lease.Close()
-	subject := strings.TrimSpace(connectionConfig(lease)["subject"])
-	if subject == "" {
-		return 0, "web push not configured (no subject)", nil
-	}
-	keys, err := vapidKeys(lease)
-	if err != nil {
-		return 0, "", err
-	}
-	client, err := pushClient(lease)
-	if err != nil {
-		var te transport.Error
-		if errors.As(err, &te) {
-			return 0, "web push unreachable: " + te.Error(), nil
-		}
-		return 0, "", err
-	}
-	defer client.CloseIdleConnections()
-	options := &webpush.Options{
-		HTTPClient: client, Subscriber: strings.TrimPrefix(subject, "mailto:"), TTL: pushTTL, Urgency: level,
-		VAPIDPublicKey: keys.public, VAPIDPrivateKey: keys.private,
-	}
-	var failures []string
-	for _, t := range targets {
-		out, err := pushOne(ctx, d, channel, t, payload, options)
-		if err != nil {
-			return sent, "", err
-		}
-		if out.delivered {
-			sent++
-		} else {
-			failures = append(failures, out.failure)
-		}
-	}
-	if sent > 0 {
-		return sent, "", nil
-	}
-	return 0, strings.Join(failures, "; "), nil
-}
-
-func pushOne(ctx context.Context, d *db.DB, channel string, t pushTarget, payload []byte, options *webpush.Options) (out pushOutcome, err error) {
-	ctx, span := obs.Start(ctx, "notify.deliver", trace.WithAttributes(
-		obs.String(obs.NotifyChannel, channel),
-		obs.String(obs.NotifyBackend, "webpush"),
-	))
-	attempted := false
-	defer func() {
-		ok := out.delivered
-		span.SetAttributes(obs.Bool(obs.NotifyDelivered, ok))
-		if err != nil {
-			obs.Fail(span, "error")
-		} else if !ok {
-			span.SetAttributes(obs.String(obs.ErrorType, "delivery_failed"))
-		}
-		span.End()
-		if attempted {
-			obs.NotifyDelivery.Add(1, channel, "webpush", strconv.FormatBool(ok))
-		}
-	}()
-	if problem := checkEndpoint(t.endpoint); problem != nil {
-		return pushOutcome{failure: problem.Error()}, recordPush(ctx, d.Write, t.id, problem.Error())
-	}
-	attempted = true
-	resp, err := webpush.SendNotificationWithContext(ctx, payload, &webpush.Subscription{
-		Endpoint: t.endpoint, Keys: webpush.Keys{P256dh: t.key, Auth: t.secret},
-	}, options)
-	if err == nil {
-		_, err = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
-		_ = resp.Body.Close()
-	}
-	if err != nil {
-		if ctx.Err() != nil {
-			return pushOutcome{}, ctx.Err()
-		}
-		failure := "web push unreachable: " + pushErrorClass(err)
-		pushLog.Warn("web push delivery failed", logx.Err, failure)
-		return pushOutcome{failure: failure}, recordPush(ctx, d.Write, t.id, failure)
-	}
-	switch {
-	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone:
-		pushLog.Info("web push subscription expired; removed", logx.Reason, strconv.Itoa(resp.StatusCode))
-		_, err := d.Write.ExecContext(ctx, "DELETE FROM push_subscriptions WHERE id = ?", t.id)
-		return pushOutcome{removed: true, failure: fmt.Sprintf("web push %d: subscription removed", resp.StatusCode)}, err
-	case resp.StatusCode >= 300:
-		failure := fmt.Sprintf("web push %d", resp.StatusCode)
-		pushLog.Warn("web push delivery failed", logx.Err, failure)
-		return pushOutcome{failure: failure}, recordPush(ctx, d.Write, t.id, failure)
-	}
-	return pushOutcome{delivered: true}, recordPush(ctx, d.Write, t.id, "")
-}
-
-func recordPush(ctx context.Context, q db.Querier, id int64, failure string) error {
-	if failure == "" {
-		_, err := q.ExecContext(ctx, "UPDATE push_subscriptions SET failure_count = 0, last_error = NULL, last_ok_ts = ? WHERE id = ?", stamp(), id)
-		return err
-	}
-	_, err := q.ExecContext(ctx, "UPDATE push_subscriptions SET failure_count = failure_count + 1, last_error = ? WHERE id = ?", failure, id)
-	return err
 }
 
 func pushErrorClass(err error) string {
@@ -530,5 +295,6 @@ func pushClient(lease *connections.Lease) (*http.Client, error) {
 		return nil
 	}}).DialContext
 	t.ForceAttemptHTTP2 = true
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return client, nil
 }

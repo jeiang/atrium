@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	webpush "github.com/SherClockHolmes/webpush-go"
-
 	"github.com/jeiang/atrium/internal/connections"
 )
 
@@ -36,8 +34,8 @@ func silentPushConnection(ctx context.Context, lease *connections.Lease, _ []con
 	if d == nil {
 		return nil, errors.New("web push health needs a writable database")
 	}
-	var devices int
-	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM push_subscriptions").Scan(&devices); err != nil {
+	devices, err := deviceCount(ctx, d.Read)
+	if err != nil {
 		return nil, err
 	}
 	if devices == 0 {
@@ -81,18 +79,14 @@ func testPushConnection(ctx context.Context, lease *connections.Lease, _ []conne
 	if d == nil {
 		return nil, errors.New("web push test needs a writable database")
 	}
-	var devices int
-	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM push_subscriptions").Scan(&devices); err != nil {
+	devices, err := deviceCount(ctx, d.Read)
+	if err != nil {
 		return nil, err
 	}
 	if devices == 0 {
 		return []connections.Result{{Capability: "delivery", State: connections.Unconfigured, Reason: "no push subscriptions"}}, nil
 	}
-	payload, err := json.Marshal(pushPayload{Title: "atrium test", Body: "Test push notification.", URL: pushInbox})
-	if err != nil {
-		return nil, err
-	}
-	sent, failure, err := pushAll(ctx, d, System, payload, webpush.UrgencyNormal)
+	sent, failure, err := pushAll(ctx, d, testWakeup())
 	if err != nil {
 		return nil, err
 	}

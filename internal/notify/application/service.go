@@ -18,11 +18,17 @@ import (
 )
 
 type Service struct {
-	db    *db.DB
-	state *state.Store
+	db      *db.DB
+	state   *state.Store
+	present notify.Presenter
 }
 
 func New(d *db.DB) *Service { return &Service{db: d, state: state.New(d)} }
+
+func (s *Service) WithPresenter(present notify.Presenter) *Service {
+	s.present = present
+	return s
+}
 
 type Notification = notify.Notification
 type Channel = notify.Channel
@@ -40,6 +46,7 @@ const (
 	SendName           application.Name = "notifications.send"
 	PhonePolicyName    application.Name = "notifications.phone-policy"
 	RevokeLinksName    application.Name = "notifications.revoke-links"
+	MarkName           application.Name = "notifications.mark"
 )
 
 func Describe() []application.Definition {
@@ -48,7 +55,8 @@ func Describe() []application.Definition {
 		application.Describe[Empty, Configuration](ConfigurationName, application.Query, op, application.NoEffect, false),
 		application.Describe[InboxInput, Inbox](InboxName, application.Query, op, application.NoEffect, false),
 		application.Describe[ChannelContentInput, Empty](ChannelContentName, application.Command, op, application.NoEffect, true),
-		application.Describe[SubscribeInput, Empty](SubscribeName, application.Command, op, application.NoEffect, true),
+		application.Describe[MarkInput, Empty](MarkName, application.Command, op, application.NoEffect, true),
+		application.Describe[SubscribeInput, Subscribed](SubscribeName, application.Command, op, application.NoEffect, true),
 		application.Describe[UnsubscribeInput, Empty](UnsubscribeName, application.Command, op, application.NoEffect, true),
 		application.Describe[Empty, TestResult](TestName, application.Command, op, application.External, true),
 		application.Describe[ResendInput, Delivery](ResendName, application.Command, op, application.External, true),
@@ -77,6 +85,14 @@ func (s *Service) finish(ctx context.Context, name application.Name, target stri
 		var pinned *settings.PinnedError
 		var disabled *module.OwnerDisabled
 		var te tool.Error
+		var unsupported notify.UnsupportedTransport
+		var invalid notify.DeviceInvalid
+		if errors.As(err, &invalid) {
+			err = &application.Error{Code: application.Invalid, Message: err.Error(), Fields: []application.Field{{Name: invalid.Field, Code: "invalid", Message: err.Error()}}, Cause: err}
+		}
+		if errors.As(err, &unsupported) {
+			err = &application.Error{Code: application.Invalid, Message: err.Error(), Fields: []application.Field{{Name: "transport", Code: "unsupported_transport", Message: err.Error()}}, Cause: err}
+		}
 		if errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &pinned) || errors.As(err, &disabled) || errors.As(err, &te) {
 			outcome = state.Refused
 			err = &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}

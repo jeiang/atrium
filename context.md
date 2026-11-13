@@ -202,6 +202,7 @@ behavior-parity target.
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
   contacts/calendar concern and are not an open-loop source.
+- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain. Link minting limits do not suppress proposal inbox rows or pushes.
 - Phone actions are HMAC-signed links in a notification that approve or
   dismiss a proposal: `phone_actions_enabled` (default off) and
   `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot
@@ -212,7 +213,7 @@ behavior-parity target.
   its bytes sign and verify links and are never copied into the database.
   Rotating the generated `action_link_key` invalidates
   outstanding links; the phone action section of the Notifications settings
-  tab shows the outstanding count and rotates the key.
+  tab shows the outstanding count and revokes links. With a host-file key, revocation deletes outstanding links without rewriting the key.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
