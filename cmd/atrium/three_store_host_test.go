@@ -30,11 +30,11 @@ func TestHostRowsCannotChangeBehavior(t *testing.T) {
 	vault := t.TempDir()
 	setEnv(t, settingEnv("public_url"), "")
 	setEnv(t, settingEnv(kbexport.ObsidianDirKey), "")
-	setEnv(t, settingEnv(media.KeyRoot), filepath.Join(dir, "media"))
+	setEnv(t, "ATRIUM_MEDIA_MEDIA_DOWNLOAD_PATH_PREFIX", filepath.Join(dir, "downloads"))
 
 	seedSetting(t, d, "public_url", "https://poisoned.example")
 	seedSetting(t, d, kbexport.ObsidianDirKey, vault)
-	seedSetting(t, d, media.KeyRoot, vault)
+	seedSetting(t, d, media.KeyDownloadPrefix, vault)
 	seedSetting(t, d, media.KeyQbitURL, "http://poisoned.invalid:8081")
 
 	if got := pinRowOf(t, runSettings(t, "get", "public_url")); got.Value != "" || got.Source != "host" {
@@ -43,8 +43,8 @@ func TestHostRowsCannotChangeBehavior(t *testing.T) {
 	if got := pinRowOf(t, runSettings(t, "get", kbexport.ObsidianDirKey)); got.Value != "" || got.Source != "host" {
 		t.Errorf("a host row reached the export folder: %+v", got)
 	}
-	if got := pinRowOf(t, runSettings(t, "get", media.KeyRoot)); got.Value != filepath.Join(dir, "media") || got.Source != "host" {
-		t.Errorf("a host row overrode the host media root: %+v", got)
+	if got := pinRowOf(t, runSettings(t, "get", media.KeyDownloadPrefix)); got.Value != filepath.Join(dir, "downloads") || got.Source != "host" {
+		t.Errorf("a host row overrode the host download prefix: %+v", got)
 	}
 	runExport(t, f, d)
 	entries, err := os.ReadDir(vault)
@@ -116,7 +116,7 @@ func TestUnpinnedHostWritesAreRefused(t *testing.T) {
 		want string
 	}{
 		{[]string{"set", "public_url", "https://other.example"}, "core.public_url"},
-		{[]string{"set", "media_root", "/srv/media"}, "media.media_root"},
+		{[]string{"set", "media_download_path_prefix", "/srv/downloads"}, "media.media_download_path_prefix"},
 		{[]string{"unset", "export_obsidian_dir"}, "export.export_obsidian_dir"},
 	} {
 		r := runSettings(t, c.args...)
@@ -139,7 +139,7 @@ func TestUnpinnedHostWritesAreRefused(t *testing.T) {
 		t.Fatalf("folder save = %d: %.300s", status, body)
 	}
 
-	for _, key := range []string{"public_url", "media_root", "export_obsidian_dir"} {
+	for _, key := range []string{"public_url", "media_download_path_prefix", "export_obsidian_dir"} {
 		if value, ok := storedSetting(t, path, key); ok {
 			t.Errorf("a refused host write stored %s = %q", key, value)
 		}

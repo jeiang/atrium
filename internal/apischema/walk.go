@@ -199,6 +199,8 @@ func constrain(schema object, tag string) object {
 			out["enum"] = values
 		case "nullable":
 			nullable = true
+		case "writeonly":
+			out["writeOnly"] = true
 		}
 	}
 	if nullable {

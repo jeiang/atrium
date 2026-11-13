@@ -36,6 +36,7 @@ type Agent struct {
 	state       *state
 	token       [sha256.Size]byte
 	tls         *tls.Config
+	vpnTLS      *tls.Config
 	hosts       map[string]bool
 	peers       []netip.Prefix
 	draining    atomic.Bool
@@ -84,6 +85,13 @@ func New(c Config) (*Agent, error) {
 		}
 		a.tls = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}
 	}
+	if c.VPN != nil && c.VPN.TLSCert != "" {
+		cert, err := tls.LoadX509KeyPair(c.VPN.TLSCert, c.VPN.TLSKey)
+		if err != nil {
+			return nil, fmt.Errorf("load VPN TLS certificate: %w", err)
+		}
+		a.vpnTLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+	}
 	if a.state, err = openState(c.StateDirectory, c.CacheDirectory); err != nil {
 		return nil, err
 	}
@@ -116,23 +124,34 @@ func (a *Agent) Listen() (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &boundedListener{Listener: ln, slots: make(chan struct{}, 256), done: make(chan struct{}), allowed: a.peerAllowed}, nil
+	return &boundedListener{Listener: ln, slots: make(chan struct{}, 256), done: make(chan struct{}), allowed: func(remote string) bool { return peerIn(a.peers, remote) }}, nil
 }
 
-func (a *Agent) Serve(ctx context.Context, ln net.Listener, stopping func()) error {
-	srv := &http.Server{MaxHeaderBytes: 16 << 10, Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
-	errc := make(chan error, 1)
-	go func() {
-		if a.tls != nil {
-			srv.TLSConfig = a.tls
-			errc <- srv.ServeTLS(ln, "", "")
-			return
-		}
-		errc <- srv.Serve(ln)
-	}()
+func (a *Agent) Serve(ctx context.Context, ln, vpn net.Listener, stopping func()) error {
+	servers := []*http.Server{a.server(a.Handler(), a.tls)}
+	listeners := []net.Listener{ln}
+	if vpn != nil {
+		vpnServer := a.server(a.VPNHandler(), a.vpnTLS)
+		vpnServer.Protocols = new(http.Protocols)
+		vpnServer.Protocols.SetHTTP1(true)
+		servers = append(servers, vpnServer)
+		listeners = append(listeners, vpn)
+	}
+	errc := make(chan error, len(servers))
+	for i, srv := range servers {
+		go func() {
+			if srv.TLSConfig != nil {
+				errc <- srv.ServeTLS(listeners[i], "", "")
+				return
+			}
+			errc <- srv.Serve(listeners[i])
+		}()
+	}
+	var err error
+	received := 0
 	select {
-	case err := <-errc:
-		return err
+	case err = <-errc:
+		received++
 	case <-ctx.Done():
 	}
 	a.draining.Store(true)
@@ -141,13 +160,27 @@ func (a *Agent) Serve(ctx context.Context, ln net.Listener, stopping func()) err
 		stopping()
 	}
 	sctx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
-	err := srv.Shutdown(sctx)
-	cancel()
-	if errors.Is(err, context.DeadlineExceeded) {
-		err = srv.Close()
+	shut := make([]error, len(servers))
+	var wg sync.WaitGroup
+	for i, srv := range servers {
+		wg.Go(func() {
+			shut[i] = srv.Shutdown(sctx)
+			if errors.Is(shut[i], context.DeadlineExceeded) {
+				shut[i] = srv.Close()
+			}
+		})
 	}
-	if serr := <-errc; !errors.Is(serr, http.ErrServerClosed) && err == nil {
-		err = serr
+	wg.Wait()
+	cancel()
+	for _, serr := range shut {
+		if err == nil {
+			err = serr
+		}
+	}
+	for ; received < len(servers); received++ {
+		if serr := <-errc; !errors.Is(serr, http.ErrServerClosed) && err == nil {
+			err = serr
+		}
 	}
 	done := make(chan struct{})
 	go func() {
@@ -166,6 +199,10 @@ func (a *Agent) Serve(ctx context.Context, ln net.Listener, stopping func()) err
 	return err
 }
 
+func (a *Agent) server(h http.Handler, cfg *tls.Config) *http.Server {
+	return &http.Server{MaxHeaderBytes: 16 << 10, Handler: h, TLSConfig: cfg, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+}
+
 func (a *Agent) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a.inflight.Add(1)
@@ -174,7 +211,7 @@ func (a *Agent) Handler() http.Handler {
 			problem(w, http.StatusBadRequest, protocol.CodeInvalidRequest, "the Host header is not allowed")
 			return
 		}
-		if !a.peerAllowed(r.RemoteAddr) {
+		if !peerIn(a.peers, r.RemoteAddr) {
 			problem(w, http.StatusForbidden, protocol.CodeForbidden, "the peer address is not allowed")
 			return
 		}
@@ -209,8 +246,8 @@ func allowRead(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-func (a *Agent) peerAllowed(remote string) bool {
-	if len(a.peers) == 0 {
+func peerIn(peers []netip.Prefix, remote string) bool {
+	if len(peers) == 0 {
 		return true
 	}
 	ap, err := netip.ParseAddrPort(remote)
@@ -218,7 +255,7 @@ func (a *Agent) peerAllowed(remote string) bool {
 		return false
 	}
 	addr := ap.Addr().Unmap()
-	for _, p := range a.peers {
+	for _, p := range peers {
 		if p.Contains(addr) {
 			return true
 		}

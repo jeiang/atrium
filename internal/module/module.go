@@ -58,7 +58,7 @@ func HostSetting(key string) Requirement {
 	}}
 }
 
-func Connection(id string) Requirement {
+func Connection(id string, credentials ...string) Requirement {
 	return Requirement{Name: id, Key: id, Connection: true, Check: func(ctx context.Context, p Probe) (string, error) {
 		lease, err := connections.OpenRead(ctx, p.Q, config.From(ctx).Host(), connections.ID(id))
 		if err != nil {
@@ -71,6 +71,11 @@ func Connection(id string) Requirement {
 		defer lease.Close()
 		if _, err := lease.Endpoint("url"); err != nil {
 			return err.Error(), nil
+		}
+		for _, slot := range credentials {
+			if _, err := lease.Credential(slot); err != nil {
+				return "the " + id + " connection: " + slot + " missing", nil
+			}
 		}
 		return "", nil
 	}}

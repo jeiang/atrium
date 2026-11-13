@@ -89,6 +89,7 @@ type Filter struct {
 	RunID            *int64
 	BeforeID         int64
 	BeforeTS         float64
+	ByTime           bool
 	Since            float64
 	Limit            int
 	Offset           int
@@ -558,6 +559,21 @@ func (s *Store) renewLive(stop chan struct{}) {
 			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
 		}
 	}
+}
+
+func (s *Store) Progress(ctx context.Context, t Ticket, after json.RawMessage) error {
+	res, err := s.DB.Write.ExecContext(ctx, "UPDATE effects SET after_json = ? WHERE id = ? AND token = ? AND state = 'intent'", scrubText(after), t.ID, t.Token)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		if err != nil {
+			return err
+		}
+		return &SettledMeanwhile{ID: t.ID}
+	}
+	s.notifyChange()
+	return nil
 }
 
 func (s *Store) Settle(ctx context.Context, t Ticket, r Result, local Mutation) error {

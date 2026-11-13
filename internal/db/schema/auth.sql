@@ -60,7 +60,7 @@ CREATE TRIGGER IF NOT EXISTS auth_bearers_read_insert AFTER INSERT ON auth_beare
     INSERT INTO read_revisions(scope,value) VALUES('auth',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
-CREATE TRIGGER IF NOT EXISTS auth_bearers_read_update AFTER UPDATE ON auth_bearers BEGIN
+CREATE TRIGGER IF NOT EXISTS auth_bearers_read_update AFTER UPDATE OF id, token_hash, kind, name, subject, created_at, expires_at, revoked_at ON auth_bearers BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('auth',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;

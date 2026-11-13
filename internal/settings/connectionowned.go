@@ -72,6 +72,9 @@ func Destination(entry ImportEntry) string {
 		}
 		return "the connection field " + entry.Target
 	}
+	if entry.Retired {
+		return entry.Target
+	}
 	if entry.Class == ImportHost {
 		if destination, ok := connectionOwnedHost[entry.Key]; ok {
 			return destination

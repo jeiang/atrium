@@ -17,23 +17,26 @@ func mustJSON(v any) string {
 
 func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 	category := web.QueryValue(r.URL.Query(), "category")
-	offset := int64(0)
-	if r.URL.Query().Has("offset") {
-		raw := web.QueryValue(r.URL.Query(), "offset")
-		n, ok := laxInt64(raw)
+	var after *reviewapp.ActivityKey
+	raw := web.QueryValue(r.URL.Query(), "after")
+	if raw != "" {
+		k, ok := reviewapp.ParseActivityKey(raw)
 		if !ok {
-			web.Unprocessable(w, web.BadInt("query", "offset", raw))
+			web.Unprocessable(w, web.FieldError{Type: "value_error", Loc: []string{"query", "after"}, Msg: "Input should be an activity position", Input: raw})
 			return
 		}
-		offset = n
+		after = &k
 	}
-	found, err := s.review.Activity(r.Context(), reviewapp.ActivityInput{Category: category, Offset: int(max(offset, 0))})
+	found, err := s.review.Activity(r.Context(), reviewapp.ActivityInput{Category: category, After: after})
 	if err != nil {
 		s.failRead(w, r, err, "")
 		return
 	}
-	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: reviewapp.Categories, NextOffset: found.Data.NextOffset, Offset: int(max(offset, 0))}
-	if web.IsPartial(r) && offset > 0 {
+	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: reviewapp.Categories, After: raw}
+	if found.Data.Next != nil {
+		data.Next = found.Data.Next.String()
+	}
+	if web.IsPartial(r) && after != nil {
 		s.fragment(w, r, http.StatusOK, "_activity_rows.gohtml", data, nil)
 		return
 	}

@@ -111,6 +111,7 @@ type hostInput struct {
 	Default string
 	Choices []string
 	Secret  bool
+	Ignored string
 }
 
 func hostInputs(entries []settings.ImportEntry, byKey map[string]settings.Def, host []settings.HostDef) []hostInput {
@@ -118,14 +119,18 @@ func hostInputs(entries []settings.ImportEntry, byKey map[string]settings.Def, h
 	seen := map[string]bool{}
 	for _, entry := range entries {
 		dotted := entry.Module + "." + entry.Key
-		if entry.Class != settings.ImportHost || entry.Runtime {
+		if entry.Class != settings.ImportHost || entry.Runtime || entry.Retired {
 			continue
 		}
 		if _, ok := derivedHost[dotted]; ok {
 			continue
 		}
 		def, registered := byKey[entry.Key]
-		out = append(out, hostInput{Module: entry.Module, Key: entry.Key, Type: entry.Type, Default: entry.Default, Choices: entry.Choices, Secret: registered && def.IsSecret()})
+		input := hostInput{Module: entry.Module, Key: entry.Key, Type: entry.Type, Default: entry.Default, Choices: entry.Choices, Secret: registered && def.IsSecret()}
+		if entry.Ignored {
+			input.Ignored = entry.Target
+		}
+		out = append(out, input)
 		seen[entry.Key] = true
 	}
 	for _, d := range host {
@@ -151,6 +156,9 @@ func schemaProperty(input hostInput) map[string]any {
 	if input.Default != "" {
 		prop["default"] = schemaDefault(input.Type, input.Default)
 	}
+	if input.Ignored != "" {
+		prop["description"] = "Accepted but ignored with a warning, replaced by " + input.Ignored + "; refused once the NixOS module has " + input.Ignored + "."
+	}
 	return prop
 }
 
@@ -173,7 +181,7 @@ func schemaJSON(entries []settings.ImportEntry, byKey map[string]settings.Def, h
 			derived[dotted] = target
 			destinations[dotted] = target
 		}
-		if entry.Class != settings.ImportHost || entry.Runtime {
+		if entry.Class != settings.ImportHost || entry.Runtime || entry.Retired {
 			destinations[dotted] = settings.CutoverDestination(entry)
 		}
 	}
@@ -287,6 +295,9 @@ func referenceDoc(defs []settings.Def, entries []settings.ImportEntry, byKey map
 		typ := string(input.Type)
 		if len(input.Choices) > 0 {
 			typ += " (" + strings.Join(input.Choices, ", ") + ")"
+		}
+		if input.Ignored != "" {
+			typ += "; accepted but ignored with a warning, replaced by `" + input.Ignored + "`; refused once the NixOS module has `" + input.Ignored + "`"
 		}
 		def := "none"
 		if input.Default != "" {

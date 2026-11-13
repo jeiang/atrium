@@ -36,11 +36,12 @@ func (a *Agent) serveThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for k, v := range q {
-		if (k != "root" && k != "path") || len(v) != 1 || len(q) != 2 {
-			problem(w, 400, protocol.CodeInvalidRequest, "the query must have exactly one root and one path")
+		if (k != "root" && k != "path" && (k != "generate" || v[0] != "0")) || len(v) != 1 || !q.Has("root") || !q.Has("path") {
+			problem(w, 400, protocol.CodeInvalidRequest, "the query must have exactly one root and one path and may only add generate=0")
 			return
 		}
 	}
+	generate := !q.Has("generate")
 	p := protocol.Path{Root: q.Get("root"), Rel: q.Get("path")}
 	if a.roots.byName[p.Root] == nil {
 		problem(w, 400, protocol.CodeInvalidRequest, "the root is unknown")
@@ -62,7 +63,7 @@ func (a *Agent) serveThumbnail(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = t.file.Close() }()
 	ctx, cancel := a.workContext(r.Context())
 	defer cancel()
-	if hit, miss := thumbCached(t.final); miss {
+	if hit, miss := thumbCached(t.final); miss || (!hit && !generate) {
 		thumbnailProblem(w, errNoImage)
 		return
 	} else if !hit {

@@ -57,8 +57,8 @@ type activityPage struct {
 	Entries    []reviewapp.ActivityEntry `json:"entries"`
 	Category   string                    `json:"category"`
 	Categories []string                  `json:"categories"`
-	NextOffset int                       `json:"next_offset"`
-	Offset     int                       `json:"offset"`
+	Next       string                    `json:"next"`
+	After      string                    `json:"after"`
 }
 
 type activityRowData struct {

@@ -1,30 +1,18 @@
 package media
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/logx"
 )
 
-const (
-	postersDir = "posters"
-	thumbsDir  = "thumbs"
-)
-
-var ffmpegMu sync.Mutex
+const postersDir = "posters"
 
 type Artwork struct {
 	Cache string
@@ -66,10 +54,6 @@ func withJPG(path string) string {
 		return path[:len(path)-len(name)+i] + ".jpg"
 	}
 	return path + ".jpg"
-}
-
-func (a *Artwork) thumbFile(rel string) string {
-	return filepath.Join(a.Cache, thumbsDir, rel+".jpg")
 }
 
 func noneMarker(path string) string { return strings.TrimSuffix(path, ".jpg") + ".none" }
@@ -165,7 +149,7 @@ func (a *Artwork) posterPath(ctx context.Context, kind, name string, season int6
 
 func (a *Artwork) Poster(ctx context.Context, kind, name string, season int64) (string, bool) {
 	path := a.posterFile(kind, name, season)
-	if isFile(path) {
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
 		return path, true
 	}
 	if a.TMDB == nil || a.freshNone(path) {
@@ -189,150 +173,4 @@ func (a *Artwork) Poster(ctx context.Context, kind, name string, season int64) (
 		return "", false
 	}
 	return path, true
-}
-
-func (a *Artwork) run(ctx context.Context, argv []string) (string, string, int, error) {
-	ctx, cancel := context.WithTimeout(ctx, a.FFmpegTimeout)
-	defer cancel()
-	return execRun(ctx, argv)
-}
-
-func execRun(ctx context.Context, argv []string) (string, string, int, error) {
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return killGroup(cmd.Process.Pid) }
-	cmd.WaitDelay = processWaitDelay
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err := cmd.Run()
-	if cmd.Process != nil {
-		if kerr := killGroup(cmd.Process.Pid); kerr != nil {
-			log.Warn(fmt.Sprintf("%s: stopping its process group failed", argv[0]), logx.Err, kerr)
-		}
-	}
-	if ctx.Err() != nil {
-		return stdout.String(), stderr.String(), -1, ctx.Err()
-	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		return stdout.String(), stderr.String(), exit.ExitCode(), nil
-	}
-	return stdout.String(), stderr.String(), 0, err
-}
-
-const processWaitDelay = 5 * time.Second
-
-func killGroup(pid int) error {
-	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-		return err
-	}
-	return nil
-}
-
-func (a *Artwork) niced(argv ...string) []string {
-	return append([]string{"nice", "-n", a.FFmpegNice}, argv...)
-}
-
-func (a *Artwork) duration(ctx context.Context, full string) (float64, error) {
-	stdout, _, code, err := a.run(ctx, a.niced("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", full))
-	if err != nil {
-		return 0, err
-	}
-	if code != 0 {
-		return 0, nil
-	}
-	seconds, perr := strconv.ParseFloat(strings.TrimSpace(stdout), 64)
-	if perr != nil {
-		return 0, nil
-	}
-	return seconds, nil
-}
-
-func clip(text string, n int) string {
-	runes := []rune(text)
-	return string(runes[:min(n, len(runes))])
-}
-
-func seekText(at float64) string {
-	if math.IsInf(at, 1) {
-		return "inf"
-	}
-	return strconv.FormatFloat(at, 'f', 2, 64)
-}
-
-func (a *Artwork) Thumbnail(ctx context.Context, root, rel string) (string, bool) {
-	full, ok := SafeRel(root, rel)
-	if !ok {
-		return "", false
-	}
-	path := a.thumbFile(rel)
-	if isFile(path) {
-		return path, true
-	}
-	if a.freshNone(path) {
-		return "", false
-	}
-	ffmpegMu.Lock()
-	defer ffmpegMu.Unlock()
-	if isFile(path) {
-		return path, true
-	}
-	fail := func(err error) (string, bool) {
-		if ctx.Err() == nil {
-			rememberNone(path)
-		}
-		log.Warn(fmt.Sprintf("thumbnail %s: %v", rel, err), logx.Err, err)
-		return "", false
-	}
-	seconds, err := a.duration(ctx, full)
-	if err != nil {
-		return fail(err)
-	}
-	at := 0.0
-	if scaled := seconds * a.ThumbPosition; scaled > 0 {
-		at = scaled
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fail(err)
-	}
-	tmpFile, err := os.CreateTemp(filepath.Dir(path), ".thumb-*.jpg")
-	if err != nil {
-		return fail(err)
-	}
-	tmp := tmpFile.Name()
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return fail(err)
-	}
-	defer func() { _ = os.Remove(tmp) }()
-	_, stderr, code, err := a.run(ctx, a.niced("ffmpeg", "-v", "error", "-y", "-ss", seekText(at), "-i", full, "-frames:v", "1", "-vf", fmt.Sprintf("scale=%d:-2", a.ThumbWidth), "-q:v", "4", tmp))
-	if err != nil {
-		return fail(err)
-	}
-	if code != 0 || !isFile(tmp) {
-		return fail(errors.New(clip(strings.TrimSpace(stderr), 200)))
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fail(err)
-	}
-	return path, true
-}
-
-func (a *Artwork) ThumbnailPass(ctx context.Context, root string, limit int) (generated, remaining int) {
-	for _, rel := range a.EpisodeFiles(root) {
-		if ctx.Err() != nil {
-			break
-		}
-		if isFile(a.thumbFile(rel)) {
-			continue
-		}
-		if generated >= limit {
-			remaining++
-			continue
-		}
-		if _, ok := a.Thumbnail(ctx, root, rel); ok {
-			generated++
-		}
-	}
-	return generated, remaining
 }

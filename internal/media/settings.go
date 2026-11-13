@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -17,15 +18,14 @@ import (
 const module = "media"
 
 const (
-	KeyRoot          = "media_root"
-	KeyQbitURL       = "media_qbittorrent_url"
-	KeyMoviesURL     = "media_movies_url"
-	KeyTVURL         = "media_tv_url"
-	KeyLinkTTL       = "media_link_ttl_seconds"
-	KeyEZTVURL       = "media_eztv_url"
-	KeyLinkKey       = "link_key"
-	KeyTMDBURL       = "media_tmdb_url"
-	KeyTMDBImagesURL = "media_tmdb_images_url"
+	KeyDownloadPrefix = "media_download_path_prefix"
+	KeyQbitURL        = "media_qbittorrent_url"
+	KeyVPNBaseURL     = "media_vpn_base_url"
+	KeyLinkTTL        = "media_link_ttl_seconds"
+	KeyEZTVURL        = "media_eztv_url"
+	KeyLinkKey        = "link_key"
+	KeyTMDBURL        = "media_tmdb_url"
+	KeyTMDBImagesURL  = "media_tmdb_images_url"
 )
 
 const (
@@ -43,18 +43,47 @@ func SettingsDefs() []settings.Def {
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: KeyRoot, Module: module, Type: settings.String},
-		{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
-		{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
+		{Key: KeyDownloadPrefix, Module: module, Type: settings.String},
+		{Key: KeyVPNBaseURL, Module: module, Type: settings.String, Check: vpnOrigin},
 	}
 }
 
-func httpURL(value string) error {
+func vpnOrigin(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil
 	}
-	return requiredHTTPURL(value)
+	u, err := url.Parse(value)
+	if err != nil || strings.Contains(value, "#") || u.Opaque != "" || u.User != nil || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return settings.Invalid("must be an origin such as https://media.example.org:8443, with no path, query or credentials")
+	}
+	if u.Scheme == "https" || u.Scheme == "http" && loopbackHost(u.Hostname()) {
+		return nil
+	}
+	return settings.Invalid("must use https; http is allowed only for a loopback host")
+}
+
+func vpnBase(value string) string {
+	u, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port := u.Port(); port != "" && port != map[string]string{"https": "443", "http": "80"}[u.Scheme] {
+		host += ":" + port
+	}
+	return u.Scheme + "://" + host
+}
+
+func loopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 func requiredHTTPURL(value string) error {
@@ -106,15 +135,15 @@ type Tuning struct {
 
 type Settings struct {
 	Tuning
-	Root      string
-	QbitLease *connections.Lease
-	QbitStore *connections.Store
-	TMDBLease *connections.Lease
-	TMDBStore *connections.Store
-	EZTVLease *connections.Lease
-	MoviesURL string
-	TVURL     string
-	PublicURL string
+	DownloadPrefix string
+	QbitLease      *connections.Lease
+	QbitStore      *connections.Store
+	TMDBLease      *connections.Lease
+	TMDBStore      *connections.Store
+	EZTVLease      *connections.Lease
+	AgentLease     *connections.Lease
+	VPNBaseURL     string
+	PublicURL      string
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
@@ -137,9 +166,8 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		failure = err
 		return n
 	}
-	out.Root = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyRoot)), "/")
-	out.MoviesURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyMoviesURL)), "/")
-	out.TVURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyTVURL)), "/")
+	out.DownloadPrefix = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyDownloadPrefix)), "/")
+	out.VPNBaseURL = vpnBase(config.From(ctx).HostValue(KeyVPNBaseURL))
 	out.LinkTTL = whole(KeyLinkTTL)
 	if failure != nil {
 		return Settings{}, failure
@@ -162,6 +190,9 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return Settings{}, failure
 	}
 	if out.EZTVLease, failure = lease(connections.ID(KindEZTV)); failure != nil {
+		return Settings{}, failure
+	}
+	if out.AgentLease, failure = lease(connections.ID(KindMediaAgent)); failure != nil {
 		return Settings{}, failure
 	}
 	out.QbitStore = connections.DefaultFor(q)
@@ -207,13 +238,6 @@ func (s Settings) TMDB() *TMDB {
 		}
 	}
 	return tmdb
-}
-
-func (s Settings) NeedRoot() (string, error) {
-	if s.Root == "" {
-		return "", config.NotConfigured("media_root is not set; set media.media_root in the host file")
-	}
-	return s.Root, nil
 }
 
 func (s Settings) NeedQbit() (string, error) {

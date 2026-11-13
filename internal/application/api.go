@@ -32,6 +32,7 @@ type APIShape struct {
 	Success   int
 	Body      BodyKind
 	Sensitive bool
+	Fresh     bool
 	Errors    []Code
 }
 

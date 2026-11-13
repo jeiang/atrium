@@ -114,7 +114,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	}
 	if unsafe {
 		params = append(params, object{"name": "Idempotency-Key", "in": "header", "schema": object{"type": "string", "minLength": 1, "maxLength": 255}})
-	} else if kind == application.Query && shape.Body != application.BodyEventStream {
+	} else if kind == application.Query && !shape.Fresh && shape.Body != application.BodyEventStream {
 		params = append(params, object{"name": "If-None-Match", "in": "header", "schema": object{"type": "string"}})
 	}
 	op := object{
@@ -139,7 +139,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	headers := object{}
 	if unsafe {
 		headers["Atrium-Command-Id"] = object{"schema": object{"type": "string"}}
-	} else if kind == application.Query && shape.Body != application.BodyEventStream {
+	} else if kind == application.Query && !shape.Fresh && shape.Body != application.BodyEventStream {
 		headers["ETag"] = object{"schema": object{"type": "string"}}
 	}
 	success := object{"description": http.StatusText(shape.Success), "headers": headers}
@@ -160,7 +160,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		responses["410"] = object{"description": http.StatusText(http.StatusGone), "content": object{"application/json": object{"schema": object{"allOf": []any{errorRef, object{
 			"type": "object", "required": []any{"run_id"}, "properties": object{"run_id": object{"type": "integer"}},
 		}}}}}}
-	} else if kind == application.Query && !unsafe {
+	} else if kind == application.Query && !unsafe && !shape.Fresh {
 		responses["304"] = object{"description": http.StatusText(http.StatusNotModified), "headers": object{"ETag": object{"schema": object{"type": "string"}}}}
 	}
 	statuses := slices.Clone(guardSafe)

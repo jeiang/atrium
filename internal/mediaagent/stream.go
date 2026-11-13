@@ -26,6 +26,10 @@ var videoTypes = map[string]string{
 	".wmv": "video/x-ms-wmv",
 }
 
+func keptVideo(rel string, size int64) bool {
+	return videoTypes[strings.ToLower(path.Ext(rel))] != "" && !protocol.Sample(rel, size)
+}
+
 func (a *Agent) serveFile(w http.ResponseWriter, r *http.Request) {
 	q, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
@@ -48,6 +52,10 @@ func (a *Agent) serveFile(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusBadRequest, protocol.CodeInvalidRequest, "the root is unknown")
 		return
 	}
+	a.streamFile(w, r, root, rel)
+}
+
+func (a *Agent) streamFile(w http.ResponseWriter, r *http.Request, root, rel string) {
 	f, st, err := a.roots.openFile(root, rel)
 	switch {
 	case err == nil:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
@@ -15,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
+	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -29,10 +31,14 @@ func CandidatesJob(deps jobworker.Dependencies) scheduler.Definition {
 		Schedule: "0 * * * *", ScheduleSetting: calendar.KeyScheduleCandidates, Persistent: true, Timeout: 30 * time.Minute,
 		Spend: scheduler.ConditionalSpends, Needs: []string{module.Calendar, module.Mail, module.Assistant},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-			out, err := calendarService(e.Service, e.Now, &e.Claim).DraftCandidates(ctx, calapp.DraftCandidatesInput{})
+			out, err := draftCandidates(ctx, e, calapp.DraftCandidatesInput{})
 			return jobworker.Result{RunID: out.Data.RunID}, err
 		}),
 	}
+}
+
+func draftCandidates(ctx context.Context, e jobworker.Env, in calapp.DraftCandidatesInput) (application.Change[candidates.Result], error) {
+	return calendarService(e.Service, e.Now, &e.Claim).DraftCandidates(ctx, in)
 }
 
 func calendarService(svc *service.Service, now func() float64, claim *scheduler.Claim) *calapp.Service {

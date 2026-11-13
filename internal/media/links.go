@@ -198,18 +198,13 @@ func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, tt
 }
 
 func (s Settings) VPNURL(rel string) string {
-	top, rest, _ := strings.Cut(rel, "/")
-	base := ""
-	switch top {
-	case Movies:
-		base = s.MoviesURL
-	case TV:
-		base = s.TVURL
-	}
-	if base == "" {
+	if s.VPNBaseURL == "" {
 		return ""
 	}
-	return base + "/" + urlQuote(rest)
+	if _, _, ok := SplitRel(rel); !ok {
+		return ""
+	}
+	return s.VPNBaseURL + "/library/" + urlQuote(rel)
 }
 
 func QueryValue(values []string) string {
@@ -221,6 +216,9 @@ func QueryValue(values []string) string {
 
 func (l *Links) Verifier() func(*http.Request) bool {
 	return func(r *http.Request) bool {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			return false
+		}
 		rest, ok := strings.CutPrefix(r.URL.Path, FilePrefix)
 		if !ok {
 			return false
@@ -228,4 +226,17 @@ func (l *Links) Verifier() func(*http.Request) bool {
 		query := r.URL.Query()
 		return l.Verify(r.Context(), rest, QueryValue(query["exp"]), QueryValue(query["sig"]), Now())
 	}
+}
+
+func SplitRel(rel string) (string, string, bool) {
+	root, rest, ok := strings.Cut(rel, "/")
+	if !ok || (root != Movies && root != TV) || rest == "" || strings.ContainsAny(rest, "\\\x00") {
+		return "", "", false
+	}
+	for part := range strings.SplitSeq(rest, "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", "", false
+		}
+	}
+	return root, rest, true
 }

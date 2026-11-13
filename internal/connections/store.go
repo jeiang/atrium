@@ -839,6 +839,38 @@ func (l *Lease) client(name string, timeout time.Duration, follow bool) (*http.C
 	return l.newClient(transport.Options{Timeout: timeout, FollowRedirects: follow}, u)
 }
 
+func (l *Lease) StreamClient(name string, header time.Duration) (*http.Client, error) {
+	if l.closed {
+		return nil, errors.New("connections: the lease is closed")
+	}
+	if _, err := l.Endpoint(name); err != nil {
+		return nil, err
+	}
+	if l.options.Proxy != "" {
+		return nil, errors.New("connections: streaming does not support a proxy")
+	}
+	if header <= 0 {
+		header = 10 * time.Second
+	}
+	l.shared.mu.Lock()
+	defer l.shared.mu.Unlock()
+	key := fmt.Sprintf("%s\x00stream:%d", name, header)
+	if client := l.shared.clients[key]; client != nil {
+		return client, nil
+	}
+	client, err := transport.New(transport.Options{Timeout: header, CAFile: l.options.CAFile})
+	if err != nil {
+		return nil, err
+	}
+	client.Timeout = 0
+	tr := client.Transport.(*http.Transport)
+	tr.Proxy = nil
+	tr.DisableCompression = true
+	client = l.reporting(client)
+	l.shared.clients[key] = client
+	return client, nil
+}
+
 func guardOrigin(client *http.Client, base *url.URL) {
 	origin := base.Scheme + "://" + base.Host
 	prefix := base.Path

@@ -234,7 +234,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
 		return
 	}
-	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName}
+	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName, Expires: tok.ExpiresAt}
 	if isUnsafe(r.Method) {
 		if !sameOrigin(r) {
 			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
@@ -258,9 +258,24 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
 	who.BearerID = tok.ID
-	ctx := withStreamAccess(withAPIIdentity(r.Context(), who), "bearer:"+tokenKey(token), func(ctx context.Context) error {
+	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
 		_, err := g.bearers.Authenticate(ctx, token)
 		return err
 	})
 	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+type originKey struct{}
+
+func Origin(r *http.Request) string {
+	scheme := "https"
+	if r.TLS == nil && strings.HasPrefix(r.Host, "127.0.0.1") {
+		scheme = "http"
+	}
+	return scheme + "://" + r.Host
+}
+
+func RequestOrigin(ctx context.Context) string {
+	origin, _ := ctx.Value(originKey{}).(string)
+	return origin
 }

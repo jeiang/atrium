@@ -172,8 +172,12 @@ func queueView(v media.View) QueueView {
 	for i, f := range v.Files {
 		files[i] = QueueFile{Rel: f.Rel, Season: f.Season, Episode: f.Episode, Dest: f.Dest}
 	}
+	problem := v.Error
+	if problem == "" {
+		problem = v.Item.Error
+	}
 	return QueueView{
 		Item: QueueItem{ID: v.Item.ID, Name: v.Item.Name, Torrent: v.Item.Torrent}, Kind: v.Kind, Title: v.Title,
-		Year: v.Year, Files: files, MovieFile: v.MovieFile, MovieDest: v.MovieDest, Error: v.Error,
+		Year: v.Year, Files: files, MovieFile: v.MovieFile, MovieDest: v.MovieDest, Error: problem,
 	}
 }
