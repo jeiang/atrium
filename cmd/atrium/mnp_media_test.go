@@ -547,7 +547,10 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	if got := expect("signed link without the group", good, http.StatusOK); got != body {
 		t.Errorf("signed link body %q", got)
 	}
-	expect("signed range without the group", good, http.StatusPartialContent, "Range", "bytes=10-19")
+	if got := expect("signed range without the group", good, http.StatusPartialContent, "Range", "bytes=10-19"); got != body[10:20] {
+		t.Errorf("range body %q, want %q", got, body[10:20])
+	}
+	expect("unsatisfiable signed range", good, http.StatusRequestedRangeNotSatisfiable, "Range", "bytes=100-")
 	expect("signed link on a foreign host", good, http.StatusBadRequest, "Host", "evil.test")
 	expect("page without the group", "/apps/media/downloads", http.StatusForbidden)
 	expect("tampered signature", mnpFlipLast(good), http.StatusForbidden)
@@ -564,4 +567,66 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	expect("parent of the root", mnpSign(key, "movies/../../atrium.db", far), http.StatusNotFound)
 	sig := mnpSign(key, movie, far)
 	expect("signature on another route", "/apps/media/thumb/"+mnpQuote(movie)+sig[strings.Index(sig, "?"):], http.StatusForbidden)
+}
+
+func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
+	v2only := "magnet:?xt=urn:btmh:1220" + strings.Repeat("a", 64) + "&dn=Lanterns.S01E12"
+
+	dir := t.TempDir()
+	mnpMediaRoot(t, dir)
+	qb, qbURL := mnpNewQbit(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
+	seedAllFlagsIn(t, dir)
+	b := mnpNewBrowser(t, startServeIn(t, dir))
+	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {v2only}, "mode": {"media"}}, http.StatusUnprocessableEntity)
+	b.want(http.MethodPost, "/apps/media/add", url.Values{
+		"magnet":  {mediaMagnet(strings.Repeat("a", 40), "Lanterns")},
+		"torrent": {"ZDE6YWJl"}, "name": {"lanterns.torrent"}, "mode": {"media"},
+	}, http.StatusUnprocessableEntity)
+	webDB := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = webDB.Close() }()
+	var effects, invalid int
+	if err := webDB.Read.QueryRow("SELECT COUNT(*) FROM effects").Scan(&effects); err != nil {
+		t.Fatal(err)
+	}
+	if err := webDB.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'media.add' AND outcome = 'invalid'").Scan(&invalid); err != nil {
+		t.Fatal(err)
+	}
+	if effects != 0 || invalid != 2 {
+		t.Fatalf("web refusals: %d effects, %d invalid audits; want 0, 2", effects, invalid)
+	}
+	if adds := qb.count("add"); adds != 0 {
+		t.Fatalf("the refused web add reached qBittorrent: %d adds", adds)
+	}
+
+	toolDir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	mnpMediaRoot(t, toolDir)
+	toolQB, toolURL := mnpNewQbit(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, toolDir, toolURL, "", "", ""))
+	result := unescape(toolResult(t, "media_add_magnet", map[string]any{"magnet": v2only}))
+	if !strings.Contains(result, `"code":"invalid"`) || !strings.Contains(result, "magnet") {
+		t.Fatalf("media_add_magnet with a v2-only magnet = %s, want an invalid tool error", result)
+	}
+	if adds := toolQB.count("add"); adds != 0 {
+		t.Fatalf("the refused tool add reached qBittorrent: %d adds", adds)
+	}
+	d := mustConnect(t, filepath.Join(toolDir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var cards int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'media_add_magnet'").Scan(&cards); err != nil {
+		t.Fatal(err)
+	}
+	if cards != 0 {
+		t.Fatalf("the refused tool add created %d approval cards", cards)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects").Scan(&effects); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'media.add' AND outcome = 'invalid'").Scan(&invalid); err != nil {
+		t.Fatal(err)
+	}
+	if effects != 0 || invalid != 1 {
+		t.Fatalf("tool refusal: %d effects, %d invalid audits; want 0, 1", effects, invalid)
+	}
 }

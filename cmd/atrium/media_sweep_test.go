@@ -46,3 +46,39 @@ func TestMediaSweepOnlyDeletesMediaTorrents(t *testing.T) {
 		t.Fatalf("deleted %v, want only %s", deleted, mediaHash)
 	}
 }
+
+func TestMediaSweepJobFailsWhenQbittorrentFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, srv.URL, "", "", ""))
+	ran := runApp(t, "media", "sweep")
+	if ran.code != cli.ExitOK {
+		t.Fatalf("media sweep: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	var out struct {
+		Errors []string `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(ran.stdout), &out); err != nil || len(out.Errors) == 0 {
+		t.Fatalf("media sweep output %q (%v), want reported errors", ran.stdout, err)
+	}
+	d := mustConnect(t, dir+"/atrium.db", keyFor(t))
+	run := runJob(t, f, d, media.JobSweep)
+	var status string
+	if err := d.Read.QueryRow("SELECT status FROM job_runs WHERE id = ?", run).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "error" {
+		t.Fatalf("media-sweep job status %q, want error", status)
+	}
+	var outcome string
+	if err := d.Read.QueryRow("SELECT outcome FROM operation_audit WHERE operation = 'media.sweep' ORDER BY id DESC LIMIT 1").Scan(&outcome); err != nil {
+		t.Fatal(err)
+	}
+	if outcome == "ok" {
+		t.Fatalf("media.sweep audit outcome %q, want a failure", outcome)
+	}
+}

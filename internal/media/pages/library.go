@@ -1,12 +1,13 @@
 package pages
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -35,77 +36,54 @@ func libEntries(found []media.Entry) []LibraryEntry {
 }
 
 func (s *service) libraryIndex(w http.ResponseWriter, r *http.Request) {
-	set := s.settings(r.Context())
-	root, err := set.NeedRoot()
+	read, err := s.app.Library(r.Context(), mediaapp.LibraryInput{})
 	if err != nil {
-		s.libRender(w, r, "media_library.gohtml", LibraryPage{Error: err.Error(), Movies: []LibraryEntry{}, Shows: []LibraryEntry{}})
-		return
+		panic(err)
 	}
-	s.libRender(w, r, "media_library.gohtml", LibraryPage{Movies: libEntries(set.MovieEntries(root)), Shows: libEntries(set.ShowEntries(root))})
+	s.libRender(w, r, "media_library.gohtml", LibraryPage{Error: read.Data.Error, Movies: libEntries(read.Data.Movies), Shows: libEntries(read.Data.Shows)})
 }
 
-func (s *service) libLinks(ctx context.Context, set media.Settings, rel string) (public, vpn string) {
-	if set.PublicURL != "" {
-		url, err := s.links.PublicURL(ctx, set.PublicURL, rel, s.now(), set.LinkTTL)
-		if err != nil {
+func (s *service) libDetail(w http.ResponseWriter, r *http.Request, kind string) (mediaapp.LibraryDetail, bool) {
+	read, err := s.app.LibraryDetail(r.Context(), mediaapp.LibraryDetailInput{Kind: kind, Name: web.PathParam(r, "name")})
+	if err != nil {
+		if application.Classify(err).Code != application.NotFound {
 			panic(err)
 		}
-		public = url
+		s.deps.Error(w, r, http.StatusNotFound, "not found")
+		return mediaapp.LibraryDetail{}, false
 	}
-	return public, set.VPNURL(rel)
+	return read.Data, true
 }
 
 func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
-	set := s.settings(r.Context())
-	root, err := set.NeedRoot()
-	var found media.MovieView
-	if err == nil {
-		found, err = set.Movie(root, web.PathParam(r, "name"))
-	}
-	if err != nil {
-		s.libMissing(w, r, err)
+	found, ok := s.libDetail(w, r, media.KindMovie)
+	if !ok {
 		return
 	}
 	files := make([]FileLink, len(found.Files))
 	for i, f := range found.Files {
-		public, vpn := s.libLinks(r.Context(), set, f.Rel)
-		files[i] = FileLink{Rel: f.Rel, Name: f.Name, Size: f.Size, Public: public, VPN: vpn}
+		files[i] = FileLink{Rel: f.Rel, Name: f.Name, Size: f.Size, Public: f.Public, VPN: f.VPN}
 	}
-	view := MovieView{Dir: found.Dir, Title: found.Title, Year: found.Year, Files: files}
-	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(set.LinkTTL)})
+	view := MovieView{Dir: found.Entry.Dir, Title: found.Entry.Title, Year: found.Entry.Year, Files: files}
+	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(found.LinkTTL)})
 }
 
 func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
-	set := s.settings(r.Context())
-	root, err := set.NeedRoot()
-	var found media.ShowView
-	if err == nil {
-		found, err = set.Show(root, web.PathParam(r, "name"))
-	}
-	if err != nil {
-		s.libMissing(w, r, err)
+	found, ok := s.libDetail(w, r, media.KindShow)
+	if !ok {
 		return
 	}
 	seasons := make([]SeasonView, len(found.Seasons))
 	for i, season := range found.Seasons {
 		episodes := make([]EpisodeView, len(season.Episodes))
 		for j, e := range season.Episodes {
-			public, vpn := s.libLinks(r.Context(), set, e.Rel)
 			episodes[j] = EpisodeView{
-				Rel: e.Rel, Name: e.Name, Size: e.Size, Public: public, VPN: vpn,
+				Rel: e.Rel, Name: e.Name, Size: e.Size, Public: e.Public, VPN: e.VPN,
 				Season: e.Season, Episode: e.Episode,
 			}
 		}
 		seasons[i] = SeasonView{Number: season.Number, Dir: season.Dir, Episodes: episodes}
 	}
-	view := ShowView{Dir: found.Dir, Title: found.Title, Year: found.Year, Seasons: seasons}
-	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(set.LinkTTL)})
-}
-
-func (s *service) libMissing(w http.ResponseWriter, r *http.Request, err error) {
-	_, kind := mustClassify(err)
-	if kind != notFoundError && kind != backendError {
-		panic(err)
-	}
-	s.deps.Error(w, r, http.StatusNotFound, "not found")
+	view := ShowView{Dir: found.Entry.Dir, Title: found.Entry.Title, Year: found.Entry.Year, Seasons: seasons}
+	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(found.LinkTTL)})
 }
