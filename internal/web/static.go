@@ -7,7 +7,7 @@ import (
 	"io/fs"
 )
 
-//go:embed static/app.css static/app.js static/sw.js static/manifest.json static/htmx.min.js static/basecoat/all.min.js static/fonts
+//go:embed static
 var staticFiles embed.FS
 
 var Static = mustSub(staticFiles, "static")

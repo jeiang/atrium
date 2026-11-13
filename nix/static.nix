@@ -4,6 +4,7 @@
   fetchurl,
   tailwindcss_4,
   jq,
+  brotli,
 }: let
   npmTarball = name: version: hash:
     fetchurl {
@@ -57,7 +58,7 @@ in
       ];
     };
     sourceRoot = "source/internal/web/assets";
-    nativeBuildInputs = [tailwindcss_4 jq];
+    nativeBuildInputs = [tailwindcss_4 jq brotli];
     dontConfigure = true;
     passthru = {inherit basecoat;};
     buildPhase = ''
@@ -78,6 +79,7 @@ in
       install -Dm444 node_modules/basecoat-css/dist/js/all.min.js $out/basecoat/all.min.js
       tar -xzOf ${htmx} package/dist/htmx.min.js > $out/htmx.min.js
       ${lib.concatMapStrings installFont fonts}
+      bash ../../../nix/webassets/pack.sh
       runHook postInstall
     '';
   }
