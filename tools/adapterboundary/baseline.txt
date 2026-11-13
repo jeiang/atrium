@@ -45,7 +45,6 @@ internal/assistant/subagents/research/research.go	github.com/jeiang/atrium/inter
 internal/assistant/subagents/research/research.go	github.com/jeiang/atrium/internal/assistant/loop
 internal/assistant/subagents/research/research.go	github.com/jeiang/atrium/internal/assistant/subagents
 internal/assistant/subagents/research/research.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/attention/attention.go	github.com/jeiang/atrium/internal/attention
 internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/assistant/approval
 internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/connections

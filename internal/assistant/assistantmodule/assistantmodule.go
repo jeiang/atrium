@@ -77,10 +77,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	memoryOps, memoryBindings := memoryOperations()
 	researchOps, researchBindings := researchOperations()
 	agentOps, agentBindings := agentOperations()
+	attentionOps, attentionBindings := attentionOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -147,7 +148,7 @@ func SettingGroups() []settings.Group {
 func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
 	for _, tools := range [][]tool.Tool{
-		askoperator.Tools(memoryToolService), attentiontool.Tools(), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
+		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
 		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(),
