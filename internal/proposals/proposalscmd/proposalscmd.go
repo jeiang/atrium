@@ -130,26 +130,36 @@ func (x *exec) review() *reviewapp.Service {
 	return reviewapp.New(reviewapp.Deps{DB: x.DB, Ledger: p.Ledger, Registry: p.Registry, Pipeline: p})
 }
 
-func selectionOf(raw string) (reviewapp.Selection, error) {
-	invalid := func(message string) error {
-		return &application.Error{Code: application.Invalid, Message: message, Fields: []application.Field{{Name: "selection", Code: "invalid", Message: message}}}
-	}
+func selectionOf(raw string) (any, error) {
 	parsed, err := jsonx.Loads([]byte(raw))
 	if err != nil {
 		if strings.TrimSpace(raw) == "{" {
-			return nil, invalid("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)")
+			return nil, errors.New("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)") //nolint:staticcheck // the CLI contract keeps the py-compatible wording
 		}
-		return nil, invalid(err.Error())
+		return nil, err
 	}
 	b, err := json.Marshal(parsed)
 	if err != nil {
 		return nil, err
 	}
-	var chosen reviewapp.Selection
-	if err := json.Unmarshal(b, &chosen); err != nil || chosen == nil {
-		return nil, invalid("selection must be an object.")
+	var chosen any
+	if err := json.Unmarshal(b, &chosen); err != nil {
+		return nil, err
 	}
 	return chosen, nil
+}
+
+func recorded(err error, unknown string) error {
+	var e *application.Error
+	switch {
+	case !errors.As(err, &e):
+		return err
+	case e.Code == application.NotFound:
+		return errors.New(unknown)
+	case e.Code == application.Invalid && len(e.Fields) == 1 && e.Fields[0].Name == "selection":
+		return errors.New(e.Message)
+	}
+	return err
 }
 
 type body func(x *exec) error
@@ -225,7 +235,7 @@ func Command(o Options) *cli.Command {
 					x.JSON(approved.Data.Proposal.Dict())
 				}
 				if err != nil {
-					return err
+					return recorded(err, fmt.Sprintf("unknown proposal %d", *id))
 				}
 				if !approved.Data.Applied {
 					return failure(cli.ExitError, errors.New("the apply failed; see the result"))
@@ -268,7 +278,7 @@ func Command(o Options) *cli.Command {
 				if err == nil || len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
 					x.JSON(outcome.Dict())
 				}
-				return err
+				return recorded(err, fmt.Sprintf("proposal %d is not applied", *id))
 			}
 		}),
 	}}

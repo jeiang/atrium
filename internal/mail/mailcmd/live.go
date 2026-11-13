@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/backlog"
@@ -132,6 +133,9 @@ func listActions(x *exec, limit int, kind string) error {
 
 func undoAction(x *exec, id int64) error {
 	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Undo(x.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
+	if e := (*application.Error)(nil); errors.As(err, &e) && e.Code == application.NotFound {
+		return fmt.Errorf("unknown action %d", id)
+	}
 	if err != nil {
 		return err
 	}

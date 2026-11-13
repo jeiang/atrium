@@ -230,7 +230,7 @@ func (s *Service) Create(ctx context.Context, in RecordInput) (application.Chang
 }
 
 func (s *Service) Edit(ctx context.Context, in EditInput) (application.Change[Changed], error) {
-	record, err := in.RecordInput.normalize()
+	record, err := in.normalize()
 	if err != nil {
 		return application.Change[Changed]{}, s.reject(ctx, EditName, in.ID, err)
 	}

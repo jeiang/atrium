@@ -7,6 +7,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -250,8 +251,27 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	if code := s.action(denied); code != http.StatusGone {
 		t.Fatalf("refused token replay = %d", code)
 	}
+	rows, err := d.Read.Query("SELECT operation || ' ' || outcome || ' ' || target FROM operation_audit WHERE source = 'phone' AND actor = 'phone' ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var phoneAudit []string
+	for rows.Next() {
+		var row string
+		if err := rows.Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		phoneAudit = append(phoneAudit, row)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	wantAudit := []string{"review.dismiss ok proposal:1", "media.channel-add ok channel:1", "review.approve ok proposal:2", "review.approve invalid proposal:3", "review.dismiss failed proposal:4", "review.dismiss refused proposal:4"}
+	if !slices.Equal(phoneAudit, wantAudit) {
+		t.Fatalf("phone audit = %q, want %q", phoneAudit, wantAudit)
+	}
 	var count int
-	if err := d.Read.QueryRow("SELECT count(*) FROM operation_audit WHERE source = 'phone'").Scan(&count); err != nil || count != 5 {
+	if err := d.Read.QueryRow("SELECT count(*) FROM operation_audit WHERE source = 'phone'").Scan(&count); err != nil || count != len(wantAudit) {
 		t.Fatalf("phone audit count = %d, %v", count, err)
 	}
 

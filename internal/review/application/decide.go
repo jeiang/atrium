@@ -21,11 +21,9 @@ import (
 
 var log = logx.Logger("atrium.review")
 
-type Selection map[string]any
-
 type ApproveInput struct {
 	ProposalID     int64
-	Selection      Selection
+	Selection      any
 	SelectionValue any
 }
 
@@ -80,11 +78,7 @@ func (s *Service) Approve(ctx context.Context, in ApproveInput) (application.Cha
 }
 
 func (s *Service) approve(ctx context.Context, in ApproveInput, who proposals.Resolver) (application.Change[Decision], error) {
-	var selection any
-	if in.Selection != nil {
-		selection = map[string]any(in.Selection)
-	}
-	done, err := s.pipeline.ApproveAndApply(ctx, in.ProposalID, selection, who)
+	done, err := s.pipeline.ApproveAndApply(ctx, in.ProposalID, in.Selection, who)
 	target := proposalTarget(in.ProposalID)
 	var badSelection proposals.SelectionError
 	if errors.As(err, &badSelection) {
