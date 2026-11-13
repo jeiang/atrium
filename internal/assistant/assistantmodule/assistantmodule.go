@@ -101,7 +101,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module: chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService, API: threadAPI, Home: func(d *web.Deps) func(context.Context) (any, any, error) {
+			Module: chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService, API: threadAPI(mc.Tools), Home: func(d *web.Deps) func(context.Context) (any, any, error) {
 				reader := reviewpages.Reads(d)
 				return func(ctx context.Context) (any, any, error) {
 					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})

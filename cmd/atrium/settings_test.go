@@ -101,10 +101,11 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 	}
 
 	t.Run("the budget reader sees the stored value", func(t *testing.T) {
+		token := localAPIToken(t, "settings-usage")
 		base := startServeIn(t, dir)
-		status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/usage", nil)
-		if status != http.StatusOK || !strings.Contains(body, "of $200 used") {
-			t.Errorf("GET /settings/usage = %d, want the $200 budget: %.600s", status, body)
+		usage := (&apiSite{t: t, base: base}).do(http.MethodGet, "/api/v1/usage", token, nil)
+		if budget, _ := usage.json["budget"].(map[string]any); usage.status != http.StatusOK || budget["budget_usd"] != float64(200) {
+			t.Errorf("GET /api/v1/usage = %d, want the $200 budget: %.600s", usage.status, usage.body)
 		}
 	})
 

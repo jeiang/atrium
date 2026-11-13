@@ -76,9 +76,15 @@
     },
     {
       "area": "knowledge",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.memory.backfill",
+        "assistant.memory.estimate",
+        "assistant.memory.tree",
+        "assistant.memory.view",
+        "assistant.memory.work"
+      ],
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "mail",
@@ -131,9 +137,15 @@
     },
     {
       "area": "schedules",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.schedule.cancel",
+        "assistant.schedule.enabled",
+        "assistant.schedule.history",
+        "assistant.schedule.list",
+        "assistant.schedule.update"
+      ],
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "search",
@@ -144,10 +156,14 @@
     {
       "area": "settings",
       "operations": [
+        "assistant.subagent.delete",
+        "assistant.subagent.enabled",
+        "assistant.subagent.list",
+        "assistant.subagent.set",
         "auth.identity"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "tasks",
@@ -182,9 +198,11 @@
     },
     {
       "area": "usage",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.usage"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "wiki",
@@ -194,5 +212,5 @@
     }
   ],
   "total_required": 167,
-  "total_bound": 49
+  "total_bound": 64
 }

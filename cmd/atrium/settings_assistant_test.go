@@ -53,19 +53,23 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	}
 	refused("agent_schedule_weekly_review", "set", "agent_schedule_weekly_review", "*/5 * * * *")
 
+	token := localAPIToken(t, "settings-schedules")
 	base := startServeIn(t, dir)
-	var page string
-	waitFor(t, func() bool {
-		_, page, _ = fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
-		return strings.Contains(page, "*/10 * * * *")
-	})
-	if strings.Contains(page, "*/20 * * * *") {
-		t.Fatalf("GET /scheduled before the override should list the default media sweep schedule: %.800s", page)
+	sweep := func() string {
+		t.Helper()
+		reply := (&apiSite{t: t, base: base}).do(http.MethodGet, "/api/v1/schedules?limit=100", token, nil)
+		items, _ := reply.json["items"].([]any)
+		for _, item := range items {
+			if row := item.(map[string]any); row["name"] == "media-sweep" {
+				return row["schedule"].(string)
+			}
+		}
+		return ""
 	}
+	waitFor(t, func() bool { return sweep() == "*/10 * * * *" })
 	accepted("set", "agent_schedule_media_sweep", "*/20 * * * *")
-	_, page, _ = fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
-	if !strings.Contains(page, "*/10 * * * *") || strings.Contains(page, "*/20 * * * *") {
-		t.Errorf("GET /scheduled must not sync builtin schedules; the scheduler worker does: %.800s", page)
+	if got := sweep(); got != "*/10 * * * *" {
+		t.Errorf("a schedule read must not sync builtin schedules; the scheduler worker does: %q", got)
 	}
 }
 
