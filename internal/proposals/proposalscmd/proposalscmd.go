@@ -134,9 +134,9 @@ func selectionOf(raw string) (any, error) {
 	parsed, err := jsonx.Loads([]byte(raw))
 	if err != nil {
 		if strings.TrimSpace(raw) == "{" {
-			return nil, errors.New("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)") //nolint:staticcheck // the CLI contract keeps the py-compatible wording
+			return nil, &application.Error{Code: application.Invalid, Message: "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"}
 		}
-		return nil, err
+		return nil, &application.Error{Code: application.Invalid, Message: err.Error()}
 	}
 	b, err := json.Marshal(parsed)
 	if err != nil {
@@ -157,7 +157,7 @@ func recorded(err error, unknown string) error {
 	case e.Code == application.NotFound:
 		return errors.New(unknown)
 	case e.Code == application.Invalid && len(e.Fields) == 1 && e.Fields[0].Name == "selection":
-		return errors.New(e.Message)
+		return &application.Error{Code: application.Invalid, Message: e.Message}
 	}
 	return err
 }

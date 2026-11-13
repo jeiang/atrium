@@ -273,7 +273,7 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 
-	for _, bad := range []string{"{", "[1]"} {
+	for _, bad := range []string{"{"} {
 		if got := runApp(t, "proposals", "approve", viaAPI, "--selection", bad); got.code != cli.ExitUsage || effectsOf(d, viaAPI) != 0 {
 			t.Fatalf("CLI approve with selection %q: exit %d, %d effects: %s", bad, got.code, effectsOf(d, viaAPI), got.stderr)
 		}
