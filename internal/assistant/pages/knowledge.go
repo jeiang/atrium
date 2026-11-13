@@ -9,65 +9,33 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/kb"
+	kbapp "github.com/jeiang/atrium/internal/kb/application"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/tokens"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const knowledgeFrame = "library_knowledge"
-
-var knowledgeStates = []string{"all", "unconfirmed", "pinned", "imported", "retracted"}
-var knowledgeScopes = []string{"", kb.ScopeWork, kb.ScopePersonal}
-
-var knowledgeMarks = []struct {
-	Name  string
-	Label string
-	Mark  tool.Marks
-}{
-	{"untrusted", "Untrusted", tool.Untrusted},
-	{"pii", "PII", tool.PII},
-	{"messages", "Messages", tool.Messages},
-	{"personal", "Personal", tool.Personal},
-}
-
-type knowledgeRow struct {
-	ID        int64
-	Title     string
-	Scope     string
-	Writer    string
-	Marks     []string
-	Confirmed bool
-	Pinned    bool
-	Retracted bool
-	Updated   float64
-}
 
 type knowledgeListData struct {
 	Q     string
 	Scope string
 	State string
-	Rows  []knowledgeRow
+	Rows  []kbapp.Row
 	Bulk  bool
 
 	Unconfirmed bool
 }
 
-type knowledgeSource struct {
-	ThreadID int64
-	Seq      *int64
-	Origin   string
-	NotionID string
-}
-
 type knowledgeRecordData struct {
-	Record  kb.Record
+	Record  kbapp.Record
 	Marks   []knowledgeMark
-	SameRun []knowledgeRow
-	History []kb.WriteRow
-	Source  *knowledgeSource
+	SameRun []kbapp.Row
+	History []kbapp.HistoryRow
+	Source  *kbapp.Source
 	Form    knowledgeFormData
 }
 
@@ -94,45 +62,9 @@ type knowledgeFormData struct {
 	Error  *string
 }
 
-type knowledgeProfileEntry struct {
-	ID       int64
-	Title    string
-	Body     string
-	Reason   string
-	InPrompt bool
-	Tokens   int64
-}
-
 type knowledgeProfileData struct {
-	Block   string
-	Tokens  int64
-	Budget  int64
-	Percent int64
-	Entries []knowledgeProfileEntry
-	Error   *string
-}
-
-func markNames(marks tool.Marks) []string {
-	out := []string{}
-	for _, m := range knowledgeMarks {
-		if marks&m.Mark != 0 {
-			out = append(out, m.Name)
-		}
-	}
-	return out
-}
-
-func knowledgeRowOf(r kb.Record) knowledgeRow {
-	return knowledgeRow{ID: r.ID, Title: r.Title, Scope: r.Scope, Writer: r.Writer, Marks: markNames(r.Marks),
-		Confirmed: r.Confirmed(), Pinned: r.Pinned, Retracted: r.Retracted(), Updated: r.UpdatedAt}
-}
-
-func rowsOf(records []kb.Record) []knowledgeRow {
-	out := make([]knowledgeRow, len(records))
-	for i, r := range records {
-		out[i] = knowledgeRowOf(r)
-	}
-	return out
+	kbapp.Profile
+	Error *string
 }
 
 func (p *pages) store() *ledger.Store { return p.svc().Runner.Ledger }
@@ -155,31 +87,34 @@ func (p *pages) knowledgeRoutes(r chi.Router) {
 	p.deps.Authenticated(http.MethodPost, "/library/knowledge/{record_id}/purge", p.knowledgePurge)
 }
 
-func knowledgeFilter(q url.Values) (query, scope, state string) {
-	query = web.QueryValue(q, "q")
-	scope = web.QueryValue(q, "scope")
-	if scope != kb.ScopeWork && scope != kb.ScopePersonal {
-		scope = ""
-	}
-	state = web.QueryValue(q, "state")
-	valid := false
-	for _, s := range knowledgeStates {
-		if state == s {
-			valid = true
-		}
-	}
-	if !valid {
-		state = "all"
-	}
-	return query, scope, state
+func knowledgeFilter(q url.Values) kbapp.ListInput {
+	return kbapp.ListInput{Query: web.QueryValue(q, "q"), Scope: web.QueryValue(q, "scope"), State: web.QueryValue(q, "state")}
+}
+
+func formFilter(form url.Values) kbapp.ListInput {
+	return kbapp.ListInput{Query: web.FormString(form, "q", ""), Scope: web.FormString(form, "scope", ""), State: web.FormString(form, "state", "")}
+}
+
+func filterQuery(f kbapp.ListInput) string {
+	return url.Values{"q": {f.Query}, "scope": {f.Scope}, "state": {f.State}}.Encode()
 }
 
 func (p *pages) knowledgeList(w http.ResponseWriter, r *http.Request) {
-	query, scope, state := knowledgeFilter(r.URL.Query())
-	found, err := kb.List(r.Context(), p.deps.DB.Read, kb.ListFilter{Query: query, Scope: scope, State: state})
-	check(err)
-	data := knowledgeListData{Q: query, Scope: scope, State: state, Rows: rowsOf(found),
-		Bulk: state == "unconfirmed" || state == "imported"}
+	filter := knowledgeFilter(r.URL.Query())
+	read, err := p.knowledge().List(r.Context(), filter)
+	if err != nil {
+		web.Fail(w, r, err, func(status int) {
+			toast := &tpl.Toast{Category: "error", Title: "Invalid filter", Description: application.Classify(err).Error()}
+			p.render(w, r, status, knowledgeFrame, "knowledge.gohtml", knowledgeListData{Q: filter.Query, Scope: filter.Scope, State: filter.State}, toast)
+		})
+		return
+	}
+	if web.NotModified(w, r, read.Revision) {
+		return
+	}
+	f := read.Data.Filter
+	data := knowledgeListData{Q: f.Query, Scope: f.Scope, State: f.State, Rows: read.Data.Rows,
+		Bulk: f.State == "unconfirmed" || f.State == "imported"}
 	for _, row := range data.Rows {
 		data.Unconfirmed = data.Unconfirmed || !row.Confirmed && !row.Retracted
 	}
@@ -190,9 +125,9 @@ func (p *pages) knowledgeList(w http.ResponseWriter, r *http.Request) {
 	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge.gohtml", data, nil)
 }
 
-func knowledgeValues(r kb.Record) knowledgeFormValues {
+func knowledgeValues(r kbapp.Record) knowledgeFormValues {
 	marks := map[string]bool{}
-	for _, m := range knowledgeMarks {
+	for _, m := range kbapp.Marks {
 		marks[m.Name] = r.Marks&m.Mark != 0
 	}
 	return knowledgeFormValues{Title: r.Title, Body: r.Body, Aliases: strings.Join(r.Aliases, "\n"),
@@ -201,7 +136,7 @@ func knowledgeValues(r kb.Record) knowledgeFormValues {
 
 func submittedKnowledge(form url.Values) kb.EditInput {
 	marks := tool.Marks(0)
-	for _, m := range knowledgeMarks {
+	for _, m := range kbapp.Marks {
 		if web.FormString(form, m.Name, "") == "1" {
 			marks |= m.Mark
 		}
@@ -225,7 +160,7 @@ func submittedKnowledge(form url.Values) kb.EditInput {
 
 func formValuesOf(in kb.EditInput) knowledgeFormValues {
 	marks := map[string]bool{}
-	for _, m := range knowledgeMarks {
+	for _, m := range kbapp.Marks {
 		marks[m.Name] = in.Marks&m.Mark != 0
 	}
 	return knowledgeFormValues{Title: in.Title, Body: in.Body, Aliases: strings.Join(in.Aliases, "\n"),
@@ -253,27 +188,18 @@ func (p *pages) knowledgeCreate(w http.ResponseWriter, r *http.Request) {
 
 func knowledgePath(id int64) string { return "/library/knowledge/" + strconv.FormatInt(id, 10) }
 
-func (p *pages) knowledgeRecordPage(w http.ResponseWriter, r *http.Request, status int, rec kb.Record, problem *string) {
-	same, err := kb.SameRun(r.Context(), p.deps.DB.Read, valueOf(rec.SourceRunID), rec.ID)
-	check(err)
-	history, err := kb.History(r.Context(), p.deps.DB.Read, rec.ID)
-	check(err)
-	marks := make([]knowledgeMark, len(knowledgeMarks))
-	for i, m := range knowledgeMarks {
-		marks[i] = knowledgeMark{Name: m.Name, Label: m.Label, On: rec.Marks&m.Mark != 0}
+func (p *pages) knowledgeRecordPage(w http.ResponseWriter, r *http.Request, status int, d kbapp.Detail, problem *string) {
+	marks := make([]knowledgeMark, len(kbapp.Marks))
+	for i, m := range kbapp.Marks {
+		marks[i] = knowledgeMark{Name: m.Name, Label: m.Label, On: d.Record.Marks&m.Mark != 0}
 	}
-	var source *knowledgeSource
-	if rec.Origin != nil {
-		source = &knowledgeSource{Origin: *rec.Origin}
-		if strings.HasPrefix(*rec.Origin, "notion:") {
-			source.NotionID = strings.TrimPrefix(*rec.Origin, "notion:")
-		}
-	} else if rec.SourceThreadID != nil {
-		source = &knowledgeSource{ThreadID: *rec.SourceThreadID, Seq: rec.SourceSeq}
-	}
-	data := knowledgeRecordData{Record: rec, Marks: marks, SameRun: rowsOf(same), History: history, Source: source,
-		Form: knowledgeFormData{Action: knowledgePath(rec.ID), Values: knowledgeValues(rec), Error: problem}}
+	data := knowledgeRecordData{Record: d.Record, Marks: marks, SameRun: d.SameRun, History: d.History, Source: d.Record.Source,
+		Form: knowledgeFormData{Action: knowledgePath(d.Record.ID), Values: knowledgeValues(d.Record), Error: problem}}
 	p.render(w, r, status, knowledgeFrame, "knowledge_record.gohtml", data, nil)
+}
+
+func (p *pages) knowledgeDetailFail(w http.ResponseWriter, r *http.Request, err error) {
+	web.Fail(w, r, err, func(status int) { p.fail(w, r, status, application.Classify(err).Error()) })
 }
 
 func (p *pages) knowledgeRecord(w http.ResponseWriter, r *http.Request) {
@@ -281,13 +207,15 @@ func (p *pages) knowledgeRecord(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, err := kb.Get(r.Context(), p.deps.DB.Read, id)
-	check(err)
-	if rec == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown knowledge record")
+	read, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: id})
+	if err != nil {
+		p.knowledgeDetailFail(w, r, err)
 		return
 	}
-	p.knowledgeRecordPage(w, r, http.StatusOK, *rec, nil)
+	if web.NotModified(w, r, read.Revision) {
+		return
+	}
+	p.knowledgeRecordPage(w, r, http.StatusOK, read.Data, nil)
 }
 
 func (p *pages) knowledgeUpdate(w http.ResponseWriter, r *http.Request) {
@@ -300,13 +228,12 @@ func (p *pages) knowledgeUpdate(w http.ResponseWriter, r *http.Request) {
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		problem := err.Error()
-		current, gerr := kb.Get(r.Context(), p.deps.DB.Read, id)
-		check(gerr)
-		if current == nil {
-			p.fail(w, r, http.StatusNotFound, "unknown knowledge record")
+		current, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: id})
+		if err != nil {
+			p.knowledgeDetailFail(w, r, err)
 			return
 		}
-		p.knowledgeRecordPage(w, r, http.StatusUnprocessableEntity, *current, &problem)
+		p.knowledgeRecordPage(w, r, http.StatusUnprocessableEntity, current.Data, &problem)
 		return
 	}
 	check(err)
@@ -340,14 +267,13 @@ func (p *pages) knowledgeRetract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	same, err := kb.SameRun(r.Context(), p.deps.DB.Read, valueOf(rec.SourceRunID), rec.ID)
-	check(err)
-	data := struct {
-		Record  kb.Record
-		SameRun []knowledgeRow
-	}{Record: rec, SameRun: rowsOf(same)}
 	if web.IsPartial(r) {
-		p.renderFragment(w, r, http.StatusOK, "_knowledge_retract.gohtml", data, nil)
+		current, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: rec.ID})
+		if err != nil {
+			p.knowledgeDetailFail(w, r, err)
+			return
+		}
+		p.renderFragment(w, r, http.StatusOK, "_knowledge_retract.gohtml", current.Data, nil)
 		return
 	}
 	navigate(w, r, knowledgePath(rec.ID))
@@ -381,7 +307,11 @@ func (p *pages) knowledgeRunRetract(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	query, scope, state := knowledgeFilter(url.Values{"q": {web.FormString(form, "q", "")}, "scope": {web.FormString(form, "scope", "")}, "state": {web.FormString(form, "state", "")}})
+	filter, err := formFilter(form).Normalize()
+	if err != nil {
+		p.failure(w, r, "Nothing confirmed", application.Classify(err).Error())
+		return
+	}
 	ids := make([]int64, 0, len(form["id"]))
 	for _, raw := range form["id"] {
 		id, err := strconv.ParseInt(raw, 10, 64)
@@ -404,50 +334,46 @@ func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request)
 		}
 		check(err)
 	}
-	navigate(w, r, "/library/knowledge?"+url.Values{"q": {query}, "scope": {scope}, "state": {state}}.Encode())
+	navigate(w, r, "/library/knowledge?"+filterQuery(filter))
 }
 
 func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	query, scope, state := knowledgeFilter(url.Values{"q": {web.FormString(form, "q", "")}, "scope": {web.FormString(form, "scope", "")}, "state": {web.FormString(form, "state", "")}})
-	if state != "unconfirmed" && state != "imported" {
+	filter, err := formFilter(form).Normalize()
+	if err != nil {
+		p.failure(w, r, "Nothing confirmed", application.Classify(err).Error())
+		return
+	}
+	if filter.State != "unconfirmed" && filter.State != "imported" {
 		p.failure(w, r, "Nothing confirmed", "Choose the unconfirmed or imported filter first.")
 		return
 	}
-	found, err := kb.List(r.Context(), p.deps.DB.Read, kb.ListFilter{Query: query, Scope: scope, State: state})
+	found, err := p.knowledge().List(r.Context(), filter)
 	check(err)
-	for _, rec := range found {
-		if rec.Confirmed() || rec.Retracted() {
+	for _, rec := range found.Data.Rows {
+		if rec.Confirmed || rec.Retracted {
 			continue
 		}
 		if _, _, err := kb.Confirm(detached(r), p.store(), rec.ID, p.now()); err != nil {
 			check(err)
 		}
 	}
-	navigate(w, r, "/library/knowledge?"+url.Values{"q": {query}, "scope": {scope}, "state": {state}}.Encode())
+	navigate(w, r, "/library/knowledge?"+filterQuery(filter))
 }
 
 func (p *pages) knowledgeProfilePage(w http.ResponseWriter, r *http.Request, status int, problem *string) {
-	block, err := kb.ProfileBlock(r.Context(), p.deps.DB.Read, 0)
+	read, err := p.knowledge().Profile(r.Context())
 	check(err)
-	budget := int64(assistant.TuningAgentKbProfileTokens)
-	entries, err := kb.ProfileReview(r.Context(), p.deps.DB.Read, budget)
-	check(err)
-	rows := make([]knowledgeProfileEntry, len(entries))
-	for i, e := range entries {
-		rows[i] = knowledgeProfileEntry{ID: e.ID, Title: e.Title, Body: e.Body, Reason: e.Reason, InPrompt: e.InPrompt, Tokens: e.Tokens}
-	}
-	n := tokens.Estimate(block)
-	percent := int64(0)
-	if budget > 0 {
-		percent = min(n*100/budget, 100)
-	}
-	data := knowledgeProfileData{Block: block, Tokens: n, Budget: budget, Percent: percent, Entries: rows, Error: problem}
-	p.render(w, r, status, knowledgeFrame, "knowledge_profile.gohtml", data, nil)
+	p.render(w, r, status, knowledgeFrame, "knowledge_profile.gohtml", knowledgeProfileData{Profile: read.Data, Error: problem}, nil)
 }
 
 func (p *pages) knowledgeProfile(w http.ResponseWriter, r *http.Request) {
-	p.knowledgeProfilePage(w, r, http.StatusOK, nil)
+	read, err := p.knowledge().Profile(r.Context())
+	check(err)
+	if web.NotModified(w, r, read.Revision) {
+		return
+	}
+	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge_profile.gohtml", knowledgeProfileData{Profile: read.Data}, nil)
 }
 
 func (p *pages) knowledgeProfileAdd(w http.ResponseWriter, r *http.Request) {
@@ -474,13 +400,12 @@ func (p *pages) knowledgePurgeDialog(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, err := kb.Get(r.Context(), p.deps.DB.Read, id)
-	check(err)
-	if rec == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown knowledge record")
+	read, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: id})
+	if err != nil {
+		p.knowledgeDetailFail(w, r, err)
 		return
 	}
-	p.renderFragment(w, r, http.StatusOK, "_knowledge_purge.gohtml", rec, nil)
+	p.renderFragment(w, r, http.StatusOK, "_knowledge_purge.gohtml", read.Data.Record, nil)
 }
 
 func (p *pages) knowledgePurge(w http.ResponseWriter, r *http.Request) {
@@ -496,11 +421,4 @@ func (p *pages) knowledgePurge(w http.ResponseWriter, r *http.Request) {
 	}
 	check(err)
 	navigate(w, r, "/library/knowledge")
-}
-
-func valueOf(v *int64) int64 {
-	if v == nil {
-		return 0
-	}
-	return *v
 }

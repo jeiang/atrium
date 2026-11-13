@@ -63,8 +63,11 @@ type Module struct {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
+	knowledgeOps, knowledgeBindings := knowledgeOperations()
 	return module.Declaration{
-		Name: module.Assistant,
+		Name:       module.Assistant,
+		Operations: knowledgeOps,
+		Bindings:   knowledgeBindings,
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -80,7 +83,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service}),
+			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: knowledgeService}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{
@@ -133,7 +136,7 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
 		scheduletools.Tools(), taskstools.Tools(),
-		kbtools.Tools(), weathertools.Tools(), opstools.Tools(),
+		kbtools.Tools(knowledgeToolService), weathertools.Tools(), opstools.Tools(),
 	} {
 		for _, t := range tools {
 			defs = append(defs, module.ToolDefinition{Tool: t})

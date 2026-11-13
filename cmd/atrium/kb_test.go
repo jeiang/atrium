@@ -340,3 +340,36 @@ func TestPrivateProjectKnowledgeStaysInItsProject(t *testing.T) {
 		t.Fatalf("inside retract left the record live: %v %v", retracted, err)
 	}
 }
+
+func TestKnowledgeListRevision(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	base, _, stop := startServeStoppable(t, dir)
+	defer stop()
+	w := asstBrowse(t, base)
+
+	code, body, header := w.get("/library/knowledge", false)
+	empty := header.Get("ETag")
+	if code != http.StatusOK || !strings.HasPrefix(empty, `W/"`) {
+		t.Fatalf("empty list = %d etag %q: %.300s", code, empty, body)
+	}
+	if code, body, _ = w.get("/library/knowledge", false, "If-None-Match", empty); code != http.StatusNotModified || body != "" {
+		t.Fatalf("unchanged list with its etag = %d: %.300s", code, body)
+	}
+
+	knowledgeCreate(t, w, url.Values{"title": {"Gate code"}, "body": {"The gate code is 2231."}, "scope": {"work"}})
+	code, body, header = w.get("/library/knowledge", false, "If-None-Match", empty)
+	if code != http.StatusOK || !strings.Contains(body, "Gate code") {
+		t.Fatalf("list after a create with the old etag = %d: %.300s", code, body)
+	}
+	if fresh := header.Get("ETag"); fresh == "" || fresh == empty {
+		t.Fatalf("etag after a create = %q, was %q", fresh, empty)
+	}
+
+	code, body, _ = w.get("/library/knowledge?scope=bogus", false)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "scope must be work or personal") {
+		t.Fatalf("bogus scope = %d: %.300s", code, body)
+	}
+}

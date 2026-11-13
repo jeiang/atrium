@@ -51,7 +51,10 @@ behavior-parity target.
   state filters, checkboxes on unconfirmed rows with Confirm selected, a
   record page with confirm, edit, retract, restore and
   purge, and a profile view that renders the system
-  prompt's profile block and each pinned record's place in it. Projects
+  prompt's profile block and each pinned record's place in it. An unknown
+  scope filter is refused with a 422 and the reason instead of being reset;
+  the list, record and profile pages answer with a weak `ETag` and a 304
+  when nothing they show has changed. Projects
   have no pages of their own beyond create and edit, and a
   project can be marked private so its knowledge and threads stay inside
   it. The sidebar collapses to a rail; chat uses a

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	kbapp "github.com/jeiang/atrium/internal/kb/application"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -37,14 +39,16 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Service func(context.Context) (*service.Service, error)
+	Service   func(context.Context) (*service.Service, error)
+	Knowledge func(*web.Deps) *kbapp.Service
 }
 
 type pages struct {
-	deps *web.Deps
-	svc  func() *service.Service
-	now  func() float64
-	jobs []scheduler.Definition
+	deps      *web.Deps
+	svc       func() *service.Service
+	knowledge func() *kbapp.Service
+	now       func() float64
+	jobs      []scheduler.Definition
 }
 
 const (
@@ -64,7 +68,7 @@ func Module(o Options) web.Module {
 			}
 			return svc
 		})
-		p := &pages{deps: d, svc: svc, now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
+		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)
