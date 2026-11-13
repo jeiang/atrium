@@ -6,13 +6,16 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"hash"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -108,11 +111,12 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 				_, err = io.Copy(spool, original)
 				_ = original.Close()
 				var large *http.MaxBytesError
+				var storage *os.PathError
 				switch {
 				case errors.As(err, &large):
 					web.APIError(w, 413, "too_large", "Request too large.")
 					return
-				case errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT):
+				case errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT), errors.As(err, &storage):
 					web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable.", Cause: err})
 					return
 				case err != nil:
@@ -131,7 +135,11 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 				}
 				fingerprint, err = fingerprintStream(r, pattern, mac, spool)
 				if err != nil {
-					web.APIFail(w, err)
+					if errors.As(err, &storage) {
+						web.APIFail(w, err)
+						return
+					}
+					web.APIError(w, http.StatusBadRequest, "bad_request", "Invalid multipart body.")
 					return
 				}
 			}
@@ -223,8 +231,47 @@ func replay(w http.ResponseWriter, rec record, fingerprint string) {
 }
 
 func fingerprintStream(r *http.Request, pattern string, mac []byte, spool *os.File) (string, error) {
+	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || params["boundary"] == "" {
+		return "", errors.New("invalid multipart boundary")
+	}
+	type partFingerprint struct {
+		Name      string
+		Index     int
+		Filename  string
+		MediaType string
+		Digest    string
+	}
+	var parts []partFingerprint
+	indexes := map[string]int{}
+	reader := multipart.NewReader(spool, params["boundary"])
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if len(parts) >= 1000 {
+			return "", errors.New("too many multipart parts")
+		}
+		digest := sha256.New()
+		if _, err := io.Copy(digest, part); err != nil {
+			return "", err
+		}
+		name := part.FormName()
+		parts = append(parts, partFingerprint{Name: name, Index: indexes[name], Filename: part.FileName(), MediaType: part.Header.Get("Content-Type"), Digest: hex.EncodeToString(digest.Sum(nil))})
+		indexes[name]++
+	}
+	sort.Slice(parts, func(i, j int) bool {
+		if parts[i].Name != parts[j].Name {
+			return parts[i].Name < parts[j].Name
+		}
+		return parts[i].Index < parts[j].Index
+	})
 	sum := requestHash(r, pattern, mac)
-	if _, err := io.Copy(sum, spool); err != nil {
+	if err := json.NewEncoder(sum).Encode(parts); err != nil {
 		return "", err
 	}
 	if _, err := spool.Seek(0, io.SeekStart); err != nil {

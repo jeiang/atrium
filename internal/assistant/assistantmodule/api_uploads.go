@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"reflect"
@@ -96,6 +97,12 @@ func uploadField(field reflect.Value, raw string) error {
 			return err
 		}
 		field.SetBool(v)
+	case reflect.Float64:
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+			return errors.New("enter a finite number")
+		}
+		field.SetFloat(v)
 	case reflect.Int64:
 		v, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil {

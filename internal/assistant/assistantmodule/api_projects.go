@@ -52,19 +52,18 @@ func (in apiProjectFields) fields() asstapp.ProjectFields {
 	return fields
 }
 
-func pageSlice[T any](rows []T, limit api.Limit, cursor api.Cursor) (web.List[T], error) {
-	start := 0
-	if cursor.Set() {
-		if err := cursor.Last(&start); err != nil || start < 0 || start > len(rows) {
-			return web.List[T]{}, invalidField("cursor", "The cursor is not valid.")
-		}
+func cursorAfter(cursor api.Cursor) (int64, error) {
+	if !cursor.Set() {
+		return 0, nil
 	}
-	end := min(start+int(limit), len(rows))
-	out := web.List[T]{Items: rows[start:end]}
-	if end < len(rows) {
-		out.NextCursor = cursor.Next(end)
+	var after int64
+	if err := cursor.Last(&after); err != nil {
+		return 0, err
 	}
-	return out, nil
+	if after <= 0 {
+		return 0, &application.Error{Code: application.BadCursor, Message: "The cursor is not valid."}
+	}
+	return after, nil
 }
 
 func projectAPIBindings(p *apiPages) []application.Binding {
@@ -76,12 +75,20 @@ func projectAPIBindings(p *apiPages) []application.Binding {
 	create.Success = 201
 	return []application.Binding{
 		apiQuery(p, asstapp.DescribeProjectList(), shape(), "GET /projects", func(ctx context.Context, svc *asstapp.Service, in apiProjectList) (application.Read[web.List[asstapp.Project]], error) {
-			read, err := svc.ProjectList(ctx, asstapp.ProjectListInput{Archived: in.Archived})
+			after, err := cursorAfter(in.Cursor)
 			if err != nil {
 				return application.Read[web.List[asstapp.Project]]{}, err
 			}
-			out, err := pageSlice(read.Data, in.Limit, in.Cursor)
-			return application.Read[web.List[asstapp.Project]]{Revision: read.Revision, Data: out}, err
+			read, err := svc.ProjectList(ctx, asstapp.ProjectListInput{Archived: in.Archived, After: after, Limit: int(in.Limit) + 1})
+			if err != nil {
+				return application.Read[web.List[asstapp.Project]]{}, err
+			}
+			out := web.List[asstapp.Project]{Items: read.Data}
+			if len(out.Items) > int(in.Limit) {
+				out.Items = out.Items[:int(in.Limit)]
+				out.NextCursor = in.Cursor.Next(out.Items[len(out.Items)-1].ID)
+			}
+			return application.Read[web.List[asstapp.Project]]{Revision: read.Revision, Data: out}, nil
 		}),
 		apiQuery(p, asstapp.DescribeProjectDetail(), shape(), "GET /projects/{project_id}", func(ctx context.Context, svc *asstapp.Service, in apiProjectID) (application.Read[asstapp.ProjectDetail], error) {
 			return svc.ProjectDetail(ctx, asstapp.ProjectInput{ID: in.ProjectID})

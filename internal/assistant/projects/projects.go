@@ -131,6 +131,15 @@ func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 	return db.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
 }
 
+func Page(ctx context.Context, q db.Querier, archived bool, after int64, limit int) ([]Project, error) {
+	rows, err := q.QueryContext(ctx,
+		listSQL+" WHERE p.archived = ? AND p.id > ? ORDER BY p.id LIMIT ?", store.Bit(archived), after, limit)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
+}
+
 func Private(ctx context.Context, q db.Querier, projectID int64) (bool, error) {
 	var private int64
 	err := q.QueryRowContext(ctx, "SELECT private FROM projects WHERE id = ?", projectID).Scan(&private)

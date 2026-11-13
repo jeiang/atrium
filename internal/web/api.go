@@ -250,9 +250,15 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		if g.apiShape != nil {
 			shape = g.apiShape(r)
 		}
+		if shape != nil && shape.BeforeBody != nil {
+			if err := shape.BeforeBody(r.Context()); err != nil {
+				APIFail(w, err)
+				return
+			}
+		}
 		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		multipart := mediaType == "multipart/form-data" && shape != nil && shape.Body == application.BodyMultipart
-		if r.ContentLength != 0 {
+		if r.ContentLength != 0 && (shape == nil || !shape.IgnoreBody) {
 			if (mediaType != jsonType && !multipart) || (mediaType == jsonType && shape != nil && shape.Body == application.BodyMultipart && !shape.AllowJSON) {
 				APIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send application/json.")
 				return
@@ -270,7 +276,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		if multipart {
 			cap = shape.BodyLimit
 		}
-		if r.ContentLength > cap {
+		if r.ContentLength > cap && (shape == nil || !shape.IgnoreBody) {
 			APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
 			return
 		}

@@ -4,6 +4,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,9 @@ func serveBinary(w http.ResponseWriter, r *http.Request, body Binary) {
 	safe := media == "text/plain" || media == "image/png" || media == "image/jpeg" || media == "image/gif" || media == "image/webp"
 	if !safe {
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": body.Name}))
+	}
+	if strings.HasPrefix(media, "text/") {
+		media = mime.FormatMediaType(media, map[string]string{"charset": "utf-8"})
 	}
 	w.Header().Set("Content-Type", media)
 	w.Header().Set("X-Content-Type-Options", "nosniff")

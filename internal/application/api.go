@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"reflect"
@@ -26,18 +27,20 @@ func (b BodyKind) Valid() bool {
 }
 
 type APIShape struct {
-	Area      Area
-	Request   reflect.Type
-	Response  reflect.Type
-	Success   int
-	Body      BodyKind
-	BodyLimit int64
-	AllowJSON bool
-	Sensitive bool
-	Errors    []Code
+	Area       Area
+	Request    reflect.Type
+	Response   reflect.Type
+	Success    int
+	Body       BodyKind
+	BodyLimit  int64
+	AllowJSON  bool
+	IgnoreBody bool
+	BeforeBody func(context.Context) error
+	Sensitive  bool
+	Errors     []Code
 }
 
-var Codes = []Code{Invalid, NotFound, Unauthenticated, Forbidden, Conflict, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}
+var Codes = []Code{Invalid, BadCursor, NotFound, Unauthenticated, Forbidden, Conflict, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}
 
 func RequiresAPI(authority []Authority) bool {
 	return slices.ContainsFunc(authority, func(a Authority) bool { return a == Operator || a == OperatorSend || a == Approved })

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,8 +30,13 @@ func uploadBody(t *testing.T, fields map[string]string, name, data string) (stri
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
-	for key, value := range fields {
-		if err := writer.WriteField(key, value); err != nil {
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if err := writer.WriteField(key, fields[key]); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -181,6 +188,24 @@ func apiItems(t *testing.T, reply apiReply) []any {
 	return items
 }
 
+func malformedLast(t *testing.T, cursor string) string {
+	t.Helper()
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	envelope["last"] = "not an id"
+	raw, err = json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
 func TestFilesAndProjectsAPI(t *testing.T) {
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, model)
@@ -257,7 +282,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 		t.Fatalf("preview conditional: %d", again.status)
 	}
 	full := s.do(http.MethodGet, fileURL+"/content", token, nil)
-	if full.status != 200 || full.body != fileText || full.header.Get("Content-Type") != "text/plain" || full.header.Get("X-Content-Type-Options") != "nosniff" {
+	if full.status != 200 || full.body != fileText || full.header.Get("Content-Type") != "text/plain; charset=utf-8" || full.header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("download: %d %s %v", full.status, full.body, full.header)
 	}
 	if conditional := s.do(http.MethodGet, fileURL+"/content", token, nil, "If-None-Match", full.header.Get("ETag")); full.header.Get("ETag") == "" || conditional.status != 304 {
@@ -307,6 +332,11 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 		t.Fatalf("file first page: %s", first.body)
 	}
 	cursor := first.json["next_cursor"].(string)
+	expectAPI(t, s.do(http.MethodGet, projectPath(project, "/files?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor))), token, nil), 400, "bad_cursor")
+	removed := number(t, apiItems(t, first)[1].(map[string]any)["id"])
+	if deleted := s.do(http.MethodDelete, projectPath(project, "/files/"+strconv.FormatInt(removed, 10)), token, nil); deleted.status != 204 {
+		t.Fatalf("delete paged file: %d %s", deleted.status, deleted.body)
+	}
 	next := s.do(http.MethodGet, projectPath(project, "/files?limit=100&cursor="+url.QueryEscape(cursor)), token, nil)
 	if len(apiItems(t, next)) != 6 || next.json["next_cursor"] != nil {
 		t.Fatalf("file next page: %s", next.body)
@@ -327,13 +357,35 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	token = localAPIToken(t, "thread-files")
 	model.Push(anthropictest.Reply("end_turn", anthropictest.Text("initial answer")))
 	threadText := strings.Repeat("thread attachment ", 12000) + "THREAD_FILE_TEXT_SECRET"
-	body, media = uploadBody(t, map[string]string{"text": "Read the attached note.", "web_search": "false"}, "thread.txt", threadText)
-	started := s.do(http.MethodPost, "/api/v1/threads", token, body, "Content-Type", media)
+	fields := map[string]string{"text": "Read the attached note.", "model": "claude-haiku-5-5", "effort": "high", "context_limit": "200000", "thinking": "adaptive", "web_search": "false", "cost_cap_usd": "5.25", "project_id": strconv.FormatInt(other, 10)}
+	body, media = uploadBody(t, fields, "thread.txt", threadText)
+	started := s.do(http.MethodPost, "/api/v1/threads", token, body, "Content-Type", media, "Idempotency-Key", "multipart-start")
 	if started.status != 201 {
 		t.Fatalf("multipart start: %d %s", started.status, started.body)
 	}
+	replayBody, replayMedia := uploadBody(t, fields, "thread.txt", threadText)
+	if replayMedia == media {
+		t.Fatal("multipart replay used the same boundary")
+	}
+	replayed := s.do(http.MethodPost, "/api/v1/threads", token, replayBody, "Content-Type", replayMedia, "Idempotency-Key", "multipart-start")
+	if replayed.status != started.status || replayed.body != started.body || replayed.header.Get("Idempotent-Replayed") != "true" {
+		t.Fatalf("multipart start replay: %d %s", replayed.status, replayed.body)
+	}
 	thread := number(t, started.json["thread"].(map[string]any)["id"])
-	waitThreadSettled(t, s, token, thread)
+	view := waitThreadSettled(t, s, token, thread)
+	threadOptions := view.json["thread"].(map[string]any)
+	if threadOptions["model"] != fields["model"] || threadOptions["effort"] != "high" || threadOptions["context_limit"] != float64(200000) || threadOptions["thinking"] != "adaptive" || threadOptions["web_search"] != false || threadOptions["cost_cap_usd"] != 5.25 || number(t, threadOptions["project_id"]) != other {
+		t.Fatalf("multipart options: %s", view.body)
+	}
+	messages := 0
+	for _, item := range transcriptItems(view) {
+		if item["kind"] == "user" && item["text"] == fields["text"] {
+			messages++
+		}
+	}
+	if messages != 1 {
+		t.Fatalf("multipart replay created %d messages: %s", messages, view.body)
+	}
 	otherThread := s.do(http.MethodPost, "/api/v1/threads", token, map[string]any{"web_search": false})
 	if otherThread.status != 201 {
 		t.Fatalf("JSON start: %d %s", otherThread.status, otherThread.body)
@@ -402,6 +454,11 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 		t.Fatalf("project first page: %s", first.body)
 	}
 	cursor = first.json["next_cursor"].(string)
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor)), token, nil), 400, "bad_cursor")
+	deletedProject := number(t, apiItems(t, first)[1].(map[string]any)["id"])
+	if _, err := d.Write.Exec("DELETE FROM projects WHERE id = ?", deletedProject); err != nil {
+		t.Fatal(err)
+	}
 	next = s.do(http.MethodGet, "/api/v1/projects?limit=100&cursor="+url.QueryEscape(cursor), token, nil)
 	if len(apiItems(t, next)) != 6 || next.json["next_cursor"] != nil {
 		t.Fatalf("project next page: %s", next.body)

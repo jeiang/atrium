@@ -42,12 +42,23 @@ type apiThreadFiles struct {
 }
 
 func filePage(ctx context.Context, svc *asstapp.Service, in asstapp.FileListInput, limit api.Limit, cursor api.Cursor) (application.Read[web.List[files.Summary]], error) {
+	after, err := cursorAfter(cursor)
+	if err != nil {
+		return application.Read[web.List[files.Summary]]{}, err
+	}
+	in.After, in.Limit = after, int(limit)+1
 	read, err := svc.FileList(ctx, in)
 	if err != nil {
 		return application.Read[web.List[files.Summary]]{}, err
 	}
-	page, err := pageSlice(files.Summaries(read.Data.Files), limit, cursor)
-	return application.Read[web.List[files.Summary]]{Revision: read.Revision, Data: page}, err
+	rows := read.Data.Files
+	page := web.List[files.Summary]{}
+	if len(rows) > int(limit) {
+		rows = rows[:int(limit)]
+		page.NextCursor = cursor.Next(rows[len(rows)-1].ID)
+	}
+	page.Items = files.Summaries(rows)
+	return application.Read[web.List[files.Summary]]{Revision: read.Revision, Data: page}, nil
 }
 func downloadFile(ctx context.Context, svc *asstapp.Service, in asstapp.FileInput) (application.Read[api.Binary], error) {
 	read, err := svc.FileDownload(ctx, asstapp.DownloadInput{FileInput: in})

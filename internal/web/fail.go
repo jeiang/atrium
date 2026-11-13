@@ -12,6 +12,8 @@ import (
 
 func Status(code application.Code) int {
 	switch code {
+	case application.BadCursor:
+		return http.StatusBadRequest
 	case application.Invalid:
 		return http.StatusUnprocessableEntity
 	case application.NotFound:

@@ -247,8 +247,8 @@ func stepsOut(in []*service.Step) []*apiStep {
 
 type apiThreadListRequest struct {
 	Q         string     `query:"q" json:"-"`
-	View      string     `query:"view" api:"enum=archived" json:"-"`
-	ProjectID int64      `query:"project_id" json:"-"`
+	View      string     `query:"view" json:"-"`
+	ProjectID int64      `query:"project_id" api:"legacy-int" json:"-"`
 	Limit     api.Limit  `query:"limit" json:"-"`
 	Cursor    api.Cursor `query:"cursor" json:"-"`
 }
@@ -441,31 +441,33 @@ func apiErr(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &disabled):
-		return reason(application.Conflict, "module_disabled", err.Error(), err)
+		return reason(application.Conflict, "module_disabled", "The assistant module is disabled.", err)
 	case errors.As(err, &exceeded):
-		return reason(application.Budget, "", err.Error(), err)
+		return reason(application.Budget, "", "The spending limit would be exceeded.", err)
 	case errors.As(err, &refused):
-		return reason(application.Invalid, "reference_refused", err.Error(), err)
+		return reason(application.Invalid, "reference_refused", "A reference could not be used.", err)
 	case errors.As(err, &active):
 		return reason(application.Conflict, "run_active", "Wait for the current reply to finish, then send again.", err)
 	case errors.As(err, &redo):
-		return reason(application.Conflict, "nothing_to_edit", err.Error(), err)
+		return reason(application.Conflict, "nothing_to_edit", "There is no message to edit.", err)
 	case errors.As(err, &unknown):
 		return reason(application.NotFound, "", "Unknown thread.", err)
 	case errors.As(err, &archived):
-		return reason(application.Conflict, "project_archived", err.Error(), err)
+		return reason(application.Conflict, "project_archived", "This project is archived.", err)
 	case errors.As(err, &readOnly):
 		return reason(application.Conflict, "read_only_thread", "Subagent threads are read-only.", err)
 	case errors.As(err, new(asstapp.NoActiveRun)):
-		return reason(application.Conflict, "no_active_run", err.Error(), err)
+		return reason(application.Conflict, "no_active_run", "No run is running.", err)
 	case errors.As(err, new(asstapp.NoQuestion)):
-		return reason(application.Conflict, "no_question", err.Error(), err)
+		return reason(application.Conflict, "no_question", "No question is waiting for an answer.", err)
 	case errors.As(err, new(asstapp.NotAnswered)):
-		return reason(application.Conflict, "not_answered", err.Error(), err)
+		return reason(application.Conflict, "not_answered", "The answer could not be accepted.", err)
+	case errors.As(err, new(service.NotInterrupted)):
+		return reason(application.Conflict, "", "The run cannot be resumed.", err)
 	case errors.As(err, &option):
-		return reason(application.Invalid, "", err.Error(), err)
+		return reason(application.Invalid, "", "The thread options are not valid.", err)
 	case errors.As(err, &app) && app.Code == application.NotConfigured:
-		return reason(application.Conflict, "not_configured", err.Error(), err)
+		return reason(application.Conflict, "not_configured", "Configure the assistant connection before sending.", err)
 	}
 	return err
 }
@@ -488,6 +490,10 @@ func apiCommand[I, O any](p *apiPages, def application.Definition, shape applica
 		d = p.deps
 	}
 	shape.Response = reflect.TypeFor[O]()
+	shape.BeforeBody = func(ctx context.Context) error {
+		_, err := module.BindOwner(ctx, module.Assistant)
+		return apiErr(err)
+	}
 	return api.Command(d, def, shape, target, func(ctx context.Context, in I) (application.Change[O], error) {
 		ctx, err := module.BindOwner(ctx, module.Assistant)
 		if err != nil {
@@ -526,14 +532,19 @@ func apiBindings(p *apiPages) []application.Binding {
 		return shape
 	}
 	sends := errs(application.NotFound, application.Invalid, application.Conflict, application.Budget)
+	stopShape := bodiless(threadsArea(application.NotFound, application.Conflict))
+	stopShape.IgnoreBody = true
 	return []application.Binding{
 		apiQuery(p, asstapp.DescribeThreadList(), threadsArea(application.Invalid), "GET /threads",
 			func(ctx context.Context, svc *asstapp.Service, in apiThreadListRequest) (application.Read[web.List[apiListedThread]], error) {
+				if in.View != "" && in.View != "archived" {
+					return application.Read[web.List[apiListedThread]]{}, &application.Error{Code: application.Invalid, Message: "view must be archived or empty."}
+				}
 				list := asstapp.ThreadListInput{Q: strings.TrimSpace(in.Q), Limit: int(in.Limit), Archived: in.View == "archived", ProjectID: in.ProjectID}
 				if in.Cursor.Set() {
 					var key threads.ListKey
 					if err := in.Cursor.Last(&key); err != nil {
-						return application.Read[web.List[apiListedThread]]{}, invalidField("cursor", "The cursor is not valid.")
+						return application.Read[web.List[apiListedThread]]{}, err
 					}
 					list.After = &key
 				}
@@ -559,7 +570,7 @@ func apiBindings(p *apiPages) []application.Binding {
 				if in.Cursor.Set() {
 					var c seqCursor
 					if err := in.Cursor.Last(&c); err != nil {
-						return application.Read[apiTranscript]{}, invalidField("cursor", "The cursor is not valid.")
+						return application.Read[apiTranscript]{}, err
 					}
 					req.Before = c.Seq
 				}
@@ -641,7 +652,7 @@ func apiBindings(p *apiPages) []application.Binding {
 				change, err := svc.MessageEdit(ctx, asstapp.SendInput{ThreadID: in.ThreadID, Text: text, Files: in.Uploads, Operator: true})
 				return changeAs(change, err, func(s asstapp.Sent) apiRunStarted { return apiRunStarted{RunID: s.RunID} })
 			}),
-		apiCommand(p, asstapp.DescribeRunStop(), bodiless(threadsArea(application.NotFound, application.Conflict)), "POST /threads/{thread_id}/stop",
+		apiCommand(p, asstapp.DescribeRunStop(), stopShape, "POST /threads/{thread_id}/stop",
 			func(ctx context.Context, svc *asstapp.Service, in apiThreadRequest) (application.Change[apiStopped], error) {
 				change, err := svc.RunStop(ctx, asstapp.ThreadInput{ID: in.ThreadID})
 				return changeAs(change, err, func(c asstapp.ThreadChanged) apiStopped { return apiStopped{Stopped: true, RunID: c.RunID} })

@@ -5801,9 +5801,6 @@
             "in": "query",
             "name": "view",
             "schema": {
-              "enum": [
-                "archived"
-              ],
               "type": "string"
             }
           },

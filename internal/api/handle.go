@@ -18,7 +18,7 @@ func Query[I, O any](d *web.Deps, def application.Definition, shape application.
 	if d != nil {
 		mount(d, target, shape, func(w http.ResponseWriter, r *http.Request) {
 			var in I
-			if !decode(w, r, def.Name, &in, shape.Body) {
+			if !decode(w, r, def.Name, &in, shape.Body, shape.IgnoreBody) {
 				return
 			}
 			read, err := run(audit.With(r.Context(), actor, audit.API), in)
@@ -53,7 +53,7 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 	if d != nil {
 		mount(d, target, shape, func(w http.ResponseWriter, r *http.Request) {
 			var in I
-			if !decode(w, r, def.Name, &in, shape.Body) {
+			if !decode(w, r, def.Name, &in, shape.Body, shape.IgnoreBody) {
 				return
 			}
 			if shape.Sensitive {

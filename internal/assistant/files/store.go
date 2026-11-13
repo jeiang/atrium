@@ -158,6 +158,15 @@ func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error
 	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scanSummary(r) })
 }
 
+func Page(ctx context.Context, q db.Querier, owner Owner, after int64, limit int) ([]Row, error) {
+	where, id := owner.where()
+	rows, err := q.QueryContext(ctx, "SELECT "+summaryColumns+" FROM thread_files WHERE "+where+" = ? AND id > ? ORDER BY id LIMIT ?", id, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scanSummary(r) })
+}
+
 type newFile struct {
 	Name      string
 	Data      []byte

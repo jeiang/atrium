@@ -69,6 +69,8 @@ type DownloadInput struct {
 type FileListInput struct {
 	ThreadID  int64
 	ProjectID int64
+	After     int64
+	Limit     int
 }
 
 type ProjectUploadInput struct {
@@ -259,7 +261,12 @@ func (s *Service) FileList(ctx context.Context, in FileListInput) (application.R
 			if thread == nil {
 				return notFound("unknown thread")
 			}
-			rows, err := files.OfThread(ctx, q, in.ThreadID)
+			var rows []files.Row
+			if in.Limit > 0 {
+				rows, err = files.Page(ctx, q, files.ThreadOwner(in.ThreadID), in.After, in.Limit)
+			} else {
+				rows, err = files.OfThread(ctx, q, in.ThreadID)
+			}
 			if rows != nil {
 				out.Files = rows
 			}
@@ -284,7 +291,12 @@ func (s *Service) FileList(ctx context.Context, in FileListInput) (application.R
 			return notFound(unknownProject)
 		}
 		out.Project = project
-		rows, err := files.OfProject(ctx, q, in.ProjectID)
+		var rows []files.Row
+		if in.Limit > 0 {
+			rows, err = files.Page(ctx, q, files.ProjectOwner(in.ProjectID), in.After, in.Limit)
+		} else {
+			rows, err = files.OfProject(ctx, q, in.ProjectID)
+		}
 		if rows != nil {
 			out.Files = rows
 		}

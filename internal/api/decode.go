@@ -23,8 +23,9 @@ var (
 )
 
 type rules struct {
-	min, max *int64
-	enum     []string
+	min, max  *int64
+	enum      []string
+	legacyInt bool
 }
 
 func parseRules(tag string) rules {
@@ -44,12 +45,14 @@ func parseRules(tag string) rules {
 			}
 		case "enum":
 			out.enum = strings.Split(value, "|")
+		case "legacy-int":
+			out.legacyInt = true
 		}
 	}
 	return out
 }
 
-func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, body application.BodyKind) bool {
+func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, body application.BodyKind, ignoreBody bool) bool {
 	rv := reflect.ValueOf(v).Elem()
 	query := r.URL.Query()
 	cursorQuery := r.URL.Query()
@@ -95,9 +98,14 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 				if raw == "" {
 					continue
 				}
-				if msg := setValue(field, raw, parseRules(f.Tag.Get("api"))); msg != "" {
+				rule := parseRules(f.Tag.Get("api"))
+				if msg := setValue(field, raw, rule); msg != "" {
+					kind := "value_error"
+					if rule.legacyInt {
+						kind = "int_parsing"
+					}
 					web.APIError(w, http.StatusUnprocessableEntity, "invalid", "The "+name+" parameter is not valid.",
-						web.FieldError{Type: "value_error", Loc: []string{"query", name}, Msg: msg, Input: raw})
+						web.FieldError{Type: kind, Loc: []string{"query", name}, Msg: msg, Input: raw})
 					return false
 				}
 			}
@@ -115,10 +123,13 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 			}
 		}
 	}
+	if ignoreBody {
+		return true
+	}
 	switch body {
 	case application.BodyMultipart:
 		media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if media == "application/json" {
+		if media == "application/json" || (r.Header.Get("Content-Type") == "" && r.ContentLength == 0) {
 			return web.DecodeJSON(w, r, v)
 		}
 		decoder, ok := v.(interface{ DecodeMultipart(*multipart.Reader) error })
@@ -181,6 +192,9 @@ func setValue(field reflect.Value, raw string, rule rules) string {
 		}
 		field.SetString(raw)
 	case reflect.Int, reflect.Int64, reflect.Int32:
+		if rule.legacyInt {
+			raw = strings.TrimSpace(raw)
+		}
 		n, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || field.OverflowInt(n) {
 			return "Input should be an integer"

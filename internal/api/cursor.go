@@ -35,7 +35,15 @@ type cursorWire struct {
 
 func (c Cursor) Set() bool { return len(c.last) > 0 }
 
-func (c Cursor) Last(v any) error { return json.Unmarshal(c.last, v) }
+func (c Cursor) Last(v any) error {
+	if bytes.Equal(bytes.TrimSpace(c.last), []byte("null")) {
+		return &application.Error{Code: application.BadCursor, Message: "The cursor is not valid."}
+	}
+	if err := json.Unmarshal(c.last, v); err != nil {
+		return &application.Error{Code: application.BadCursor, Message: "The cursor is not valid.", Cause: err}
+	}
+	return nil
+}
 
 func (c Cursor) Next(last any) *string {
 	raw, err := json.Marshal(last)
@@ -77,7 +85,22 @@ func parseCursor(op application.Name, query url.Values, raw string) (Cursor, boo
 	dec.DisallowUnknownFields()
 	var wire cursorWire
 	if dec.Decode(&wire) != nil || wire.V != cursorVersion || wire.Op != op || wire.Filter != c.filter || len(wire.Last) == 0 {
-		return Cursor{}, false
+		if op != "assistant.thread.list" && op != "assistant.thread.transcript" {
+			return Cursor{}, false
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(data, &fields) != nil {
+			return Cursor{}, false
+		}
+		if op == "assistant.thread.list" {
+			if len(fields) != 3 || fields["Pinned"] == nil || fields["UpdatedAt"] == nil || fields["ID"] == nil {
+				return Cursor{}, false
+			}
+		} else if len(fields) != 1 || fields["seq"] == nil {
+			return Cursor{}, false
+		}
+		c.last = data
+		return c, true
 	}
 	c.last = wire.Last
 	return c, true
