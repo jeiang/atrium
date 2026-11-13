@@ -614,6 +614,9 @@ behavior-parity target.
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
 
+- A standalone `atrium media-agent --config FILE` process now provides authenticated rooted streaming without opening the main database. Listener peers are checked before TLS/headers, connections are capped at 256, headers at 16 KiB, and ranges at 16 parts (larger range sets are ignored). Root/state/cache overlap is checked on resolved paths and filesystem identities. SIGHUP drains and exits non-zero. This does not yet move main-side media filesystem work or deploy an agent service.
+- The media agent now supports read-only source/import/directory metadata and preparation, durable receipt-keyed filing, progress and inspection, and receipt-derived undo. Torrent plans hardlink downloads; import plans use exclusive rename; cleanup refuses remaining videos and is non-undoable. Mutations are globally serialized, preserve library-group permissions, and never copy across devices or replace destinations. Crash recovery only inspects receipts; identical replay returns the terminal result and never resumes. Main-side integration and the service unit remain pending.
+
 ## Current authority boundaries
 
 - The effect ledger (`internal/ledger`) owns the `effects`, `effect_resources`,
