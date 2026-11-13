@@ -1,6 +1,7 @@
 package agentcmd
 
 import (
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
@@ -29,7 +30,7 @@ func runScheduler(env *cli.Env, open Open, enabled func(module string) bool) err
 	defer closeApp()
 	notifier := sdnotify.New(func(name string) string { v, _ := env.Env(name); return v })
 	beat := sdnotify.NewHeartbeat()
-	s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), jobworker.Options{Enabled: enabled, Beat: beat.Beat})
+	s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), jobworker.Options{Enabled: enabled, Beat: beat.Beat, Start: asstapp.ScheduledStart})
 	notifier.Ready()
 	notifier.Status("scheduling")
 	stopWatchdog := notifier.Watch(ctx, func() bool { return beat.Fresh(notifier.Interval() * 2) })

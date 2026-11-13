@@ -12,7 +12,8 @@ func opsToolService(tc *tool.Context) *opsapp.Service {
 
 func opsOperations() ([]application.Definition, []application.Binding) {
 	uses := func(name application.Name) []application.Name { return []application.Name{name} }
-	return opsapp.DescribeWorker(), []application.Binding{
+	return append(opsapp.DescribeWorker(), opsapp.DescribeHealth()), []application.Binding{
+		{Kind: application.Tool, Target: "worker_status", Uses: uses(opsapp.HealthName)},
 		{Kind: application.Tool, Target: "ops_samples", Uses: uses(opsapp.ObservationsName)},
 		{Kind: application.Tool, Target: "ops_findings", Uses: uses(opsapp.ObservationsName)},
 		{Kind: application.Tool, Target: "worker_finding", Uses: uses(opsapp.ObservationsName)},

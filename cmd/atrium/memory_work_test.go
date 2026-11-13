@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,6 +43,16 @@ func TestMemoryWorkSummarizesTheTree(t *testing.T) {
 		if strings.Contains(ran.stdout, ": 0 nodes") {
 			break
 		}
+	}
+	audits := operationAudits(t, d, "assistant.memory.work")
+	if len(audits) == 0 || slices.ContainsFunc(audits, func(a string) bool { return !strings.HasPrefix(a, "ok thread:1 ") }) {
+		t.Errorf("memory work audits = %q, want only ok rows for the passes that summarized", audits)
+	}
+	if ran := runApp(t, "memory", "work", "1"); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, ": 0 nodes") {
+		t.Fatalf("memory work with nothing pending: %d %q %s", ran.code, ran.stdout, ran.stderr)
+	}
+	if again := operationAudits(t, d, "assistant.memory.work"); len(again) != len(audits) {
+		t.Errorf("a memory work pass that summarized nothing wrote audits %q", again[len(audits):])
 	}
 	var pending, summarized, memoryRows int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_nodes WHERE thread_id = 1 AND state = 'pending'").Scan(&pending); err != nil {

@@ -291,7 +291,7 @@ func (s *Scheduler) Finish(ctx context.Context, c Claim, o Result) error {
 			return err
 		}
 		if o.Status == StatusSkippedUnconfigured && o.ThreadID == nil && !c.manual {
-			if err := mergeUnconfigured(ctx, tx, c, o.Error, now); err != nil {
+			if err := mergeUnconfigured(ctx, tx, c, o.Error); err != nil {
 				return err
 			}
 		}
@@ -303,7 +303,7 @@ func (s *Scheduler) Finish(ctx context.Context, c Claim, o Result) error {
 	})
 }
 
-func mergeUnconfigured(ctx context.Context, tx *sql.Tx, c Claim, text *string, now float64) error {
+func mergeUnconfigured(ctx context.Context, tx *sql.Tx, c Claim, text *string) error {
 	var prev int64
 	err := tx.QueryRowContext(ctx, "SELECT p.id FROM job_runs p WHERE p.job_id = ? AND p.id = (SELECT MAX(id) FROM job_runs WHERE job_id = ? AND id < ?) "+
 		"AND p.status = ? AND p.ended_at IS NOT NULL AND p.error IS ? AND COALESCE(p.owner, '') NOT LIKE 'manual/%' "+
@@ -315,13 +315,13 @@ func mergeUnconfigured(ctx context.Context, tx *sql.Tx, c Claim, text *string, n
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE job_runs SET due_at = (SELECT due_at FROM job_runs WHERE id = ?), ended_at = ? WHERE id = ?", c.JobRunID, now, prev); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE job_runs SET started_at = (SELECT started_at FROM job_runs WHERE id = ?) WHERE id = ?", prev, c.JobRunID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE jobs SET last_run_id = ? WHERE id = ? AND last_run_id = ?", prev, c.Job.ID, c.JobRunID); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE jobs SET last_run_id = ? WHERE id = ? AND last_run_id = ?", c.JobRunID, c.Job.ID, prev); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, "DELETE FROM job_runs WHERE id = ?", c.JobRunID)
+	_, err = tx.ExecContext(ctx, "DELETE FROM job_runs WHERE id = ?", prev)
 	return err
 }
 

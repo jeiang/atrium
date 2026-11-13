@@ -126,12 +126,11 @@
     {
       "area": "threads",
       "operations": [
-        "assistant.run.events",
         "assistant.thread.list",
         "assistant.thread.transcript"
       ],
-      "required": 3,
-      "bound": 3
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "usage",
@@ -146,6 +145,6 @@
       "bound": 0
     }
   ],
-  "total_required": 148,
-  "total_bound": 9
+  "total_required": 150,
+  "total_bound": 8
 }
