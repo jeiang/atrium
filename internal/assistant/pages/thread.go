@@ -135,7 +135,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
 	if edit, _ := web.Value(form, "edit"); edit != "" {
-		_, err := p.svc.EditLast(ctx, threadID, text, attached)
+		_, err := p.svc().EditLast(ctx, threadID, text, attached)
 		if p.refused(w, r, err) {
 			return
 		}
@@ -146,7 +146,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		p.transcript(w, r, threadID, "innerHTML")
 		return
 	}
-	sent, err := p.svc.Send(ctx, threadID, text, attached)
+	sent, err := p.svc().Send(ctx, threadID, text, attached)
 	if p.refused(w, r, err) {
 		return
 	}
@@ -184,7 +184,7 @@ func (p *pages) chatRegenerate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := p.svc.Regenerate(detached(r), threadID)
+	_, err := p.svc().Regenerate(detached(r), threadID)
 	if p.refused(w, r, err) {
 		return
 	}
@@ -243,7 +243,7 @@ func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	child, err := p.svc.Branch(detached(r), threadID, seq)
+	child, err := p.svc().Branch(detached(r), threadID, seq)
 	var unknown service.UnknownThread
 	var redo service.NothingToRedo
 	switch {
@@ -326,7 +326,7 @@ func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
 	if _, ok := p.loadRun(w, r, threadID, runID); !ok {
 		return
 	}
-	err := p.svc.StartResume(detached(r), runID)
+	err := p.svc().StartResume(detached(r), runID)
 	if errors.As(err, new(service.NotInterrupted)) {
 		p.fail(w, r, http.StatusConflict, "run is not interrupted")
 		return
@@ -358,7 +358,7 @@ func (p *pages) chatAnswer(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.FieldError{Loc: []string{"body", "text"}, Msg: "Type an answer first."})
 		return
 	}
-	if err := p.svc.Answer(detached(r), threadID, text); err != nil {
+	if err := p.svc().Answer(detached(r), threadID, text); err != nil {
 		p.fail(w, r, http.StatusConflict, err.Error())
 		return
 	}

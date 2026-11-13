@@ -1,11 +1,16 @@
 package web
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/jeiang/atrium/internal/application"
 )
 
 var ErrRegistrarSealed = errors.New("web: route registrar sealed")
@@ -20,11 +25,66 @@ func (e *DuplicateRoute) Error() string {
 	return fmt.Sprintf("web: duplicate route %s %s: owners %v", e.Method, e.Pattern, e.Owners)
 }
 
+type UnmountedBinding struct {
+	Owner  string
+	Kind   application.BindingKind
+	Target string
+}
+
+func (e *UnmountedBinding) Error() string {
+	return fmt.Sprintf("web: %s declares %s binding %s but does not mount it", e.Owner, e.Kind, e.Target)
+}
+
+type Route struct {
+	Owner   string
+	Kind    application.BindingKind
+	Method  string
+	Pattern string
+}
+
 type routeKey struct{ method, pattern string }
 type registrations struct {
-	seen   map[routeKey]string
-	sealed bool
-	err    error
+	seen     map[routeKey]string
+	bindings map[string][]application.Binding
+	bound    map[routeKey]bool
+	sealed   bool
+	err      error
+}
+
+func (s *registrations) check() error {
+	s.bound = map[routeKey]bool{}
+	for owner, bindings := range s.bindings {
+		for _, b := range bindings {
+			method, pattern, ok := application.Route(b.Target)
+			if b.Kind == application.API {
+				pattern = APIPrefix + pattern
+			}
+			key := routeKey{method, pattern}
+			if !ok || s.seen[key] != owner {
+				return &UnmountedBinding{Owner: owner, Kind: b.Kind, Target: b.Target}
+			}
+			s.bound[key] = true
+		}
+	}
+	return nil
+}
+
+func (s *registrations) unbound() []Route {
+	var out []Route
+	for key, owner := range s.seen {
+		if s.bound[key] {
+			continue
+		}
+		route := Route{Owner: owner, Kind: application.HTML, Method: key.method, Pattern: key.pattern}
+		if rest, ok := strings.CutPrefix(key.pattern, APIPrefix); ok && strings.HasPrefix(rest, "/") {
+			route.Kind, route.Pattern = application.API, rest
+		}
+		out = append(out, route)
+	}
+	slices.SortFunc(out, func(a, b Route) int {
+		return cmp.Or(cmp.Compare(a.Owner, b.Owner), cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Pattern, b.Pattern), cmp.Compare(a.Method, b.Method))
+	})
+	return out
 }
 
 type Registrar struct {
@@ -34,7 +94,13 @@ type Registrar struct {
 	state  *registrations
 }
 
-func (r *Registrar) Seal() error { r.state.sealed = true; return r.state.err }
+func (r *Registrar) Seal() error {
+	r.state.sealed = true
+	if r.state.err != nil {
+		return r.state.err
+	}
+	return r.state.check()
+}
 
 func (r *Registrar) record(method, pattern string) bool {
 	if r.state.sealed {

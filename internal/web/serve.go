@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -39,6 +40,7 @@ type Page struct {
 	Home      string
 	Nav       []tpl.NavItem
 	OIDC      oidc.Source
+	Bindings  map[string][]application.Binding
 }
 
 type Resource struct {
@@ -167,6 +169,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	var nav []tpl.NavItem
 	home := ""
 	var oidcSource oidc.Source
+	bindings := map[string][]application.Binding{}
 	for _, p := range a.pages {
 		if p.Module != nil {
 			modules = append(modules, p.Module)
@@ -184,6 +187,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 			oidcSource = p.OIDC
 		}
 		maps.Copy(globals, p.Globals)
+		maps.Copy(bindings, p.Bindings)
 		nav = append(nav, p.Nav...)
 	}
 	var sessions *oidc.Service
@@ -197,7 +201,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Trusted: trusted, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
+	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Trusted: trusted, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, Bindings: bindings, OnReady: func(deps *Deps) error {
 		return a.boot.Start(ctx, deps, a.services)
 	}})
 	if err != nil {
