@@ -76,8 +76,6 @@ internal/assistant/pages/home.go	github.com/jeiang/atrium/internal/calendar
 internal/assistant/pages/home.go	github.com/jeiang/atrium/internal/config
 internal/assistant/pages/home.go	github.com/jeiang/atrium/internal/db
 internal/assistant/pages/home.go	github.com/jeiang/atrium/internal/textsearch
-internal/assistant/pages/knowledge.go	github.com/jeiang/atrium/internal/kb
-internal/assistant/pages/knowledge.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/pages/library.go	database/sql
 internal/assistant/pages/library.go	github.com/jeiang/atrium/internal/config
 internal/assistant/pages/library.go	github.com/jeiang/atrium/internal/db

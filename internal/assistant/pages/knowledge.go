@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,9 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/kb"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -66,8 +63,6 @@ type knowledgeProfileData struct {
 	kbapp.Profile
 	Error *string
 }
-
-func (p *pages) store() *ledger.Store { return p.svc().Runner.Ledger }
 
 func (p *pages) knowledgeRoutes(r chi.Router) {
 	r.Get("/library/knowledge", p.knowledgeList)
@@ -134,7 +129,7 @@ func knowledgeValues(r kbapp.Record) knowledgeFormValues {
 		Scope: r.Scope, Private: r.Private, Pinned: r.Pinned, Marks: marks}
 }
 
-func submittedKnowledge(form url.Values) kb.EditInput {
+func submittedKnowledge(form url.Values) kbapp.RecordInput {
 	marks := tool.Marks(0)
 	for _, m := range kbapp.Marks {
 		if web.FormString(form, m.Name, "") == "1" {
@@ -147,18 +142,18 @@ func submittedKnowledge(form url.Values) kb.EditInput {
 			aliases = append(aliases, line)
 		}
 	}
-	return kb.EditInput{
-		Title:   strings.TrimSpace(web.FormString(form, "title", "")),
-		Body:    strings.TrimSpace(web.FormString(form, "body", "")),
+	return kbapp.RecordInput{
+		Title:   web.FormString(form, "title", ""),
+		Body:    web.FormString(form, "body", ""),
 		Aliases: aliases,
-		Scope:   web.FormString(form, "scope", kb.ScopePersonal),
+		Scope:   web.FormString(form, "scope", kbapp.ScopePersonal),
 		Private: web.FormString(form, "private", "") == "1",
 		Marks:   marks,
 		Pinned:  web.FormString(form, "pinned", "") == "1",
 	}
 }
 
-func formValuesOf(in kb.EditInput) knowledgeFormValues {
+func formValuesOf(in kbapp.RecordInput) knowledgeFormValues {
 	marks := map[string]bool{}
 	for _, m := range kbapp.Marks {
 		marks[m.Name] = in.Marks&m.Mark != 0
@@ -169,32 +164,34 @@ func formValuesOf(in kb.EditInput) knowledgeFormValues {
 
 func (p *pages) knowledgeNew(w http.ResponseWriter, r *http.Request) {
 	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge_new.gohtml",
-		knowledgeFormData{Action: "/library/knowledge/new", Values: knowledgeFormValues{Scope: kb.ScopePersonal}}, nil)
+		knowledgeFormData{Action: "/library/knowledge/new", Values: knowledgeFormValues{Scope: kbapp.ScopePersonal}}, nil)
 }
 
 func (p *pages) knowledgeCreate(w http.ResponseWriter, r *http.Request) {
 	in := submittedKnowledge(web.FormValues(r))
-	rec, _, err := kb.OperatorCreate(detached(r), p.store(), in, p.now())
-	var refused kb.Refused
-	if errors.As(err, &refused) {
-		problem := err.Error()
-		p.render(w, r, http.StatusUnprocessableEntity, knowledgeFrame, "knowledge_new.gohtml",
-			knowledgeFormData{Action: "/library/knowledge/new", Values: formValuesOf(in), Error: &problem}, nil)
+	changed, err := p.knowledge().Create(detached(r), in)
+	if err != nil {
+		web.Fail(w, r, err, func(status int) {
+			problem := application.Classify(err).Error()
+			p.render(w, r, status, knowledgeFrame, "knowledge_new.gohtml",
+				knowledgeFormData{Action: "/library/knowledge/new", Values: formValuesOf(in), Error: &problem}, nil)
+		})
 		return
 	}
-	check(err)
-	navigate(w, r, knowledgePath(rec.ID))
+	navigate(w, r, knowledgePath(changed.Data.ID))
 }
 
 func knowledgePath(id int64) string { return "/library/knowledge/" + strconv.FormatInt(id, 10) }
 
-func (p *pages) knowledgeRecordPage(w http.ResponseWriter, r *http.Request, status int, d kbapp.Detail, problem *string) {
+func (p *pages) knowledgeRecordPage(w http.ResponseWriter, r *http.Request, status int, d kbapp.Detail, form *knowledgeFormData) {
 	marks := make([]knowledgeMark, len(kbapp.Marks))
 	for i, m := range kbapp.Marks {
 		marks[i] = knowledgeMark{Name: m.Name, Label: m.Label, On: d.Record.Marks&m.Mark != 0}
 	}
-	data := knowledgeRecordData{Record: d.Record, Marks: marks, SameRun: d.SameRun, History: d.History, Source: d.Record.Source,
-		Form: knowledgeFormData{Action: knowledgePath(d.Record.ID), Values: knowledgeValues(d.Record), Error: problem}}
+	if form == nil {
+		form = &knowledgeFormData{Action: knowledgePath(d.Record.ID), Values: knowledgeValues(d.Record)}
+	}
+	data := knowledgeRecordData{Record: d.Record, Marks: marks, SameRun: d.SameRun, History: d.History, Source: d.Record.Source, Form: *form}
 	p.render(w, r, status, knowledgeFrame, "knowledge_record.gohtml", data, nil)
 }
 
@@ -224,20 +221,20 @@ func (p *pages) knowledgeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := submittedKnowledge(web.FormValues(r))
-	rec, _, err := kb.OperatorEdit(detached(r), p.store(), id, in, p.now())
-	var refused kb.Refused
-	if errors.As(err, &refused) {
-		problem := err.Error()
-		current, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: id})
-		if err != nil {
-			p.knowledgeDetailFail(w, r, err)
+	changed, err := p.knowledge().Edit(detached(r), kbapp.EditInput{ID: id, RecordInput: in})
+	if err != nil {
+		current, derr := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: id})
+		if derr != nil {
+			p.knowledgeDetailFail(w, r, derr)
 			return
 		}
-		p.knowledgeRecordPage(w, r, http.StatusUnprocessableEntity, current.Data, &problem)
+		web.Fail(w, r, err, func(status int) {
+			problem := application.Classify(err).Error()
+			p.knowledgeRecordPage(w, r, status, current.Data, &knowledgeFormData{Action: knowledgePath(id), Values: formValuesOf(in), Error: &problem})
+		})
 		return
 	}
-	check(err)
-	navigate(w, r, knowledgePath(rec.ID))
+	navigate(w, r, knowledgePath(changed.Data.ID))
 }
 
 func (p *pages) knowledgeConfirm(w http.ResponseWriter, r *http.Request) {
@@ -245,14 +242,16 @@ func (p *pages) knowledgeConfirm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, _, err := kb.Confirm(detached(r), p.store(), id, p.now())
-	var refused kb.Refused
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not confirmed", err.Error())
+	changed, err := p.knowledge().Confirm(detached(r), kbapp.IDInput{ID: id})
+	if err != nil {
+		p.knowledgeRefused(w, r, "Not confirmed", err)
 		return
 	}
-	check(err)
-	navigate(w, r, knowledgePath(rec.ID))
+	navigate(w, r, knowledgePath(changed.Data.ID))
+}
+
+func (p *pages) knowledgeRefused(w http.ResponseWriter, r *http.Request, title string, err error) {
+	web.Fail(w, r, err, func(status int) { p.failureStatus(w, r, status, title, application.Classify(err).Error()) })
 }
 
 func (p *pages) knowledgeRetract(w http.ResponseWriter, r *http.Request) {
@@ -260,15 +259,13 @@ func (p *pages) knowledgeRetract(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, _, err := kb.OperatorRetract(detached(r), p.store(), id, p.now())
-	var refused kb.Refused
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not retracted", err.Error())
+	changed, err := p.knowledge().Retract(detached(r), kbapp.IDInput{ID: id})
+	if err != nil {
+		p.knowledgeRefused(w, r, "Not retracted", err)
 		return
 	}
-	check(err)
 	if web.IsPartial(r) {
-		current, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: rec.ID})
+		current, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: id})
 		if err != nil {
 			p.knowledgeDetailFail(w, r, err)
 			return
@@ -276,7 +273,7 @@ func (p *pages) knowledgeRetract(w http.ResponseWriter, r *http.Request) {
 		p.renderFragment(w, r, http.StatusOK, "_knowledge_retract.gohtml", current.Data, nil)
 		return
 	}
-	navigate(w, r, knowledgePath(rec.ID))
+	navigate(w, r, knowledgePath(changed.Data.ID))
 }
 
 func (p *pages) knowledgeRestore(w http.ResponseWriter, r *http.Request) {
@@ -284,14 +281,12 @@ func (p *pages) knowledgeRestore(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, _, err := kb.Restore(detached(r), p.store(), id, p.now())
-	var refused kb.Refused
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not restored", err.Error())
+	changed, err := p.knowledge().Restore(detached(r), kbapp.IDInput{ID: id})
+	if err != nil {
+		p.knowledgeRefused(w, r, "Not restored", err)
 		return
 	}
-	check(err)
-	navigate(w, r, knowledgePath(rec.ID))
+	navigate(w, r, knowledgePath(changed.Data.ID))
 }
 
 func (p *pages) knowledgeRunRetract(w http.ResponseWriter, r *http.Request) {
@@ -300,7 +295,7 @@ func (p *pages) knowledgeRunRetract(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	_, err := kb.RunRetract(detached(r), p.store(), runID, p.now())
+	_, err := p.knowledge().RetractRun(detached(r), kbapp.RunInput{RunID: runID})
 	check(err)
 	navigate(w, r, "/library/knowledge")
 }
@@ -326,13 +321,10 @@ func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	for _, id := range ids {
-		_, _, err := kb.Confirm(detached(r), p.store(), id, p.now())
-		var refused kb.Refused
-		if errors.As(err, &refused) {
-			p.failure(w, r, "Not confirmed", err.Error())
+		if _, err := p.knowledge().Confirm(detached(r), kbapp.IDInput{ID: id}); err != nil {
+			p.knowledgeRefused(w, r, "Not confirmed", err)
 			return
 		}
-		check(err)
 	}
 	navigate(w, r, "/library/knowledge?"+filterQuery(filter))
 }
@@ -354,7 +346,7 @@ func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
 		if rec.Confirmed || rec.Retracted {
 			continue
 		}
-		if _, _, err := kb.Confirm(detached(r), p.store(), rec.ID, p.now()); err != nil {
+		if _, err := p.knowledge().Confirm(detached(r), kbapp.IDInput{ID: rec.ID}); err != nil {
 			check(err)
 		}
 	}
@@ -378,20 +370,19 @@ func (p *pages) knowledgeProfile(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) knowledgeProfileAdd(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	in := kb.EditInput{
-		Title:  strings.TrimSpace(web.FormString(form, "title", "")),
-		Body:   strings.TrimSpace(web.FormString(form, "body", "")),
-		Scope:  kb.ScopePersonal,
+	in := kbapp.RecordInput{
+		Title:  web.FormString(form, "title", ""),
+		Body:   web.FormString(form, "body", ""),
+		Scope:  kbapp.ScopePersonal,
 		Pinned: true,
 	}
-	_, _, err := kb.OperatorCreate(detached(r), p.store(), in, p.now())
-	var refused kb.Refused
-	if errors.As(err, &refused) {
-		problem := err.Error()
-		p.knowledgeProfilePage(w, r, http.StatusUnprocessableEntity, &problem)
+	if _, err := p.knowledge().Create(detached(r), in); err != nil {
+		web.Fail(w, r, err, func(status int) {
+			problem := application.Classify(err).Error()
+			p.knowledgeProfilePage(w, r, status, &problem)
+		})
 		return
 	}
-	check(err)
 	navigate(w, r, "/library/knowledge/profile")
 }
 
@@ -413,12 +404,9 @@ func (p *pages) knowledgePurge(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := kb.Purge(detached(r), p.store(), id, p.now())
-	var refused kb.Refused
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not purged", err.Error())
+	if _, err := p.knowledge().Purge(detached(r), kbapp.IDInput{ID: id}); err != nil {
+		p.knowledgeRefused(w, r, "Not purged", err)
 		return
 	}
-	check(err)
 	navigate(w, r, "/library/knowledge")
 }

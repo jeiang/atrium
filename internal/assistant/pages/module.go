@@ -154,15 +154,19 @@ func (p *pages) fail(w http.ResponseWriter, r *http.Request, status int, detail 
 }
 
 func (p *pages) failure(w http.ResponseWriter, r *http.Request, title, description string) {
+	p.failureStatus(w, r, http.StatusUnprocessableEntity, title, description)
+}
+
+func (p *pages) failureStatus(w http.ResponseWriter, r *http.Request, status int, title, description string) {
 	if !web.IsPartial(r) {
-		p.fail(w, r, http.StatusUnprocessableEntity, description)
+		p.fail(w, r, status, description)
 		return
 	}
 	f, err := p.deps.Render.Frame(r, "", nil)
 	check(err)
 	f.Toast = &tpl.Toast{Category: "error", Title: title, Description: description}
 	w.Header().Set("HX-Reswap", "none")
-	check(p.deps.Render.Fragment(w, r, http.StatusUnprocessableEntity, "_toast.gohtml", f))
+	check(p.deps.Render.Fragment(w, r, status, "_toast.gohtml", f))
 }
 
 func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool {

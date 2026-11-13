@@ -373,3 +373,74 @@ func TestKnowledgeListRevision(t *testing.T) {
 		t.Fatalf("bogus scope = %d: %.300s", code, body)
 	}
 }
+
+func knowledgeAudits(t *testing.T, d *db.DB, operation string, id int64, outcome string) int {
+	t.Helper()
+	var n int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND target = ? AND outcome = ? AND source = 'ui'",
+		operation, strconv.FormatInt(id, 10), outcome).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestKnowledgeOperatorLifecycleAudits(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	base, _, stop := startServeStoppable(t, dir)
+	defer stop()
+	w := asstBrowse(t, base)
+	body := func(id int64) string {
+		t.Helper()
+		var b string
+		if err := d.Read.QueryRow("SELECT body FROM kb_records WHERE id = ?", id).Scan(&b); err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+
+	id := knowledgeCreate(t, w, url.Values{"title": {"Water shutoff"}, "body": {"Under the stairs."}, "scope": {"personal"}})
+	path := fmt.Sprintf("/library/knowledge/%d", id)
+	if code, b, _ := w.post(path, url.Values{"title": {"Water shutoff"}, "body": {"Behind the boiler."}, "scope": {"personal"}}, false); code != http.StatusSeeOther {
+		t.Fatalf("edit = %d: %.300s", code, b)
+	}
+	var effectID int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'kb_edit' AND target = ?", "kb:"+strconv.FormatInt(id, 10)).Scan(&effectID); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "effects", "undo", strconv.FormatInt(effectID, 10)); got.code != cli.ExitOK {
+		t.Fatalf("undo the edit: %d %s", got.code, got.stderr)
+	}
+	if got := body(id); got != "Under the stairs." {
+		t.Fatalf("body after undoing the edit = %q", got)
+	}
+	for _, action := range []string{"confirm", "retract", "restore"} {
+		if code, b, _ := w.post(path+"/"+action, url.Values{}, false); code != http.StatusSeeOther {
+			t.Fatalf("%s = %d: %.300s", action, code, b)
+		}
+	}
+
+	code, page, _ := w.post(path, url.Values{"title": {""}, "body": {"Draft that must not land."}, "scope": {"personal"}}, false)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(page, "Draft that must not land.") {
+		t.Fatalf("invalid edit = %d: %.300s", code, page)
+	}
+	if got := body(id); got != "Under the stairs." {
+		t.Fatalf("an invalid edit changed the body to %q", got)
+	}
+	if code, b, _ := w.post(path+"/purge", url.Values{}, false); code != http.StatusSeeOther {
+		t.Fatalf("purge = %d: %.300s", code, b)
+	}
+
+	for _, op := range []string{"knowledge.create", "knowledge.edit", "knowledge.confirm", "knowledge.retract", "knowledge.restore", "knowledge.purge"} {
+		if n := knowledgeAudits(t, d, op, id, "ok"); n != 1 {
+			t.Errorf("%s ok audit rows = %d, want 1", op, n)
+		}
+	}
+	if n := knowledgeAudits(t, d, "knowledge.edit", id, "invalid"); n != 1 {
+		t.Errorf("invalid edit audit rows = %d, want 1", n)
+	}
+}

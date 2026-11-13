@@ -6,17 +6,19 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 type Service struct {
-	db    *db.DB
-	state *state.Store
-	now   func() float64
+	db     *db.DB
+	state  *state.Store
+	ledger *ledger.Store
+	now    func() float64
 }
 
-func New(d *db.DB, now func() float64) *Service {
-	return &Service{db: d, state: state.New(d), now: now}
+func New(d *db.DB, store *ledger.Store, now func() float64) *Service {
+	return &Service{db: d, state: state.New(d), ledger: store, now: now}
 }
 
 type Mark struct {

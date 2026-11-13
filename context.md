@@ -54,7 +54,9 @@ behavior-parity target.
   prompt's profile block and each pinned record's place in it. An unknown
   scope filter is refused with a 422 and the reason instead of being reset;
   the list, record and profile pages answer with a weak `ETag` and a 304
-  when nothing they show has changed. Projects
+  when nothing they show has changed. Each knowledge command writes one
+  operation audit row; a refused command answers 409 and a rejected edit
+  keeps the submitted values on the 422 page. Projects
   have no pages of their own beyond create and edit, and a
   project can be marked private so its knowledge and threads stay inside
   it. The sidebar collapses to a rail; chat uses a
