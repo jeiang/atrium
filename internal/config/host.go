@@ -11,7 +11,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -88,11 +87,6 @@ func LoadHost(env Env, reg *settings.Registry, filename string) (Host, error) {
 	for _, d := range defs {
 		if err := h.readEnv(env, reg, d); err != nil {
 			return Host{}, err
-		}
-		if entry, ok := settings.ImportEntryFor(d.Key); ok && entry.Ignored && entry.Module == d.Module && strings.TrimSpace(h.Values[d.Key]) != "" {
-			logx.Logger("atrium.config").Warn("ignoring a removed host key", "key", d.Module+"."+d.Key, "source", h.Sources[d.Key], "replacement", entry.Target)
-			h.Values[d.Key] = d.Default
-			delete(h.Sources, d.Key)
 		}
 	}
 	h.deriveHostConnections()

@@ -43,7 +43,6 @@ type ImportEntry struct {
 	Runtime bool
 	Secret  bool
 	Retired bool
-	Ignored bool
 	Note    string
 }
 
@@ -355,7 +354,7 @@ var importManifest = []ImportEntry{
 	{Module: "media", Key: "media_qbittorrent_api_key", Class: ImportOperator, Action: ImportRename, Target: "service/qbittorrent credential api_key", Default: "", Type: String, Choices: nil, Cutover: true, Runtime: true},
 	{Module: "media", Key: "media_qbittorrent_timeout_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds", Default: "15", Type: Int, Choices: nil, Cutover: true, Runtime: true},
 	{Module: "media", Key: "media_qbittorrent_url", Class: ImportHost, Action: ImportDropHost, Target: "service/qbittorrent.config.url", Default: "", Type: String, Choices: nil, Cutover: true, Runtime: true},
-	{Module: "media", Key: "media_root", Class: ImportHost, Action: ImportDropHost, Target: "services.atrium.mediaAgent.roots", Default: "", Type: String, Choices: nil, Cutover: false, Ignored: true},
+	{Module: "media", Key: "media_root", Class: ImportHost, Action: ImportDropHost, Target: "services.atrium.mediaAgent.roots", Default: "", Type: String, Choices: nil, Cutover: false, Retired: true},
 	{Module: "media", Key: "media_search_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaSearchLimit", Default: "50", Type: Int, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_subtitle_extensions", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaSubtitleExtensions", Default: ".srt,.sub,.idx,.ass,.ssa,.vtt", Type: String, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_thumbnail_pass_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaThumbnailPassLimit", Default: "200", Type: Int, Choices: nil, Cutover: false},

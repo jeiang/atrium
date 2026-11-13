@@ -330,14 +330,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "media_root": {
-          "description": "Accepted but ignored with a warning, replaced by services.atrium.mediaAgent.roots; refused once the NixOS module has services.atrium.mediaAgent.roots.",
-          "type": "string"
-        },
-        "media_root_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_vpn_base_url": {
           "type": "string"
         },
@@ -1271,6 +1263,7 @@
     "media.media_qbittorrent_api_key": "connections.\"service/qbittorrent\".credential_files.api_key",
     "media.media_qbittorrent_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds",
     "media.media_qbittorrent_url": "connections.\"service/qbittorrent\".config.url",
+    "media.media_root": "services.atrium.mediaAgent.roots",
     "media.media_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaSearchLimit",
     "media.media_subtitle_extensions": "the compiled constant internal/media/tuning.go:TuningMediaSubtitleExtensions",
     "media.media_thumbnail_pass_limit": "the compiled constant internal/media/tuning.go:TuningMediaThumbnailPassLimit",

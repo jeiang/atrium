@@ -2963,13 +2963,13 @@ func TestImportV2ReportsMediaHostKeyReplacements(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := filepath.Join(dir, "media-root.toml")
-	if err := os.WriteFile(host, append(base, []byte("\n[media]\nmedia_root = \"/var/lib/media\"\n")...), 0o600); err != nil {
+	host := filepath.Join(dir, "media-host.toml")
+	if err := os.WriteFile(host, base, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
 	if got.code != cli.ExitOK {
-		t.Fatalf("db import-v2 with media_root still in the host file: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	for _, want := range []string{
 		"setting media_movies_url: drop-host -> host.media.media_vpn_base_url (choose explicitly); host requirement host.media.media_vpn_base_url (choose explicitly) = http://artemis.vpn:8084 (settings)",
@@ -2980,13 +2980,17 @@ func TestImportV2ReportsMediaHostKeyReplacements(t *testing.T) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
 	}
-	for _, key := range []string{"media_movies_url", "media_tv_url"} {
+	for key, replacement := range map[string]string{
+		"media_movies_url": "host.media.media_vpn_base_url",
+		"media_tv_url":     "host.media.media_vpn_base_url",
+		"media_root":       "services.atrium.mediaAgent.roots",
+	} {
 		refused := filepath.Join(dir, key+".toml")
 		if err := os.WriteFile(refused, append(base, []byte("\n[media]\n"+key+" = \"https://artemis.vpn:8084\"\n")...), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		got := runImportApp(t, importTestAppHost(t, dir, clock, refused), "connections", "list")
-		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "media."+key+" was removed") || !strings.Contains(got.stderr, "host.media.media_vpn_base_url") {
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "media."+key+" was removed") || !strings.Contains(got.stderr, replacement) {
 			t.Errorf("%s in the host file: exit %d stderr %q", key, got.code, got.stderr)
 		}
 	}

@@ -64,12 +64,135 @@
     })
   cfg.mailAccounts;
 
+  agent = cfg.mediaAgent;
+  agentUnit = "atrium-media-agent.service";
+  agentCredential = name: "/run/credentials/${agentUnit}/${name}";
+  agentStateDir = "/var/lib/atrium-media-agent";
+  agentCacheDir = "/var/cache/atrium-media-agent";
+  vpnOn = agent.enable && agent.vpn.enable;
+
+  parseListen = value: let
+    v6 = builtins.match "\\[([0-9A-Fa-f:.]+)]:([0-9]+)" value;
+    v4 = builtins.match "(([0-9]{1,3}\\.){3}[0-9]{1,3}):([0-9]+)" value;
+    port = m: i: lib.toInt (builtins.elemAt m i);
+  in
+    if v6 != null
+    then {
+      ip = builtins.head v6;
+      port = port v6 1;
+      wildcard = builtins.match "[0:]+" (builtins.head v6) != null;
+      loopback = builtins.head v6 == "::1";
+    }
+    else if v4 != null
+    then {
+      ip = builtins.head v4;
+      port = port v4 2;
+      wildcard = builtins.head v4 == "0.0.0.0";
+      loopback = lib.hasPrefix "127." (builtins.head v4);
+    }
+    else null;
+  listenError = option: value: let
+    l = parseListen value;
+  in
+    if l == null || l.port < 1 || l.port > 65535
+    then "${option} must be an IP address and port, such as 127.0.0.1:8482 or [fd00::1]:8483"
+    else if l.wildcard
+    then "${option} must not be a wildcard address"
+    else null;
+  controlListen = parseListen agent.listen;
+  vpnListen = parseListen agent.vpn.listen;
+
+  agentRoots = lib.mapAttrsToList (name: path: {inherit name path;}) agent.roots;
+  within = parent: child: parent == child || lib.hasPrefix "${parent}/" child;
+  cleanAbsolute = path: lib.hasPrefix "/" path && path != "/" && builtins.match ".*(//|/\\.\\.?/|/\\.\\.?$|/$).*" path == null;
+  commonParent = paths: let
+    split = map (p: lib.filter (c: c != "") (lib.splitString "/" p)) paths;
+    prefixLength = a: b: let
+      n = lib.min (lib.length a) (lib.length b);
+      go = i:
+        if i < n && lib.elemAt a i == lib.elemAt b i
+        then go (i + 1)
+        else i;
+    in
+      go 0;
+    shared = lib.foldl' (acc: cs: lib.take (prefixLength acc cs) acc) (builtins.head split) split;
+  in
+    "/" + lib.concatStringsSep "/" shared;
+  libraryDir = commonParent (map (r: r.path) agentRoots);
+  broadDirs = ["/" "/var" "/var/lib" "/var/cache" "/srv" "/mnt" "/media" "/data" "/run" "/etc" "/nix" "/usr" "/opt" "/tmp" "/home" "/root"];
+  rootErrors =
+    lib.concatMap (r: lib.optional (!cleanAbsolute r.path) "services.atrium.mediaAgent.roots.${r.name} must be a clean absolute path") agentRoots
+    ++ lib.concatLists (lib.imap0 (i: a:
+      lib.concatMap (b: lib.optional (within a.path b.path || within b.path a.path) "services.atrium.mediaAgent.roots.${a.name} and roots.${b.name} overlap")
+      (lib.drop (i + 1) agentRoots))
+    agentRoots)
+    ++ lib.concatMap (r: lib.optional (within "/home" r.path || within "/root" r.path) "services.atrium.mediaAgent.roots.${r.name} is under /home or /root, which ProtectHome hides from the agent") agentRoots
+    ++ lib.optional (builtins.elem libraryDir broadDirs) "services.atrium.mediaAgent.roots must share one library directory below ${libraryDir} (filing hardlinks and renames between roots need one writable mount); their common parent is ${libraryDir}"
+    ++ lib.optional (within libraryDir cfg.stateDir || within cfg.stateDir libraryDir) "services.atrium.mediaAgent.roots share ${libraryDir}, which overlaps services.atrium.stateDir";
+  vpnErrors = let
+    listenErr = listenError "services.atrium.mediaAgent.vpn.listen" agent.vpn.listen;
+  in
+    lib.optional (listenErr != null) listenErr
+    ++ lib.optional (listenErr == null && vpnListen.loopback) "services.atrium.mediaAgent.vpn.listen must be the mesh address, not a loopback address"
+    ++ lib.optional (agent.vpn.tls.certificateFile == null || agent.vpn.tls.keyFile == null) "services.atrium.mediaAgent.vpn needs tls.certificateFile and tls.keyFile; the VPN listener is not on loopback"
+    ++ lib.optional (agent.vpn.allowedPeers == []) "services.atrium.mediaAgent.vpn.allowedPeers must list at least one peer prefix"
+    ++ lib.optional (builtins.any (p: lib.hasSuffix "/0" p) agent.vpn.allowedPeers) "services.atrium.mediaAgent.vpn.allowedPeers must not contain 0.0.0.0/0 or ::/0"
+    ++ lib.optional (agent.vpn.allowedHosts == [] || builtins.elem "" agent.vpn.allowedHosts) "services.atrium.mediaAgent.vpn.allowedHosts must list at least one host and no empty value"
+    ++ lib.optional (agent.vpn.interface == null) "services.atrium.mediaAgent.vpn.interface must name the mesh interface; the VPN port is opened only there"
+    ++ lib.optional ((cfg.host.media or {}) ? media_vpn_base_url) "services.atrium.host.media.media_vpn_base_url is rendered from services.atrium.mediaAgent.vpn.baseUrl; set only that";
+  agentErrors = let
+    listenErr = listenError "services.atrium.mediaAgent.listen" agent.listen;
+  in
+    lib.optional (listenErr != null) listenErr
+    ++ lib.optional (listenErr == null && !controlListen.loopback) "services.atrium.mediaAgent.listen must be a loopback address; an agent on another host is declared as services.atrium.connections.\"service/media-agent\""
+    ++ lib.optional (listenErr == null && builtins.elem controlListen.port ([cfg.port] ++ lib.optional cfg.web.emergency.enable cfg.web.emergency.port)) "services.atrium.mediaAgent.listen must use a port other than services.atrium.port and services.atrium.web.emergency.port"
+    ++ lib.optional (agent.bearerFile == null || !lib.hasPrefix "/" agent.bearerFile) "services.atrium.mediaAgent.bearerFile must be an absolute path to a host file holding at least 32 bytes"
+    ++ lib.optional (agent.user == cfg.user) "services.atrium.mediaAgent.user must differ from services.atrium.user"
+    ++ lib.optional (cfg.connections ? "service/media-agent") "services.atrium.connections.\"service/media-agent\" is rendered from services.atrium.mediaAgent; remove it"
+    ++ rootErrors
+    ++ lib.optionals agent.vpn.enable vpnErrors;
+
+  renderedAgent =
+    {
+      control = {
+        inherit (agent) listen;
+        token_file = agentCredential "bearer";
+        allowed_hosts = [agent.listen];
+      };
+      state_directory = agentStateDir;
+      cache_directory = agentCacheDir;
+      inherit (agent) roots group;
+    }
+    // lib.optionalAttrs agent.vpn.enable {
+      vpn = {
+        inherit (agent.vpn) listen;
+        allowed_peers = agent.vpn.allowedPeers;
+        allowed_hosts = agent.vpn.allowedHosts;
+        tls_cert = agentCredential "vpn-tls-cert";
+        tls_key = agentCredential "vpn-tls-key";
+      };
+    };
+  agentConfigFile = toml.generate "atrium-media-agent.toml" renderedAgent;
+
+  allConnections =
+    cfg.connections
+    // lib.optionalAttrs agent.enable {
+      "service/media-agent" = {
+        kind = "service/media-agent";
+        label = "media agent";
+        config.url = "http://${agent.listen}";
+        transport = {};
+        inherit (agent) capabilities;
+        credentialFiles.bearer = agent.bearerFile;
+      };
+    };
+
   renderedConnections =
     (lib.mapAttrs (id: c: {
         inherit (c) kind label config transport capabilities;
         credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") c.credentialFiles;
       })
-      cfg.connections)
+      allConnections)
     // mailConnections;
 
   hostValues = lib.mapAttrs (module: table:
@@ -102,7 +225,8 @@
     // lib.optionalAttrs (coreHost != {}) {core = coreHost;}
     // lib.optionalAttrs (cfg.web.trustedProxyCidrs != []) {web.trusted_proxy_cidrs = lib.concatStringsSep "," cfg.web.trustedProxyCidrs;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
-    // lib.optionalAttrs (cfg.connections != {} || cfg.mailAccounts != {}) {connections = renderedConnections;}
+    // lib.optionalAttrs (allConnections != {} || cfg.mailAccounts != {}) {connections = renderedConnections;}
+    // lib.optionalAttrs vpnOn {media.media_vpn_base_url = agent.vpn.baseUrl;}
     // appKeyHost
   );
   hostConfigFile = toml.generate "atrium-host.toml" renderedHost;
@@ -115,11 +239,10 @@
     cfg.host)
     ++ lib.concatLists (lib.mapAttrsToList (id: c:
       lib.mapAttrsToList (slot: path: "${connectionCredential id slot}:${path}") c.credentialFiles)
-    cfg.connections)
+    allConnections)
     ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") cfg.mailAccounts
     ++ lib.optional (cfg.database.keyFile != null) "db-key:${cfg.database.keyFile}";
 
-  mediaRoot = cfg.host.media.media_root or null;
   obsidianDir = cfg.knowledgeExport.obsidianDirectory;
 
   appEnvironment =
@@ -258,14 +381,7 @@
     LockPersonality = true;
   };
 
-  mediaWriter = lib.optionalAttrs cfg.media.enable {
-    SupplementaryGroups = [cfg.media.group];
-    UMask = "0002";
-  };
-
-  writePaths = lib.optional cfg.media.enable mediaRoot ++ lib.optional (obsidianDir != null) obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
-
-  mediaPath = lib.optional cfg.media.enable pkgs.ffmpeg-headless;
+  writePaths = lib.optional (obsidianDir != null) obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
 
   writeTimeout = "45min";
 
@@ -273,17 +389,15 @@
 
   atriumService = {
     description = "atrium";
-    after = ["network-online.target"] ++ cfg.embeddingServerUnits;
-    wants = ["network-online.target"] ++ cfg.embeddingServerUnits;
+    after = ["network-online.target"] ++ cfg.embeddingServerUnits ++ lib.optional agent.enable agentUnit;
+    wants = ["network-online.target"] ++ cfg.embeddingServerUnits ++ lib.optional agent.enable agentUnit;
     environment = appEnvironment // lib.optionalAttrs needsPublicHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
-    path = mediaPath;
     # Transient failures (an address not yet available, a held lock, a dependency down) exit 1
     # and are retried every 5 s without limit; permanent refusals exit 2 (usage) or 78
     # (invalid configuration, database key or schema) and stop the unit.
     unitConfig.StartLimitIntervalSec = 0;
     serviceConfig =
       hardening
-      // mediaWriter
       // lib.optionalAttrs (writePaths != []) {ReadWritePaths = writePaths;}
       // {
         ExecStart = lib.concatStringsSep " " ([(lib.getExe cfg.package) "serve" "--host" (lib.escapeShellArg cfg.web.host) "--port" (lib.escapeShellArg (toString cfg.port))]
@@ -303,7 +417,57 @@
     wantedBy = ["multi-user.target"];
   };
 
-  unitNames = ["atrium.service"];
+  agentService = {
+    description = "atrium media agent";
+    after = ["network-online.target"];
+    wants = ["network-online.target"];
+    path = [agent.ffmpegPackage pkgs.coreutils];
+    unitConfig.StartLimitIntervalSec = 0;
+    serviceConfig = {
+      ExecStart = "${lib.getExe agent.package} media-agent --config ${agentConfigFile}";
+      Type = "notify";
+      WatchdogSec = "1min";
+      TimeoutStopSec = "150s";
+      KillMode = "mixed";
+      KillSignal = "SIGTERM";
+      Restart = "on-failure";
+      RestartSec = "5s";
+      User = agent.user;
+      Group = agent.group;
+      StateDirectory = lib.removePrefix "/var/lib/" agentStateDir;
+      StateDirectoryMode = "0700";
+      CacheDirectory = lib.removePrefix "/var/cache/" agentCacheDir;
+      CacheDirectoryMode = "0700";
+      UMask = "0002";
+      LoadCredential =
+        ["bearer:${agent.bearerFile}"]
+        ++ lib.optionals agent.vpn.enable ["vpn-tls-cert:${agent.vpn.tls.certificateFile}" "vpn-tls-key:${agent.vpn.tls.keyFile}"];
+      ReadWritePaths = [libraryDir];
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectKernelLogs = true;
+      ProtectControlGroups = true;
+      ProtectClock = true;
+      ProtectHostname = true;
+      ProtectProc = "invisible";
+      RestrictNamespaces = true;
+      RestrictRealtime = true;
+      LockPersonality = true;
+      CapabilityBoundingSet = "";
+      AmbientCapabilities = "";
+      RestrictAddressFamilies = "AF_INET AF_INET6 AF_UNIX";
+      SystemCallArchitectures = "native";
+      SystemCallFilter = ["@system-service"];
+    };
+    wantedBy = ["multi-user.target"];
+  };
+
+  unitNames = ["atrium.service"] ++ lib.optional agent.enable agentUnit;
 in {
   imports = [
     (lib.mkRemovedOptionModule ["services" "atrium" "backup" "onCalendar"] "Use services.atrium.backup.schedule in the atrium schedule grammar (for example \"daily 03:00\"); translate a nondefault OnCalendar expression by hand.")
@@ -353,7 +517,7 @@ in {
     host = mkOption {
       inherit (toml) type;
       default = {};
-      example = lib.literalExpression ''{ core.public_url = "https://atrium.example.org"; media.media_root = "/var/lib/media"; }'';
+      example = lib.literalExpression ''{ core.public_url = "https://atrium.example.org"; core.ops_listen = "127.0.0.1:9180"; }'';
       description = "Host configuration, one table per module, rendered to the file named by ATRIUM_HOST_CONFIG. Only host keys from ${reference} are accepted; operator and tuning keys fail evaluation with their destination. Host values are read-only in the application.";
     };
 
@@ -523,12 +687,132 @@ in {
     };
 
     media = {
-      enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs host.media.media_root";
+      enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs the media agent connection, from services.atrium.mediaAgent or an explicit services.atrium.connections.\"service/media-agent\"";
 
       group = mkOption {
         type = types.str;
         default = "media";
-        description = "Group that owns the media tree; the web unit writes through it with umask 0002.";
+        description = "Group that owns the media tree; the media agent runs with it and creates library folders setgid to it with umask 0002. atrium.service is not a member.";
+      };
+    };
+
+    mediaAgent = {
+      enable = mkEnableOption "atrium-media-agent.service, the only process with media filesystem access, and the service/media-agent connection that atrium.service uses to reach it";
+
+      package = mkOption {
+        type = types.package;
+        default = cfg.package;
+        defaultText = lib.literalExpression "config.services.atrium.package";
+        description = "Package whose atrium binary runs `atrium media-agent`.";
+      };
+
+      ffmpegPackage = mkOption {
+        type = types.package;
+        default = pkgs.ffmpeg-headless;
+        defaultText = lib.literalExpression "pkgs.ffmpeg-headless";
+        description = "Package that provides ffmpeg and ffprobe on the agent unit's path for thumbnails.";
+      };
+
+      user = mkOption {
+        type = types.str;
+        default = "atrium-media-agent";
+        description = "System user of the agent unit, created by the module.";
+      };
+
+      group = mkOption {
+        type = types.str;
+        default = cfg.media.group;
+        defaultText = lib.literalExpression "config.services.atrium.media.group";
+        description = "Primary group of the agent user and the agent's `group`: new library folders get this group and mode 2775, and filing sources must be readable by it.";
+      };
+
+      listen = mkOption {
+        type = types.str;
+        default = "127.0.0.1:8482";
+        description = "Loopback address and port of the agent's control listener; rendered as the agent's control.listen and as config.url (http://<listen>) of the service/media-agent connection.";
+      };
+
+      bearerFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Host file holding the shared bearer token (at least 32 bytes), delivered through LoadCredential to the agent (control.token_file) and to atrium.service (credential_files.bearer of service/media-agent). Never stored in the Nix store.";
+      };
+
+      capabilities = mkOption {
+        type = types.listOf (types.enum ["scan" "thumbnail" "file" "stream"]);
+        default = ["scan" "thumbnail" "file" "stream"];
+        description = "Enabled capabilities of the service/media-agent connection: scan (library catalogue), thumbnail, file (filing and imports) and stream (signed library links).";
+      };
+
+      roots = {
+        movies = mkOption {
+          type = types.str;
+          description = "Absolute path of the movies library.";
+        };
+        tv = mkOption {
+          type = types.str;
+          description = "Absolute path of the TV library.";
+        };
+        downloads = mkOption {
+          type = types.str;
+          description = "Absolute path of the qBittorrent download directory that filing hardlinks from; the agent never writes it.";
+        };
+        import = mkOption {
+          type = types.str;
+          description = "Absolute path of the manual import directory.";
+        };
+      };
+
+      vpn = {
+        enable = mkEnableOption "the agent's VPN listener that serves GET and HEAD for /library/movies/* and /library/tv/* to mesh peers, and host.media.media_vpn_base_url";
+
+        listen = mkOption {
+          type = types.str;
+          default = "";
+          example = "100.64.0.10:8483";
+          description = "Mesh IP address and port of the VPN listener; never a wildcard or loopback address.";
+        };
+
+        interface = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          example = "wt0";
+          description = "Mesh interface; the VPN port is opened in the firewall on this interface only.";
+        };
+
+        allowedPeers = mkOption {
+          type = types.listOf types.str;
+          default = [];
+          example = ["100.64.0.0/10"];
+          description = "Peer prefixes allowed to connect; other peers are closed at accept.";
+        };
+
+        allowedHosts = mkOption {
+          type = types.listOf types.str;
+          default = [];
+          example = ["media.mesh.example:8483"];
+          description = "Exact Host header values the VPN listener answers; the first one forms the default baseUrl.";
+        };
+
+        baseUrl = mkOption {
+          type = types.str;
+          default = "https://${builtins.head (cfg.mediaAgent.vpn.allowedHosts ++ [""])}";
+          defaultText = lib.literalExpression "\"https://\${builtins.head config.services.atrium.mediaAgent.vpn.allowedHosts}\"";
+          description = "Origin that players use for VPN library links, rendered as host.media.media_vpn_base_url.";
+        };
+
+        tls = {
+          certificateFile = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Host file with the certificate chain for the names in allowedHosts, delivered through LoadCredential; players must trust it.";
+          };
+          keyFile = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Host file with the private key of that certificate, delivered through LoadCredential.";
+          };
+        };
       };
     };
 
@@ -600,6 +884,14 @@ in {
       description = "Every systemd service and timer the module defines.";
     };
 
+    renderedMediaAgent = mkOption {
+      type = types.attrs;
+      internal = true;
+      readOnly = true;
+      default = renderedAgent;
+      description = "The media agent configuration file of atrium-media-agent.service.";
+    };
+
     renderedHost = mkOption {
       type = types.attrs;
       internal = true;
@@ -628,8 +920,12 @@ in {
         message = lib.concatStringsSep "; " connectionErrors;
       }
       {
-        assertion = !cfg.media.enable || mediaRoot != null;
-        message = "services.atrium.media.enable needs services.atrium.host.media.media_root";
+        assertion = !cfg.media.enable || agent.enable || cfg.connections ? "service/media-agent";
+        message = "services.atrium.media.enable needs services.atrium.mediaAgent.enable, or services.atrium.connections.\"service/media-agent\" for an agent on another host";
+      }
+      {
+        assertion = !agent.enable || agentErrors == [];
+        message = lib.concatStringsSep "; " agentErrors;
       }
       {
         assertion = cfg.database.keyFile == null || lib.hasPrefix "/" cfg.database.keyFile;
@@ -665,18 +961,40 @@ in {
       }
     ];
 
-    users.users.${cfg.user} = {
-      isSystemUser = true;
-      inherit (cfg) uid group;
+    users = {
+      users =
+        {
+          ${cfg.user} = {
+            isSystemUser = true;
+            inherit (cfg) uid group;
+          };
+        }
+        // lib.optionalAttrs agent.enable {
+          ${agent.user} = {
+            isSystemUser = true;
+            inherit (agent) group;
+          };
+        };
+      groups = lib.mkMerge [
+        {${cfg.group}.gid = cfg.uid;}
+        (mkIf agent.enable {${agent.group} = {};})
+      ];
     };
-    users.groups.${cfg.group}.gid = cfg.uid;
 
     environment.systemPackages = [atriumRun];
 
-    systemd.tmpfiles.rules =
-      ["d ${cacheDir} 0750 ${cfg.user} ${cfg.group} -"]
-      ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 ${cfg.user} ${cfg.group} -";
+    systemd = {
+      tmpfiles.rules =
+        ["d ${cacheDir} 0750 ${cfg.user} ${cfg.group} -"]
+        ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 ${cfg.user} ${cfg.group} -";
+      services = {
+        atrium = atriumService;
+        atrium-media-agent = mkIf agent.enable agentService;
+      };
+    };
 
-    systemd.services.atrium = atriumService;
+    networking.firewall.interfaces = mkIf (vpnOn && agent.vpn.interface != null && vpnListen != null) {
+      ${agent.vpn.interface}.allowedTCPPorts = [vpnListen.port];
+    };
   };
 }

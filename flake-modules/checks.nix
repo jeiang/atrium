@@ -25,14 +25,38 @@
           }
         ];
       };
+    agentBase = {
+      enable = true;
+      bearerFile = "/run/secrets/media-agent-bearer";
+      roots = {
+        movies = "/srv/media/movies";
+        tv = "/srv/media/tv";
+        downloads = "/srv/media/downloads";
+        import = "/srv/media/import";
+      };
+    };
     nixos = host {
       environmentFiles = ["/run/secrets/atrium.env"];
       embeddingServerUnits = ["llama-embed.service"];
       host = {
         core.public_url = "https://atrium.example.org";
         core.ops_listen = "127.0.0.1:9180";
-        media.media_root = "/var/lib/media";
       };
+      mediaAgent =
+        agentBase
+        // {
+          vpn = {
+            enable = true;
+            listen = "100.64.0.10:8483";
+            interface = "wt0";
+            allowedPeers = ["100.64.0.0/10"];
+            allowedHosts = ["media.mesh.example:8483"];
+            tls = {
+              certificateFile = "/run/secrets/media-vpn.crt";
+              keyFile = "/run/secrets/media-vpn.key";
+            };
+          };
+        };
       connections = {
         "service/oidc" = {
           kind = "service/oidc";
@@ -96,6 +120,79 @@
     embeddingDependencyKept = assert builtins.all (name: let t = unitText name; in lib.hasInfix "After=" t && lib.hasInfix "llama-embed.service" t) appUnits; true;
     opsPortRefused = assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {web.emergency.port = 9180;}; assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {host.core.ops_listen = "127.0.0.1:8480";}; assert !(refusedWith "services.atrium.host.core.ops_listen" {host.core.ops_listen = "off";}); true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
+    mediaAgentRefused = let
+      agentWith = extra: {
+        media.enable = true;
+        mediaAgent = lib.recursiveUpdate agentBase extra;
+      };
+      vpn = extra:
+        agentWith {
+          vpn =
+            {
+              enable = true;
+              listen = "100.64.0.10:8483";
+              interface = "wt0";
+              allowedPeers = ["100.64.0.0/10"];
+              allowedHosts = ["media.mesh.example:8483"];
+              tls = {
+                certificateFile = "/run/x.crt";
+                keyFile = "/run/x.key";
+              };
+            }
+            // extra;
+        };
+    in
+      assert refusedWith "services.atrium.media.enable needs services.atrium.mediaAgent.enable" {media.enable = true;};
+      assert !(refusedWith "services.atrium.media.enable" {
+        media.enable = true;
+        connections."service/media-agent" = {
+          kind = "service/media-agent";
+          config.url = "https://media.example:8482";
+          credentialFiles.bearer = "/run/x";
+        };
+      });
+      assert refusedWith "media.media_root is services.atrium.mediaAgent.roots" {host.media.media_root = "/var/lib/media";};
+      assert refusedWith "services.atrium.mediaAgent.bearerFile" (agentWith {bearerFile = null;});
+      assert refusedWith "services.atrium.mediaAgent.listen must not be a wildcard address" (agentWith {listen = "0.0.0.0:8482";});
+      assert refusedWith "services.atrium.mediaAgent.listen must not be a wildcard address" (agentWith {listen = "[::]:8482";});
+      assert refusedWith "services.atrium.mediaAgent.listen must be a loopback address" (agentWith {listen = "192.0.2.1:8482";});
+      assert refusedWith "services.atrium.mediaAgent.listen must be an IP address and port" (agentWith {listen = "localhost:8482";});
+      assert refusedWith "services.atrium.mediaAgent.listen must use a port other than" (agentWith {listen = "127.0.0.1:8481";});
+      assert refusedWith "is rendered from services.atrium.mediaAgent; remove it" ((agentWith {}) // {connections."service/media-agent".kind = "service/media-agent";});
+      assert refusedWith "roots.movies and roots.tv overlap" (agentWith {roots.tv = "/srv/media/movies/tv";});
+      assert refusedWith "roots.downloads must be a clean absolute path" (agentWith {roots.downloads = "srv/downloads";});
+      assert refusedWith "roots.import must be a clean absolute path" (agentWith {roots.import = "/srv/media/../import";});
+      assert refusedWith "must share one library directory" (agentWith {roots.downloads = "/var/lib/qbittorrent/downloads";});
+      assert refusedWith "ProtectHome" (agentWith {
+        roots = {
+          movies = "/home/me/media/movies";
+          tv = "/home/me/media/tv";
+          downloads = "/home/me/media/downloads";
+          import = "/home/me/media/import";
+        };
+      });
+      assert refusedWith "overlaps services.atrium.stateDir" (agentWith {
+        roots = {
+          movies = "/var/lib/atrium/media/movies";
+          tv = "/var/lib/atrium/media/tv";
+          downloads = "/var/lib/atrium/media/downloads";
+          import = "/var/lib/atrium/media/import";
+        };
+      });
+      assert refusedWith "vpn.listen must not be a wildcard address" (vpn {listen = "0.0.0.0:8483";});
+      assert refusedWith "vpn.listen must be the mesh address, not a loopback address" (vpn {listen = "127.0.0.1:8483";});
+      assert refusedWith "vpn needs tls.certificateFile and tls.keyFile" (vpn {tls.keyFile = null;});
+      assert refusedWith "vpn.allowedPeers must list at least one peer prefix" (vpn {allowedPeers = [];});
+      assert refusedWith "vpn.allowedPeers must not contain" (vpn {allowedPeers = ["0.0.0.0/0"];});
+      assert refusedWith "vpn.allowedHosts must list at least one host" (vpn {allowedHosts = [];});
+      assert refusedWith "vpn.interface must name the mesh interface" (vpn {interface = null;});
+      assert refusedWith "media_vpn_base_url is rendered from services.atrium.mediaAgent.vpn.baseUrl" ((vpn {}) // {host.media.media_vpn_base_url = "https://x.example";});
+      assert !(refusedWith "services.atrium" (vpn {}));
+      assert failing (host {
+        web.allowedHost = "atrium.example.org";
+        mediaAgent = agentBase // {listen = "[::1]:8482";};
+      })
+      == []; true;
     emergencyOptionsRefused = assert refusedWith "services.atrium.web.emergency.enable" {
       web = {
         allowedHost = "atrium.example.org";
@@ -159,7 +256,7 @@
       }); true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
-    appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
+    appUnits = ["atrium.service"];
     credentialLines = [
       "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key"
       "LoadCredential=media.link_key:/run/secrets/media-link-key"
@@ -168,6 +265,7 @@
       "LoadCredential=connection-service-qbittorrent-api_key:/run/secrets/qbittorrent-api-key"
       "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"
       "LoadCredential=connection-service-oidc-client_secret:/run/secrets/oidc-client-secret"
+      "LoadCredential=connection-service-media-agent-bearer:/run/secrets/media-agent-bearer"
     ];
     sharedLines = credentialLines ++ ["EnvironmentFile=/run/secrets/atrium.env" "User=atrium" "Group=atrium" "StateDirectory=atrium"];
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
@@ -184,13 +282,86 @@
       assert cfg.renderedHost.core.backup_keep == 5;
       assert cfg.renderedHost.core.backup_keep_days == 14;
       assert cfg.renderedHost.core.backup_schedule == "daily 03:00";
-      assert builtins.all (dir: lib.hasInfix "ReadWritePaths=${dir}" web) ["/var/lib/media" "/var/lib/atrium-vault" "/var/backups/atrium"]; true;
-    notifyUnits = ["atrium.service"];
+      assert builtins.all (dir: lib.hasInfix "ReadWritePaths=${dir}" web) ["/var/lib/atrium-vault" "/var/backups/atrium"]; true;
+    mainWithoutMedia = let
+      web = unitText "atrium.service";
+    in
+      assert !(builtins.any (text: lib.hasInfix text web) ["/srv/media" "/var/lib/media" "SupplementaryGroups=" "ffmpeg" "UMask=0002" "Group=media"]);
+      assert lib.hasInfix "After=" web && lib.hasInfix "atrium-media-agent.service" web;
+      assert !(cfg.renderedHost.media ? media_root); true;
+    mediaAgentUnit = let
+      t = unitText "atrium-media-agent.service";
+      agentCfg = cfg.renderedMediaAgent;
+      conn = cfg.renderedHost.connections."service/media-agent";
+    in
+      assert builtins.all (line: lib.hasInfix line t) [
+        "Type=notify"
+        "WatchdogSec=1min"
+        "Restart=on-failure"
+        "TimeoutStopSec=150s"
+        "StartLimitIntervalSec=0"
+        "User=atrium-media-agent"
+        "Group=media"
+        "StateDirectory=atrium-media-agent"
+        "StateDirectoryMode=0700"
+        "CacheDirectory=atrium-media-agent"
+        "CacheDirectoryMode=0700"
+        "UMask=0002"
+        "LoadCredential=bearer:/run/secrets/media-agent-bearer"
+        "LoadCredential=vpn-tls-cert:/run/secrets/media-vpn.crt"
+        "LoadCredential=vpn-tls-key:/run/secrets/media-vpn.key"
+        "ReadWritePaths=/srv/media"
+        "NoNewPrivileges=true"
+        "ProtectSystem=strict"
+        "ProtectHome=true"
+        "PrivateTmp=true"
+        "PrivateDevices=true"
+        "ProtectKernelTunables=true"
+        "ProtectKernelModules=true"
+        "ProtectControlGroups=true"
+        "RestrictNamespaces=true"
+        "CapabilityBoundingSet="
+        "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX"
+        "SystemCallArchitectures=native"
+        "SystemCallFilter=@system-service"
+        "ffmpeg-headless"
+        " media-agent --config "
+      ];
+      assert !(builtins.any (text: lib.hasInfix text t) ["ATRIUM_DB" "ATRIUM_HOST_CONFIG" "EnvironmentFile=" "db-key" "action_link_key" "media.link_key" "/var/lib/atrium/" "/var/lib/atrium " "RestrictSUIDSGID" "ExecReload" "ReadOnlyPaths="]);
+      assert agentCfg.control
+      == {
+        listen = "127.0.0.1:8482";
+        token_file = "/run/credentials/atrium-media-agent.service/bearer";
+        allowed_hosts = ["127.0.0.1:8482"];
+      };
+      assert agentCfg.roots.downloads == "/srv/media/downloads";
+      assert agentCfg.group == "media";
+      assert agentCfg.state_directory == "/var/lib/atrium-media-agent";
+      assert agentCfg.cache_directory == "/var/cache/atrium-media-agent";
+      assert agentCfg.vpn
+      == {
+        listen = "100.64.0.10:8483";
+        allowed_peers = ["100.64.0.0/10"];
+        allowed_hosts = ["media.mesh.example:8483"];
+        tls_cert = "/run/credentials/atrium-media-agent.service/vpn-tls-cert";
+        tls_key = "/run/credentials/atrium-media-agent.service/vpn-tls-key";
+      };
+      assert !(defaults.config.systemd.units ? "atrium-media-agent.service");
+      assert conn.kind == "service/media-agent";
+      assert conn.config == {url = "http://127.0.0.1:8482";};
+      assert conn.capabilities == ["scan" "thumbnail" "file" "stream"];
+      assert conn.credential_files == {bearer = "\${CREDENTIALS_DIRECTORY}/connection-service-media-agent-bearer";};
+      assert cfg.renderedHost.media.media_vpn_base_url == "https://media.mesh.example:8483";
+      assert nixos.config.networking.firewall.interfaces.wt0.allowedTCPPorts == [8483];
+      assert !(builtins.elem 8483 nixos.config.networking.firewall.allowedTCPPorts);
+      assert nixos.config.users.users.atrium-media-agent.group == "media"; true;
+    notifyUnits = ["atrium.service" "atrium-media-agent.service"];
     schedulerInServe = assert !(nixos.config.systemd.units ? "atrium-agent-scheduler.service");
     assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-dav-sync.service" "atrium-dav-sync.timer" "atrium-notion-sync.service" "atrium-notion-sync.timer" "atrium-sync.service" "atrium-sync.timer" "atrium-scan.service" "atrium-scan.timer" "atrium-watch.service"]);
     assert !(defaults.config.systemd.units ? "atrium-agent-scheduler.service");
-    assert cfg.unitNames == ["atrium.service"];
-    assert builtins.attrNames (lib.filterAttrs (name: _: lib.hasPrefix "atrium" name) nixos.config.systemd.services) == ["atrium"];
+    assert cfg.unitNames == ["atrium.service" "atrium-media-agent.service"];
+    assert defaults.config.services.atrium.unitNames == ["atrium.service"];
+    assert builtins.attrNames (lib.filterAttrs (name: _: lib.hasPrefix "atrium" name) nixos.config.systemd.services) == ["atrium" "atrium-media-agent"];
     assert builtins.attrNames (lib.filterAttrs (name: _: lib.hasPrefix "atrium" name) nixos.config.systemd.timers) == [];
     assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-web.service" "atrium-watch.service" "atrium-backup.service" "atrium-backup.timer"]);
     assert builtins.all (line: lib.hasInfix line (unitText "atrium.service")) ["Type=notify" "Restart=on-failure" "RestartSec=5s" "WatchdogSec=1min" "TimeoutStartSec=45min" "TimeoutStopSec=150s" "KillMode=mixed" "KillSignal=SIGTERM" "StartLimitIntervalSec=0" "RestartPreventExitStatus=2 78"];
@@ -213,7 +384,6 @@
     in
       assert cfg.renderedHost.export.export_obsidian_dir == "/var/lib/atrium-vault";
       assert lib.hasInfix "ReadWritePaths=/var/lib/atrium-vault" scheduler;
-      assert lib.hasInfix "ReadWritePaths=/var/lib/media" scheduler;
       assert !(defaults.config.services.atrium.renderedHost ? export); true;
     hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
     assert cfg.renderedHost.app_keys.action_link_key_file == "\${CREDENTIALS_DIRECTORY}/action_links.action_link_key";
@@ -240,7 +410,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;
@@ -295,6 +465,7 @@
           printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
           printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
           printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/connection-service-oidc-client_secret"
+          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/connection-service-media-agent-bearer"
           atrium settings list >/dev/null
           atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
           atrium settings get tz | grep -q '"value": "UTC"'
@@ -326,6 +497,11 @@
           fi
           atrium connections list | grep -q 'service/qbittorrent'
           atrium connections list | grep -q 'mail/icloud'
+          atrium connections list | grep -q 'service/media-agent'
+          if ATRIUM_MEDIA_MEDIA_ROOT=/srv/media atrium settings list >/dev/null 2>&1; then
+            echo "the removed media_root host key was accepted" >&2
+            exit 1
+          fi
           rm "$CREDENTIALS_DIRECTORY/mail-account-icloud"
           if atrium settings list >/dev/null 2>&1; then
             echo "a missing mail account password was accepted" >&2
