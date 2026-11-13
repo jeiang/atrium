@@ -264,6 +264,9 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		log.Error(fmt.Sprintf("run %d failed", runID), logx.RunID, runID, logx.Err, err)
 		errText = new(err.Error())
 	}
+	if flushErr := s.writer.Flush(ctx); flushErr != nil {
+		return nil, flushErr
+	}
 	if errText != nil {
 		if rerr := memory.Rebuild(ctx, d.Write, s.thread.ID, s.now()); rerr != nil {
 			log.Error(fmt.Sprintf("thread %d memory tree rebuild failed", s.thread.ID), logx.RunID, runID, logx.Err, rerr)
@@ -276,9 +279,6 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		if err := journal.ParkRun(ctx, d.Write, runID, s.now()); err != nil {
 			return nil, err
 		}
-	}
-	if err := s.writer.Event(ctx, progress.RunDone, map[string]any{"state": final, "error": optional(errText)}); err != nil {
-		return nil, err
 	}
 	finished, err := journal.GetRun(ctx, d.Read, runID)
 	s.observeRun(started, span, finished)
@@ -450,7 +450,7 @@ func (s *state) heartbeat(ctx context.Context) func() {
 }
 
 func (s *state) runStart(ctx context.Context) error {
-	return s.writer.Event(ctx, progress.RunStart, map[string]any{"thread_id": s.thread.ID, "thread_kind": string(s.thread.Kind), "role": optional(s.thread.Role), "title": optional(s.thread.Title), "effort": s.run.Effort})
+	return s.writer.Event(ctx, progress.RunStart, map[string]any{"thread_id": s.thread.ID, "thread_kind": string(s.thread.Kind), "role": optional(s.thread.Role), "title": optional(s.thread.Title), "effort": s.run.Effort, "parent_run_id": s.run.ParentRunID})
 }
 
 func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Message, []ToolUse, error) {
@@ -763,6 +763,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, next, nil
 	}
 	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
+		return false, next, err
+	}
+	if err := s.writer.Flush(ctx); err != nil {
 		return false, next, err
 	}
 	done, err = journal.FinishUnlessQueued(ctx, s.d, s.run.ID, s.thread.ID, journal.Done, s.now())
