@@ -49,6 +49,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
 	ops, binds = filingOperations()
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
+	bindings = append(bindings, mediaRoutes(nil, nil)...)
 	return module.Declaration{
 		Operations: operations,
 		Bindings:   bindings,
@@ -65,7 +66,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Settings: media.SettingsDefs(),
 		Host:     media.HostSettings(),
 		Pages: []web.Page{{
-			Module:    pages.Module(pages.Options{Service: pageService(m.Now)}),
+			Module:    pages.Module(pages.Options{Service: pageService(m.Now), Routes: func(d *web.Deps, s *mediaapp.Service) { mediaRoutes(d, s) }}),
 			Templates: pages.Templates(),
 			Public:    publicCheck,
 			Nav: []web.NavItem{

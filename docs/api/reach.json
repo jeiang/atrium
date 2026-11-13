@@ -67,9 +67,21 @@
     },
     {
       "area": "media",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "media.add",
+        "media.channel-add",
+        "media.channel-remove",
+        "media.channels",
+        "media.downloads",
+        "media.poll",
+        "media.release-preview",
+        "media.select-files",
+        "media.show-lookup",
+        "media.show-search",
+        "media.torrent-files"
+      ],
+      "required": 11,
+      "bound": 11
     },
     {
       "area": "permissions",
@@ -147,5 +159,5 @@
     }
   ],
   "total_required": 168,
-  "total_bound": 9
+  "total_bound": 20
 }

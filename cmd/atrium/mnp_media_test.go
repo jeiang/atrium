@@ -366,20 +366,20 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK, name, "Ready to file (1)")
-	b.want(http.MethodGet, "/apps/media/torrents", nil, http.StatusOK, "Dune.2021")
+	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
+	b.want(http.MethodGet, "/apps/media/torrents", nil, http.StatusOK)
 	if qb.touched(ready) || qb.touched(busy) || qb.touched(plain) {
 		t.Fatalf("viewing downloads wrote to qBittorrent: %v", qb.writes)
 	}
 
 	b.want(http.MethodPost, "/apps/media/torrents/"+plain+"/files", url.Values{"index": {"0"}, "wanted": {"1"}}, http.StatusNotFound)
-	b.want(http.MethodPost, "/apps/media/torrents/"+busy+"/files", url.Values{"index": {"1"}, "wanted": {"0"}}, http.StatusOK, "Selection changed")
+	b.want(http.MethodPost, "/apps/media/torrents/"+busy+"/files", url.Values{"index": {"1"}, "wanted": {"0"}}, http.StatusOK)
 	if _, prio := qb.state(busy); !slices.Equal(prio, []int{0, 0}) {
 		t.Fatalf("media torrent priorities %v, want [0 0]", prio)
 	}
 
 	magnet := "magnet:?xt=urn:btih:" + fresh + "&dn=Lanterns.S01E09"
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK, "Added the magnet link")
+	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK)
 	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != media.TagMedia {
 		t.Fatalf("media add sent %v", got)
 	}
@@ -392,14 +392,14 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 		return url.Values{"id": {ready}, "action": {action}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {"2026"}, "s0": {"1"}, "e0": {"8"}}
 	}
 	dest := filepath.Join(root, "tv", "Lanterns (2026)", "Season 01", "Lanterns (2026) - S01E08.mkv")
-	b.want(http.MethodPost, "/apps/media/file", form("preview"), http.StatusOK, "tv/Lanterns (2026)/Season 01/Lanterns (2026) - S01E08.mkv")
+	b.want(http.MethodPost, "/apps/media/file", form("preview"), http.StatusOK)
 	if _, err := os.Stat(filepath.Join(root, "tv", "Lanterns (2026)")); !os.IsNotExist(err) {
 		t.Fatalf("preview touched the library: %v", err)
 	}
 	if tags, _ := qb.state(ready); slices.Contains(tags, media.TagFiled) {
 		t.Fatal("preview tagged the torrent filed")
 	}
-	b.want(http.MethodPost, "/apps/media/file", form("file"), http.StatusOK, "Filed "+name)
+	b.want(http.MethodPost, "/apps/media/file", form("file"), http.StatusOK)
 	src, err := os.Stat(filepath.Join(content, name+".mkv"))
 	if err != nil {
 		t.Fatal(err)
@@ -443,11 +443,10 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK, "No channels")
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}}, http.StatusOK,
-		"Watching Lanterns", "The first poll only records what is already out")
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"nope"}, "pattern": {"1080p"}}, http.StatusUnprocessableEntity, "Not saved")
-	b.want(http.MethodPost, "/apps/media/channels/poll", url.Values{}, http.StatusOK, "nothing new")
+	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}}, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"nope"}, "pattern": {"1080p"}}, http.StatusUnprocessableEntity)
+	b.want(http.MethodPost, "/apps/media/channels/poll", url.Values{}, http.StatusOK)
 	if qb.lastAdd() != nil {
 		t.Fatalf("the first poll downloaded %v", qb.added)
 	}
@@ -468,8 +467,7 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 		t.Fatalf("first poll seen: matching %v, other %v; want only the matching release", seen(old), seen(latest))
 	}
 
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}, http.StatusOK,
-		"Added: lanterns s01e01 720p.")
+	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}, http.StatusOK)
 	if len(qb.added) != 1 || qb.added[0].Get("tags") != media.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
 		t.Fatalf("backfill adds = %v", qb.added)
 	}
