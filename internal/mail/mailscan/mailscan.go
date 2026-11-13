@@ -51,19 +51,24 @@ type Result struct {
 	Found   int
 }
 
-func candidates(ctx context.Context, q db.Querier, now float64, spec Spec) ([]Message, error) {
+func page(ctx context.Context, q db.Querier, now float64, spec Spec, after *Message) ([]Message, error) {
+	where := "WHERE m.gone_at IS NULL AND m.date_ts >= ? AND (" + spec.Hint + ") AND NOT EXISTS " +
+		"(SELECT 1 FROM messages o JOIN mail_scans s ON s.message_id = o.id " +
+		"WHERE s.kind = ? AND o.account = m.account AND o.digest = m.digest)"
+	args := []any{now - float64(spec.WindowDays)*86400, spec.Kind}
+	if after != nil {
+		where += " AND (m.date_ts < ? OR (m.date_ts = ? AND m.id < ?))"
+		args = append(args, after.DateTS, after.DateTS, after.ID)
+	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT m.id, m.account, m.date_ts, m.subject, m.from_name, m.from_addr, m.from_domain, m.sent, "+
 			"m.labels, m.flags, m.precedence, m.category, m.list_id, m.to_addrs, m.esp, m.reply_to, m.raw_path FROM messages m "+
-			"WHERE m.gone_at IS NULL AND m.date_ts >= ? AND ("+spec.Hint+") AND NOT EXISTS "+
-			"(SELECT 1 FROM messages o JOIN mail_scans s ON s.message_id = o.id "+
-			"WHERE s.kind = ? AND o.account = m.account AND o.digest = m.digest) "+
-			"ORDER BY m.date_ts DESC LIMIT ?",
-		now-float64(spec.WindowDays)*86400, spec.Kind, spec.FetchLimit)
+			where+" ORDER BY m.date_ts DESC, m.id DESC LIMIT ?",
+		append(args, spec.FetchLimit)...)
 	if err != nil {
 		return nil, err
 	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (Message, error) {
+	return db.Collect(rows, func(r *sql.Rows) (Message, error) {
 		var m Message
 		var rawPath sql.NullString
 		err := r.Scan(&m.ID, &m.Account, &m.DateTS, &m.Subject, &m.FromName, &m.FromAddr, &m.FromDomain, &m.Sent,
@@ -71,61 +76,69 @@ func candidates(ctx context.Context, q db.Querier, now float64, spec Spec) ([]Me
 		m.RawPath = rawPath.String
 		return m, err
 	})
-	if err != nil {
-		return nil, err
-	}
-	if spec.Eligible == nil {
-		return all[:min(len(all), spec.Limit)], nil
-	}
-	out := make([]Message, 0, min(len(all), spec.Limit))
-	for _, m := range all {
-		ok, err := spec.Eligible(m)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		out = append(out, m)
-		if len(out) >= spec.Limit {
-			break
-		}
-	}
-	return out, nil
 }
 
 func Run(ctx context.Context, d *db.DB, now float64, spec Spec) (Result, error) {
 	var result Result
-	rows, err := candidates(ctx, d.Read, now, spec)
+	var after *Message
+	examined, judged := 0, 0
+	for {
+		rows, err := page(ctx, d.Read, now, spec, after)
+		if err != nil || len(rows) == 0 {
+			return result, err
+		}
+		for _, row := range rows {
+			if examined >= spec.FetchLimit || judged >= spec.Limit {
+				return result, nil
+			}
+			after = &row
+			if spec.Eligible != nil {
+				ok, err := spec.Eligible(row)
+				if err != nil {
+					return result, err
+				}
+				if !ok {
+					examined++
+					continue
+				}
+			}
+			counted, err := scan(ctx, d, now, spec, row, &result)
+			if err != nil {
+				return result, err
+			}
+			if counted {
+				examined++
+				judged++
+			}
+		}
+	}
+}
+
+func scan(ctx context.Context, d *db.DB, now float64, spec Spec, row Message, result *Result) (bool, error) {
+	body, err := message.Body(ctx, d.Read, row.ID)
 	if err != nil {
-		return result, err
+		return false, err
 	}
-	for _, row := range rows {
-		body, err := message.Body(ctx, d.Read, row.ID)
-		if err != nil {
-			return result, err
-		}
-		found, err := spec.Judge(ctx, row, body)
-		final, unanswered := classify.Unanswered(err)
-		switch {
-		case spec.Paid.Note(err):
-			continue
-		case unanswered && !final:
-			continue
-		case unanswered:
-			found = 0
-		case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
-			log.Warn(fmt.Sprintf("message %d: unusable %s answer: %s", row.ID, spec.Kind, httpx.Message(err)))
-			found = 0
-		case err != nil:
-			return result, err
-		}
-		result.Scanned++
-		result.Found += found
-		if _, err := d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO mail_scans (kind, message_id, ts, found) VALUES (?, ?, ?, ?)",
-			spec.Kind, row.ID, now, found > 0); err != nil {
-			return result, err
-		}
+	found, err := spec.Judge(ctx, row, body)
+	final, unanswered := classify.Unanswered(err)
+	switch {
+	case spec.Paid.Note(err):
+		return true, nil
+	case classify.Waiting(err):
+		return false, nil
+	case unanswered && !final:
+		return true, nil
+	case unanswered:
+		found = 0
+	case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
+		log.Warn(fmt.Sprintf("message %d: unusable %s answer: %s", row.ID, spec.Kind, httpx.Message(err)))
+		found = 0
+	case err != nil:
+		return false, err
 	}
-	return result, nil
+	result.Scanned++
+	result.Found += found
+	_, err = d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO mail_scans (kind, message_id, ts, found) VALUES (?, ?, ?, ?)",
+		spec.Kind, row.ID, now, found > 0)
+	return true, err
 }

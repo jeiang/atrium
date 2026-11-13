@@ -82,6 +82,11 @@ func (d *Deferral) Note(err error) bool {
 	return true
 }
 
+func Waiting(err error) bool {
+	var unanswered *classifier.Unanswered
+	return errors.As(err, &unanswered) && unanswered.Reason == classifier.ReasonRetryLater
+}
+
 func Unanswered(err error) (final, ok bool) {
 	var unanswered *classifier.Unanswered
 	if !errors.As(err, &unanswered) {

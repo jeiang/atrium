@@ -82,15 +82,11 @@ type row struct {
 	rawPath  string
 }
 
-func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
-	scan, _, err := calendar.CandidateLimits(ctx, d.Read)
-	if err != nil {
-		return nil, err
-	}
+func pending(ctx context.Context, d *db.DB, account string, after int64, limit int) ([]row, error) {
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT m.id, m.account, m.subject, m.from_name, m.from_addr, m.raw_path FROM "+mail.FromClause("m")+" WHERE m.account = ? AND m.in_inbox = 1 "+
-			"AND m.seen = 0 AND m.sent = 0 AND m.gone_at IS NULL AND NOT EXISTS (SELECT 1 FROM event_candidates e WHERE e.message_id = m.id) "+
-			"ORDER BY m.id LIMIT ?", account, scan)
+			"AND m.seen = 0 AND m.sent = 0 AND m.gone_at IS NULL AND m.id > ? AND NOT EXISTS (SELECT 1 FROM event_candidates e WHERE e.message_id = m.id) "+
+			"ORDER BY m.id LIMIT ?", account, after, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +165,16 @@ func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites [
 	return made, nil
 }
 
+type scanner struct {
+	d         *db.DB
+	cfg       config.Config
+	account   string
+	judge     *classify.Service
+	paid      *classify.Deferral
+	proposals *calendar.Proposals
+	now       func() float64
+}
+
 func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge *classify.Service, paid *classify.Deferral, env config.Env, now func() float64) (proposed, flagged int, err error) {
 	if env == nil {
 		env = config.OS
@@ -176,60 +182,80 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if now == nil {
 		now = wallClock
 	}
-	rows, err := pending(ctx, d, account)
+	limit, _, err := calendar.CandidateLimits(ctx, d.Read)
 	if err != nil {
 		return 0, 0, err
 	}
-	proposals := &calendar.Proposals{DB: d, Now: now, Env: env}
-	for _, r := range rows {
-		invites, err := rowInvites(cfg, r, time.Unix(0, int64(now()*1e9)))
-		if err != nil {
+	s := scanner{d: d, cfg: cfg, account: account, judge: judge, paid: paid, proposals: &calendar.Proposals{DB: d, Now: now, Env: env}, now: now}
+	var after int64
+	processed := 0
+	for processed < limit {
+		rows, err := pending(ctx, d, account, after, limit)
+		if err != nil || len(rows) == 0 {
 			return proposed, flagged, err
 		}
-		if len(invites) > 0 {
-			made, err := proposeInvites(ctx, proposals, r, invites)
+		for _, r := range rows {
+			if processed >= limit {
+				break
+			}
+			after = r.id
+			made, event, waiting, err := s.scan(ctx, r)
 			proposed += made
+			if event {
+				flagged++
+			}
 			if err != nil {
 				return proposed, flagged, err
 			}
-			if err := set(ctx, d, r.id, StatusProposed, "calendar invitation", now()); err != nil {
-				return proposed, flagged, err
+			if !waiting {
+				processed++
 			}
-			continue
-		}
-		if paid.Stopped() {
-			continue
-		}
-		body, err := message.Body(ctx, d.Read, r.id)
-		if err != nil {
-			return proposed, flagged, err
-		}
-		hasEvent, err := judge.JudgeEvent(ctx, classify.MessageItem(account, r.id),
-			classify.Message{Subject: r.subject, FromName: r.fromName, FromAddr: r.fromAddr}, body)
-		if paid.Note(err) {
-			continue
-		}
-		if final, unanswered := classify.Unanswered(err); unanswered {
-			if final {
-				if err := set(ctx, d, r.id, StatusNone, "model gave no usable answer", now()); err != nil {
-					return proposed, flagged, err
-				}
-			}
-			continue
-		}
-		if err != nil {
-			return proposed, flagged, err
-		}
-		status, reason := StatusNone, ""
-		if hasEvent {
-			status, reason = StatusQueued, "model flagged an event"
-			flagged++
-		}
-		if err := set(ctx, d, r.id, status, reason, now()); err != nil {
-			return proposed, flagged, err
 		}
 	}
 	return proposed, flagged, nil
+}
+
+func (s scanner) scan(ctx context.Context, r row) (proposed int, flagged, waiting bool, err error) {
+	invites, err := rowInvites(s.cfg, r, time.Unix(0, int64(s.now()*1e9)))
+	if err != nil {
+		return 0, false, false, err
+	}
+	if len(invites) > 0 {
+		made, err := proposeInvites(ctx, s.proposals, r, invites)
+		if err != nil {
+			return made, false, false, err
+		}
+		return made, false, false, set(ctx, s.d, r.id, StatusProposed, "calendar invitation", s.now())
+	}
+	if s.paid.Stopped() {
+		return 0, false, false, nil
+	}
+	body, err := message.Body(ctx, s.d.Read, r.id)
+	if err != nil {
+		return 0, false, false, err
+	}
+	hasEvent, err := s.judge.JudgeEvent(ctx, classify.MessageItem(s.account, r.id),
+		classify.Message{Subject: r.subject, FromName: r.fromName, FromAddr: r.fromAddr}, body)
+	if s.paid.Note(err) {
+		return 0, false, false, nil
+	}
+	if classify.Waiting(err) {
+		return 0, false, true, nil
+	}
+	if final, unanswered := classify.Unanswered(err); unanswered {
+		if final {
+			return 0, false, false, set(ctx, s.d, r.id, StatusNone, "model gave no usable answer", s.now())
+		}
+		return 0, false, false, nil
+	}
+	if err != nil {
+		return 0, false, false, err
+	}
+	status, reason := StatusNone, ""
+	if hasEvent {
+		status, reason = StatusQueued, "model flagged an event"
+	}
+	return 0, hasEvent, false, set(ctx, s.d, r.id, status, reason, s.now())
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }

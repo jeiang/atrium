@@ -584,6 +584,107 @@ func TestMailPassFinalEventOutcomesLeaveThePendingWindow(t *testing.T) {
 	}
 }
 
+func (r *mailClassifierRig) calls(t *testing.T, caller string) int {
+	t.Helper()
+	n := 0
+	for _, s := range r.requests(t) {
+		if scanCaller(s.caller) == caller {
+			n++
+		}
+	}
+	return n
+}
+
+func (r *mailClassifierRig) refuseAllBut(t *testing.T, caller, keep string) {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hook = func(req anthropictest.Request) {
+		if body := req.JSON(t); scanCaller(callerOf(t, body)) == caller && subjectIn(body) != keep {
+			r.f.api.PushJSON(anthropictest.Refusal("cyber", "declined"))
+		}
+	}
+}
+
+func (r *mailClassifierRig) passWithWaitingItems(t *testing.T, caller string, window int, judged func() bool) {
+	t.Helper()
+	if code, stderr := r.sync(t); code != cli.ExitOK {
+		t.Fatalf("first sync: exit %d stderr %q", code, stderr)
+	}
+	waiting := r.failedItems(t, "refusal")
+	if len(waiting) < window || r.calls(t, caller) != len(waiting) {
+		t.Fatalf("first %s pass: %d refused items for %d paid calls, want at least %d", caller, len(waiting), r.calls(t, caller), window)
+	}
+	if judged() {
+		t.Fatalf("the later message was judged before the %s window filled", caller)
+	}
+	if code, stderr := r.sync(t); code != cli.ExitOK {
+		t.Fatalf("second sync: exit %d stderr %q", code, stderr)
+	}
+	if !judged() {
+		t.Errorf("the later message was not judged behind %d %s items waiting for their retry", len(waiting), caller)
+	}
+	failed := r.failedItems(t, "refusal")
+	for key, n := range failed {
+		if n != 1 {
+			t.Errorf("item %s has %d charged failures within the retry spacing, want 1", key, n)
+		}
+	}
+	for key := range waiting {
+		if failed[key] == 0 {
+			t.Errorf("waiting item %s lost its charged failure", key)
+		}
+	}
+	if got, want := r.calls(t, caller), len(failed)+1; got != want {
+		t.Errorf("%d paid %s calls, want %d: one per refused message and one for the later message", got, caller, want)
+	}
+}
+
+func TestMailPassWaitingEventRetriesDoNotHoldTheWindow(t *testing.T) {
+	t.Parallel()
+	r := newMailClassifierRig(t, nil)
+	const unread = 60
+	if _, err := r.d.Write.Exec("UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL "+
+		"WHERE id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT ?)", unread); err != nil {
+		t.Fatal(err)
+	}
+	var lateID int64
+	var late string
+	if err := r.d.Read.QueryRow("SELECT id, subject FROM messages WHERE id = (SELECT MAX(id) FROM "+
+		"(SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT ?))", unread).Scan(&lateID, &late); err != nil {
+		t.Fatal(err)
+	}
+	r.refuseAllBut(t, "event", late)
+	r.passWithWaitingItems(t, "event", 50, func() bool { return r.event(t, lateID) != "" })
+	r.noMailWrites(t)
+}
+
+func TestMailPassWaitingPackageRetriesDoNotHoldTheWindow(t *testing.T) {
+	t.Parallel()
+	r := newMailClassifierRig(t, nil)
+	const shipped = 30
+	for _, q := range []string{
+		"DELETE FROM mail_scans",
+		"UPDATE messages SET subject = 'Your package shipped ' || id, date_ts = CAST(strftime('%s', 'now') AS REAL) - 3600 - id, sent = 0, gone_at = NULL " +
+			"WHERE id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT " + strconv.Itoa(shipped) + ")",
+	} {
+		if _, err := r.d.Write.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var lateID int64
+	var late string
+	if err := r.d.Read.QueryRow("SELECT id, subject FROM messages WHERE id = (SELECT MAX(id) FROM "+
+		"(SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT ?))", shipped).Scan(&lateID, &late); err != nil {
+		t.Fatal(err)
+	}
+	r.refuseAllBut(t, "packages", late)
+	r.passWithWaitingItems(t, "packages", 20, func() bool {
+		return r.count(t, "SELECT COUNT(*) FROM mail_scans WHERE kind = 'packages' AND message_id = ?", lateID) == 1
+	})
+	r.noMailWrites(t)
+}
+
 func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T) {
 	t.Parallel()
 	r := newMailClassifierRig(t, nil)
