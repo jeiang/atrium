@@ -70,10 +70,8 @@ internal/assistant/tools/mail/tools.go	github.com/jeiang/atrium/internal/schedul
 internal/assistant/tools/mail/tracking.go	github.com/jeiang/atrium/internal/assistant/approval
 internal/assistant/tools/mail/tracking.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/mail/tracking.go	github.com/jeiang/atrium/internal/mail/tracking
-internal/assistant/tools/mail/triage.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/mail/triage.go	github.com/jeiang/atrium/internal/mail
 internal/assistant/tools/mail/triage.go	github.com/jeiang/atrium/internal/mail/executors
-internal/assistant/tools/mail/triage.go	github.com/jeiang/atrium/internal/mail/mailops
 internal/assistant/tools/mail/triage.go	github.com/jeiang/atrium/internal/proposals
 internal/assistant/tools/mail/undo.go	database/sql
 internal/assistant/tools/mail/undo.go	github.com/jeiang/atrium/internal/config
@@ -104,7 +102,6 @@ internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/config
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/db
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/ledger
 internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/settings
-internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/applier
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/backlog
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/live
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/run

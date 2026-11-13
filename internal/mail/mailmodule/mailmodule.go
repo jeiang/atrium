@@ -74,7 +74,7 @@ func SettingGroups() []settings.Group {
 }
 
 func ToolDefinitions() []module.ToolDefinition {
-	return mailtools.Definitions(mailToolService)
+	return mailtools.Definitions(ToolService)
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -106,6 +106,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	loopOps, loopBindings := mailLoopOperations()
 	operations = append(operations, loopOps...)
 	bindings = append(bindings, loopBindings...)
+	scanOps, scanBindings := mailScanOperations()
+	operations = append(operations, scanOps...)
+	bindings = append(bindings, scanBindings...)
 	return module.Declaration{
 		Name:        module.Mail,
 		Operations:  operations,
@@ -139,7 +142,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			"replay":      {Always: true},
 		},
 		Tools:        ToolDefinitions(),
-		ProposeKinds: mailtools.Proposals(),
+		ProposeKinds: mailtools.Proposals(ToolService),
 		Effects: func(d module.EffectDeps) module.Effects {
 			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: d.Open, Now: d.Now}
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}

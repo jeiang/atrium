@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
@@ -60,7 +62,7 @@ func (m Module) scanJob(env config.Env) scheduler.Definition {
 			if err != nil {
 				return scheduler.Result{}, err
 			}
-			if _, err := scans.ScanPass(ctx, d, now(), rebalance.SuggestName(c)); err != nil {
+			if _, err := scans.ScanPass(ctx, d, mailapp.New(d, cfg, env, now).WithNamer(rebalance.SuggestName(c)).Scans(now())); err != nil {
 				return scheduler.Result{}, err
 			}
 			return scheduler.Result{Status: scheduler.StatusOK}, nil

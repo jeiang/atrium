@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/backlog"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/run"
@@ -52,7 +51,8 @@ func (o Options) LiveCommand() *cli.Command {
 }
 
 func liveBacklog(x *exec) error {
-	result, err := backlog.Backlog(x.Ctx, x.DB, x.Now())
+	done, err := x.opts.Application(x.Pass).WithClock(x.Now).Backlog(x.Ctx, struct{}{})
+	result := done.Data
 	if err != nil {
 		var backlogErr backlog.Error
 		if errors.As(err, &backlogErr) {
@@ -66,18 +66,11 @@ func liveBacklog(x *exec) error {
 
 func rebaseline(x *exec) error {
 	return x.PassLocked(func() error {
-		if err := x.SyncAll(x.Ctx); err != nil {
-			return err
-		}
-		baseline, err := x.Live.Rebaseline(x.Ctx)
+		done, err := x.opts.Application(x.Pass).WithClock(x.Now).WithSync(x.SyncAll).Rebaseline(x.Ctx, struct{}{})
 		if err != nil {
 			return err
 		}
-		refreshed, err := backlog.Refresh(x.Ctx, x.DB, x.Now())
-		if err != nil {
-			return err
-		}
-		x.JSON(rebaselineResult{Baseline: baseline, Created: refreshed.Created, Accounts: refreshed.Accounts})
+		x.JSON(done.Data)
 		return nil
 	})
 }
@@ -110,14 +103,13 @@ func liveDeletions(x *exec) error {
 		if err != nil {
 			return err
 		}
-		syncer := x.Syncer
+		done, err := x.opts.Application(x.Pass).WithOpen(x.Open).WithSyncer(x.Syncer).ApplyDeletions(x.Ctx, mailapp.ApplyDeletionsInput{Accounts: accounts})
+		if err != nil {
+			return err
+		}
 		out := accountResults{}
-		for _, account := range accounts {
-			done, err := applier.New(x.Live, x.Open, syncer).DeletionPass(x.Ctx, account, true)
-			if err != nil {
-				return err
-			}
-			out = append(out, accountResult{name: account, result: deletionResult{Ran: done.Ran, Trashed: done.Kind(live.Trash), Skipped: done.Skipped, Failed: done.Failed}})
+		for _, a := range done.Data.Accounts {
+			out = append(out, accountResult{name: a.Account, result: deletionResult{Ran: a.Ran, Trashed: a.Trashed, Skipped: a.Skipped, Failed: a.Failed}})
 		}
 		x.JSON(out)
 		return nil
@@ -160,12 +152,6 @@ func resolveAction(x *exec, id int64, outcome string) error {
 	}
 	x.JSON(map[string]any{"id": done.Data.Mail.ID, "outcome": done.Data.Mail.Outcome})
 	return nil
-}
-
-type rebaselineResult struct {
-	Baseline any              `json:"baseline"`
-	Created  []int64          `json:"created"`
-	Accounts backlog.Accounts `json:"accounts"`
 }
 
 type accountResult struct {
