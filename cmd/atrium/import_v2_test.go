@@ -2165,6 +2165,7 @@ S: {t} OK
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	setEnv(t, "ATRIUM_HOST_CONFIG", importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
 	parkImportedJobs(t, dir)
+	t.Setenv("ATRIUM_IMAP_ADDR", "127.0.0.1:1")
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}

@@ -270,13 +270,43 @@ func TestServeDrainFinishesTheCurrentWatchPass(t *testing.T) {
 	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "done" {
 		t.Fatalf("the correction effect is %s after drain, want done", state)
 	}
-	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE state IN ('pending', 'unknown', 'running')"); n != 0 {
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE state IN ('intent', 'unknown')"); n != 0 {
 		t.Fatalf("%d unsettled effects after drain", n)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effect_resources r JOIN effects e ON e.id = r.effect_id WHERE r.holding = 1 AND e.state IN ('intent', 'unknown')"); n != 0 {
+		t.Fatalf("%d resources held by unsettled effects after drain", n)
 	}
 	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
 		t.Fatalf("Bills holds %d messages, want 1", n)
 	}
 	if strings.Contains(logs.String(), "outlived") {
 		t.Fatalf("drain reported work past its deadline: %s", logs.String())
+	}
+}
+
+func TestServeWatchInShadowWritesNothing(t *testing.T) {
+	m := mailSafetyFixture(t, "shadow")
+	d := mustConnect(t, m.path, keyFor(t))
+	declareJobsAndParkThem(t, d)
+	_, logs, _ := startServeWith(t, m.dir, true)
+	waitWatching(t, m.fake)
+	id := m.correctionPending(t)
+	passes := strings.Count(logs.String(), "icloud: 0 new, 0 gone")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := m.fake.Wake(ctx); err != nil {
+		t.Fatalf("wake the IDLE: %v", err)
+	}
+	waitUntil(t, 60*time.Second, "the IDLE change to run a watch pass", func() bool {
+		return strings.Count(logs.String(), "icloud: 0 new, 0 gone") > passes && m.fake.Idling() == 1
+	})
+	if len(m.fake.Writes) != 0 {
+		t.Fatalf("the shadow-mode watch pass wrote %v with a pending correction", m.fake.Writes)
+	}
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 0 {
+		t.Fatalf("Bills holds %d messages after a shadow-mode watch pass, want 0", n)
+	}
+	if stage, action, dest := m.decision(t, id); stage != "correction" || action != "file" || dest != "Bills" {
+		t.Fatalf("the watch pass decided %s %s %s, want the correction to Bills recorded", stage, action, dest)
 	}
 }

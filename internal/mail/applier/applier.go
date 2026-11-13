@@ -185,7 +185,7 @@ type Applier struct {
 
 func New(l *live.Live, open mail.OpenFunc, syncer *mailsync.Syncer) *Applier {
 	return &Applier{Live: l, Open: open, Resync: func(ctx context.Context, account string) error {
-		return mailops.Session(ctx, open, l.DB.Read, account, func(client mail.Client) error {
+		return mailops.ReadSession(ctx, open, l.DB.Read, account, func(client mail.Client) error {
 			_, err := syncer.Account(ctx, account, client)
 			return err
 		})

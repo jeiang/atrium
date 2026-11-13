@@ -157,8 +157,8 @@ func mrvMailFixture(t *testing.T, mode string) *mrvMail {
 	h, x := mailtest.RawWith("Statement", "pay@bank.test", "statement-1", "Your statement is ready.")
 	inbox.Add(h, x, []string{`\Seen`}, nil)
 	f.app = newAppWith(f.lookup, func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
-			return mail.Gated(m.fake, opts.Q), nil
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return m.fake.Open(ctx, opts)
 		}
 	}, nil, quietLog)
 	f.settings, f.state = f.app.Settings, f.app.State

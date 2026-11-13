@@ -248,8 +248,8 @@ capabilities = ["api"]
 	env := config.Map(vars)
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
-			return mail.Gated(fakes[opts.Account], opts.Q), nil
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return fakes[opts.Account].Open(ctx, opts)
 		}
 	}
 	app := newAppWith(env, clients, func() float64 { return data.world.Clock }, quietLog)

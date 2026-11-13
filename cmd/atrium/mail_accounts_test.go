@@ -77,12 +77,12 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	var mu sync.Mutex
 	opened := map[string]int{}
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			opened[opts.Account]++
 			if f, ok := fakes[opts.Account]; ok {
-				return mail.Gated(f, opts.Q), nil
+				return f.Open(ctx, opts)
 			}
 			return nil, fmt.Errorf("unexpected account %q", opts.Account)
 		}

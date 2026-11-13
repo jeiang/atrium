@@ -19,6 +19,7 @@ type State struct {
 	credential   AccountCredentialFunc
 	hostAccounts HostAccountsFunc
 	dbKey        db.Key
+	dbPath       string
 	hooks        map[*func()]struct{}
 }
 
@@ -36,6 +37,12 @@ func (s *State) DBKey() db.Key {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.dbKey
+}
+
+func (s *State) DBPath() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dbPath
 }
 
 func (s *State) SetConnectionReconciler(f func(context.Context, *db.DB, Host) error) {
@@ -134,6 +141,7 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	}
 	s.mu.Lock()
 	s.host = host
+	s.dbPath = cfg.DBPath
 	s.mu.Unlock()
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return err

@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
@@ -321,4 +323,142 @@ func TestPostEffectSyncInsideAPassDoesNotDeadlock(t *testing.T) {
 	if n := len(fake.Boxes["Archive"].Box.Messages); n != 1 {
 		t.Fatalf("Archive holds %d messages, want 1", n)
 	}
+}
+
+func (m *mailSafety) racePending(t *testing.T) (id int64, uid uint32, proposal string) {
+	t.Helper()
+	uid = m.add("INBOX", "Bank statement", serveMailFrom, "race", "Your statement is ready.", `\Seen`)
+	m.rule(t, "Receipts", serveMailFrom)
+	m.run(t, "sync")
+	id = m.messageID(t, "Bank statement")
+	m.run(t, "live", "rebaseline")
+	m.run(t, "live", "backlog")
+	proposal = m.scalar(t, "SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'inbox_backlog' AND status = 'pending' ORDER BY id DESC LIMIT 1")
+	if proposal == "<nil>" {
+		t.Fatal("no pending inbox_backlog proposal")
+	}
+	return id, uid, proposal
+}
+
+func (m *mailSafety) correctToBills(t *testing.T, id int64, uid uint32) {
+	t.Helper()
+	m.exec(t, "INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (?, 'icloud', 'Bills', ?, 'operator')",
+		id, mail.WallClock()+60)
+	m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`, `\Answered`}, nil)
+}
+
+func (m *mailSafety) holdPassAtCopy(t *testing.T, d *db.DB) (manual int, release func()) {
+	t.Helper()
+	entered, held := make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
+	armed.Store(true)
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "COPY" && armed.CompareAndSwap(true, false) {
+			close(entered)
+			<-held
+		}
+		return nil
+	}
+	release = func() {
+		if !isClosed(held) {
+			close(held)
+		}
+	}
+	t.Cleanup(release)
+	manual = syncDue(t, d)
+	select {
+	case <-entered:
+	case <-time.After(60 * time.Second):
+		t.Fatal("the scheduled pass never reached its COPY")
+	}
+	return manual, release
+}
+
+func (m *mailSafety) assertFiledOnceToBills(t *testing.T, d *db.DB, manual int) {
+	t.Helper()
+	waitUntil(t, 30*time.Second, "the scheduled mail sync run", scheduledRunEnded(d, passrun.Sync, manual))
+	if n := m.copies(); n != 1 {
+		t.Fatalf("%d COPY commands %v, want only the pass's one", n, m.verbs())
+	}
+	for box, want := range map[string]int{"INBOX": 0, "Bills": 1, "Receipts": 0} {
+		if n := len(m.fake.Boxes[box].Box.Messages); n != want {
+			t.Fatalf("%s holds %d messages, want %d", box, n, want)
+		}
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE state IN ('intent', 'unknown')"); n != 0 {
+		t.Fatalf("%d effects left intent or unknown, want none", n)
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "done" {
+		t.Fatalf("the pass's correction is %s, want done", state)
+	}
+}
+
+func TestMailWritersWaitForTheRunningPass(t *testing.T) {
+	t.Run("approval", func(t *testing.T) {
+		m := mailSafetyFixture(t, "live")
+		d := mustConnect(t, m.path, keyFor(t))
+		declareJobsAndParkThem(t, d)
+		id, uid, proposal := m.racePending(t)
+		serveWatching(t, m.dir, d, m.fake)
+		m.correctToBills(t, id, uid)
+		manual, release := m.holdPassAtCopy(t, d)
+
+		done := make(chan appRun, 1)
+		go func() { done <- runApp(t, "proposals", "approve", proposal) }()
+		select {
+		case ran := <-done:
+			t.Fatalf("the approval finished beside the pass held at its COPY: exit %d, stderr %q", ran.code, ran.stderr)
+		case <-time.After(time.Second):
+		}
+		release()
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			t.Fatal("the approval did not finish after the pass released mail-pass")
+		}
+		m.assertFiledOnceToBills(t, d, manual)
+		if status := m.scalar(t, "SELECT status FROM proposals WHERE id = ?", proposal); status == "approved" {
+			t.Fatalf("the proposal is still %s after its approval ended", status)
+		}
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'proposal' AND operation = 'move' AND state <> 'skipped'"); n != 0 {
+			t.Fatalf("%d proposal moves recorded after the pass filed the message, want none", n)
+		}
+	})
+	t.Run("agent", func(t *testing.T) {
+		m := mailSafetyFixture(t, "live")
+		t.Setenv("ATRIUM_IMAP_ADDR", "127.0.0.1:1")
+		d := mustConnect(t, m.path, keyFor(t))
+		declareJobsAndParkThem(t, d)
+		id, uid, _ := m.racePending(t)
+		if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+			t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+		}
+		serveWatching(t, m.dir, d, m.fake)
+		m.correctToBills(t, id, uid)
+		manual, release := m.holdPassAtCopy(t, d)
+
+		m.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "mail_move", map[string]any{"account": "icloud", "folder": "Receipts", "message_ids": []any{id}})))
+		m.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+		started := time.Now()
+		ran := runApp(t, "agent", "run", "--text", "file the bank statement")
+		waited := time.Since(started)
+		release()
+		if ran.code != cli.ExitOK {
+			t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+		}
+		if waited < db.ShortLockWait {
+			t.Fatalf("the agent move returned after %s, want it to wait %s for mail-pass", waited, db.ShortLockWait)
+		}
+		var body string
+		if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = (SELECT MAX(id) FROM threads) AND role = 'user' AND content_json LIKE '%tool_result%' ORDER BY seq DESC LIMIT 1").Scan(&body); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(body, mail.PassResource) {
+			t.Fatalf("the agent move result %q, want a refusal naming %s", body, mail.PassResource)
+		}
+		m.assertFiledOnceToBills(t, d, manual)
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE operation = 'mail_move' AND state NOT IN ('failed', 'skipped')"); n != 0 {
+			t.Fatalf("%d agent moves recorded beside the pass, want none", n)
+		}
+	})
 }

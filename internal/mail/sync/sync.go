@@ -62,7 +62,7 @@ func (s *Syncer) now() float64 {
 }
 
 func (s *Syncer) One(ctx context.Context, account string, open mail.OpenFunc) (Stats, error) {
-	client, err := open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read})
+	client, err := open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read, ReadOnly: true})
 	if err != nil {
 		return Stats{}, err
 	}

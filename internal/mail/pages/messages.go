@@ -201,7 +201,7 @@ func (s *service) moveCorrection(r *http.Request, found *message.View, id int64)
 			return out, err
 		}
 		defer func() { _ = locks.Close() }()
-		done, err := s.applier.ApplyCorrections(ctx, found.Account, []int64{id})
+		done, err := s.applier.ApplyCorrections(db.WithHeld(ctx, locks), found.Account, []int64{id})
 		return appliedOutcome{done.Ran, done.Written, done.Failed + done.Skipped}, err
 	}()
 	if err != nil {

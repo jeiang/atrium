@@ -1011,7 +1011,7 @@ func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 			return err
 		}
 		defer func() { _ = lock.Close() }()
-		_, err = syncer.One(ctx, account, open)
+		_, err = syncer.One(db.WithHeld(ctx, lock), account, open)
 		return err
 	}
 }

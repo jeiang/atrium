@@ -88,6 +88,9 @@ func (x *exec) PassLocked(fn func() error) error {
 		return err
 	}
 	defer func() { _ = locks.Close() }()
+	outer := x.Ctx
+	x.Ctx = db.WithHeld(outer, locks)
+	defer func() { x.Ctx = outer }()
 	return fn()
 }
 

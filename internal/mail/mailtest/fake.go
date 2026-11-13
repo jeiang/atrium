@@ -135,8 +135,8 @@ func NewFakeClient() *FakeClient {
 	return f
 }
 
-func (f *FakeClient) Open(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
-	return mail.Gated(f, opts.Q), nil
+func (f *FakeClient) Open(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+	return mail.Gated(ctx, opts, func() (mail.Conn, error) { return f, nil })
 }
 
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {

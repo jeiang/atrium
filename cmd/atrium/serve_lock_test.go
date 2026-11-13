@@ -104,3 +104,30 @@ func TestManualSyncSettlesARunLeftRunningWhileServeWasDown(t *testing.T) {
 		}
 	}
 }
+
+func TestManualSyncLeavesAnotherJobsStaleRunAlone(t *testing.T) {
+	m := mailSafetyFixture(t, "shadow")
+	d := mustConnect(t, m.path, keyFor(t))
+	declareJobsAndParkThem(t, d)
+	for _, pass := range []string{passrun.Sync, passrun.Scan} {
+		jobID := m.scalar(t, "SELECT CAST(id AS TEXT) FROM jobs WHERE declaration_key = ?", "mail/"+pass)
+		stale := float64(time.Now().Add(-time.Hour).Unix())
+		m.exec(t, "INSERT INTO job_runs (job_id, due_at, started_at, heartbeat_at, owner, status) VALUES (?, ?, ?, ?, 'gone:1:dead', 'running')", jobID, stale, stale, stale)
+		m.exec(t, "UPDATE jobs SET lease_owner = 'gone:1:dead', lease_until = 0, last_run_id = (SELECT MAX(id) FROM job_runs WHERE job_id = ?) WHERE id = ?", jobID, jobID)
+	}
+
+	m.run(t, "sync")
+	if lost := m.scalar(t, "SELECT r.status || ':' || COALESCE(r.error, '') FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = 'mail/"+passrun.Sync+"' AND r.owner = 'gone:1:dead'"); lost != "error:worker lost" {
+		t.Fatalf("the sync job's stale run settled as %s, want error:worker lost", lost)
+	}
+	scan := "mail/" + passrun.Scan
+	if row := m.scalar(t, "SELECT r.status || ':' || COALESCE(r.error, '') FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ? AND r.owner = 'gone:1:dead'", scan); row != "running:" {
+		t.Fatalf("the scan job's stale run is %s after a manual sync, want it left running", row)
+	}
+	if lease := m.scalar(t, "SELECT COALESCE(lease_owner, '') FROM jobs WHERE declaration_key = ?", scan); lease != "gone:1:dead" {
+		t.Fatalf("the scan job's lease owner is %q after a manual sync, want it untouched", lease)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ?", scan); n != 1 {
+		t.Fatalf("the scan job has %d runs after a manual sync, want only the stale one", n)
+	}
+}

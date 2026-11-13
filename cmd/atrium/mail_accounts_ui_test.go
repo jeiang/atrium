@@ -170,8 +170,8 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	fakes := map[string]*mailtest.FakeClient{"work": work, "home": mailtest.NewFakeClient()}
 	fakes["home"].AddBox("INBOX", mailtest.NewBox(3))
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
-			return mail.Gated(fakes[opts.Account], opts.Q), nil
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return fakes[opts.Account].Open(ctx, opts)
 		}
 	}
 	app := newAppWith(f.lookup, clients, nil, quietLog)

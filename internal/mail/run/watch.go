@@ -163,7 +163,7 @@ func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) 
 	if err := locked(); err != nil {
 		return err
 	}
-	return mailops.Session(ctx, pass.Open, pass.DB.Read, account, func(client mail.Client) error {
+	return mailops.ReadSession(ctx, pass.Open, pass.DB.Read, account, func(client mail.Client) error {
 		for ctx.Err() == nil {
 			beat()
 			var changed bool
