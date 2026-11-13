@@ -410,8 +410,9 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	addrFile := filepath.Join(dir, "serve-addr")
+	signalsFile := filepath.Join(dir, "serve-signals")
 	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
-	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile)
+	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile, "ATRIUM_CLI_EXIT_SIGNALS_FILE="+signalsFile)
 	stderr := &lockedBuffer{}
 	cmd.Stdout, cmd.Stderr = io.Discard, stderr
 	if err := cmd.Start(); err != nil {
@@ -419,6 +420,12 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	// A loaded host can take seconds to reach main; a SIGTERM before the process handles
+	// signals at all would test the kernel, not serve.
+	waitUntil(t, 60*time.Second, "serve to handle signals", func() bool {
+		_, err := os.Stat(signalsFile)
+		return err == nil
+	})
 	time.Sleep(3 * time.Second)
 	if _, err := os.Stat(addrFile); !os.IsNotExist(err) {
 		t.Fatalf("serve reported its address while a writer held the database: %v", err)
