@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"sync"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
@@ -23,20 +26,55 @@ func Declared(defs []Definition, job Job) (Definition, bool) {
 	return defs[i], true
 }
 
+func runsWhilePaused(defs []Definition, job Job) bool {
+	def, _ := Declared(defs, job)
+	return def.RunsWhilePaused
+}
+
 func SpendOf(defs []Definition, job Job) Spend {
 	def, _ := Declared(defs, job)
 	return def.Spend
 }
 
+var hostWarned sync.Map
+
 func declaredSchedule(ctx context.Context, q db.Querier, def Definition) (string, bool, error) {
+	switch {
+	case def.Every > 0:
+		return EveryText(def.Every), false, nil
+	case def.ScheduleHost != "":
+		value := strings.TrimSpace(config.HostValueFrom(ctx, def.ScheduleHost))
+		if value == "" {
+			hostWarned.Delete(def.ScheduleHost)
+			return def.Schedule, false, nil
+		}
+		err := RecurringSchedule(value)
+		if err == nil {
+			_, _, err = Validate(ctx, q, value, "UTC", 0, true)
+		}
+		if err == nil {
+			hostWarned.Delete(def.ScheduleHost)
+			return value, false, nil
+		}
+		if last, seen := hostWarned.Swap(def.ScheduleHost, value); !seen || last != value {
+			log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
+		}
+		return def.Schedule, false, nil
+	}
 	found, err := settings.From(ctx).Resolve(ctx, q, def.ScheduleSetting)
 	return found.Value, found.Origin != settings.FromDefault, err
 }
 
 func syncSchedule(ctx context.Context, q db.Querier, def Definition, job Job, now float64) (bool, error) {
 	schedule, explicit, err := declaredSchedule(ctx, q, def)
-	if err != nil || !explicit || schedule == job.Schedule {
+	if err != nil || schedule == job.Schedule {
 		return false, err
+	}
+	if def.ScheduleSetting == "" {
+		return true, resetSchedule(ctx, q, job, schedule, now)
+	}
+	if !explicit {
+		return false, nil
 	}
 	_, err = UpdateJob(ctx, q, job.ID, now, JobUpdate{Schedule: &schedule, Actor: Operator})
 	var refused Error
@@ -110,4 +148,62 @@ func createDeclared(ctx context.Context, q db.Querier, tz string, now float64, d
 		CreatedBy: Operator, Kind: def.Kind, Module: def.Module, Key: def.Key,
 	})
 	return err
+}
+
+func resetSchedule(ctx context.Context, q db.Querier, job Job, schedule string, now float64) error {
+	spec, err := parseJob(schedule, job.TZ)
+	if err != nil {
+		log.Warn(fmt.Sprintf("declared schedule for %s not applied: %s", job.Name, err), logx.Job, job.ID)
+		return nil
+	}
+	var due *float64
+	if job.State == StateActive {
+		if next, ok := spec.NextAfter(now); ok {
+			due = &next
+		}
+	}
+	_, err = q.ExecContext(ctx, "UPDATE jobs SET schedule = ?, next_due = CASE WHEN state = ? THEN ? ELSE next_due END WHERE id = ?",
+		schedule, StateActive, due, job.ID)
+	return err
+}
+
+func prime(ctx context.Context, q db.Querier, defs []Definition, now float64) error {
+	for _, def := range defs {
+		if def.Persistent {
+			continue
+		}
+		if def.Backoff.Initial > 0 {
+			var retry bool
+			if err := q.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM jobs j JOIN job_runs r ON r.id = (SELECT MAX(id) FROM job_runs WHERE job_id = j.id AND COALESCE(owner, '') NOT LIKE 'manual/%') WHERE j.declaration_key = ? AND r.status = ? AND j.next_due IS NOT NULL)", def.Key, StatusError).Scan(&retry); err != nil {
+				return err
+			}
+			if retry {
+				continue
+			}
+		}
+		if def.Every > 0 {
+			if _, err := q.ExecContext(ctx, "UPDATE jobs SET next_due = ? WHERE declaration_key = ? AND state = ?",
+				now+def.InitialDelay.Seconds(), def.Key, StateActive); err != nil {
+				return err
+			}
+			continue
+		}
+		job, err := declaredJob(ctx, q, def.Key)
+		if err != nil {
+			return err
+		}
+		if job == nil || job.State != StateActive || job.NextDue == nil || !missed(now, *job.NextDue) {
+			continue
+		}
+		spec, err := parseJob(job.Schedule, job.TZ)
+		if err != nil {
+			continue
+		}
+		if next, ok := spec.NextAfter(now); ok {
+			if _, err := q.ExecContext(ctx, "UPDATE jobs SET next_due = ? WHERE id = ?", next, job.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

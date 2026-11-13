@@ -37,7 +37,6 @@ type Dependencies struct {
 	Notice    func(context.Context, Skipped, float64) error
 	RunCron   func(context.Context, Run) (Result, error)
 	Enabled   func(string) bool
-	Active    func() bool
 	Beat      func()
 	Recovered func(error)
 	Work      context.Context
@@ -56,6 +55,7 @@ type Scheduler struct {
 	claims  atomic.Int64
 	busy    atomic.Int64
 	started atomic.Int64
+	priming atomic.Bool
 }
 
 func New(d *db.DB, jobs []Definition, deps Dependencies) *Scheduler {
@@ -76,7 +76,9 @@ func interrupted(ctx context.Context, err error) bool {
 func (s *Scheduler) admit(gate Gate) Admit {
 	return func(job Job) Status {
 		switch {
-		case gate.Paused:
+		case s.moduleDisabled(job):
+			return StatusSkippedModule
+		case gate.Paused && !runsWhilePaused(s.jobs, job):
 			return StatusSkippedPause
 		case gate.OverBudget && SpendOf(s.jobs, job) == AlwaysSpends:
 			return StatusSkippedBudget
@@ -92,10 +94,17 @@ func (s *Scheduler) owner() string {
 func (s *Scheduler) Tick(ctx context.Context) error {
 	stamp := s.now()
 	tz := s.deps.Zone(ctx)
+	priming := s.priming.Load()
 	if err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		return Ensure(ctx, tx, s.jobs, tz, stamp)
+		if err := Ensure(ctx, tx, s.jobs, tz, stamp); err != nil || !priming {
+			return err
+		}
+		return prime(ctx, tx, s.jobs, stamp)
 	}); err != nil {
 		return err
+	}
+	if priming {
+		s.priming.Store(false)
 	}
 	gate, err := s.deps.Gate(ctx, stamp)
 	if err != nil {
@@ -153,6 +162,13 @@ func (s *Scheduler) recoverRuns(ctx context.Context) error {
 		if s.stopping() {
 			return nil
 		}
+		if s.moduleDisabled(p.job) {
+			if _, err := s.db.Write.ExecContext(ctx, "UPDATE job_runs SET status = ? WHERE id = ? AND ended_at IS NULL AND status IN (?, ?) AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND (lease_until IS NULL OR lease_until < ?))",
+				StatusSkippedModule, p.jobRunID, StatusRunning, StatusSkippedModule, p.job.ID, now); err != nil {
+				return err
+			}
+			continue
+		}
 		resources := claimResources(s.jobs, p.job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
@@ -195,21 +211,31 @@ func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, f
 	s.dirty.Store(true)
 	s.started.Add(1)
 	s.active.Add(1)
-	job, release := s.detach(ctx)
+	def, _ := Declared(s.jobs, claim.Job)
+	job, release := s.detach(ctx, def.Shutdown)
 	s.wg.Go(func() {
 		defer release()
 		defer s.finished(job)
 		defer func() { _ = locks.Close() }()
-		s.execute(job, claim, fn)
+		_ = s.execute(db.WithHeld(job, locks), claim, fn)
 	})
 }
 
-func (s *Scheduler) detach(ctx context.Context) (context.Context, func()) {
+func (s *Scheduler) detach(ctx context.Context, policy ShutdownPolicy) (context.Context, func()) {
 	if s.deps.Work == nil {
 		return ctx, func() {}
 	}
 	job, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 	stop := context.AfterFunc(s.deps.Work, func() { cancel(context.Cause(s.deps.Work)) })
+	if policy == ShutdownCancel && s.stop != nil {
+		go func() {
+			select {
+			case <-s.stop:
+				cancel(ErrInterrupted)
+			case <-job.Done():
+			}
+		}()
+	}
 	return job, func() {
 		stop()
 		cancel(nil)
@@ -220,6 +246,25 @@ func (s *Scheduler) finished(ctx context.Context) {
 	s.active.Add(-1)
 	s.dirty.Store(true)
 	s.checkpoint(ctx)
+}
+
+func (s *Scheduler) moduleDisabled(job Job) bool {
+	if s.deps.Enabled == nil {
+		return false
+	}
+	def, declared := Declared(s.jobs, job)
+	if !declared {
+		return !s.deps.Enabled("assistant")
+	}
+	if !s.deps.Enabled(def.Module) {
+		return true
+	}
+	for _, owner := range def.Needs {
+		if !s.deps.Enabled(owner) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Scheduler) work(job Job) func(context.Context, Run) (Result, error) {
@@ -240,7 +285,7 @@ func (s *Scheduler) work(job Job) func(context.Context, Run) (Result, error) {
 	return def.Run
 }
 
-func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error)) {
+func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error)) error {
 	timeout := 2 * time.Hour
 	if def, ok := Declared(s.jobs, claim.Job); ok {
 		timeout = def.Timeout
@@ -275,30 +320,38 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 	switch {
 	case lost.Load():
 		log.Warn(fmt.Sprintf("job %d lost its claim; it stopped and leaves the run to its successor", id), logx.Job, id)
-		return
+		return ErrClaimLost
 	case err != nil && (interrupted(ctx, err) || errors.Is(err, ErrInterrupted)):
+		if claim.manual {
+			text := "interrupted"
+			return s.Finish(done, claim, Result{Status: StatusError, ThreadID: result.ThreadID, Error: &text})
+		}
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", id), logx.Job, id)
 		if err := s.handOver(done, claim); err != nil {
 			log.Error(fmt.Sprintf("job %d: interrupting its runs failed", id), logx.Job, id, logx.Err, err)
 		}
-		s.settle(done, claim, s.release(done, claim))
-		return
+		released := s.release(done, claim)
+		s.settle(done, claim, released)
+		return released
 	case err != nil && errors.Is(context.Cause(limited), errTimedOut):
 		text := fmt.Sprintf("timed out after %s", timeout)
 		log.Error(fmt.Sprintf("job %d %s", id, text), logx.Job, id)
 		if aerr := s.abandon(done, claim, text); aerr != nil {
 			s.settle(done, claim, aerr)
-			return
+			return aerr
 		}
 		result = Result{Status: StatusError, ThreadID: result.ThreadID, Error: &text}
 	case err != nil:
 		log.Error(fmt.Sprintf("job %d crashed", id), logx.Job, id, logx.Err, err)
 		result = Result{Status: StatusError, ThreadID: result.ThreadID, Error: new(err.Error())}
 	case result.Status == StatusRunning:
-		s.settle(done, claim, s.release(done, claim))
-		return
+		released := s.release(done, claim)
+		s.settle(done, claim, released)
+		return released
 	}
-	s.settle(done, claim, s.Finish(done, claim, result))
+	finished := s.Finish(done, claim, result)
+	s.settle(done, claim, finished)
+	return finished
 }
 
 var (
@@ -439,14 +492,10 @@ func (s *Scheduler) Run(ctx context.Context, stop <-chan struct{}) error {
 	log.Info(fmt.Sprintf("scheduler %s started", s.deps.Owner))
 	defer s.wg.Wait()
 	s.stop = stop
+	s.priming.Store(true)
 	recovered := false
 	for ctx.Err() == nil && !s.stopping() {
 		s.beat()
-		if s.deps.Active != nil && !s.deps.Active() {
-			s.recovered(nil)
-			s.wait(ctx)
-			continue
-		}
 		ok, err := s.safeCycle(ctx)
 		switch {
 		case ctx.Err() != nil || s.stopping():

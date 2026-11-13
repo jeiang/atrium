@@ -17,8 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-type Module struct{}
-
 func Requirements() []module.Requirement {
 	return []module.Requirement{module.HostSetting(contacts.DirKey)}
 }
@@ -27,35 +25,34 @@ func ToolDefinitions() []module.ToolDefinition {
 	return []module.ToolDefinition{Definition()}
 }
 
-func (Module) Declare(mc module.Context) module.Declaration {
-	return module.Declaration{
-		Name:     module.Contacts,
-		Requires: Requirements(),
-		Host:     contacts.HostSettings(),
-		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
-		Tools:    ToolDefinitions(),
-	}
+func syncCommand(env config.Env) *cli.Command {
+	return davmirror.SyncCommand("mirror the iCloud address books into the contacts directory (read-only)",
+		module.Contacts+"/"+passrun.CardDAV, passrun.CardDAV, mirrorContacts(env))
 }
 
-func syncCommand(env config.Env) *cli.Command {
-	return davmirror.SyncCommand("mirror the iCloud address books into the contacts directory (read-only)", passrun.CardDAV,
-		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
-			set, err := calendar.LoadSettings(ctx, d.Read)
-			if err != nil {
-				return davmirror.Stats{}, err
-			}
-			src, err := contacts.Resolve(ctx, d.Read)
-			if err != nil {
-				return davmirror.Stats{}, err
-			}
-			if src.State == contacts.Off {
-				return davmirror.Stats{}, nil
-			}
-			if src.State == contacts.Unset {
-				return davmirror.Stats{}, calendar.Error(contacts.DirKey + " is not set")
-			}
+func mirrorContacts(env config.Env) davmirror.Prepare {
+	return func(ctx context.Context, d *db.DB) (func(context.Context) (davmirror.Stats, error), error) {
+		set, err := calendar.LoadSettings(ctx, d.Read)
+		if err != nil {
+			return nil, err
+		}
+		src, err := contacts.Resolve(ctx, d.Read)
+		if err != nil {
+			return nil, err
+		}
+		if src.State == contacts.Off {
+			return func(context.Context) (davmirror.Stats, error) { return davmirror.Stats{}, nil }, nil
+		}
+		if src.State == contacts.Unset {
+			return nil, config.NotConfigured(contacts.DirKey + " is not set")
+		}
+		if err := calendar.MirrorConfigured(ctx, set, src.Dir); err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context) (davmirror.Stats, error) {
 			return calendar.SyncContactsMirror(ctx, env, set, src.Dir)
-		})
+		}, nil
+	}
 }
 
 const schemaMaxContacts = 100

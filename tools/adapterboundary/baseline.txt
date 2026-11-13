@@ -282,7 +282,6 @@ internal/assistant/webfetch/tool.go	github.com/jeiang/atrium/internal/textutil
 internal/backup/backup.go	github.com/jeiang/atrium/internal/config
 internal/backup/backup.go	github.com/jeiang/atrium/internal/db
 internal/backup/backup.go	github.com/jeiang/atrium/internal/db/key
-internal/backup/backup.go	github.com/jeiang/atrium/internal/passrun
 internal/backup/backup.go	github.com/jeiang/atrium/internal/settings
 internal/backup/restore.go	github.com/jeiang/atrium/internal/config
 internal/backup/restore.go	github.com/jeiang/atrium/internal/db

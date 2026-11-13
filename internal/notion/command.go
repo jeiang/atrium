@@ -3,19 +3,36 @@ package notion
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 )
+
+const JobKey = module.Notion + "/" + passrun.NotionSync
 
 type Options struct {
 	Env   config.Env
 	Embed embed.TextsFunc
+}
+
+type Summary struct {
+	Sources   int64   `json:"sources"`
+	Pages     int64   `json:"pages"`
+	New       int     `json:"new"`
+	Updated   int     `json:"updated"`
+	Unchanged int     `json:"unchanged"`
+	Trashed   int     `json:"trashed"`
+	Failed    int     `json:"failed"`
+	Embedded  int64   `json:"embedded"`
+	Seconds   float64 `json:"seconds"`
+	Live      int64   `json:"live"`
+	Private   int64   `json:"private"`
 }
 
 func (o Options) env() config.Env {
@@ -66,36 +83,10 @@ func run(env *cli.Env, o Options, fn func(context.Context, *db.DB, config.Config
 }
 
 func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	return passrun.Track(ctx, d, passrun.NotionSync, func() error { return o.syncPass(ctx, d, cfg, env) })
-}
-
-func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	client, err := NewClient(ctx, d.Read)
+	out, err := o.invokeSync(ctx, d, cfg)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
-	stats, err := o.locked(ctx, d, cfg, client)
-	if err != nil {
-		return err
-	}
-	counts, err := Totals(ctx, d.Read)
-	if err != nil {
-		return err
-	}
-	out := struct {
-		Sources   int64   `json:"sources"`
-		Pages     int64   `json:"pages"`
-		New       int     `json:"new"`
-		Updated   int     `json:"updated"`
-		Unchanged int     `json:"unchanged"`
-		Trashed   int     `json:"trashed"`
-		Failed    int     `json:"failed"`
-		Embedded  int64   `json:"embedded"`
-		Seconds   float64 `json:"seconds"`
-		Live      int64   `json:"live"`
-		Private   int64   `json:"private"`
-	}{counts.Sources, counts.Pages, stats.New, stats.Updated, stats.Unchanged, stats.Trashed, stats.Failed, counts.Embedded, stats.Seconds, counts.Live, counts.Private}
 	encoded, err := json.Marshal(out)
 	if err != nil {
 		return err
@@ -104,13 +95,29 @@ func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env 
 	return nil
 }
 
-func (o Options) locked(ctx context.Context, d *db.DB, cfg config.Config, client *Client) (Stats, error) {
-	lock, err := db.Exclusive(ctx, filepath.Join(filepath.Dir(cfg.DBPath), config.NotionLockName), db.ShortLockWait)
-	if err != nil {
-		return Stats{}, err
+func (o Options) Pass(ctx context.Context, d *db.DB) (Summary, error) {
+	client, err := NewClient(ctx, d.Read)
+	if _, skip := errors.AsType[config.NotConfigured](err); skip {
+		return Summary{}, err
 	}
-	defer func() { _ = lock.Close() }()
-	return Sync(ctx, d, client, o.Embed)
+	var out Summary
+	err = passrun.Track(ctx, d, passrun.NotionSync, func() error {
+		if err != nil {
+			return err
+		}
+		defer client.Close()
+		stats, err := Sync(ctx, d, client, o.Embed)
+		if err != nil {
+			return err
+		}
+		counts, err := Totals(ctx, d.Read)
+		if err != nil {
+			return err
+		}
+		out = Summary{counts.Sources, counts.Pages, stats.New, stats.Updated, stats.Unchanged, stats.Trashed, stats.Failed, counts.Embedded, stats.Seconds, counts.Live, counts.Private}
+		return nil
+	})
+	return out, err
 }
 
 func (o Options) search(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env, query string, private bool, limit int) error {

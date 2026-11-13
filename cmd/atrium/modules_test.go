@@ -542,18 +542,10 @@ func TestUsageAndBudgetStayReachableWithTheAssistantOff(t *testing.T) {
 func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'Lifecycle thread', 'low', ?, ?)", now, now); err != nil {
 		t.Fatal(err)
-	}
-	jobs := func() int {
-		t.Helper()
-		var n int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err != nil {
-			t.Fatal(err)
-		}
-		return n
 	}
 	base := startServeIn(t, dir)
 	about := func() string {
@@ -573,15 +565,42 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	if body := about(); strings.Contains(body, "Lifecycle thread") || strings.Contains(body, "sb-thread") {
 		t.Fatal("/about shows the assistant thread sidebar while the assistant is off")
 	}
-	time.Sleep(time.Second)
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
+	asstExec(t, d, "INSERT INTO jobs (name, kind, prompt, schedule, tz, state, next_due, created_by, created_at, module, activated_at) VALUES ('disabled-cron', 'cron', 'Say hi', 'daily 12:00', 'UTC', 'active', NULL, 'operator', ?, 'assistant', ?)", now, now)
+	asstExec(t, d, "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")
+	asstExec(t, d, "INSERT INTO mailboxes (id, account, name, imap_name, role, uidvalidity, highest_uid) VALUES (701, 'icloud', 'INBOX', 'INBOX', 'inbox', 1, 1)")
+	asstExec(t, d, "INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, first_seen) VALUES (701, 'icloud', 701, 1, 1, 'event@x', 'event', 'Dinner on Friday', 'friend@example.com', 0)")
+	asstExec(t, d, "INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (701, 'event', 'queued', 1)")
+	due := []string{"nightly", "weekly-review", "daily-nudges", "task-reminders", "memory-work", "knowledge-export", "calendar-candidates", "ops-sampler", "disabled-cron"}
+	schedulerDue(t, d, due...)
+	waitUntil(t, 60*time.Second, "due jobs to be skipped with the assistant off", schedulerTerminal(d, due...))
+	for _, name := range due {
+		if status, text := schedulerStatus(t, d, name); status != "skipped_module" {
+			t.Fatalf("%s with assistant off = %s (%s), want skipped_module", name, status, text)
+		}
+	}
+	if n := len(api.Requests()); n != 0 {
+		t.Fatalf("%d model requests while assistant jobs and a queued candidate were due with the assistant off", n)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM event_candidates WHERE status = 'queued'"); n != 1 {
+		t.Fatalf("%d queued candidates, want 1", n)
+	}
 	if n := api.ModelLists(); n != 0 {
 		t.Fatalf("%d model catalog requests while the assistant is off", n)
 	}
-	if n := jobs(); n != 0 {
-		t.Fatalf("%d scheduler jobs seeded while the assistant is off", n)
+	schedulerDue(t, d, due...)
+	waitUntil(t, 60*time.Second, "consecutive disabled occurrences to coalesce", func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM jobs WHERE name IN ('weekly-review', 'calendar-candidates', 'disabled-cron') AND next_due > ?", float64(time.Now().Unix())) == 3
+	})
+	for _, name := range due {
+		if n := schedulerRuns(t, d, name); n != 1 {
+			t.Fatalf("%s has %d skipped rows after two disabled occurrences, want one", name, n)
+		}
+	}
+	if n := len(api.Requests()); n != 0 {
+		t.Fatalf("%d model requests after a second disabled occurrence", n)
 	}
 	toggle("true")
-	waitFor(t, func() bool { return jobs() > 0 })
 	waitFor(t, func() bool { return api.ModelLists() > 0 })
 	if n := api.ModelLists(); n != 1 {
 		t.Fatalf("%d model catalog requests after enabling the assistant, want 1", n)

@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
 
@@ -49,6 +50,10 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 		runs := result.Runs
 		if len(runs) == 0 && result.RunID != 0 {
 			runs = []int64{result.RunID}
+		}
+		var off *module.OwnerDisabled
+		if errors.As(err, &off) {
+			return scheduler.Result{Status: scheduler.StatusSkippedModule, Error: new(off.Error())}, nil
 		}
 		var missing config.NotConfigured
 		unconfigured := errors.As(err, &missing)

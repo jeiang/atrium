@@ -86,11 +86,11 @@ func anys(items []string) []any {
 	return out
 }
 
-func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, run func(jobworker.Env) job) scheduler.Definition {
+func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, shutdown scheduler.ShutdownPolicy, run func(jobworker.Env) job) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Media, Key: module.Media + "/" + name, Name: name, Kind: scheduler.JobBuiltin, Prompt: prompt,
-		Schedule: schedule, ScheduleSetting: setting, Timeout: timeout, Spend: scheduler.ModelFree,
-		Resources: []string{resource}, Needs: []string{module.Media},
+		Schedule: schedule, ScheduleSetting: setting, Persistent: true, Timeout: timeout, Spend: scheduler.ModelFree,
+		Shutdown: shutdown, Resources: []string{resource}, Needs: []string{module.Media},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			out, err := run(e)(ctx, e.Service.DB, e.Service.Env, e.Now)
 			if skipped, ok := out.(map[string]any); ok && skipped["skipped"] != nil {
@@ -119,11 +119,11 @@ func thumbnails(cfg config.Config) job {
 func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 	return []scheduler.Definition{
 		mediaJob(deps, media.JobChannels, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).",
-			"*/30 * * * *", media.KeyScheduleChannels, 15*time.Minute, "media-control", func(jobworker.Env) job { return channels }),
+			"*/30 * * * *", media.KeyScheduleChannels, 15*time.Minute, "media-control", scheduler.ShutdownDrain, func(jobworker.Env) job { return channels }),
 		mediaJob(deps, media.JobSweep, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).",
-			"*/10 * * * *", media.KeyScheduleSweep, 15*time.Minute, "media-control", func(jobworker.Env) job { return sweep }),
+			"*/10 * * * *", media.KeyScheduleSweep, 15*time.Minute, "media-control", scheduler.ShutdownDrain, func(jobworker.Env) job { return sweep }),
 		mediaJob(deps, media.JobThumbnails, "Daily: generate missing episode thumbnails for the media library (no model run).",
-			"daily 04:00", media.KeyScheduleThumbnails, 2*time.Hour, "media-thumbnails", func(e jobworker.Env) job { return thumbnails(e.Service.Cfg) }),
+			"daily 04:00", media.KeyScheduleThumbnails, 2*time.Hour, "media-thumbnails", scheduler.ShutdownCancel, func(e jobworker.Env) job { return thumbnails(e.Service.Cfg) }),
 	}
 }
 
@@ -131,13 +131,13 @@ func Command(cfgEnv config.Env, clock func() float64) *cli.Command {
 	return &cli.Command{
 		Name: "media",
 		Commands: []*cli.Command{
-			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(cfgEnv, channels, clock)},
-			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(cfgEnv, sweep, clock)},
+			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(cfgEnv, media.JobChannels, channels, clock)},
+			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(cfgEnv, media.JobSweep, sweep, clock)},
 		},
 	}
 }
 
-func handler(cfgEnv config.Env, run job, clock func() float64) func(*cli.Args) cli.Handler {
+func handler(cfgEnv config.Env, name string, run job, clock func() float64) func(*cli.Args) cli.Handler {
 	return func(*cli.Args) cli.Handler {
 		return func(env *cli.Env) int {
 			cfg, err := config.Load(cfgEnv)
@@ -152,7 +152,15 @@ func handler(cfgEnv config.Env, run job, clock func() float64) func(*cli.Args) c
 			if err := config.Boot(env.Ctx, cfgEnv, d, cfg); err != nil {
 				return cli.Fail(env, err)
 			}
-			out, err := run(env.Ctx, d, cfgEnv, clock)
+			var out any
+			_, err = module.Invoke(env.Ctx, d, cfg, module.Media+"/"+name, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+				var err error
+				out, err = run(ctx, d, cfgEnv, clock)
+				if skipped, ok := out.(map[string]any); ok && skipped["skipped"] != nil {
+					return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured}, err
+				}
+				return scheduler.Result{}, err
+			})
 			if err != nil {
 				return cli.Fail(env, err)
 			}

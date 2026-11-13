@@ -96,6 +96,43 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "backup_directory": {
+          "type": "string"
+        },
+        "backup_directory_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "backup_keep": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "backup_keep_days": {
+          "default": 14,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "backup_keep_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "backup_keep_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "backup_schedule": {
+          "default": "daily 03:00",
+          "type": "string"
+        },
+        "backup_schedule_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "calendar_enabled": {
           "default": false,
           "type": [
@@ -467,6 +504,10 @@
     "contacts.contacts_dir": "host",
     "contacts.contacts_max_results": "tuning",
     "core.assistant_enabled": "operator",
+    "core.backup_directory": "host",
+    "core.backup_keep": "host",
+    "core.backup_keep_days": "host",
+    "core.backup_schedule": "host",
     "core.calendar_enabled": "operator",
     "core.contacts_enabled": "operator",
     "core.grafana_enabled": "operator",
