@@ -10,8 +10,14 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			asstapp.DescribeThreadList(), asstapp.DescribeThreadTranscript(), asstapp.DescribeThreadWork(), asstapp.DescribeThreadHistory(),
 			asstapp.DescribeRunEvents(), asstapp.DescribeRunDetail(), asstapp.DescribeHome(), asstapp.DescribeAbout(), asstapp.DescribeTodayEnsure(),
+			asstapp.DescribeThreadStart(), asstapp.DescribeMessageSend(), asstapp.DescribeMessageEdit(),
 		}, []application.Binding{
 			{Kind: application.HTML, Target: "GET /chat", Uses: uses(asstapp.HomeName)},
+			{Kind: application.HTML, Target: "POST /chat", Uses: uses(asstapp.ThreadStartName)},
+			{Kind: application.HTML, Target: "POST /chat/{thread_id}/messages", Uses: uses(asstapp.MessageSendName, asstapp.MessageEditName, asstapp.ThreadTranscriptName)},
+			{Kind: application.API, Target: "POST /threads", Uses: uses(asstapp.ThreadStartName)},
+			{Kind: application.API, Target: "POST /threads/{thread_id}/messages", Uses: uses(asstapp.MessageSendName, asstapp.MessageEditName)},
+			{Kind: application.CLI, Target: "agent run", Uses: uses(asstapp.ThreadStartName, asstapp.MessageSendName)},
 			{Kind: application.HTML, Target: "GET /chat/palette", Uses: uses(asstapp.ThreadListName)},
 			{Kind: application.HTML, Target: "GET /today", Uses: uses(asstapp.TodayEnsureName)},
 			{Kind: application.HTML, Target: "GET /chat/agenda", Uses: uses(asstapp.HomeName)},

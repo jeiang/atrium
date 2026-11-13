@@ -2,7 +2,6 @@ package pages
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -11,10 +10,7 @@ import (
 	"strings"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
-	"github.com/jeiang/atrium/internal/assistant/references"
-	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -49,31 +45,6 @@ func (p *pages) threadList(w http.ResponseWriter, r *http.Request, q, view strin
 	p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", read.Data)
 }
 
-func attachmentBlocks(blocks []files.AttachmentBlock) []json.RawMessage {
-	out := make([]json.RawMessage, len(blocks))
-	for i, b := range blocks {
-		raw, err := json.Marshal(b)
-		check(err)
-		out[i] = raw
-	}
-	return out
-}
-
-func (p *pages) attach(w http.ResponseWriter, r *http.Request, thread *threads.Thread, uploads []files.UploadedFile) ([]json.RawMessage, bool) {
-	if len(uploads) == 0 {
-		return nil, true
-	}
-	limit := threads.ContextLimitOf(*thread)
-	blocks, err := files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ThreadOwner(thread.ID), &limit)
-	var refused files.FileError
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not attached", err.Error())
-		return nil, false
-	}
-	check(err)
-	return attachmentBlocks(blocks), true
-}
-
 func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	form, uploads, ok := p.readUploads(w, r)
 	if !ok {
@@ -90,33 +61,6 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
 		return
 	}
-	ctx := detached(r)
-	refs, err := references.Resolve(ctx, p.deps.DB.Read, 0, text)
-	if p.refused(w, r, err) {
-		return
-	}
-	about, err := p.assistant().About(ctx, asstapp.AboutInput{Ref: web.FormString(form, "about", "")})
-	check(err)
-	if about := about.Data; about != nil && text != "" {
-		text = about.Line + "\n\n" + text
-		if about.Project != 0 {
-			projectID = about.Project
-		}
-	}
-	var project *int64
-	if projectID != 0 {
-		found, err := projects.Get(ctx, p.deps.DB.Read, projectID)
-		check(err)
-		if found == nil || found.ID == 0 {
-			p.fail(w, r, http.StatusNotFound, "unknown project")
-			return
-		}
-		if problem, archived := archivedProject(found, "start chats in it"); archived {
-			p.failure(w, r, "Project archived", problem)
-			return
-		}
-		project = &projectID
-	}
 	webSearch := true
 	if values, ok := form["web_search"]; ok {
 		webSearch = slices.Contains(values, "1")
@@ -127,31 +71,16 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 			costCap = &value
 		}
 	}
-	threadID, err := threads.Create(ctx, p.deps.DB.Write, p.now(), threads.Spec{
-		Kind: threads.Chat, ProjectID: project,
+	started, err := p.assistant().ThreadStart(detached(r), asstapp.StartInput{
+		Kind: threads.Chat, ProjectID: projectID, About: web.FormString(form, "about", ""),
 		Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: optional(form, "context_limit"),
 		Thinking: web.FormString(form, "thinking", ""), WebSearch: &webSearch, CostCapUSD: costCap,
+		Text: text, Files: uploads, Operator: true,
 	})
-	var refused threads.OptionError
-	if errors.As(err, &refused) {
-		p.failure(w, r, "Not started", err.Error())
+	if p.refused(w, r, err) {
 		return
 	}
-	check(err)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	attached, ok := p.attach(w, r, thread, uploads)
-	if !ok {
-		check(p.svc().DeleteThread(ctx, threadID))
-		return
-	}
-	if text != "" {
-		_, err := p.svc().StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true, Files: append(attached, refs...)})
-		if p.refused(w, r, err) {
-			return
-		}
-	}
-	to := "/chat/" + strconv.FormatInt(threadID, 10)
+	to := "/chat/" + strconv.FormatInt(started.Data.ThreadID, 10)
 	if web.IsPartial(r) {
 		hxRedirect(w, to)
 		return

@@ -120,23 +120,10 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if thread == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
-		return
-	}
-	if thread.Kind == threads.Subagent {
-		p.fail(w, r, http.StatusConflict, "subagent threads are read-only")
-		return
-	}
-	attached, ok := p.attach(w, r, thread, uploads)
-	if !ok {
-		return
-	}
+	in := asstapp.SendInput{ThreadID: threadID, Text: text, Files: uploads, Operator: true}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
 	if edit, _ := web.Value(form, "edit"); edit != "" {
-		_, err := p.svc().EditLast(ctx, threadID, text, attached)
+		_, err := p.assistant().MessageEdit(ctx, in)
 		if p.refused(w, r, err) {
 			return
 		}
@@ -147,10 +134,11 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		p.transcript(w, r, threadID, "innerHTML")
 		return
 	}
-	sent, err := p.svc().Send(ctx, threadID, text, attached)
+	change, err := p.assistant().MessageSend(ctx, in)
 	if p.refused(w, r, err) {
 		return
 	}
+	sent := change.Data
 	if !web.IsPartial(r) {
 		redirect(w, r, back)
 		return
@@ -159,10 +147,10 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if sent.Queued {
+	if sent.QueuedID != 0 {
 		queued := []asstapp.Queued{}
 		for _, q := range view.Queued {
-			if q.ID == sent.ID {
+			if q.ID == sent.QueuedID {
 				queued = append(queued, q)
 			}
 		}
@@ -172,12 +160,12 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	items := []*service.Item{}
 	var after int64
 	for _, item := range itemsOf(view) {
-		if runOf(item) == sent.ID {
+		if runOf(item) == sent.RunID {
 			items = append(items, item)
 			after = max(after, seqOf(item))
 		}
 	}
-	p.fragment(w, r, http.StatusOK, "_run_started.gohtml", RunStarted{View: view, ThreadID: threadID, RunID: sent.ID, Items: items, After: after})
+	p.fragment(w, r, http.StatusOK, "_run_started.gohtml", RunStarted{View: view, ThreadID: threadID, RunID: sent.RunID, Items: items, After: after})
 }
 
 func (p *pages) chatRegenerate(w http.ResponseWriter, r *http.Request) {

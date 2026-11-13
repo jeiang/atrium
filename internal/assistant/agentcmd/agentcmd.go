@@ -2,9 +2,11 @@ package agentcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -72,35 +74,30 @@ func run(env *cli.Env, open Open, threadID *int64, text, kind, toolChoice string
 		return err
 	}
 	defer closeApp()
-	if _, err := svc.ResolveClient(ctx); err != nil {
-		return err
-	}
+	app := asstapp.New(svc.DB, svc.Env, svc.Now).WithRuns(func() *service.Service { return svc })
+	var runID int64
 	if threadID == nil {
-		id, err := threads.Create(ctx, svc.DB.Write, svc.Now(), threads.Spec{Kind: threadKind(kind)})
-		if err != nil {
+		started, err := app.ThreadStart(ctx, asstapp.StartInput{Kind: threadKind(kind), Text: text, ToolChoice: toolChoice, Wait: true})
+		if runID = started.Data.RunID; runID == 0 || err != nil {
 			return err
 		}
-		threadID = &id
 	} else {
-		thread, err := threads.Get(ctx, svc.DB.Read, *threadID)
-		if err != nil {
+		in := asstapp.SendInput{ThreadID: *threadID, Text: text, ToolChoice: toolChoice, Wait: true}
+		if explicitKind {
+			in.Kind = threadKind(kind)
+		}
+		sent, err := app.MessageSend(ctx, in)
+		var unknown service.UnknownThread
+		var mismatch asstapp.KindMismatch
+		switch {
+		case errors.As(err, &unknown):
+			return fmt.Errorf("no thread %d", *threadID)
+		case errors.As(err, &mismatch):
+			return fmt.Errorf("thread %d is a %s thread; --kind %s contradicts it", *threadID, mismatch.Kind, kind)
+		}
+		if runID = sent.Data.RunID; runID == 0 || err != nil {
 			return err
 		}
-		if thread == nil {
-			return fmt.Errorf("no thread %d", *threadID)
-		}
-		if explicitKind && threadKind(kind) != thread.Kind {
-			return fmt.Errorf("thread %d is a %s thread; --kind %s contradicts it", *threadID, thread.Kind, kind)
-		}
-		kind = string(thread.Kind)
-	}
-	start := service.Start{Kind: threadKind(kind)}
-	if toolChoice != "" {
-		start.Limits.ToolChoice = &toolChoice
-	}
-	runID, err := svc.RunOnce(ctx, *threadID, text, start)
-	if runID == 0 || err != nil {
-		return err
 	}
 	out, err := service.RunDict(ctx, svc.DB.Read, runID)
 	if err != nil {

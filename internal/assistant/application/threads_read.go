@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
@@ -173,6 +174,9 @@ func DescribeRunDetail() application.Definition {
 }
 
 func listThreads(ctx context.Context, q db.Querier, in ThreadListInput) (ThreadList, error) {
+	if in.Limit <= 0 {
+		in.Limit = config.TuningChatThreadLimit
+	}
 	match := ""
 	if in.Q != "" {
 		var err error

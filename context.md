@@ -271,8 +271,16 @@ behavior-parity target.
   its subagent threads, lowered by the cost cap chosen in the composer when
   the thread was created. A run's spend includes its subagent runs, and every
   subagent request is also checked against each parent run's cap. An
-  Anthropic spend-cap 429 stops the run as a budget stop. The
-  catalog also records whether a model accepts a forced `tool_choice`
+  Anthropic spend-cap 429 stops the run as a budget stop.
+  Starting a thread and sending a message go through one pipeline for the
+  chat page, `/api/v1` and `atrium agent run`: the assistant module must be
+  on and the Anthropic connection configured before a run starts (else
+  the start is refused with no thread, the API answering 409
+  `not_configured`), the monthly budget is checked before the thread is
+  created, and a refused start leaves no thread behind in any interface.
+  References in the message are resolved against the new thread, also for
+  API starts and `agent run`; `agent run` never queues behind an active run.
+  The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
   message and run error on refusal (with the `stop_details` category),

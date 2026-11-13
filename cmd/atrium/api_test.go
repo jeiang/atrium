@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 const apiClient = "atrium-ios"
@@ -528,5 +529,63 @@ func TestAPIChatSendStreamsTheRun(t *testing.T) {
 	tailItems, _ := tail.json["items"].([]any)
 	if len(tailItems) == 0 || tailItems[0].(map[string]any)["title"] != "one" {
 		t.Fatalf("inbox page 2: %s", tail.body)
+	}
+}
+
+type proxyOwner struct{ next http.RoundTripper }
+
+func (p proxyOwner) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Remote-User", "owner")
+	r.Header.Set("Remote-Groups", "atrium_access,atrium_admin")
+	return p.next.RoundTrip(r)
+}
+
+func (s *apiSite) browser() *http.Client {
+	s.t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, Transport: proxyOwner{http.DefaultTransport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, body, _ := fetch(s.t, client, http.MethodGet, s.base+"/chat", nil); status != http.StatusOK {
+		s.t.Fatalf("GET /chat = %d: %s", status, body)
+	}
+	return client
+}
+
+func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("budget: %d %s", ran.code, ran.stderr)
+	}
+	d := asstDB(t, dir)
+	asstSpendAt(t, d, inference.SourceLoop, 5, float64(time.Now().Unix()))
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
+	before, requests := threads(), len(api.Requests())
+	listed := len(s.do(http.MethodGet, "/api/v1/threads", owner, nil).json["items"].([]any))
+
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "x"}), http.StatusConflict, "budget_exceeded")
+	if after := s.do(http.MethodGet, "/api/v1/threads", owner, nil); len(after.json["items"].([]any)) != listed {
+		t.Fatalf("API refusal changed the thread list: %s", after.body)
+	}
+	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {"x"}}); status < http.StatusBadRequest {
+		t.Fatalf("HTML start under an exhausted budget = %d: %s", status, body)
+	}
+	if ran := runApp(t, "agent", "run", "--text", "x"); ran.code == cli.ExitOK {
+		t.Fatalf("CLI start under an exhausted budget: %d %s", ran.code, ran.stdout)
+	}
+	if after := threads(); after != before {
+		t.Fatalf("threads = %d after refused starts, want %d", after, before)
+	}
+	if sent := len(api.Requests()) - requests; sent != 0 {
+		t.Fatalf("%d provider requests after refused starts", sent)
+	}
+	if refused := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused'"); refused != 3 {
+		t.Fatalf("refused start audits = %d, want 3", refused)
 	}
 }

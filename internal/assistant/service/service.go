@@ -222,14 +222,19 @@ func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now
 	if err != nil {
 		return nil, err
 	}
-	loc, err := config.From(ctx).Location(env)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := inference.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly || root == threads.Worker); err != nil {
+	if err := Admit(ctx, q, env, root, now); err != nil {
 		return nil, err
 	}
 	return thread, nil
+}
+
+func Admit(ctx context.Context, q db.Querier, env config.Env, root threads.Kind, now float64) error {
+	loc, err := config.From(ctx).Location(env)
+	if err != nil {
+		return err
+	}
+	_, err = inference.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly || root == threads.Worker)
+	return err
 }
 
 func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now float64, o Start) (int64, error) {
@@ -429,36 +434,6 @@ func (s *Service) StartRun(ctx context.Context, threadID int64, text string, o S
 	return runID, s.launch(ctx, runID)
 }
 
-type Sent struct {
-	Queued bool
-	ID     int64
-}
-
-func (s *Service) Send(ctx context.Context, threadID int64, text string, attachments []json.RawMessage) (Sent, error) {
-	ctx = context.WithoutCancel(ctx)
-	thread, err := threads.Get(ctx, s.DB.Read, threadID)
-	if err != nil {
-		return Sent{}, err
-	}
-	if thread == nil {
-		return Sent{}, UnknownThread(threadID)
-	}
-	refs, err := references.Resolve(ctx, s.DB.Read, threadID, text)
-	if err != nil {
-		return Sent{}, err
-	}
-	attachments = append(attachments, refs...)
-	id, queued, err := journal.QueueMessage(ctx, s.DB, threadID, text, s.now(), attachments)
-	if err != nil {
-		return Sent{}, err
-	}
-	if queued {
-		return Sent{Queued: true, ID: id}, nil
-	}
-	runID, err := s.StartRun(ctx, threadID, text, Start{Kind: threads.Chat, Operator: true, Files: attachments})
-	return Sent{ID: runID}, err
-}
-
 func (s *Service) lastOperator(ctx context.Context, threadID int64, refusal string) (*journal.Message, error) {
 	if _, err := Load(ctx, s.DB.Read, s.Env, threadID, s.now()); err != nil {
 		return nil, err
@@ -544,14 +519,18 @@ func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 		}
 	}
 	for _, row := range append(children, *thread) {
-		if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), files.ThreadOwner(row.ID)); err != nil {
-			return err
-		}
-		if err := threads.Purge(ctx, s.DB.Write, row.ID, s.now()); err != nil {
+		if err := s.Discard(ctx, row.ID); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Service) Discard(ctx context.Context, threadID int64) error {
+	if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), files.ThreadOwner(threadID)); err != nil {
+		return err
+	}
+	return threads.Purge(ctx, s.DB.Write, threadID, s.now())
 }
 
 func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, error) {

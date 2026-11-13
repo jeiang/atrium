@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -177,6 +176,9 @@ func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
 	var option threads.OptionError
 	var refused references.Refused
 	var disabled *module.OwnerDisabled
+	var archived asstapp.ArchivedProject
+	var readOnly asstapp.ReadOnlyThread
+	var app *application.Error
 	switch {
 	case err == nil:
 		return false
@@ -192,6 +194,14 @@ func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
 		web.APIError(w, http.StatusConflict, "nothing_to_edit", err.Error())
 	case errors.As(err, &unknown):
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
+	case errors.As(err, &archived):
+		web.APIError(w, http.StatusConflict, "project_archived", err.Error())
+	case errors.As(err, &readOnly):
+		web.APIError(w, http.StatusConflict, "read_only_thread", "Subagent threads are read-only.")
+	case errors.As(err, &app) && app.Code == application.NotConfigured:
+		web.APIError(w, http.StatusConflict, "not_configured", err.Error())
+	case errors.As(err, &app) && app.Code == application.NotFound:
+		web.APIError(w, http.StatusNotFound, "not_found", "Unknown project.")
 	case errors.As(err, &option):
 		web.APIError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	default:
@@ -253,47 +263,29 @@ func (p *pages) apiNewThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	if in.ProjectID != nil && *in.ProjectID != 0 {
-		found, err := projects.Get(ctx, p.deps.DB.Read, *in.ProjectID)
-		check(err)
-		if found == nil || found.ID == 0 {
-			web.APIError(w, http.StatusNotFound, "not_found", "Unknown project.")
-			return
-		}
-		if problem, archived := archivedProject(found, "start chats in it"); archived {
-			web.APIError(w, http.StatusConflict, "project_archived", problem)
-			return
-		}
-	} else {
-		in.ProjectID = nil
-	}
 	webSearch := true
 	if in.WebSearch != nil {
 		webSearch = *in.WebSearch
 	}
-	spec := threads.Spec{
-		Kind: threads.Chat, ProjectID: in.ProjectID, Model: in.Model, Effort: in.Effort, Thinking: in.Thinking,
-		WebSearch: &webSearch, CostCapUSD: in.CostCapUSD,
+	start := asstapp.StartInput{
+		Kind: threads.Chat, Model: in.Model, Effort: in.Effort, Thinking: in.Thinking,
+		WebSearch: &webSearch, CostCapUSD: in.CostCapUSD, Text: in.Text, Operator: true,
+	}
+	if in.ProjectID != nil {
+		start.ProjectID = *in.ProjectID
 	}
 	if in.ContextLimit != nil {
-		spec.ContextLimit = *in.ContextLimit
+		start.ContextLimit = *in.ContextLimit
 	}
-	threadID, err := threads.Create(ctx, p.deps.DB.Write, p.now(), spec)
+	started, err := p.assistant().ThreadStart(ctx, start)
 	if p.apiRefused(w, err) {
 		return
 	}
 	var runID *int64
-	if text := strings.TrimSpace(in.Text); text != "" {
-		id, err := p.svc().StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true})
-		if err != nil {
-			check(p.svc().DeleteThread(ctx, threadID))
-		}
-		if p.apiRefused(w, err) {
-			return
-		}
-		runID = &id
+	if started.Data.RunID != 0 {
+		runID = &started.Data.RunID
 	}
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
+	thread, err := threads.Get(ctx, p.deps.DB.Read, started.Data.ThreadID)
 	check(err)
 	web.JSON(w, http.StatusCreated, map[string]any{"thread": threadOut(*thread), "run_id": runID})
 }
@@ -335,34 +327,23 @@ func (p *pages) apiMessage(w http.ResponseWriter, r *http.Request) {
 		required(w, "text")
 		return
 	}
-	ctx := detached(r)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if thread == nil {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
-		return
-	}
-	if thread.Kind == threads.Subagent {
-		web.APIError(w, http.StatusConflict, "read_only_thread", "Subagent threads are read-only.")
-		return
-	}
+	send := p.assistant().MessageSend
 	if in.Edit {
-		runID, err := p.svc().EditLast(ctx, threadID, text, nil)
-		if p.apiRefused(w, err) {
-			return
-		}
-		web.JSON(w, http.StatusAccepted, map[string]any{"run_id": runID})
-		return
+		send = p.assistant().MessageEdit
 	}
-	sent, err := p.svc().Send(ctx, threadID, text, nil)
+	change, err := send(detached(r), asstapp.SendInput{ThreadID: threadID, Text: text, Operator: true})
 	if p.apiRefused(w, err) {
 		return
 	}
-	if sent.Queued {
-		web.JSON(w, http.StatusAccepted, map[string]any{"queued_id": sent.ID})
+	if in.Edit {
+		web.JSON(w, http.StatusAccepted, map[string]any{"run_id": change.Data.RunID})
 		return
 	}
-	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": sent.ID})
+	if change.Data.QueuedID != 0 {
+		web.JSON(w, http.StatusAccepted, map[string]any{"queued_id": change.Data.QueuedID})
+		return
+	}
+	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": change.Data.RunID})
 }
 
 func (p *pages) apiStop(w http.ResponseWriter, r *http.Request) {

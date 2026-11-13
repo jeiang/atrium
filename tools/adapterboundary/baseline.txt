@@ -28,15 +28,11 @@ internal/assistant/memory/memorycmd/memorycmd.go	github.com/jeiang/atrium/intern
 internal/assistant/memory/memorycmd/memorycmd.go	github.com/jeiang/atrium/internal/db
 internal/assistant/memory/memorycmd/memorycmd.go	github.com/jeiang/atrium/internal/settings/audit
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/journal
-internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/projects
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/references
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/inference
-internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/files
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/projects
-internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/references
-internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/config
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/db

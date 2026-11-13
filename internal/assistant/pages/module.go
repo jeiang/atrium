@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/references"
@@ -71,7 +72,7 @@ func Module(o Options) web.Module {
 			}
 			return svc
 		})
-		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d) }), now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
+		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)
@@ -179,11 +180,23 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 	var unknown service.UnknownThread
 	var refused references.Refused
 	var disabled *module.OwnerDisabled
+	var archived asstapp.ArchivedProject
+	var readOnly asstapp.ReadOnlyThread
+	var option threads.OptionError
+	var app *application.Error
 	switch {
 	case err == nil:
 		return false
 	case errors.As(err, &disabled):
 		p.failure(w, r, "Not available", err.Error())
+	case errors.As(err, &archived):
+		p.failure(w, r, "Project archived", err.Error())
+	case errors.As(err, &readOnly):
+		p.fail(w, r, http.StatusConflict, err.Error())
+	case errors.As(err, &option):
+		p.failure(w, r, "Not started", err.Error())
+	case errors.As(err, &app) && app.Code == application.Invalid:
+		p.failure(w, r, "Not attached", err.Error())
 	case errors.As(err, &exceeded):
 		p.failure(w, r, "Budget reached", err.Error())
 	case errors.As(err, &refused):
@@ -194,6 +207,10 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 		p.failure(w, r, "Nothing to redo", err.Error())
 	case errors.As(err, &unknown):
 		p.fail(w, r, http.StatusNotFound, "unknown thread")
+	case errors.As(err, &app) && app.Code == application.NotConfigured:
+		p.failure(w, r, "Not available", err.Error())
+	case errors.As(err, &app) && app.Code == application.NotFound:
+		p.fail(w, r, http.StatusNotFound, app.Message)
 	default:
 		log.Error("request failed", logx.Err, err.Error())
 		p.failure(w, r, "Something went wrong", "Try again.")

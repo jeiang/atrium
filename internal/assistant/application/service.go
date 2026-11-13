@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
@@ -17,6 +18,7 @@ type Service struct {
 	state *state.Store
 	now   func() float64
 	env   config.Env
+	runs  func() *service.Service
 }
 
 func New(d *db.DB, env config.Env, now func() float64) *Service {
@@ -47,7 +49,7 @@ func outcomeOf(e *application.Error) (state.Outcome, bool) {
 	switch e.Code {
 	case application.Invalid:
 		return state.Invalid, true
-	case application.Refused:
+	case application.Refused, application.NotConfigured:
 		return state.Refused, true
 	case application.Conflict:
 		return state.Conflict, true
