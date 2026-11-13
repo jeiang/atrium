@@ -3,11 +3,9 @@ package pages
 import (
 	"errors"
 	"net/http"
-	"slices"
 	"strings"
-	"time"
 
-	"github.com/jeiang/atrium/internal/contacts"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -29,31 +27,17 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	account, stage, agreement := web.QueryValue(q, "account"), web.QueryValue(q, "stage"), web.QueryValue(q, "agreement")
 	text := strings.TrimSpace(web.QueryValue(q, "q"))
 	ctx := r.Context()
-	filter := triage.Filter{Account: account, Stage: stage, Agreement: agreement, Limit: pageSize, Offset: offset, Q: text}
-	plain := stage == "" && agreement == "" && text == ""
-	if plain {
-		filter.Attention = triage.AttentionRest
-	}
-	found, err := triage.Triage(ctx, s.deps.DB.Read, filter)
+	read, err := s.reads.Triage(ctx, mailapp.TriageInput{Account: account, Stage: stage, Agreement: agreement, Q: text, Offset: offset, Full: !web.IsPartial(r)})
 	var unknown triage.FilterError
 	if errors.As(err, &unknown) {
 		s.fail(w, r, http.StatusUnprocessableEntity, unknown.Error())
 		return
 	}
 	check(err)
-	data := triageData{
-		Rows: found.Rows, Total: found.Total, Offset: offset, Account: account, Stage: stage, Agreement: agreement, Q: text,
+	if web.FragmentNotModified(w, r, read.Revision) {
+		return
 	}
-	if shown := offset + len(found.Rows); shown < found.Total {
-		data.NextOffset = shown
-	}
-	if plain && offset == 0 {
-		check, err := triage.Triage(ctx, s.deps.DB.Read, triage.Filter{Account: account, Attention: triage.AttentionCheck, PerSender: true, Limit: checkRows})
-		if err != nil {
-			panic(err)
-		}
-		data.Check = check.Rows
-	}
+	data := read.Data
 	if web.IsPartial(r) {
 		name := "_decisions.gohtml"
 		if offset > 0 {
@@ -62,15 +46,5 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 		s.fragment(w, r, name, data, nil)
 		return
 	}
-	summaries, err := triage.Summaries(ctx, s.deps.DB.Read, s.deps.Env, nil, time.Now())
-	check(err)
-	data.Summaries = slices.DeleteFunc(summaries, func(s triage.Summary) bool { return account != "" && s.Account != account })
-	flags, err := triage.FlagJudgments(ctx, s.deps.DB.Read, account, pageSize+1, 0)
-	check(err)
-	data.FlagsCapped = len(flags) > pageSize
-	data.Flags = flags[:min(len(flags), pageSize)]
-	dir, err := contacts.Dir(ctx, s.deps.DB.Read)
-	check(err)
-	data.NoContacts = dir == ""
 	s.page(w, r, http.StatusOK, "triage", "triage.gohtml", data, nil)
 }

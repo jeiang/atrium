@@ -70,4 +70,28 @@ func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
 	if !strings.Contains(configJSON, `"login":"me@other.test"`) {
 		t.Fatalf("the connection config after a passing update is %s", configJSON)
 	}
+	empty := url.Values{"label": {""}, "login": {""}, "password": {""}, "enabled": {"on"}, "auth_method": {""}}
+	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts/work", empty); code != http.StatusOK {
+		t.Fatalf("empty fields update = %d: %.300s", code, body)
+	}
+	var label, authMethod string
+	if err := d.Read.QueryRow("SELECT label, login, auth_method FROM mail_accounts WHERE id = 'work'").Scan(&label, &login, &authMethod); err != nil {
+		t.Fatal(err)
+	}
+	if label != "Work" || login != "me@other.test" || authMethod != "password" {
+		t.Fatalf("empty fields changed account values: label=%q login=%q auth=%q", label, login, authMethod)
+	}
+	var added, saved, refused int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-add' AND outcome = 'ok' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&added); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'ok' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&saved); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'refused' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&refused); err != nil {
+		t.Fatal(err)
+	}
+	if added != 1 || saved != 2 || refused != 1 {
+		t.Fatalf("account operation audits: added=%d saved=%d refused=%d", added, saved, refused)
+	}
 }
