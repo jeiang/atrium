@@ -6,8 +6,13 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
+	"github.com/jeiang/atrium/internal/davmirror"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -90,4 +95,12 @@ func included(args tool.Args) ([]string, error) {
 		out = append(out, name)
 	}
 	return out, nil
+}
+
+func syncCommand(env config.Env) *cli.Command {
+	return davmirror.SyncCommand("mirror the iCloud address books into the contacts directory (read-only)", passrun.CardDAV,
+		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
+			change, err := contactsapp.New(d, env).Sync(ctx, contactsapp.SyncInput{})
+			return change.Data, err
+		})
 }
