@@ -8,11 +8,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/backlog"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
@@ -25,11 +25,11 @@ func (o Options) LiveCommand() *cli.Command {
 		o.leaf("resume", func(*cli.Args) body { return setPaused(false) }),
 		o.leaf("status", func(*cli.Args) body {
 			return func(x *exec) error {
-				status, err := x.Live.Status(x.Ctx)
+				status, err := x.opts.Application(x.Pass).LiveStatus(x.Ctx, struct{}{})
 				if err != nil {
 					return err
 				}
-				x.JSON(status)
+				x.JSON(status.Data)
 				return nil
 			}
 		}),
@@ -84,14 +84,22 @@ func rebaseline(x *exec) error {
 
 func setPaused(paused bool) body {
 	return func(x *exec) error {
-		l := x.Live
-		if err := l.SetPaused(paused); err != nil {
+		svc := x.opts.Application(x.Pass)
+		var done application.Change[mailapp.PauseResult]
+		var err error
+		if paused {
+			done, err = svc.Pause(x.Ctx, mailapp.PauseInput{})
+		} else {
+			done, err = svc.Resume(x.Ctx, mailapp.PauseInput{})
+		}
+		if err != nil && !mailapp.Committed(err) {
 			return err
 		}
-		if err := notify.PauseChanged(x.Ctx, x.DB, x.opts.env(), paused); err != nil {
+		if err := done.Data.NoticeError; err != nil {
 			_, _ = fmt.Fprintln(x.Stderr, "warning: pause notice failed:", err)
 		}
-		x.JSON(map[string]any{"paused": l.Paused()})
+		x.JSON(done.Data)
+
 		return nil
 	}
 }
@@ -117,7 +125,8 @@ func liveDeletions(x *exec) error {
 }
 
 func listActions(x *exec, limit int, kind string) error {
-	actions, err := x.Live.List(x.Ctx, "", kind, limit, 0)
+	read, err := x.opts.Application(x.Pass).LiveActions(x.Ctx, mailapp.LiveActionsInput{Limit: limit, Kind: kind})
+	actions := read.Data
 	if err != nil {
 		return err
 	}

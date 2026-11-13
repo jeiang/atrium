@@ -36,19 +36,22 @@ func Templates() fs.FS {
 	return sub
 }
 
-func PauseModule(r chi.Router, d *web.Deps) {
-	s := &service{deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
-	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-		mode, err := mail.Mode(ctx, d.DB.Read)
-		if err != nil {
-			return err
-		}
-		f.Mode = mode
-		f.Paused = safety.IsPaused(d.Cfg.PausePath())
-		return nil
-	})
-	r.With(bindMail).Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
-	d.Authenticated(http.MethodPost, "/live/resume", bindMail(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })).ServeHTTP)
+func PauseModule(reads func(*web.Deps) *mailapp.Service) func(chi.Router, *web.Deps) {
+	return func(r chi.Router, d *web.Deps) {
+		s := &service{reads: reads(d), deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
+		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
+			mode, err := mail.Mode(ctx, d.DB.Read)
+			if err != nil {
+				return err
+			}
+			f.Mode = mode
+			f.Paused = safety.IsPaused(d.Cfg.PausePath())
+			return nil
+		})
+		r.With(bindMail).Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
+		d.Authenticated(http.MethodPost, "/live/resume", bindMail(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })).ServeHTTP)
+	}
+
 }
 
 func bindMail(next http.Handler) http.Handler {

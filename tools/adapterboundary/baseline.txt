@@ -270,19 +270,11 @@ internal/contacts/contactsmodule/adapters.go	github.com/jeiang/atrium/internal/p
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/config
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/db
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/ledger
-internal/mail/accountpages/accountpages.go	database/sql
-internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/config
-internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/connections
-internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/embed
-internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/mail
-internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/mail/mailconn
 internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/settings
-internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/settings/audit
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/applier
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/backlog
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/live
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/run
-internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/notify
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/proposals
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/config
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/db
@@ -313,7 +305,6 @@ internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/corrections
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/message
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/triage
-internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/notify
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/safety
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail/applier

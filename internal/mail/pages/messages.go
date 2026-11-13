@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/triage"
-	"github.com/jeiang/atrium/internal/notify"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/urlx"
@@ -230,8 +229,18 @@ type appliedOutcome struct {
 }
 
 func (s *service) togglePause(w http.ResponseWriter, r *http.Request, paused bool) {
-	check(s.live.SetPaused(paused))
-	if err := notify.PauseChanged(context.WithoutCancel(r.Context()), s.deps.DB, s.deps.Env, paused); err != nil {
+	ctx := context.WithoutCancel(r.Context())
+	var done application.Change[mailapp.PauseResult]
+	var err error
+	if paused {
+		done, err = s.reads.Pause(ctx, mailapp.PauseInput{})
+	} else {
+		done, err = s.reads.Resume(ctx, mailapp.PauseInput{})
+	}
+	if !mailapp.Committed(err) {
+		check(err)
+	}
+	if err := done.Data.NoticeError; err != nil {
 		log.Warn("pause notice failed", logx.Err, err.Error())
 	}
 	target := "/triage"

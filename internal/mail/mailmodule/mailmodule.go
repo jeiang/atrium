@@ -77,7 +77,7 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers}
+	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers, Application: mailCLIService(mc.Env)}
 	cmds := []*cli.Command{
 		run.SyncCommand(mc.Env, m.Clients, m.classifiers),
 		run.WatchCommand(mc.Env, m.Clients, m.classifiers),
@@ -91,6 +91,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	operations, bindings := mailReadOperations()
+	accountOps, accountBindings := mailAccountOperations()
+	operations = append(operations, accountOps...)
+	bindings = append(bindings, accountBindings...)
 	return module.Declaration{
 		Name:       module.Mail,
 		Operations: operations, Bindings: bindings,
@@ -106,12 +109,12 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
-			{Module: pages.PauseModule},
+			{Module: pages.PauseModule(mailPageService)},
 			{Module: reviewpages.MailModule(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools}), Nav: []web.NavItem{
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},
-			{Module: accountpages.Module, Templates: accountpages.Templates()},
+			{Module: accountpages.Module(mailPageService, mailSettingsService), Templates: accountpages.Templates()},
 		},
 		Groups:   SettingGroups(),
 		Commands: cmds,
