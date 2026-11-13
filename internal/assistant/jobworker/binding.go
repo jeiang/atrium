@@ -6,7 +6,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
@@ -17,15 +16,7 @@ type Dependencies struct {
 	Service    func(context.Context) (*service.Service, error)
 	Classifier func(context.Context, *service.Service) (*classifier.Service, error)
 	Now        func() float64
-	Attention  func(context.Context) []attention.Source
 	Start      Starter
-}
-
-func (d Dependencies) Sources(ctx context.Context) []attention.Source {
-	if d.Attention == nil {
-		return nil
-	}
-	return d.Attention(ctx)
 }
 
 func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) func(context.Context, scheduler.Run) (scheduler.Result, error) {

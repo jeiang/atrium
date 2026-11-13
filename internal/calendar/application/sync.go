@@ -32,6 +32,9 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[dav
 			return calendar.SyncCalendarMirror(ctx, s.env, set)
 		}, nil
 	})
+	if errors.As(err, new(config.NotConfigured)) || err == nil && stats.Written == 0 && stats.Removed == 0 {
+		return application.Change[davmirror.Stats]{Data: stats}, err
+	}
 	outcome := state.OK
 	if err != nil {
 		outcome = outcomeOf(err)

@@ -132,6 +132,48 @@ func TestAssistantWithoutTheAnthropicKeyRefusesPaidRunsAndKeepsModelFreeWork(t *
 	}
 }
 
+func TestMergedUnconfiguredRunsKeepTheirAuditsOnTheirOwnJob(t *testing.T) {
+	t.Parallel()
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	host := filepath.Join(dir, "host-no-anthropic.toml")
+	body := hostConfigBodyWith(defaultEmbeddingConnection, defaultWebPushConnection, "") + defaultQbitConnection + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
+	if err := os.WriteFile(host, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.env["ATRIUM_HOST_CONFIG"] = host
+	d := asstDB(t, dir)
+	schedulerSeed(t, f, d)
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
+	tick := func(names ...string) {
+		t.Helper()
+		schedulerDue(t, d, names...)
+		next, stderr := tickProcess(t)
+		if code := exitCode(next.Wait()); code != 0 {
+			t.Fatalf("tick exit %d: %s", code, stderr)
+		}
+	}
+	tick("weekly-review")
+	tick("weekly-review")
+	if n := schedulerRuns(t, d, "weekly-review"); n != 1 {
+		t.Fatalf("%d weekly review runs after two unconfigured passes, want one merged row", n)
+	}
+	asstExec(t, d, "INSERT INTO tasks (title, notes, remind_at, status, priority, source_kind, source_id, created_ts, updated_ts) VALUES ('water the plants', '', ?, 'open', 'normal', '', '', ?, ?)", unixNow()-60, unixNow()-120, unixNow()-120)
+	tick("task-reminders")
+	if status, text := schedulerStatus(t, d, "task-reminders"); status != "ok" {
+		t.Fatalf("task reminders %s %q, want ok", status, text)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.schedule.run' AND outcome = 'refused' AND job_run_id IS NOT NULL"); n != 2 {
+		t.Fatalf("%d refused scheduled-run audits, want 2", n)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'tasks.remind' AND job_run_id IS NOT NULL"); n != 1 {
+		t.Fatalf("%d reminder audits, want 1", n)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit a JOIN job_runs r ON r.id = a.job_run_id JOIN jobs j ON j.id = r.job_id "+
+		"WHERE (a.operation = 'assistant.schedule.run') <> (j.name = 'weekly-review') OR (a.operation = 'tasks.remind') <> (j.name = 'task-reminders')"); n != 0 {
+		t.Errorf("%d audit rows name a run of another job", n)
+	}
+}
+
 func stopWhileHeld(t *testing.T, stop, release func()) {
 	t.Helper()
 	stopped := make(chan struct{})

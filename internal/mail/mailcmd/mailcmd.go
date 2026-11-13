@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	runpkg "github.com/jeiang/atrium/internal/mail/run"
 )
@@ -22,6 +23,7 @@ type Options struct {
 	Clients     func(config.Config) mail.OpenFunc
 	Now         func() float64
 	Classifiers runpkg.Classifier
+	Application func(*runpkg.Pass) *mailapp.Service
 }
 
 func (o Options) env() config.Env {

@@ -41,6 +41,7 @@ type fakeOpsGrafana struct {
 	requests []opsGrafanaRequest
 	alerts   []map[string]any
 	up       float64
+	failHost string
 }
 
 func (f *fakeOpsGrafana) setUp(value float64) {
@@ -77,6 +78,10 @@ func (f *fakeOpsGrafana) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		expr := ""
 		if len(body.Queries) > 0 {
 			expr = body.Queries[0].Expr
+		}
+		if f.failHost != "" && strings.Contains(expr, `"`+f.failHost+`(`) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": map[string]any{"A": map[string]any{"error": "bad series"}}})
+			return
 		}
 		value := 0.0
 		switch {
@@ -210,8 +215,17 @@ func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 		}
 		return old == 0
 	})
-	if audits := operationAudits(t, d, "ops.sample"); len(audits) < 2 || !strings.HasPrefix(audits[0], "ok ops_samples ") || !strings.HasPrefix(audits[len(audits)-1], "ok ops_samples ") {
-		t.Errorf("ops.sample audits = %q, want an ok row per pass", audits)
+	audits := operationAudits(t, d, "ops.sample")
+	if len(audits) < 2 || slices.ContainsFunc(audits, func(a string) bool { return !strings.HasPrefix(a, "ok ops_samples ") }) {
+		t.Errorf("ops.sample audits = %q, want an ok row per pass that sampled", audits)
+	}
+	setEnv(t, settingEnv(serverops.KeyHosts), "")
+	runs := asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.status = 'ok'", serveropsJobName)
+	runOpsSampler(t, f, d, func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.status = 'ok'", serveropsJobName) > runs
+	})
+	if again := operationAudits(t, d, "ops.sample"); len(again) != len(audits) {
+		t.Errorf("a sampler pass with no hosts wrote audits %q", again[len(audits):])
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "kb_search", map[string]any{"query": "node-a"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
@@ -281,5 +295,43 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 			continue
 		}
 		t.Errorf("the sampler sent %s %s", request.Method, request.Path)
+	}
+}
+
+func TestOpsSamplerKeepsHealthyHostsWhenOneHostFails(t *testing.T) {
+	fake := &fakeOpsGrafana{up: 1, failHost: "node-b"}
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
+	setEnv(t, settingEnv(serverops.KeyHosts), "node-a,node-b")
+	warm(t, api)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	now := float64(time.Now().Unix())
+	asstExec(t, d, "INSERT INTO ops_samples (ts, host, metric, value) VALUES (?, 'node-a', 'cpu_pct', 1)", now-15*24*3600)
+	asstExec(t, d, "INSERT INTO ops_findings (fact, severity, title, body, created_at, resolved_at, resolved_reason) VALUES ('node-a/up', 'info', 'old', 'old', ?, ?, 'cleared')", now-40*24*3600, now-31*24*3600)
+	runOpsSampler(t, f, d, func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.ended_at IS NOT NULL", serveropsJobName) > 0 &&
+			asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE ts < ?", now-14*24*3600) == 0
+	})
+	if status, text := schedulerStatus(t, d, serveropsJobName); status != "ok" {
+		t.Errorf("sampler job with one failing host = %s %q, want ok", status, text)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE host = 'node-a' AND ts >= ?", now-60); n < 6 || n%6 != 0 {
+		t.Errorf("node-a samples = %d, want six per pass", n)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE host = 'node-b'"); n != 0 {
+		t.Errorf("node-b samples = %d from a host whose reads fail, want none", n)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_findings WHERE title = 'old'"); n != 0 {
+		t.Errorf("the supervisor did not prune the old resolved finding after a partial pass")
+	}
+	audits := operationAudits(t, d, "ops.sample")
+	if len(audits) == 0 || slices.ContainsFunc(audits, func(a string) bool { return !strings.HasPrefix(a, "partial ops_samples ") }) {
+		t.Errorf("ops.sample audits = %q, want a partial row per pass", audits)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'ops.sample' AND details_json <> '{\"failed_hosts\":1}'"); n != 0 {
+		t.Errorf("%d ops.sample audits without the failing host count alone", n)
 	}
 }
