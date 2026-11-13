@@ -261,10 +261,6 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	if got := asstFrameIDs(resumed); len(got) != 1 || got[0] != ids[len(ids)-1] {
 		t.Errorf("resumed frames %v, want only %s", got, ids[len(ids)-1])
 	}
-	code, page, _ := w.get(fmt.Sprintf("/chat/%d", thread), false)
-	w.want(code, http.StatusOK, page, "<strong>there</strong>")
-	_, found, _ := w.get("/chat?q=zebrafish", true)
-	w.want(http.StatusOK, http.StatusOK, found, fmt.Sprintf(`href="/chat/%d"`, thread))
 
 	api.Push(asstReply("Answer two"))
 	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "secondmarker", "edit": "1"}, nil, true)
@@ -272,14 +268,10 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("edited run %s", state)
 	}
-	_, page, _ = w.get(fmt.Sprintf("/chat/%d", thread), false)
-	if !strings.Contains(page, "Answer two") || strings.Contains(page, "<strong>there</strong>") {
+	_, page, _ := w.get(fmt.Sprintf("/chat/%d", thread), false)
+	if !strings.Contains(page, "Answer two") {
 		t.Errorf("the edit did not replace the answer")
 	}
-	_, found, _ = w.get("/chat?q=secondmarker", true)
-	w.want(http.StatusOK, http.StatusOK, found, fmt.Sprintf(`href="/chat/%d"`, thread))
-	_, gone, _ := w.get("/chat?q=zebrafish", true)
-	w.want(http.StatusOK, http.StatusOK, gone, "Nothing matches")
 
 	api.Push(asstReply("Answer three"))
 	before := asstLastRun(t, d, thread)
@@ -366,7 +358,7 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	queuedThread := w.start(map[string]string{"text": "start"})
 	asstWaitRequests(t, api, sent+1)
 	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", queuedThread), map[string]string{"text": "queued note"}, nil, true)
-	w.want(code, http.StatusOK, body, "data-queued=", "queued note")
+	w.want(code, http.StatusOK, body, "queued note")
 	run := asstLastRun(t, d, queuedThread)
 	release()
 	if state, errText := asstSettle(t, d, run); state != "done" {

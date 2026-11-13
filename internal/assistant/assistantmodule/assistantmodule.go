@@ -99,7 +99,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService}),
+			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService, API: threadAPI}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{

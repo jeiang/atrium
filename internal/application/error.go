@@ -37,6 +37,7 @@ type Field struct {
 
 type Error struct {
 	Code         Code
+	Reason       string
 	Message      string
 	Fields       []Field
 	EffectIDs    []int64

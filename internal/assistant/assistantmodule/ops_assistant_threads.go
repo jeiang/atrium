@@ -4,7 +4,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -17,12 +16,10 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 			asstapp.DescribeReplyRegenerate(), asstapp.DescribeThreadBranch(), asstapp.DescribeThreadDelete(), asstapp.DescribeThreadPin(),
 			asstapp.DescribeThreadArchive(), asstapp.DescribeThreadProject(), asstapp.DescribeThreadOptions(),
 			asstapp.DescribeRunStop(), asstapp.DescribeRunResume(), asstapp.DescribeRunAnswer(), asstapp.DescribeStreamRetention(),
-		}, append(pages.APIReadBindings(), []application.Binding{
+		}, append(apiBindings(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /chat", Uses: uses(asstapp.HomeName)},
 			{Kind: application.HTML, Target: "POST /chat", Uses: uses(asstapp.ThreadStartName)},
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/messages", Uses: uses(asstapp.MessageSendName, asstapp.MessageEditName, asstapp.ThreadTranscriptName)},
-			{Kind: application.API, Target: "POST /threads", Uses: uses(asstapp.ThreadStartName)},
-			{Kind: application.API, Target: "POST /threads/{thread_id}/messages", Uses: uses(asstapp.MessageSendName, asstapp.MessageEditName)},
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/pin", Uses: uses(asstapp.ThreadPinName, asstapp.HomeName)},
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/archive", Uses: uses(asstapp.ThreadArchiveName, asstapp.HomeName)},
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/project", Uses: uses(asstapp.ThreadProjectName)},
@@ -33,8 +30,6 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/branch", Uses: uses(asstapp.ThreadBranchName)},
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/runs/{run_id}/resume", Uses: uses(asstapp.RunResumeName, asstapp.RunDetailName, asstapp.ThreadTranscriptName)},
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/answer", Uses: uses(asstapp.RunAnswerName, asstapp.ThreadTranscriptName)},
-			{Kind: application.API, Target: "POST /threads/{thread_id}/stop", Uses: uses(asstapp.RunStopName)},
-			{Kind: application.API, Target: "POST /threads/{thread_id}/answer", Uses: uses(asstapp.RunAnswerName)},
 			{Kind: application.CLI, Target: "agent run", Uses: uses(asstapp.ThreadStartName, asstapp.MessageSendName)},
 			{Kind: application.HTML, Target: "GET /chat/palette", Uses: uses(asstapp.ThreadListName)},
 			{Kind: application.HTML, Target: "GET /today", Uses: uses(asstapp.TodayEnsureName)},

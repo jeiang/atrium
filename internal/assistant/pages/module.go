@@ -42,6 +42,7 @@ type Options struct {
 	Service   func(context.Context) (*service.Service, error)
 	Knowledge func(*web.Deps) *kbapp.Service
 	Assistant func(*web.Deps) *asstapp.Service
+	API       func(*web.Deps, func() *asstapp.Service)
 }
 
 type pages struct {
@@ -107,7 +108,8 @@ func Module(o Options) web.Module {
 		p.projectRoutes(r)
 		p.scheduledRoutes(r)
 		p.settingsRoutes(r)
-		p.apiRoutes(d)
+		o.API(d, p.assistant)
+		d.API(http.MethodGet, "/threads/{thread_id}/runs/{run_id}/events", p.apiEvents)
 	}
 }
 

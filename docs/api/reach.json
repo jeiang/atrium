@@ -13,9 +13,12 @@
     },
     {
       "area": "composer",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.configuration",
+        "assistant.thread.options"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "devices",
@@ -37,9 +40,13 @@
     },
     {
       "area": "home",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.about",
+        "assistant.home",
+        "assistant.today.ensure"
+      ],
+      "required": 3,
+      "bound": 3
     },
     {
       "area": "inbox",
@@ -126,12 +133,27 @@
     {
       "area": "threads",
       "operations": [
+        "assistant.message.edit",
+        "assistant.message.send",
+        "assistant.reply.regenerate",
+        "assistant.run.answer",
+        "assistant.run.detail",
         "assistant.run.events",
+        "assistant.run.resume",
+        "assistant.run.stop",
+        "assistant.thread.archive",
+        "assistant.thread.branch",
+        "assistant.thread.delete",
+        "assistant.thread.history",
         "assistant.thread.list",
-        "assistant.thread.transcript"
+        "assistant.thread.pin",
+        "assistant.thread.project",
+        "assistant.thread.start",
+        "assistant.thread.transcript",
+        "assistant.thread.work"
       ],
-      "required": 3,
-      "bound": 3
+      "required": 18,
+      "bound": 18
     },
     {
       "area": "usage",
@@ -147,5 +169,5 @@
     }
   ],
   "total_required": 166,
-  "total_bound": 9
+  "total_bound": 29
 }

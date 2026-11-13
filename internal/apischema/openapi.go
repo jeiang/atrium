@@ -30,7 +30,7 @@ var (
 )
 
 var transportCodes = []string{
-	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "command_interrupted", "command_result_withheld", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "stream_expired", "too_large", "unsupported_media_type",
+	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "command_interrupted", "command_result_withheld", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "module_disabled", "no_active_run", "no_question", "not_answered", "nothing_to_edit", "project_archived", "read_only_thread", "reference_refused", "run_active", "stream_expired", "too_large", "unsupported_media_type",
 }
 
 func Generate(cat *module.Catalog) (map[string][]byte, error) {

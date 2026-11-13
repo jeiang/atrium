@@ -56,7 +56,11 @@ func APIFail(w http.ResponseWriter, err error) {
 		w.Header().Set("WWW-Authenticate", realm)
 	}
 	status := Status(e.Code)
-	body := newAPIError(w, status, string(e.Code), e.Error())
+	code := string(e.Code)
+	if e.Reason != "" {
+		code = e.Reason
+	}
+	body := newAPIError(w, status, code, e.Error())
 	body.EffectIDs, body.DiagnosticID = e.EffectIDs, e.DiagnosticID
 	if e.RetryAfter > 0 {
 		body.RetryAfter = retryAfterSeconds(e)
