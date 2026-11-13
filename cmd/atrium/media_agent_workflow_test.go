@@ -252,8 +252,8 @@ func TestImportFilingRenamesAndCleansUp(t *testing.T) {
 	if _, err := os.Stat(movie); !os.IsNotExist(err) {
 		t.Fatalf("the import residue remains: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(other, "Other.2021.sample.mkv")); err != nil {
-		t.Fatalf("the cleanup removed an import that still holds a video: %v", err)
+	if _, err := os.Stat(other); !os.IsNotExist(err) {
+		t.Fatalf("the cleanup kept an import that holds only a sample: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "movies", "Other (2021)", "Other (2021).mkv")); err != nil {
 		t.Fatal(err)
@@ -261,8 +261,24 @@ func TestImportFilingRenamesAndCleansUp(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	mediaEffectID(t, d, media.OpImportCleanup, media.Import+"/Movie.2020", "done")
-	if n := mediaEffectCount(t, d, media.OpImportCleanup, media.Import+"/Other.2021"); n != 0 {
-		t.Fatalf("cleanup effects for an import with a sample = %d", n)
+	mediaEffectID(t, d, media.OpImportCleanup, media.Import+"/Other.2021", "done")
+	filed := mediaEffectID(t, d, media.OpFile, media.Import+"/Movie.2020", "done")
+	if ran := runApp(t, "effects", "undo", fmt.Sprint(filed)); ran.code != cli.ExitOK {
+		t.Fatalf("undo after cleanup: %d %s", ran.code, ran.stderr)
+	}
+	if body, err := os.ReadFile(filepath.Join(movie, "Movie.2020.mkv")); err != nil || string(body) != "movie bytes" {
+		t.Fatalf("the undo did not restore the import %q %v", body, err)
+	}
+	if _, err := os.Stat(placed); !os.IsNotExist(err) {
+		t.Fatalf("the undo left the filed movie: %v", err)
+	}
+	shown := runApp(t, "effects", "show", fmt.Sprint(filed))
+	var effect ledger.Effect
+	if shown.code != cli.ExitOK || json.Unmarshal([]byte(shown.stdout), &effect) != nil || effect.UndoneBy == nil || effect.Undoable {
+		t.Fatalf("the filing after undo: %d %s", shown.code, shown.stdout)
+	}
+	if ran := runApp(t, "effects", "undo", fmt.Sprint(filed)); ran.code == cli.ExitOK || ran.stderr == "" {
+		t.Fatalf("a second undo was accepted: %d %s", ran.code, ran.stdout)
 	}
 	id := mediaEffectID(t, d, media.OpFile, media.Import+"/Other.2021", "done")
 	changed := filepath.Join(root, "movies", "Other (2021)", "Other (2021).mkv")
@@ -273,17 +289,115 @@ func TestImportFilingRenamesAndCleansUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	ran := runApp(t, "effects", "undo", fmt.Sprint(id))
-	var undone struct {
-		State string `json:"state"`
-	}
-	if ran.code == cli.ExitOK && (json.Unmarshal([]byte(ran.stdout), &undone) != nil || undone.State == string(ledger.Done)) {
+	if ran.code == cli.ExitOK {
 		t.Fatalf("the undo of a changed destination succeeded: %s", ran.stdout)
 	}
 	if body, err := os.ReadFile(changed); err != nil || string(body) != "replaced by hand" {
 		t.Fatalf("the refused undo touched the destination: %q %v", body, err)
 	}
-	if _, err := os.Stat(filepath.Join(other, "Other.2021.mkv")); !os.IsNotExist(err) {
-		t.Fatalf("the refused undo restored the source: %v", err)
+	if _, err := os.Stat(other); !os.IsNotExist(err) {
+		t.Fatalf("the refused undo touched the import: %v", err)
+	}
+}
+
+func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the read-only folder that stops the second placement")
+	}
+	const hash = "dededededededededededededededededededede"
+	name := "Lanterns.S01E01.S02E01.1080p.WEB"
+	dir := t.TempDir()
+	qb, qbURL := mnpNewQbit(t)
+	_, root := agentLibrary(t, dir, qbURL)
+	content := filepath.Join(root, "downloads", name)
+	mnpWrite(t, filepath.Join(content, "Lanterns.S01E01.mkv"), []byte("one"))
+	mnpWrite(t, filepath.Join(content, "Lanterns.S02E01.mkv"), []byte("two"))
+	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	show := filepath.Join(root, "tv", "Lanterns (2026)")
+	if err := os.Mkdir(show, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(show, 0o775|os.ModeSetgid); err != nil {
+		t.Fatal(err)
+	}
+	blocked := filepath.Join(show, "Season 02")
+	mnpWrite(t, blocked, []byte("not a folder"))
+
+	seedAllFlagsIn(t, dir)
+	b := mnpNewBrowser(t, startServeIn(t, dir))
+	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
+	form := url.Values{"id": {hash}, "action": {"file"}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {"2026"},
+		"s0": {"1"}, "e0": {"1"}, "s1": {"2"}, "e1": {"1"}}
+	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
+		t.Fatal("a plan whose season folder is a file was filed")
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	if n := mediaEffectCount(t, d, media.OpFile, hash); n != 0 {
+		t.Fatalf("a refused plan recorded %d effects", n)
+	}
+	if _, err := os.Stat(filepath.Join(show, "Season 01")); !os.IsNotExist(err) {
+		t.Fatalf("a refused plan created a folder: %v", err)
+	}
+
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(blocked, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(blocked, 0o575|os.ModeSetgid); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o775) })
+	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
+		t.Fatal("a filing stopped by a read-only season folder reported success")
+	}
+	id := mediaEffectID(t, d, media.OpFile, hash, "partial")
+	if counts := mediaAudit(t, d, "media.file-item", "partial"); counts["placed"] != 1 {
+		t.Fatalf("partial audit %v, want placed=1", counts)
+	}
+	first := filepath.Join(show, "Season 01", "Lanterns (2026) - S01E01.mkv")
+	placed, err := os.Stat(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src, err := os.Stat(filepath.Join(content, "Lanterns.S01E01.mkv")); err != nil || !os.SameFile(placed, src) {
+		t.Fatalf("the first placement is not a link to the download: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(blocked, "Lanterns (2026) - S02E01.mkv")); !os.IsNotExist(err) {
+		t.Fatalf("the blocked placement exists: %v", err)
+	}
+	if tags, _ := qb.state(hash); slices.Contains(tags, media.TagFiled) {
+		t.Fatalf("a partial filing tagged the torrent %v", tags)
+	}
+	shown := runApp(t, "effects", "show", fmt.Sprint(id))
+	if shown.code != cli.ExitOK {
+		t.Fatalf("effects show: %d %s", shown.code, shown.stderr)
+	}
+	for _, want := range []string{"Lanterns (2026)/Season 01/Lanterns (2026) - S01E01.mkv", "Lanterns (2026)/Season 02/Lanterns (2026) - S02E01.mkv"} {
+		if !strings.Contains(shown.stdout, want) {
+			t.Fatalf("effects show does not list %q: %s", want, shown.stdout)
+		}
+	}
+}
+
+func TestImportWithASymlinkShowsTheAgentRefusal(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	_, qbURL := mnpNewQbit(t)
+	_, root := agentLibrary(t, dir, qbURL)
+	item := filepath.Join(root, "import", "Linked.2022")
+	mnpWrite(t, filepath.Join(item, "Linked.2022.mkv"), []byte("linked"))
+	if err := os.Symlink(filepath.Join(dir, "elsewhere.jpg"), filepath.Join(item, "poster.jpg")); err != nil {
+		t.Fatal(err)
+	}
+	seedAllFlagsIn(t, dir)
+	b := mnpNewBrowser(t, startServeIn(t, dir))
+	body := b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
+	if !strings.Contains(body, "Linked.2022") || !strings.Contains(body, "the media agent refused the source (") {
+		t.Fatalf("the import with a symlink is not shown with its refusal: %s", body)
 	}
 }
 

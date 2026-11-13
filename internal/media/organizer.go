@@ -136,7 +136,10 @@ func (t Tuning) Items(ctx context.Context, qb *Qbit, agent *agentclient.Client, 
 	}
 	for _, entry := range imports {
 		item := Item{ID: importPref + path.Base(entry.Rel), Name: path.Base(entry.Rel), Source: entry}
-		if err := t.fill(ctx, agent, &item); err == nil && len(item.Files) > 0 {
+		if err := t.fill(ctx, agent, &item); err != nil {
+			item.Error = agentText(err)
+		}
+		if item.Error != "" || len(item.Files) > 0 {
 			found = append(found, item)
 		}
 	}

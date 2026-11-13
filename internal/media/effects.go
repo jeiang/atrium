@@ -317,6 +317,9 @@ func undoAgent(store *ledger.Store, env config.Env) ledger.Undoer {
 			}
 			res, err := agent.File(ctx, protocol.FilingRequest{Key: protocol.UndoKey(u.ForwardKey), UndoOf: u.ForwardKey})
 			var e *agentclient.Error
+			if errors.As(err, &e) && e.Mutation == protocol.MutationNone && e.Code == protocol.CodeBusy {
+				return ledger.Result{}, ledger.Refused("the media agent has no confirmed result for this filing because it was resolved by hand; undo it by hand")
+			}
 			if errors.As(err, &e) && e.Mutation == protocol.MutationNone && e.Status != 503 {
 				return ledger.Result{}, ledger.Refused("the media agent cannot undo this filing (" + e.Code + ")")
 			}
