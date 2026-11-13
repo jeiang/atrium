@@ -272,6 +272,14 @@ func wireStruct(t reflect.Type) bool {
 }
 
 func wireType(t reflect.Type, seen map[reflect.Type]bool) string {
+	if u, ok := application.UnionOf(t); ok {
+		for _, kind := range u.Kinds() {
+			if reason := wireType(u.Variants[kind], seen); reason != "" {
+				return reason
+			}
+		}
+		return ""
+	}
 	switch t.Kind() {
 	case reflect.Interface, reflect.Func, reflect.Chan, reflect.UnsafePointer, reflect.Complex64, reflect.Complex128, reflect.Uintptr:
 		return "has a field of type " + t.String()

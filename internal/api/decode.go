@@ -66,9 +66,9 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 			case limitType:
 				n, err := strconv.Atoi(raw)
 				if raw == "" {
-					n, err = limitDefault, nil
+					n, err = LimitDefault, nil
 				}
-				if err != nil || n < 1 || n > limitMax {
+				if err != nil || n < 1 || n > LimitMax {
 					web.APIError(w, http.StatusUnprocessableEntity, "invalid", "limit must be between 1 and 100.",
 						web.FieldError{Type: "int_range", Loc: []string{"query", name}, Msg: "Input should be between 1 and 100", Input: raw})
 					return false

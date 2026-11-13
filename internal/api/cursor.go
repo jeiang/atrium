@@ -13,9 +13,9 @@ import (
 
 const (
 	cursorVersion = 1
-	cursorMax     = 2048
-	limitDefault  = 50
-	limitMax      = 100
+	CursorMax     = 2048
+	LimitDefault  = 50
+	LimitMax      = 100
 )
 
 type Limit int
@@ -66,7 +66,7 @@ func parseCursor(op application.Name, query url.Values, raw string) (Cursor, boo
 	if raw == "" {
 		return c, true
 	}
-	if len(raw) > cursorMax {
+	if len(raw) > CursorMax {
 		return Cursor{}, false
 	}
 	data, err := base64.RawURLEncoding.DecodeString(raw)

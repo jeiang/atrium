@@ -1,6 +1,11 @@
 package application
 
-import "reflect"
+import (
+	"fmt"
+	"maps"
+	"reflect"
+	"slices"
+)
 
 type BodyKind string
 
@@ -28,4 +33,49 @@ type APIShape struct {
 	Body      BodyKind
 	Sensitive bool
 	Errors    []Code
+}
+
+var Codes = []Code{Invalid, NotFound, Unauthenticated, Forbidden, Conflict, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}
+
+func RequiresAPI(authority []Authority) bool {
+	return slices.ContainsFunc(authority, func(a Authority) bool { return a == Operator || a == OperatorSend || a == Approved })
+}
+
+const UnionDiscriminator = "kind"
+
+type Union struct {
+	Interface reflect.Type
+	Variants  map[string]reflect.Type
+}
+
+func (u Union) Kinds() []string { return slices.Sorted(maps.Keys(u.Variants)) }
+
+var (
+	unions   = map[reflect.Type]Union{}
+	variants = map[reflect.Type]string{}
+)
+
+func RegisterUnion[T any](kinds map[string]reflect.Type) {
+	iface := reflect.TypeFor[T]()
+	if iface.Kind() != reflect.Interface || unions[iface].Interface != nil {
+		panic(fmt.Sprintf("application: union %s is not a new interface", iface))
+	}
+	for kind, t := range kinds {
+		f, ok := t.FieldByName("Kind")
+		if t.Kind() != reflect.Struct || !t.Implements(iface) || !ok || f.Tag.Get("json") != UnionDiscriminator {
+			panic(fmt.Sprintf("application: union %s variant %s must be a struct implementing it with a Kind field tagged json:%q", iface, t, UnionDiscriminator))
+		}
+		variants[t] = kind
+	}
+	unions[iface] = Union{Interface: iface, Variants: maps.Clone(kinds)}
+}
+
+func UnionOf(t reflect.Type) (Union, bool) {
+	u, ok := unions[t]
+	return u, ok
+}
+
+func VariantKind(t reflect.Type) (string, bool) {
+	kind, ok := variants[t]
+	return kind, ok
 }

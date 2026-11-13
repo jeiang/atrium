@@ -1,13 +1,17 @@
 package coremodule
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/jeiang/atrium/internal/apischema"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
@@ -78,6 +82,41 @@ func catalogCommand(mc module.Context) *cli.Command {
 				return cli.ExitOK
 			}
 		},
+	}, {
+		Name: "openapi",
+		Help: "generate the OpenAPI document and API reach report",
+		Setup: func(a *cli.Args) cli.Handler {
+			output := a.String("output", "", cli.Opt{Help: "write openapi.json and reach.json into this directory"})
+			check := a.String("check", "", cli.Opt{Help: "exit 1 when the files in this directory differ from the generated ones"})
+			return func(env *cli.Env) int {
+				files, err := apischema.Generate(mc.Catalog())
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				switch {
+				case *check != "":
+					for _, name := range []string{apischema.OpenAPIFile, apischema.ReachFile} {
+						have, err := os.ReadFile(filepath.Join(*check, name))
+						if err != nil || !bytes.Equal(have, files[name]) {
+							_, _ = fmt.Fprintf(env.Stderr, "%s is out of date; regenerate it with: go run ./cmd/atrium catalog openapi --output %s\n", filepath.Join(*check, name), *check)
+							return cli.ExitError
+						}
+					}
+				case *output != "":
+					if err := os.MkdirAll(*output, 0o755); err != nil {
+						return cli.Fail(env, err)
+					}
+					for _, name := range []string{apischema.OpenAPIFile, apischema.ReachFile} {
+						if err := os.WriteFile(filepath.Join(*output, name), files[name], 0o644); err != nil {
+							return cli.Fail(env, err)
+						}
+					}
+				default:
+					_, _ = env.Stdout.Write(files[apischema.OpenAPIFile])
+				}
+				return cli.ExitOK
+			}
+		},
 	}}}
 }
 
@@ -106,18 +145,12 @@ func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation 
 				row.APIRoutes = append(row.APIRoutes, b.Target)
 			}
 		}
-		if missingAPI && (row.Area != "" || !operatorAuthority(op.Authority)) {
+		if missingAPI && (row.Area != "" || !application.RequiresAPI(op.Authority)) {
 			continue
 		}
 		out = append(out, row)
 	}
 	return out
-}
-
-func operatorAuthority(authority []application.Authority) bool {
-	return slices.ContainsFunc(authority, func(a application.Authority) bool {
-		return a == application.Operator || a == application.OperatorSend || a == application.Approved
-	})
 }
 
 func catalogUnboundItems(env *cli.Env, cat *module.Catalog) ([]catalogUnbound, error) {
