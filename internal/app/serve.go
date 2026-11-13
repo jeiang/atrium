@@ -39,7 +39,7 @@ func (b *Bindings) ServeCommand(pages ...web.Page) *cli.Command {
 				env.Ctx = audit.With(env.Ctx, "", "")
 				plan, ok := flags().Resolve(env.Stderr, env.Env)
 				if !ok {
-					return cli.ExitError
+					return cli.ExitConfig
 				}
 				if err := b.serve(env.Ctx, ListenOptions{Plan: plan, Pages: pages, Tools: b.tools, Now: b.now}); err != nil {
 					return serveExit(env, err)
@@ -60,7 +60,33 @@ func serveExit(env *cli.Env, err error) int {
 		log.Info("serve stopped on a signal", logx.Err, err.Error())
 		return cli.ExitOK
 	}
-	return cli.Fail(env, err)
+	if code := cli.Fail(env, err); code != cli.ExitError || !permanentRefusal(err) {
+		return code
+	}
+	log.Error("serve refused to start; fix the configuration before starting it again", logx.Err, err.Error())
+	return cli.ExitConfig
+}
+
+// refusal marks a startup error that repeats on every start until the operator changes the
+// configuration.
+type refusal struct{ err error }
+
+func (e *refusal) Error() string { return e.err.Error() }
+
+func (e *refusal) Unwrap() error { return e.err }
+
+// permanentRefusal reports a startup error that a restart cannot fix: invalid configuration
+// or settings, a missing or wrong database key, or a schema this build does not know.
+// Everything else (an address not yet available, a held lock, a dependency down) is transient.
+func permanentRefusal(err error) bool {
+	return errors.As(err, new(*refusal)) ||
+		errors.As(err, new(db.KeyError)) ||
+		errors.As(err, new(*db.FutureSchemaError)) ||
+		errors.Is(err, db.ErrNotV3) ||
+		errors.As(err, new(settings.Invalid)) ||
+		errors.As(err, new(settings.InvalidDef)) ||
+		errors.As(err, new(settings.FieldInvalid)) ||
+		errors.As(err, new(*settings.PinnedError))
 }
 
 func (b *Bindings) serve(ctx context.Context, o ListenOptions) error {
@@ -83,7 +109,7 @@ func (e *uncleanStop) Unwrap() error { return e.err }
 
 func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if _, err := a.state.Location(a.env); err != nil {
-		return fmt.Errorf("the tz setting is not a time zone: %w", err)
+		return &refusal{fmt.Errorf("the tz setting is not a time zone: %w", err)}
 	}
 	cmds, err := commands.Open(ctx, a.db, func() ([]byte, error) { return actionlink.Material(ctx, a.db.Write) })
 	if err != nil {

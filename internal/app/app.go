@@ -43,7 +43,7 @@ type App struct {
 func Open(ctx context.Context, env config.Env, cat *module.Catalog, mode Mode) (*App, error) {
 	cfg, err := config.Load(env)
 	if err != nil {
-		return nil, err
+		return nil, &refusal{err}
 	}
 	st := config.From(ctx)
 	k := st.DBKey()

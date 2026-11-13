@@ -277,10 +277,10 @@
     wants = ["network-online.target"] ++ cfg.embeddingServerUnits;
     environment = appEnvironment // lib.optionalAttrs needsPublicHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
-    unitConfig = {
-      StartLimitIntervalSec = "10min";
-      StartLimitBurst = 5;
-    };
+    # Transient failures (an address not yet available, a held lock, a dependency down) exit 1
+    # and are retried every 5 s without limit; permanent refusals exit 2 (usage) or 78
+    # (invalid configuration, database key or schema) and stop the unit.
+    unitConfig.StartLimitIntervalSec = 0;
     serviceConfig =
       hardening
       // mediaWriter
@@ -298,6 +298,7 @@
         KillSignal = "SIGTERM";
         Restart = "on-failure";
         RestartSec = "5s";
+        RestartPreventExitStatus = "2 78";
       };
     wantedBy = ["multi-user.target"];
   };
