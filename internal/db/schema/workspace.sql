@@ -20,3 +20,27 @@ CREATE TABLE IF NOT EXISTS thread_files (
 );
 CREATE INDEX IF NOT EXISTS thread_files_thread ON thread_files (thread_id, id);
 CREATE INDEX IF NOT EXISTS thread_files_project ON thread_files (project_id, id);
+CREATE TRIGGER IF NOT EXISTS thread_files_read_insert AFTER INSERT ON thread_files BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_files_read_update AFTER UPDATE ON thread_files BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_files_read_delete AFTER DELETE ON thread_files BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_plans_read_insert AFTER INSERT ON thread_plans BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_plans_read_update AFTER UPDATE ON thread_plans BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_plans_read_delete AFTER DELETE ON thread_plans BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -371,5 +372,104 @@ func TestInferenceMemoryMonthlyRefusalResumesNextMonth(t *testing.T) {
 	}
 	if pending != 0 {
 		t.Errorf("%d memory jobs not done after the next month", pending)
+	}
+}
+
+func TestInferenceReservationAndSettlementBumpTheUsageRevision(t *testing.T) {
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+	revision := func() int64 {
+		t.Helper()
+		var v int64
+		if err := d.Read.QueryRow("SELECT COALESCE((SELECT value FROM read_revisions WHERE scope = 'assistant'), 0)").Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	w := asstBrowse(t, startServeIn(t, dir))
+	usagePage := func() string {
+		t.Helper()
+		code, page, _ := w.get("/settings/usage", false)
+		if code != 200 {
+			t.Fatalf("GET /settings/usage = %d: %.500s", code, page)
+		}
+		return page
+	}
+	before := revision()
+	usagePage()
+
+	api.Push(asstReply("held"))
+	release := make(chan struct{})
+	arrived := make(chan struct{})
+	var once sync.Once
+	api.SetOnRequest(func(r anthropictest.Request) {
+		api.mu.Lock()
+		api.seen = append(api.seen, r)
+		api.mu.Unlock()
+		if r.Path != "/v1/messages" || !strings.Contains(string(r.Body), "reservation probe") {
+			return
+		}
+		once.Do(func() {
+			close(arrived)
+			<-release
+		})
+	})
+	done := make(chan appRun, 1)
+	go func() {
+		done <- asstRunApp(asstApp(f), context.Background(), "agent", "run", "--text", "reservation probe")
+	}()
+	<-arrived
+
+	var id, reservationN int64
+	var state string
+	if err := d.Read.QueryRow("SELECT id, state, reservation_nusd FROM usage ORDER BY id DESC LIMIT 1").Scan(&id, &state, &reservationN); err != nil {
+		close(release)
+		t.Fatal(err)
+	}
+	held := revision()
+	page := usagePage()
+	close(release)
+	ran := <-done
+	if ran.code != cli.ExitOK {
+		t.Fatalf("held run: %d %s", ran.code, ran.stderr)
+	}
+	if state != "reserved" || reservationN <= 0 {
+		t.Fatalf("in-flight row %d: state %q reservation %d, want a reservation", id, state, reservationN)
+	}
+	if held <= before {
+		t.Errorf("assistant revision %d while the reservation is held, want above %d", held, before)
+	}
+	if want := fmt.Sprintf("$%.2f reserved", float64(reservationN)/inference.NanoUSD); !strings.Contains(page, want) {
+		t.Errorf("usage page during the call lacks %q", want)
+	}
+
+	if err := d.Read.QueryRow("SELECT state FROM usage WHERE id = ?", id).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	settled := revision()
+	if state != "settled" || settled <= held {
+		t.Errorf("after settlement: row %d state %q, assistant revision %d, want settled above %d", id, state, settled, held)
+	}
+	if page := usagePage(); !strings.Contains(page, "$0.00 reserved") {
+		t.Error("usage page after settlement still shows a reservation")
+	}
+
+	now := float64(time.Now().UnixMicro()) / 1e6
+	asstExec(t, d, "INSERT INTO usage (attempt_key, ts, month, expires_at, state, budget_class, reservation_nusd, source, provider, thread_id, run_id, kind, model, effort, iterations, tier, cost_usd) "+
+		"VALUES ('reservation-probe', ?, ?, ?, 'reserved', 'interactive', 1250000000, ?, 'anthropic', 1, 1, 'chat', 'claude-haiku-5-5', 'medium', '[]', '<=100K', 0)",
+		now, asstMonth(t, now), now+3600, inference.SourceLoop)
+	if got := revision(); got != settled+1 {
+		t.Errorf("assistant revision %d after one reservation row, want %d", got, settled+1)
+	}
+	if page := usagePage(); !strings.Contains(page, "$1.25 reserved") {
+		t.Error("usage page lacks the $1.25 reservation")
+	}
+	asstExec(t, d, "UPDATE usage SET state = 'settled', settled_at = ?, accounted_nusd = 1000000000 WHERE attempt_key = 'reservation-probe'", now)
+	if got := revision(); got != settled+2 {
+		t.Errorf("assistant revision %d after settling the reservation row, want %d", got, settled+2)
+	}
+	if page := usagePage(); !strings.Contains(page, "$0.00 reserved") {
+		t.Error("usage page still shows the settled reservation")
 	}
 }

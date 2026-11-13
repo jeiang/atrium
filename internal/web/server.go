@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
@@ -143,6 +145,7 @@ type Options struct {
 	OIDC         *oidc.Service
 	Policy       *Policy
 	OnReady      func(*Deps) error
+	Bindings     map[string][]application.Binding
 }
 
 type Server struct {
@@ -191,7 +194,7 @@ func New(o Options) (*Server, error) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
 	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, base: o.Ctx, db: o.DB}
-	s.registrations = &registrations{seen: map[routeKey]string{}}
+	s.registrations = &registrations{seen: map[routeKey]string{}, bindings: o.Bindings}
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
 	if o.DB != nil {
 		s.bearers = bearer.New(o.DB, o.OIDC)
@@ -273,6 +276,28 @@ func New(o Options) (*Server, error) {
 		}),
 	)
 	return s, nil
+}
+
+func (s *Server) Unbound() []Route { return s.registrations.unbound() }
+
+func Unbound(ctx context.Context, pages []Page) ([]Route, error) {
+	var modules []Module
+	bindings := map[string][]application.Binding{}
+	for _, p := range pages {
+		if p.Module != nil {
+			modules = append(modules, p.Module)
+		}
+		maps.Copy(bindings, p.Bindings)
+	}
+	srv, err := New(Options{Ctx: ctx, Modules: modules, Bindings: bindings})
+	if err != nil {
+		return nil, err
+	}
+	unbound := srv.Unbound()
+	if err := srv.Close(); err != nil {
+		return nil, err
+	}
+	return unbound, nil
 }
 
 func instrument(next http.Handler) http.Handler {

@@ -162,7 +162,7 @@ var liveUndoers = []struct {
 	}},
 }
 
-func Undo(open mail.OpenFunc, q db.Querier) []ledger.UndoDefinition {
+func Undo(open mail.OpenFunc, d *db.DB) []ledger.UndoDefinition {
 	out := make([]ledger.UndoDefinition, 0, len(liveUndoers))
 	for _, u := range liveUndoers {
 		u := u
@@ -170,7 +170,7 @@ func Undo(open mail.OpenFunc, q db.Querier) []ledger.UndoDefinition {
 			Validate: validateUndo(u.name),
 			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-				value, err := u.fn(safety.ApprovedWrites(ctx, "undo"), open, q, raw)
+				value, err := u.fn(safety.ApprovedWrites(ctx, "undo"), open, d.Read, raw)
 				return undoResult(value, err)
 			},
 			After: clearCorrection,

@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS effect_resolutions (
     proposal_id INTEGER REFERENCES proposals(id),
     ts REAL NOT NULL,
     actor TEXT NOT NULL,
-    source TEXT NOT NULL CHECK(source IN ('cli','ui','phone','import')),
+    source TEXT NOT NULL CHECK(source IN ('cli','ui','api','tool','job','phone','import')),
     outcome TEXT NOT NULL,
     effective_outcome TEXT CHECK(effective_outcome IN ('done','failed','partial')),
     prior_state TEXT,
@@ -86,3 +86,51 @@ CREATE TABLE IF NOT EXISTS effect_import_refs (
     resolution_id INTEGER REFERENCES effect_resolutions(id),
     PRIMARY KEY(source_table, source_id, role)
 );
+CREATE TRIGGER IF NOT EXISTS effects_read_insert AFTER INSERT ON effects BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effects_read_update AFTER UPDATE OF id, created_at, settled_at, token, origin, operation, operation_key, direction, undo_of, proposal_id, thread_id, run_id, account, message_id, digest, decision_id, src, dest, target, action_json, before_json, after_json, undo_json, state, error, undone_by, legacy_json ON effects BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effects_read_delete AFTER DELETE ON effects BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_resources_read_insert AFTER INSERT ON effect_resources BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_resources_read_update AFTER UPDATE ON effect_resources BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_resources_read_delete AFTER DELETE ON effect_resources BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_resolutions_read_insert AFTER INSERT ON effect_resolutions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_resolutions_read_update AFTER UPDATE ON effect_resolutions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_resolutions_read_delete AFTER DELETE ON effect_resolutions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_import_refs_read_insert AFTER INSERT ON effect_import_refs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_import_refs_read_update AFTER UPDATE ON effect_import_refs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS effect_import_refs_read_delete AFTER DELETE ON effect_import_refs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('effects',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

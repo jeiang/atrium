@@ -195,8 +195,13 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
+	operations, bindings, err := compileOperations(decls)
+	if err != nil {
+		return nil, err
+	}
 	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
-		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services}, nil
+		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
+		operations: operations, bindings: bindings}, nil
 }
 
 func compileJobs(decls []Declaration, byName map[string]Declaration) ([]scheduler.Definition, error) {

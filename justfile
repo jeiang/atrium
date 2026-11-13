@@ -5,7 +5,7 @@ default:
   @just --list
 
 verify:
-  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs check && go run ./tools/registrationownership'
+  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs check && go run ./tools/registrationownership && go run ./tools/adapterboundary'
 
 tools-docs:
   {{dev}} go run ./cmd/toolsdocs
@@ -62,6 +62,7 @@ check-quick:
   fi
   go run ./tools/tableownership
   go run ./tools/registrationownership
+  go run ./tools/adapterboundary
   nix eval --raw ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).module.drvPath" >/dev/null
 
 # Build one x86_64-linux check on artemis; flake sources are git-tracked files only, so git add new files first

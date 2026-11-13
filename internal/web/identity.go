@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -31,18 +32,10 @@ var (
 	errUnavailable = errors.New("session lookup failed")
 )
 
-type Identity struct {
-	Source  string
-	Subject string
-	Email   string
-	Name    string
-}
-
-type identityKey struct{}
+type Identity = authapp.Principal
 
 func IdentityOf(ctx context.Context) (Identity, bool) {
-	who, ok := ctx.Value(identityKey{}).(Identity)
-	return who, ok
+	return authapp.PrincipalOf(ctx)
 }
 
 func (g *Guard) identify(r *http.Request) (Identity, error) {

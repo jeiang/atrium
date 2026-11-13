@@ -46,6 +46,7 @@ const (
 	convert
 	drop
 	fresh
+	derive
 )
 
 func (a importAction) String() string {
@@ -58,6 +59,8 @@ func (a importAction) String() string {
 		return "converted"
 	case fresh:
 		return "kept empty"
+	case derive:
+		return "derived"
 	default:
 		return "dropped"
 	}
@@ -195,6 +198,7 @@ var importTables = []tablePlan{
 	{table: "job_runs", action: drop, why: "job history is not carried; the jobs are"},
 	{table: "job_run_threads", action: fresh, why: "new in v3; job history is not carried"},
 	{table: "job_resource_leases", action: fresh, why: "new in v3; no claim survives an import"},
+	{table: "operation_audit", action: fresh, why: "new in v3; no operation history is made up from imported rows"},
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
 	{table: "pass_run_alerts", action: drop, why: "ops pass history is not carried"},
@@ -219,6 +223,7 @@ var importTables = []tablePlan{
 	{table: "db_key_history", action: drop, why: "key history belongs to the destination's key lineage; old backups are read with the old key"},
 	{table: "module_migrations", action: drop, why: "v3 has no modules"},
 	{table: "schema_migrations", action: drop, why: "the destination records its own schema version"},
+	{table: "read_revisions", action: derive, why: "new in v3; read revision scopes counted by the destination as rows arrive, none taken from the source"},
 }
 
 var ftsParents = []string{"message_fts", "thread_fts", "kb_fts", "notion_fts", "memory_fts"}
@@ -1089,10 +1094,10 @@ func planTables(names []string, active embed.Index) ([]tablePlan, error) {
 	}
 	for _, plan := range importTables {
 		switch {
-		case plan.action == fresh && present[plan.table]:
+		case (plan.action == fresh || plan.action == derive) && present[plan.table]:
 			return nil, fmt.Errorf("db import-v2: the source has a %s table; it is not a v2 database at version %d",
 				plan.table, v2Version)
-		case plan.action != fresh && !present[plan.table]:
+		case plan.action != fresh && plan.action != derive && !present[plan.table]:
 			return nil, fmt.Errorf("db import-v2: the source has no %s table; it is not a v2 database at version %d",
 				plan.table, v2Version)
 		}
@@ -1129,7 +1134,7 @@ func isShadow(name string, vecParents map[string]bool) bool {
 }
 
 func (im *importer) apply(plan tablePlan) (int64, error) {
-	if plan.action == fresh {
+	if plan.action == fresh || plan.action == derive {
 		return im.countRows(plan.table)
 	}
 	if plan.action == drop {

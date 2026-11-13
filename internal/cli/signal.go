@@ -2,11 +2,14 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/jeiang/atrium/internal/application"
 )
 
 type signalKey struct{}
@@ -62,7 +65,21 @@ func Fail(env *Env, err error) int {
 	if code, ok := canceled(env.Ctx, env.Stderr); ok {
 		return code
 	}
-	printf(env.Stderr, "error: %s\n", err.Error())
+	var e *application.Error
+	if !errors.As(err, &e) {
+		printf(env.Stderr, "error: %s\n", err.Error())
+		return ExitError
+	}
+	printf(env.Stderr, "error: %s\n", e.Error())
+	for _, f := range e.Fields {
+		printf(env.Stderr, "  %s: %s\n", f.Name, f.Message)
+	}
+	if len(e.EffectIDs) > 0 {
+		printf(env.Stderr, "  effects: %v\n", e.EffectIDs)
+	}
+	if e.Code == application.Invalid {
+		return ExitUsage
+	}
 	return ExitError
 }
 

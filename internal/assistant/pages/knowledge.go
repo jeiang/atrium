@@ -135,7 +135,7 @@ func rowsOf(records []kb.Record) []knowledgeRow {
 	return out
 }
 
-func (p *pages) store() *ledger.Store { return p.ledger }
+func (p *pages) store() *ledger.Store { return p.svc().Runner.Ledger }
 
 func (p *pages) knowledgeRoutes(r chi.Router) {
 	r.Get("/library/knowledge", p.knowledgeList)
