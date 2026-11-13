@@ -218,6 +218,26 @@ func addBytes(tw *tar.Writer, name string, data []byte) error {
 	return err
 }
 
+const cancelCheckBytes = 4 << 20
+
+type ctxReader struct {
+	ctx       context.Context
+	r         io.Reader
+	unchecked int64
+}
+
+func (c *ctxReader) Read(p []byte) (int, error) {
+	if c.unchecked <= 0 {
+		if err := c.ctx.Err(); err != nil {
+			return 0, err
+		}
+		c.unchecked = cancelCheckBytes
+	}
+	n, err := c.r.Read(p)
+	c.unchecked -= int64(n)
+	return n, err
+}
+
 type source struct {
 	name string
 	path string
@@ -226,9 +246,12 @@ type source struct {
 	dir  bool
 }
 
-func listFiles(root string) ([]source, error) {
+func listFiles(ctx context.Context, root string) ([]source, error) {
 	var out []source
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil
@@ -287,7 +310,7 @@ func storedSize(seal *Seal, size int64) int64 {
 	return sealedSize(size)
 }
 
-func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, files []source) error {
+func writeArchive(ctx context.Context, out io.Writer, header Header, key db.Key, snapshot string, files []source) error {
 	headerJSON, err := json.Marshal(header)
 	if err != nil {
 		return err
@@ -312,7 +335,7 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 		return err
 	}
 	e, err := writeEntry(tw, dbEntry, info.Size(), 0, func(w io.Writer) error {
-		_, err := io.Copy(w, io.LimitReader(snap, info.Size()))
+		_, err := io.Copy(w, io.LimitReader(&ctxReader{ctx: ctx, r: snap}, info.Size()))
 		return err
 	})
 	_ = snap.Close()
@@ -321,6 +344,9 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 	}
 	entries = append(entries, e)
 	for _, f := range files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if f.dir {
 			if err := tw.WriteHeader(&tar.Header{Name: f.name, Mode: int64(f.mode), Typeflag: tar.TypeDir}); err != nil {
 				return err
@@ -328,10 +354,11 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 			entries = append(entries, Entry{Name: f.name, Mode: f.mode, Dir: true})
 			continue
 		}
-		src, err := os.Open(f.path)
+		file, err := os.Open(f.path)
 		if err != nil {
 			return fmt.Errorf("backup: %s vanished or could not be read: %w", f.name, err)
 		}
+		src := &ctxReader{ctx: ctx, r: file}
 		stored := f.size
 		fill := func(w io.Writer) error {
 			_, err := io.Copy(w, io.LimitReader(src, f.size))
@@ -342,7 +369,10 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 			fill = func(w io.Writer) error { return seal(w, aead, f.name, src, f.size) }
 		}
 		e, err := writeEntry(tw, f.name, stored, f.mode, fill)
-		_ = src.Close()
+		_ = file.Close()
+		if ctxErr := ctx.Err(); err != nil && ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			return err
 		}

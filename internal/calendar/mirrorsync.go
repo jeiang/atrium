@@ -2,10 +2,24 @@ package calendar
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/davmirror"
 )
+
+func MirrorConfigured(ctx context.Context, set Settings, dir string) error {
+	if dir == "" {
+		return config.NotConfigured("the mirror directory is not set")
+	}
+	if _, err := ICloudLogin(ctx, set); err != nil {
+		if missing, ok := errors.AsType[NotConfigured](err); ok {
+			return config.NotConfigured(missing)
+		}
+		return err
+	}
+	return nil
+}
 
 func icloudMirror(ctx context.Context, set Settings, endpoint, dir string, k davmirror.Kind) (davmirror.Stats, error) {
 	if dir == "" {

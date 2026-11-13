@@ -88,8 +88,8 @@ func TestOwnerScheduleSettingRoundTripsThroughTheScheduledPage(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'package-tracking' AND kind = 'builtin'").Scan(&id); err != nil {
 		t.Fatalf("the package-tracking job: %v", err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs WHERE kind IN ('builtin', 'nightly')").Scan(&n); err != nil || n != 12 {
-		t.Fatalf("%d built-in jobs (%v), want 12", n, err)
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs WHERE kind IN ('builtin', 'nightly')").Scan(&n); err != nil || n != int64(len(builtinJobNames)) {
+		t.Fatalf("%d built-in jobs (%v), want %d", n, err, len(builtinJobNames))
 	}
 	code, body, _ := w.post("/scheduled/"+strconv.FormatInt(id, 10)+"/schedule", url.Values{"schedule": {"*/50 * * * *"}}, true)
 	w.want(code, http.StatusOK, body, "*/50 * * * *")

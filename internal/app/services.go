@@ -79,7 +79,6 @@ func (a *App) scheduler(beat func()) *scheduler.Scheduler {
 	enabled := func(name string) bool { return rt.set.Current().Enabled(name) }
 	return jobworker.New(a.Assistant(), a.catalog.Jobs(), jobworker.Options{
 		Enabled:   enabled,
-		Active:    func() bool { return enabled(module.Assistant) },
 		Beat:      beat,
 		Recovered: rt.recover,
 		Work:      a.work,

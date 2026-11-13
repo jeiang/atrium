@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -198,9 +199,17 @@ func (a *Artwork) run(ctx context.Context, argv []string) (string, string, int, 
 
 func execRun(ctx context.Context, argv []string) (string, string, int, error) {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return killGroup(cmd.Process.Pid) }
+	cmd.WaitDelay = processWaitDelay
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
+	if cmd.Process != nil {
+		if kerr := killGroup(cmd.Process.Pid); kerr != nil {
+			log.Warn(fmt.Sprintf("%s: stopping its process group failed", argv[0]), logx.Err, kerr)
+		}
+	}
 	if ctx.Err() != nil {
 		return stdout.String(), stderr.String(), -1, ctx.Err()
 	}
@@ -209,6 +218,15 @@ func execRun(ctx context.Context, argv []string) (string, string, int, error) {
 		return stdout.String(), stderr.String(), exit.ExitCode(), nil
 	}
 	return stdout.String(), stderr.String(), 0, err
+}
+
+const processWaitDelay = 5 * time.Second
+
+func killGroup(pid int) error {
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	return nil
 }
 
 func (a *Artwork) niced(argv ...string) []string {

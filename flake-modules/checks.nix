@@ -96,6 +96,41 @@
     embeddingDependencyKept = assert builtins.all (name: let t = unitText name; in lib.hasInfix "After=" t && lib.hasInfix "llama-embed.service" t) appUnits; true;
     opsPortRefused = assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {web.local.port = 9180;}; assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {host.core.ops_listen = "127.0.0.1:8480";}; assert !(refusedWith "services.atrium.host.core.ops_listen" {host.core.ops_listen = "off";}); true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
+    backupOptionsRefused = let
+      schedule = value: {
+        backup = {
+          enable = true;
+          schedule = value;
+        };
+      };
+      evaluates = backup:
+        (builtins.tryEval (builtins.deepSeq
+          (host {
+            web.allowedHost = "atrium.example.org";
+            inherit backup;
+          }).config.services.atrium.renderedHost.core
+          true)).success;
+    in
+      assert refusedWith "services.atrium.backup.schedule" {backup.onCalendar = "daily";};
+      assert builtins.all (value: refusedWith "is not in the atrium schedule grammar" (schedule value)) ["monthly 1 04:00" "daily 24:00" "weekly 02:30" "daily" "0 4 1 *"];
+      assert !(builtins.any (value: refusedWith "services.atrium.backup.schedule" (schedule value)) ["daily 03:00" "weekly mon 02:30" "Weekly Monday 2:30" "0 4 1 * *" "*/30 2-4 * jan-mar mon-fri"]);
+      assert evaluates {
+        enable = true;
+        keep = 10000;
+        keepDays = 36500;
+      };
+      assert !(evaluates {
+        enable = true;
+        keep = 10001;
+      });
+      assert !(evaluates {
+        enable = true;
+        keepDays = 36501;
+      });
+      assert !(evaluates {
+        enable = true;
+        keep = 0;
+      }); true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
     appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
@@ -112,9 +147,21 @@
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
     assert builtins.all (name: builtins.all (line: lib.hasInfix line (unitText name)) sharedLines) appUnits;
     assert builtins.length (builtins.filter (lib.hasPrefix "LoadCredential=") cfg.runProperties) == builtins.length credentialLines; true;
-    backupAbsentByDefault = assert !(defaults.config.systemd.units ? "atrium-backup.service" || defaults.config.systemd.units ? "atrium-backup.timer"); true;
+    backupInServe = let
+      defaultHost = defaults.config.services.atrium.renderedHost;
+      web = unitText "atrium-web.service";
+    in
+      assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-backup.service" "atrium-backup.timer"]);
+      assert !(builtins.any (key: (defaultHost.core or {}) ? ${key}) ["backup_directory" "backup_keep" "backup_keep_days" "backup_schedule"]);
+      assert !(lib.hasInfix "/var/backups/atrium" defaults.config.systemd.units."atrium-web.service".text);
+      assert cfg.renderedHost.core.backup_directory == "/var/backups/atrium";
+      assert cfg.renderedHost.core.backup_keep == 5;
+      assert cfg.renderedHost.core.backup_keep_days == 14;
+      assert cfg.renderedHost.core.backup_schedule == "daily 03:00";
+      assert builtins.all (dir: lib.hasInfix "ReadWritePaths=${dir}" web) ["/var/lib/media" "/var/lib/atrium-vault" "/var/backups/atrium"]; true;
     notifyUnits = ["atrium-web.service" "atrium-watch.service"];
     schedulerInServe = assert !(nixos.config.systemd.units ? "atrium-agent-scheduler.service");
+    assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-dav-sync.service" "atrium-dav-sync.timer" "atrium-notion-sync.service" "atrium-notion-sync.timer"]);
     assert !(defaults.config.systemd.units ? "atrium-agent-scheduler.service");
     assert !(lib.hasInfix "--no-services" (unitText "atrium-web.service"));
     assert !(nixos.config.systemd.units ? "atrium-web-local.service");
@@ -128,7 +175,7 @@
       notifying = name: let t = unitText name; in lib.hasInfix "Type=notify" t && lib.hasInfix "WatchdogSec=" t;
     in
       assert builtins.all notifying notifyUnits;
-      assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service" "atrium-notion-sync.service" "atrium-backup.service"]); true;
+      assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service"]); true;
     vaultExport = let
       scheduler = unitText "atrium-web.service";
     in
@@ -161,7 +208,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && opsPortRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

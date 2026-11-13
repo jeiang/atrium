@@ -17,7 +17,7 @@ func Settings(defs []Definition) []settings.Def {
 	})
 	var gapped []string
 	for _, def := range defs {
-		if def.PromptRun {
+		if def.PromptRun && def.ScheduleSetting != "" {
 			gapped = append(gapped, def.ScheduleSetting)
 		}
 	}
@@ -28,7 +28,10 @@ func Settings(defs []Definition) []settings.Def {
 func scheduleSettings(defs []Definition) []settings.Def {
 	out := make([]settings.Def, 0, len(defs))
 	for _, def := range defs {
-		s := settings.Value(settings.Advanced, settings.Def{Key: def.ScheduleSetting, Module: "assistant", Type: settings.String, Default: def.Schedule, Check: recurringSchedule})
+		if def.ScheduleSetting == "" {
+			continue
+		}
+		s := settings.Value(settings.Advanced, settings.Def{Key: def.ScheduleSetting, Module: "assistant", Type: settings.String, Default: def.Schedule, Check: RecurringSchedule})
 		if def.PromptRun {
 			s.Peers = minimumGap
 		}
@@ -37,7 +40,7 @@ func scheduleSettings(defs []Definition) []settings.Def {
 	return out
 }
 
-func recurringSchedule(value string) error {
+func RecurringSchedule(value string) error {
 	spec, err := Parse(value, "UTC")
 	if err != nil {
 		return settings.Invalid(err.Error())

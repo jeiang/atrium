@@ -2,12 +2,10 @@ package application
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/passrun"
 )
@@ -95,10 +93,16 @@ func (s *Service) Detail(ctx context.Context, in DetailInput) (application.Read[
 }
 
 func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[SyncResult], error) {
+	client, err := notion.NewClient(ctx, s.db.Read)
+	if err != nil {
+		s.audit(ctx, SyncName, state.Refused, map[string]any{})
+		return application.Change[SyncResult]{}, err
+	}
+	defer client.Close()
 	var out SyncResult
-	err := passrun.Track(ctx, s.db, passrun.NotionSync, func() error {
+	err = passrun.Track(ctx, s.db, passrun.NotionSync, func() error {
 		var err error
-		out, err = s.syncPass(ctx)
+		out, err = s.syncPass(ctx, client)
 		return err
 	})
 	if err != nil {
@@ -113,13 +117,8 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[Syn
 	return application.Change[SyncResult]{Data: out, AuditID: s.audit(ctx, SyncName, state.OK, details)}, nil
 }
 
-func (s *Service) syncPass(ctx context.Context) (SyncResult, error) {
-	client, err := notion.NewClient(ctx, s.db.Read)
-	if err != nil {
-		return SyncResult{}, err
-	}
-	defer client.Close()
-	stats, err := s.locked(ctx, client)
+func (s *Service) syncPass(ctx context.Context, client *notion.Client) (SyncResult, error) {
+	stats, err := notion.Sync(ctx, s.db, client, s.embed)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -129,13 +128,4 @@ func (s *Service) syncPass(ctx context.Context) (SyncResult, error) {
 	}
 	return SyncResult{counts.Sources, counts.Pages, stats.New, stats.Updated, stats.Unchanged, stats.Trashed, stats.Failed,
 		counts.Embedded, stats.Seconds, counts.Live, counts.Private}, nil
-}
-
-func (s *Service) locked(ctx context.Context, client *notion.Client) (notion.Stats, error) {
-	lock, err := db.Exclusive(ctx, filepath.Join(s.lockDir, config.NotionLockName), db.ShortLockWait)
-	if err != nil {
-		return notion.Stats{}, err
-	}
-	defer func() { _ = lock.Close() }()
-	return notion.Sync(ctx, s.db, client, s.embed)
 }

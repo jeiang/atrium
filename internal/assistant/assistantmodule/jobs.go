@@ -35,7 +35,7 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 func assistantJob(name, kind, prompt, schedule, setting string, timeout time.Duration, spend scheduler.Spend) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Assistant, Key: module.Assistant + "/" + name, Name: name, Kind: kind, Prompt: prompt,
-		Schedule: schedule, ScheduleSetting: setting, Timeout: timeout, Spend: spend, Needs: []string{module.Assistant},
+		Schedule: schedule, ScheduleSetting: setting, Persistent: true, Timeout: timeout, Spend: spend, Needs: []string{module.Assistant},
 	}
 }
 
@@ -51,7 +51,6 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 		"weekly sun 18:00", assistant.KeyWeeklyReview, 30*time.Minute, scheduler.AlwaysSpends)
 	weekly.PromptRun = true
 	weekly.Run = deps.Prompt(weeklyReviewPrompt)
-	weekly.Needs = nil
 	nudges := assistantJob(assistant.DailyNudgesName, scheduler.JobBuiltin, "Daily: send the attention digest (no model run).",
 		"daily 08:00", assistant.KeyDailyNudges, 5*time.Minute, scheduler.ModelFree)
 	nudges.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {

@@ -11,6 +11,8 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
+const JobKey = "notion/notion-sync"
+
 type Options struct {
 	Env    config.Env
 	Search func(ctx context.Context, d *db.DB, query string, private bool, limit int) (Result, error)

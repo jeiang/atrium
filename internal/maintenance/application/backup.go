@@ -18,7 +18,8 @@ const (
 )
 
 type BackupInput struct {
-	Dest string `json:"dest"`
+	Dest   string                                  `json:"dest"`
+	Forget func(context.Context, db.Querier) error `json:"-"`
 }
 
 type Backup struct {
@@ -43,7 +44,7 @@ type Restored struct {
 }
 
 func DescribeBackup() application.Definition {
-	return application.Describe[BackupInput, Backup](BackupName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+	return application.Describe[BackupInput, Backup](BackupName, application.Command, []application.Authority{application.Operator, application.System}, application.NoEffect, true)
 }
 
 func DescribeDBBackup() application.Definition {
@@ -68,7 +69,7 @@ func (s *Service) Backup(ctx context.Context, in BackupInput) (application.Chang
 		return application.Change[Backup]{}, err
 	}
 	defer func() { _ = d.Close() }()
-	count, err := backup.Write(ctx, d, cfg, key, in.Dest)
+	count, err := backup.Write(ctx, d, cfg, key, in.Dest, in.Forget)
 	details := map[string]any{"encrypted": !key.IsZero()}
 	if err == nil {
 		details["files"] = count

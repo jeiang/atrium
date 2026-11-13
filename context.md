@@ -349,10 +349,7 @@ behavior-parity target.
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
-  and `atrium restore` (with a `--verify` dry run) restores them. The
-  module's optional `atrium-backup` timer prunes `*.backup` files in its
-  directory after each successful run, keeping the newest `backup.keep`
-  (default 5) plus any from the last `backup.keepDays` (default 14) days.
+  and `atrium restore` (with a `--verify` dry run) restores them.
   `atrium backup` and `atrium db backup` write one `operation_audit` row
   (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
   file count only) to the source database, including refused destinations; a
@@ -371,6 +368,14 @@ behavior-parity target.
   The outcome is `failed` if any statement failed. Backup, restore and shell
   audits are skipped on a database without `operation_audit`, and the import
   freshness check ignores `maintenance.*` audit rows.
+  The persistent serve job `core/backup` (host keys `core.backup_directory`,
+  `core.backup_schedule` default `daily 03:00`, `core.backup_keep` default
+  5, `core.backup_keep_days` default 14; resource `backup`, 2 h, drained on
+  shutdown) writes `atrium-<UTC>.backup` and, after a successful archive,
+  prunes `atrium-*.backup` beyond the newest keep that are older than
+  keep_days. No directory means `skipped_unconfigured`. `atrium backup`
+  shares the job's claim. NixOS `backup.schedule` replaced `onCalendar`;
+  there is no backup unit.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -560,9 +565,21 @@ behavior-parity target.
   an error. It has no
   ticker or service notification; declared invocation deadlines still apply.
   A job that reaches its own declared timeout fails its unsettled runs and
-  ends `error` ("timed out after …"); only shutdown or cancellation releases
-  it for resume.
-  Missing configuration records `skipped_unconfigured`, not success. Nightly
+  ends `error` ("timed out after …"); scheduled shutdown or cancellation
+  releases it for resume. An interrupted assistant job waits as
+  `skipped_module` with no end timestamp while its dependencies are off;
+  its threads remain reserved to that job and resume only under a claim.
+  Consecutive threadless disabled-module skips coalesce into one row.
+  Manual interruption ends `error` ("interrupted"), releases the claim,
+  and never contributes to scheduled backoff. Manual successes do not
+  reset scheduled backoff, and priming preserves a pending retry.
+  A manual invocation that loses its claim exits nonzero.
+  Missing configuration records `skipped_unconfigured`, not success.
+  The Notion mirror is the model-free `notion/notion-sync` serve job
+  (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
+  on shutdown). Its CLI shares the `notion-sync` resource and claim;
+  unconfigured skips record no pass row. The former systemd service and
+  timer are removed when this job is activated. Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
   executes; immediately before a child runs, on the first pass or in

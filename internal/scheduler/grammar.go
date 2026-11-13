@@ -24,6 +24,7 @@ const (
 	KindWeekly         = "weekly"
 	KindCron           = "cron"
 	KindOnce           = "once"
+	KindEvery          = "every"
 	errUnrecognised    = "unrecognised schedule; use an ISO datetime, 'daily HH:MM', 'weekly DOW HH:MM' or a 5-field cron expression"
 	errNeverFires      = "that schedule never fires in the future"
 	secondsPerDay      = 86400
@@ -59,6 +60,7 @@ type Spec struct {
 	DOM     []int
 	Months  []int
 	DOW     []int
+	Every   float64
 	times   [][2]int
 }
 
@@ -256,7 +258,32 @@ func (s Spec) dayMatches(day time.Time) bool {
 	return domOK && dowOK
 }
 
+func EveryText(every time.Duration) string { return KindEvery + " " + every.String() }
+
+func isEvery(text string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(text)), KindEvery+" ")
+}
+
+func parseJob(text, tz string) (Spec, error) {
+	if !isEvery(text) {
+		return Parse(text, tz)
+	}
+	words := strings.Fields(text)
+	every, err := time.ParseDuration(words[len(words)-1])
+	if len(words) != 2 || err != nil || every <= 0 {
+		return Spec{}, Error(errUnrecognised)
+	}
+	loc, err := Zone(tz)
+	if err != nil {
+		return Spec{}, err
+	}
+	return Spec{Kind: KindEvery, TZ: tz, Loc: loc, Every: every.Seconds()}, nil
+}
+
 func (s Spec) NextAfter(after float64) (float64, bool) {
+	if s.Kind == KindEvery {
+		return after + s.Every, true
+	}
 	if s.Kind == KindOnce {
 		return s.OnceAt, s.OnceAt > after
 	}
@@ -299,9 +326,12 @@ func (s Spec) MinGap(after float64) (float64, bool) {
 }
 
 func Describe(text, tz string) string {
-	s, err := Parse(text, tz)
+	s, err := parseJob(text, tz)
 	if err != nil {
 		return text
+	}
+	if s.Kind == KindEvery {
+		return "Every " + describeInterval(int(s.Every))
 	}
 	if s.Kind == KindOnce {
 		return localTime(s.OnceAt, s.Loc).Format("Once on Mon 02 Jan 2006 at 15:04")
@@ -335,7 +365,7 @@ func Describe(text, tz string) string {
 }
 
 func Validate(ctx context.Context, q db.Querier, text, tz string, now float64, enforceMin bool) (Spec, float64, error) {
-	s, err := Parse(text, tz)
+	s, err := parseJob(text, tz)
 	if err != nil {
 		return Spec{}, 0, err
 	}

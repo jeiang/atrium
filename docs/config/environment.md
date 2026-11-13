@@ -11,6 +11,10 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_CALENDAR_CALENDAR_DIR` | `calendar.calendar_dir` |
 | `ATRIUM_CONTACTS_CONTACTS_DIR` | `contacts.contacts_dir` |
 | `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
+| `ATRIUM_CORE_BACKUP_DIRECTORY` | `core.backup_directory` |
+| `ATRIUM_CORE_BACKUP_KEEP` | `core.backup_keep` |
+| `ATRIUM_CORE_BACKUP_KEEP_DAYS` | `core.backup_keep_days` |
+| `ATRIUM_CORE_BACKUP_SCHEDULE` | `core.backup_schedule` |
 | `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |
 | `ATRIUM_CORE_CONTACTS_ENABLED` | `core.contacts_enabled` |
 | `ATRIUM_CORE_GRAFANA_ENABLED` | `core.grafana_enabled` |

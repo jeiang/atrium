@@ -98,6 +98,7 @@ type ScheduleJob struct {
 	LastError       *string `json:"last_error"`
 	LastStartedText *string `json:"last_started_text"`
 	NextDue         *string `json:"-"`
+	Fixed           bool    `json:"-"`
 }
 
 type ScheduleRun struct {
@@ -239,6 +240,8 @@ func (s *Service) ScheduleList(ctx context.Context, in ScheduleListInput) (appli
 			if err != nil {
 				return err
 			}
+			def, declared := scheduler.Declared(s.jobs, j.Job)
+			view.Fixed = declared && def.ScheduleSetting == ""
 			out.Jobs = append(out.Jobs, view)
 			targets = append(targets, target("schedule", j.ID))
 		}
@@ -407,6 +410,9 @@ func (s *Service) ScheduleUpdate(ctx context.Context, in ScheduleUpdateInput) (a
 			}
 			schedule := strings.TrimSpace(*in.Schedule)
 			if def, known := scheduler.Declared(s.jobs, *job); known {
+				if def.ScheduleSetting == "" {
+					return ScheduleChanged{}, ledger.Result{}, refusal("the schedule of " + job.Name + " is fixed by its module")
+				}
 				if err := settings.From(ctx).Set(ctx, tx, def.ScheduleSetting, schedule); err != nil {
 					return ScheduleChanged{}, ledger.Result{}, err
 				}

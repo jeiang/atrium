@@ -2,6 +2,12 @@ package application
 
 import (
 	"context"
+	"errors"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -117,9 +123,17 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[Syn
 		return application.Change[SyncResult]{AuditID: s.audit(ctx, SyncName, state.Noop, map[string]any{"reason": "off"})}, nil
 	case contacts.Unset:
 		s.audit(ctx, SyncName, state.Refused, map[string]any{"reason": "not_configured"})
-		return application.Change[SyncResult]{}, notConfigured()
+		return application.Change[SyncResult]{}, config.NotConfigured(contacts.DirKey + " is not set")
 	}
-	stats, err := calendar.SyncContactsMirror(ctx, s.env, set, src.Dir)
+	err = calendar.MirrorConfigured(ctx, set, src.Dir)
+	var stats davmirror.Stats
+	if err == nil {
+		err = passrun.Track(ctx, s.db, passrun.CardDAV, func() error {
+			var syncErr error
+			stats, syncErr = calendar.SyncContactsMirror(ctx, s.env, set, src.Dir)
+			return syncErr
+		})
+	}
 	if err != nil {
 		outcome := state.Failed
 		if ctx.Err() != nil {
@@ -129,4 +143,21 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[Syn
 		return application.Change[SyncResult]{}, err
 	}
 	return application.Change[SyncResult]{Data: stats, AuditID: s.audit(ctx, SyncName, state.OK, map[string]any{})}, nil
+}
+
+func (s *Service) SyncManual(ctx context.Context, cfg config.Config) (SyncResult, error) {
+	var out SyncResult
+	var syncErr error
+	_, err := module.Invoke(ctx, s.db, cfg, module.Contacts+"/"+passrun.CardDAV, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+		change, runErr := s.Sync(ctx, SyncInput{})
+		out, syncErr = change.Data, runErr
+		if missing, ok := errors.AsType[config.NotConfigured](runErr); ok {
+			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
+		}
+		return scheduler.Result{}, runErr
+	})
+	if err == nil {
+		err = syncErr
+	}
+	return out, err
 }

@@ -146,6 +146,8 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 		n.Module = cronOwner
 	case n.Key == "" || n.Module == "":
 		return 0, Error("a declared job needs its owner module and declaration key")
+	case n.Kind == JobCron && isEvery(n.Schedule):
+		return 0, Error(errUnrecognised)
 	}
 	bypass := n.CreatedBy == Operator
 	_, due, err := Validate(ctx, q, n.Schedule, n.TZ, n.Now, !bypass)
@@ -208,6 +210,9 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 	}
 	schedule := job.Schedule
 	if u.Schedule != nil {
+		if isEvery(*u.Schedule) {
+			return nil, Error(errUnrecognised)
+		}
 		schedule = *u.Schedule
 	}
 	state := job.State

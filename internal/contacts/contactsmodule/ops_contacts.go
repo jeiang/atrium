@@ -8,6 +8,7 @@ import (
 func contactsOperations() ([]application.Definition, []application.Binding) {
 	return contactsapp.Describe(), []application.Binding{
 		{Kind: application.Tool, Target: "contacts_lookup", Uses: []application.Name{contactsapp.LookupName}},
+		{Kind: application.Job, Target: "contacts/carddav", Uses: []application.Name{contactsapp.SyncName}},
 		{Kind: application.CLI, Target: "contacts sync", Uses: []application.Name{contactsapp.SyncName}},
 	}
 }

@@ -302,12 +302,29 @@ func TestSchedulerResumesAnInterruptedJobRunUnderANewClaim(t *testing.T) {
 		t.Errorf("%d resource leases after the signal, want none", n)
 	}
 	releaseFirst()
+	asstSet(t, "assistant_enabled", "false")
+	parked := serveCLIProcess(t, f.dir)
+	waitUntil(t, 30*time.Second, "the interrupted job to wait for its module", func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE id = ? AND status = 'skipped_module' AND ended_at IS NULL", held.run) == 1
+	})
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM runs WHERE thread_id IN (SELECT thread_id FROM job_run_threads WHERE job_run_id = ?) AND state = 'interrupted'", held.run); n != 1 {
+		t.Fatalf("%d interrupted assistant runs while disabled, want 1", n)
+	}
+	if got := len(api.Requests()) - before; got != 1 {
+		t.Fatalf("%d requests while disabled, want only the initial interrupted request", got)
+	}
+	if code := parked.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+		t.Fatalf("disabled serve exit %d: %s", code, parked.stderr.String())
+	}
+	asstSet(t, "assistant_enabled", "true")
 
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 	done2 := make(chan appRun, 1)
 	go func() { done2 <- runAppContext(t, f, ctx2, "agent", "scheduler") }()
-	waitUntil(t, 60*time.Second, "the resumed weekly review to finish", schedulerTerminal(d, "weekly-review"))
+	waitUntil(t, 60*time.Second, "the resumed weekly review to finish", func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE id = ? AND ended_at IS NOT NULL", held.run) == 1
+	})
 	cancel2()
 	<-done2
 	if status, text := schedulerStatus(t, d, "weekly-review"); status != "ok" {

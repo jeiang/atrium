@@ -138,9 +138,7 @@ internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/db
 internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/mail/imapclient
 internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/scheduler
 internal/contacts/contactsmodule/adapters.go	github.com/jeiang/atrium/internal/config
-internal/contacts/contactsmodule/adapters.go	github.com/jeiang/atrium/internal/davmirror
 internal/contacts/contactsmodule/adapters.go	github.com/jeiang/atrium/internal/db
-internal/contacts/contactsmodule/adapters.go	github.com/jeiang/atrium/internal/passrun
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/config
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/db
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/ledger

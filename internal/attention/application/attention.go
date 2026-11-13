@@ -17,17 +17,18 @@ const ReadName application.Name = "attention.read"
 var ErrNoModuleSet = errors.New("attention: no module set")
 
 var sourceScopes = map[string]string{
-	"proposals":   state.Review,
-	"candidates":  state.Calendar,
-	"drafts":      state.Mail,
-	"loops":       state.Mail,
-	"commitments": state.Mail,
-	"packages":    state.Mail,
-	"plans":       state.Assistant,
-	"questions":   state.Assistant,
-	"dreaming":    state.Assistant,
-	"tasks":       state.Tasks,
-	"ops":         state.Ops,
+	"proposals":             state.Review,
+	"candidates":            state.Calendar,
+	"drafts":                state.Mail,
+	"loops":                 state.Mail,
+	"commitments":           state.Mail,
+	"packages":              state.Mail,
+	"classification_budget": state.Assistant,
+	"plans":                 state.Assistant,
+	"questions":             state.Assistant,
+	"dreaming":              state.Assistant,
+	"tasks":                 state.Tasks,
+	"ops":                   state.Ops,
 }
 
 type Service struct {

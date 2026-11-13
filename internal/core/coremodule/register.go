@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/auth/bearercmd"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
+	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -108,10 +109,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		return s
 	}
 	return module.Declaration{
-		Name:              module.Core,
-		Core:              true,
-		Settings:          slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
-		Host:              slices.Concat(config.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Name:     module.Core,
+		Core:     true,
+		Settings: slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
+		Host:     slices.Concat(config.HostSettings(), backup.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Jobs: []scheduler.Definition{backup.Job(mc.Env, func(ctx context.Context, dest string, forget func(context.Context, db.Querier) error) error {
+			_, err := maintenance.Backup(ctx, maintenanceapp.BackupInput{Dest: dest, Forget: forget})
+			return err
+		})},
 		Attention:         AttentionSources(),
 		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics()),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
