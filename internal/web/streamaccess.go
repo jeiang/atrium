@@ -27,10 +27,10 @@ func StreamCredential(ctx context.Context) (string, func(context.Context) error)
 	return a.key, a.check
 }
 
-func (g *Guard) sessionAccess(r *http.Request, who Identity) context.Context {
-	key := string(who.Source)
+func (g *Guard) sessionAccess(r *http.Request, who Identity, browser string) context.Context {
+	key := string(who.Source) + ":browser:" + tokenKey(browser)
 	if who.Source == SourceOIDC {
-		key += ":" + tokenKey(cookieValue(r, sessionCookie, g.secure(r)))
+		key = string(who.Source) + ":" + tokenKey(cookieValue(r, sessionCookie, g.secure(r)))
 	}
 	clone := r.Clone(context.WithoutCancel(r.Context()))
 	return withStreamAccess(r.Context(), key, func(ctx context.Context) error {

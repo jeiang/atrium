@@ -29,21 +29,25 @@ func (p *pages) chatEvents(w http.ResponseWriter, r *http.Request) {
 	} else {
 		errs = append(errs, web.BadInt("query", "run", values[len(values)-1]))
 	}
-	after := queryAfter(r, &errs)
 	if len(errs) > 0 {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	p.serveStream(w, r, threadID, runID, after, func(status int, _ string, message string, _ int64) {
+	p.serveStream(w, r, threadID, runID, func(status int, _ string, message string, _ int64) {
 		p.fail(w, r, status, message)
 	})
 }
 
-func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, threadID, runID, after int64, refuse streamRefusal) {
-	if header := r.Header.Get("Last-Event-ID"); header != "" {
-		n, ok := new(big.Int).SetString(header, 10)
+func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, threadID, runID int64, refuse streamRefusal) {
+	name, raw := "Last-Event-ID", r.Header.Get("Last-Event-ID")
+	if values := r.URL.Query()["after"]; raw == "" && len(values) > 0 {
+		name, raw = "after", values[len(values)-1]
+	}
+	var after int64
+	if raw != "" {
+		n, ok := new(big.Int).SetString(raw, 10)
 		if !ok || !n.IsInt64() {
-			refuse(http.StatusBadRequest, "bad_request", "Last-Event-ID must be an integer.", runID)
+			refuse(http.StatusBadRequest, "bad_request", name+" must be an integer.", runID)
 			return
 		}
 		after = n.Int64()

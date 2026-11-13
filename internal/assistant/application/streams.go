@@ -25,14 +25,15 @@ func DescribeStreamRetention() application.Definition {
 func (s *Service) StreamRetention(ctx context.Context, _ StreamRetentionInput) (application.Change[StreamsPruned], error) {
 	var out StreamsPruned
 	var auditID int64
-	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		if out.Streams, err = progress.Prune(ctx, tx, s.now()); err != nil {
+	pruned, err := progress.Prune(ctx, s.db, s.now())
+	out.Streams = pruned
+	if err == nil {
+		err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
+			var err error
+			auditID, err = s.audit(ctx, tx, StreamRetentionName, "", state.OK)
 			return err
-		}
-		auditID, err = s.audit(ctx, tx, StreamRetentionName, "", state.OK)
-		return err
-	})
+		})
+	}
 	if err != nil {
 		return application.Change[StreamsPruned]{}, s.reject(ctx, StreamRetentionName, "", err)
 	}

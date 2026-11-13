@@ -394,13 +394,7 @@ func (p *pages) apiEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var errs []web.FieldError
-	after := queryAfter(r, &errs)
-	if len(errs) > 0 {
-		web.APIError(w, http.StatusUnprocessableEntity, "invalid", "after must be an integer.", errs...)
-		return
-	}
-	p.serveStream(w, r, threadID, runID, after, func(status int, code, message string, runID int64) {
+	p.serveStream(w, r, threadID, runID, func(status int, code, message string, runID int64) {
 		if status == http.StatusGone {
 			web.APIErrorWith(w, status, code, message, map[string]any{"run_id": runID})
 			return
@@ -521,7 +515,7 @@ type apiStreamEvent struct {
 func APIReadBindings() []application.Binding {
 	return []application.Binding{
 		{Kind: application.API, Target: "GET /threads", Uses: []application.Name{asstapp.ThreadListName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiThreadListRequest](), Response: reflect.TypeFor[web.List[apiListedThread]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
-		{Kind: application.API, Target: "GET /threads/{thread_id}/runs/{run_id}/events", Uses: []application.Name{asstapp.RunEventsName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiEventsRequest](), Response: reflect.TypeFor[apiStreamEvent](), Body: application.BodyEventStream, Success: 200, Errors: []application.Code{application.NotFound, application.Invalid, application.RateLimited}}},
+		{Kind: application.API, Target: "GET /threads/{thread_id}/runs/{run_id}/events", Uses: []application.Name{asstapp.RunEventsName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiEventsRequest](), Response: reflect.TypeFor[apiStreamEvent](), Body: application.BodyEventStream, Success: 200, Errors: []application.Code{application.NotFound, application.RateLimited}}},
 		{Kind: application.API, Target: "GET /threads/{thread_id}", Uses: []application.Name{asstapp.ThreadTranscriptName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiTranscriptRequest](), Response: reflect.TypeFor[apiTranscript](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound, application.Invalid}}},
 	}
 }

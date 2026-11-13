@@ -227,6 +227,7 @@
                   "not_found",
                   "rate_limited",
                   "refused",
+                  "stream_expired",
                   "too_large",
                   "unauthenticated",
                   "unavailable",
@@ -2248,13 +2249,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -2267,23 +2261,10 @@
               }
             },
             "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+            "headers": {}
           },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+          "204": {
+            "description": "No Content"
           },
           "400": {
             "content": {
@@ -2325,15 +2306,30 @@
             },
             "description": "Not Found"
           },
-          "422": {
+          "410": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "run_id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "run_id"
+                      ],
+                      "type": "object"
+                    }
+                  ]
                 }
               }
             },
-            "description": "Unprocessable Entity"
+            "description": "Gone"
           },
           "429": {
             "content": {

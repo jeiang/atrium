@@ -256,6 +256,13 @@ func TestStreamExpiredIs410(t *testing.T) {
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("old answer")))
 	threadID, runID := s.start("old")
 	_, last := s.events(s.token, threadID, runID, "")
+	var backlog []int64
+	for i := range 6 {
+		s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("old backlog")))
+		oldThread, oldRun := s.start(fmt.Sprintf("old %d", i))
+		s.events(s.token, oldThread, oldRun, "")
+		backlog = append(backlog, oldRun)
+	}
 	shift.Store(int64(31 * 24 * time.Hour))
 	free := s.hold()
 	for range 8 {
@@ -267,8 +274,22 @@ func TestStreamExpiredIs410(t *testing.T) {
 	schedulerSeed(t, s.f, s.d)
 	schedulerDue(t, s.d, "stream-retention")
 	schedulerRun(t, s.f, s.d, func() bool {
-		return asstCount(t, s.d, "SELECT COUNT(*) FROM run_streams WHERE run_id = ? AND retained_after = terminal_seq", runID) == 1
+		for _, id := range append([]int64{runID}, backlog...) {
+			if asstCount(t, s.d, "SELECT COUNT(*) FROM run_streams WHERE run_id = ? AND retained_after = terminal_seq", id) != 1 {
+				return false
+			}
+		}
+		return true
 	})
+	for _, old := range backlog {
+		if n := asstCount(t, s.d, "SELECT COUNT(*) FROM run_events WHERE stream_run_id = ?", old); n != 0 {
+			t.Fatalf("%d expired events kept for run %d", n, old)
+		}
+	}
+	browser := asstBrowse(t, s.base)
+	if code, body, _ := browser.get(fmt.Sprintf("/chat/%d/events?run=%d", threadID, runID), false); code != http.StatusGone {
+		t.Fatalf("browser stream with a pruned cursor: %d %s", code, body)
+	}
 
 	path := fmt.Sprintf("/api/v1/threads/%d/runs/%d/events", threadID, runID)
 	expired := s.do(http.MethodGet, path, s.token, nil)
