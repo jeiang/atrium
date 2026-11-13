@@ -935,7 +935,9 @@ behavior-parity target.
   `Cache-Control: private, no-cache` and answer `If-None-Match` with 304
   when nothing they show changed; the effects revision also covers each
   shown effect's lease times and blocked flags, so a lease renewal or a
-  stuck undo crossing its threshold is never hidden by a 304. These reads
+  stuck undo crossing its threshold is never hidden by a 304. `GET /threads`
+  and `/threads/{id}` answer the same way; each transcript page (`limit`,
+  `cursor`) has its own tag, and a new message, run or card changes it. These reads
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
   and `atrium writes list` go through the `review.*` operations in
   `internal/review/application`.

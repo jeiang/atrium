@@ -17,13 +17,11 @@ const (
 )
 
 func (p *pages) sidebar(ctx context.Context, f *tpl.Frame) error {
-	listed, err := threads.ListThreads(ctx, p.deps.DB.Read, threads.ListOpts{Limit: sidebarThreads})
+	read, err := p.assistant().ThreadList(ctx, asstapp.ThreadListInput{Limit: sidebarThreads})
 	if err != nil {
 		return err
 	}
-	if err := fillThreadCosts(ctx, p.deps.DB.Read, listed); err != nil {
-		return err
-	}
+	listed := read.Data.Items
 	shelved, err := p.assistant().ProjectList(ctx, asstapp.ProjectListInput{Archived: true})
 	if err != nil {
 		return err

@@ -321,3 +321,10 @@ func DeleteOne(ctx context.Context, q db.Querier, fileID int64) (bool, error) {
 	_, err = q.ExecContext(ctx, "DELETE FROM thread_files WHERE id = ?", fileID)
 	return err == nil, err
 }
+
+func ProjectFileName(ctx context.Context, q db.Querier, fileID int64) (string, int64, error) {
+	var name string
+	var project int64
+	err := q.QueryRowContext(ctx, "SELECT name, project_id FROM thread_files WHERE id = ? AND project_id IS NOT NULL", fileID).Scan(&name, &project)
+	return name, project, err
+}

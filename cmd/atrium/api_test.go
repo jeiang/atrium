@@ -362,6 +362,44 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	s.idp.RevokeAll = false
 }
 
+func TestThreadTranscriptRevision(t *testing.T) {
+	s := newAPISite(t)
+	owner := s.token("owner")
+	made := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "hello there"})
+	if made.status != http.StatusCreated {
+		t.Fatalf("create: %d %s", made.status, made.body)
+	}
+	thread, _ := made.json["thread"].(map[string]any)
+	threadID := number(t, thread["id"])
+	s.events(owner, threadID, number(t, made.json["run_id"]), "")
+	path := "/api/v1/threads/" + strconv.FormatInt(threadID, 10)
+
+	first := s.do(http.MethodGet, path, owner, nil)
+	tag := first.header.Get("ETag")
+	firstItems, _ := first.json["items"].([]any)
+	if first.status != http.StatusOK || tag == "" || len(firstItems) < 2 {
+		t.Fatalf("transcript: %d etag %q %s", first.status, tag, first.body)
+	}
+	if same := s.do(http.MethodGet, path, owner, nil, "If-None-Match", tag); same.status != http.StatusNotModified || same.body != "" || same.header.Get("ETag") != tag {
+		t.Fatalf("unchanged transcript with its ETag = %d %q %s", same.status, same.header.Get("ETag"), same.body)
+	}
+	if paged := s.do(http.MethodGet, path+"?limit=1", owner, nil, "If-None-Match", tag); paged.status != http.StatusOK {
+		t.Fatalf("a different page with the full transcript ETag = %d", paged.status)
+	}
+
+	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
+	sent := s.do(http.MethodPost, path+"/messages", owner, map[string]any{"text": "once more"})
+	if sent.status != http.StatusAccepted {
+		t.Fatalf("send: %d %s", sent.status, sent.body)
+	}
+	s.events(owner, threadID, number(t, sent.json["run_id"]), "")
+	changed := s.do(http.MethodGet, path, owner, nil, "If-None-Match", tag)
+	items, _ := changed.json["items"].([]any)
+	if changed.status != http.StatusOK || changed.header.Get("ETag") == tag || len(items) <= len(firstItems) {
+		t.Fatalf("transcript after a new message with the old ETag = %d etag %q %s", changed.status, changed.header.Get("ETag"), changed.body)
+	}
+}
+
 func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
 	issued := runApp(t, "auth", "token", "issue", "--name", "phone")

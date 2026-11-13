@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/references"
@@ -14,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
-	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -224,31 +225,26 @@ func (p *pages) apiThreads(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	match := ""
-	if q := strings.TrimSpace(web.QueryValue(query, "q")); q != "" {
-		var err error
-		match, err = textsearch.FTSQuery(q)
-		check(err)
-	}
-	opts := threads.ListOpts{Match: match, Limit: limit + 1, Archived: view == archived, ProjectID: projectID}
+	in := asstapp.ThreadListInput{Q: strings.TrimSpace(web.QueryValue(query, "q")), Limit: limit, Archived: view == archived, ProjectID: projectID}
 	if after {
-		opts.After = &key
+		in.After = &key
 	}
-	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, opts)
-	check(err)
-	check(fillThreadCosts(r.Context(), p.deps.DB.Read, found))
+	read, err := p.assistant().ThreadList(r.Context(), in)
+	if err != nil {
+		web.APIFail(w, err)
+		return
+	}
 	out := web.List[apiListedThread]{Items: []apiListedThread{}}
-	if len(found) > limit {
-		found = found[:limit]
-		out.NextCursor = web.EncodeCursor(found[limit-1].Key())
+	if read.Data.Next != nil {
+		out.NextCursor = web.EncodeCursor(*read.Data.Next)
 	}
-	for _, t := range found {
+	for _, t := range read.Data.Items {
 		out.Items = append(out.Items, apiListedThread{
 			ID: t.ID, Title: t.Title, Pinned: bool(t.Pinned), Archived: bool(t.Archived), ProjectID: t.ProjectID,
 			ProjectName: t.ProjectName, RunState: t.RunState, CostUSD: t.Cost, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 		})
 	}
-	web.JSON(w, http.StatusOK, out)
+	web.APIRead(w, r, read.Revision, out)
 }
 
 func (p *pages) apiNewThread(w http.ResponseWriter, r *http.Request) {
@@ -312,38 +308,17 @@ func (p *pages) apiTranscript(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v, err := service.View(r.Context(), p.deps.DB.Read, threadID)
-	check(err)
-	if v == nil {
+	in := asstapp.TranscriptInput{ID: threadID, Limit: limit}
+	if after {
+		in.Before = cursor.Seq
+	}
+	read, err := p.assistant().Transcript(r.Context(), in)
+	if errorIs(err, application.NotFound) {
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
 		return
 	}
-	items := v.Items
-	if after {
-		end := len(items)
-		for end > 0 && items[end-1].Seq >= cursor.Seq {
-			end--
-		}
-		items = items[:end]
-	}
-	out := apiTranscript{
-		Thread: threadOut(v.Thread), ActiveRun: runOut(v.Active), Queued: []apiQueued{},
-		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{},
-	}
-	if len(items) > limit {
-		items = items[len(items)-limit:]
-		out.NextCursor = web.EncodeCursor(seqCursor{Seq: items[0].Seq})
-	}
-	for _, item := range items {
-		out.Items = append(out.Items, itemOut(item))
-	}
-	for _, q := range v.Queued {
-		out.Queued = append(out.Queued, apiQueued{ID: q.ID, Text: q.Text, CreatedAt: q.CreatedAt})
-	}
-	if v.Question != nil {
-		out.Question = &apiQuestion{RunID: v.Question.RunID, Text: v.Question.Text}
-	}
-	web.JSON(w, http.StatusOK, out)
+	check(err)
+	web.APIRead(w, r, read.Revision, transcriptOut(read.Data))
 }
 
 func (p *pages) apiMessage(w http.ResponseWriter, r *http.Request) {
@@ -466,11 +441,35 @@ func (p *pages) apiEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		after = n.Int64()
 	}
-	found, err := journal.GetRun(r.Context(), p.deps.DB.Read, runID)
-	check(err)
-	if found == nil || found.ThreadID != threadID {
+	read, err := p.assistant().RunEvents(r.Context(), asstapp.RunInput{ThreadID: threadID, RunID: runID, After: after})
+	if errorIs(err, application.NotFound) {
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown run.")
 		return
 	}
-	p.serveStream(w, r, runID, after)
+	check(err)
+	p.serveStream(w, r, read.Data)
+}
+
+func transcriptOut(v asstapp.Transcript) apiTranscript {
+	out := apiTranscript{
+		Thread: threadOut(v.Thread), ActiveRun: runOut(v.Active), Queued: []apiQueued{},
+		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{},
+	}
+	if v.Earlier != 0 {
+		out.NextCursor = web.EncodeCursor(seqCursor{Seq: v.Earlier})
+	}
+	for _, item := range v.Items {
+		out.Items = append(out.Items, itemOut(item))
+	}
+	for _, q := range v.Queued {
+		out.Queued = append(out.Queued, apiQueued{ID: q.ID, Text: q.Text, CreatedAt: q.CreatedAt})
+	}
+	if v.Question != nil {
+		out.Question = &apiQuestion{RunID: v.Question.RunID, Text: v.Question.Text}
+	}
+	return out
+}
+
+func errorIs(err error, code application.Code) bool {
+	return err != nil && application.Classify(err).Code == code
 }

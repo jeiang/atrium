@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -15,10 +16,11 @@ type Service struct {
 	db    *db.DB
 	state *state.Store
 	now   func() float64
+	env   config.Env
 }
 
-func New(d *db.DB, now func() float64) *Service {
-	return &Service{db: d, state: state.New(d), now: now}
+func New(d *db.DB, env config.Env, now func() float64) *Service {
+	return &Service{db: d, state: state.New(d), now: now, env: env}
 }
 
 func (s *Service) snapshot(ctx context.Context, projection string, scopes []string, input any, fn func(db.Querier) error) (application.Revision, error) {

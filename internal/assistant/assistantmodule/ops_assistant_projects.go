@@ -8,7 +8,7 @@ import (
 )
 
 func assistantService(d *web.Deps) *asstapp.Service {
-	return asstapp.New(d.DB, assistant.Now)
+	return asstapp.New(d.DB, d.Env, assistant.Now)
 }
 
 func projectOperations() ([]application.Definition, []application.Binding) {

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
@@ -18,31 +19,31 @@ import (
 
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
-func (p *pages) loadThread(w http.ResponseWriter, r *http.Request, threadID int64) (*ThreadData, bool) {
-	v, err := service.View(r.Context(), p.deps.DB.Read, threadID)
-	check(err)
-	if v == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
+func (p *pages) readFailed(w http.ResponseWriter, r *http.Request, err error) {
+	web.Fail(w, r, err, func(status int) { p.fail(w, r, status, application.Classify(err).Error()) })
+}
+
+func (p *pages) loadThread(w http.ResponseWriter, r *http.Request, threadID int64) (*asstapp.Transcript, bool) {
+	read, err := p.assistant().Transcript(r.Context(), asstapp.TranscriptInput{ID: threadID})
+	if err != nil {
+		p.readFailed(w, r, err)
 		return nil, false
 	}
-	view, err := threadView(v)
-	check(err)
-	return view, true
+	return &read.Data, true
 }
 
 func (p *pages) loadRun(w http.ResponseWriter, r *http.Request, threadID, runID int64) (*journal.Run, bool) {
-	found, err := journal.GetRun(r.Context(), p.deps.DB.Read, runID)
-	check(err)
-	if found == nil || found.ThreadID != threadID {
-		p.fail(w, r, http.StatusNotFound, "unknown run")
+	read, err := p.assistant().RunDetail(r.Context(), asstapp.RunInput{ThreadID: threadID, RunID: runID})
+	if err != nil {
+		p.readFailed(w, r, err)
 		return nil, false
 	}
-	return found, true
+	return &read.Data, true
 }
 
-func threadOf(view *ThreadData) threads.Thread { return view.Thread }
+func threadOf(view *asstapp.Transcript) threads.Thread { return view.Thread }
 
-func itemsOf(view *ThreadData) []*service.Item { return view.Items }
+func itemsOf(view *asstapp.Transcript) []*service.Item { return view.Items }
 
 func seqOf(item *service.Item) int64 { return item.Seq }
 
@@ -59,7 +60,7 @@ func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID i
 		return nil, false
 	}
 	t := threadOf(view)
-	return &ThreadPage{View: view, ThreadID: threadID, History: p.hasHistory(r.Context(), threadID),
+	return &ThreadPage{View: view, ThreadID: threadID, History: view.History,
 		Composer: composerOf(r.Context(), t, threadID)}, true
 }
 
@@ -84,18 +85,17 @@ func (p *pages) chatThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	work, err := workView(ctx, p.deps.DB.Read, threadID, p.now())
+	work, err := p.assistant().Work(ctx, asstapp.ThreadInput{ID: threadID})
 	check(err)
-	list, err := projects.List(ctx, p.deps.DB.Read, false)
+	list, err := p.assistant().ProjectList(ctx, asstapp.ProjectListInput{})
 	check(err)
-	if list == nil {
-		list = []projects.Project{}
-	}
-	data.Work, data.Projects, data.Project = work, list, nil
+	data.Work, data.Projects, data.Project = work.Data, list.Data, nil
 	if t := threadOf(data.View); t.ProjectID != nil && *t.ProjectID != 0 {
-		project, err := projects.Get(ctx, p.deps.DB.Read, *t.ProjectID)
-		check(err)
-		data.Project = project
+		found, err := p.assistant().ProjectDetail(ctx, asstapp.ProjectInput{ID: *t.ProjectID})
+		if application.Classify(err).Code != application.NotFound {
+			check(err)
+			data.Project = &found.Data.Project
+		}
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread.gohtml", data)
@@ -160,7 +160,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sent.Queued {
-		queued := []QueuedView{}
+		queued := []asstapp.Queued{}
 		for _, q := range view.Queued {
 			if q.ID == sent.ID {
 				queued = append(queued, q)
@@ -268,9 +268,9 @@ func (p *pages) chatWork(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	work, err := workView(r.Context(), p.deps.DB.Read, threadID, p.now())
+	work, err := p.assistant().Work(r.Context(), asstapp.ThreadInput{ID: threadID})
 	check(err)
-	data.Work = work
+	data.Work = work.Data
 	p.fragment(w, r, http.StatusOK, "_work_update.gohtml", data)
 }
 

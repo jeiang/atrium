@@ -68,10 +68,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	knowledgeOps, knowledgeBindings := knowledgeOperations()
 	taskOps, taskBindings := taskOperations()
 	projectOps, projectBindings := projectOperations()
+	threadOps, threadBindings := threadOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),

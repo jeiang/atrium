@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/jsonx"
@@ -58,13 +59,16 @@ func (p *pages) chatEvents(w http.ResponseWriter, r *http.Request) {
 		}
 		after = n.Int64()
 	}
-	if _, ok := p.loadRun(w, r, threadID, runID); !ok {
+	read, err := p.assistant().RunEvents(r.Context(), asstapp.RunInput{ThreadID: threadID, RunID: runID, After: after})
+	if err != nil {
+		p.readFailed(w, r, err)
 		return
 	}
-	p.serveStream(w, r, runID, after)
+	p.serveStream(w, r, read.Data)
 }
 
-func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, runID, after int64) {
+func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, events asstapp.EventStream) {
+	runID, after := events.RunID, events.After
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream; charset=utf-8")
 	h.Set("Cache-Control", "no-cache")
