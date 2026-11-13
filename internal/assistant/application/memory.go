@@ -277,6 +277,9 @@ func (s *Service) memoryPass(ctx context.Context, name application.Name, tgt str
 	}
 	outcome := state.OK
 	if out.Summarized == 0 {
+		if name == MemoryWorkName {
+			return application.Change[MemoryWorked]{Data: out}, nil
+		}
 		outcome = state.Noop
 	}
 	auditID, err := s.state.Audit(ctx, nil, state.Entry{Operation: string(name), Outcome: outcome, Target: tgt,

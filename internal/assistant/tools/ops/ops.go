@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/serverops"
 	opsapp "github.com/jeiang/atrium/internal/serverops/application"
 	"github.com/jeiang/atrium/internal/tool"
@@ -155,80 +152,14 @@ func findingByID(svc Service) tool.Handler {
 	}
 }
 
-func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	var last *float64
-	last, err := serverops.LatestSampleTS(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	found, err := serverops.LatestSamples(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	latest := map[string]map[string]any{}
-	for _, sample := range found {
-		if latest[sample.Host] == nil {
-			latest[sample.Host] = map[string]any{}
+func status(svc Service) tool.Handler {
+	return func(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
+		read, err := svc(tc).Health(ctx, opsapp.HealthInput{})
+		if err != nil {
+			return nil, err
 		}
-		switch sample.Metric {
-		case serverops.MetricUp:
-			if sample.State != nil {
-				latest[sample.Host]["up"] = *sample.State
-			}
-		case serverops.MetricCPU:
-			latest[sample.Host]["cpu_pct"] = sample.Value
-		case serverops.MetricMemory:
-			latest[sample.Host]["mem_pct"] = sample.Value
-		case serverops.MetricDisk:
-			latest[sample.Host]["disk_root_pct"] = sample.Value
-		case serverops.MetricFailedUnits:
-			latest[sample.Host]["failed_units"] = sample.Value
-		case serverops.MetricAlerts:
-			latest[sample.Host]["alerts_firing"] = sample.Value
-		}
+		return read.Data, nil
 	}
-	set := assistant.Read(ctx, tc.DB.Read)
-	hosts := []any{}
-	for _, host := range serverops.HostValues(ctx).Hosts {
-		item := map[string]any{"host": host}
-		for _, key := range []string{"up", "cpu_pct", "mem_pct", "disk_root_pct", "failed_units", "alerts_firing"} {
-			if value, ok := latest[host][key]; ok {
-				item[key] = value
-			}
-		}
-		hosts = append(hosts, item)
-	}
-	findings, err := liveFindings(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	loc, err := config.From(ctx).Location(tc.Env)
-	if err != nil {
-		return nil, err
-	}
-	spend, err := serverops.MonthSpend(ctx, tc.DB.Read, tc.Now(), loc)
-	if err != nil {
-		return nil, err
-	}
-	if err := set.Err(); err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"mode": "fixed-schema-haiku", "last_sample": last, "hosts": hosts, "findings": findings,
-		"spend_usd": spend, "budget_usd": set.Float(serverops.KeyWorkerMonthlyUSD),
-	}, nil
-}
-
-func liveFindings(ctx context.Context, q db.Querier) ([]any, error) {
-	found, err := serverops.UnresolvedFindings(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]any, 0, len(found))
-	for _, f := range found {
-		out = append(out, map[string]any{"id": f.ID, "severity": f.Severity, "fact": f.Fact, "title": f.Title, "written": f.CreatedAt})
-	}
-	return out, nil
 }
 
 type Service func(*tool.Context) *opsapp.Service
@@ -271,7 +202,7 @@ func Tools(svc Service) []tool.Tool {
 			Name:        "worker_status",
 			Description: "Read the server-ops status: last sample time, the latest value per host, live findings, and the worker's month-to-date spend against its budget.",
 			InputSchema: json.RawMessage(statusSchema),
-			Handler:     status,
+			Handler:     status(svc),
 			Effect:      tool.Read,
 			Annotated:   true,
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron},

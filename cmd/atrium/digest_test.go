@@ -83,6 +83,13 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(first["body"]), "Call the dentist") || !strings.Contains(fmt.Sprint(first["body"]), "Send invoice") {
 		t.Fatalf("digest does not list the items: %v", first)
 	}
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.digest' AND outcome = 'ok' AND source = 'job' AND job_run_id IS NOT NULL").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits != 1 {
+		t.Fatalf("digest audits = %d, want 1", audits)
+	}
 	exec("UPDATE ntfy_channels SET content = 'title' WHERE name = 'assistant'")
 	exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE name = 'daily-nudges'", now)
 	cancel, done = start()
