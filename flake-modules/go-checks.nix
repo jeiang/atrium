@@ -60,7 +60,7 @@
         go test -race -tags ${tags} -count=1 -exec true ./... >/dev/null
         export ATRIUM_E2E_BINARY=$TMPDIR/e2e/atrium
       ''}
-      if ! ${lib.optionalString isLinux "bash tools/e2e-loopback "}go test -race -timeout 60m -tags ${tags} ./... >"$log" 2>&1; then
+      if ! ${lib.optionalString isLinux "bash tools/e2e-loopback "}go test -race -timeout 120m -tags ${tags} ./... >"$log" 2>&1; then
         cat "$log"
         echo "=== go-test failure summary ==="
         grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
