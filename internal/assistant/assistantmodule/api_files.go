@@ -1,9 +1,9 @@
 package assistantmodule
 
 import (
-	"strings"
 	"context"
 	"mime/multipart"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
