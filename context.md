@@ -309,6 +309,13 @@ behavior-parity target.
   module's optional `atrium-backup` timer prunes `*.backup` files in its
   directory after each successful run, keeping the newest `backup.keep`
   (default 5) plus any from the last `backup.keepDays` (default 14) days.
+  `atrium backup` and `atrium db backup` write one `operation_audit` row
+  (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
+  file count only) to the source database, including refused destinations; a
+  completed `atrium restore` writes one `maintenance.restore` row to the
+  restored database. A refused or failed restore writes nothing, since it
+  leaves the database unchanged. `db check` and `restore --verify` are not
+  audited.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB

@@ -282,15 +282,6 @@ internal/assistant/tools/tasks/tasks.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/tools/tasks/tasks.go	github.com/jeiang/atrium/internal/tasks
 internal/assistant/tools/weather/weather.go	github.com/jeiang/atrium/internal/weather
 internal/assistant/webfetch/tool.go	github.com/jeiang/atrium/internal/textutil
-internal/backup/backup.go	github.com/jeiang/atrium/internal/config
-internal/backup/backup.go	github.com/jeiang/atrium/internal/db
-internal/backup/backup.go	github.com/jeiang/atrium/internal/db/key
-internal/backup/backup.go	github.com/jeiang/atrium/internal/passrun
-internal/backup/backup.go	github.com/jeiang/atrium/internal/settings
-internal/backup/restore.go	github.com/jeiang/atrium/internal/config
-internal/backup/restore.go	github.com/jeiang/atrium/internal/db
-internal/backup/restore.go	github.com/jeiang/atrium/internal/db/key
-internal/backup/restore.go	github.com/jeiang/atrium/internal/settings
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/calendar
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/config
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/davmirror

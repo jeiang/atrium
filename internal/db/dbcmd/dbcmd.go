@@ -14,13 +14,14 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/logx"
+	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
 const maxKeyInput = 1024
 
-func Command(env config.Env, now func() float64) *cli.Command {
-	s := &service{env: env, now: now}
+func Command(env config.Env, now func() float64, maintenance *maintenanceapp.Service) *cli.Command {
+	s := &service{env: env, now: now, maintenance: maintenance}
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
@@ -35,8 +36,9 @@ func Command(env config.Env, now func() float64) *cli.Command {
 }
 
 type service struct {
-	env config.Env
-	now func() float64
+	env         config.Env
+	now         func() float64
+	maintenance *maintenanceapp.Service
 }
 
 func (s *service) path() (string, error) {
@@ -97,66 +99,30 @@ func readKey(path string, stdin io.Reader) (db.Key, error) {
 func (s *service) backup(a *cli.Args) cli.Handler {
 	dest := a.Arg("dest", cli.Opt{Help: "path of the new backup file; must not exist"})
 	return func(e *cli.Env) int {
-		d, _, key, code := s.open(e)
-		if code != cli.ExitOK {
-			return code
-		}
-		defer func() { _ = d.Close() }()
-		if _, err := os.Lstat(*dest); err == nil {
-			return cli.Fail(e, fmt.Errorf("backup destination %s already exists", *dest))
-		}
-		staged, err := db.Stage(*dest, 0o600)
+		res, err := s.maintenance.DBBackup(e.Ctx, maintenanceapp.BackupInput{Dest: *dest})
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		defer staged.Discard()
-		if err := d.BackupTo(e.Ctx, staged.Path(), key); err != nil {
-			return cli.Fail(e, err)
-		}
-		if err := db.Verify(e.Ctx, staged.Path(), key, nil); err != nil {
-			return cli.Fail(e, fmt.Errorf("backup verification: %w", err))
-		}
-		if err := staged.PublishLink(); err != nil {
-			return cli.Fail(e, err)
-		}
-		_, _ = fmt.Fprintf(e.Stdout, "backup written to %s (%s)\n", *dest, encryption(key))
+		_, _ = fmt.Fprintf(e.Stdout, "backup written to %s (%s)\n", *dest, encryption(res.Data.Encryption))
 		return cli.ExitOK
 	}
 }
 
-func encryption(key db.Key) string {
-	if key.IsZero() {
-		return "plaintext"
-	}
-	return "encrypted, key id " + dbkey.ID(key)
-}
-
 func (s *service) check(*cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
-		path, err := s.path()
-		if err != nil {
-			return cli.Fail(e, err)
+		res, err := s.maintenance.Check(e.Ctx, maintenanceapp.CheckInput{})
+		c := res.Data
+		if c.Opened {
+			_, _ = fmt.Fprintf(e.Stdout, "database: %s\nencryption: %s\n", c.Database, encryption(c.Encryption))
 		}
-		key, err := s.currentKey(e)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		d, err := db.OpenFile(path, key)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		defer func() { _ = d.Close() }()
-		_, _ = fmt.Fprintf(e.Stdout, "database: %s\nencryption: %s\n", path, encryption(key))
-		if err := db.IntegrityCheck(e.Ctx, d); err != nil {
+		if c.Opened && !c.Intact {
 			_, _ = fmt.Fprintf(e.Stdout, "integrity_check: FAILED\n")
+		}
+		if err != nil {
 			return cli.Fail(e, err)
 		}
 		_, _ = fmt.Fprintf(e.Stdout, "integrity_check: ok\n")
-		tables, err := db.VirtualTables(e.Ctx, d)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		for _, t := range tables {
+		for _, t := range c.Tables {
 			_, _ = fmt.Fprintf(e.Stdout, "%s %s: %d\n", t.Kind, t.Name, t.Rows)
 		}
 		return cli.ExitOK

@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/auth/bearercmd"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
-	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -35,6 +34,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/obs/opsmetrics"
 	"github.com/jeiang/atrium/internal/observability"
@@ -68,6 +68,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
 	connectionOps, connectionBindings := connectionsOperations()
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
+	maintenanceOps, maintenanceBindings := maintenanceOperations()
+	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -120,10 +123,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),
 			secretscmd.Command(openSettings),
-			dbcmd.Command(mc.Env, m.Now),
+			dbcmd.Command(mc.Env, m.Now, maintenance),
 			kbcmd.Command(mc.Env),
-			backup.BackupCommand(),
-			backup.RestoreCommand(),
+			dbcmd.BackupCommand(maintenance),
+			dbcmd.RestoreCommand(maintenance),
 			catalogCommand(mc),
 		},
 	}
