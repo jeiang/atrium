@@ -458,11 +458,23 @@ behavior-parity target.
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
   A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
-  `import`. Every readable table has insert, update and delete triggers
+  `import`; it is the entry point that made the decision, so an `/api/v1`
+  approval records `api` and a web one `ui`. Approve, dismiss, undo and
+  resolve are the `review.*` operations shared by every entry point, each
+  audited in `operation_audit` after the ledger settles, even after caller
+  cancellation. Audit provenance comes only from the trusted invocation. Phone
+  policy and changed-plan refusals are audited; invalid, expired and used tokens
+  are not. Undo and resolve preserve the explicit proposal, effect or mail
+  namespace, including unknown ids. A malformed
+  approval selection is invalid input (`atrium proposals approve` exits 2,
+  the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
   streamed run event writes do not); the append-only
   `operation_audit` table records application commands. Both are owned by
-  `internal/application/state`.
+  `internal/application/state`. Notification inbox, channel and device controls,
+  delivery, and phone policy commands use `notifications.*` operations. The
+  inbox read is bounded to 100 items (API default 50); failed push delivery
+  remains explicit and keeps its inbox record.
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -875,7 +887,15 @@ behavior-parity target.
   drafts store and writes registry as the Review pages, so approval scope,
   the ledger, the send revision check and the mail gate are unchanged. POST
   to create a thread, send a message, approve or send a draft honours an
-  `Idempotency-Key` header for ten minutes in memory.
+  `Idempotency-Key` header for ten minutes in memory. `GET /pending`,
+  `/undo`, `/effects` and `/effects/{id}` return a weak `ETag` with
+  `Cache-Control: private, no-cache` and answer `If-None-Match` with 304
+  when nothing they show changed; the effects revision also covers each
+  shown effect's lease times and blocked flags, so a lease renewal or a
+  stuck undo crossing its threshold is never hidden by a 304. These reads
+  and the Review pages, `atrium proposals list`, `atrium effects list|show`
+  and `atrium writes list` go through the `review.*` operations in
+  `internal/review/application`.
 - Code execution is not part of the application. The code-mode worker
   command and units are removed; coding may return as an external module.
 

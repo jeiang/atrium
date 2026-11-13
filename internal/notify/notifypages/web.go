@@ -1,4 +1,4 @@
-package notify
+package notifypages
 
 import (
 	"context"
@@ -10,10 +10,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/application"
 	moduleowner "github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/settings/audit"
+	notifyapp "github.com/jeiang/atrium/internal/notify/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -29,21 +28,8 @@ func Templates() fs.FS {
 	return sub
 }
 
-type listing struct {
-	Channels []Channel   `json:"channels"`
-	Error    string      `json:"error"`
-	Push     pushListing `json:"push"`
-	Phone    any         `json:"phone"`
-}
-
-type pushListing struct {
-	Key     string       `json:"key"`
-	Problem string       `json:"problem"`
-	Devices []PushDevice `json:"devices"`
-}
-
 type inboxView struct {
-	Notifications []Notification `json:"notifications"`
+	Notifications []notifyapp.Notification `json:"notifications"`
 }
 
 const (
@@ -51,21 +37,18 @@ const (
 	inboxPage = "/inbox"
 )
 
-type Section func(context.Context, db.Querier) (any, error)
-
 type handlers struct {
-	d     *web.Deps
-	phone Section
+	d       *web.Deps
+	service *notifyapp.Service
 }
 
-func Module(phone Section) web.Module {
-	return func(_ chi.Router, d *web.Deps) { serve(d, phone) }
+func Module(factory func(*web.Deps) *notifyapp.Service) web.Module {
+	return func(_ chi.Router, d *web.Deps) { serve(d, factory(d)) }
 }
-
-func serve(d *web.Deps, phone Section) {
-	h := handlers{d, phone}
+func serve(d *web.Deps, service *notifyapp.Service) {
+	h := handlers{d: d, service: service}
 	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-		labels, err := failingDevices(ctx, d.DB.Read)
+		labels, err := service.Failing(ctx)
 		f.NotifyFailing = labels
 		return err
 	})
@@ -81,7 +64,7 @@ func serve(d *web.Deps, phone Section) {
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {
-	return audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
+	return context.WithoutCancel(r.Context())
 }
 
 func (h handlers) owned(next http.HandlerFunc) http.HandlerFunc {
@@ -96,21 +79,12 @@ func (h handlers) owned(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, problem string) {
-	ctx := r.Context()
-	data := listing{Error: problem}
-	var err error
-	if data.Channels, err = ListChannels(ctx, h.d.DB.Read); err != nil {
+	found, err := h.service.Configuration(r.Context(), notifyapp.Empty{})
+	if err != nil {
 		panic(err)
 	}
-	if data.Push.Devices, err = Devices(ctx, h.d.DB.Read); err != nil {
-		panic(err)
-	}
-	if data.Push.Key, err = PushPublicKey(ctx, h.d.DB); err != nil {
-		data.Push.Problem = err.Error()
-	}
-	if data.Phone, err = h.phone(ctx, h.d.DB.Read); err != nil {
-		panic(err)
-	}
+	data := found.Data
+	data.Error = problem
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
@@ -126,11 +100,11 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) renderInbox(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast) {
-	list, err := Recent(r.Context(), h.d.DB.Read, 100)
+	found, err := h.service.Inbox(r.Context(), notifyapp.InboxInput{Limit: 100})
 	if err != nil {
 		panic(err)
 	}
-	f, err := h.d.Render.Frame(r, "inbox", inboxView{Notifications: list})
+	f, err := h.d.Render.Frame(r, "inbox", inboxView{Notifications: found.Data.Items})
 	if err != nil {
 		panic(err)
 	}
@@ -145,11 +119,9 @@ func (h handlers) inbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func refused(err error) bool {
-	var channel ChannelError
-	var push PushError
-	var pinned *settings.PinnedError
+	var e *application.Error
 	var disabled *moduleowner.OwnerDisabled
-	return errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &pinned) || errors.As(err, &disabled)
+	return errors.As(err, &disabled) || (errors.As(err, &e) && (e.Code == application.Refused || e.Code == application.Invalid))
 }
 
 func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title string) {
@@ -165,7 +137,8 @@ func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title 
 
 func (h handlers) content(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	h.done(w, r, SetContent(h.ctx(r), h.d.DB.Write, chi.URLParam(r, "name"), web.FormString(form, "content", "")), "Saved")
+	_, err := h.service.ChannelContent(h.ctx(r), notifyapp.ChannelContentInput{Name: chi.URLParam(r, "name"), Content: web.FormString(form, "content", "")})
+	h.done(w, r, err, "Saved")
 }
 
 func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
@@ -174,10 +147,7 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	sent, err := Resend(h.ctx(r), h.d.DB, id)
-	if err == nil && !sent.Delivered {
-		err = ChannelError("Not delivered: " + sent.Error)
-	}
+	_, err = h.service.Resend(h.ctx(r), notifyapp.ResendInput{ID: id})
 	if refused(err) {
 		h.renderInbox(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not resent", Description: err.Error()})
 		return
@@ -190,13 +160,14 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 
 func (h handlers) subscribe(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	err := Subscribe(h.ctx(r), h.d.DB.Write, web.FormString(form, "endpoint", ""), web.FormString(form, "p256dh", ""), web.FormString(form, "auth", ""), PushLabel(r.UserAgent()))
+	_, err := h.service.Subscribe(h.ctx(r), notifyapp.SubscribeInput{Endpoint: web.FormString(form, "endpoint", ""), P256DH: web.FormString(form, "p256dh", ""), Auth: web.FormString(form, "auth", ""), Label: notifyapp.PushLabel(r.UserAgent())})
 	h.done(w, r, err, "Push enabled on this device")
 }
 
 func (h handlers) unsubscribe(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	h.done(w, r, Unsubscribe(h.ctx(r), h.d.DB.Write, web.FormString(form, "endpoint", "")), "Push disabled on this device")
+	_, err := h.service.Unsubscribe(h.ctx(r), notifyapp.UnsubscribeInput{Endpoint: web.FormString(form, "endpoint", "")})
+	h.done(w, r, err, "Push disabled on this device")
 }
 
 func (h handlers) removeDevice(w http.ResponseWriter, r *http.Request) {
@@ -205,16 +176,11 @@ func (h handlers) removeDevice(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	h.done(w, r, RemoveDevice(h.ctx(r), h.d.DB.Write, id), "Device removed")
+	_, err = h.service.Unsubscribe(h.ctx(r), notifyapp.UnsubscribeInput{DeviceID: &id})
+	h.done(w, r, err, "Device removed")
 }
 
 func (h handlers) pushTest(w http.ResponseWriter, r *http.Request) {
-	sent, failure, err := PushTest(h.ctx(r), h.d.DB)
-	if err == nil && sent == 0 {
-		if failure == "" {
-			failure = NoDevices
-		}
-		err = PushError("Test not delivered: " + failure)
-	}
+	_, err := h.service.Test(h.ctx(r), notifyapp.Empty{})
 	h.done(w, r, err, "Test sent")
 }

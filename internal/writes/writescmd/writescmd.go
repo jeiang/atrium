@@ -10,9 +10,8 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
-
-var directOrigins = []string{"agent", "local", "calendar", "export", "tracking", "media", "notify"}
 
 type Options struct {
 	Env   config.Env
@@ -61,15 +60,15 @@ func list(o Options) *cli.Command {
 				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
 					return cli.Fail(e, err)
 				}
-				f := ledger.Filter{Origins: directOrigins, Operation: *operation, Limit: *limit, BlockedOnly: *blocked}
+				f := reviewapp.EffectsInput{Origins: reviewapp.DirectOrigins, Operation: *operation, Limit: *limit, BlockedOnly: *blocked}
 				if *origin != "" {
 					f.Origins = []string{*origin}
 				}
-				found, err := s.List(e.Ctx, f)
+				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Effects(e.Ctx, f)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				return write(e, found)
+				return write(e, found.Data)
 			}
 		},
 	}
@@ -97,11 +96,11 @@ func resolve(o Options) *cli.Command {
 				if *evidence != "" {
 					r.Evidence = json.RawMessage(*evidence)
 				}
-				found, err := s.Resolve(e.Ctx, int64(*id), r, ledger.Resolver{Actor: "operator", Source: "cli"}, nil)
+				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Resolve(e.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: int64(*id)}, Outcome: r.Outcome, Evidence: r.Evidence})
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				return write(e, found)
+				return write(e, found.Data.Effect)
 			}
 		},
 	}
@@ -122,11 +121,11 @@ func undo(o Options) *cli.Command {
 				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
 					return cli.Fail(e, err)
 				}
-				found, err := s.Undo(e.Ctx, int64(*id), ledger.Resolver{Actor: "operator", Source: "cli"})
+				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Undo(e.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: int64(*id)}})
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				return write(e, found)
+				return write(e, found.Data.Undo)
 			}
 		},
 	}

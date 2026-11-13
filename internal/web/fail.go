@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
 )
@@ -56,6 +57,27 @@ func APIFail(w http.ResponseWriter, err error) {
 		body.Fields = append(body.Fields, FieldError{Type: f.Code, Loc: []string{"body", f.Name}, Msg: f.Message})
 	}
 	JSON(w, Status(e.Code), map[string]apiError{"error": body})
+}
+
+func APIRead(w http.ResponseWriter, r *http.Request, revision application.Revision, v any) {
+	tag := `W/"` + string(revision) + `"`
+	w.Header().Set("ETag", tag)
+	w.Header().Set("Cache-Control", "private, no-cache")
+	if revision != "" && matchesETag(r.Header.Get("If-None-Match"), tag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	JSON(w, http.StatusOK, v)
+}
+
+func matchesETag(header, tag string) bool {
+	for candidate := range strings.SplitSeq(header, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || strings.TrimPrefix(candidate, "W/") == strings.TrimPrefix(tag, "W/") {
+			return true
+		}
+	}
+	return false
 }
 
 func failHeaders(w http.ResponseWriter, e *application.Error) {

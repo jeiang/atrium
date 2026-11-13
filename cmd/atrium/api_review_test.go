@@ -4,12 +4,16 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -106,7 +110,7 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 		t.Fatalf("a second approval wrote again: %d puts", len(dav.Puts))
 	}
 	var source string
-	if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND effect_id IS NULL AND outcome = 'approved'", approve).Scan(&source); err != nil || source != "ui" {
+	if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND effect_id IS NULL AND outcome = 'approved'", approve).Scan(&source); err != nil || source != "api" {
 		t.Fatalf("approval resolution source = %q, %v", source, err)
 	}
 
@@ -117,6 +121,7 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/"+deny+"/deny", owner, nil), http.StatusConflict, "not_dismissed")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/"+deny+"/approve", owner, nil), http.StatusConflict, "not_approved")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/999999/approve", owner, nil), http.StatusNotFound, "not_found")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/999999/approve", owner, map[string]any{"selection": []any{1}}), http.StatusNotFound, "not_found")
 	if len(dav.Puts) != 1 {
 		t.Fatalf("deny wrote to the calendar: %d puts", len(dav.Puts))
 	}
@@ -183,5 +188,171 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 	expectAPI(t, s.do(http.MethodPost, draftPath+"/discard", owner, nil), http.StatusConflict, "not_discarded")
 	if got := s.do(http.MethodGet, draftPath, owner, nil); got.status != http.StatusOK || got.json["status"] != "sent" {
 		t.Fatalf("draft after send: %d %s", got.status, got.body)
+	}
+}
+
+func TestPendingRevisionChangesAfterDecision(t *testing.T) {
+	dir, dav := davFixture(t)
+	reviewSMTP(t, dir)
+	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
+	approve := proposalID(t, toolResult(t, "calendar_create", event))
+	toolResult(t, "task_add", map[string]any{"title": "Call the dentist", "due": "2026-11-09"})
+	if listed := runApp(t, "effects", "list", "--before", "-1"); listed.code != 0 || !strings.Contains(listed.stdout, "task_add") {
+		t.Fatalf("effects list --before -1: %d %s %s", listed.code, listed.stdout, listed.stderr)
+	}
+	s := startAPISite(t, dir, nil)
+	owner := s.token("owner")
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+
+	first := s.do(http.MethodGet, "/api/v1/pending", owner, nil)
+	tag := first.header.Get("ETag")
+	if ids := approvalIDs(t, first.json["approvals"]); first.status != http.StatusOK || tag == "" || len(ids) != 1 || ids[0] != approve {
+		t.Fatalf("pending: %d etag %q %s", first.status, tag, first.body)
+	}
+	keys := []int{strings.Index(first.body, `"approvals":`), strings.Index(first.body, `"blocked":`), strings.Index(first.body, `"counts":`), strings.Index(first.body, `"drafts":`)}
+	if !slices.IsSorted(keys) || keys[0] < 0 {
+		t.Fatalf("pending keys out of order %v: %s", keys, first.body)
+	}
+	if same := s.do(http.MethodGet, "/api/v1/pending", owner, nil, "If-None-Match", tag); same.status != http.StatusNotModified || same.body != "" || same.header.Get("ETag") != tag {
+		t.Fatalf("unchanged pending: %d etag %q %s", same.status, same.header.Get("ETag"), same.body)
+	}
+	if done := s.do(http.MethodPost, "/api/v1/approvals/"+approve+"/approve", owner, nil); done.status != http.StatusOK || done.json["outcome"] != "applied" {
+		t.Fatalf("approve: %d %s", done.status, done.body)
+	}
+	if len(dav.Puts) != 1 {
+		t.Fatalf("approval wrote %d events, want 1", len(dav.Puts))
+	}
+	stale := s.do(http.MethodGet, "/api/v1/pending", owner, nil, "If-None-Match", tag)
+	fresh := stale.header.Get("ETag")
+	if stale.status != http.StatusOK || len(approvalIDs(t, stale.json["approvals"])) != 0 || fresh == "" || fresh == tag {
+		t.Fatalf("pending after the decision with the old etag: %d etag %q %s", stale.status, fresh, stale.body)
+	}
+	if current := s.do(http.MethodGet, "/api/v1/pending", owner, nil, "If-None-Match", fresh); current.status != http.StatusNotModified {
+		t.Fatalf("pending with the current etag: %d %s", current.status, current.body)
+	}
+
+	effects := s.do(http.MethodGet, "/api/v1/effects", owner, nil)
+	effectsTag := effects.header.Get("ETag")
+	if items, _ := effects.json["items"].([]any); effects.status != http.StatusOK || effectsTag == "" || len(items) == 0 {
+		t.Fatalf("effects: %d etag %q %s", effects.status, effectsTag, effects.body)
+	}
+	if same := s.do(http.MethodGet, "/api/v1/effects", owner, nil, "If-None-Match", effectsTag); same.status != http.StatusNotModified {
+		t.Fatalf("unchanged effects: %d %s", same.status, same.body)
+	}
+	if _, err := d.Write.Exec("UPDATE effects SET lease_at = lease_at + 1 WHERE id = (SELECT MAX(id) FROM effects)"); err != nil {
+		t.Fatal(err)
+	}
+	renewed := s.do(http.MethodGet, "/api/v1/effects", owner, nil, "If-None-Match", effectsTag)
+	if renewed.status != http.StatusOK || renewed.header.Get("ETag") == effectsTag {
+		t.Fatalf("effects after a lease renewal answered %d with etag %q (was %q)", renewed.status, renewed.header.Get("ETag"), effectsTag)
+	}
+	undo := s.do(http.MethodGet, "/api/v1/undo", owner, nil)
+	if undo.status != http.StatusOK || undo.header.Get("ETag") == "" {
+		t.Fatalf("undo feed: %d %s", undo.status, undo.body)
+	}
+	if same := s.do(http.MethodGet, "/api/v1/undo", owner, nil, "If-None-Match", undo.header.Get("ETag")); same.status != http.StatusNotModified {
+		t.Fatalf("unchanged undo feed: %d %s", same.status, same.body)
+	}
+}
+
+func TestApprovalSourceAndInvalidSelection(t *testing.T) {
+	dir, dav := davFixture(t)
+	reviewSMTP(t, dir)
+	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
+	viaHTML := proposalID(t, toolResult(t, "calendar_create", event))
+	event["title"] = "Haircut"
+	viaAPI := proposalID(t, toolResult(t, "calendar_create", event))
+	effectsOf := func(d *db.DB, id string) int {
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE proposal_id = ?", id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+
+	for _, bad := range []string{"{", "[1]"} {
+		if got := runApp(t, "proposals", "approve", viaAPI, "--selection", bad); got.code != cli.ExitUsage || effectsOf(d, viaAPI) != 0 {
+			t.Fatalf("CLI approve with selection %q: exit %d, %d effects: %s", bad, got.code, effectsOf(d, viaAPI), got.stderr)
+		}
+	}
+
+	base, _, stop := startServeStoppable(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); code != http.StatusOK {
+		t.Fatalf("GET /chat = %d", code)
+	}
+	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK {
+		t.Fatalf("HTML approve: %d\n%s", code, body)
+	}
+	stop()
+
+	s := startAPISite(t, dir, nil)
+	owner := s.token("owner")
+	reply := s.do(http.MethodPost, "/api/v1/approvals/"+viaAPI+"/approve", owner, map[string]any{"selection": []any{1}})
+	expectAPI(t, reply, http.StatusUnprocessableEntity, "bad_selection")
+	if fields, _ := reply.json["error"].(map[string]any)["fields"].([]any); len(fields) != 1 || !strings.Contains(reply.body, `"selection"`) || effectsOf(d, viaAPI) != 0 {
+		t.Fatalf("API bad selection: %s, %d effects", reply.body, effectsOf(d, viaAPI))
+	}
+	if done := s.do(http.MethodPost, "/api/v1/approvals/"+viaAPI+"/approve", owner, nil); done.status != http.StatusOK || done.json["outcome"] != "applied" {
+		t.Fatalf("API approve: %d %s", done.status, done.body)
+	}
+	if len(dav.Puts) != 2 {
+		t.Fatalf("approvals wrote %d events, want 2", len(dav.Puts))
+	}
+	for id, source := range map[string]string{viaHTML: "ui", viaAPI: "api"} {
+		var resolution, audited string
+		if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND outcome = 'approved'", id).Scan(&resolution); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.Read.QueryRow("SELECT source FROM operation_audit WHERE operation = 'review.approve' AND outcome = 'ok' AND target = ?", "proposal:"+id).Scan(&audited); err != nil {
+			t.Fatal(err)
+		}
+		if resolution != source || audited != source {
+			t.Errorf("proposal %s: resolution source %q, audit source %q, want %q", id, resolution, audited, source)
+		}
+	}
+}
+
+func TestReviewZeroTargetsKeepTheirNamespace(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	base := startServeIn(t, dir)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	for _, command := range []string{"effects", "writes", "live"} {
+		for _, action := range []string{"undo", "resolve"} {
+			args := []string{command, action, "0"}
+			if action == "resolve" {
+				args = append(args, "--outcome", "not-applied")
+			}
+			ran := runApp(t, args...)
+			if ran.code != cli.ExitError {
+				t.Fatalf("%v = %d %s", args, ran.code, ran.stderr)
+			}
+			target := "effect:0"
+			if command == "live" {
+				target = "mail:0"
+			}
+			var got, outcome string
+			if err := d.Read.QueryRow("SELECT target, outcome FROM operation_audit WHERE operation = ? ORDER BY id DESC LIMIT 1", "review."+action).Scan(&got, &outcome); err != nil || got != target || outcome != "not_found" {
+				t.Fatalf("%v audit = %q %q, %v", args, got, outcome, err)
+			}
+		}
+	}
+	ran := runApp(t, "effects", "resolve", "0", "--outcome", "not-applied", "--actor", "")
+	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "actor") {
+		t.Fatalf("empty actor = %d %s", ran.code, ran.stderr)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	fetch(t, client, http.MethodGet, base+"/review", nil)
+	for _, kind := range []string{"effect", "mail"} {
+		code, _, _ := fetch(t, client, http.MethodPost, base+"/activity/"+kind+"/0/undo", url.Values{})
+		if code != http.StatusNotFound {
+			t.Fatalf("%s zero undo = %d", kind, code)
+		}
 	}
 }

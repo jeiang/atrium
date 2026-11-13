@@ -1,4 +1,4 @@
-package notify
+package application
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
@@ -16,7 +17,7 @@ const staleEvery = 5 * time.Minute
 
 var staleLog = logx.Logger("atrium.notify.stale")
 
-func Monitor(ctx context.Context, d *db.DB, env config.Env, budget BudgetStatus) error {
+func Monitor(ctx context.Context, d *db.DB, env config.Env, budget notify.BudgetStatus) error {
 	warn := func(msg string, err error) {
 		if err != nil && ctx.Err() == nil {
 			staleLog.Warn(msg, logx.Err, err.Error())
@@ -25,7 +26,7 @@ func Monitor(ctx context.Context, d *db.DB, env config.Env, budget BudgetStatus)
 	t := time.NewTicker(staleEvery)
 	defer t.Stop()
 	for ctx.Err() == nil {
-		if Enabled(ctx) {
+		if notify.Enabled(ctx) {
 			warn("stale pass check failed", noticeStale(ctx, d, env))
 			warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp(), budget))
 		}
@@ -83,8 +84,8 @@ func noticeStale(ctx context.Context, d *db.DB, env config.Env) error {
 		return err
 	}
 	for job, alert := range fresh {
-		if _, err := Send(ctx, d, Message{Channel: System, Title: "atrium: " + job + " is stale", Body: alert.why,
-			Occurrence: fmt.Sprintf("stale:%s:%g", job, alert.at)}); err != nil {
+		if _, err := New(d).Send(ctx, SendInput{Message: notify.Message{Channel: notify.System, Title: "atrium: " + job + " is stale", Body: alert.why,
+			Occurrence: fmt.Sprintf("stale:%s:%g", job, alert.at)}}); err != nil {
 			return err
 		}
 	}

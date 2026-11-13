@@ -14,8 +14,8 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 	if strings.TrimSpace(who.Actor) == "" {
 		return Effect{}, Refused("an undo needs an actor")
 	}
-	if who.Source != "cli" && who.Source != "ui" {
-		return Effect{}, Refused("an undo source must be cli or ui")
+	if who.Source != "cli" && who.Source != "ui" && who.Source != "api" {
+		return Effect{}, Refused("an undo source must be cli, ui or api")
 	}
 	forward, err := s.Get(ctx, id)
 	if err != nil {

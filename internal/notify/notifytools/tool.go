@@ -1,11 +1,11 @@
-package notify
+package notifytools
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	modules "github.com/jeiang/atrium/internal/module"
+	notifyapp "github.com/jeiang/atrium/internal/notify/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -29,21 +29,15 @@ func Metadata() tool.Tool {
 	}
 }
 
-func Tool() tool.Tool {
+func Definition(factory func(*tool.Context) *notifyapp.Service) modules.ToolDefinition {
 	t := Metadata()
-	t.Handler = handle
-	return t
+	t.Handler = func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+		return handle(ctx, tc, args, factory(tc))
+	}
+	return modules.ToolDefinition{Tool: t}
 }
 
-func Definition() modules.ToolDefinition {
-	return modules.ToolDefinition{Tool: Tool()}
-}
-
-func Tools() []tool.Tool {
-	return []tool.Tool{Tool()}
-}
-
-func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func handle(ctx context.Context, tc *tool.Context, args tool.Args, service *notifyapp.Service) (any, error) {
 	title, _, err := tool.TextArg(args, "title", true)
 	if err != nil {
 		return nil, err
@@ -52,26 +46,7 @@ func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	var used int
-	if err := tc.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE run_id = ?", nullID(tc.RunID)).Scan(&used); err != nil {
-		return nil, err
-	}
-	capKey := KeyPerRunCap
-	if tc.Kind == tool.Nightly {
-		capKey = KeyNightlyCap
-	}
-	limit, err := whole(ctx, tc.DB.Read, capKey)
-	if err != nil {
-		return nil, err
-	}
-	if used >= limit {
-		plural := "s"
-		if limit == 1 {
-			plural = ""
-		}
-		return nil, tool.Error(fmt.Sprintf("at most %d notification%s per run", limit, plural))
-	}
-	m := Message{Title: title, Body: body, ThreadID: tc.ThreadID, RunID: tc.RunID, Now: tc.Now}
+	m := notifyapp.Message{Title: title, Body: body, ThreadID: tc.ThreadID, RunID: tc.RunID, Now: tc.Now}
 	if tc.ProposalID != nil {
 		m.ProposalID = *tc.ProposalID
 	}
@@ -80,7 +55,8 @@ func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	} else if ok {
 		m.ThreadLink = &link
 	}
-	sent, err := Send(ctx, tc.DB, m)
+	change, err := service.Send(ctx, notifyapp.SendInput{Message: m, RunKind: &tc.Kind})
+	sent := change.Data
 	if err != nil {
 		return nil, err
 	}
