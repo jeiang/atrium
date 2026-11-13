@@ -280,6 +280,10 @@ behavior-parity target.
   created, and a refused start leaves no thread behind in any interface.
   References in the message are resolved against the new thread, also for
   API starts and `agent run`; `agent run` never queues behind an active run.
+  A branch keeps the source thread's model, effort, context limit, thinking,
+  web search and cost cap. Regenerate and resume are refused like a send
+  when the module is off or the Anthropic connection is missing; stopping
+  in an unknown thread answers 404 on the chat page as in the API.
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread

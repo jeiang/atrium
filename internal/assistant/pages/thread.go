@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/numx"
@@ -173,8 +172,7 @@ func (p *pages) chatRegenerate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := p.svc().Regenerate(detached(r), threadID)
-	if p.refused(w, r, err) {
+	if _, err := p.assistant().ReplyRegenerate(detached(r), asstapp.ThreadInput{ID: threadID}); p.refused(w, r, err) {
 		return
 	}
 	if !web.IsPartial(r) {
@@ -189,16 +187,7 @@ func (p *pages) chatStop(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx := detached(r)
-	active, err := journal.ActiveRun(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	stopped := false
-	if active != nil {
-		stopped, err = journal.RequestStop(ctx, p.deps.DB.Write, active.ID)
-		check(err)
-	}
-	if !stopped {
-		p.fail(w, r, http.StatusConflict, "no run is running")
+	if _, err := p.assistant().RunStop(detached(r), asstapp.ThreadInput{ID: threadID}); p.refused(w, r, err) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -220,31 +209,15 @@ func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	parent, err := threads.Get(detached(r), p.deps.DB.Read, threadID)
-	check(err)
-	if parent != nil && parent.ProjectID != nil && *parent.ProjectID != 0 {
-		project, err := projects.Get(detached(r), p.deps.DB.Read, *parent.ProjectID)
-		check(err)
-		if project != nil {
-			if problem, archived := archivedProject(project, "start chats in it"); archived {
-				p.failure(w, r, "Project archived", problem)
-				return
-			}
-		}
-	}
-	child, err := p.svc().Branch(detached(r), threadID, seq)
-	var unknown service.UnknownThread
-	var redo service.NothingToRedo
-	switch {
-	case errors.As(err, &unknown):
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
-		return
-	case errors.As(err, &redo):
+	branched, err := p.assistant().ThreadBranch(detached(r), asstapp.BranchInput{ThreadID: threadID, Seq: seq})
+	if errors.As(err, new(service.NothingToRedo)) {
 		p.fail(w, r, http.StatusNotFound, err.Error())
 		return
 	}
-	check(err)
-	redirect(w, r, "/chat/"+strconv.FormatInt(child, 10))
+	if p.refused(w, r, err) {
+		return
+	}
+	redirect(w, r, "/chat/"+strconv.FormatInt(branched.Data.ThreadID, 10))
 }
 
 func (p *pages) chatWork(w http.ResponseWriter, r *http.Request) {
@@ -315,12 +288,9 @@ func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
 	if _, ok := p.loadRun(w, r, threadID, runID); !ok {
 		return
 	}
-	err := p.svc().StartResume(detached(r), runID)
-	if errors.As(err, new(service.NotInterrupted)) {
-		p.fail(w, r, http.StatusConflict, "run is not interrupted")
+	if _, err := p.assistant().RunResume(detached(r), asstapp.ResumeInput{ThreadID: threadID, RunID: runID}); p.refused(w, r, err) {
 		return
 	}
-	check(err)
 	if !web.IsPartial(r) {
 		redirect(w, r, "/chat/"+strconv.FormatInt(threadID, 10))
 		return
@@ -347,8 +317,7 @@ func (p *pages) chatAnswer(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.FieldError{Loc: []string{"body", "text"}, Msg: "Type an answer first."})
 		return
 	}
-	if err := p.svc().Answer(detached(r), threadID, text); err != nil {
-		p.fail(w, r, http.StatusConflict, err.Error())
+	if _, err := p.assistant().RunAnswer(detached(r), asstapp.AnswerInput{ThreadID: threadID, Text: text}); p.refused(w, r, err) {
 		return
 	}
 	if !web.IsPartial(r) {

@@ -32,10 +32,8 @@ internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/refe
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/inference
-internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/projects
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/config
-internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/db
 internal/assistant/pages/events.go	github.com/jeiang/atrium/internal/assistant/journal
 internal/assistant/pages/events.go	github.com/jeiang/atrium/internal/assistant/progress
 internal/assistant/pages/files.go	github.com/jeiang/atrium/internal/assistant/files
@@ -67,7 +65,6 @@ internal/assistant/pages/settings.go	github.com/jeiang/atrium/internal/settings/
 internal/assistant/pages/sidebar.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/pages/sidebar.go	github.com/jeiang/atrium/internal/config
 internal/assistant/pages/thread.go	github.com/jeiang/atrium/internal/assistant/journal
-internal/assistant/pages/thread.go	github.com/jeiang/atrium/internal/assistant/projects
 internal/assistant/pages/thread.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/pages/thread.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/pages/views.go	github.com/jeiang/atrium/internal/assistant/files

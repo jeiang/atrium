@@ -9,11 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -88,7 +87,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, to)
 }
 
-func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, set func(context.Context, db.Querier, int64, bool) (bool, error)) {
+func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, set func(context.Context, asstapp.FlagInput) (application.Change[asstapp.ThreadChanged], error)) {
 	threadID, errs := pathInt(r, "thread_id")
 	form := web.FormValues(r)
 	value := formInt(form, "body", column, 1, &errs)
@@ -96,10 +95,7 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, s
 		web.Unprocessable(w, errs...)
 		return
 	}
-	ok, err := set(detached(r), p.deps.DB.Write, threadID, value != 0)
-	check(err)
-	if !ok {
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
+	if _, err := set(detached(r), asstapp.FlagInput{ThreadID: threadID, Set: value != 0}); p.refused(w, r, err) {
 		return
 	}
 	if web.IsPartial(r) {
@@ -124,29 +120,7 @@ func (p *pages) chatProject(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	var target *int64
-	if projectID != 0 {
-		found, err := projects.Get(detached(r), p.deps.DB.Read, projectID)
-		check(err)
-		if found == nil {
-			p.fail(w, r, http.StatusNotFound, "unknown project")
-			return
-		}
-		if problem, archived := archivedProject(found, "move chats into it"); archived {
-			p.failure(w, r, "Project archived", problem)
-			return
-		}
-		target = &projectID
-	}
-	moved, err := projects.MoveThread(detached(r), p.deps.DB.Write, threadID, target)
-	var refused projects.ProjectError
-	if errors.As(err, &refused) {
-		p.fail(w, r, http.StatusNotFound, err.Error())
-		return
-	}
-	check(err)
-	if !moved {
-		p.fail(w, r, http.StatusNotFound, "unknown chat thread")
+	if _, err := p.assistant().ThreadProject(detached(r), asstapp.MoveInput{ThreadID: threadID, ProjectID: projectID}); p.refused(w, r, err) {
 		return
 	}
 	redirect(w, r, "/chat/"+strconv.FormatInt(threadID, 10))
@@ -158,15 +132,14 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	changed, err := threads.SetOptions(detached(r), p.deps.DB.Write, threadID, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
+	_, err := p.assistant().ThreadOptions(detached(r), asstapp.OptionsInput{ThreadID: threadID, Model: web.FormString(form, "model", ""),
+		Effort: web.FormString(form, "effort", ""), ContextLimit: web.FormString(form, "context_limit", "")})
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not saved", err.Error())
 		return
 	}
-	check(err)
-	if !changed {
-		p.fail(w, r, http.StatusNotFound, "unknown chat thread")
+	if p.refused(w, r, err) {
 		return
 	}
 	if !web.IsPartial(r) {
@@ -188,7 +161,7 @@ func (p *pages) chatDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if p.refused(w, r, p.svc().DeleteThread(detached(r), threadID)) {
+	if _, err := p.assistant().ThreadDelete(detached(r), asstapp.ThreadInput{ID: threadID}); p.refused(w, r, err) {
 		return
 	}
 	if web.IsPartial(r) {

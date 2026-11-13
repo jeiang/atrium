@@ -778,3 +778,39 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 		t.Errorf("an invalid schedule = %d, stored %q, want a refusal that keeps the old one", code, schedule(nightly))
 	}
 }
+
+func TestBranchKeepsRunOptions(t *testing.T) {
+	_, api, d, w := asstServe(t)
+	api.Push(asstReply("branch source answer"))
+	thread := w.start(map[string]string{"text": "branch options", "web_search": "0", "cost_cap": "2.5"})
+	if state := asstSettleThread(t, d, thread); state != "done" {
+		t.Fatalf("source run %s", state)
+	}
+	var seq int64
+	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
+		t.Fatal(err)
+	}
+	code, body, h := w.post(fmt.Sprintf("/chat/%d/branch", thread), url.Values{"seq": {strconv.FormatInt(seq, 10)}}, false)
+	w.want(code, http.StatusSeeOther, body)
+	child, err := strconv.ParseInt(strings.TrimPrefix(h.Get("Location"), "/chat/"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := func(id int64) string {
+		var model, effort, thinking string
+		var limit, search int64
+		var costCap float64
+		if err := d.Read.QueryRow("SELECT model, effort, COALESCE(context_limit, 0), thinking, web_search, COALESCE(cost_cap_usd, 0) FROM threads WHERE id = ?", id).
+			Scan(&model, &effort, &limit, &thinking, &search, &costCap); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprintf("%s|%s|%d|%s|%d|%g", model, effort, limit, thinking, search, costCap)
+	}
+	source, branched := options(thread), options(child)
+	if source != branched || !strings.HasSuffix(source, "|0|2.5") {
+		t.Fatalf("branch options %q, source %q (want web search off and the 2.5 cap kept)", branched, source)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.branch' AND outcome = 'ok' AND target = ?", fmt.Sprintf("thread:%d", child)); n != 1 {
+		t.Fatalf("%d branch audits for the child, want 1", n)
+	}
+}

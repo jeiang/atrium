@@ -198,6 +198,12 @@ func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
 		web.APIError(w, http.StatusConflict, "project_archived", err.Error())
 	case errors.As(err, &readOnly):
 		web.APIError(w, http.StatusConflict, "read_only_thread", "Subagent threads are read-only.")
+	case errors.As(err, new(asstapp.NoActiveRun)):
+		web.APIError(w, http.StatusConflict, "no_active_run", err.Error())
+	case errors.As(err, new(asstapp.NoQuestion)):
+		web.APIError(w, http.StatusConflict, "no_question", err.Error())
+	case errors.As(err, new(asstapp.NotAnswered)):
+		web.APIError(w, http.StatusConflict, "not_answered", err.Error())
 	case errors.As(err, &app) && app.Code == application.NotConfigured:
 		web.APIError(w, http.StatusConflict, "not_configured", err.Error())
 	case errors.As(err, &app) && app.Code == application.NotFound:
@@ -351,25 +357,11 @@ func (p *pages) apiStop(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx := detached(r)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if thread == nil {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown thread.")
+	stopped, err := p.assistant().RunStop(detached(r), asstapp.ThreadInput{ID: threadID})
+	if p.apiRefused(w, err) {
 		return
 	}
-	active, err := journal.ActiveRun(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	stopped := false
-	if active != nil {
-		stopped, err = journal.RequestStop(ctx, p.deps.DB.Write, active.ID)
-		check(err)
-	}
-	if !stopped {
-		web.APIError(w, http.StatusConflict, "no_active_run", "No run is running.")
-		return
-	}
-	web.JSON(w, http.StatusOK, map[string]any{"stopped": true, "run_id": active.ID})
+	web.JSON(w, http.StatusOK, map[string]any{"stopped": true, "run_id": stopped.Data.RunID})
 }
 
 func (p *pages) apiAnswer(w http.ResponseWriter, r *http.Request) {
@@ -385,18 +377,11 @@ func (p *pages) apiAnswer(w http.ResponseWriter, r *http.Request) {
 		required(w, "text")
 		return
 	}
-	ctx := detached(r)
-	question, err := service.PendingQuestion(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if question == nil {
-		web.APIError(w, http.StatusConflict, "no_question", "No question is waiting for an answer.")
+	answered, err := p.assistant().RunAnswer(detached(r), asstapp.AnswerInput{ThreadID: threadID, Text: in.Text})
+	if p.apiRefused(w, err) {
 		return
 	}
-	if err := p.svc().Answer(ctx, threadID, in.Text); err != nil {
-		web.APIError(w, http.StatusConflict, "not_answered", err.Error())
-		return
-	}
-	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": question.RunID})
+	web.JSON(w, http.StatusAccepted, map[string]any{"run_id": answered.Data.RunID})
 }
 
 func (p *pages) apiEvents(w http.ResponseWriter, r *http.Request) {

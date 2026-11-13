@@ -86,6 +86,10 @@ func classify(err error) error {
 		redo     service.NothingToRedo
 		archived ArchivedProject
 		readOnly ReadOnlyThread
+		stopped  NoActiveRun
+		question NoQuestion
+		answer   NotAnswered
+		resume   service.NotInterrupted
 		exceeded inference.BudgetExceeded
 		refused  references.Refused
 		disabled *module.OwnerDisabled
@@ -99,7 +103,8 @@ func classify(err error) error {
 		code = application.NotFound
 	case errors.As(err, &option), errors.As(err, &file), errors.As(err, &mismatch):
 		code = application.Invalid
-	case errors.As(err, &active), errors.As(err, &redo), errors.As(err, &archived), errors.As(err, &readOnly):
+	case errors.As(err, &active), errors.As(err, &redo), errors.As(err, &archived), errors.As(err, &readOnly),
+		errors.As(err, &stopped), errors.As(err, &question), errors.As(err, &answer), errors.As(err, &resume):
 		code = application.Conflict
 	case errors.As(err, &missing):
 		code = application.NotConfigured
@@ -203,8 +208,8 @@ func (s *Service) threadStart(ctx context.Context, in StartInput, started *Start
 		if found == nil || found.ID == 0 {
 			return 0, notFound(unknownProject)
 		}
-		if found.Archived {
-			return 0, ArchivedProject(fmt.Sprintf("“%s” is archived. Restore it to start chats in it.", found.Name))
+		if err := archivedProject(found, "start chats in it"); err != nil {
+			return 0, err
 		}
 		project = &projectID
 	}

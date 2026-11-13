@@ -81,8 +81,8 @@ func Module(o Options) web.Module {
 		r.Get("/chat/palette", p.palette)
 		r.Get("/today", p.today)
 		r.Get("/chat/agenda", p.agenda)
-		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned", threads.SetPinned) })
-		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived", threads.SetArchived) })
+		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned", p.assistant().ThreadPin) })
+		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived", p.assistant().ThreadArchive) })
 		r.Get("/chat/{thread_id}", p.chatThread)
 		r.Post("/chat/{thread_id}/project", p.chatProject)
 		r.Post("/chat/{thread_id}/options", p.chatOptions)
@@ -193,6 +193,12 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 		p.failure(w, r, "Project archived", err.Error())
 	case errors.As(err, &readOnly):
 		p.fail(w, r, http.StatusConflict, err.Error())
+	case errors.As(err, new(asstapp.NoActiveRun)):
+		p.fail(w, r, http.StatusConflict, "no run is running")
+	case errors.As(err, new(asstapp.NoQuestion)), errors.As(err, new(asstapp.NotAnswered)):
+		p.fail(w, r, http.StatusConflict, err.Error())
+	case errors.As(err, new(service.NotInterrupted)):
+		p.fail(w, r, http.StatusConflict, "run is not interrupted")
 	case errors.As(err, &option):
 		p.failure(w, r, "Not started", err.Error())
 	case errors.As(err, &app) && app.Code == application.Invalid:
