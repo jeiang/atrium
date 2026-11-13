@@ -71,7 +71,7 @@
 }
 
 :root {
-  --radius: var(--radius-md);
+  --radius: var(--token-radius-md);
   --tabbar-h: 0px;
   --background: var(--bg);
   --foreground: var(--ink);

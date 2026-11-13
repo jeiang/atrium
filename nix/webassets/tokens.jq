@@ -10,7 +10,7 @@ def declarations: map("--\(.name):\(.value);") | join("");
 | fail(all(.type.fonts[]; .family as $f | any($t.type.families[]; contains($f))); "unknown font reference")
 | (.layout.tokens | map({key:.name,value:.value}) | from_entries) as $layout
 | fail($layout["touch-min"] == "44px" and $layout["reading-w"] == "760px" and $layout["panel-w"] == "320px" and $layout["bp-mobile"] == "768px" and $layout["bp-panel"] == "1024px"; "required layout tokens missing or invalid")
-| ([.color.tokens[] | {name, value:.value.light}] + .spacing.tokens + .radius.tokens + .shadow.tokens + .layout.tokens | declarations) as $root
+| ([.color.tokens[] | {name, value:.value.light}] + .spacing.tokens + (.radius.tokens | map(.name |= "token-\(.)")) + .shadow.tokens + .layout.tokens | declarations) as $root
 | ([.color.tokens[] | {name,value:.value.dark}] | declarations) as $dark
 | (.type.families | to_entries | map("--family-\(.key):\(.value);") | join("")) as $fonts
 | ([.type.groups[] | .family as $family | .styles[] | "--type-\(.name)-family:var(--family-\($family));--type-\(.name)-size:\(.fontSize);--type-\(.name)-leading:\(.lineHeight);--type-\(.name)-weight:\(.fontWeight);--type-\(.name)-tracking:\(.letterSpacing // "normal");--type-\(.name)-style:\(.fontStyle // "normal");"] | join("")) as $type

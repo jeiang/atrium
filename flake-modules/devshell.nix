@@ -37,6 +37,7 @@
           pkgs.go-licenses
           pkgs.pkg-config
           pkgs.tailwindcss_4
+          pkgs.brotli
         ]
         ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
       env =

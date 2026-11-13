@@ -9,6 +9,7 @@ result
 .pre-commit-config.yaml
 
 /internal/web/static/
+/internal/web/static.next/
 node_modules/
 
 # SQLite sidecars from opening the golden world fixture
