@@ -6,24 +6,28 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 type Service struct {
-	db       *db.DB
-	state    *state.Store
-	now      func() float64
-	env      config.Env
-	runs     func() *service.Service
-	filesDir string
-	ledger   *ledger.Store
-	jobs     []scheduler.Definition
+	db            *db.DB
+	state         *state.Store
+	now           func() float64
+	env           config.Env
+	runs          func() *service.Service
+	filesDir      string
+	ledger        *ledger.Store
+	jobs          []scheduler.Definition
+	resolveClient func(context.Context) (*anthropic.Client, error)
+	inference     *inference.Service
 }
 
 func New(d *db.DB, env config.Env, now func() float64) *Service {

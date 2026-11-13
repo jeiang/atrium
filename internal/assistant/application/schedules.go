@@ -188,7 +188,7 @@ func scheduleJobOf(j scheduler.ListedJob, zone *time.Location, agent bool) (Sche
 	if agent && j.NextDue != nil {
 		loc, err := scheduler.Zone(j.TZ)
 		if err != nil {
-			return ScheduleJob{}, scheduleRefused("invalid time zone")
+			return ScheduleJob{}, refusal("invalid time zone")
 		}
 		sec, us := timex.SplitTimestamp(*j.NextDue)
 		due := time.Unix(sec, us*1000).In(loc).Format(scheduleDueLayout)
@@ -271,7 +271,7 @@ func (s *Service) ScheduleHistory(ctx context.Context, in ScheduleHistoryInput) 
 	return application.Read[[]ScheduleRun]{Revision: rev, Data: out}, err
 }
 
-func scheduleRefused(message string) error {
+func refusal(message string) error {
 	return &application.Error{Code: application.Refused, Message: message}
 }
 
@@ -356,7 +356,7 @@ func (s *Service) existingJob(ctx context.Context, q db.Querier, id int64, agent
 		return nil, noSchedule(id)
 	}
 	if agent && job.Fixed() {
-		return nil, scheduleRefused(builtinAgentRefusal)
+		return nil, refusal(builtinAgentRefusal)
 	}
 	return job, nil
 }
