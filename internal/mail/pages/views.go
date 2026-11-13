@@ -1,14 +1,13 @@
 package pages
 
 import (
-	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
 
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -81,104 +80,16 @@ type rowData struct {
 	Correct *correctForm `json:"correct"`
 }
 
-type triageData struct {
-	Summaries   []triage.Summary  `json:"summaries"`
-	Flags       []triage.Judgment `json:"flags"`
-	FlagsCapped bool              `json:"flags_capped"`
-	NoContacts  bool              `json:"no_contacts"`
-	Rows        []triage.Row      `json:"rows"`
-	Check       []triage.Row      `json:"check"`
-	Total       int               `json:"total"`
-	Offset      int               `json:"offset"`
-	NextOffset  int               `json:"next_offset"`
-	Account     string            `json:"account"`
-	Stage       string            `json:"stage"`
-	Agreement   string            `json:"agreement"`
-	Q           string            `json:"q"`
-}
-
-type conditionView struct {
-	Field string `json:"field"`
-	Op    string `json:"op"`
-	Value any    `json:"value,omitempty"`
-}
-
-type ruleView struct {
-	ID      string          `json:"id"`
-	Account *string         `json:"account"`
-	Action  string          `json:"action"`
-	Dest    *string         `json:"dest"`
-	When    []conditionView `json:"when"`
-}
-
-type learnedView struct {
-	Level   string  `json:"level"`
-	Key     string  `json:"key"`
-	Dest    string  `json:"dest"`
-	Purity  float64 `json:"purity"`
-	N       int     `json:"n"`
-	Account string  `json:"account"`
-}
-
-type rulesData struct {
-	Account      string        `json:"account"`
-	Rules        []ruleView    `json:"rules"`
-	Learned      []learnedView `json:"learned"`
-	LearnedLimit *int          `json:"learned_limit"`
-}
-
 type moved struct {
 	ID        string `json:"id"`
 	Direction string `json:"direction"`
 }
 
 type ruleListData struct {
-	Rules   []ruleView `json:"rules"`
-	Account string     `json:"account"`
-	Moved   *moved     `json:"moved"`
-	FocusID *string    `json:"focus_id"`
-}
-
-type sourceMessage struct {
-	ID       int64  `json:"id"`
-	Subject  string `json:"subject"`
-	FromAddr string `json:"from_addr"`
-}
-
-type ruleEditData struct {
-	Rule          ruleView                   `json:"rule"`
-	IsNew         bool                       `json:"is_new"`
-	Folders       map[string][]triage.Folder `json:"folders"`
-	Suggestions   []conditionView            `json:"suggestions"`
-	SourceMessage *sourceMessage             `json:"source_message"`
-	Errors        []string                   `json:"errors"`
-}
-
-type conditionData struct {
-	C     conditionView `json:"c"`
-	Focus string        `json:"focus"`
-}
-
-func conditionViewOf(c rules.Condition) conditionView {
-	out := conditionView{Field: c.Field(), Op: c.Op()}
-	value, ok := c.Value()
-	if !ok {
-		return out
-	}
-	if n, ok := value.(*big.Int); ok {
-		out.Value = n.String()
-	} else {
-		out.Value = value
-	}
-	return out
-}
-
-func conditionViews(cs []rules.Condition) []conditionView {
-	out := make([]conditionView, len(cs))
-	for i, c := range cs {
-		out[i] = conditionViewOf(c)
-	}
-	return out
+	Rules   []mailapp.RuleView `json:"rules"`
+	Account string             `json:"account"`
+	Moved   *moved             `json:"moved"`
+	FocusID *string            `json:"focus_id"`
 }
 
 func toast(category, title, description string) *tpl.Toast {
