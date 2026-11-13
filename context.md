@@ -227,6 +227,11 @@ behavior-parity target.
   the Google OAuth wizard's Gmail refresh token, refreshes the access token
   once for concurrent callers, reconnects or retries AUTH once after a
   rejected token, and reports needs-reauth or expiring health.
+- The bearer API exposes existing mail message, triage, rule, correction,
+  account and live-state operations under `/api/v1/mail`. Corrections require
+  an explicit immediate or deferred mode. Account creation still tests before
+  saving; deployment-pinned accounts cannot be removed. Pause and resume do
+  not change mail mode or grant go-live eligibility.
 - The assistant uses the Anthropic API. A static catalog in
   `internal/assistant/pricing` holds Haiku 5.5, Sonnet 5.5 and Opus 5.5 with
   their ids, context window, maximum output, effort levels, thinking modes

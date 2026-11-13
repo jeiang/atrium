@@ -26,7 +26,7 @@ func Query[I, O any](d *web.Deps, def application.Definition, shape application.
 				web.APIFail(w, err)
 				return
 			}
-			if shape.Uncached {
+			if shape.Uncached || shape.ReadOnlyPost {
 				read.Revision = ""
 			}
 			if shape.Body == application.BodyBinary {

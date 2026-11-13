@@ -283,10 +283,10 @@ func newHit(info Info, head string, marked *string) Hit {
 	return Hit{Info: info, Snippet: snippet.String()}
 }
 
-func recent(ctx context.Context, q Querier, f Filters, limit, snippetChars int) ([]Hit, error) {
+func recent(ctx context.Context, q Querier, f Filters, limit, offset, snippetChars int) ([]Hit, error) {
 	where, params := filterSQL(f)
-	infos, err := infoRows(q.QueryContext(ctx, baseSelect+" WHERE "+where+" ORDER BY m.date_ts DESC, m.id DESC LIMIT ?",
-		slices.Concat(params, []any{limit})...))
+	infos, err := infoRows(q.QueryContext(ctx, baseSelect+" WHERE "+where+" ORDER BY m.date_ts DESC, m.id DESC LIMIT ? OFFSET ?",
+		slices.Concat(params, []any{limit, offset})...))
 	if err != nil {
 		return nil, err
 	}
@@ -314,6 +314,7 @@ type Query struct {
 	Text    string
 	Filters Filters
 	Limit   int
+	Offset  int
 }
 
 func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFunc) (Result, error) {
@@ -335,7 +336,7 @@ func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFun
 	}
 	query := strings.TrimSpace(req.Text)
 	if query == "" {
-		hits, err := recent(ctx, q, f, limit, lim.snippetChars)
+		hits, err := recent(ctx, q, f, limit, req.Offset, lim.snippetChars)
 		return Result{Hits: hits}, err
 	}
 	match, err := textsearch.FTSQueryTerms(query, lim.maxTerms)
@@ -373,7 +374,7 @@ func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFun
 		marked[h.id] = h.snippet
 	}
 	fused := textsearch.RRFWith(lim.rrfK, lexIDs, sem)
-	fused = fused[:min(len(fused), max(limit, 0))]
+	fused = fused[min(len(fused), max(req.Offset, 0)):min(len(fused), max(req.Offset, 0)+max(limit, 0))]
 	fusedIDs := make([]int64, len(fused))
 	for i, s := range fused {
 		fusedIDs[i] = s.ID

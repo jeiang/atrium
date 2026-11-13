@@ -16,6 +16,7 @@ const TriageName application.Name = "mail.triage"
 type TriageInput struct {
 	Account, Stage, Agreement, Q string
 	Offset                       int
+	Limit                        int
 	Full                         bool
 }
 type TriageResult struct {
@@ -42,7 +43,11 @@ func (s *Service) Triage(ctx context.Context, in TriageInput) (application.Read[
 	const checkRows = 20
 	data := TriageResult{Account: in.Account, Stage: in.Stage, Agreement: in.Agreement, Q: in.Q, Offset: in.Offset}
 	rev, err := s.snapshot(ctx, TriageName, in, func(q db.Querier) error {
-		filter := triage.Filter{Account: in.Account, Stage: in.Stage, Agreement: in.Agreement, Limit: pageSize, Offset: in.Offset, Q: in.Q}
+		limit := in.Limit
+		if limit == 0 {
+			limit = pageSize
+		}
+		filter := triage.Filter{Account: in.Account, Stage: in.Stage, Agreement: in.Agreement, Limit: limit, Offset: in.Offset, Q: in.Q}
 		plain := in.Stage == "" && in.Agreement == "" && in.Q == ""
 		if plain {
 			filter.Attention = triage.AttentionRest

@@ -117,9 +117,31 @@
     },
     {
       "area": "mail",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "mail.account-add",
+        "mail.account-remove",
+        "mail.account-test",
+        "mail.account-update",
+        "mail.accounts",
+        "mail.correct",
+        "mail.live-actions",
+        "mail.live-status",
+        "mail.message",
+        "mail.pause",
+        "mail.resume",
+        "mail.rule-create",
+        "mail.rule-delete",
+        "mail.rule-preview",
+        "mail.rule-reorder",
+        "mail.rule-update",
+        "mail.rules",
+        "mail.rules-export",
+        "mail.rules-import",
+        "mail.search",
+        "mail.triage"
+      ],
+      "required": 21,
+      "bound": 21
     },
     {
       "area": "media",
@@ -289,6 +311,6 @@
       "bound": 3
     }
   ],
-  "total_required": 204,
-  "total_bound": 136
+  "total_required": 205,
+  "total_bound": 157
 }
