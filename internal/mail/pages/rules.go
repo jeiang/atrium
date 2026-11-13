@@ -221,7 +221,7 @@ func (f ruleForm) view(id string) mailapp.RuleView {
 func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
 	raw := readRuleForm(web.FormValues(r)).raw()
 	raw["id"] = ruleedit.PreviewID
-	found, err := ruleedit.PreviewRule(r.Context(), s.deps.DB.Read, raw, ruleedit.DefaultLimit, s.now())
+	read, err := s.reads.RulePreview(r.Context(), mailapp.RulePreviewInput{Rule: raw})
 	var invalid rules.RuleError
 	if errors.As(err, &invalid) {
 		problem := ruleProblem(err)
@@ -229,20 +229,19 @@ func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	s.fragment(w, r, "_rule_preview.gohtml", previewData{Preview: &found}, nil)
+	s.fragment(w, r, "_rule_preview.gohtml", previewData{Preview: &read.Data}, nil)
 }
 
 func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, isNew bool, form ruleForm) {
 	ctx := context.WithoutCancel(r.Context())
 	raw := form.raw()
 	raw["id"] = id
-	var rule rules.Rule
-	var err error
+	save := s.reads.RuleUpdate
 	if isNew {
-		rule, err = ruleedit.CreateRule(ctx, s.deps.DB, raw)
-	} else {
-		rule, err = ruleedit.UpdateRule(ctx, s.deps.DB, id, raw)
+		save = s.reads.RuleCreate
 	}
+	done, err := save(ctx, mailapp.RuleInput{ID: id, Rule: raw})
+	rule := done.Data
 	var invalid rules.RuleError
 	if errors.As(err, &invalid) {
 		data := mailapp.RuleEdit{
@@ -302,20 +301,13 @@ func (s *service) ruleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	account := web.FormString(form, "account", "")
 	ctx := context.WithoutCancel(r.Context())
-	ordered := idsOf(s.ruleViews(ctx, account))
-	index := slices.Index(ordered, id)
-	if index < 0 {
+	_, err := s.reads.RuleReorder(ctx, mailapp.RuleReorderInput{ID: id, Account: account, Direction: direction})
+	var unknown *application.Error
+	if errors.As(err, &unknown) && unknown.Code == application.NotFound {
 		s.fail(w, r, http.StatusNotFound, "unknown rule")
 		return
 	}
-	target := index + 1
-	if direction == "up" {
-		target = index - 1
-	}
-	if target >= 0 && target < len(ordered) {
-		ordered[index], ordered[target] = ordered[target], ordered[index]
-		check(ruleedit.ReorderRules(ctx, s.deps.DB, ordered))
-	}
+	check(err)
 	data := ruleListData{Rules: s.ruleViews(ctx, account), Account: account, Moved: &moved{ID: id, Direction: direction}}
 	s.fragment(w, r, "_rule_list.gohtml", data, nil)
 }
@@ -333,10 +325,10 @@ func (s *service) ruleDelete(w http.ResponseWriter, r *http.Request) {
 	account := web.QueryValue(r.URL.Query(), "account")
 	ctx := context.WithoutCancel(r.Context())
 	before := idsOf(s.ruleViews(ctx, account))
-	deleted, err := ruleedit.DeleteRule(ctx, s.deps.DB, id)
+	done, err := s.reads.RuleDelete(ctx, mailapp.RuleDeleteInput{ID: id})
 	check(err)
 	notice := toast("error", "Rule not found", id)
-	if deleted {
+	if done.Data.Deleted {
 		notice = toast("success", "Rule deleted", id)
 	}
 	remaining := s.ruleViews(ctx, account)

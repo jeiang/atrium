@@ -88,7 +88,7 @@ func DescribeDraftDiscard() application.Definition {
 }
 func NewDrafts(d *db.DB, cfg config.Config, env config.Env, now func() float64, store *ledger.Store) *Service {
 	s := New(d, cfg, env, now)
-	s.draftLedger = store
+	s.effects = store
 	return s
 }
 func (s *Service) draftStore(q db.Querier) *drafts.Store {
@@ -252,7 +252,7 @@ func (s *Service) DraftCreate(ctx context.Context, in DraftCreateInput) (applica
 		}
 		var id int64
 		st := s.draftStore(tx)
-		effect, err := s.draftLedger.ApplyLocalTx(ctx, tx, ledger.New{Origin: "agent", Operation: "draft_email_create", OperationKey: "draft_email_create:" + ledger.NewKey(), Target: "draft:new", ThreadID: &inv.ThreadID, RunID: &inv.RunID, ProposalID: in.ProposalID}, func(ctx context.Context, _ *sql.Tx) (ledger.Result, error) {
+		effect, err := s.effects.ApplyLocalTx(ctx, tx, ledger.New{Origin: "agent", Operation: "draft_email_create", OperationKey: "draft_email_create:" + ledger.NewKey(), Target: "draft:new", ThreadID: &inv.ThreadID, RunID: &inv.RunID, ProposalID: in.ProposalID}, func(ctx context.Context, _ *sql.Tx) (ledger.Result, error) {
 			var reply any
 			if in.ReplyID != nil {
 				reply = *in.ReplyID
@@ -296,7 +296,7 @@ func (s *Service) DraftUpdate(ctx context.Context, in DraftUpdateInput) (applica
 			return nil, nil, &application.Error{Code: application.Forbidden, Message: "draft editing requires an agent invocation"}
 		}
 		var row *drafts.Row
-		effect, err := s.draftLedger.ApplyLocalTx(ctx, tx, ledger.New{Origin: "agent", Operation: "draft_email_update", OperationKey: "draft_email_update:" + ledger.NewKey(), Target: fmt.Sprintf("draft:%d", in.ID), ThreadID: &inv.ThreadID, RunID: &inv.RunID, ProposalID: in.ProposalID}, func(ctx context.Context, _ *sql.Tx) (ledger.Result, error) {
+		effect, err := s.effects.ApplyLocalTx(ctx, tx, ledger.New{Origin: "agent", Operation: "draft_email_update", OperationKey: "draft_email_update:" + ledger.NewKey(), Target: fmt.Sprintf("draft:%d", in.ID), ThreadID: &inv.ThreadID, RunID: &inv.RunID, ProposalID: in.ProposalID}, func(ctx context.Context, _ *sql.Tx) (ledger.Result, error) {
 			var err error
 			row, err = st.Update(ctx, in.ID, in.Fields.changes())
 			if err != nil {

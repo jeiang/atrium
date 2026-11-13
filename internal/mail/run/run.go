@@ -26,7 +26,6 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 var log = logx.Logger("atrium.run")
@@ -135,11 +134,11 @@ func (p *Pass) use(c *classifier.Service) {
 }
 
 func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64, classifiers Classifier) (*Pass, func(), error) {
-	d, err := connect(ctx, env, cfg)
+	d, err := Connect(ctx, env, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	p, err := prepare(ctx, env, d, cfg, open, now, classifiers)
+	p, err := Prepare(ctx, env, d, cfg, open, now, classifiers)
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, err
@@ -147,7 +146,7 @@ func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.Open
 	return p, func() { _ = d.Close() }, nil
 }
 
-func connect(ctx context.Context, env config.Env, cfg config.Config) (*db.DB, error) {
+func Connect(ctx context.Context, env config.Env, cfg config.Config) (*db.DB, error) {
 	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
 	if err != nil {
 		return nil, err
@@ -159,7 +158,7 @@ func connect(ctx context.Context, env config.Env, cfg config.Config) (*db.DB, er
 	return d, nil
 }
 
-func prepare(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64, classifiers Classifier) (*Pass, error) {
+func Prepare(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64, classifiers Classifier) (*Pass, error) {
 	if now == nil {
 		now = mail.WallClock
 	}
@@ -299,21 +298,24 @@ var passDeadline = 20 * time.Minute
 
 const SyncJobKey = module.Mail + "/" + passrun.Sync
 
-func (p *Pass) Locked(waitCtx, workCtx context.Context, accounts []string) error {
-	lock, err := db.ResourceLocks(waitCtx, p.Cfg.DBPath, []string{mail.PassResource}, 0)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = lock.Close() }()
-	workCtx, cancel := context.WithTimeout(db.WithHeld(workCtx, lock), passDeadline)
+type AccountSync struct {
+	Account string
+	Stats   mailsync.Stats
+}
+
+func (p *Pass) Run(ctx context.Context, accounts []string) ([]AccountSync, error) {
+	workCtx, cancel := context.WithTimeout(ctx, passDeadline)
 	defer cancel()
 	defer p.checkpoint(workCtx)
+	var synced []AccountSync
 	for _, account := range accounts {
-		if err := p.SyncOne(workCtx, account); err != nil {
-			return err
+		stats, err := p.Syncer.One(workCtx, account, p.Open)
+		synced = append(synced, AccountSync{Account: account, Stats: stats})
+		if err != nil {
+			return synced, err
 		}
 	}
-	return p.Process(workCtx, accounts)
+	return synced, p.Process(workCtx, accounts)
 }
 
 func (p *Pass) checkpoint(ctx context.Context) {
@@ -327,33 +329,4 @@ func (p *Pass) checkpoint(ctx context.Context) {
 	case c.Busy:
 		log.Warn(fmt.Sprintf("wal checkpoint blocked by a reader: %d of %d frames checkpointed", c.Done, c.Frames))
 	}
-}
-
-func Sync(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc, classifiers Classifier) ([]string, error) {
-	accounts, err := SelectAccounts(ctx, requested)
-	if err != nil {
-		return nil, err
-	}
-	d, err := connect(ctx, env, cfg)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = d.Close() }()
-	var passErr error
-	_, err = module.Invoke(ctx, d, cfg, SyncJobKey, 0, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
-		passErr = SyncPass(ctx, env, d, cfg, accounts, open, classifiers)
-		return scheduler.Result{}, passErr
-	})
-	if err == nil {
-		err = passErr
-	}
-	return accounts, err
-}
-
-func SyncPass(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, accounts []string, open mail.OpenFunc, classifiers Classifier) error {
-	pass, err := prepare(ctx, env, d, cfg, open, nil, classifiers)
-	if err != nil {
-		return err
-	}
-	return passrun.Track(ctx, d, passrun.Sync, func() error { return pass.Locked(ctx, ctx, accounts) })
 }

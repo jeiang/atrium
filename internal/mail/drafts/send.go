@@ -47,23 +47,25 @@ type Result struct {
 	Refused    smtp.Refusals
 	Filed      Filed
 	FiledError string
+	EffectIDs  []int64 `json:"-"`
+	Stale      bool    `json:"-"`
 }
 
-func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (Filed, error) {
+func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (filed Filed, effectID int64, err error) {
 	if config.From(ctx).Preset(account) != config.ICloud {
-		return FiledByServer, nil
+		return FiledByServer, 0, nil
 	}
 	if s.Open == nil {
-		return FiledFailed, errors.New("no IMAP opener")
+		return FiledFailed, 0, errors.New("no IMAP opener")
 	}
 	client, err := s.Open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read, SentOnly: true})
 	if err != nil {
-		return FiledFailed, err
+		return FiledFailed, 0, err
 	}
 	defer client.Close()
 	boxes, err := client.ListMailboxes(ctx)
 	if err != nil {
-		return FiledFailed, err
+		return FiledFailed, 0, err
 	}
 	sent := ""
 	for _, b := range boxes {
@@ -73,7 +75,7 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 		}
 	}
 	if sent == "" {
-		return FiledNoMailbox, nil
+		return FiledNoMailbox, 0, nil
 	}
 	msgid := mime.ParseMsgID(msg.Get("Message-ID")).Bare()
 	store := s.ledgerStore()
@@ -84,7 +86,7 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 		Resources: []ledger.Resource{{Key: "mail_folder:" + account + ":" + sent}},
 	}, nil)
 	if err != nil {
-		return FiledFailed, err
+		return FiledFailed, 0, err
 	}
 	raw := msg.Bytes("\r\n", false)
 	if err := client.Append(safety.OperatorSend(ctx, sent), sent, raw, `\Seen`); err != nil {
@@ -95,14 +97,14 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 			text = "the copy in Sent may exist: check Sent before filing it again"
 		}
 		_ = store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Error: text}, nil)
-		return FiledFailed, errors.New(text)
+		return FiledFailed, ticket.ID, errors.New(text)
 	}
 	if err := store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
 		State: ledger.Done, After: jsonOf(map[string]any{"account": account, "imap_name": sent, "msgid": msgid}),
 	}, nil); err != nil {
-		return FiledFailed, err
+		return FiledFailed, ticket.ID, err
 	}
-	return FiledCopy, nil
+	return FiledCopy, ticket.ID, nil
 }
 
 func (s *Store) abandon(ctx context.Context, id int64, cause error) {
@@ -113,10 +115,10 @@ func (s *Store) abandon(ctx context.Context, id int64, cause error) {
 	}
 }
 
-func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Result, error) {
+func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (out Result, err error) {
 	var draft *Row
 	var ticket ledger.Ticket
-	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	err = s.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, "UPDATE drafts SET status = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND status = ? AND revision = ?",
 			string(Sending), s.now(), id, string(Draft), reviewedRevision)
 		if err != nil {
@@ -150,12 +152,13 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 				return Result{}, gerr
 			}
 			if current != nil && current.Status == Draft {
-				return Result{}, Error("draft changed, review again")
+				return Result{Stale: true}, Error("draft changed, review again")
 			}
 			return Result{}, Error("draft is not in a sendable state")
 		}
 		return Result{}, err
 	}
+	out.EffectIDs = []int64{ticket.ID}
 	msg, refused, err := s.submit(ctx, draft)
 	var unknown *smtp.OutcomeUnknown
 	if errors.As(err, &unknown) {
@@ -163,18 +166,18 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 		if uerr := s.settle(ctx, ticket, ledger.Result{State: ledger.Unknown, Error: text}, func(ctx context.Context, tx *sql.Tx) error {
 			return transitionTx(ctx, tx, s.now(), id, Sending, Unknown, func(u *updateSet) { u.set("smtp_result", text) })
 		}); uerr != nil {
-			return Result{}, uerr
+			return out, uerr
 		}
-		return Result{}, OutcomeUnknown("the mail may have been sent (" + unknown.Error() + "); check before you choose Back to draft")
+		return out, OutcomeUnknown("the mail may have been sent (" + unknown.Error() + "); check before you choose Back to draft")
 	}
 	if err != nil {
 		text := "send failed: " + err.Error()
 		if uerr := s.settle(ctx, ticket, ledger.Result{State: ledger.Failed, Error: text}, func(ctx context.Context, tx *sql.Tx) error {
 			return transitionTx(ctx, tx, s.now(), id, Sending, Draft, func(u *updateSet) { u.set("smtp_result", text) })
 		}); uerr != nil {
-			return Result{}, uerr
+			return out, uerr
 		}
-		return Result{}, err
+		return out, err
 	}
 	result := "sent"
 	if len(refused) > 0 {
@@ -189,9 +192,12 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 			u.set("sent_msgid", msgid)
 		})
 	}); err != nil {
-		return Result{}, err
+		return out, err
 	}
-	filed, ferr := s.fileSentCopy(ctx, draft.Account, msg)
+	filed, appendID, ferr := s.fileSentCopy(ctx, draft.Account, msg)
+	if appendID != 0 {
+		out.EffectIDs = append(out.EffectIDs, appendID)
+	}
 	filedError := ""
 	if ferr != nil {
 		log.Warn(fmt.Sprintf("sent copy for draft %d not filed: %s", id, ferr))
@@ -202,10 +208,11 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 	if filedError != "" {
 		detail += ": " + filedError
 	}
+	out.Refused, out.Filed, out.FiledError = refused, filed, filedError
 	if _, err := s.exec(ctx, "UPDATE drafts SET smtp_result = ? WHERE id = ? AND status = ?", result+"; "+detail, id, string(Sent)); err != nil {
-		return Result{}, err
+		return out, err
 	}
-	return Result{Refused: refused, Filed: filed, FiledError: filedError}, nil
+	return out, nil
 }
 
 func (s *Store) settle(ctx context.Context, ticket ledger.Ticket, result ledger.Result, local ledger.Mutation) error {

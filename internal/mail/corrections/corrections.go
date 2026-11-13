@@ -48,41 +48,36 @@ func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 	return &c, nil
 }
 
-func Record(ctx context.Context, d *db.DB, messageID int64, folder, source string, ts float64) (Correction, error) {
+func RecordTx(ctx context.Context, tx *sql.Tx, messageID int64, folder, source string, ts float64) (Correction, error) {
 	folder = strings.TrimSpace(folder)
 	if folder == "" || utf8.RuneCountInString(folder) > MaxFolderChars || strings.Contains(folder, "|") || folder == config.Inbox {
 		return Correction{}, errorf("invalid destination %s", strconv.Quote(folder))
 	}
-	var out Correction
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		var account string
-		var sent int64
-		err := tx.QueryRowContext(ctx, "SELECT account, sent FROM messages WHERE id = ?", messageID).Scan(&account, &sent)
-		if errors.Is(err, sql.ErrNoRows) {
-			return errorf("unknown message %d", messageID)
-		}
-		if err != nil {
-			return err
-		}
-		if sent != 0 {
-			return errorf("cannot correct a sent message")
-		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT OR REPLACE INTO corrections (message_id, account, folder, ts, source) VALUES (?, ?, ?, ?, ?)",
-			messageID, account, folder, ts, source); err != nil {
-			return err
-		}
-		confidence := 1.0
-		if err := message.RecordDecision(ctx, tx, message.DecisionRecord{
-			MessageID: messageID, Account: account, TS: ts, Stage: "correction", Key: &source, Action: "file", Dest: &folder,
-			Confidence: &confidence, Detail: map[string]any{},
-		}); err != nil {
-			return err
-		}
-		out = Correction{messageID, account, folder, ts, source}
-		return nil
-	})
-	return out, err
+	var account string
+	var sent int64
+	err := tx.QueryRowContext(ctx, "SELECT account, sent FROM messages WHERE id = ?", messageID).Scan(&account, &sent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Correction{}, errorf("unknown message %d", messageID)
+	}
+	if err != nil {
+		return Correction{}, err
+	}
+	if sent != 0 {
+		return Correction{}, errorf("cannot correct a sent message")
+	}
+	if _, err := tx.ExecContext(ctx,
+		"INSERT OR REPLACE INTO corrections (message_id, account, folder, ts, source) VALUES (?, ?, ?, ?, ?)",
+		messageID, account, folder, ts, source); err != nil {
+		return Correction{}, err
+	}
+	confidence := 1.0
+	if err := message.RecordDecision(ctx, tx, message.DecisionRecord{
+		MessageID: messageID, Account: account, TS: ts, Stage: "correction", Key: &source, Action: "file", Dest: &folder,
+		Confidence: &confidence, Detail: map[string]any{},
+	}); err != nil {
+		return Correction{}, err
+	}
+	return Correction{messageID, account, folder, ts, source}, nil
 }
 
 type Execer interface {

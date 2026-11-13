@@ -727,7 +727,6 @@ func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T
 }
 
 func TestMailPassWithAnUnbuildableAnthropicTransportRunsFreeStages(t *testing.T) {
-	t.Parallel()
 	r := newMailClassifierRig(t, nil)
 	hostPath, _ := r.f.lookup("ATRIUM_HOST_CONFIG")
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, hostPath, r.f.dir, "host-broken-ca.toml", map[string]string{

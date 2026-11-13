@@ -2,14 +2,13 @@ package mailtools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/ledger"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
@@ -17,7 +16,7 @@ import (
 
 var trackPackageSchema = json.RawMessage(`{"type":"object","properties":{"package_id":{"type":"integer"},"tracking_number":{"type":"string"},"carrier":{"type":"string"},"destination_country":{"type":"string"},"destination_postcode":{"type":"string"}},"additionalProperties":false}`)
 
-func trackingTools() []tool.Tool {
+func trackingTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	return []tool.Tool{approval.Gate(tool.Tool{
 		Name: "track_package",
 		Description: "Ask the operator to approve registering a package's tracking number with Ship24 (a paid lookup); nothing is sent until they approve the card. " +
@@ -27,11 +26,13 @@ func trackingTools() []tool.Tool {
 		Annotated: true,
 		Channel:   tool.ChannelOwn,
 		Contexts:  tool.Kinds{tool.Chat},
-		Approval:  &tool.Approval{Apply: trackPackage, Label: "Track package", Icon: "package", Module: module.Mail, Detail: "tracking_number"},
+		Approval: &tool.Approval{Apply: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+			return trackPackage(ctx, tc, args, svc)
+		}, Label: "Track package", Icon: "package", Module: module.Mail, Detail: "tracking_number"},
 	})}
 }
 
-func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
 	id, _, err := tool.IntArg(args, "package_id", false)
 	if err != nil {
 		return nil, err
@@ -55,66 +56,17 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if id == 0 && number == "" {
 		return nil, tool.Error("give package_id or tracking_number")
 	}
-	target, settings, err := tracking.Resolve(ctx, tc.DB, tc.Env, tc.Now(), id, number, carrier)
+	done, err := svc(tc).ProposeTracking(ctx, mailapp.ProposeTrackingInput{ProposalID: tc.ProposalID, PackageID: id, Number: number, Carrier: carrier, Country: country, Postcode: postcode})
 	if err != nil {
-		return nil, trackingFailed(err)
-	}
-	defer settings.Close()
-	if country != "" {
-		settings.Country = country
-	}
-	if postcode != "" {
-		settings.Postcode = postcode
-	}
-	if target.TrackerID != "" {
-		result, _, err := tracking.Refresh(ctx, tc.DB, tc.Now(), target, settings, tc.Env)
-		if err != nil {
-			return nil, trackingFailed(err)
+		if failure, ok := errors.AsType[*mailapp.TrackingFailure](err); ok {
+			return nil, trackingFailed(failure.Err)
 		}
-		return result, nil
-	}
-	identity := tracking.Identity(target.Carrier, target.TrackingNumber)
-	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
-		Origin: "tracking", Operation: "track_package", OperationKey: "track_package:" + identity,
-		Target: identity, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
-		Resources: []ledger.Resource{{Key: identity}},
-	}, func(ctx context.Context, tx *sql.Tx) error {
-		id, err := tracking.Admit(ctx, tx, target, tc.Now())
-		if err != nil {
-			return err
+		if e, ok := errors.AsType[*application.Error](err); ok {
+			return nil, tool.Error(e.Message)
 		}
-		target.ID = id
-		return nil
-	})
-	if err != nil {
 		return nil, err
 	}
-	result, err := tracking.Register(ctx, tc.DB, tc.Now(), target, settings)
-	if err != nil {
-		settleCtx := context.WithoutCancel(ctx)
-		state := ledger.Failed
-		if tracking.OutcomeUnknown(err) {
-			state = ledger.Unknown
-		}
-		_ = tc.Ledger.Settle(settleCtx, ticket, ledger.Result{State: state, Target: identity, Error: err.Error()}, nil)
-		if state == ledger.Unknown {
-			return nil, tool.Error("the Ship24 registration outcome is unknown: " + err.Error() +
-				"; the write is blocked until the operator resolves it with `atrium effects resolve " + fmt.Sprint(ticket.ID) + " --outcome applied`")
-		}
-		return nil, trackingFailed(err)
-	}
-	undo := tracking.Undo{Op: tracking.UndoUntrack, PackageID: target.ID, TrackerID: result.TrackerID, Before: target}
-	if err := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
-		State: ledger.Done, Target: identity,
-		After: jsonOf(map[string]any{"tracker_id": result.TrackerID, "status": result.Status}),
-		Undo:  jsonOf(undo),
-	}, func(ctx context.Context, tx *sql.Tx) error {
-		return tracking.SaveRegistration(ctx, tx, tc.Now(), target.ID, result.TrackerID, result.Tracking)
-	}); err != nil {
-		return nil, err
-	}
-	result.WriteID = ticket.ID
-	return result, nil
+	return done.Data.Tracking, nil
 }
 
 func trackingFailed(err error) error {

@@ -5,14 +5,31 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/applier"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/live"
+	"github.com/jeiang/atrium/internal/mail/rebalance"
+	"github.com/jeiang/atrium/internal/mail/run"
+	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 )
 
 type Service struct {
-	draftLedger *ledger.Store
+	applier     *applier.Applier
+	pass        *run.Pass
+	classifiers run.Classifier
+	workContext context.Context
+	classifier  *classifier.Service
+	namer       rebalance.Namer
+	syncer      *mailsync.Syncer
+	syncAll     func(context.Context) error
+	effects     *ledger.Store
+	sender      *drafts.Store
+	open        mail.OpenFunc
 	live        *live.Live
 	db          *db.DB
 	state       *state.Store

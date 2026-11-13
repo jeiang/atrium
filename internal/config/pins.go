@@ -79,7 +79,11 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		return pins, nil
 	}
 	if err := reg.Validate(d.Key, value); err != nil {
-		return nil, fmt.Errorf("config: %s: %w", source, err)
+		err = fmt.Errorf("config: %s: %w", source, err)
+		if source != "env "+dbKeyEnv {
+			return nil, &FileContentError{Err: err}
+		}
+		return nil, err
 	}
 	pins.m[d.Key] = pin{value: value, source: source}
 	return pins, nil

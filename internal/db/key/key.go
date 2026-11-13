@@ -58,7 +58,7 @@ func Load(env config.Env, reg *settings.Registry) (db.Key, error) {
 	}
 	k, err := db.ParseKey(strings.TrimSpace(string(raw)))
 	if err != nil {
-		return db.Key{}, fmt.Errorf("%s credential: %w", db.KeyCredential, err)
+		return db.Key{}, &config.FileContentError{Err: fmt.Errorf("%s credential: %w", db.KeyCredential, err)}
 	}
 	return k, nil
 }

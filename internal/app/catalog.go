@@ -8,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
-	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
@@ -42,7 +41,7 @@ func Builtins(d Dependencies) []module.Builder {
 		calendarmodule.Module{Jobs: jobs},
 		notionmodule.Module{Env: d.Env, Jobs: jobs},
 		mediamodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
-		assistantmodule.Module{Now: d.Now, ProposeKinds: mailtools.Proposals(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
+		assistantmodule.Module{Now: d.Now, ProposeKinds: mailmodule.ProposeKinds(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
 		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},
 		grafanamodule.Module{Jobs: jobs},
 	}

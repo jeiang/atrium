@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/cli"
@@ -189,7 +191,7 @@ func Command(o Options) *cli.Command {
 				if err != nil {
 					return err
 				}
-				out, err := scans.Manual(x.Ctx, x.DB, x.Cfg, x.Now(), namer)
+				out, err := scans.Manual(x.Ctx, x.DB, x.Cfg, mailapp.New(x.DB, x.Cfg, config.OS, x.Now).WithNamer(namer).Scans(x.Now()))
 				if err != nil {
 					return err
 				}

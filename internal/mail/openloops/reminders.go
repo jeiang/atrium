@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tasks"
+	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/timex"
 )
@@ -132,16 +133,14 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 		sum := sha256.Sum256(encoded)
 		fingerprint := hex.EncodeToString(sum[:])[:32]
 		title := fmt.Sprintf("Remind me: %s (due %s)", textx.Clip(c.text, 80), c.due)
-		pid, created, err := proposals.Create(ctx, r.DB, KindReminder, nil, title, payload, preview, fingerprint, now)
+		proposed, err := tasksapp.New(r.DB, r.Ledger, r.now).ProposeReminder(ctx, tasksapp.ProposeReminderInput{Kind: KindReminder, Title: title, Payload: payload, Preview: preview, Fingerprint: fingerprint, Now: now})
 		if err != nil {
 			return made, err
 		}
-		if created {
+		if proposed.Data.Created {
 			made++
-		} else if pid, err = proposals.IDByFingerprint(ctx, r.DB.Write, fingerprint); err != nil {
-			return made, err
 		}
-		if _, err := r.DB.Write.ExecContext(ctx, "UPDATE commitments SET proposal_id = ? WHERE id = ?", pid, c.id); err != nil {
+		if _, err := r.DB.Write.ExecContext(ctx, "UPDATE commitments SET proposal_id = ? WHERE id = ?", proposed.Data.ProposalID, c.id); err != nil {
 			return made, err
 		}
 	}

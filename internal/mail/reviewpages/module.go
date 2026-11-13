@@ -97,7 +97,7 @@ func newService(o Options, d *web.Deps) *service {
 	pipeline := &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled}
 	var mailService *mailapp.Service
 	if o.Application != nil {
-		mailService = o.Application(d)
+		mailService = o.Application(d).WithSender(draftStore)
 	}
 	return &service{
 		mail:     mailService,

@@ -18,7 +18,6 @@ import (
 )
 
 func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
-	t.Parallel()
 	data := loadGoldenData(t)
 	f := newFixture(t, data, nil, "")
 	f.api.AnswerJSON(func(required []string, _ string) (json.RawMessage, error) {

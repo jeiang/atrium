@@ -224,3 +224,44 @@ func AutoForMessages(ctx context.Context, q db.Querier, ids []int64, now float64
 	}
 	return out, nil
 }
+
+func LastEffectID(ctx context.Context, q db.Querier) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(id), 0) FROM effects").Scan(&id)
+	return id, err
+}
+
+func AutoEffectsSince(ctx context.Context, q db.Querier, messageID, after int64) (ids []int64, unknown bool, err error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, state FROM effects WHERE id > ? AND message_id = ? AND origin = ? AND direction = 'forward' ORDER BY id", after, messageID, AutoOrigin)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		var st State
+		if err := rows.Scan(&id, &st); err != nil {
+			return ids, unknown, err
+		}
+		ids = append(ids, id)
+		unknown = unknown || st == Unknown
+	}
+	return ids, unknown, rows.Err()
+}
+
+type AutoEffectOutcome struct {
+	ID    int64
+	State State
+}
+
+func AutoPassEffectsSince(ctx context.Context, q db.Querier, after int64) ([]AutoEffectOutcome, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, state FROM effects WHERE id > ? AND origin = ? AND direction = 'forward' ORDER BY id", after, AutoOrigin)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (AutoEffectOutcome, error) {
+		var out AutoEffectOutcome
+		err := r.Scan(&out.ID, &out.State)
+		return out, err
+	})
+}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -18,7 +19,7 @@ func TrackingJob(deps jobworker.Dependencies) scheduler.Definition {
 		Schedule: "0 * * * *", ScheduleSetting: tracking.KeySchedulePackageTracking, Persistent: true, Timeout: 15 * time.Minute,
 		Spend: scheduler.ModelFree, Needs: []string{module.Mail},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-			_, err := tracking.Poll(ctx, e.Service.DB, e.Service.Env, e.Now())
+			_, err := mailapp.New(e.Service.DB, e.Service.Cfg, e.Service.Env, e.Now).PollTrackers(ctx, struct{}{})
 			return jobworker.Result{}, err
 		}),
 	}
@@ -34,11 +35,11 @@ func (o Options) TrackingCommands() []*cli.Command {
 							return err
 						}
 					}
-					out, err := tracking.Poll(x.Ctx, x.DB, o.env(), x.Now())
+					done, err := x.opts.Application(x.Pass).WithClock(x.Now).PollTrackers(x.Ctx, struct{}{})
 					if err != nil {
 						return err
 					}
-					x.JSON(out)
+					x.JSON(done.Data.Poll)
 					return nil
 				})
 			}
