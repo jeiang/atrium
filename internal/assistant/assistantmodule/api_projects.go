@@ -61,7 +61,7 @@ func cursorAfter(cursor api.Cursor) (int64, error) {
 		return 0, err
 	}
 	if after <= 0 {
-		return 0, &application.Error{Code: application.BadCursor, Message: "The cursor is not valid."}
+		return 0, api.ErrBadCursor
 	}
 	return after, nil
 }

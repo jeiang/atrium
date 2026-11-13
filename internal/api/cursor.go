@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/url"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -36,7 +35,7 @@ type cursorWire struct {
 
 func (c Cursor) Set() bool { return len(c.last) > 0 }
 
-var ErrBadCursor = errors.New("bad cursor")
+var ErrBadCursor error = &application.Error{Code: application.BadCursor, Message: "The cursor is not valid."}
 
 func (c Cursor) Last(v any) error {
 	if bytes.Equal(bytes.TrimSpace(c.last), []byte("null")) {

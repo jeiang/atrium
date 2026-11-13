@@ -44,11 +44,11 @@ type ResendResult struct {
 }
 
 type DeviceRegistration struct {
-	Transport string `json:"transport"`
+	Transport string `json:"transport,omitempty"`
 	Endpoint  string `json:"endpoint"`
 	P256DH    string `json:"p256dh"`
 	Auth      string `json:"auth"`
-	Label     string `json:"label"`
+	Label     string `json:"label,omitempty"`
 }
 
 type RegisteredDevice struct {

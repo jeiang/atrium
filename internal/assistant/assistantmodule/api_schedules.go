@@ -103,7 +103,7 @@ func scheduleAPIBindings(p *apiPages) []application.Binding {
 						return application.Read[web.List[asstapp.ScheduleRun]]{}, err
 					}
 					if before <= 0 {
-						return application.Read[web.List[asstapp.ScheduleRun]]{}, &application.Error{Code: application.BadCursor, Message: "The cursor is not valid."}
+						return application.Read[web.List[asstapp.ScheduleRun]]{}, api.ErrBadCursor
 					}
 				}
 				read, err := svc.ScheduleHistory(ctx, asstapp.ScheduleHistoryInput{JobID: in.JobID, Before: before, Limit: int(in.Limit) + 1})

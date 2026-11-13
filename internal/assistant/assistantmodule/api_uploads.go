@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
@@ -60,7 +61,7 @@ func decodeUploads(reader *multipart.Reader, dst any) ([]files.UploadedFile, err
 		}
 		found := false
 		for _, field := range reflect.VisibleFields(rv.Type()) {
-			if field.Anonymous || field.Tag.Get("json") != name || name == "-" {
+			if field.Anonymous || strings.Split(field.Tag.Get("json"), ",")[0] != name || name == "-" {
 				continue
 			}
 			found = true

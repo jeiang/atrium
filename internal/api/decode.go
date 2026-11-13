@@ -172,6 +172,9 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 }
 
 func decodeBody(w http.ResponseWriter, r *http.Request, v any, t reflect.Type) bool {
+	if len(checkBody(t, json.RawMessage("{}"), nil)) == 0 {
+		return web.DecodeJSON(w, r, v)
+	}
 	var raw bytes.Buffer
 	r.Body = struct {
 		io.Reader

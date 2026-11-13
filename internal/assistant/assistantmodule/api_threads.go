@@ -127,8 +127,8 @@ type apiTranscript struct {
 type apiNewThread struct {
 	Uploads      []files.UploadedFile `json:"-"`
 	Text         string               `json:"text,omitempty"`
-	Model        string               `json:"model"`
-	Effort       string               `json:"effort"`
+	Model        string               `json:"model,omitempty"`
+	Effort       string               `json:"effort,omitempty"`
 	ContextLimit *int64               `json:"context_limit"`
 	Thinking     string               `json:"thinking,omitempty"`
 	WebSearch    *bool                `json:"web_search"`
@@ -332,8 +332,8 @@ type apiMoveRequest struct {
 
 type apiOptionsRequest struct {
 	ThreadID     int64  `path:"thread_id" json:"-"`
-	Model        string `json:"model"`
-	Effort       string `json:"effort"`
+	Model        string `json:"model,omitempty"`
+	Effort       string `json:"effort,omitempty"`
 	ContextLimit *int64 `json:"context_limit"`
 }
 

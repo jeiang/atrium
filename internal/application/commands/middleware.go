@@ -100,10 +100,10 @@ func (b *idleBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func carriesFiles(r *http.Request) (bool, error) {
+func carriesFiles(r *http.Request) bool {
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || params["boundary"] == "" {
-		return false, errors.New("invalid multipart boundary")
+		return true
 	}
 	var prefix bytes.Buffer
 	body := r.Body
@@ -117,19 +117,13 @@ func carriesFiles(r *http.Request) (bool, error) {
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
-			return false, nil
+			return false
 		}
-		if err != nil {
-			return false, err
+		if err != nil || part.FileName() != "" {
+			return true
 		}
-		if part.FileName() != "" {
-			return true, nil
-		}
-		if _, err := io.Copy(io.Discard, io.LimitReader(part, plainBodyMax+1)); err != nil {
-			return false, err
-		}
-		if prefix.Len() > plainBodyMax {
-			return false, &http.MaxBytesError{Limit: plainBodyMax}
+		if _, err := io.Copy(io.Discard, io.LimitReader(part, int64(plainBodyMax-prefix.Len()+1))); err != nil || prefix.Len() > plainBodyMax {
+			return true
 		}
 	}
 }
@@ -154,20 +148,7 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 		var fingerprint string
 		media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		multipartForm := media == "multipart/form-data"
-		hasFiles := false
-		if multipartForm {
-			files, err := carriesFiles(r)
-			if err != nil {
-				var large *http.MaxBytesError
-				if errors.As(err, &large) {
-					web.APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
-				} else {
-					web.APIError(w, http.StatusBadRequest, "bad_request", "Invalid multipart body.")
-				}
-				return
-			}
-			hasFiles = files
-		}
+		hasFiles := multipartForm && carriesFiles(r)
 		if hasFiles {
 			body := &idleBody{ReadCloser: r.Body, controller: http.NewResponseController(w)}
 			if err := body.extend(); err != nil {

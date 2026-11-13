@@ -3073,10 +3073,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "model",
-          "effort"
-        ],
         "type": "object"
       },
       "AssistantmoduleapiOptionsRequest": {
@@ -3093,10 +3089,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "model",
-          "effort"
-        ],
         "type": "object"
       },
       "AssistantmoduleapiPinRequest": {
@@ -6529,11 +6521,9 @@
           }
         },
         "required": [
-          "transport",
           "endpoint",
           "p256dh",
-          "auth",
-          "label"
+          "auth"
         ],
         "type": "object"
       },
