@@ -78,7 +78,7 @@ func (s *Scheduler) admit(gate Gate) Admit {
 		switch {
 		case s.moduleDisabled(job):
 			return StatusSkippedModule
-		case gate.Paused:
+		case gate.Paused && !runsWhilePaused(s.jobs, job):
 			return StatusSkippedPause
 		case gate.OverBudget && SpendOf(s.jobs, job) == AlwaysSpends:
 			return StatusSkippedBudget

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -25,26 +26,38 @@ func Declared(defs []Definition, job Job) (Definition, bool) {
 	return defs[i], true
 }
 
+func runsWhilePaused(defs []Definition, job Job) bool {
+	def, _ := Declared(defs, job)
+	return def.RunsWhilePaused
+}
+
 func SpendOf(defs []Definition, job Job) Spend {
 	def, _ := Declared(defs, job)
 	return def.Spend
 }
+
+var hostWarned sync.Map
 
 func declaredSchedule(ctx context.Context, q db.Querier, def Definition) (string, bool, error) {
 	switch {
 	case def.Every > 0:
 		return EveryText(def.Every), false, nil
 	case def.ScheduleHost != "":
-		if value := strings.TrimSpace(config.HostValueFrom(ctx, def.ScheduleHost)); value != "" {
-			if err := RecurringSchedule(value); err == nil {
-				_, _, err = Validate(ctx, q, value, "UTC", 0, true)
-				if err == nil {
-					return value, false, nil
-				}
-				log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
-			} else {
-				log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
-			}
+		value := strings.TrimSpace(config.HostValueFrom(ctx, def.ScheduleHost))
+		if value == "" {
+			hostWarned.Delete(def.ScheduleHost)
+			return def.Schedule, false, nil
+		}
+		err := RecurringSchedule(value)
+		if err == nil {
+			_, _, err = Validate(ctx, q, value, "UTC", 0, true)
+		}
+		if err == nil {
+			hostWarned.Delete(def.ScheduleHost)
+			return value, false, nil
+		}
+		if last, seen := hostWarned.Swap(def.ScheduleHost, value); !seen || last != value {
+			log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
 		}
 		return def.Schedule, false, nil
 	}

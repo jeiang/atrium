@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -123,7 +124,7 @@ func TestBackupJobTakesItsScheduleFromTheHost(t *testing.T) {
 		warned          bool
 	}{
 		"valid":   {"weekly mon 05:15", "weekly mon 05:15", 5, false},
-		"invalid": {"daily 25:61", backup.DefaultSchedule, 3, true},
+		"invalid": {fmt.Sprintf("daily 25:%d", 60+time.Now().Nanosecond()%40), backup.DefaultSchedule, 3, true},
 		"absent":  {"", backup.DefaultSchedule, 3, false},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -151,6 +152,10 @@ func TestBackupJobTakesItsScheduleFromTheHost(t *testing.T) {
 			}
 			if n := schedulerRuns(t, d, passrun.Backup); n != 0 {
 				t.Fatalf("%d backup runs at declaration, want 0", n)
+			}
+			again := runAppLogged(t, "agent", "tick")
+			if strings.Contains(again.stderr, "host schedule "+backup.KeySchedule+" not applied") {
+				t.Fatalf("second tick repeated the host schedule warning; stderr %q", again.stderr)
 			}
 		})
 	}
@@ -217,6 +222,15 @@ func TestBackupJobSkipsWithoutADirectoryAndPrunesNothingOnFailure(t *testing.T) 
 	}
 	if ok, failed, _ := passRows(t, dir, passrun.Backup); ok != 0 || failed != 0 {
 		t.Fatalf("backup pass rows ok=%d failed=%d without a directory, want none", ok, failed)
+	}
+	for range 2 {
+		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, backup.JobKey)
+		if ran := runApp(t, "agent", "tick"); ran.code != cli.ExitOK {
+			t.Fatalf("repeated agent tick without a backup directory: exit %d %q", ran.code, ran.stderr)
+		}
+	}
+	if n := schedulerRuns(t, d, passrun.Backup); n != 1 {
+		t.Fatalf("%d backup job rows after three unconfigured runs, want one merged row", n)
 	}
 
 	if os.Geteuid() == 0 {

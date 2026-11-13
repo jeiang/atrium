@@ -48,6 +48,7 @@ type Definition struct {
 	ScheduleHost    string
 	InitialDelay    time.Duration
 	Persistent      bool
+	RunsWhilePaused bool
 	Overlap         bool
 	Timeout         time.Duration
 	Spend           Spend

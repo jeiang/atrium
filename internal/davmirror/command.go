@@ -81,6 +81,6 @@ func Job(owner, pass, prompt string, run func(context.Context, scheduler.Run) (s
 		Module: owner, Key: owner + "/" + pass, Name: pass, Kind: scheduler.JobBuiltin, Prompt: prompt,
 		Every: 15 * time.Minute, InitialDelay: time.Minute, Timeout: 10 * time.Minute, Spend: scheduler.ModelFree,
 		Backoff:  runtime.Backoff{Initial: time.Minute, Maximum: 15 * time.Minute},
-		Shutdown: scheduler.ShutdownCancel, Resources: []string{pass}, Needs: []string{owner}, Run: run,
+		Shutdown: scheduler.ShutdownCancel, RunsWhilePaused: true, Resources: []string{pass}, Needs: []string{owner}, Run: run,
 	}
 }

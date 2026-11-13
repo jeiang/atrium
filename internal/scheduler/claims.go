@@ -290,12 +290,39 @@ func (s *Scheduler) Finish(ctx context.Context, c Claim, o Result) error {
 		if err := clearClaim(ctx, tx, c, "lease_owner = NULL, lease_until = NULL"); err != nil {
 			return err
 		}
+		if o.Status == StatusSkippedUnconfigured && o.ThreadID == nil {
+			if err := mergeUnconfigured(ctx, tx, c, o.Error, now); err != nil {
+				return err
+			}
+		}
 		def, declared := Declared(s.jobs, c.Job)
 		if o.Status != StatusError || c.manual || !declared || def.Backoff == (runtime.Backoff{}) {
 			return nil
 		}
 		return backOff(ctx, tx, c.Job.ID, def.Backoff, now)
 	})
+}
+
+func mergeUnconfigured(ctx context.Context, tx *sql.Tx, c Claim, text *string, now float64) error {
+	var prev int64
+	err := tx.QueryRowContext(ctx, "SELECT p.id FROM job_runs p WHERE p.job_id = ? AND p.id = (SELECT MAX(id) FROM job_runs WHERE job_id = ? AND id < ?) "+
+		"AND p.status = ? AND p.ended_at IS NOT NULL AND p.error IS ? "+
+		"AND NOT EXISTS (SELECT 1 FROM job_run_threads WHERE job_run_id IN (p.id, ?))",
+		c.Job.ID, c.Job.ID, c.JobRunID, StatusSkippedUnconfigured, text, c.JobRunID).Scan(&prev)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE job_runs SET due_at = (SELECT due_at FROM job_runs WHERE id = ?), ended_at = ? WHERE id = ?", c.JobRunID, now, prev); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE jobs SET last_run_id = ? WHERE id = ? AND last_run_id = ?", prev, c.Job.ID, c.JobRunID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "DELETE FROM job_runs WHERE id = ?", c.JobRunID)
+	return err
 }
 
 func backOff(ctx context.Context, tx *sql.Tx, jobID int64, b runtime.Backoff, now float64) error {

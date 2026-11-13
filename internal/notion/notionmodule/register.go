@@ -52,7 +52,7 @@ func syncJob(deps jobworker.Dependencies) scheduler.Definition {
 		Module: module.Notion, Key: notion.JobKey, Name: passrun.NotionSync, Kind: scheduler.JobBuiltin,
 		Prompt: "Every 15 minutes: mirror shared Notion pages into the index (no model run).",
 		Every:  15 * time.Minute, InitialDelay: 3 * time.Minute, Timeout: 15 * time.Minute,
-		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownCancel,
+		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownCancel, RunsWhilePaused: true,
 		Resources: []string{passrun.NotionSync}, Needs: []string{module.Notion},
 		Backoff: runtime.Backoff{Initial: time.Minute, Maximum: 15 * time.Minute},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
