@@ -235,6 +235,11 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = q.Close() }()
+	for _, table := range []string{"agent_writes", "proposal_actions", "write_resolutions"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = ?", table); n != 0 {
+			t.Errorf("retired table %s survives the import", table)
+		}
+	}
 
 	for _, tc := range []struct {
 		name  string
