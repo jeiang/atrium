@@ -134,10 +134,16 @@
     {
       "area": "settings",
       "operations": [
-        "auth.identity"
+        "auth.identity",
+        "settings.read",
+        "settings.secret-delete",
+        "settings.secret-set",
+        "settings.secret-status",
+        "settings.set",
+        "settings.unset"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 7,
+      "bound": 7
     },
     {
       "area": "tasks",
@@ -177,5 +183,5 @@
     }
   ],
   "total_required": 154,
-  "total_bound": 34
+  "total_bound": 40
 }

@@ -35,6 +35,10 @@ func CLI(env config.Env, guard Guard) Open {
 	}
 }
 
+func Server(d *db.DB, reg *settings.Registry, guard Guard) *Service {
+	return &Service{d: d, store: settings.NewStore(reg, d, d), guard: guard, state: state.New(d), operatorKeys: true}
+}
+
 func Web(d *db.DB) *Service {
 	return &Service{d: d, state: state.New(d)}
 }

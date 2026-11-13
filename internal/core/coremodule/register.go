@@ -91,7 +91,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
 	reviewOps, reviewBindings := reviewOperations()
 	operations, bindings = append(operations, reviewOps...), append(bindings, reviewBindings...)
-	settingOps, settingBindings := settingsOperations()
+	settingOps, settingBindings := m.settingsOperations()
 	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
 	connectionOps, connectionBindings := connectionsOperations()
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
@@ -145,7 +145,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(connectionService),
-			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d) }},
+			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d); m.settingsRoutes(d) }},
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,
