@@ -32,7 +32,7 @@ func runCatalogOperations(t *testing.T, args ...string) (catalogOperationsReport
 	t.Helper()
 	path := os.Getenv(builtBinaryEnv)
 	if path == "" {
-		t.Fatalf("%s must name the atrium binary the runner built", builtBinaryEnv)
+		t.Skipf("catalog operations runs the built binary; %s is set by the e2e runner", builtBinaryEnv)
 	}
 	cmd := exec.Command(path, append([]string{"catalog", "operations"}, args...)...)
 	cmd.Env = []string{"HOME=" + t.TempDir(), "TMPDIR=" + t.TempDir(), "PATH=" + os.Getenv("PATH")}
