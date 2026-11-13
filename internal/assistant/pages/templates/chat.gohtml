@@ -58,7 +58,7 @@
   </aside>
   <div class="composer-dock reading">
     <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
-          class="composer" data-reset data-attach>
+          class="composer" data-reset data-attach data-command-form>
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <label for="new-text" class="sr-only">New thread</label>
       {{with $d.About}}<p class="flex min-w-0" data-about><input type="hidden" name="about" value="{{.Ref}}"><span class="chip max-w-full shrink">{{icon "link"}}<span class="truncate">{{.Label}}</span><a href="/chat" class="hover:text-ink" aria-label="Remove {{.Label}}">{{icon "x"}}</a></span></p>{{end}}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -251,5 +252,92 @@ func TestHTMLSendRefusesOtherMediaAndOversize(t *testing.T) {
 	status, text2, _ := htmlDo(t, htmlRequest(t, s, client, http.MethodPost, "/chat", "application/x-www-form-urlencoded", strings.NewReader(form.Encode())))
 	if status >= 400 {
 		t.Fatalf("urlencoded start: %d %s", status, text2)
+	}
+}
+
+func TestHTMLSendKeysAreScoped(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	d := asstDB(t, dir)
+	s := startAPISite(t, dir, api)
+	owner, guest := s.token("owner"), s.token("guest")
+	client := s.browser()
+	api.Push(asstReply("owner"), asstReply("guest"), asstReply("form one"), asstReply("spare"))
+
+	first := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "scoped key", "web_search": false}, "Idempotency-Key", "shared-key")
+	if first.status != http.StatusCreated {
+		t.Fatalf("owner start: %d %s", first.status, first.body)
+	}
+	other := s.do(http.MethodPost, "/api/v1/threads", guest, map[string]any{"text": "scoped key", "web_search": false}, "Idempotency-Key", "shared-key")
+	if other.status != http.StatusCreated || other.header.Get("Idempotent-Replayed") != "" || other.header.Get("Atrium-Command-Id") == first.header.Get("Atrium-Command-Id") {
+		t.Fatalf("another principal with the same key replayed: %d %q %s", other.status, other.header.Get("Idempotent-Replayed"), other.body)
+	}
+	again := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "scoped key", "web_search": false}, "Idempotency-Key", "shared-key")
+	if again.status != http.StatusCreated || again.header.Get("Idempotent-Replayed") != "true" || again.header.Get("Atrium-Command-Id") != first.header.Get("Atrium-Command-Id") {
+		t.Fatalf("same principal and key: %d %q %s", again.status, again.header.Get("Idempotent-Replayed"), again.body)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_messages WHERE role = 'user' AND content_json LIKE '%scoped key%'"); n != 2 {
+		t.Fatalf("two principals stored %d messages, want 2", n)
+	}
+
+	form := func(text string) (int, string) {
+		t.Helper()
+		req := htmlRequest(t, s, client, http.MethodPost, "/chat", "application/x-www-form-urlencoded", nil, "Idempotency-Key", "form-key")
+		token := req.Header.Get(web.CSRFHeader)
+		req.Header.Del(web.CSRFHeader)
+		encoded := url.Values{"text": {text}, "csrf_token": {token}}.Encode()
+		req.Body = io.NopCloser(strings.NewReader(encoded))
+		req.ContentLength = int64(len(encoded))
+		status, body, _ := htmlDo(t, req)
+		return status, body
+	}
+	if status, body := form("form one"); status >= 400 {
+		t.Fatalf("keyed form start: %d %s", status, body)
+	}
+	if status, body := form("form two"); status != http.StatusUnprocessableEntity || !strings.Contains(body, "idempotency_mismatch") {
+		t.Fatalf("same key, different form body: %d %s", status, body)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_messages WHERE role = 'user' AND content_json LIKE '%form two%'"); n != 0 {
+		t.Fatalf("a mismatched form body stored %d messages", n)
+	}
+}
+
+func TestThreadRunDoneBadgeCountsDrafts(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	d := asstDB(t, dir)
+	for _, query := range []string{
+		"INSERT INTO proposals (id, kind, status, created_ts, title, fingerprint) VALUES (901, 'reminder', 'pending', 100, 'Call the dentist', 'badge-fp')",
+		"INSERT INTO drafts (id, account, to_addrs, subject, body, status, created_at, updated_at) VALUES (901, 'a', 'pat@person.test', 'Re: lease', '', 'draft', 200, 200)",
+		"INSERT INTO drafts (id, account, to_addrs, subject, body, status, created_at, updated_at) VALUES (902, 'a', 'sam@person.test', 'Re: rent', '', 'unknown', 201, 201)",
+	} {
+		if _, err := d.Write.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	api.Push(asstReply("started"))
+	started := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "badge", "web_search": false})
+	if started.status != http.StatusCreated {
+		t.Fatalf("start: %d %s", started.status, started.body)
+	}
+	thread, _ := started.json["thread"].(map[string]any)
+	id, run := number(t, thread["id"]), number(t, started.json["run_id"])
+	waitThreadSettled(t, s, owner, id)
+	badge := regexp.MustCompile(`id="pending-count"[^>]*>(\d*)<`)
+	count := func(page string) string {
+		t.Helper()
+		m := badge.FindStringSubmatch(page)
+		if m == nil {
+			t.Fatalf("no pending badge:\n%s", page)
+		}
+		return m[1]
+	}
+	_, frame, _ := fetch(t, client, http.MethodGet, s.base+"/chat/"+strconv.FormatInt(id, 10), nil)
+	status, body, _ := htmlDo(t, htmlRequest(t, s, client, http.MethodGet, "/chat/"+strconv.FormatInt(id, 10)+"/runs/"+strconv.FormatInt(run, 10), "", nil))
+	if status != http.StatusOK || count(frame) != "3" || count(body) != count(frame) {
+		t.Fatalf("finished run badge %q, page badge %q, want 3: %d\n%s", count(body), count(frame), status, body)
 	}
 }

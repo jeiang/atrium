@@ -370,7 +370,13 @@ const renderChips = (form) => {
   }));
 };
 
+const dropCommandKey = (element) => {
+  const form = element?.closest?.("form[data-command-form]");
+  if (form) delete form.dataset.commandKey;
+};
+
 const setFiles = (form, files) => {
+  dropCommandKey(form);
   const transfer = new DataTransfer();
   files.forEach((file) => transfer.items.add(file));
   pendingFiles.set(form, transfer);
@@ -459,6 +465,7 @@ actions["edit-message"] = (button) => {
   const form = document.getElementById("composer");
   form.elements.text.value = button.closest("li").querySelector("[data-text]").textContent;
   form.elements.edit.value = "1";
+  dropCommandKey(form);
   document.getElementById("composer-editing").hidden = false;
   form.elements.text.focus();
 };
@@ -466,6 +473,7 @@ actions["cancel-edit"] = () => {
   const form = document.getElementById("composer");
   form.elements.edit.value = "";
   form.elements.text.value = "";
+  dropCommandKey(form);
   document.getElementById("composer-editing").hidden = true;
 };
 
@@ -767,13 +775,13 @@ const commandKey = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), 
 
 document.addEventListener("submit", (event) => {
   const form = event.target;
-  if (form.id !== "composer") return;
+  if (!form.matches?.("form[data-command-form]")) return;
   const key = form.dataset.commandKey || commandKey();
   form.dataset.commandKey = key;
   form.setAttribute("hx-headers", JSON.stringify({ "Idempotency-Key": key }));
   const transcript = document.getElementById("transcript");
   const text = form.elements.text.value.trim();
-  if (!transcript || !text || form.elements.edit.value) return;
+  if (!transcript || !text || form.elements.edit?.value) return;
   transcript.querySelectorAll(`[data-command-key="${CSS.escape(key)}"]`).forEach((bubble) => bubble.remove());
   const bubble = userMessage(form.querySelector("template[data-message=user]"), text);
   bubble.dataset.commandKey = key;
@@ -783,7 +791,7 @@ document.addEventListener("submit", (event) => {
 
 document.addEventListener("htmx:afterRequest", (event) => {
   const form = event.detail.elt;
-  if (form.id !== "composer") return;
+  if (!form.matches?.("form[data-command-form]")) return;
   const key = event.detail.requestConfig?.headers?.["Idempotency-Key"];
   if (!key) return;
   document.querySelectorAll(`#transcript [data-command-key="${CSS.escape(key)}"]`).forEach((bubble) => bubble.remove());
@@ -793,10 +801,7 @@ document.addEventListener("htmx:afterRequest", (event) => {
   form.removeAttribute("hx-headers");
 });
 
-["input", "change"].forEach((kind) => document.addEventListener(kind, (event) => {
-  const form = event.target.closest?.("#composer");
-  if (form) delete form.dataset.commandKey;
-}));
+["input", "change"].forEach((kind) => document.addEventListener(kind, (event) => dropCommandKey(event.target)));
 
 document.addEventListener("submit", (event) => {
   if (!event.target.matches("form[data-test-signin]")) return;
@@ -873,6 +878,7 @@ actions["fill-composer"] = (button) => {
   const field = document.getElementById(button.dataset.target);
   if (!field) return;
   field.value = button.dataset.text;
+  dropCommandKey(field);
   field.focus();
   field.setSelectionRange(field.value.length, field.value.length);
 };
@@ -1117,6 +1123,7 @@ const refPick = (option) => {
   if (!token) return;
   const after = field.value.slice(span.end);
   field.value = field.value.slice(0, span.start) + token + " " + after;
+  dropCommandKey(field);
   const caret = span.start + token.length + 1;
   field.focus();
   field.setSelectionRange(caret, caret);

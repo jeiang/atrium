@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/textsearch"
 )
@@ -372,7 +373,12 @@ func (s *Service) Work(ctx context.Context, in ThreadInput) (application.Read[Wo
 }
 
 func (s *Service) NeedsCount(ctx context.Context) (int, error) {
-	return proposals.NeedsCount(ctx, s.db.Read)
+	n, err := proposals.NeedsCount(ctx, s.db.Read)
+	if err != nil {
+		return 0, err
+	}
+	d, err := drafts.CountNeeds(ctx, s.db.Read)
+	return n + d, err
 }
 
 func (s *Service) History(ctx context.Context, in HistoryInput) (application.Read[History], error) {

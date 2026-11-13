@@ -62,7 +62,7 @@
 {{if ne $t.Kind "subagent"}}
 <div class="composer-dock">
 <form id="composer" class="composer" method="post" action="/chat/{{$t.ID}}/messages" enctype="multipart/form-data"
-      hx-post="/chat/{{$t.ID}}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
+      hx-post="/chat/{{$t.ID}}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach data-command-form>
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   <input type="hidden" name="edit" value="">
   {{template "chat_user_template"}}

@@ -106,6 +106,15 @@ func carriesFiles(r *http.Request) bool {
 	return r.ContentLength < 0 || r.ContentLength > plainBodyMax
 }
 
+func scoped(ctx context.Context, key string) string {
+	if key == "" {
+		return ""
+	}
+	who, _ := web.IdentityOf(ctx)
+	sum := sha256.Sum256([]byte(who.Source + "\x00" + who.Subject))
+	return hex.EncodeToString(sum[:8]) + ":" + key
+}
+
 func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimSpace(r.Header.Get(IdempotencyHeader))
@@ -155,9 +164,12 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 				web.APIFail(w, err)
 				return
 			}
-			sum := requestHash(r, pattern, mac)
-			switch r.Body {
-			case nil, http.NoBody:
+			sum := requestHash(r, pattern, media, mac)
+			switch {
+			case r.PostForm != nil:
+				sum.Write([]byte(r.PostForm.Encode()))
+				fingerprint = hex.EncodeToString(sum.Sum(nil))
+			case r.Body == nil || r.Body == http.NoBody:
 				fingerprint = hex.EncodeToString(sum.Sum(nil))
 			default:
 				hashed := io.Writer(sum)
@@ -188,7 +200,7 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 				}
 			}
 		}
-		rec, fresh, err := s.admit(r.Context(), key, r.Method, pattern, fingerprint)
+		rec, fresh, err := s.admit(r.Context(), scoped(r.Context(), key), r.Method, pattern, fingerprint)
 		if err != nil {
 			web.APIFail(w, err)
 			return
@@ -333,9 +345,9 @@ func fingerprintParts(r *http.Request, sum hash.Hash, spool *os.File) (string, e
 	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
-func requestHash(r *http.Request, pattern string, mac []byte) hash.Hash {
+func requestHash(r *http.Request, pattern, media string, mac []byte) hash.Hash {
 	sum := hmac.New(sha256.New, mac)
-	for _, part := range []string{r.Method, pattern, r.URL.EscapedPath(), r.URL.Query().Encode()} {
+	for _, part := range []string{r.Method, pattern, r.URL.EscapedPath(), r.URL.Query().Encode(), media} {
 		sum.Write([]byte(part))
 		sum.Write([]byte{0})
 	}

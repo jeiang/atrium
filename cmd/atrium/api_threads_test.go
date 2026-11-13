@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -236,7 +238,7 @@ func TestHTMLSendReplaysByKey(t *testing.T) {
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
 	client := s.browser()
-	api.Push(asstReply("started"), asstReply("keyed reply"), asstReply("second key reply"))
+	api.Push(asstReply("started"), asstReply("keyed reply"), asstReply("second key reply"), asstReply("keyed start reply"))
 
 	started := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "hello", "web_search": false})
 	if started.status != http.StatusCreated {
@@ -301,5 +303,33 @@ func TestHTMLSendReplaysByKey(t *testing.T) {
 	waitThreadSettled(t, s, owner, id)
 	if n := notes(); n != 2 {
 		t.Fatalf("two keys stored %d messages, want 2", n)
+	}
+
+	start := func() (int, string, http.Header) {
+		t.Helper()
+		body, contentType := composerBody(t, "keyed start")
+		return htmlDo(t, htmlRequest(t, s, client, http.MethodPost, "/chat", contentType, bytes.NewReader(body), "Idempotency-Key", "html-start-key"))
+	}
+	threads := asstCount(t, d, "SELECT COUNT(*) FROM threads")
+	requests = len(api.Requests())
+	started1, startBody, startHeader := start()
+	to := startHeader.Get("HX-Redirect")
+	if started1 != http.StatusNoContent || !strings.HasPrefix(to, "/chat/") || startHeader.Get("Atrium-Command-Id") == "" {
+		t.Fatalf("keyed start: %d %q %s", started1, to, startBody)
+	}
+	newID, err := strconv.ParseInt(strings.TrimPrefix(to, "/chat/"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitThreadSettled(t, s, owner, newID)
+	started2, _, againStart := start()
+	if started2 != started1 || againStart.Get("HX-Redirect") != to || againStart.Get("Idempotent-Replayed") != "true" || againStart.Get("Atrium-Command-Id") != startHeader.Get("Atrium-Command-Id") {
+		t.Fatalf("repeated keyed start: %d %q replayed=%q", started2, againStart.Get("HX-Redirect"), againStart.Get("Idempotent-Replayed"))
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM threads") - threads; n != 1 {
+		t.Fatalf("one start key created %d threads, want 1", n)
+	}
+	if sent := len(api.Requests()) - requests; sent != 1 {
+		t.Fatalf("one start key made %d provider requests, want 1", sent)
 	}
 }
