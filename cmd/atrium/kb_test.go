@@ -444,3 +444,69 @@ func TestKnowledgeOperatorLifecycleAudits(t *testing.T) {
 		t.Errorf("invalid edit audit rows = %d, want 1", n)
 	}
 }
+
+func TestKnowledgeConfirmMatchingReportsCommittedPrefix(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	seed := func(title, scope string, retracted bool) int64 {
+		t.Helper()
+		var retractedAt any
+		if retracted {
+			retractedAt = 2
+		}
+		res, err := d.Write.Exec("INSERT INTO kb_records (title, body, scope, marks, writer, retracted_at, created_at, updated_at) VALUES (?, 'x', ?, 1, 'import', ?, 1, 1)",
+			title, scope, retractedAt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	matching := []int64{seed("Boiler", "personal", false), seed("Fuse box", "personal", false), seed("Gutters", "personal", false)}
+	retracted := seed("Old alarm code", "personal", true)
+	outside := seed("Desk number", "work", false)
+	confirmed := func(id int64) bool {
+		t.Helper()
+		var at sql.NullFloat64
+		if err := d.Read.QueryRow("SELECT confirmed_at FROM kb_records WHERE id = ?", id).Scan(&at); err != nil {
+			t.Fatal(err)
+		}
+		return at.Valid
+	}
+	base, _, stop := startServeStoppable(t, dir)
+	defer stop()
+	w := asstBrowse(t, base)
+
+	code, page, _ := w.post("/library/knowledge/confirm-all", url.Values{"scope": {"personal"}, "state": {"imported"}}, false)
+	if code != http.StatusOK || !strings.Contains(page, "3 confirmed, 1 refused") {
+		t.Fatalf("confirm-all = %d: %.300s", code, page)
+	}
+	for _, id := range matching {
+		if !confirmed(id) || knowledgeAudits(t, d, "knowledge.confirm-matching", id, "ok") != 1 {
+			t.Errorf("record %d not confirmed with one ok audit row", id)
+		}
+	}
+	if confirmed(retracted) || knowledgeAudits(t, d, "knowledge.confirm-matching", retracted, "refused") != 1 {
+		t.Errorf("retracted record %d confirmed or not audited as refused", retracted)
+	}
+	if confirmed(outside) {
+		t.Errorf("out-of-scope record %d was confirmed", outside)
+	}
+
+	later := seed("Smoke alarm", "personal", false)
+	code, _, _ = w.post("/library/knowledge/confirm", url.Values{"scope": {"personal"}, "state": {"imported"},
+		"id": {strconv.FormatInt(outside, 10), strconv.FormatInt(retracted, 10), strconv.FormatInt(later, 10)}}, false)
+	if code != http.StatusConflict {
+		t.Fatalf("confirm-selected past a retracted record = %d, want 409", code)
+	}
+	if !confirmed(outside) || confirmed(later) {
+		t.Errorf("confirm-selected: first record confirmed = %v, record after the refusal confirmed = %v", confirmed(outside), confirmed(later))
+	}
+}

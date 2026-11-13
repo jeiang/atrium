@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -107,17 +108,22 @@ func (p *pages) knowledgeList(w http.ResponseWriter, r *http.Request) {
 	if web.NotModified(w, r, read.Revision) {
 		return
 	}
-	f := read.Data.Filter
-	data := knowledgeListData{Q: f.Query, Scope: f.Scope, State: f.State, Rows: read.Data.Rows,
-		Bulk: f.State == "unconfirmed" || f.State == "imported"}
-	for _, row := range data.Rows {
-		data.Unconfirmed = data.Unconfirmed || !row.Confirmed && !row.Retracted
-	}
+	data := knowledgeListOf(read.Data)
 	if web.IsPartial(r) {
 		p.renderFragment(w, r, http.StatusOK, "_knowledge_rows.gohtml", data, nil)
 		return
 	}
 	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge.gohtml", data, nil)
+}
+
+func knowledgeListOf(l kbapp.List) knowledgeListData {
+	f := l.Filter
+	data := knowledgeListData{Q: f.Query, Scope: f.Scope, State: f.State, Rows: l.Rows,
+		Bulk: f.State == "unconfirmed" || f.State == "imported"}
+	for _, row := range data.Rows {
+		data.Unconfirmed = data.Unconfirmed || !row.Confirmed && !row.Retracted
+	}
+	return data
 }
 
 func knowledgeValues(r kbapp.Record) knowledgeFormValues {
@@ -316,41 +322,34 @@ func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request)
 		}
 		ids = append(ids, id)
 	}
-	if len(ids) == 0 {
-		p.failure(w, r, "Nothing confirmed", "Select at least one record.")
+	result, err := p.knowledge().ConfirmSelected(detached(r), kbapp.SelectedInput{IDs: ids})
+	if err != nil {
+		p.knowledgeRefused(w, r, "Nothing confirmed", err)
 		return
 	}
-	for _, id := range ids {
-		if _, err := p.knowledge().Confirm(detached(r), kbapp.IDInput{ID: id}); err != nil {
-			p.knowledgeRefused(w, r, "Not confirmed", err)
-			return
-		}
+	if refused := result.Data.Refused; len(refused) > 0 {
+		p.knowledgeRefused(w, r, "Not confirmed", &application.Error{Code: refused[0].Code, Message: refused[0].Message})
+		return
 	}
 	navigate(w, r, "/library/knowledge?"+filterQuery(filter))
 }
 
 func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
-	form := web.FormValues(r)
-	filter, err := formFilter(form).Normalize()
+	filter := formFilter(web.FormValues(r))
+	result, err := p.knowledge().ConfirmMatching(detached(r), filter)
 	if err != nil {
-		p.failure(w, r, "Nothing confirmed", application.Classify(err).Error())
+		p.knowledgeRefused(w, r, "Nothing confirmed", err)
 		return
 	}
-	if filter.State != "unconfirmed" && filter.State != "imported" {
-		p.failure(w, r, "Nothing confirmed", "Choose the unconfirmed or imported filter first.")
-		return
-	}
-	found, err := p.knowledge().List(r.Context(), filter)
+	read, err := p.knowledge().List(r.Context(), filter)
 	check(err)
-	for _, rec := range found.Data.Rows {
-		if rec.Confirmed || rec.Retracted {
-			continue
-		}
-		if _, err := p.knowledge().Confirm(detached(r), kbapp.IDInput{ID: rec.ID}); err != nil {
-			check(err)
-		}
+	committed, refused := len(result.Data.Committed), len(result.Data.Refused)
+	toast := notice("success", "Confirmed", fmt.Sprintf("%d confirmed, %d refused", committed, refused))
+	if refused > 0 {
+		toast.Category = "warning"
 	}
-	navigate(w, r, "/library/knowledge?"+filterQuery(filter))
+	w.Header().Set("HX-Push-Url", "/library/knowledge?"+filterQuery(read.Data.Filter))
+	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge.gohtml", knowledgeListOf(read.Data), toast)
 }
 
 func (p *pages) knowledgeProfilePage(w http.ResponseWriter, r *http.Request, status int, problem *string) {

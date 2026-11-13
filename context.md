@@ -54,7 +54,11 @@ behavior-parity target.
   prompt's profile block and each pinned record's place in it. An unknown
   scope filter is refused with a 422 and the reason instead of being reset;
   the list, record and profile pages answer with a weak `ETag` and a 304
-  when nothing they show has changed. Each knowledge command writes one
+  when nothing they show has changed. Confirm all on the unconfirmed or
+  imported filter confirms each record in its own step and reports how
+  many were confirmed and how many were refused (a retracted record is
+  refused); Confirm selected stops at the first refused record and keeps
+  the ones confirmed before it. Each knowledge command writes one
   operation audit row; a refused command answers 409 and a rejected edit
   keeps the submitted values on the 422 page. Projects
   have no pages of their own beyond create and edit, and a

@@ -3,18 +3,14 @@ package kbtools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"slices"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/kb"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
 	"github.com/jeiang/atrium/internal/tool"
-)
-
-var (
-	writeBound = tool.NewCeiling(assistant.TuningAgentKbWriteChars, 200, assistant.TuningAgentKbWriteChars)
 )
 
 func sourceMap(source *kbapp.Source) any {
@@ -134,7 +130,7 @@ func aliasesArg(args tool.Args) ([]string, error) {
 	return out, nil
 }
 
-func sourceArg(args tool.Args) (*kb.Source, error) {
+func sourceArg(args tool.Args) (*kbapp.AgentSource, error) {
 	raw, ok := args.Get("source")
 	if !ok || raw == nil {
 		return nil, nil
@@ -147,7 +143,7 @@ func sourceArg(args tool.Args) (*kb.Source, error) {
 	if err != nil || !ok {
 		return nil, tool.Error("source.thread_id is required")
 	}
-	src := &kb.Source{ThreadID: threadID}
+	src := &kbapp.AgentSource{ThreadID: threadID}
 	if fields["seq"] != nil {
 		seq, ok, err := tool.IntArg(tool.Args{"seq": fields["seq"]}, "seq", true)
 		if err != nil || !ok {
@@ -158,79 +154,64 @@ func sourceArg(args tool.Args) (*kb.Source, error) {
 	return src, nil
 }
 
-func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	id, _, err := tool.IntArg(args, "id", false)
-	if err != nil {
-		return nil, err
+func agentFail(err error) error {
+	var e *application.Error
+	if errors.As(err, &e) {
+		return tool.Fail(err)
 	}
-	title, _, err := tool.TextArg(args, "title", false)
-	if err != nil {
-		return nil, err
-	}
-	body, _, err := tool.TextArg(args, "body", false)
-	if err != nil {
-		return nil, err
-	}
-	if title != "" && len([]rune(title)) > 200 {
-		return nil, tool.Error("title is limited to 200 characters")
-	}
-	if err := writeBound.ClampText(ctx, tc.DB.Read, body, "body"); err != nil {
-		return nil, err
-	}
-	scope, _, err := tool.TextArg(args, "scope", false)
-	if err != nil {
-		return nil, err
-	}
-	aliases, err := aliasesArg(args)
-	if err != nil {
-		return nil, err
-	}
-	source, err := sourceArg(args)
-	if err != nil {
-		return nil, err
-	}
-	if tc.Kind == tool.Nightly {
-		if source == nil || !slices.Contains(tc.Sources, source.ThreadID) {
-			return nil, tool.Error("source.thread_id must be one of the threads gathered for this run")
-		}
-	}
-	rec, writeID, err := kb.Write(ctx, tc.Ledger, kb.Writer{
-		ThreadID: tc.ThreadID, RunID: tc.RunID, Kind: string(tc.Kind), Now: tc.Now(),
-	}, kb.WriteInput{ID: id, Title: title, Body: body, Aliases: aliases, Scope: scope, Source: source})
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"id": rec.ID, "cite": kb.Cite(rec.ID), "write_id": writeID}, nil
+	return err
 }
 
-func retract(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	id, ok, err := tool.IntArg(args, "id", true)
-	if err != nil || !ok {
-		return nil, tool.Error("id is required")
-	}
-	reason, ok, err := tool.TextArg(args, "reason", true)
-	if err != nil || !ok {
-		return nil, tool.Error("reason is required")
-	}
-	if len([]rune(reason)) > 200 {
-		return nil, tool.Error("reason is limited to 200 characters")
-	}
-	if tc.Kind == tool.Nightly {
-		rec, err := kb.Get(ctx, tc.DB.Read, id)
+func write(svc func(*tool.Context) *kbapp.Service) tool.Handler {
+	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+		id, _, err := tool.IntArg(args, "id", false)
 		if err != nil {
 			return nil, err
 		}
-		if rec == nil || rec.SourceThreadID == nil || !slices.Contains(tc.Sources, *rec.SourceThreadID) {
-			return nil, tool.Error("only records from the threads gathered for this run can be retracted")
+		title, _, err := tool.TextArg(args, "title", false)
+		if err != nil {
+			return nil, err
 		}
+		body, _, err := tool.TextArg(args, "body", false)
+		if err != nil {
+			return nil, err
+		}
+		scope, _, err := tool.TextArg(args, "scope", false)
+		if err != nil {
+			return nil, err
+		}
+		aliases, err := aliasesArg(args)
+		if err != nil {
+			return nil, err
+		}
+		source, err := sourceArg(args)
+		if err != nil {
+			return nil, err
+		}
+		written, err := svc(tc).AgentWrite(ctx, kbapp.AgentWriteInput{ID: id, Title: title, Body: body, Aliases: aliases, Scope: scope, Source: source})
+		if err != nil {
+			return nil, agentFail(err)
+		}
+		return map[string]any{"id": written.Data.ID, "cite": kb.Cite(written.Data.ID), "write_id": written.EffectIDs[0]}, nil
 	}
-	rec, writeID, err := kb.Retract(ctx, tc.Ledger, kb.Writer{
-		ThreadID: tc.ThreadID, RunID: tc.RunID, Kind: string(tc.Kind), Now: tc.Now(),
-	}, id, reason)
-	if err != nil {
-		return nil, err
+}
+
+func retract(svc func(*tool.Context) *kbapp.Service) tool.Handler {
+	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+		id, ok, err := tool.IntArg(args, "id", true)
+		if err != nil || !ok {
+			return nil, tool.Error("id is required")
+		}
+		reason, ok, err := tool.TextArg(args, "reason", true)
+		if err != nil || !ok {
+			return nil, tool.Error("reason is required")
+		}
+		retracted, err := svc(tc).AgentRetract(ctx, kbapp.AgentRetractInput{ID: id, Reason: reason})
+		if err != nil {
+			return nil, agentFail(err)
+		}
+		return map[string]any{"id": retracted.Data.ID, "cite": kb.Cite(retracted.Data.ID), "retracted": true, "write_id": retracted.EffectIDs[0]}, nil
 	}
-	return map[string]any{"id": rec.ID, "cite": kb.Cite(rec.ID), "retracted": true, "write_id": writeID}, nil
 }
 
 const searchSchema = `{"type": "object", "properties": {"query": {"type": "string", "maxLength": 200}, ` +
@@ -249,7 +230,7 @@ func writeSchema() string {
 		`"aliases": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 10}, `+
 		`"scope": {"enum": ["work", "personal"]}, `+
 		`"source": {"type": "object", "properties": {"thread_id": {"type": "integer"}, "seq": {"type": "integer"}}, "required": ["thread_id"], "additionalProperties": false}}, `+
-		`"additionalProperties": false}`, writeBound.TextSchema())
+		`"additionalProperties": false}`, kbapp.AgentBodyBound.TextSchema())
 }
 
 func Tools(svc func(*tool.Context) *kbapp.Service) []tool.Tool {
@@ -280,7 +261,7 @@ func Tools(svc func(*tool.Context) *kbapp.Service) []tool.Tool {
 			Description: "Create or edit one durable knowledge record: a fact, decision or reference worth keeping. " +
 				"Creating needs title and body; pass id to edit an unconfirmed record. Never store secrets. Logged and undoable by the operator.",
 			InputSchema: json.RawMessage(writeSchema()),
-			Handler:     write,
+			Handler:     write(svc),
 			Effect:      tool.WriteUndo, Undo: kb.UndoOp,
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
@@ -290,7 +271,7 @@ func Tools(svc func(*tool.Context) *kbapp.Service) []tool.Tool {
 			Name:        "kb_retract",
 			Description: "Retract a knowledge record that is wrong or superseded. The record stays in history and the operator can undo. Give a short reason.",
 			InputSchema: json.RawMessage(retractSchema),
-			Handler:     retract,
+			Handler:     retract(svc),
 			Effect:      tool.WriteUndo, Undo: kb.UndoOp,
 			Annotated: true,
 			Channel:   tool.ChannelOwn,

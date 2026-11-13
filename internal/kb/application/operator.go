@@ -57,12 +57,14 @@ type Changed struct {
 
 type BatchItem struct {
 	ID      int64
+	Code    application.Code
 	Message string
 }
 
 type BatchResult struct {
 	Committed []BatchItem
 	Refused   []BatchItem
+	Failed    []BatchItem
 }
 
 func describeOperator[I, O any](name application.Name, effect application.Effect) application.Definition {
@@ -293,19 +295,5 @@ func (s *Service) RetractRun(ctx context.Context, in RunInput) (application.Chan
 	if err != nil {
 		return application.Change[BatchResult]{}, err
 	}
-	var out application.Change[BatchResult]
-	for _, id := range ids {
-		changed, err := s.retract(ctx, RetractRunName, id)
-		var e *application.Error
-		switch {
-		case err == nil:
-			out.Data.Committed = append(out.Data.Committed, BatchItem{ID: id})
-			out.EffectIDs = append(out.EffectIDs, changed.EffectIDs...)
-		case errors.As(err, &e) && e.Code != application.Internal:
-			out.Data.Refused = append(out.Data.Refused, BatchItem{ID: id, Message: e.Error()})
-		default:
-			return out, err
-		}
-	}
-	return out, nil
+	return s.batch(ids, false, func(id int64) (application.Change[Changed], error) { return s.retract(ctx, RetractRunName, id) })
 }
