@@ -84,4 +84,5 @@ type RunDone struct {
 	ThreadID int64               `json:"thread_id"`
 	Run      *journal.Run        `json:"run"`
 	Items    []*service.Item     `json:"items"`
+	Work     asstapp.Work        `json:"work"`
 }

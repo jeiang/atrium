@@ -182,6 +182,13 @@ func (d *Deps) API(method, pattern string, h http.HandlerFunc) {
 	d.route(method, APIPrefix+pattern, accessDefault, h)
 }
 
+func (d *Deps) Command(pattern string, h http.HandlerFunc) http.HandlerFunc {
+	if d.commands == nil {
+		return h
+	}
+	return d.commands(pattern, h).ServeHTTP
+}
+
 func (d *Deps) DeclaredAPI(method, pattern string, shape application.APIShape, h http.HandlerFunc) {
 	d.API(method, pattern, h)
 	(*d.routes)[len(*d.routes)-1].api = &shape

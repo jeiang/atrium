@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"strconv"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/web"
 )
 
 func threadPath(id int64, rest string) string {
@@ -224,5 +226,80 @@ func TestThreadsAPIActions(t *testing.T) {
 	expectAPI(t, s.do(http.MethodPatch, threadPath(id, "/messages/latest"), owner, map[string]any{"text": "x"}), http.StatusConflict, "budget_exceeded")
 	if extra := len(api.Requests()) - requests; extra != 0 {
 		t.Fatalf("%d provider requests after refused sends", extra)
+	}
+}
+
+func TestHTMLSendReplaysByKey(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	d := asstDB(t, dir)
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	api.Push(asstReply("started"), asstReply("keyed reply"), asstReply("second key reply"))
+
+	started := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "hello", "web_search": false})
+	if started.status != http.StatusCreated {
+		t.Fatalf("start: %d %s", started.status, started.body)
+	}
+	thread, _ := started.json["thread"].(map[string]any)
+	id := number(t, thread["id"])
+	waitThreadSettled(t, s, owner, id)
+	requests := len(api.Requests())
+
+	send := func(key string) (int, string, http.Header) {
+		t.Helper()
+		body, contentType := asstMultipart(t, map[string]string{"text": "keyed note"}, nil)
+		req, err := http.NewRequest(http.MethodPost, s.base+"/chat/"+strconv.FormatInt(id, 10)+"/messages", body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("Idempotency-Key", key)
+		for _, c := range client.Jar.Cookies(req.URL) {
+			if c.Name == web.CSRFCookie {
+				req.Header.Set(web.CSRFHeader, c.Value)
+			}
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		text, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode, string(text), resp.Header
+	}
+	notes := func() int {
+		return asstCount(t, d, "SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND role = 'user' AND superseded = 0 AND content_json LIKE '%keyed note%'", id)
+	}
+
+	status, body, header := send("html-send-key-1")
+	if status != http.StatusOK || header.Get("Atrium-Command-Id") == "" {
+		t.Fatalf("first keyed send: %d %q %s", status, header.Get("Atrium-Command-Id"), body)
+	}
+	waitThreadSettled(t, s, owner, id)
+	again, againBody, againHeader := send("html-send-key-1")
+	if again != status || againBody != body || againHeader.Get("Atrium-Command-Id") != header.Get("Atrium-Command-Id") || againHeader.Get("Idempotent-Replayed") != "true" {
+		t.Fatalf("repeated keyed send: %d %q replayed=%q, want %d %q and the first response", again, againHeader.Get("Atrium-Command-Id"), againHeader.Get("Idempotent-Replayed"), status, header.Get("Atrium-Command-Id"))
+	}
+	waitThreadSettled(t, s, owner, id)
+	if n := notes(); n != 1 {
+		t.Fatalf("one key stored %d messages, want 1", n)
+	}
+	if sent := len(api.Requests()) - requests; sent != 1 {
+		t.Fatalf("one key made %d provider requests, want 1", sent)
+	}
+
+	other, otherBody, otherHeader := send("html-send-key-2")
+	if other != http.StatusOK || otherHeader.Get("Idempotent-Replayed") != "" || otherHeader.Get("Atrium-Command-Id") == header.Get("Atrium-Command-Id") {
+		t.Fatalf("second key: %d %q %s", other, otherHeader.Get("Atrium-Command-Id"), otherBody)
+	}
+	waitThreadSettled(t, s, owner, id)
+	if n := notes(); n != 2 {
+		t.Fatalf("two keys stored %d messages, want 2", n)
 	}
 }

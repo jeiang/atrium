@@ -189,8 +189,8 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 				status = http.StatusOK
 			}
 			kept := http.Header{}
-			for _, name := range []string{"Content-Type", "Location"} {
-				if values := headers.Values(name); len(values) > 0 {
+			for name, values := range headers {
+				if name == "Content-Type" || name == "Location" || strings.HasPrefix(name, "Hx-") {
 					kept[name] = values
 				}
 			}

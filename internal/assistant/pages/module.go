@@ -74,7 +74,7 @@ func Module(o Options) web.Module {
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)
-		r.Post("/chat", p.chatNew)
+		r.Post("/chat", p.command("/chat", p.chatNew))
 		r.Get("/chat/composer-options", p.composerOptions)
 		r.Get("/chat/palette", p.palette)
 		r.Get("/today", p.today)
@@ -85,7 +85,7 @@ func Module(o Options) web.Module {
 		r.Post("/chat/{thread_id}/project", p.chatProject)
 		r.Post("/chat/{thread_id}/options", p.chatOptions)
 		r.Post("/chat/{thread_id}/delete", p.chatDelete)
-		r.Post("/chat/{thread_id}/messages", p.chatMessage)
+		r.Post("/chat/{thread_id}/messages", p.command("/chat/{thread_id}/messages", p.chatMessage))
 		r.Post("/chat/{thread_id}/regenerate", p.chatRegenerate)
 		r.Post("/chat/{thread_id}/stop", p.chatStop)
 		r.Post("/chat/{thread_id}/branch", p.chatBranch)

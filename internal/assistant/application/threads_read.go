@@ -371,6 +371,10 @@ func (s *Service) Work(ctx context.Context, in ThreadInput) (application.Read[Wo
 	return application.Read[Work]{Revision: rev, Data: out}, err
 }
 
+func (s *Service) NeedsCount(ctx context.Context) (int, error) {
+	return proposals.NeedsCount(ctx, s.db.Read)
+}
+
 func (s *Service) History(ctx context.Context, in HistoryInput) (application.Read[History], error) {
 	if in.N == 0 {
 		v, err := memory.Build(ctx, s.db.Write, in.ThreadID, s.now())

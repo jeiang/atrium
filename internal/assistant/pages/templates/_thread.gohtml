@@ -65,6 +65,7 @@
       hx-post="/chat/{{$t.ID}}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   <input type="hidden" name="edit" value="">
+  {{template "chat_user_template"}}
   <p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>{{icon "pencil" "size-3.5"}}Editing your last message<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button></p>
   <label for="composer-text" class="sr-only">Message</label>
   <textarea id="composer-text" name="text" rows="2" placeholder="Reply, or tell me what to change" data-submit-on-enter required autofocus></textarea>

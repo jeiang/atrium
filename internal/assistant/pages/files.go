@@ -87,6 +87,16 @@ func uploadReadError(err error, messageCap int) error {
 	return errBadBody
 }
 
+func (p *pages) command(pattern string, h http.HandlerFunc) http.HandlerFunc {
+	command := p.deps.Command(pattern, h)
+	return func(w http.ResponseWriter, r *http.Request) {
+		limits, err := files.ReadLimits(r.Context(), p.deps.DB.Read)
+		check(err)
+		r.Body = http.MaxBytesReader(w, r.Body, int64(limits.MessageCap)+uploadSlack)
+		command(w, r)
+	}
+}
+
 func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, bool) {
 	form, uploads, err := p.parseUploads(w, r)
 	switch {
