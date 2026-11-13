@@ -275,10 +275,14 @@ func (s *Service) memoryPass(ctx context.Context, name application.Name, tgt str
 		}
 		return application.Change[MemoryWorked]{}, err
 	}
+	outcome := state.OK
 	if out.Summarized == 0 {
-		return application.Change[MemoryWorked]{Data: out}, nil
+		if name == MemoryWorkName {
+			return application.Change[MemoryWorked]{Data: out}, nil
+		}
+		outcome = state.Noop
 	}
-	auditID, err := s.state.Audit(ctx, nil, state.Entry{Operation: string(name), Outcome: state.OK, Target: tgt,
+	auditID, err := s.state.Audit(ctx, nil, state.Entry{Operation: string(name), Outcome: outcome, Target: tgt,
 		DetailsJSON: fmt.Sprintf(`{"threads":%d,"summarized":%d}`, out.Threads, out.Summarized)})
 	return application.Change[MemoryWorked]{Data: out, AuditID: auditID}, err
 }
