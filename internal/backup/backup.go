@@ -23,7 +23,7 @@ func (r *Refusal) Error() string { return r.Err.Error() }
 
 func (r *Refusal) Unwrap() error { return r.Err }
 
-func refuseDestination(cfg config.Config, dest string) error {
+func RefuseDestination(cfg config.Config, dest string) error {
 	if filepath.Clean(dest) == filepath.Clean(cfg.DBPath) {
 		return &Refusal{fmt.Errorf("backup destination %s is the database itself", dest)}
 	}
@@ -45,7 +45,7 @@ func Write(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest st
 }
 
 func writeBackup(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest string, forget func(context.Context, db.Querier) error) (int, error) {
-	if err := refuseDestination(cfg, dest); err != nil {
+	if err := RefuseDestination(cfg, dest); err != nil {
 		return 0, err
 	}
 	staged, err := db.Stage(dest, 0o600)

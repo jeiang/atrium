@@ -46,13 +46,13 @@ func knowledgeToolService(tc *tool.Context) *kbapp.Service {
 	return kbapp.New(tc.DB, tc.Ledger, tc.Now)
 }
 
-func knowledgeOperations() ([]application.Definition, []application.Binding) {
+func (m Module) knowledgeOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			kbapp.DescribeList(), kbapp.DescribeDetail(), kbapp.DescribeProfile(), kbapp.DescribeSearch(), kbapp.DescribeGet(),
 			kbapp.DescribeCreate(), kbapp.DescribeEdit(), kbapp.DescribeConfirm(), kbapp.DescribeRetract(), kbapp.DescribeRestore(),
 			kbapp.DescribePurge(), kbapp.DescribeRetractRun(), kbapp.DescribeConfirmSelected(), kbapp.DescribeConfirmMatching(),
 			kbapp.DescribeAgentWrite(), kbapp.DescribeAgentRetract(), kbapp.DescribeImport(), kbapp.DescribeExport(),
-		}, []application.Binding{
+		}, append(m.knowledgeRoutes(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /library/knowledge", Uses: []application.Name{kbapp.ListName}},
 			{Kind: application.HTML, Target: "GET /library/knowledge/{record_id}", Uses: []application.Name{kbapp.DetailName}},
 			{Kind: application.HTML, Target: "GET /library/knowledge/{record_id}/purge", Uses: []application.Name{kbapp.DetailName}},
@@ -74,5 +74,5 @@ func knowledgeOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.Job, Target: module.Assistant + "/" + assistant.KnowledgeExportName, Uses: []application.Name{kbapp.ExportName}},
 			{Kind: application.Tool, Target: "kb_write", Uses: []application.Name{kbapp.AgentWriteName}},
 			{Kind: application.Tool, Target: "kb_retract", Uses: []application.Name{kbapp.AgentRetractName}},
-		}
+		}...)
 }

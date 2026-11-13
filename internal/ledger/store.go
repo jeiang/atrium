@@ -89,6 +89,7 @@ type Filter struct {
 	RunID            *int64
 	BeforeID         int64
 	BeforeTS         float64
+	ByTime           bool
 	Since            float64
 	Limit            int
 	Offset           int

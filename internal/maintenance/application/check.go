@@ -47,11 +47,11 @@ type Archive struct {
 }
 
 func DescribeCheck() application.Definition {
-	return application.Describe[CheckInput, Check](CheckName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
+	return application.Describe[CheckInput, Check](CheckName, application.Command, []application.Authority{application.Operator}, application.NoEffect, false)
 }
 
 func DescribeVerifyArchive() application.Definition {
-	return application.Describe[VerifyArchiveInput, Archive](VerifyArchiveName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
+	return application.Describe[VerifyArchiveInput, Archive](VerifyArchiveName, application.Command, []application.Authority{application.Operator}, application.NoEffect, false)
 }
 
 func (s *Service) Check(ctx context.Context, _ CheckInput) (application.Read[Check], error) {
@@ -98,7 +98,17 @@ func (s *Service) VerifyArchive(ctx context.Context, in VerifyArchiveInput) (app
 	return application.Read[Archive]{Data: archive(in.Archive, p.Report)}, nil
 }
 
+func Busy(err error) error {
+	if errors.As(err, new(*db.LockBusy)) {
+		return &application.Error{Code: application.Conflict, Message: "A backup or database check is already running.", Cause: err}
+	}
+	return err
+}
+
 func refused(err error) error {
+	if errors.As(err, new(*db.LockBusy)) {
+		return Busy(err)
+	}
 	var refusal *backup.Refusal
 	if errors.As(err, &refusal) || errors.Is(err, backup.ErrNewerSchema) || errors.Is(err, backup.ErrArchiveKey) || errors.Is(err, backup.ErrPlaintextKeyed) {
 		return &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}

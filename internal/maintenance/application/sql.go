@@ -30,7 +30,7 @@ type SQLResult struct {
 }
 
 func DescribeSQL() application.Definition {
-	return application.Describe[SQLInput, SQLResult](SQLName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
+	return application.Describe[SQLInput, SQLResult](SQLName, application.Command, []application.Authority{application.Bootstrap}, application.LocalUndoable, true)
 }
 
 func (s *Service) SQL(ctx context.Context, in SQLInput) (application.Change[SQLResult], error) {

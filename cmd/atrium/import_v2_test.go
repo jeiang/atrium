@@ -240,6 +240,11 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 			t.Errorf("retired table %s survives the import", table)
 		}
 	}
+	for _, index := range []string{"operation_audit_time", "effect_resolutions_time", "settings_audit_time"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'index' AND name = ?", index); n != 1 {
+			t.Errorf("activity index %s is missing after the import", index)
+		}
+	}
 
 	for _, tc := range []struct {
 		name  string

@@ -1,44 +1,63 @@
 package application
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
-	SourceMail        = "mail"
-	SourceWrite       = "write"
-	SourceSettings    = "settings"
-	CategoryMail      = "mail"
-	CategoryAssistant = "assistant"
-	CategoryWiki      = "wiki"
-	CategoryKnowledge = "knowledge"
-	CategoryMedia     = "media"
-	CategorySettings  = "settings"
-	ActivityPage      = 50
-	snippetLimit      = 800
+	SourceMail         = "mail"
+	SourceWrite        = "write"
+	SourceSettings     = "settings"
+	SourceOperation    = "operation"
+	CategoryMail       = "mail"
+	CategoryAssistant  = "assistant"
+	CategoryWiki       = "wiki"
+	CategoryKnowledge  = "knowledge"
+	CategoryMedia      = "media"
+	CategorySettings   = "settings"
+	CategoryOperations = "operations"
+	ActivityPage       = 50
+	snippetLimit       = 800
 )
 
 var Categories = []string{CategoryMail, CategoryAssistant, CategoryWiki, CategoryKnowledge, CategoryMedia, CategorySettings}
 
 type ActivityEntry struct {
-	Source   string            `json:"source"`
-	ID       int64             `json:"id"`
-	Category string            `json:"category"`
-	TS       float64           `json:"ts"`
-	Mail     *MailActivity     `json:"mail,omitempty"`
-	Write    *WriteActivity    `json:"write,omitempty"`
-	Settings *SettingsActivity `json:"settings,omitempty"`
-	Phone    *PhoneActivity    `json:"phone,omitempty"`
+	Source    string             `json:"source"`
+	ID        int64              `json:"id"`
+	Category  string             `json:"category"`
+	TS        float64            `json:"ts"`
+	Mail      *MailActivity      `json:"mail,omitempty"`
+	Write     *WriteActivity     `json:"write,omitempty"`
+	Settings  *SettingsActivity  `json:"settings,omitempty"`
+	Phone     *PhoneActivity     `json:"phone,omitempty"`
+	Operation *OperationActivity `json:"operation,omitempty"`
+}
+
+type OperationActivity struct {
+	Name      string  `json:"name"`
+	Actor     string  `json:"actor"`
+	Source    string  `json:"source"`
+	Outcome   string  `json:"outcome"`
+	Target    string  `json:"target"`
+	ThreadID  *int64  `json:"thread_id"`
+	RunID     *int64  `json:"run_id"`
+	CommandID *string `json:"command_id"`
+	EffectIDs []int64 `json:"effect_ids"`
 }
 
 type PhoneActivity struct {
@@ -80,6 +99,7 @@ type WriteActivity struct {
 	Error      *string  `json:"error"`
 	Undoable   bool     `json:"undoable"`
 	Resolved   bool     `json:"resolved"`
+	Effective  string   `json:"effective_outcome,omitempty"`
 }
 
 type SettingsActivity struct {
@@ -126,28 +146,156 @@ func (e ActivityEntry) Summary() string {
 }
 
 type ActivityInput struct {
-	Category string
-	Offset   int
-	Limit    int
+	Category    string
+	After       *ActivityKey
+	Limit       int
+	Operations  bool
+	HidePrivate bool
 }
 
 type Activity struct {
-	Entries    []ActivityEntry
-	NextOffset int
+	Entries []ActivityEntry
+	Next    *ActivityKey
+}
+
+type ActivityKey struct {
+	TS     float64 `json:"t"`
+	ID     int64   `json:"i"`
+	Source string  `json:"s"`
+}
+
+var activitySources = []string{SourceOperation, SourceMail, "phone", SourceSettings, "effect"}
+
+func (k ActivityKey) Valid() bool {
+	return k.TS >= 0 && !math.IsInf(k.TS, 0) && k.ID > 0 && k.ID < math.MaxInt64 && slices.Contains(activitySources, k.Source)
+}
+
+func (k ActivityKey) String() string {
+	return strconv.FormatFloat(k.TS, 'g', -1, 64) + "_" + strconv.FormatInt(k.ID, 10) + "_" + k.Source
+}
+
+func ParseActivityKey(raw string) (ActivityKey, bool) {
+	parts := strings.Split(raw, "_")
+	if len(parts) != 3 {
+		return ActivityKey{}, false
+	}
+	ts, err := strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return ActivityKey{}, false
+	}
+	id, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return ActivityKey{}, false
+	}
+	k := ActivityKey{TS: ts, ID: id, Source: parts[2]}
+	return k, k.Valid()
+}
+
+func keyOf(e ActivityEntry) ActivityKey { return ActivityKey{TS: e.TS, ID: e.ID, Source: e.Source} }
+
+func compareKeys(a, b ActivityKey) int {
+	if c := cmp.Compare(b.TS, a.TS); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(b.ID, a.ID); c != 0 {
+		return c
+	}
+	return strings.Compare(b.Source, a.Source)
+}
+
+func (in ActivityInput) bound(source string) (float64, int64) {
+	k := in.After
+	if k == nil {
+		return 0, 0
+	}
+	if source < k.Source {
+		return k.TS, k.ID + 1
+	}
+	return k.TS, k.ID
 }
 
 func (s *Service) Activity(ctx context.Context, in ActivityInput) (application.Read[Activity], error) {
 	if in.Category != "" && !slices.Contains(Categories, in.Category) {
 		return application.Read[Activity]{}, invalid("category", "unknown category")
 	}
-	in.Offset = max(in.Offset, 0)
+	if in.After != nil && !in.After.Valid() {
+		return application.Read[Activity]{}, invalid("after", "unknown position")
+	}
 	if in.Limit <= 0 {
 		in.Limit = ActivityPage
 	}
 	return read(ctx, s, ActivityName, []string{state.Mail, state.Effects, state.Settings}, in, func() (Activity, error) {
-		entries, next, err := s.timeline(ctx, in.Category, in.Limit, in.Offset)
-		return Activity{Entries: entries, NextOffset: next}, err
-	}, mailMarks)
+		return s.timeline(ctx, in)
+	}, func(a Activity) any {
+		if in.Operations {
+			return a.Entries
+		}
+		return mailMarks(a)
+	})
+}
+
+type privacy struct {
+	threads  map[int64]bool
+	projects map[int64]bool
+}
+
+func (p privacy) hidesTarget(target string) bool {
+	kind, raw, ok := strings.Cut(target, ":")
+	if !ok {
+		return false
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return false
+	}
+	switch kind {
+	case "thread":
+		return p.threads[id]
+	case "project":
+		return p.projects[id]
+	}
+	return false
+}
+
+func (s *Service) operationEntries(ctx context.Context, in ActivityInput, hidden privacy, fetch int) (sourcePage, error) {
+	ts, id := in.bound(SourceOperation)
+	rows, err := s.state.AuditBefore(ctx, ts, id, fetch)
+	if err != nil {
+		return sourcePage{}, err
+	}
+	page := sourcePage{}
+	for _, r := range rows {
+		page.saw(ActivityKey{TS: r.TS, ID: r.ID, Source: SourceOperation}, len(rows), fetch)
+		if r.ThreadID != nil && hidden.threads[*r.ThreadID] || hidden.hidesTarget(r.Target) {
+			continue
+		}
+		var linked struct {
+			EffectIDs []int64 `json:"effect_ids"`
+		}
+		_ = json.Unmarshal([]byte(r.DetailsJSON), &linked)
+		if linked.EffectIDs == nil {
+			linked.EffectIDs = []int64{}
+		}
+		page.entries = append(page.entries, ActivityEntry{
+			Source: SourceOperation, ID: r.ID, Category: CategoryOperations, TS: r.TS,
+			Operation: &OperationActivity{
+				Name: r.Operation, Actor: r.Actor, Source: r.Source, Outcome: r.Outcome, Target: r.Target,
+				ThreadID: r.ThreadID, RunID: r.RunID, CommandID: r.CommandID, EffectIDs: linked.EffectIDs,
+			},
+		})
+	}
+	return page, nil
+}
+
+type sourcePage struct {
+	entries  []ActivityEntry
+	frontier *ActivityKey
+}
+
+func (p *sourcePage) saw(k ActivityKey, rows, fetch int) {
+	if rows == fetch {
+		p.frontier = &k
+	}
 }
 
 var writeCategoryPrefixes = []struct{ Prefix, Category string }{
@@ -211,79 +359,116 @@ func deref(s *string) string {
 	return *s
 }
 
-func (s *Service) timeline(ctx context.Context, category string, limit, offset int) ([]ActivityEntry, int, error) {
+func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, error) {
 	q := s.db.Read
-	want := offset + limit + 1
-	var entries []ActivityEntry
-	if category == "" || category == CategoryMail {
-		actions, err := s.live.List(ctx, "", "", want, 0)
-		if err != nil {
-			return nil, 0, err
+	category := in.Category
+	fetch := in.Limit + 1
+	var hidden privacy
+	if in.HidePrivate {
+		var err error
+		if hidden.threads, err = projects.PrivateThreadIDs(ctx, q); err != nil {
+			return Activity{}, err
 		}
-		for _, a := range actions {
-			entries = append(entries, MailEntry(a))
-		}
-		found, err := ledger.ResolutionsSince(ctx, q, "phone", want)
-		if err != nil {
-			return nil, 0, err
-		}
-		for _, r := range found {
-			entries = append(entries, ActivityEntry{
-				ID: r.ID, TS: r.TS, Source: "phone", Category: CategoryMail,
-				Phone: &PhoneActivity{Actor: r.Actor, Kind: phoneKind(r), Status: r.Outcome, Target: phoneTarget(r)},
-			})
+		if hidden.projects, err = projects.PrivateIDs(ctx, q); err != nil {
+			return Activity{}, err
 		}
 	}
-	if category == "" || category == CategorySettings {
-		rows, err := audit.Recent(ctx, q, want)
+	var pages []sourcePage
+	if in.Operations && category == "" {
+		page, err := s.operationEntries(ctx, in, hidden, fetch)
 		if err != nil {
-			return nil, 0, err
+			return Activity{}, err
 		}
+		pages = append(pages, page)
+	}
+	if category == "" || category == CategoryMail {
+		ts, id := in.bound(SourceMail)
+		actions, err := s.live.Before(ctx, ts, id, fetch)
+		if err != nil {
+			return Activity{}, err
+		}
+		var mail sourcePage
+		for _, a := range actions {
+			e := MailEntry(a)
+			mail.saw(keyOf(e), len(actions), fetch)
+			mail.entries = append(mail.entries, e)
+		}
+		ts, id = in.bound("phone")
+		found, err := ledger.ResolutionsBefore(ctx, q, "phone", ts, id, fetch)
+		if err != nil {
+			return Activity{}, err
+		}
+		var phone sourcePage
+		for _, r := range found {
+			e := ActivityEntry{
+				ID: r.ID, TS: r.TS, Source: "phone", Category: CategoryMail,
+				Phone: &PhoneActivity{Actor: r.Actor, Kind: phoneKind(r), Status: r.Outcome, Target: phoneTarget(r)},
+			}
+			phone.saw(keyOf(e), len(found), fetch)
+			phone.entries = append(phone.entries, e)
+		}
+		pages = append(pages, mail, phone)
+	}
+	if category == "" || category == CategorySettings {
+		ts, id := in.bound(SourceSettings)
+		rows, err := audit.Before(ctx, q, ts, id, fetch)
+		if err != nil {
+			return Activity{}, err
+		}
+		var settings sourcePage
 		for _, row := range rows {
 			e := ActivityEntry{ID: row.ID, TS: row.TS, Source: SourceSettings, Category: CategorySettings}
 			e.Settings = &SettingsActivity{Tool: row.Key, Actor: row.Actor, Origin: row.Source, Before: deref(row.Old), After: deref(row.New)}
-			entries = append(entries, e)
+			settings.saw(keyOf(e), len(rows), fetch)
+			settings.entries = append(settings.entries, e)
 		}
+		pages = append(pages, settings)
 	}
 	if category != CategoryMail && category != CategorySettings && s.ledger != nil {
-		effects, err := s.ledger.List(ctx, effectFilter(category, want))
+		filter := effectFilter(category, fetch)
+		filter.ByTime = true
+		filter.BeforeTS, filter.BeforeID = in.bound("effect")
+		effects, err := s.ledger.List(ctx, filter)
 		if err != nil {
-			return nil, 0, err
+			return Activity{}, err
 		}
+		var writes sourcePage
 		for _, effect := range effects {
-			if effect.Direction != "forward" {
+			writes.saw(ActivityKey{TS: effect.CreatedAt, ID: effect.ID, Source: "effect"}, len(effects), fetch)
+			if effect.Direction != "forward" || effect.ThreadID != nil && hidden.threads[*effect.ThreadID] {
 				continue
 			}
-			entries = append(entries, EffectEntry(effect))
+			writes.entries = append(writes.entries, EffectEntry(effect))
+		}
+		pages = append(pages, writes)
+	}
+	return merge(pages, in.Limit), nil
+}
+
+func merge(pages []sourcePage, limit int) Activity {
+	var horizon *ActivityKey
+	var entries []ActivityEntry
+	for _, p := range pages {
+		if p.frontier != nil && (horizon == nil || compareKeys(*p.frontier, *horizon) < 0) {
+			horizon = p.frontier
 		}
 	}
-	slices.SortStableFunc(entries, func(a, b ActivityEntry) int {
-		switch {
-		case a.TS != b.TS:
-			if a.TS > b.TS {
-				return -1
+	for _, p := range pages {
+		for _, e := range p.entries {
+			if horizon == nil || compareKeys(keyOf(e), *horizon) <= 0 {
+				entries = append(entries, e)
 			}
-			return 1
-		case a.ID > b.ID:
-			return -1
-		case a.ID < b.ID:
-			return 1
 		}
-		return 0
-	})
-	next := 0
-	if len(entries) > offset+limit {
-		next = offset + limit
 	}
-	if offset > len(entries) {
-		offset = len(entries)
+	slices.SortFunc(entries, func(a, b ActivityEntry) int { return compareKeys(keyOf(a), keyOf(b)) })
+	out := Activity{Entries: []ActivityEntry{}, Next: horizon}
+	if len(entries) > limit {
+		entries = entries[:limit]
+		next := keyOf(entries[limit-1])
+		out.Next = &next
 	}
-	end := min(offset+limit, len(entries))
-	shown := entries[offset:end]
-	if shown == nil {
-		shown = []ActivityEntry{}
-	}
-	return shown, next, nil
+	out.Entries = append(out.Entries, entries...)
+	return out
 }
 
 func phoneKind(r ledger.ResolutionRow) string {
@@ -317,7 +502,7 @@ func EffectEntry(e ledger.Effect) ActivityEntry {
 		Write: &WriteActivity{
 			Tool: e.Operation, Target: e.Target, ThreadID: e.ThreadID, UndoneAt: e.UndoneAt,
 			Before: before, After: after, State: string(e.State), Error: errorText, Undoable: e.Undoable,
-			Resolved: e.Resolution != nil,
+			Resolved: e.Resolution != nil, Effective: cmp.Or(e.EffectiveOutcome, string(e.State)),
 		},
 	}
 }

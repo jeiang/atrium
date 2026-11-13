@@ -65,6 +65,7 @@ type Deps struct {
 	DB       *db.DB
 	Settings *settings.Registry
 	State    *config.State
+	Account  *authapp.Service
 	Render   *Renderer
 	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
 	NotFound http.HandlerFunc
@@ -222,7 +223,7 @@ func New(o Options) (*Server, error) {
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
-		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
+		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Account: s.account, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
 		drain:    o.Drain,
 		commands: o.Commands, router: core, routes: &s.routes, owner: "core", registrations: s.registrations,

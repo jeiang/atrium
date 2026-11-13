@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS effect_resolutions (
 );
 CREATE INDEX IF NOT EXISTS effect_resolutions_effect ON effect_resolutions(effect_id, id);
 CREATE INDEX IF NOT EXISTS effect_resolutions_proposal ON effect_resolutions(proposal_id, id);
+CREATE INDEX IF NOT EXISTS effect_resolutions_time ON effect_resolutions(source, ts, id);
 CREATE TRIGGER IF NOT EXISTS effect_resolutions_no_update
 BEFORE UPDATE ON effect_resolutions
 BEGIN SELECT RAISE(ABORT, 'effect_resolutions is append-only'); END;

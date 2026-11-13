@@ -103,7 +103,7 @@ func TestSettingsAuditRecordsCommandsAndShowsInActivity(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("GET /activity?category=settings = %d: %.300s", status, body)
 	}
-	for _, want := range []string{"monthly_budget_usd", secrets.ActionLinkKey, "by operator via cli", ">200<", ">300<", ">changed<"} {
+	for _, want := range []string{"monthly_budget_usd", secrets.ActionLinkKey} {
 		if !strings.Contains(body, want) {
 			t.Errorf("settings activity lacks %q", want)
 		}

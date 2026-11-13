@@ -112,11 +112,10 @@ func syncCommand(env config.Env) *cli.Command {
 				return cli.Fail(e, err)
 			}
 			change, err := contactsapp.New(d, env).SyncManual(e.Ctx, cfg)
-			out := change
 			if err != nil {
 				return cli.Fail(e, err)
 			}
-			body, _ := json.Marshal(out)
+			body, _ := json.Marshal(change.Data)
 			_, _ = fmt.Fprintln(e.Stdout, string(body))
 			return cli.ExitOK
 		}

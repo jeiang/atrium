@@ -332,6 +332,7 @@ type ProposalSummary struct {
 	Status   string  `json:"status"`
 	Title    string  `json:"title"`
 	Undoable bool    `json:"undoable"`
+	Blocked  bool    `json:"-"`
 }
 
 func (s *Service) Proposals(ctx context.Context, in ProposalsInput) (application.Read[[]ProposalSummary], error) {
@@ -345,7 +346,8 @@ func (s *Service) Proposals(ctx context.Context, in ProposalsInput) (application
 		}
 		out := make([]ProposalSummary, len(list))
 		for i, p := range list {
-			out[i] = ProposalSummary{ID: p.ID, Kind: p.Kind, Account: p.Account, Status: p.Status, Title: p.Title, Undoable: p.Undoable}
+			out[i] = ProposalSummary{ID: p.ID, Kind: p.Kind, Account: p.Account, Status: p.Status, Title: p.Title, Undoable: p.Undoable,
+				Blocked: p.Blocked || p.BlockedEffect || p.BlockedUndo}
 		}
 		return out, nil
 	}, nil)

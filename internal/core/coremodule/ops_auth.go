@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/http"
 	"reflect"
 
 	"github.com/jeiang/atrium/internal/api"
@@ -35,7 +36,32 @@ func authRoutes(d *web.Deps) []application.Binding {
 	return []application.Binding{
 		api.Query(d, authapp.DescribeIdentity(), application.APIShape{Area: "settings", Response: reflect.TypeFor[Identity](), Errors: []application.Code{application.Unauthenticated}},
 			"GET /me", identity),
+		api.Query(d, authapp.DescribeConfiguration(), application.APIShape{Area: "settings"},
+			"GET /auth", func(ctx context.Context, _ struct{}) (application.Read[authapp.Configuration], error) {
+				return d.Account.Configuration(ctx)
+			}),
+		api.Query(d, authapp.DescribeBearerList(), application.APIShape{Area: "settings", Fresh: true},
+			"GET /auth/tokens", func(ctx context.Context, _ struct{}) (application.Read[Tokens], error) {
+				read, err := d.Account.BearerList(ctx)
+				return application.Read[Tokens]{Revision: read.Revision, Data: Tokens{Tokens: read.Data}}, err
+			}),
+		api.Command(d, authapp.DescribeBearerIssue(), application.APIShape{Area: "settings", Success: http.StatusCreated, Sensitive: true, Errors: []application.Code{application.Invalid}},
+			"POST /auth/tokens", func(ctx context.Context, in authapp.BearerIssueInput) (application.Change[authapp.Issued], error) {
+				return d.Account.BearerIssue(ctx, in)
+			}),
+		api.Command(d, authapp.DescribeBearerRevoke(), application.APIShape{Area: "settings", Body: application.BodyNone, Success: http.StatusNoContent, Errors: []application.Code{application.NotFound}},
+			"DELETE /auth/tokens/{token_id}", func(ctx context.Context, in TokenRef) (application.Change[struct{}], error) {
+				return d.Account.BearerRevoke(ctx, authapp.BearerRevokeInput{ID: in.ID})
+			}),
 	}
+}
+
+type Tokens struct {
+	Tokens []authapp.Token `json:"tokens"`
+}
+
+type TokenRef struct {
+	ID int64 `path:"token_id" json:"-"`
 }
 
 func identity(ctx context.Context, _ struct{}) (application.Read[Identity], error) {

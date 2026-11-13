@@ -25,11 +25,11 @@ type googlePage struct {
 }
 
 func googleRedirect(r *http.Request) string {
-	scheme := "https"
-	if r.TLS == nil && strings.HasPrefix(r.Host, "127.0.0.1") {
-		scheme = "http"
-	}
-	return scheme + "://" + r.Host + googlePath + "/callback"
+	return GoogleRedirect(web.Origin(r))
+}
+
+func GoogleRedirect(origin string) string {
+	return origin + googlePath + "/callback"
 }
 
 func (h handlers) googlePage(r *http.Request) googlePage {
