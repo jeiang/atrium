@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 )
 
 const (
@@ -67,24 +66,30 @@ type OAuthState struct {
 
 var ErrUnknownConsent = errors.New("this consent link is unknown or already used; start again")
 
-func (s *Store) SaveOAuthState(ctx context.Context, state, verifier, capability, redirect string) error {
-	_, err := s.d.Write.ExecContext(ctx, "INSERT INTO oauth_states (state, verifier, capability, redirect_uri, created_ts) VALUES (?, ?, ?, ?, ?)",
-		state, verifier, capability, redirect, s.stamp())
-	return err
+func (s *Store) SaveOAuthState(ctx context.Context, state, verifier, capability, redirect string, commits ...Commit) error {
+	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO oauth_states (state, verifier, capability, redirect_uri, created_ts) VALUES (?, ?, ?, ?, ?)",
+			state, verifier, capability, redirect, s.stamp()); err != nil {
+			return err
+		}
+		return committed(ctx, tx, true, commits)
+	})
 }
 
 func (s *Store) ConsumeOAuthState(ctx context.Context, state string) (OAuthState, error) {
 	var out OAuthState
 	var created float64
-	err := s.d.Read.QueryRowContext(ctx, "SELECT verifier, capability, redirect_uri, created_ts FROM oauth_states WHERE state = ?", state).
-		Scan(&out.Verifier, &out.Capability, &out.Redirect, &created)
-	if errors.Is(err, sql.ErrNoRows) {
-		return OAuthState{}, ErrUnknownConsent
-	}
+	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, "DELETE FROM oauth_states WHERE state = ? RETURNING verifier, capability, redirect_uri, created_ts", state).
+			Scan(&out.Verifier, &out.Capability, &out.Redirect, &created)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUnknownConsent
+		}
+		return err
+	})
 	if err != nil {
 		return OAuthState{}, err
 	}
-	_, _ = s.d.Write.ExecContext(ctx, "DELETE FROM oauth_states WHERE state = ?", state)
 	out.Created = time.Unix(int64(created), 0)
 	return out, nil
 }
@@ -389,32 +394,4 @@ func (s *Store) EnsureGoogle(ctx context.Context) error {
 		caps = append(caps, Capability{Name: g.Name, Enabled: true, Config: json.RawMessage("{}")})
 	}
 	return s.Ensure(ctx, GoogleID, KindGoogle, "Google", nil, caps)
-}
-
-// GoogleGrantSlot returns the credential slot holding a capability's refresh
-// grant.
-func GoogleGrantSlot(capability string) (string, bool) {
-	grant, ok := GoogleGrantFor(capability)
-	return grant.Slot, ok
-}
-
-// StoreGoogleGrant saves a refresh grant obtained by the local consent flow.
-func StoreGoogleGrant(ctx context.Context, d *db.DB, capability, refresh string) error {
-	slot, ok := GoogleGrantSlot(capability)
-	if !ok {
-		return fmt.Errorf("google has no %s capability", capability)
-	}
-	reg, err := From(ctx)
-	if err != nil {
-		return err
-	}
-	s, err := New(d, config.From(ctx).Host(), reg)
-	if err != nil {
-		return err
-	}
-	if err := s.EnsureGoogle(ctx); err != nil {
-		return err
-	}
-	_, err = s.Save(ctx, GoogleID, Candidate{Credentials: []CredentialInput{{Slot: slot, Value: refresh}}})
-	return err
 }

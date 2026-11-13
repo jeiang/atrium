@@ -18,13 +18,16 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 
-	for _, tc := range []struct{ key, value, want string }{
-		{"tz", "Mars/Olympus", "must be an IANA time zone"},
-		{"snooze_choices", "1,x", "must be comma-separated"},
-		{"media_qbittorrent_url", "http://127.0.0.1:8081", `use connections."service/qbittorrent".config.url`},
+	for _, tc := range []struct {
+		key, value, want string
+		code             int
+	}{
+		{"tz", "Mars/Olympus", "must be an IANA time zone", cli.ExitUsage},
+		{"snooze_choices", "1,x", "must be comma-separated", cli.ExitUsage},
+		{"media_qbittorrent_url", "http://127.0.0.1:8081", `use connections."service/qbittorrent".config.url`, cli.ExitError},
 	} {
 		got := runSettings(t, "set", tc.key, tc.value)
-		if got.code != cli.ExitError || got.stdout != "" || !strings.Contains(got.stderr, tc.want) {
+		if got.code != tc.code || got.stdout != "" || !strings.Contains(got.stderr, tc.want) {
 			t.Errorf("set %s %s: exit %d stdout %q stderr %q, want %q", tc.key, tc.value, got.code, got.stdout, got.stderr, tc.want)
 		}
 	}

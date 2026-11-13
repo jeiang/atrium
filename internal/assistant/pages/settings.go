@@ -3,9 +3,11 @@ package pages
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -13,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -67,14 +70,21 @@ func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 			values[f.Key] = value
 		}
 	}
-	err := settings.SaveFields(audit.With(detached(r), "operator", audit.UI), p.deps.DB, fields, values)
-	var invalid settings.Invalid
-	var pinned *settings.PinnedError
-	if errors.As(err, &invalid) || errors.As(err, &pinned) {
-		p.assistantPage(w, r, http.StatusUnprocessableEntity, AssistantData{Refused: err.Error()}, toasted(notice("error", "Not saved", err.Error())))
+	changes := make([]settingsapp.Value, 0, len(fields))
+	for _, f := range fields {
+		if value, ok := values[f.Key]; ok {
+			value = strings.TrimSpace(value)
+			changes = append(changes, settingsapp.Value{Key: f.Key, Value: value, Unset: value == ""})
+		}
+	}
+	if _, err := settingsapp.Web(p.deps.DB).Set(detached(r), settingsapp.SetInput{Values: changes}); err != nil {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
+			message := web.Message(failure)
+			p.assistantPage(w, r, status, AssistantData{Refused: message}, toasted(notice("error", "Not saved", message)))
+		})
 		return
 	}
-	check(err)
 	settingsRedirect(w, "/settings/assistant?saved=permissions")
 }
 
@@ -101,8 +111,9 @@ func toasted(toast *tpl.Toast) func(*tpl.Frame) {
 func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, data AssistantData, mutate func(*tpl.Frame)) {
 	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
 	check(err)
-	views, err := settings.LoadFields(r.Context(), p.deps.DB.Read, permissionFields(settings.From(r.Context())))
+	read, err := settingsapp.Web(p.deps.DB).Read(r.Context(), settingsapp.ReadInput{Fields: permissionFields(settings.From(r.Context()))})
 	check(err)
+	views := read.Data.Fields
 	channels := len(registry.PermissionChannelLabels)
 	for s, label := range registry.PermissionSituationLabels {
 		data.Rows = append(data.Rows, PermissionRow{Label: label, Cells: views[s*channels : (s+1)*channels]})

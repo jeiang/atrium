@@ -18,6 +18,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
+	"github.com/jeiang/atrium/internal/connections/connectionscmd"
 	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
@@ -43,6 +45,7 @@ import (
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/writes/writescmd"
@@ -50,7 +53,7 @@ import (
 
 type Module struct {
 	Version   string
-	Guard     settingscmd.Guard
+	Guard     settingsapp.Guard
 	Clients   func(config.Config) mail.OpenFunc
 	Now       func() float64
 	Resources module.Resources
@@ -60,6 +63,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
 	reviewOps, reviewBindings := reviewOperations()
 	operations, bindings = append(operations, reviewOps...), append(bindings, reviewBindings...)
+	settingOps, settingBindings := settingsOperations()
+	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
+	connectionOps, connectionBindings := connectionsOperations()
+	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
+	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -95,7 +103,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
-			connweb.Page(),
+			connweb.Page(connectionService),
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,
@@ -106,9 +114,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}),
-			settingscmd.Command(mc.Env, m.Guard),
+			settingscmd.Command(openSettings),
+			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearer.Command(mc.Env),
-			secretscmd.Command(mc.Env),
+			secretscmd.Command(openSettings),
 			dbcmd.Command(mc.Env, m.Now),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
@@ -163,7 +172,7 @@ func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
 			if err != nil {
 				return err
 			}
-			return connweb.Watch(ctx, d)
+			return watchConnections(ctx, d)
 		}},
 	}
 }

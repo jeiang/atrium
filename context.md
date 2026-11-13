@@ -345,12 +345,29 @@ behavior-parity target.
   settings set`; a value the host file declares for one, including a
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
   application instance gets its own settings registry from the compiled
-  module declaration catalog, and every command reads the same stored operator values. There is no
+  module declaration catalog, and every command reads the same stored operator values.
+  `atrium settings`, `atrium secrets`, the settings group and section forms
+  and the assistant permission form run the same `settings.*` operations: a
+  value refused as invalid exits 2 on the command line (unknown keys, an
+  out-of-range or malformed value, an empty secret) and is answered 422 on the
+  page, a refusal (host key, pinned, secret key in `settings`, plaintext
+  database for a secret) exits 1 and is answered 409, and each change or
+  refusal of a command writes one `operation_audit` row with key names only.
+  Refused `settings get` keys are checked before opening the database; reads
+  write no audit. `secrets set` checks the name before reading standard input.
+  Section validators save their added, normalized keys, including clears.
+  Unexpected form failures show one diagnostic ID. There is no
   legacy pin file: `ATRIUM_CONFIG` is refused at startup, and so is an
   `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key or for a
   connection-owned host key (the refusal names the destination). Provider
   credentials come only from connection records: the Connections page, a
   connection `credential_files` entry in the host file, or `atrium secrets`.
+  Connections forms, `atrium connections`, Google consent (including
+  `calendar google-auth`), and health observation use `connections.*`
+  operations. Their audits contain connection IDs only, never credentials,
+  OAuth codes, states or token responses. OAuth exchange errors do not show
+  provider response bodies. The Connections credential form retains its
+  existing 422 refusal status.
   The only app key inputs are `app_keys.action_link_key_file` and
   `app_keys.link_key_file`. Saving a working integration turns its module on,
   and the settings audit rows show on the Done page.

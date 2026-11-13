@@ -43,6 +43,13 @@ func Fail(w http.ResponseWriter, r *http.Request, err error, render func(status 
 	render(Status(e.Code))
 }
 
+func Message(e *application.Error) string {
+	if e.DiagnosticID == "" {
+		return e.Error()
+	}
+	return e.Error() + " Diagnostic ID: " + e.DiagnosticID + "."
+}
+
 func APIFail(w http.ResponseWriter, err error) {
 	e := application.Classify(err)
 	failHeaders(w, e)
