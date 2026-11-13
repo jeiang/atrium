@@ -28,3 +28,39 @@ CREATE TABLE IF NOT EXISTS commitments (
     UNIQUE (message_id, text)
 );
 CREATE INDEX IF NOT EXISTS commitments_status ON commitments (status, due);
+CREATE TRIGGER IF NOT EXISTS open_loops_read_insert AFTER INSERT ON open_loops BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS open_loops_read_update AFTER UPDATE ON open_loops BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS open_loops_read_delete AFTER DELETE ON open_loops BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS loop_overrides_read_insert AFTER INSERT ON loop_overrides BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS loop_overrides_read_update AFTER UPDATE ON loop_overrides BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS loop_overrides_read_delete AFTER DELETE ON loop_overrides BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS commitments_read_insert AFTER INSERT ON commitments BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS commitments_read_update AFTER UPDATE ON commitments BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS commitments_read_delete AFTER DELETE ON commitments BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

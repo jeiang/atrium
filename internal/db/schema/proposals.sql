@@ -15,3 +15,15 @@ CREATE TABLE IF NOT EXISTS proposals (
     fingerprint TEXT NOT NULL UNIQUE
 );
 CREATE INDEX IF NOT EXISTS proposals_status ON proposals (status, kind);
+CREATE TRIGGER IF NOT EXISTS proposals_read_insert AFTER INSERT ON proposals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('review',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS proposals_read_update AFTER UPDATE ON proposals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('review',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS proposals_read_delete AFTER DELETE ON proposals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('review',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
