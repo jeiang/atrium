@@ -20,7 +20,7 @@ func (a *Agent) ListenVPN() (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &boundedListener{Listener: ln, slots: make(chan struct{}, 256), done: make(chan struct{}), allowed: func(string) bool { return true }}, nil
+	return &boundedListener{Listener: ln, slots: make(chan struct{}, 256), done: make(chan struct{}), allowed: func(remote string) bool { return peerIn(a.cfg.VPN.AllowedPeers, remote) }}, nil
 }
 
 func (a *Agent) VPNHandler() http.Handler {

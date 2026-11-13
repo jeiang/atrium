@@ -54,13 +54,28 @@ func vpnOrigin(value string) error {
 		return nil
 	}
 	u, err := url.Parse(value)
-	if err != nil || u.Opaque != "" || u.User != nil || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+	if err != nil || strings.Contains(value, "#") || u.Opaque != "" || u.User != nil || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
 		return settings.Invalid("must be an origin such as https://media.example.org:8443, with no path, query or credentials")
 	}
 	if u.Scheme == "https" || u.Scheme == "http" && loopbackHost(u.Hostname()) {
 		return nil
 	}
 	return settings.Invalid("must use https; http is allowed only for a loopback host")
+}
+
+func vpnBase(value string) string {
+	u, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port := u.Port(); port != "" && port != map[string]string{"https": "443", "http": "80"}[u.Scheme] {
+		host += ":" + port
+	}
+	return u.Scheme + "://" + host
 }
 
 func loopbackHost(host string) bool {
@@ -152,7 +167,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return n
 	}
 	out.DownloadPrefix = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyDownloadPrefix)), "/")
-	out.VPNBaseURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyVPNBaseURL)), "/")
+	out.VPNBaseURL = vpnBase(config.From(ctx).HostValue(KeyVPNBaseURL))
 	out.LinkTTL = whole(KeyLinkTTL)
 	if failure != nil {
 		return Settings{}, failure

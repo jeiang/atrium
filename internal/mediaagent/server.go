@@ -131,7 +131,10 @@ func (a *Agent) Serve(ctx context.Context, ln, vpn net.Listener, stopping func()
 	servers := []*http.Server{a.server(a.Handler(), a.tls)}
 	listeners := []net.Listener{ln}
 	if vpn != nil {
-		servers = append(servers, a.server(a.VPNHandler(), a.vpnTLS))
+		vpnServer := a.server(a.VPNHandler(), a.vpnTLS)
+		vpnServer.Protocols = new(http.Protocols)
+		vpnServer.Protocols.SetHTTP1(true)
+		servers = append(servers, vpnServer)
 		listeners = append(listeners, vpn)
 	}
 	errc := make(chan error, len(servers))
@@ -157,16 +160,23 @@ func (a *Agent) Serve(ctx context.Context, ln, vpn net.Listener, stopping func()
 		stopping()
 	}
 	sctx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
-	for _, srv := range servers {
-		serr := srv.Shutdown(sctx)
-		if errors.Is(serr, context.DeadlineExceeded) {
-			serr = srv.Close()
-		}
+	shut := make([]error, len(servers))
+	var wg sync.WaitGroup
+	for i, srv := range servers {
+		wg.Go(func() {
+			shut[i] = srv.Shutdown(sctx)
+			if errors.Is(shut[i], context.DeadlineExceeded) {
+				shut[i] = srv.Close()
+			}
+		})
+	}
+	wg.Wait()
+	cancel()
+	for _, serr := range shut {
 		if err == nil {
 			err = serr
 		}
 	}
-	cancel()
 	for ; received < len(servers); received++ {
 		if serr := <-errc; !errors.Is(serr, http.ErrServerClosed) && err == nil {
 			err = serr

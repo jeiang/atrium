@@ -175,11 +175,17 @@ func (v VPN) validate() error {
 	if len(v.AllowedPeers) == 0 {
 		return errors.New("vpn.allowed_peers must list at least one peer prefix")
 	}
+	if slices.ContainsFunc(v.AllowedPeers, func(p netip.Prefix) bool { return p.Bits() == 0 }) {
+		return errors.New("vpn.allowed_peers must not contain 0.0.0.0/0 or ::/0")
+	}
 	if len(v.AllowedHosts) == 0 || slices.Contains(v.AllowedHosts, "") {
 		return errors.New("vpn.allowed_hosts must list at least one host and no empty value")
 	}
 	if (v.TLSCert == "") != (v.TLSKey == "") {
 		return errors.New("vpn.tls_cert and vpn.tls_key must be set together")
+	}
+	if !addr.Addr().IsLoopback() && v.TLSCert == "" {
+		return errors.New("vpn.listen is not a loopback address, so vpn.tls_cert and vpn.tls_key are required")
 	}
 	for _, p := range [][2]string{{"vpn.tls_cert", v.TLSCert}, {"vpn.tls_key", v.TLSKey}} {
 		if p[1] != "" {

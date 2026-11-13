@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/logx"
@@ -119,12 +120,18 @@ func TestVPNListenerServesOnlyLibraryFiles(t *testing.T) {
 
 	agent.terminate(t)
 	restarted := startMediaAgent(t, mediaAgentOpts{dir: agent.dir, extra: vpnTable(addr, "10.0.0.0/8")})
-	waitFor(t, func() bool {
-		code, _ := vpnRequest(t, http.MethodGet, file, vpnHost, nil)
-		return code == http.StatusForbidden
-	})
-	if code, got := vpnRequest(t, http.MethodGet, file, vpnHost, nil); code != http.StatusForbidden || strings.Contains(got, body) {
-		t.Errorf("disallowed peer = %d", code)
+	for i := range 300 {
+		conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+		if err != nil {
+			t.Fatalf("refused peer connection %d: %v", i, err)
+		}
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		_, _ = conn.Write([]byte("GET /library/tv/" + (&url.URL{Path: episode}).EscapedPath() + " HTTP/1.1\r\nHost: " + vpnHost + "\r\n\r\n"))
+		got, err := io.ReadAll(conn)
+		_ = conn.Close()
+		if len(got) != 0 || errors.Is(err, os.ErrDeadlineExceeded) {
+			t.Fatalf("refused peer connection %d was answered or held open: %q %v", i, got, err)
+		}
 	}
 	restarted.terminate(t)
 
@@ -139,32 +146,39 @@ func TestVPNListenerServesOnlyLibraryFiles(t *testing.T) {
 	}
 }
 
+const (
+	oddMovie = "Oddity (2020)"
+	oddFile  = ".Ünïcode #1 ?50%.mkv"
+)
+
 func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	movieRel := "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
-	search := func(t *testing.T, base string) (*asstWeb, librarySearch, librarySearch, *mediaAgent, string) {
+	search := func(t *testing.T, base string) (*asstWeb, librarySearch, librarySearch, librarySearch, *mediaAgent, string) {
 		t.Helper()
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 		addr := freeLoopbackAddr(t)
 		agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: t.TempDir(), extra: vpnTable(addr, "127.0.0.1/32")})
 		writeMediaFile(t, filepath.Join(agent.roots["movies"], libraryMovie, libraryMovie+".mkv"), "movie bytes")
 		writeMediaFile(t, filepath.Join(agent.roots["tv"], strings.TrimPrefix(libraryEpisode, "tv/")), "episode bytes")
+		writeMediaFile(t, filepath.Join(agent.roots["movies"], oddMovie, oddFile), "odd bytes")
 		raw, err := os.ReadFile(defaultHostConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
 		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-library.toml", withAgentConnection(string(raw), agent.base, filepath.Join(agent.dir, "token"))))
+		value := base
 		if base == "vpn" {
-			base = "http://" + addr
+			value, base = "HTTP://"+addr+"/", "http://"+addr
 		}
-		setEnv(t, settingEnv(media.KeyVPNBaseURL), base)
+		setEnv(t, settingEnv(media.KeyVPNBaseURL), value)
 		asstWarm(t)
 		d := asstDB(t, dir)
 		w := asstBrowse(t, startServeIn(t, dir))
-		return w, searchThroughServe(t, api, d, w, "dune"), searchThroughServe(t, api, d, w, "lanterns"), agent, base
+		return w, searchThroughServe(t, api, d, w, "dune"), searchThroughServe(t, api, d, w, "lanterns"), searchThroughServe(t, api, d, w, "oddity"), agent, base
 	}
 
 	t.Run("unset", func(t *testing.T) {
-		_, movie, show, _, _ := search(t, "")
+		_, movie, show, _, _, _ := search(t, "")
 		for _, found := range []librarySearch{movie, show} {
 			if len(found.Results) != 1 || len(found.Results[0].VPNURLs) != 1 || found.Results[0].VPNURLs[0] != "" {
 				t.Errorf("a VPN link without a base: %+v", found)
@@ -173,7 +187,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	})
 
 	t.Run("set", func(t *testing.T) {
-		w, movie, show, _, base := search(t, "vpn")
+		w, movie, show, odd, _, base := search(t, "vpn")
 		cases := []struct {
 			found  librarySearch
 			rel    string
@@ -182,6 +196,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 		}{
 			{movie, movieRel, base + "/library/movies/", "movie bytes"},
 			{show, libraryEpisode, base + "/library/tv/", "episode bytes"},
+			{odd, "movies/" + oddMovie + "/" + oddFile, base + "/library/movies/", "odd bytes"},
 		}
 		for _, c := range cases {
 			if len(c.found.Results) != 1 || len(c.found.Results[0].Files) != 1 || c.found.Results[0].Files[0] != c.rel || len(c.found.Results[0].VPNURLs) != 1 {
@@ -205,7 +220,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	})
 
 	t.Run("refused bases", func(t *testing.T) {
-		for _, value := range []string{"http://media.example.org", "https://media.example.org/library", "https://user@media.example.org", "https://media.example.org?x=1", "ftp://media.example.org"} {
+		for _, value := range []string{"http://media.example.org", "https://media.example.org/library", "https://user@media.example.org", "https://media.example.org?x=1", "ftp://media.example.org", "https://media.example.org#", "https://media.example.org/#"} {
 			setEnv(t, settingEnv(media.KeyVPNBaseURL), value)
 			if got := runApp(t, "settings", "list"); got.code == cli.ExitOK || !strings.Contains(strings.ToLower(got.stderr), media.KeyVPNBaseURL) {
 				t.Errorf("base %q: exit %d stderr %q", value, got.code, got.stderr)

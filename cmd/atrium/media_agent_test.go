@@ -417,6 +417,14 @@ allowed_hosts =`)
 	t.Run("vpn without peers", func(t *testing.T) {
 		refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"127.0.0.1:8483\"\nallowed_hosts = [\"media.vpn.test\"]\nallow_loopback = true\n"}, nil, "vpn.allowed_peers must list at least one peer prefix")
 	})
+	for _, peer := range []string{"0.0.0.0/0", "::/0"} {
+		t.Run("unbounded vpn peers "+peer, func(t *testing.T) {
+			refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"127.0.0.1:8483\"\nallowed_peers = [\"" + peer + "\"]\nallowed_hosts = [\"media.vpn.test\"]\nallow_loopback = true\n"}, nil, "vpn.allowed_peers must not contain 0.0.0.0/0 or ::/0")
+		})
+	}
+	t.Run("non-loopback vpn without tls", func(t *testing.T) {
+		refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"192.0.2.10:8483\"\nallowed_peers = [\"192.0.2.0/24\"]\nallowed_hosts = [\"media.vpn.test\"]\n"}, nil, "vpn.tls_cert and vpn.tls_key are required")
+	})
 	t.Run("wildcard vpn", func(t *testing.T) {
 		refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"0.0.0.0:8483\"\nallow_loopback = true\n"}, nil, "vpn.listen must not be a wildcard address")
 	})
