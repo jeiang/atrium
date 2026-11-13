@@ -324,11 +324,11 @@ func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request)
 	}
 	result, err := p.knowledge().ConfirmSelected(detached(r), kbapp.SelectedInput{IDs: ids})
 	if err != nil {
-		p.knowledgeRefused(w, r, "Nothing confirmed", err)
+		p.knowledgeBatchRefused(w, r, filter, result.Data, err)
 		return
 	}
 	if refused := result.Data.Refused; len(refused) > 0 {
-		p.knowledgeRefused(w, r, "Not confirmed", &application.Error{Code: refused[0].Code, Message: refused[0].Message})
+		p.knowledgeBatchRefused(w, r, filter, result.Data, &application.Error{Code: refused[0].Code, Message: refused[0].Message})
 		return
 	}
 	navigate(w, r, "/library/knowledge?"+filterQuery(filter))
@@ -338,7 +338,7 @@ func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
 	filter := formFilter(web.FormValues(r))
 	result, err := p.knowledge().ConfirmMatching(detached(r), filter)
 	if err != nil {
-		p.knowledgeRefused(w, r, "Nothing confirmed", err)
+		p.knowledgeBatchRefused(w, r, filter, result.Data, err)
 		return
 	}
 	read, err := p.knowledge().List(r.Context(), filter)
@@ -350,6 +350,22 @@ func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Push-Url", "/library/knowledge?"+filterQuery(read.Data.Filter))
 	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge.gohtml", knowledgeListOf(read.Data), toast)
+}
+
+func (p *pages) knowledgeBatchRefused(w http.ResponseWriter, r *http.Request, filter kbapp.ListInput, result kbapp.BatchResult, err error) {
+	read, readErr := p.knowledge().List(r.Context(), filter)
+	if readErr != nil {
+		p.knowledgeRefused(w, r, "Nothing confirmed", err)
+		return
+	}
+	title := "Nothing confirmed"
+	if committed := len(result.Committed); committed > 0 {
+		title = fmt.Sprintf("%d confirmed", committed)
+	}
+	toast := notice("warning", title, fmt.Sprintf("%d confirmed, %d refused. %s", len(result.Committed), len(result.Refused), application.Classify(err).Error()))
+	web.Fail(w, r, err, func(status int) {
+		p.render(w, r, status, knowledgeFrame, "knowledge.gohtml", knowledgeListOf(read.Data), toast)
+	})
 }
 
 func (p *pages) knowledgeProfilePage(w http.ResponseWriter, r *http.Request, status int, problem *string) {
