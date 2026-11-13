@@ -1,8 +1,9 @@
 {{template "knowledge_rows" (dict "rows" .Data.Rows "unconfirmed" .Data.Unconfirmed "bulk" .Data.Bulk "q" .Data.Q "scope" .Data.Scope "state" .Data.State "csrf" .CSRF)}}
+{{with .Toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
 
 {{define "knowledge_rows"}}
 {{if .rows}}
-<form id="kb-confirm" method="post" action="/library/knowledge/confirm" hx-post="/library/knowledge/confirm" hx-target="body" class="flex flex-col gap-2">
+<form id="kb-confirm" method="post" action="/library/knowledge/confirm" hx-post="/library/knowledge/confirm" hx-target="#kb-rows" class="flex flex-col gap-2">
 <input type="hidden" name="csrf_token" value="{{.csrf}}">
 <input type="hidden" name="q" value="{{.q}}">
 <input type="hidden" name="scope" value="{{.scope}}">
@@ -32,7 +33,7 @@
 {{template "empty_state" (dict "icon_name" "book-open" "title" "No knowledge records yet")}}
 {{end}}
 {{if .bulk}}
-<form class="flex justify-end pt-2" method="post" action="/library/knowledge/confirm-all" hx-post="/library/knowledge/confirm-all" hx-target="body">
+<form class="flex justify-end pt-2" method="post" action="/library/knowledge/confirm-all" hx-post="/library/knowledge/confirm-all" hx-target="#kb-rows">
   <input type="hidden" name="csrf_token" value="{{.csrf}}">
   <input type="hidden" name="q" value="{{.q}}">
   <input type="hidden" name="scope" value="{{.scope}}">

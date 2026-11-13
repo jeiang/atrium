@@ -198,11 +198,7 @@ func (s *service) channelPreview(w http.ResponseWriter, r *http.Request) {
 		}
 		view.Releases, view.Matched = releases, read.Data.Matched
 	}
-	f, err := s.deps.Render.Frame(r, "", view)
-	if err != nil {
-		panic(err)
-	}
-	if err := s.deps.Render.Fragment(w, r, http.StatusOK, "_media_preview.gohtml", f); err != nil {
+	if err := s.deps.Render.Fragment(w, r, http.StatusOK, "_media_preview.gohtml", view); err != nil {
 		panic(err)
 	}
 }

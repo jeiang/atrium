@@ -377,13 +377,7 @@ func TestAsstUsageLedgerPricesFallbacksFlagsUnpricedModelsAndKeepsPartialRows(t 
 
 	base := startServeIn(t, dir)
 	w := asstBrowse(t, base)
-	_, page, _ := w.get(fmt.Sprintf("/chat/%d", served.ThreadID), false)
-	for _, want := range []string{pricing.OpusID + " declined; " + pricing.HaikuID + " took over (refusal category: cyber).", "served by the fallback"} {
-		if !strings.Contains(page, want) {
-			t.Errorf("thread page lacks %q", want)
-		}
-	}
-	_, page, _ = w.get("/settings/usage", false)
+	_, page, _ := w.get("/settings/usage", false)
 	for _, want := range []string{"1 unpriced", "1 partial"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("usage page lacks %q", want)

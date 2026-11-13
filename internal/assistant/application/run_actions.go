@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -111,7 +112,10 @@ func (s *Service) RunAnswer(ctx context.Context, in AnswerInput) (application.Ch
 			return ThreadChanged{}, err
 		}
 		if err := s.runs().Answer(ctx, in.ThreadID, in.Text); err != nil {
-			return ThreadChanged{}, NotAnswered{Err: err}
+			if errors.Is(err, service.ErrAnswerRequired) || errors.Is(err, service.ErrNoPendingQuestion) {
+				return ThreadChanged{}, NotAnswered{Err: err}
+			}
+			return ThreadChanged{}, err
 		}
 		return ThreadChanged{ThreadID: in.ThreadID, RunID: question.RunID}, nil
 	})

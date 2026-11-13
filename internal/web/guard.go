@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -11,6 +12,8 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/application"
 
 	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
@@ -67,6 +70,7 @@ type Guard struct {
 	limits   *limiter
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
+	apiShape func(*http.Request) *application.APIShape
 	sessions *oidc.Service
 	bearers  *bearer.Service
 	errPage  ErrorPage

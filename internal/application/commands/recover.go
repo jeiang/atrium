@@ -5,6 +5,9 @@ import (
 	"crypto/hkdf"
 	"crypto/sha256"
 	"database/sql"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -15,11 +18,26 @@ const (
 	Retention    = 30 * 24 * time.Hour
 )
 
-func Open(ctx context.Context, d *db.DB, appKey func() ([]byte, error)) (*Store, error) {
+func Open(ctx context.Context, d *db.DB, appKey func() ([]byte, error), tempDir string) (*Store, error) {
 	s := New(d)
 	s.appKey = appKey
+	s.tempDir = tempDir
+	if err := os.MkdirAll(tempDir, 0o700); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "command-body-") {
+			if err := os.Remove(filepath.Join(tempDir, entry.Name())); err != nil {
+				return nil, err
+			}
+		}
+	}
 	var n int64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, "UPDATE commands SET state = ?, ended_at = ? WHERE state = ?", string(Interrupted), seconds(s.now()), string(Running))
 		if err != nil {
 			return err

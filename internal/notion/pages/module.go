@@ -57,9 +57,7 @@ func (s *service) page(w http.ResponseWriter, r *http.Request, name string, data
 }
 
 func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
-	f, err := s.deps.Render.Frame(r, "", data)
-	check(err)
-	check(s.deps.Render.Fragment(w, r, status, name, f))
+	check(s.deps.Render.Fragment(w, r, status, name, data))
 }
 
 func (s *service) fail(w http.ResponseWriter, r *http.Request, err error) {

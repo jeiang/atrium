@@ -113,6 +113,10 @@ func newService(o Options, d *web.Deps) *service {
 	}
 }
 
+func Reads(d *web.Deps) *reviewapp.Service {
+	return newService(Options{}, d).review
+}
+
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		s := newService(o, d)
@@ -214,10 +218,13 @@ func (s *service) page(w http.ResponseWriter, r *http.Request, status int, page,
 }
 
 func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any, notice *tpl.Toast) {
-	f, err := s.deps.Render.Frame(r, "", data)
+	check(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: notice}))
+}
+
+func (s *service) mode(ctx context.Context) string {
+	mode, err := mail.Mode(ctx, s.deps.DB.Read)
 	check(err)
-	f.Toast = notice
-	check(s.deps.Render.Fragment(w, r, status, name, f))
+	return mode
 }
 
 func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detail string) {

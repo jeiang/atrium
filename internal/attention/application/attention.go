@@ -44,7 +44,7 @@ func New(d *db.DB, now func() float64) *Service {
 type ReadInput struct{}
 
 func DescribeRead() application.Definition {
-	return application.Describe[ReadInput, attention.Result](ReadName, application.Query, []application.Authority{application.Agent, application.Operator}, application.NoEffect, false)
+	return application.Describe[ReadInput, attention.Result](ReadName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
 }
 
 func (s *Service) Read(ctx context.Context, _ ReadInput) (application.Read[attention.Result], error) {

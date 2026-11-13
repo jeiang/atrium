@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
@@ -214,8 +215,20 @@ func (s *Service) MemoryTree(ctx context.Context, in MemoryThreadInput) (applica
 	var out MemoryTree
 	rev, err := s.snapshot(ctx, string(MemoryTreeName), memoryScopes, in, func(q db.Querier) error {
 		nodes, err := memory.Tree(ctx, q, in.ThreadID)
+		if err != nil {
+			return err
+		}
+		if len(nodes) == 0 {
+			thread, err := threads.Get(ctx, q, in.ThreadID)
+			if err != nil {
+				return err
+			}
+			if thread == nil {
+				return notFound(fmt.Sprintf("unknown thread %d", in.ThreadID))
+			}
+		}
 		out = MemoryTree{Nodes: len(nodes), Roots: rootsOf(nodes)}
-		return err
+		return nil
 	})
 	return application.Read[MemoryTree]{Revision: rev, Data: out}, err
 }

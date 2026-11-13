@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/attention"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	attentionapp "github.com/jeiang/atrium/internal/attention/application"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
@@ -17,7 +18,7 @@ func attentionToolService(tc *tool.Context) *attentionapp.Service {
 }
 
 func attentionOperations() ([]application.Definition, []application.Binding) {
-	return []application.Definition{attentionapp.DescribeRead()}, append(attentionRoutes(nil), []application.Binding{
+	return []application.Definition{attentionapp.DescribeRead(), asstapp.DescribeSearch()}, append(append(attentionRoutes(nil), searchAPIBindings(nil)...), []application.Binding{
 		{Kind: application.Tool, Target: "attention", Uses: []application.Name{attentionapp.ReadName}},
 	}...)
 }

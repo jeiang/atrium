@@ -39,6 +39,7 @@ document.addEventListener("htmx:configRequest", (event) => {
 });
 
 document.addEventListener("htmx:historyRestore", () => {
+  connectAll();
   const params = new URLSearchParams(window.location.search);
   document.querySelectorAll("form:is([hx-push-url], [hx-replace-url]) [name]").forEach((field) => {
     if (field.type === "checkbox") field.checked = params.has(field.name);
@@ -120,7 +121,7 @@ document.addEventListener("close-dialogs", () => {
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
 });
 
-const swapStatuses = new Set([403, 404, 409, 422, 429]);
+const swapStatuses = new Set([403, 404, 409, 413, 422, 429]);
 document.addEventListener("htmx:beforeSwap", (event) => {
   const xhr = event.detail.xhr;
   const html = (xhr.getResponseHeader("content-type") || "").startsWith("text/html");
@@ -166,6 +167,16 @@ document.addEventListener("submit", (event) => {
   if (question && !window.confirm(question)) event.preventDefault();
 });
 
+const refusal = (xhr) => {
+  if (!xhr || !(xhr.getResponseHeader("content-type") || "").startsWith("application/json")) return "";
+  try {
+    const message = JSON.parse(xhr.responseText).error?.message;
+    return typeof message === "string" ? message : "";
+  } catch {
+    return "";
+  }
+};
+
 const failed = (title, description) => (event) => {
   const target = event.detail.target;
   if (target && target.dataset.loading) {
@@ -173,7 +184,7 @@ const failed = (title, description) => (event) => {
     const dialog = target.closest("dialog");
     if (dialog) dialog.close();
   }
-  document.getElementById("toaster").toast({ category: "error", title, description });
+  document.getElementById("toaster").toast({ category: "error", title, description: refusal(event.detail.xhr) || description });
 };
 document.addEventListener("htmx:responseError", failed("Something went wrong", "atrium could not finish that request. Try again, or reload the page."));
 document.addEventListener("htmx:sendError", failed("atrium is unreachable", "Check the connection to the server and try again."));
@@ -359,7 +370,13 @@ const renderChips = (form) => {
   }));
 };
 
+const dropCommandKey = (element) => {
+  const form = element?.closest?.("form[data-command-form]");
+  if (form) delete form.dataset.commandKey;
+};
+
 const setFiles = (form, files) => {
+  dropCommandKey(form);
   const transfer = new DataTransfer();
   files.forEach((file) => transfer.items.add(file));
   pendingFiles.set(form, transfer);
@@ -448,6 +465,7 @@ actions["edit-message"] = (button) => {
   const form = document.getElementById("composer");
   form.elements.text.value = button.closest("li").querySelector("[data-text]").textContent;
   form.elements.edit.value = "1";
+  dropCommandKey(form);
   document.getElementById("composer-editing").hidden = false;
   form.elements.text.focus();
 };
@@ -455,6 +473,7 @@ actions["cancel-edit"] = () => {
   const form = document.getElementById("composer");
   form.elements.edit.value = "";
   form.elements.text.value = "";
+  dropCommandKey(form);
   document.getElementById("composer-editing").hidden = true;
 };
 
@@ -551,77 +570,116 @@ const toolVerb = (name) => {
   return words.join(" ");
 };
 
-const toolMarkup = (data) => `
-  <details class="trace">
-    <summary><span class="trace-label">${escapeHtml(toolVerb(data.name))}</span><span class="trace-args">${escapeHtml(data.args || "")}</span><span class="badge ms-auto" data-variant="outline" data-tool-state>running</span></summary>
-    <div class="trace-body trace-code" data-tool-result>(no result yet)</div>
-  </details>`;
+const fromTemplate = (template) => template.content.firstElementChild.cloneNode(true);
+
+const userMessage = (template, text) => {
+  const bubble = fromTemplate(template);
+  bubble.querySelector("[data-user-text]").textContent = text;
+  return bubble;
+};
 
 const liveRuns = new Map();
 const refusedRuns = new Map();
-const RETRY_MS = 2000;
+const watchedRuns = new WeakSet();
 const SLOW_RETRY_MS = 30000;
+const checkpointKey = (thread) => `atrium.stream.${thread}`;
+const readCheckpoint = (thread) => {
+  try {
+    return JSON.parse(sessionStorage.getItem(checkpointKey(thread))) || {};
+  } catch {
+    return {};
+  }
+};
 
 const connectLive = (li) => {
   const runId = Number(li.dataset.liveRun);
-  if (liveRuns.has(runId)) return;
+  const current = liveRuns.get(runId);
+  if (current && current.li === li) return;
+  if (current) current.source.close();
   const thread = li.dataset.thread;
   const label = li.querySelector("[data-live-label]");
   const answer = li.querySelector("[data-live-answer]");
   const answerText = li.querySelector("[data-live-text]");
   const mainSteps = li.querySelector("[data-live-steps]");
   const groups = new Map([[runId, mainSteps]]);
+  const userTemplate = li.querySelector("template[data-message=user]");
 
+  const stored = readCheckpoint(thread);
+  const resume = stored.run === runId && li.dataset.streamCheckpoint === String(stored.lastId);
+  if (resume) {
+    li.querySelectorAll("[data-child-run]").forEach((group) => groups.set(Number(group.dataset.childRun), group.querySelector("ol")));
+  } else {
+    delete li.dataset.streamCheckpoint;
+    mainSteps.replaceChildren();
+    answerText.textContent = "";
+    answer.hidden = true;
+    document.querySelectorAll(`[data-live-user="${runId}"]`).forEach((bubble) => bubble.remove());
+  }
+
+  let spoken = label.textContent;
+  const say = (text) => { spoken = text; label.textContent = text; };
   const stepsFor = (id) => groups.get(id) || mainSteps;
   const lastStep = (list) => list.lastElementChild;
-  const appendStep = (list, kind, html) => {
-    const step = document.createElement("li");
-    step.dataset.step = kind;
-    step.innerHTML = html;
+  const appendStep = (list, kind) => {
+    const step = fromTemplate(li.querySelector(`template[data-step="${kind}"]`));
     list.appendChild(step);
     return step;
   };
+  const appendText = (list, kind, text) => {
+    const last = lastStep(list);
+    const step = last && last.dataset.step === kind ? last : appendStep(list, kind);
+    step.querySelector("[data-step-text]").textContent += text;
+  };
   const flushAnswer = () => {
     if (answer.hidden || !answerText.textContent) return;
-    appendStep(mainSteps, "note", `<div class="whitespace-pre-wrap break-words">${escapeHtml(answerText.textContent)}</div>`);
+    appendStep(mainSteps, "note").querySelector("[data-step-text]").textContent = answerText.textContent;
     answerText.textContent = "";
     answer.hidden = true;
   };
 
-  const source = new EventSource(`/chat/${thread}/events?run=${runId}`);
-  liveRuns.set(runId, source);
-  const on = (kind, handler) => source.addEventListener(kind, (event) => handler(JSON.parse(event.data)));
+  const after = resume ? `&after=${encodeURIComponent(stored.lastId)}` : "";
+  const source = new EventSource(`/chat/${thread}/events?run=${runId}${after}`);
+  liveRuns.set(runId, { li, source });
+  const stop = () => {
+    source.close();
+    if (liveRuns.get(runId)?.source === source) liveRuns.delete(runId);
+  };
+  const on = (kind, handler) => source.addEventListener(kind, (event) => {
+    if (!li.isConnected) { stop(); return; }
+    handler(JSON.parse(event.data));
+    if (!event.lastEventId || settled) return;
+    li.dataset.streamCheckpoint = event.lastEventId;
+    sessionStorage.setItem(checkpointKey(thread), JSON.stringify({ run: runId, lastId: Number(event.lastEventId) }));
+  });
 
   on("run_start", (data) => {
     if (data.run_id === runId) return;
-    const group = appendStep(mainSteps, "subagent", `<div class="flex flex-col gap-1 rounded-md border px-3 py-2"><span class="flex items-center gap-2 text-muted-foreground"><span class="badge" data-variant="secondary">${escapeHtml(data.role || data.thread_kind)}</span><span class="truncate">${escapeHtml(data.title || "")}</span><span class="badge ms-auto" data-variant="outline" data-child-state>running</span></span><ol class="flex flex-col gap-1.5 border-s ps-3"></ol></div>`);
+    const group = appendStep(mainSteps, "subagent");
     group.dataset.childRun = data.run_id;
+    group.querySelector("[data-child-role]").textContent = data.role || data.thread_kind || "";
+    group.querySelector("[data-child-title]").textContent = data.title || "";
     groups.set(data.run_id, group.querySelector("ol"));
-    label.textContent = `waiting for ${data.role || "subagent"}…`;
+    say(`waiting for ${data.role || "subagent"}…`);
   });
   on("thinking", (data) => {
-    if (data.run_id === runId) { flushAnswer(); label.textContent = "thinking…"; }
-    const list = stepsFor(data.run_id);
-    const last = lastStep(list);
-    if (last && last.dataset.step === "thinking") last.firstElementChild.textContent += data.text;
-    else appendStep(list, "thinking", `<div class="whitespace-pre-wrap break-words text-muted-foreground">${escapeHtml(data.text)}</div>`);
+    if (data.run_id === runId) { flushAnswer(); say("thinking…"); }
+    appendText(stepsFor(data.run_id), "thinking", data.text);
   });
   on("text", (data) => {
     if (data.run_id !== runId) {
-      const list = stepsFor(data.run_id);
-      const last = lastStep(list);
-      if (last && last.dataset.step === "note") last.firstElementChild.textContent += data.text;
-      else appendStep(list, "note", `<div class="whitespace-pre-wrap break-words">${escapeHtml(data.text)}</div>`);
+      appendText(stepsFor(data.run_id), "note", data.text);
       return;
     }
     answer.hidden = false;
     answerText.textContent += data.text;
-    label.textContent = "writing…";
+    say("writing…");
   });
   on("tool_start", (data) => {
-    if (data.run_id === runId) { flushAnswer(); label.textContent = `running ${data.name}…`; }
-    const step = appendStep(stepsFor(data.run_id), "tool", toolMarkup(data));
+    if (data.run_id === runId) { flushAnswer(); say(`running ${data.name}…`); }
+    const step = appendStep(stepsFor(data.run_id), "tool");
     step.dataset.toolId = data.id;
+    step.querySelector("[data-tool-name]").textContent = toolVerb(data.name);
+    step.querySelector("[data-tool-args]").textContent = data.args || "";
   });
   on("tool_done", (data) => {
     const step = li.querySelector(`[data-tool-id="${CSS.escape(data.id)}"]`);
@@ -630,22 +688,19 @@ const connectLive = (li) => {
     const state = step.querySelector("[data-tool-state]");
     if (data.ok) state.remove();
     else { state.textContent = "error"; state.dataset.variant = "destructive"; }
-    if (data.run_id === runId) label.textContent = "thinking…";
+    if (data.run_id === runId) say("thinking…");
   });
   on("user", (data) => {
     const queued = document.querySelector(`[data-queued="${data.queue_id}"]`);
-    const bubble = document.createElement("li");
-    bubble.className = "msg";
+    const bubble = userMessage(userTemplate, data.text);
     bubble.dataset.liveUser = runId;
-    bubble.dataset.role = "user";
-    bubble.innerHTML = `<div class="msg-body"><div class="msg-user"></div></div>`;
-    bubble.querySelector(".msg-user").textContent = data.text;
     li.before(bubble);
     if (queued) queued.remove();
   });
   on("plan", refreshWork);
   on("files", refreshWork);
   on("run_done", (data) => {
+    if (data.run_id === runId) return;
     const group = li.querySelector(`[data-child-run="${data.run_id}"] [data-child-state]`);
     if (group) { group.textContent = data.state; if (data.state !== "done") group.dataset.variant = "destructive"; }
     refreshWork();
@@ -654,10 +709,9 @@ const connectLive = (li) => {
   const settle = (completed = false) => {
     if (settled) return;
     settled = true;
-    source.close();
-    liveRuns.delete(runId);
+    stop();
+    if (readCheckpoint(thread).run === runId) sessionStorage.removeItem(checkpointKey(thread));
     setBusy(false);
-    refreshWork();
     document.querySelectorAll(`[data-live-user="${runId}"]`).forEach((bubble) => bubble.remove());
     const announcer = document.getElementById("transcript-announcer");
     if (completed && announcer) announcer.textContent = "Reply ready.";
@@ -666,17 +720,30 @@ const connectLive = (li) => {
   on("complete", () => settle(true));
   on("run_error", () => settle(true));
   on("done", () => settle(true));
-  source.onopen = () => refusedRuns.delete(runId);
-  source.onerror = () => {
-    if (source.readyState === EventSource.CLOSED) {
-      const refused = (refusedRuns.get(runId) || 0) + 1;
-      refusedRuns.set(runId, refused);
-      label.textContent = "reconnecting…";
-      setTimeout(settle, refused === 1 ? 0 : SLOW_RETRY_MS);
-      return;
-    }
-    setTimeout(settle, RETRY_MS);
+  source.onopen = () => {
+    refusedRuns.delete(runId);
+    label.textContent = spoken;
   };
+  source.onerror = () => {
+    if (settled) return;
+    if (!li.isConnected) { stop(); return; }
+    label.textContent = "reconnecting…";
+    if (source.readyState !== EventSource.CLOSED) return;
+    const refused = (refusedRuns.get(runId) || 0) + 1;
+    refusedRuns.set(runId, refused);
+    setTimeout(settle, refused === 1 ? 0 : SLOW_RETRY_MS);
+  };
+  if (!watchedRuns.has(li)) {
+    watchedRuns.add(li);
+    li.addEventListener("htmx:beforeSwap", (event) => {
+      if (event.detail.elt === li && event.detail.xhr.status === 200 && !event.detail.serverResponse.includes("data-live-run=")) {
+        document.querySelectorAll("#transcript [data-queued]").forEach((row) => row.remove());
+      }
+    });
+    li.addEventListener("htmx:afterRequest", (event) => {
+      if (event.detail.elt === li && !event.detail.successful) setTimeout(() => { if (li.isConnected) connectLive(li); }, SLOW_RETRY_MS);
+    });
+  }
   setBusy(true);
 };
 
@@ -694,6 +761,47 @@ document.addEventListener("htmx:afterSettle", (event) => {
   if (transcript && transcript.contains(event.detail.target)) transcript.lastElementChild?.scrollIntoView({ block: "end" });
   focusFallback(event.detail.target);
 });
+
+const uncertainSend = (xhr) => {
+  if (xhr.status === 0 || xhr.status === 408 || xhr.status === 429 || xhr.status >= 500) return true;
+  try {
+    return JSON.parse(xhr.responseText).error?.code === "idempotency_in_progress";
+  } catch {
+    return false;
+  }
+};
+
+const commandKey = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (!form.matches?.("form[data-command-form]")) return;
+  const key = form.dataset.commandKey || commandKey();
+  form.dataset.commandKey = key;
+  form.setAttribute("hx-headers", JSON.stringify({ "Idempotency-Key": key }));
+  const transcript = document.getElementById("transcript");
+  const text = form.elements.text.value.trim();
+  if (!transcript || !text || form.elements.edit?.value) return;
+  transcript.querySelectorAll(`[data-command-key="${CSS.escape(key)}"]`).forEach((bubble) => bubble.remove());
+  const bubble = userMessage(form.querySelector("template[data-message=user]"), text);
+  bubble.dataset.commandKey = key;
+  transcript.appendChild(bubble);
+  bubble.scrollIntoView({ block: "end" });
+}, true);
+
+document.addEventListener("htmx:afterRequest", (event) => {
+  const form = event.detail.elt;
+  if (!form.matches?.("form[data-command-form]")) return;
+  const key = event.detail.requestConfig?.headers?.["Idempotency-Key"];
+  if (!key) return;
+  document.querySelectorAll(`#transcript [data-command-key="${CSS.escape(key)}"]`).forEach((bubble) => bubble.remove());
+  const xhr = event.detail.xhr;
+  if (!(event.detail.successful && xhr.getResponseHeader("Atrium-Command-Id")) && uncertainSend(xhr)) return;
+  if (form.dataset.commandKey === key) delete form.dataset.commandKey;
+  form.removeAttribute("hx-headers");
+});
+
+["input", "change"].forEach((kind) => document.addEventListener(kind, (event) => dropCommandKey(event.target)));
 
 document.addEventListener("submit", (event) => {
   if (!event.target.matches("form[data-test-signin]")) return;
@@ -770,6 +878,7 @@ actions["fill-composer"] = (button) => {
   const field = document.getElementById(button.dataset.target);
   if (!field) return;
   field.value = button.dataset.text;
+  dropCommandKey(field);
   field.focus();
   field.setSelectionRange(field.value.length, field.value.length);
 };
@@ -1014,6 +1123,7 @@ const refPick = (option) => {
   if (!token) return;
   const after = field.value.slice(span.end);
   field.value = field.value.slice(0, span.start) + token + " " + after;
+  dropCommandKey(field);
   const caret = span.start + token.length + 1;
   field.focus();
   field.setSelectionRange(caret, caret);

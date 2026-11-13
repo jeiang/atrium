@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
@@ -126,6 +127,9 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		if p.refused(w, r, err) {
 			return
 		}
+		reply, cancel := context.WithTimeout(ctx, replyTimeout)
+		defer cancel()
+		r = r.WithContext(reply)
 		if !web.IsPartial(r) {
 			redirect(w, r, back)
 			return
@@ -137,6 +141,9 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	if p.refused(w, r, err) {
 		return
 	}
+	reply, cancel := context.WithTimeout(ctx, replyTimeout)
+	defer cancel()
+	r = r.WithContext(reply)
 	sent := change.Data
 	if !web.IsPartial(r) {
 		redirect(w, r, back)
@@ -275,7 +282,11 @@ func (p *pages) chatRun(w http.ResponseWriter, r *http.Request) {
 			items = append(items, item)
 		}
 	}
-	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", RunDone{View: view, ThreadID: threadID, Run: found, Items: items})
+	work, err := p.assistant().Work(r.Context(), asstapp.ThreadInput{ID: threadID})
+	check(err)
+	pending, err := p.assistant().NeedsCount(r.Context())
+	check(err)
+	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", tpl.Fragment{PendingCount: pending, Data: RunDone{View: view, ThreadID: threadID, Run: found, Items: items, Work: work.Data}})
 }
 
 func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {

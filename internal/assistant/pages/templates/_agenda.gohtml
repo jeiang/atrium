@@ -1,4 +1,7 @@
-{{with .Data.Events}}
+{{template "agenda" .Data}}
+{{with .Data.Next}}<span id="brief-next" hx-swap-oob="true"> before {{.Title}} at {{.Time}}</span>{{end}}
+
+{{define "agenda"}}{{with .Events}}
 <section class="flex flex-col gap-3" aria-labelledby="agenda-h" data-agenda>
   <h2 id="agenda-h" class="eyebrow">Today</h2>
   <ol class="agenda">
@@ -7,4 +10,4 @@
   </ol>
 </section>
 {{end}}
-{{with .Data.Next}}<span id="brief-next" hx-swap-oob="true"> before {{.Title}} at {{.Time}}</span>{{end}}
+{{end}}

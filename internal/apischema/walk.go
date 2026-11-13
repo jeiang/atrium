@@ -159,7 +159,7 @@ func (w *walker) structSchema(t reflect.Type) (object, error) {
 		}
 		schema = constrain(schema, f.Tag.Get("api"))
 		props[name] = schema
-		if f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
+		if strings.Contains(","+f.Tag.Get("api")+",", ",required,") || f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
 			required = append(required, name)
 		}
 	}

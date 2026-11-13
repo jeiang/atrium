@@ -10,11 +10,6 @@ internal/assistant/agentcmd/tick.go	github.com/jeiang/atrium/internal/scheduler
 internal/assistant/memory/memorycmd/job.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/memory/memorycmd/job.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/assistant/memory/memorycmd/job.go	github.com/jeiang/atrium/internal/scheduler
-internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/journal
-internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/references
-internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/service
-internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/assistant/threads
-internal/assistant/pages/api.go	github.com/jeiang/atrium/internal/inference
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/config
 internal/assistant/pages/events.go	github.com/jeiang/atrium/internal/assistant/journal

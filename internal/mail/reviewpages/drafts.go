@@ -58,7 +58,9 @@ func (s *service) draftCard(w http.ResponseWriter, r *http.Request, id int64, co
 
 func (s *service) renderDraftCard(w http.ResponseWriter, r *http.Request, view DraftView, code int, notice *tpl.Toast) {
 	data := draftCardData{D: view, Configured: reviewapp.AccountConfigured(r.Context()), Partial: true}
-	s.fragment(w, r, code, "_draft.gohtml", data, notice)
+	n, err := needsCount(r.Context(), s.deps.DB.Read)
+	check(err)
+	check(s.deps.Render.Fragment(w, r, code, "_draft.gohtml", tpl.Fragment{Data: data, Toast: notice, PendingCount: n}))
 }
 
 func (s *service) reply(w http.ResponseWriter, r *http.Request, id int64, status drafts.Status, code int, notice *tpl.Toast) {

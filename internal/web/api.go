@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
@@ -181,6 +182,18 @@ func (d *Deps) API(method, pattern string, h http.HandlerFunc) {
 	d.route(method, APIPrefix+pattern, accessDefault, h)
 }
 
+func (d *Deps) Command(pattern string, h http.HandlerFunc) http.HandlerFunc {
+	if d.commands == nil {
+		return h
+	}
+	return d.commands(pattern, h).ServeHTTP
+}
+
+func (d *Deps) DeclaredAPI(method, pattern string, shape application.APIShape, h http.HandlerFunc) {
+	d.API(method, pattern, h)
+	(*d.routes)[len(*d.routes)-1].api = &shape
+}
+
 func bearerToken(r *http.Request) (string, bool) {
 	scheme, token, found := strings.Cut(r.Header.Get("Authorization"), " ")
 	token = strings.TrimSpace(token)
@@ -240,9 +253,20 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
 			return
 		}
-		if r.ContentLength != 0 {
-			mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-			if mediaType != jsonType {
+		var shape *application.APIShape
+		if g.apiShape != nil {
+			shape = g.apiShape(r)
+		}
+		if shape != nil && shape.BeforeBody != nil {
+			if err := shape.BeforeBody(r.Context()); err != nil {
+				APIFail(w, err)
+				return
+			}
+		}
+		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		multipart := mediaType == "multipart/form-data" && shape != nil && shape.Body == application.BodyMultipart
+		if r.ContentLength != 0 && (shape == nil || !shape.IgnoreBody) {
+			if (mediaType != jsonType && !multipart) || (mediaType == jsonType && shape != nil && shape.Body == application.BodyMultipart && !shape.AllowJSON) {
 				APIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send application/json.")
 				return
 			}
@@ -255,7 +279,15 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 				return
 			}
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
+		cap := int64(limit)
+		if multipart {
+			cap = shape.BodyLimit
+		}
+		if r.ContentLength > cap && (shape == nil || !shape.IgnoreBody) {
+			APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, cap)
 	}
 	who.BearerID = tok.ID
 	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {

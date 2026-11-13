@@ -14,6 +14,7 @@ type Code string
 
 const (
 	Invalid         Code = "invalid"
+	BadCursor       Code = "bad_cursor"
 	NotFound        Code = "not_found"
 	Unauthenticated Code = "unauthenticated"
 	Forbidden       Code = "forbidden"
@@ -37,6 +38,7 @@ type Field struct {
 
 type Error struct {
 	Code         Code
+	Reason       string
 	Message      string
 	Fields       []Field
 	EffectIDs    []int64

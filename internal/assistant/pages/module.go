@@ -42,9 +42,12 @@ type Options struct {
 	Service   func(context.Context) (*service.Service, error)
 	Knowledge func(*web.Deps) *kbapp.Service
 	Assistant func(*web.Deps) *asstapp.Service
+	API       func(*web.Deps, func() *asstapp.Service)
+	Home      func(*web.Deps) func(context.Context) (any, any, error)
 }
 
 type pages struct {
+	home      func(context.Context) (any, any, error)
 	deps      *web.Deps
 	svc       func() *service.Service
 	knowledge func() *kbapp.Service
@@ -67,11 +70,11 @@ func Module(o Options) web.Module {
 			}
 			return svc
 		})
-		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now}
+		p := &pages{home: o.Home(d), deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)
-		r.Post("/chat", p.chatNew)
+		r.Post("/chat", p.command("/chat", p.chatNew))
 		r.Get("/chat/composer-options", p.composerOptions)
 		r.Get("/chat/palette", p.palette)
 		r.Get("/today", p.today)
@@ -82,7 +85,7 @@ func Module(o Options) web.Module {
 		r.Post("/chat/{thread_id}/project", p.chatProject)
 		r.Post("/chat/{thread_id}/options", p.chatOptions)
 		r.Post("/chat/{thread_id}/delete", p.chatDelete)
-		r.Post("/chat/{thread_id}/messages", p.chatMessage)
+		r.Post("/chat/{thread_id}/messages", p.command("/chat/{thread_id}/messages", p.chatMessage))
 		r.Post("/chat/{thread_id}/regenerate", p.chatRegenerate)
 		r.Post("/chat/{thread_id}/stop", p.chatStop)
 		r.Post("/chat/{thread_id}/branch", p.chatBranch)
@@ -107,7 +110,8 @@ func Module(o Options) web.Module {
 		p.projectRoutes(r)
 		p.scheduledRoutes(r)
 		p.settingsRoutes(r)
-		p.apiRoutes(d)
+		o.API(d, p.assistant)
+		d.API(http.MethodGet, "/threads/{thread_id}/runs/{run_id}/events", p.apiEvents)
 	}
 }
 
@@ -143,9 +147,7 @@ func (p *pages) page(w http.ResponseWriter, r *http.Request, name string, data a
 }
 
 func (p *pages) fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
-	f, err := p.deps.Render.Frame(r, "", data)
-	check(err)
-	check(p.deps.Render.Fragment(w, r, status, name, f))
+	check(p.deps.Render.Fragment(w, r, status, name, data))
 }
 
 func (p *pages) fail(w http.ResponseWriter, r *http.Request, status int, detail string) {
@@ -161,9 +163,7 @@ func (p *pages) failureStatus(w http.ResponseWriter, r *http.Request, status int
 		p.fail(w, r, status, description)
 		return
 	}
-	f, err := p.deps.Render.Frame(r, "", nil)
-	check(err)
-	f.Toast = &tpl.Toast{Category: "error", Title: title, Description: description}
+	f := tpl.Fragment{Toast: &tpl.Toast{Category: "error", Title: title, Description: description}}
 	w.Header().Set("HX-Reswap", "none")
 	check(p.deps.Render.Fragment(w, r, status, "_toast.gohtml", f))
 }

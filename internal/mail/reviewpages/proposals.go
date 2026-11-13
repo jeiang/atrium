@@ -53,12 +53,28 @@ func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice 
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	view := proposalView(found.Data)
-	if rowView(r) {
-		s.fragment(w, r, http.StatusOK, "_proposal_row.gohtml", proposalCardData{Proposal: view, PendingOOB: true}, notice)
+	s.renderCard(w, r, found.Data, notice)
+}
+
+func (s *service) renderCard(w http.ResponseWriter, r *http.Request, card reviewapp.Card, notice *tpl.Toast) {
+	f := tpl.Fragment{Data: proposalCardData{Proposal: proposalView(card), PendingOOB: true}, Toast: notice}
+	var err error
+	f.PendingCount, err = needsCount(r.Context(), s.deps.DB.Read)
+	check(err)
+	name := "_proposal_row.gohtml"
+	if !rowView(r) {
+		name = "_proposal.gohtml"
+		f.Mode = s.mode(r.Context())
+	}
+	check(s.deps.Render.Fragment(w, r, http.StatusOK, name, f))
+}
+
+func (s *service) decidedCard(w http.ResponseWriter, r *http.Request, id int64, proposal *proposals.Proposal, notice *tpl.Toast) {
+	if proposal == nil {
+		s.card(w, r, id, notice)
 		return
 	}
-	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: view, PendingOOB: true}, notice)
+	s.renderCard(w, r, s.review.CardOf(proposal), notice)
 }
 
 func picked(form url.Values, index int, messages any) ([]any, error) {
@@ -164,17 +180,17 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	}
 	if refused != nil {
 		if done.Data.Proposal != nil {
-			s.card(w, r, id, toast("error", "It did not finish", stoppedPartway(refused, done.Data.Proposal)))
+			s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "It did not finish", stoppedPartway(refused, done.Data.Proposal)))
 			return
 		}
 		s.card(w, r, id, toast("error", "Not approved", refused.Error()))
 		return
 	}
 	if done.Data.Applied {
-		s.card(w, r, id, toast("success", "Applied", resultString(done.Data.Proposal.Result, "summary")))
+		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Applied", resultString(done.Data.Proposal.Result, "summary")))
 		return
 	}
-	s.card(w, r, id, toast("error", "It did not finish", resultString(done.Data.Proposal.Result, "error")))
+	s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "It did not finish", resultString(done.Data.Proposal.Result, "error")))
 }
 
 func (s *service) decided(w http.ResponseWriter, r *http.Request, err error, missing string) (error, bool) {
@@ -203,7 +219,7 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	forever, _ := web.Value(web.FormValues(r), "forever")
-	_, err := s.review.Dismiss(detached(r), reviewapp.DismissInput{ProposalID: id, Suppress: forever != ""})
+	done, err := s.review.Dismiss(detached(r), reviewapp.DismissInput{ProposalID: id, Suppress: forever != ""})
 	refused, answered := s.decided(w, r, err, "unknown proposal")
 	if answered {
 		return
@@ -213,10 +229,10 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if forever != "" {
-		s.card(w, r, id, toast("success", "Dismissed forever"))
+		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Dismissed forever"))
 		return
 	}
-	s.card(w, r, id, toast("success", "Dismissed"))
+	s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Dismissed"))
 }
 func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "proposal_id")
@@ -231,14 +247,14 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	if refused != nil {
 		if len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
-			s.card(w, r, id, toast("error", "Undo stopped partway", undoStoppedPartway(refused, outcome)))
+			s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "Undo stopped partway", undoStoppedPartway(refused, outcome)))
 			return
 		}
 		s.card(w, r, id, toast("error", "Not undone", refused.Error()))
 		return
 	}
 	if outcome.Undone {
-		s.card(w, r, id, toast("success", "Undone"))
+		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Undone"))
 		return
 	}
 	failed := ""
@@ -249,7 +265,7 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	s.card(w, r, id, toast("error", "Undo did not finish", failed))
+	s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "Undo did not finish", failed))
 }
 func stoppedPartway(err error, done *proposals.Proposal) string {
 	if done.Undoable {

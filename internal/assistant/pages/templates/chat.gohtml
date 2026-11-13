@@ -45,19 +45,20 @@
     {{else}}
     <header class="brief" data-brief>
       <p class="eyebrow">{{$d.Date}}</p>
-      <h2>{{if eq .PendingCount 1}}One thing needs you{{else if .PendingCount}}{{.PendingCount}} things need you{{else}}Nothing needs you{{end}}<span id="brief-next"></span>.</h2>
+      <h2>{{if eq .PendingCount 1}}One thing needs you{{else if .PendingCount}}{{.PendingCount}} things need you{{else}}Nothing needs you{{end}}<span id="brief-next">{{with $d.Day}}{{with .Next}} before {{.Title}} at {{.Time}}{{end}}{{end}}</span>.</h2>
       {{with $d.Digest}}<ul class="brief-lines" data-digest>{{range .}}<li>{{if .URL}}<a href="{{.URL}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</li>{{end}}</ul>{{end}}
     </header>
     {{end}}
-    <div hx-get="/review/strip" hx-trigger="load" hx-swap="outerHTML" data-needs-strip></div>
+    {{template "_review_strip.gohtml" (dict "Data" $d.Needs "CSRF" .CSRF "Mode" .Mode)}}
   </div>
   <aside class="day-panel" aria-label="Today">
-    {{if $d.Agenda}}<div hx-get="/chat/agenda" hx-trigger="load" hx-swap="outerHTML"></div>{{end}}
-    <div hx-get="/activity/recent" hx-trigger="load" hx-swap="outerHTML"></div>
+    {{with $d.Day}}{{template "agenda" .}}{{end}}
+    {{with $d.AgendaError}}<section aria-label="Today"><p class="text-sm text-muted-foreground" role="alert">{{.}}</p></section>{{end}}
+    {{template "_receipts.gohtml" (dict "Data" $d.Receipts)}}
   </aside>
   <div class="composer-dock reading">
     <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
-          class="composer" data-reset data-attach>
+          class="composer" data-reset data-attach data-command-form>
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <label for="new-text" class="sr-only">New thread</label>
       {{with $d.About}}<p class="flex min-w-0" data-about><input type="hidden" name="about" value="{{.Ref}}"><span class="chip max-w-full shrink">{{icon "link"}}<span class="truncate">{{.Label}}</span><a href="/chat" class="hover:text-ink" aria-label="Remove {{.Label}}">{{icon "x"}}</a></span></p>{{end}}

@@ -101,19 +101,22 @@ func (p *pages) knowledgeList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		web.Fail(w, r, err, func(status int) {
 			toast := &tpl.Toast{Category: "error", Title: "Invalid filter", Description: application.Classify(err).Error()}
-			p.render(w, r, status, knowledgeFrame, "knowledge.gohtml", knowledgeListData{Q: filter.Query, Scope: filter.Scope, State: filter.State}, toast)
+			p.knowledgeListPage(w, r, status, knowledgeListData{Q: filter.Query, Scope: filter.Scope, State: filter.State}, toast)
 		})
 		return
 	}
 	if web.FragmentNotModified(w, r, read.Revision) {
 		return
 	}
-	data := knowledgeListOf(read.Data)
+	p.knowledgeListPage(w, r, http.StatusOK, knowledgeListOf(read.Data), nil)
+}
+
+func (p *pages) knowledgeListPage(w http.ResponseWriter, r *http.Request, status int, data knowledgeListData, toast *tpl.Toast) {
 	if web.IsPartial(r) {
-		p.renderFragment(w, r, http.StatusOK, "_knowledge_rows.gohtml", data, nil)
+		p.renderFragment(w, r, status, "_knowledge_rows.gohtml", data, toast)
 		return
 	}
-	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge.gohtml", data, nil)
+	p.render(w, r, status, knowledgeFrame, "knowledge.gohtml", data, toast)
 }
 
 func knowledgeListOf(l kbapp.List) knowledgeListData {
@@ -198,6 +201,10 @@ func (p *pages) knowledgeRecordPage(w http.ResponseWriter, r *http.Request, stat
 		form = &knowledgeFormData{Action: knowledgePath(d.Record.ID), Values: knowledgeValues(d.Record)}
 	}
 	data := knowledgeRecordData{Record: d.Record, Marks: marks, SameRun: d.SameRun, History: d.History, Source: d.Record.Source, Form: *form}
+	if web.IsPartial(r) {
+		p.renderFragment(w, r, status, "_knowledge_record.gohtml", data, nil)
+		return
+	}
 	p.render(w, r, status, knowledgeFrame, "knowledge_record.gohtml", data, nil)
 }
 
@@ -216,6 +223,20 @@ func (p *pages) knowledgeRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.knowledgeRecordPage(w, r, http.StatusOK, read.Data, nil)
+}
+
+func (p *pages) knowledgeChanged(w http.ResponseWriter, r *http.Request, changed kbapp.Changed) {
+	if web.IsPartial(r) {
+		read, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: changed.ID})
+		if err != nil {
+			p.knowledgeDetailFail(w, r, err)
+			return
+		}
+		read.Data.Record = changed.Record
+		p.knowledgeRecordPage(w, r, http.StatusOK, read.Data, nil)
+		return
+	}
+	navigate(w, r, knowledgePath(changed.ID))
 }
 
 func (p *pages) knowledgeUpdate(w http.ResponseWriter, r *http.Request) {
@@ -237,7 +258,7 @@ func (p *pages) knowledgeUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	navigate(w, r, knowledgePath(changed.Data.ID))
+	p.knowledgeChanged(w, r, changed.Data)
 }
 
 func (p *pages) knowledgeConfirm(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +271,7 @@ func (p *pages) knowledgeConfirm(w http.ResponseWriter, r *http.Request) {
 		p.knowledgeRefused(w, r, "Not confirmed", err)
 		return
 	}
-	navigate(w, r, knowledgePath(changed.Data.ID))
+	p.knowledgeChanged(w, r, changed.Data)
 }
 
 func (p *pages) knowledgeRefused(w http.ResponseWriter, r *http.Request, title string, err error) {
@@ -273,6 +294,11 @@ func (p *pages) knowledgeRetract(w http.ResponseWriter, r *http.Request) {
 			p.knowledgeDetailFail(w, r, err)
 			return
 		}
+		if web.FormString(web.FormValues(r), "view", "") == "record" {
+			current.Data.Record = changed.Data.Record
+			p.knowledgeRecordPage(w, r, http.StatusOK, current.Data, nil)
+			return
+		}
 		p.renderFragment(w, r, http.StatusOK, "_knowledge_retract.gohtml", current.Data, nil)
 		return
 	}
@@ -289,7 +315,7 @@ func (p *pages) knowledgeRestore(w http.ResponseWriter, r *http.Request) {
 		p.knowledgeRefused(w, r, "Not restored", err)
 		return
 	}
-	navigate(w, r, knowledgePath(changed.Data.ID))
+	p.knowledgeChanged(w, r, changed.Data)
 }
 
 func (p *pages) knowledgeRunRetract(w http.ResponseWriter, r *http.Request) {
@@ -328,6 +354,12 @@ func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request)
 		p.knowledgeBatchRefused(w, r, filter, result.Data, &application.Error{Code: refused[0].Code, Message: refused[0].Message})
 		return
 	}
+	if web.IsPartial(r) {
+		read, err := p.knowledge().List(r.Context(), filter)
+		check(err)
+		p.knowledgeListPage(w, r, http.StatusOK, knowledgeListOf(read.Data), nil)
+		return
+	}
 	navigate(w, r, "/library/knowledge?"+filterQuery(filter))
 }
 
@@ -346,7 +378,7 @@ func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
 		toast.Category = "warning"
 	}
 	w.Header().Set("HX-Push-Url", "/library/knowledge?"+filterQuery(read.Data.Filter))
-	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge.gohtml", knowledgeListOf(read.Data), toast)
+	p.knowledgeListPage(w, r, http.StatusOK, knowledgeListOf(read.Data), toast)
 }
 
 func (p *pages) knowledgeBatchRefused(w http.ResponseWriter, r *http.Request, filter kbapp.ListInput, result kbapp.BatchResult, err error) {
@@ -361,14 +393,19 @@ func (p *pages) knowledgeBatchRefused(w http.ResponseWriter, r *http.Request, fi
 	}
 	toast := notice("warning", title, fmt.Sprintf("%d confirmed, %d refused. %s", len(result.Committed), len(result.Refused), application.Classify(err).Error()))
 	web.Fail(w, r, err, func(status int) {
-		p.render(w, r, status, knowledgeFrame, "knowledge.gohtml", knowledgeListOf(read.Data), toast)
+		p.knowledgeListPage(w, r, status, knowledgeListOf(read.Data), toast)
 	})
 }
 
 func (p *pages) knowledgeProfilePage(w http.ResponseWriter, r *http.Request, status int, problem *string) {
 	read, err := p.knowledge().Profile(r.Context())
 	check(err)
-	p.render(w, r, status, knowledgeFrame, "knowledge_profile.gohtml", knowledgeProfileData{Profile: read.Data, Error: problem}, nil)
+	data := knowledgeProfileData{Profile: read.Data, Error: problem}
+	if web.IsPartial(r) {
+		p.renderFragment(w, r, status, "_knowledge_profile.gohtml", data, nil)
+		return
+	}
+	p.render(w, r, status, knowledgeFrame, "knowledge_profile.gohtml", data, nil)
 }
 
 func (p *pages) knowledgeProfile(w http.ResponseWriter, r *http.Request) {
@@ -388,6 +425,10 @@ func (p *pages) knowledgeProfileAdd(w http.ResponseWriter, r *http.Request) {
 			problem := application.Classify(err).Error()
 			p.knowledgeProfilePage(w, r, status, &problem)
 		})
+		return
+	}
+	if web.IsPartial(r) {
+		p.knowledgeProfilePage(w, r, http.StatusOK, nil)
 		return
 	}
 	navigate(w, r, "/library/knowledge/profile")

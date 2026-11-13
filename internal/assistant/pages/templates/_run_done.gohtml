@@ -7,3 +7,5 @@
 {{end}}
 {{range $v.Queued}}{{template "chat_item" (dict "Item" (dict "Kind" "queued" "ID" .ID "Text" .Text "Files" .Files))}}{{end}}
 {{template "chat_meter" (dict "view" $v "oob" true)}}
+<div id="panel-work" hx-swap-oob="innerHTML">{{template "chat_work" $d.Work}}</div>
+{{template "pending_badge" (dict "count" .PendingCount "oob" true)}}

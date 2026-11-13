@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 )
 
@@ -39,3 +40,5 @@ func (s *Service) snapshot(ctx context.Context, name application.Name, input any
 	}
 	return application.Revision(state.Revision(string(name), counters, input, "operator")), nil
 }
+
+func (s *Service) Mode(ctx context.Context) (string, error) { return mail.Mode(ctx, s.db.Read) }
