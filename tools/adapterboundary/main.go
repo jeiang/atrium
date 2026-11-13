@@ -47,7 +47,7 @@ var adapters = []adapter{
 	{pattern: "internal/actionlink/handler.go"},
 	{pattern: "internal/actionlink/pages/*"},
 	{pattern: "internal/calendar/calendarcmd/*"},
-	{pattern: "internal/contacts/contactsmodule/tools.go"},
+	{pattern: "internal/contacts/contactsmodule/adapters.go"},
 	{pattern: "internal/media/pages/*"},
 	{pattern: "internal/media/mediacmd/*"},
 	{pattern: "internal/notify/web.go"},

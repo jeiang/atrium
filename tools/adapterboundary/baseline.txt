@@ -310,12 +310,6 @@ internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/config
 internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/connections
 internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/db
 internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/settings/audit
-internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/calendar
-internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/config
-internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/contacts
-internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/davmirror
-internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/db
-internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/passrun
 internal/db/dbcmd/dbcmd.go	github.com/jeiang/atrium/internal/config
 internal/db/dbcmd/dbcmd.go	github.com/jeiang/atrium/internal/db
 internal/db/dbcmd/dbcmd.go	github.com/jeiang/atrium/internal/db/key
