@@ -86,8 +86,11 @@ func TestServeDrainSettlesAHeldExternalWriteThenStopsCleanly(t *testing.T) {
 	}
 	notify.Wait("STOPPING=1")
 	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/readyz", nil)
-	if status != http.StatusServiceUnavailable || !strings.Contains(body, "draining") {
-		t.Fatalf("readyz while draining = %d %s, want 503 naming the drain", status, body)
+	if status != http.StatusServiceUnavailable || !strings.Contains(body, "draining") || !strings.Contains(body, `"db":"ok"`) {
+		t.Fatalf("readyz while draining = %d %s, want 503 naming the drain with a working database check", status, body)
+	}
+	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/metrics", nil); status != http.StatusOK || !strings.Contains(body, "# TYPE atrium_scheduler_jobs ") || !strings.Contains(body, `atrium_readiness_check_ok{check="db"} 1`) {
+		t.Fatalf("metrics while draining = %d %s, want collected database metrics", status, body)
 	}
 	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/livez", nil); status != http.StatusOK {
 		t.Fatalf("livez while draining = %d %s, want 200", status, body)
@@ -130,7 +133,7 @@ func TestServeDrainSettlesAHeldExternalWriteThenStopsCleanly(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", held).Scan(&proposal); err != nil || proposal != "applied" {
 		t.Fatalf("the held proposal is %q (%v), want applied", proposal, err)
 	}
-	for _, bad := range []string{"database is closed", "serve did not stop cleanly"} {
+	for _, bad := range []string{"database is closed", "serve did not stop cleanly", "metric collection failed"} {
 		if strings.Contains(s.stderr.String(), bad) {
 			t.Fatalf("the drain logged %q: %s", bad, s.stderr.String())
 		}

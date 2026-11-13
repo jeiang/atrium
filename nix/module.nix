@@ -613,7 +613,7 @@ in {
         port = mkOption {
           type = types.port;
           default = 8481;
-          description = "Port of the emergency listener on 127.0.0.1; it must differ from services.atrium.port.";
+          description = "Port of the emergency listener on 127.0.0.1; it must differ from services.atrium.port and from the port of host.core.ops_listen.";
         };
       };
     };
@@ -754,6 +754,14 @@ in {
       {
         assertion = !cfg.web.local.enable || cfg.web.local.port != cfg.port;
         message = "services.atrium.web.local.port must differ from services.atrium.port; both listeners run in atrium-web";
+      }
+      {
+        assertion = let
+          listen = toString (renderedHost.core.ops_listen or "127.0.0.1:9180");
+          port = lib.last (lib.splitString ":" listen);
+        in
+          builtins.elem listen ["" "off"] || (port != toString cfg.port && (!cfg.web.local.enable || port != toString cfg.web.local.port));
+        message = "services.atrium.host.core.ops_listen must use a port other than services.atrium.port and services.atrium.web.local.port; all three listeners run in atrium-web";
       }
     ];
 

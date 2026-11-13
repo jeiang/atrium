@@ -204,8 +204,8 @@ func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, f
 	def, _ := Declared(s.jobs, claim.Job)
 	job, release := s.detach(ctx, def.Shutdown)
 	s.wg.Go(func() {
-		defer s.finished(job)
 		defer release()
+		defer s.finished(job)
 		defer func() { _ = locks.Close() }()
 		s.execute(db.WithHeld(job, locks), claim, fn)
 	})

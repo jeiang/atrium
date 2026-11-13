@@ -81,7 +81,7 @@ The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIU
 | `web.allowedHost` | null or string | `null` | The one Host header the public listener accepts (`ATRIUM_PUBLIC_HOST`). The configuration fails to evaluate with `web.auth = "proxy"`, `"oidc"` or `"proxy+oidc"` while it is null. |
 | `web.trustedProxyCidrs` | list of string | `[]` | Socket peer addresses or CIDRs allowed to set `CF-Connecting-IP`, rendered as `host.web.trusted_proxy_cidrs` (or the repeated `serve --trusted-proxy` flag). Empty keys every request by its socket address. The deployment must strip or overwrite the header on every request; a loopback peer is not trusted automatically. |
 | `web.local.enable` | bool | `true` | Serves the emergency listener on `127.0.0.1` from the `atrium-web` process (`serve --emergency-port`), trusting every loopback request like `--auth local`. |
-| `web.local.port` | port | `8481` | Port of the emergency listener; must differ from `port`. |
+| `web.local.port` | port | `8481` | Port of the emergency listener; must differ from `port` and from the port of `host.core.ops_listen`. |
 
 ## Media
 
