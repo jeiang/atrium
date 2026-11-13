@@ -100,6 +100,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}},
 		Groups:   SettingGroups(),
 		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Open), memorycmd.Command(mc.Env, m.Now), kbcmd.Command(knowledgeCLIService(mc.Env))},
+		Leaves:   map[string]module.Leaf{"kb import": {Always: true}},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
