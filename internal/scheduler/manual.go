@@ -73,6 +73,12 @@ func manualJob(ctx context.Context, s *Scheduler, tz string, def Definition) (Jo
 func claimManual(ctx context.Context, d *db.DB, jobID int64, resources []string, now float64, owner string) (*Claim, error) {
 	var claim *Claim
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE job_runs SET status = ?, ended_at = ?, error = ? WHERE job_id = ? AND status = ? AND ended_at IS NULL "+
+			"AND NOT EXISTS (SELECT 1 FROM job_run_threads WHERE job_run_threads.job_run_id = job_runs.id) "+
+			"AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND (lease_until IS NULL OR lease_until < ?))",
+			StatusError, now, workerLost, jobID, StatusRunning, jobID, now); err != nil {
+			return err
+		}
 		var job Job
 		err := tx.QueryRowContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE id = ? AND (lease_until IS NULL OR lease_until < ?) "+
 			"AND NOT EXISTS (SELECT 1 FROM job_runs WHERE job_runs.job_id = jobs.id AND (job_runs.status = ? OR (job_runs.status = 'skipped_module' AND job_runs.ended_at IS NULL)))",

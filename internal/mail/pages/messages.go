@@ -196,11 +196,11 @@ func (s *service) moveCorrection(r *http.Request, found *message.View, id int64)
 		return ""
 	}
 	out, err := func() (out appliedOutcome, err error) {
-		lock, err := db.Exclusive(ctx, s.deps.Cfg.DBPath, db.ShortLockWait)
+		locks, err := db.ResourceLocks(ctx, s.deps.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
 		if err != nil {
 			return out, err
 		}
-		defer func() { _ = lock.Close() }()
+		defer func() { _ = locks.Close() }()
 		done, err := s.applier.ApplyCorrections(ctx, found.Account, []int64{id})
 		return appliedOutcome{done.Ran, done.Written, done.Failed + done.Skipped}, err
 	}()

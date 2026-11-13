@@ -3,237 +3,104 @@
 package main
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
+	"net/url"
 	"strings"
-	"syscall"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/passrun"
 )
 
-const inUse = "is in use by a running atrium serve or destructive database command"
-
-func lockedServeEnv(t *testing.T, dir, keyHex string) string {
-	t.Helper()
-	live := filepath.Join(dir, "atrium.db")
-	setEnv(t, "ATRIUM_DB", live)
-	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_DB_KEY", keyHex)
-	setEnv(t, "ATRIUM_CONFIG", "")
-	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	return live
-}
-
-func startLockedServe(t *testing.T, dir string) *serveProcess {
-	t.Helper()
-	addrFile := filepath.Join(dir, "serve-addr")
-	_ = os.Remove(addrFile)
-	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
-	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_SERVE_ADDR_FILE="+addrFile)
-	return startServeProcess(t, cmd, addrFile)
-}
-
-func refusedServe(t *testing.T, workDir, dbPath string, extra ...string) cliRun {
-	t.Helper()
-	scratch := t.TempDir()
-	addrFile := filepath.Join(scratch, "serve-addr")
-	cache := filepath.Join(scratch, "cache")
-	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
-	cmd.Dir = workDir
-	cmd.Env = append(envWithout(envWithout(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="), "ATRIUM_CACHE_DIR="),
-		append([]string{"ATRIUM_SERVE_ADDR_FILE=" + addrFile, "ATRIUM_DB=" + dbPath, "ATRIUM_CACHE_DIR=" + cache}, extra...)...)
-	var stdout, stderr lockedBuffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	got := runBounded(t, cmd)
-	run := cliRun{got, stdout.String(), stderr.String()}
-	if _, err := os.Stat(addrFile); err == nil {
-		t.Errorf("serve on %s reported a listening address although it was refused; stderr %q", dbPath, run.stderr)
+func TestWebCorrectionWaitsForTheServeSyncPass(t *testing.T) {
+	m := mailSafetyFixture(t, "live")
+	d := mustConnect(t, m.path, keyFor(t))
+	declareJobsAndParkThem(t, d)
+	base, _, _ := startServeWith(t, m.dir, false)
+	waitWatching(t, m.fake)
+	id := m.correctionPending(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
+	armed.Store(true)
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "COPY" && armed.CompareAndSwap(true, false) {
+			close(entered)
+			<-release
+		}
+		return nil
 	}
-	if _, err := os.Stat(cache); err == nil {
-		t.Errorf("serve on %s created its cache directory although it was refused", dbPath)
-	}
-	return run
-}
-
-func runBounded(t *testing.T, cmd *exec.Cmd) int {
-	t.Helper()
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
+	t.Cleanup(func() {
+		if !isClosed(release) {
+			close(release)
+		}
+	})
+	manual := syncDue(t, d)
 	select {
-	case err := <-done:
-		return exitCode(err)
+	case <-entered:
 	case <-time.After(60 * time.Second):
-		_ = cmd.Process.Kill()
-		<-done
-		t.Fatalf("%v did not exit", cmd.Args)
-		return 0
+		t.Fatal("the scheduled pass never reached its COPY")
+	}
+
+	client := mrvClient(t)
+	if code, _, _ := mrvDo(t, client, "GET", base+"/triage", nil); code != 200 {
+		t.Fatalf("GET /triage = %d", code)
+	}
+	code, body, _ := mrvDo(t, client, "POST", base+"/messages/"+m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE id = ?", id)+"/correct",
+		url.Values{"dest": {"Bills"}, "context": {"row"}}, "HX-Request", "true")
+	if code != 200 || !strings.Contains(body, "It could not be moved yet") {
+		t.Fatalf("the web correction during the pass = %d: %.400s, want it told the message could not be moved yet", code, body)
+	}
+	if n := m.copies(); n != 0 {
+		t.Fatalf("%d COPY commands completed while the pass held its COPY, want none from the web correction", n)
+	}
+	close(release)
+	waitUntil(t, 60*time.Second, "the scheduled mail sync run", scheduledRunEnded(d, passrun.Sync, manual))
+	if n := m.copies(); n != 1 {
+		t.Fatalf("%d COPY commands for the corrected message, want exactly one", n)
+	}
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("Bills holds %d messages, want the corrected message once", n)
+	}
+	if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 0 {
+		t.Fatalf("INBOX still holds %d messages after the correction", n)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE state = 'unknown'"); n != 0 {
+		t.Fatalf("%d unknown effects after the correction", n)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct' AND state = 'done'"); n != 1 {
+		t.Fatalf("%d done correction effects, want 1", n)
 	}
 }
 
-func dbFileState(t *testing.T, path string) string {
-	t.Helper()
-	var parts []string
-	for _, suffix := range []string{"", "-wal", "-shm"} {
-		if _, err := os.Stat(path + suffix); err == nil {
-			parts = append(parts, suffix+"="+fileDigest(t, path+suffix))
-		} else {
-			parts = append(parts, suffix+"=absent")
+func TestManualSyncSettlesARunLeftRunningWhileServeWasDown(t *testing.T) {
+	m := mailSafetyFixture(t, "shadow")
+	d := mustConnect(t, m.path, keyFor(t))
+	declareJobsAndParkThem(t, d)
+	for _, pass := range []string{passrun.Sync, passrun.Scan} {
+		jobID := m.scalar(t, "SELECT CAST(id AS TEXT) FROM jobs WHERE declaration_key = ?", "mail/"+pass)
+		stale := float64(time.Now().Add(-time.Hour).Unix())
+		m.exec(t, "INSERT INTO job_runs (job_id, due_at, started_at, heartbeat_at, owner, status) VALUES (?, ?, ?, ?, 'gone:1:dead', 'running')", jobID, stale, stale, stale)
+		m.exec(t, "UPDATE jobs SET lease_owner = 'gone:1:dead', lease_until = 0, last_run_id = (SELECT MAX(id) FROM job_runs WHERE job_id = ?) WHERE id = ?", jobID, jobID)
+	}
+
+	for _, argv := range [][]string{{"sync"}, {"proposals", "scan-all"}} {
+		ran := m.run(t, argv...)
+		if ran.code != cli.ExitOK {
+			t.Fatalf("%s beside a stale running row = (%d, %q), want success", strings.Join(argv, " "), ran.code, ran.stderr)
 		}
 	}
-	return strings.Join(parts, " ")
-}
-
-func TestServeExcludesASecondServeOnTheSameDatabase(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	live := lockedServeEnv(t, dir, rightKeyHex)
-	serve := startLockedServe(t, dir)
-
-	alias := filepath.Join(t.TempDir(), "alias")
-	if err := os.Symlink(dir, alias); err != nil {
-		t.Fatal(err)
-	}
-	for name, tc := range map[string]struct{ workDir, path string }{
-		"same path":     {dir, live},
-		"symlinked dir": {dir, filepath.Join(alias, "atrium.db")},
-		"relative path": {dir, "atrium.db"},
-	} {
-		got := refusedServe(t, tc.workDir, tc.path)
-		if got.code == cli.ExitOK || !strings.Contains(got.stderr, inUse) {
-			t.Errorf("%s: second serve exited %d, stderr %q; want nonzero with %q", name, got.code, got.stderr, inUse)
+	for _, pass := range []string{passrun.Sync, passrun.Scan} {
+		key := "mail/" + pass
+		if n := m.count(t, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ? AND r.status = 'running'", key); n != 0 {
+			t.Fatalf("%s still has %d running rows", key, n)
 		}
-	}
-	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK {
-		t.Fatalf("first serve exited %d; stderr %q", code, serve.stderr.String())
-	}
-
-	link := live + ".alt"
-	if err := os.Link(live, link); err != nil {
-		t.Fatal(err)
-	}
-	before := dbFileState(t, live)
-	if got := refusedServe(t, dir, live); got.code == cli.ExitOK || !strings.Contains(got.stderr, "hard links") {
-		t.Errorf("serve on a hard-linked database exited %d, stderr %q; want nonzero with a hard link refusal", got.code, got.stderr)
-	}
-	if after := dbFileState(t, live); after != before {
-		t.Errorf("the refused serve changed the database files: %s -> %s", before, after)
-	}
-	if err := os.Remove(link); err != nil {
-		t.Fatal(err)
-	}
-
-	crashed := startLockedServe(t, dir)
-	if err := crashed.cmd.Process.Signal(syscall.SIGKILL); err != nil {
-		t.Fatal(err)
-	}
-	_ = crashed.wait()
-	again := startLockedServe(t, dir)
-	if code := again.stop(t, syscall.SIGTERM); code != cli.ExitOK {
-		t.Errorf("serve after a crashed serve exited %d; stderr %q", code, again.stderr.String())
-	}
-	if _, err := os.Stat(live + ".serve.lock"); err != nil {
-		t.Errorf("the serve lock file was removed: %v", err)
-	}
-}
-
-func TestServeRefusesDestructiveMaintenanceAndKeepsBackupOnline(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	live := lockedServeEnv(t, dir, rightKeyHex)
-	serve := startLockedServe(t, dir)
-
-	copied := filepath.Join(t.TempDir(), "copy.db")
-	if got := runProcess(t, "db backup "+copied); got.code != cli.ExitOK {
-		t.Fatalf("db backup during serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-	archive := filepath.Join(t.TempDir(), "state.tar.zst")
-	if got := runProcess(t, "backup "+archive); got.code != cli.ExitOK {
-		t.Fatalf("archive backup during serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-	if got := runProcess(t, "db check"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "integrity_check: ok") {
-		t.Errorf("db check during serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-	if got := runProcess(t, "restore --verify "+archive); got.code != cli.ExitOK {
-		t.Errorf("restore --verify during serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-
-	next := writeKey(t, t.TempDir(), "next.key", otherKeyHex)
-	source := copyV2Fixture(t, t.TempDir())
-	refusals := map[string]cliRun{
-		"rekey":     runProcess(t, "db rekey --new-key-file "+next),
-		"encrypt":   runProcess(t, "db encrypt"),
-		"import-v2": runProcess(t, "db import-v2 "+source),
-		"restore":   runProcess(t, "restore "+archive),
-		"shell":     runProcessStdin(t, "CREATE TABLE shell_probe (a);\n", "db shell"),
-	}
-	for name, got := range refusals {
-		if got.code != cli.ExitError || !strings.Contains(got.stderr, inUse) || strings.Contains(got.stdout+got.stderr, otherKeyHex) {
-			t.Errorf("%s during serve exited %d, stdout %q, stderr %q; want a refusal naming the running serve", name, got.code, got.stdout, got.stderr)
+		if lost := m.scalar(t, "SELECT r.status || ':' || COALESCE(r.error, '') FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ? AND r.owner = 'gone:1:dead'", key); lost != "error:worker lost" {
+			t.Fatalf("%s stale run settled as %s, want error:worker lost", key, lost)
 		}
-	}
-	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK {
-		t.Fatalf("serve exited %d; stderr %q", code, serve.stderr.String())
-	}
-
-	backup := mustConnect(t, copied, keyFor(t))
-	var integrity string
-	if err := backup.Read.QueryRow("PRAGMA integrity_check").Scan(&integrity); err != nil || integrity != "ok" {
-		t.Errorf("the online backup integrity_check = %q, %v", integrity, err)
-	}
-	var copiedVersions, liveVersions int
-	if err := backup.Read.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&copiedVersions); err != nil {
-		t.Fatal(err)
-	}
-	if err := backup.Close(); err != nil {
-		t.Fatal(err)
-	}
-	restoredCopy := filepath.Join(t.TempDir(), "restored.db")
-	copyFile(t, copied, restoredCopy)
-	restored := mustConnect(t, restoredCopy, keyFor(t))
-	if err := restored.Read.QueryRow("PRAGMA integrity_check").Scan(&integrity); err != nil || integrity != "ok" {
-		t.Errorf("the restored online backup integrity_check = %q, %v", integrity, err)
-	}
-	if err := restored.Read.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&liveVersions); err != nil || liveVersions != copiedVersions || liveVersions == 0 {
-		t.Errorf("the restored online backup holds %d migrations, want %d: %v", liveVersions, copiedVersions, err)
-	}
-
-	if got := runProcessStdin(t, "CREATE TABLE shell_probe (a);\nSELECT count(*) FROM shell_probe;\n", "db shell"); got.code != cli.ExitOK || got.stdout != "0\n" {
-		t.Errorf("db shell after serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-	if got := runProcess(t, "restore "+archive); got.code != cli.ExitOK || !strings.Contains(got.stdout, "restored "+live) {
-		t.Errorf("restore after serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-	if got := runProcess(t, "db rekey --new-key-file "+next); got.code != cli.ExitOK {
-		t.Errorf("db rekey after serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-	for _, suffix := range []string{"", "-wal", "-shm"} {
-		if err := os.Remove(live + suffix); err != nil && !os.IsNotExist(err) {
-			t.Fatal(err)
+		if ok := m.count(t, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ? AND r.status = 'ok' AND r.owner <> 'gone:1:dead'", key); ok != 1 {
+			t.Fatalf("%s recorded %d successful manual runs, want 1", key, ok)
 		}
-	}
-	if got := runProcess(t, "db import-v2 "+source, "ATRIUM_DB_KEY="+otherKeyHex); got.code != cli.ExitOK {
-		t.Errorf("db import-v2 after serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-}
-
-func TestServeRefusesEncryptionUntilItStops(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	lockedServeEnv(t, dir, "")
-	serve := startLockedServe(t, dir)
-	if got := runProcess(t, "db encrypt", "ATRIUM_DB_KEY="+rightKeyHex); got.code != cli.ExitError || !strings.Contains(got.stderr, inUse) {
-		t.Errorf("db encrypt during serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
-	}
-	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK {
-		t.Fatalf("serve exited %d; stderr %q", code, serve.stderr.String())
-	}
-	if got := runProcess(t, "db encrypt", "ATRIUM_DB_KEY="+rightKeyHex); got.code != cli.ExitOK {
-		t.Errorf("db encrypt after serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

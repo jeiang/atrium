@@ -63,7 +63,7 @@ func liveBacklog(x *exec) error {
 }
 
 func rebaseline(x *exec) error {
-	return x.Exclusive(func() error {
+	return x.PassLocked(func() error {
 		if err := x.SyncAll(x.Ctx); err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func setPaused(paused bool) body {
 }
 
 func liveDeletions(x *exec) error {
-	return x.Exclusive(func() error {
+	return x.PassLocked(func() error {
 		accounts, err := run.SelectAccounts(x.Ctx, "")
 		if err != nil {
 			return err

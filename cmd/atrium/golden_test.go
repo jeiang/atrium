@@ -421,13 +421,13 @@ func TestCLIGoldens(t *testing.T) {
 	}
 }
 
-func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
+func TestWritingCommandsTakeTheMailPassLock(t *testing.T) {
 	t.Parallel()
 	data := loadGoldenData(t)
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
 			f := newFixture(t, data, nil, "")
-			lock, err := db.Exclusive(context.Background(), filepath.Join(f.dir, "atrium.db"), db.ShortLockWait)
+			lock, err := db.ResourceLocks(context.Background(), filepath.Join(f.dir, "atrium.db"), []string{mail.PassResource}, db.ShortLockWait)
 			if err != nil {
 				t.Fatal(err)
 			}
