@@ -62,7 +62,7 @@ type apiDraft struct {
 
 func (s *service) apiRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/pending", s.apiPending)
-	d.API(http.MethodPost, "/approvals/{proposal_id}/approve", web.Idempotent(s.apiApprove))
+	d.API(http.MethodPost, "/approvals/{proposal_id}/approve", s.apiApprove)
 	d.API(http.MethodPost, "/approvals/{proposal_id}/deny", s.apiDeny)
 	d.API(http.MethodPost, "/approvals/{proposal_id}/resolve", s.apiResolve)
 	d.API(http.MethodGet, "/undo", s.apiUndoFeed)
@@ -76,7 +76,7 @@ func (s *service) apiRoutes(d *web.Deps) {
 func (s *service) mailAPIRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/drafts/{draft_id}", s.apiDraft)
 	d.API(http.MethodPatch, "/drafts/{draft_id}", bindMail(http.HandlerFunc(s.apiDraftUpdate)).ServeHTTP)
-	d.API(http.MethodPost, "/drafts/{draft_id}/send", bindMail(web.Idempotent(s.apiDraftSend)).ServeHTTP)
+	d.API(http.MethodPost, "/drafts/{draft_id}/send", bindMail(http.HandlerFunc(s.apiDraftSend)).ServeHTTP)
 	d.API(http.MethodPost, "/drafts/{draft_id}/discard", bindMail(http.HandlerFunc(s.apiDraftDiscard)).ServeHTTP)
 	d.API(http.MethodPost, "/drafts/{draft_id}/resolve", bindMail(http.HandlerFunc(s.apiDraftResolve)).ServeHTTP)
 }

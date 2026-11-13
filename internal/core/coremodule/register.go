@@ -7,9 +7,12 @@ import (
 	"slices"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/commands"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -97,6 +100,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env, m.Now)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
+	commandOps, commandBindings := commandOperations()
+	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -140,6 +145,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(connectionService),
+			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d) }},
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,
@@ -187,7 +193,10 @@ func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {
 	if n > 0 {
 		log.Warn("recovered interrupted approved proposals", "count", n)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return commands.New(d).Prune(ctx)
 }
 
 func (m Module) services(mc module.Context) []runtime.ServiceDefinition {

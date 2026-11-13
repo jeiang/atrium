@@ -72,7 +72,6 @@ type Guard struct {
 	errPage  ErrorPage
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
-	idem     *idemCache
 }
 
 func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
@@ -90,7 +89,7 @@ func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify, idem: newIdemCache()}
+	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify}
 }
 
 func hostname(value string) string {
