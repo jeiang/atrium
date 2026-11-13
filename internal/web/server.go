@@ -293,8 +293,11 @@ func Unbound(ctx context.Context, pages []Page) ([]Route, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer srv.Close()
-	return srv.Unbound(), nil
+	unbound := srv.Unbound()
+	if err := srv.Close(); err != nil {
+		return nil, err
+	}
+	return unbound, nil
 }
 
 func instrument(next http.Handler) http.Handler {
