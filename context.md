@@ -440,7 +440,7 @@ behavior-parity target.
   A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
   `import`. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
-  in-flight inference reservation writes do not); the append-only
+  streamed run event writes do not); the append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`.
 - Modules are toggled at runtime. The built-in modules are always compiled

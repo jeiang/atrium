@@ -183,6 +183,8 @@ func (s *Store) Audit(ctx context.Context, tx *sql.Tx, e Entry) (int64, error) {
 	run := s.db.WithTx
 	if tx != nil {
 		run = func(_ context.Context, fn func(*sql.Tx) error) error { return fn(tx) }
+	} else {
+		ctx = context.WithoutCancel(ctx)
 	}
 	if err := run(ctx, insert); err != nil {
 		return 0, err

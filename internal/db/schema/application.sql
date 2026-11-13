@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS operation_audit (
 );
 CREATE INDEX IF NOT EXISTS operation_audit_recent ON operation_audit(id DESC);
 CREATE INDEX IF NOT EXISTS operation_audit_operation ON operation_audit(operation,id);
+CREATE TRIGGER IF NOT EXISTS operation_audit_no_replace BEFORE INSERT ON operation_audit
+WHEN NEW.id IS NOT NULL AND EXISTS (SELECT 1 FROM operation_audit WHERE id = NEW.id)
+BEGIN SELECT RAISE(ABORT, 'operation_audit is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS operation_audit_no_update BEFORE UPDATE ON operation_audit
 BEGIN SELECT RAISE(ABORT, 'operation_audit is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS operation_audit_no_delete BEFORE DELETE ON operation_audit

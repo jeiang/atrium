@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -173,7 +174,6 @@ var invalidates = map[string]string{
 	"push_subscriptions":      "notify",
 	"rebalance_candidates":    "mail",
 	"rules":                   "mail",
-	"run_events":              "assistant",
 	"runs":                    "assistant",
 	"secrets":                 "settings",
 	"settings":                "settings",
@@ -207,12 +207,27 @@ var revisionExempt = map[string]string{
 	"notion_fts":          "full-text index",
 	"operation_audit":     "the operation audit itself",
 	"read_revisions":      "the revision counters themselves",
+	"run_events":          "run state changes bump through runs",
 	"schema_migrations":   "runtime bookkeeping",
 	"skills":              "read by no application operation",
 	"thread_fts":          "full-text index",
 }
 
-var readTrigger = regexp.MustCompile(`CREATE\s+TRIGGER\s+IF\s+NOT\s+EXISTS\s+([A-Za-z0-9_]+)_read_(insert|update|delete)\s+AFTER\s+(INSERT|UPDATE|DELETE)\b[^;]*?\bON\s+([A-Za-z0-9_]+)\b[^;]*?INSERT\s+INTO\s+read_revisions\(scope,value\)\s+VALUES\('([a-z]+)',1\)`)
+var revisionColumnExempt = map[string][]string{
+	"effects":     {"lease_at"},
+	"job_runs":    {"heartbeat_at", "owner"},
+	"jobs":        {"lease_owner", "lease_until"},
+	"memory_jobs": {"lease_until"},
+	"runs":        {"owner", "lease_until"},
+}
+
+var revisionWhen = map[string]string{}
+
+var (
+	readTrigger    = regexp.MustCompile(`CREATE\s+TRIGGER\s+IF\s+NOT\s+EXISTS\s+([A-Za-z0-9_]+)_read_(insert|update|delete)\s+AFTER\s+(INSERT|UPDATE|DELETE)(?:\s+OF\s+([A-Za-z0-9_,\s]+?))?\s+ON\s+([A-Za-z0-9_]+)(?:\s+WHEN\s+([^;]*?))?\s+BEGIN\s+INSERT\s+INTO\s+read_revisions\(scope,value\)\s+VALUES\('([a-z]+)',1\)`)
+	anyReadTrigger = regexp.MustCompile(`CREATE\s+TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_]+_read_(?:insert|update|delete))\b`)
+	tableBody      = regexp.MustCompile(`CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
+)
 
 var vectorPrefixes = []string{"embed_message_", "embed_notion_", "embed_kb_"}
 
@@ -303,14 +318,76 @@ func checkRevisions(names map[string]bool, schema string) error {
 			problems = append(problems, name+" has a revision scope but no table")
 		}
 	}
+	for name := range revisionExempt {
+		if !names[name] {
+			problems = append(problems, name+" has a revision exemption but no table")
+		}
+	}
+	columns := tableColumns(schema)
+	for name, excluded := range revisionColumnExempt {
+		if _, ok := columns[name]; !ok {
+			problems = append(problems, name+" has a revision column exemption but no table")
+			continue
+		}
+		for _, column := range excluded {
+			if !slices.Contains(columns[name], column) {
+				problems = append(problems, fmt.Sprintf("%s has a revision column exemption for %s, which it does not have", name, column))
+			}
+		}
+	}
 	found := map[string]bool{}
+	shaped := map[string]bool{}
 	for _, m := range readTrigger.FindAllStringSubmatch(schema, -1) {
-		table, op, event, on, scope := m[1], m[2], m[3], m[4], m[5]
+		table, op, event, of, on, when, scope := m[1], m[2], m[3], m[4], m[5], m[6], m[7]
+		trigger := table + "_read_" + op
+		shaped[trigger] = true
 		if table != on || strings.ToUpper(op) != event || invalidates[table] != scope || found[table+"/"+op] {
-			problems = append(problems, fmt.Sprintf("trigger %s_read_%s on %s writes scope %q; want one per operation on its own table with scope %q", table, op, on, scope, invalidates[table]))
+			problems = append(problems, fmt.Sprintf("trigger %s on %s writes scope %q; want one per operation on its own table with scope %q", trigger, on, scope, invalidates[table]))
 			continue
 		}
 		found[table+"/"+op] = true
+		if when != "" && strings.Join(strings.Fields(when), " ") != revisionWhen[trigger] {
+			problems = append(problems, fmt.Sprintf("trigger %s has WHEN %s, which is not allowlisted", trigger, strings.Join(strings.Fields(when), " ")))
+		}
+		if of != "" && event != "UPDATE" {
+			problems = append(problems, fmt.Sprintf("trigger %s lists columns on %s", trigger, event))
+		}
+		if event != "UPDATE" {
+			continue
+		}
+		excluded, partial := revisionColumnExempt[table]
+		switch {
+		case of == "" && partial:
+			problems = append(problems, fmt.Sprintf("trigger %s must list every %s column except %s", trigger, table, strings.Join(excluded, ", ")))
+		case of != "" && !partial:
+			problems = append(problems, fmt.Sprintf("trigger %s lists columns but %s has no revision column exemption", trigger, table))
+		case of != "":
+			var want []string
+			for _, column := range columns[table] {
+				if !slices.Contains(excluded, column) {
+					want = append(want, column)
+				}
+			}
+			var got []string
+			for _, column := range strings.Split(of, ",") {
+				got = append(got, strings.TrimSpace(column))
+			}
+			sort.Strings(want)
+			sort.Strings(got)
+			if !slices.Equal(got, want) {
+				problems = append(problems, fmt.Sprintf("trigger %s lists %s; want %s", trigger, strings.Join(got, ", "), strings.Join(want, ", ")))
+			}
+		}
+	}
+	for _, m := range anyReadTrigger.FindAllStringSubmatch(schema, -1) {
+		if !shaped[m[1]] {
+			problems = append(problems, "trigger "+m[1]+" does not have the revision trigger shape")
+		}
+	}
+	for trigger := range revisionWhen {
+		if !shaped[trigger] {
+			problems = append(problems, trigger+" has an allowlisted WHEN but no trigger")
+		}
 	}
 	for name := range invalidates {
 		for _, op := range []string{"insert", "update", "delete"} {
@@ -324,6 +401,44 @@ func checkRevisions(names map[string]bool, schema string) error {
 		return fmt.Errorf("revision triggers: %s", strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+func tableColumns(schema string) map[string][]string {
+	out := map[string][]string{}
+	for _, loc := range tableBody.FindAllStringSubmatchIndex(schema, -1) {
+		name := schema[loc[2]:loc[3]]
+		depth, start := 1, loc[1]
+		var items []string
+		for i := start; i < len(schema) && depth > 0; i++ {
+			switch schema[i] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					items = append(items, schema[start:i])
+				}
+			case ',':
+				if depth == 1 {
+					items = append(items, schema[start:i])
+					start = i + 1
+				}
+			}
+		}
+		for _, item := range items {
+			fields := strings.Fields(item)
+			if len(fields) == 0 {
+				continue
+			}
+			keyword, _, _ := strings.Cut(fields[0], "(")
+			switch strings.ToUpper(keyword) {
+			case "PRIMARY", "UNIQUE", "CHECK", "FOREIGN", "CONSTRAINT":
+				continue
+			}
+			out[name] = append(out[name], strings.Trim(fields[0], `"`+"`"))
+		}
+	}
+	return out
 }
 
 func normalize(table string) string {

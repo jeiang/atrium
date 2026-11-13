@@ -224,15 +224,15 @@ CREATE TRIGGER IF NOT EXISTS tool_results_read_delete AFTER DELETE ON tool_resul
     INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
-CREATE TRIGGER IF NOT EXISTS usage_read_insert AFTER INSERT ON usage WHEN NEW.state <> 'reserved' BEGIN
+CREATE TRIGGER IF NOT EXISTS usage_read_insert AFTER INSERT ON usage BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
-CREATE TRIGGER IF NOT EXISTS usage_read_update AFTER UPDATE ON usage WHEN OLD.state <> 'reserved' OR NEW.state <> 'reserved' BEGIN
+CREATE TRIGGER IF NOT EXISTS usage_read_update AFTER UPDATE ON usage BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
-CREATE TRIGGER IF NOT EXISTS usage_read_delete AFTER DELETE ON usage WHEN OLD.state <> 'reserved' BEGIN
+CREATE TRIGGER IF NOT EXISTS usage_read_delete AFTER DELETE ON usage BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
