@@ -12,10 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/triage"
-	"github.com/jeiang/atrium/internal/notify"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/urlx"
@@ -61,7 +61,8 @@ func backTo(r *http.Request) backLink {
 }
 
 func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) *message.View {
-	found, err := message.Get(r.Context(), s.deps.DB.Read, s.deps.Cfg.CacheDir, id)
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id})
+	found := read.Data.View
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown message")
@@ -70,7 +71,8 @@ func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) 
 }
 
 func (s *service) correctContext(r *http.Request, found *message.View, context string, selected, problem *string) *correctForm {
-	folders, err := triage.Folders(r.Context(), s.deps.DB.Read, found.Account)
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: found.ID, Folders: true})
+	folders := read.Data.Folders
 	check(err)
 	return &correctForm{
 		MessageID: found.ID, Account: found.Account, Context: context, Folders: folders, Selected: selected, Error: problem,
@@ -83,13 +85,13 @@ func (s *service) messagePage(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, bad...)
 		return
 	}
-	found := s.loadMessage(w, r, id)
-	if found == nil {
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id, Draft: true})
+	check(err)
+	if read.Data.View == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown message")
 		return
 	}
-	draft, err := s.drafts.ForMessage(r.Context(), id)
-	check(err)
-	data := messageData{Message: found, Back: backTo(r), FromDraft: draft}
+	data := messageData{Message: read.Data.View, Back: backTo(r), FromDraft: read.Data.Draft}
 	if web.IsPartial(r) {
 		s.fragment(w, r, "_message.gohtml", data, nil)
 		return
@@ -227,8 +229,18 @@ type appliedOutcome struct {
 }
 
 func (s *service) togglePause(w http.ResponseWriter, r *http.Request, paused bool) {
-	check(s.live.SetPaused(paused))
-	if err := notify.PauseChanged(context.WithoutCancel(r.Context()), s.deps.DB, s.deps.Env, paused); err != nil {
+	ctx := context.WithoutCancel(r.Context())
+	var done application.Change[mailapp.PauseResult]
+	var err error
+	if paused {
+		done, err = s.reads.Pause(ctx, mailapp.PauseInput{})
+	} else {
+		done, err = s.reads.Resume(ctx, mailapp.PauseInput{})
+	}
+	if !mailapp.Committed(err) {
+		check(err)
+	}
+	if err := done.Data.NoticeError; err != nil {
 		log.Warn("pause notice failed", logx.Err, err.Error())
 	}
 	target := "/triage"

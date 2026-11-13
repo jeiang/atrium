@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
@@ -20,7 +22,7 @@ func tickCommand(open Open, enabled func(string) bool) *cli.Command {
 			ctx, svc, closeApp, err := open(ctx)
 			if err == nil {
 				defer closeApp()
-				s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), jobworker.Options{Enabled: enabled})
+				s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), jobworker.Options{Enabled: enabled, Start: asstapp.ScheduledStart})
 				err = s.Once(ctx)
 			}
 			if errors.Is(err, scheduler.ErrAllBusy) {

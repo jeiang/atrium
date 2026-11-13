@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
@@ -41,11 +40,12 @@ type Options struct {
 	Recovered func(error)
 	Work      context.Context
 	Own       Own
+	Start     Starter
 }
 
 func New(svc *service.Service, jobs []scheduler.Definition, o Options) *scheduler.Scheduler {
 	runCron := func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
-		return prompt(ctx, svc, run, run.Claim.Job.Prompt)
+		return prompt(ctx, svc, o.Start, run, run.Claim.Job.Prompt)
 	}
 	if o.Own != nil {
 		jobs = scheduler.Clone(jobs)
@@ -184,38 +184,24 @@ func notifySkipped(ctx context.Context, svc *service.Service, skip scheduler.Ski
 	return err
 }
 
-func prompt(ctx context.Context, svc *service.Service, run scheduler.Run, text string) (scheduler.Result, error) {
+type Starter func(ctx context.Context, svc *service.Service, run scheduler.Run, text string, operator bool) (threadID, runID int64, err error)
+
+func prompt(ctx context.Context, svc *service.Service, start Starter, run scheduler.Run, text string) (scheduler.Result, error) {
+	if start == nil {
+		return scheduler.Result{}, errors.New("scheduled runs are not bound to the assistant start")
+	}
 	claim := run.Claim
-	job, d := claim.Job, svc.DB
-	kind := threads.Cron
+	job := claim.Job
 	operator := job.Kind == scheduler.JobCron && job.PromptBy != nil && *job.PromptBy == scheduler.Operator
+	thread, runID, err := start(ctx, svc, run, text, operator)
 	var threadID *int64
-	runID, err := func() (int64, error) {
-		spec := threads.Spec{Kind: kind, Title: &job.Name, JobID: &job.ID}
-		if !operator {
-			marks, err := threads.MarksOf(ctx, d.Read, []string{fmt.Sprintf("schedule:%d", job.ID)})
-			if err != nil {
-				return 0, err
-			}
-			if marks != 0 {
-				now := run.Now()
-				spec.Marks = threads.Marks{At: &now, Set: marks}
-			}
-		}
-		id, err := threads.Create(ctx, d.Write, run.Now(), spec)
-		if err != nil {
-			return 0, err
-		}
-		threadID = &id
-		if err := scheduler.AttachThread(ctx, d.Write, claim, id); err != nil {
-			return 0, err
-		}
-		return svc.RunOnce(ctx, id, text, service.Start{Kind: kind, Operator: operator})
-	}()
+	if thread != 0 {
+		threadID = &thread
+	}
 	if err != nil {
 		return refused(threadID, err)
 	}
-	result, err := outcome(context.WithoutCancel(ctx), d.Read, []int64{runID}, claim.Missed)
+	result, err := outcome(context.WithoutCancel(ctx), svc.DB.Read, []int64{runID}, claim.Missed)
 	if err != nil {
 		return refused(threadID, err)
 	}

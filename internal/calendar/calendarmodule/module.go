@@ -36,7 +36,7 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	command := calendarcmd.Command(mc.Env, mc.Tools)
+	command := calendarcmd.Command(mc.Env, calendarCLI(mc.Env, mc.Tools))
 	operations, bindings := calendarOperations()
 	return module.Declaration{
 		Name:      module.Calendar,
@@ -44,7 +44,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Host:      calendar.HostSettings(),
 		Sections:  calendar.Sections(),
 		Attention: AttentionSources(),
-		Jobs:      []scheduler.Definition{calendarcmd.CandidatesJob(m.Jobs), CalDAVJob(m.Jobs)},
+		Jobs:      []scheduler.Definition{CandidatesJob(m.Jobs), CalDAVJob(m.Jobs)},
 		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
