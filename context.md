@@ -553,7 +553,13 @@ behavior-parity target.
   `jobs`, `job_runs`, `job_run_threads` and `job_resource_leases` tables,
   seeding, claiming, recovery and the tick
   loop; `internal/assistant/jobworker` supplies the assistant's prompt runs,
-  run accounting, skip notices and recovery lookups. A job row records its
+  run accounting, skip notices and recovery lookups. Calendar mirroring
+  (`calendar sync` and the CalDAV job) and candidate drafting (`calendar
+  candidates` and its job) run as `calendar.sync` and
+  `calendar.draft-candidates`, one `operation_audit` row per pass (`noop`
+  for an empty candidate queue); the drafting run starts through
+  `assistant.thread.start`, so a missing key or exhausted budget is refused
+  before a thread exists. A job row records its
   owning `module`; a declared job is matched by its unique
   `declaration_key` (`<module>/<name>`), never by name, and a cron job has
   none. Re-enabling a job sets `activated_at`. A run records the threads it

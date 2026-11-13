@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -25,11 +26,12 @@ const (
 )
 
 type Service struct {
-	db     *db.DB
-	env    config.Env
-	ledger *ledger.Store
-	now    func() float64
-	state  *state.Store
+	db       *db.DB
+	env      config.Env
+	ledger   *ledger.Store
+	now      func() float64
+	state    *state.Store
+	draftRun candidates.Run
 }
 
 func New(d *db.DB, env config.Env, l *ledger.Store, now func() float64) *Service {
