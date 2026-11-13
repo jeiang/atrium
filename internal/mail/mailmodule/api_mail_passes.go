@@ -161,8 +161,8 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 	passes := mailPasses{d: d, m: m}
 	service := func() *mailapp.Service { return mailPageService(d) }
 	const area = "mail"
-	refusals := []application.Code{application.Refused}
-	effects := []application.Code{application.Refused, application.Unknown, application.Partial, application.Conflict}
+	refusals := []application.Code{application.Refused, application.Unavailable}
+	effects := []application.Code{application.Refused, application.Unknown, application.Partial, application.Conflict, application.Unavailable}
 	scan := func(def application.Definition, target string, do func(*mailapp.Service, context.Context) (application.Change[scanutil.Result], error)) application.Binding {
 		return api.Command(d, def, application.APIShape{Area: area, Errors: refusals}, target, func(ctx context.Context, _ struct{}) (out application.Change[MailScanned], err error) {
 			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {

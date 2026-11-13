@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -174,5 +175,135 @@ func TestDraftSendOnceAndLoops(t *testing.T) {
 	resolved := s.do(http.MethodPost, dinner+"/resolve", token, map[string]any{"outcome": "draft"})
 	if resolved.status != http.StatusOK || resolved.json["draft"].(map[string]any)["status"] != "draft" {
 		t.Fatalf("resolve: %d %s", resolved.status, resolved.body)
+	}
+}
+
+func TestDraftSendRaceSentCopyAndResolveSent(t *testing.T) {
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	m := mrvMailFixture(t, "shadow")
+	smtp := mrvSMTPServer(t)
+	if got := runApp(t, "sync"); got.code != 0 {
+		t.Fatalf("sync: %s", got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(m.dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	scalar := func(query string, args ...any) string {
+		t.Helper()
+		var out string
+		if err := d.Read.QueryRow(query, args...).Scan(&out); err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+		return out
+	}
+	for _, subject := range []string{"Race plans", "Lost plans"} {
+		if _, err := d.Write.Exec("INSERT INTO drafts (thread_id, account, to_addrs, subject, body, status, revision, created_at, updated_at) VALUES (NULL, 'icloud', 'friend@x.test', ?, 'See you.', 'draft', 1, 1000, 1000)", subject); err != nil {
+			t.Fatal(err)
+		}
+	}
+	race := "/api/v1/drafts/" + scalar("SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Race plans'")
+	lost := "/api/v1/drafts/" + scalar("SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Lost plans'")
+	token := localAPIToken(t, "api")
+	base, _, stop, err := startServeAppArgs(t, m.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stop() })
+	s := &apiSite{t: t, base: base}
+
+	expectField(t, s.do(http.MethodPost, race+"/send", token, nil), "revision")
+	read := s.do(http.MethodGet, race, token, nil)
+	etag := read.header.Get("ETag")
+	if read.status != http.StatusOK || etag == "" {
+		t.Fatalf("draft read: %d %v %s", read.status, read.header, read.body)
+	}
+	patched := s.do(http.MethodPatch, race, token, map[string]any{"subject": "Race plans"}, "If-Match", etag)
+	if patched.status != http.StatusOK {
+		t.Fatalf("update with the read ETag: %d %s", patched.status, patched.body)
+	}
+	expectAPI(t, s.do(http.MethodPatch, race, token, map[string]any{"subject": "Overwritten"}, "If-Match", etag), http.StatusConflict, "stale")
+	etag = s.do(http.MethodGet, race, token, nil).header.Get("ETag")
+	if n := len(smtp.sent()); n != 0 {
+		t.Fatalf("updates reached SMTP: %d", n)
+	}
+
+	replies := make([]apiReply, 2)
+	var wg sync.WaitGroup
+	for i := range replies {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			replies[i] = s.do(http.MethodPost, race+"/send", token, nil, "If-Match", etag)
+		}()
+	}
+	wg.Wait()
+	var sent apiReply
+	oks, refused := 0, 0
+	for _, r := range replies {
+		switch r.status {
+		case http.StatusOK:
+			oks, sent = oks+1, r
+		case http.StatusConflict:
+			refused++
+		}
+	}
+	if oks != 1 || refused != 1 || len(smtp.sent()) != 1 {
+		t.Fatalf("two concurrent sends: %d ok, %d refused, %d SMTP transactions: %+v", oks, refused, len(smtp.sent()), replies)
+	}
+	if sent.json["filed"] != "copy" || sent.json["draft"].(map[string]any)["status"] != "sent" {
+		t.Fatalf("send: %s", sent.body)
+	}
+	if n := scalar("SELECT CAST(COUNT(*) AS TEXT) FROM effects WHERE operation = 'smtp_send'"); n != "1" {
+		t.Fatalf("send effects after two concurrent sends: %s", n)
+	}
+	if got := scalar("SELECT group_concat(operation || ':' || state, ',') FROM (SELECT operation, state FROM effects WHERE operation IN ('smtp_send', 'sent_append') ORDER BY id)"); got != "smtp_send:done,sent_append:done" {
+		t.Fatalf("send and Sent-copy effects: %s", got)
+	}
+
+	smtp.set("drop")
+	lostRev := number(t, s.do(http.MethodGet, lost, token, nil).json["revision"])
+	uncertain := s.do(http.MethodPost, lost+"/send", token, map[string]any{"revision": lostRev})
+	expectAPI(t, uncertain, http.StatusConflict, "send_outcome_unknown")
+	ids, _ := uncertain.json["error"].(map[string]any)["effect_ids"].([]any)
+	unknown := scalar("SELECT CAST(id AS TEXT) FROM effects WHERE operation = 'smtp_send' AND state = 'unknown'")
+	if len(ids) != 1 || strconv.FormatInt(number(t, ids[0]), 10) != unknown {
+		t.Fatalf("uncertain send effect ids %v, want [%s]", ids, unknown)
+	}
+	smtp.set("")
+	resolved := s.do(http.MethodPost, lost+"/resolve", token, map[string]any{"outcome": "sent"})
+	if resolved.status != http.StatusOK || resolved.json["draft"].(map[string]any)["status"] != "sent" {
+		t.Fatalf("resolve as sent: %d %s", resolved.status, resolved.body)
+	}
+	if got := s.do(http.MethodPost, lost+"/send", token, map[string]any{"revision": number(t, resolved.json["draft"].(map[string]any)["revision"])}); got.status != http.StatusConflict || len(smtp.sent()) != 2 {
+		t.Fatalf("send after resolving as sent: %d, %d SMTP transactions", got.status, len(smtp.sent()))
+	}
+}
+
+func TestAPIOwnerBindingRefusesAModuleOffAtBoot(t *testing.T) {
+	dir, _, f := moduleFixture(t, flagsExcept("mail", "false"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	token := localAPIToken(t, "owner-binding")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stop() })
+	s := &apiSite{t: t, base: base}
+	rule := map[string]any{"rule": map[string]any{"id": "shop", "action": "file", "dest": "Bills", "when": []any{map[string]any{"field": "from_addr", "op": "eq", "value": "a@shop.test"}}}}
+	for range 2 {
+		expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/rules", token, rule, "Idempotency-Key", "rule-1"), http.StatusConflict, "module_disabled")
+	}
+	var stored, rules int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM commands WHERE idempotency_key LIKE '%:rule-1'").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM rules").Scan(&rules); err != nil {
+		t.Fatal(err)
+	}
+	if stored != 0 || rules != 0 {
+		t.Fatalf("a refused mail command stored %d command rows and %d rules", stored, rules)
+	}
+	if got := s.do(http.MethodPut, "/api/v1/settings/calendar_account", token, map[string]any{"value": ""}, "Idempotency-Key", "core-1"); got.status != http.StatusOK {
+		t.Fatalf("core command with the mail module off: %d %s", got.status, got.body)
 	}
 }

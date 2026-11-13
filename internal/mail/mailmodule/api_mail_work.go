@@ -17,6 +17,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -103,9 +105,15 @@ func (p mailPasses) locked(ctx context.Context, fn func(context.Context, *run.Pa
 	return fn(db.WithHeld(ctx, locks), pass)
 }
 
+const busyRetryAfter = 2 * time.Second
+
 func passBusy(err error) error {
+	return busy(err, "A mail pass is already running.")
+}
+
+func busy(err error, message string) error {
 	if errors.As(err, new(*db.LockBusy)) {
-		return &application.Error{Code: application.Refused, Message: "A mail pass is already running.", Cause: err}
+		return &application.Error{Code: application.Unavailable, Reason: outcomeRefused, Message: message, Cause: err, RetryAfter: busyRetryAfter}
 	}
 	return err
 }
@@ -196,23 +204,28 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 		api.Command(d, mailapp.DescribePackageDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/packages/{package_id}/dismiss", func(ctx context.Context, in MailPackageRef) (application.Change[struct{}], error) {
 			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})
 		}),
-		api.Command(d, mailapp.DescribeRefreshLoops(), application.APIShape{Area: area, Errors: []application.Code{application.Refused}}, "POST /mail/loops/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
+		api.Command(d, mailapp.DescribeRefreshLoops(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/loops/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
 			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshLoops(ctx, struct{}{}))
 				return err
 			})
 			return out, err
 		}),
-		api.Command(d, mailapp.DescribeRefreshWatches(), application.APIShape{Area: area, Errors: []application.Code{application.Refused}}, "POST /mail/watches/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
+		api.Command(d, mailapp.DescribeRefreshWatches(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/watches/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
 			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshWatches(ctx, struct{}{}))
 				return err
 			})
 			return out, err
 		}),
-		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
-			r, err := svc().PollTrackers(ctx, struct{}{})
-			return application.Change[MailPoll]{Data: MailPoll{Poll: r.Data.Poll}, AuditID: r.AuditID}, err
+		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
+			var r application.Change[mailapp.PollTrackersResult]
+			_, err := module.Invoke(ctx, d.DB, d.Cfg, module.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+				var err error
+				r, err = svc().PollTrackers(ctx, struct{}{})
+				return scheduler.Result{}, err
+			})
+			return application.Change[MailPoll]{Data: MailPoll{Poll: r.Data.Poll}, AuditID: r.AuditID}, busy(err, "A package poll is already running.")
 		}),
 	}
 }

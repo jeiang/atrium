@@ -35,6 +35,7 @@ type APIShape struct {
 	BodyLimit    int64
 	AllowJSON    bool
 	IgnoreBody   bool
+	OptionalBody bool
 	BeforeBody   func(context.Context) error
 	ID           string
 	Uncached     bool

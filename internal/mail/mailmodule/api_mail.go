@@ -272,7 +272,7 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 		service = mailPageService(d).WithLive(l).WithApplier(applier.New(l, open, syncer))
 	}
 	const area = "mail"
-	refusable := []application.Code{application.Invalid, application.Refused, application.NotFound, application.Conflict, application.Unknown}
+	refusable := []application.Code{application.Invalid, application.Refused, application.NotFound, application.Conflict, application.Unknown, application.Unavailable}
 	return []application.Binding{
 		api.Query(d, mailapp.DescribeTriage(), application.APIShape{Area: area}, "GET /mail/triage", func(ctx context.Context, in MailTriageRequest) (application.Read[MailTriagePage], error) {
 			offset, err := mailOffset(in.Cursor)
@@ -381,7 +381,11 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 			if code == "" {
 				return done, nil
 			}
-			return done, &application.Error{Code: code, Reason: done.Data.Outcome, Message: strings.TrimSpace(done.Data.Note), EffectIDs: done.EffectIDs}
+			failure := &application.Error{Code: code, Reason: done.Data.Outcome, Message: strings.TrimSpace(done.Data.Note), EffectIDs: done.EffectIDs}
+			if code == application.Refused && len(done.EffectIDs) == 0 {
+				failure.Code, failure.RetryAfter = application.Unavailable, busyRetryAfter
+			}
+			return done, failure
 		}),
 		api.Query(d, mailapp.DescribeAccounts(), application.APIShape{Area: area}, "GET /mail/accounts", func(ctx context.Context, in MailListRequest) (application.Read[MailAccountsPage], error) {
 			r, err := svc().Accounts(ctx, struct{}{})

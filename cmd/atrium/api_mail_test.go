@@ -222,8 +222,11 @@ func TestMailPassesAPI(t *testing.T) {
 	}
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/sync", "", nil), http.StatusUnauthorized, "unauthenticated")
 	fetches, syncs := len(m.fake.Fetches), count("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.sync'")
-	busy := s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{})
-	expectAPI(t, busy, http.StatusConflict, "refused")
+	busy := s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}, "Idempotency-Key", "sync-1")
+	expectAPI(t, busy, http.StatusServiceUnavailable, "refused")
+	if busy.header.Get("Retry-After") == "" {
+		t.Fatalf("busy sync without Retry-After: %v", busy.header)
+	}
 	hooked.Lock()
 	calls := statusCalls
 	hooked.Unlock()
@@ -233,19 +236,26 @@ func TestMailPassesAPI(t *testing.T) {
 	if n := count("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.sync'"); n != syncs {
 		t.Fatalf("a busy sync was audited as a run: %d -> %d", syncs, n)
 	}
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/scans/rebalance", token, nil), http.StatusConflict, "refused")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/scans/rebalance", token, nil), http.StatusServiceUnavailable, "refused")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/loops/refresh", token, nil, "Idempotency-Key", "refresh-1"), http.StatusServiceUnavailable, "refused")
 	m.fake.SetStatusHook(nil)
 	releaseOnce.Do(func() { close(release) })
 	waitUntil(t, 60*time.Second, "the watch pass to release mail-pass", func() bool {
-		got := s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "icloud"})
-		if got.status == http.StatusConflict && got.code() == "refused" {
+		got := s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}, "Idempotency-Key", "sync-1")
+		if got.status == http.StatusServiceUnavailable && got.code() == "refused" {
 			return false
 		}
-		if data := apiData(t, got, http.StatusOK); data["outcome"] != "ok" {
-			t.Fatalf("sync: %v", data)
+		if data := apiData(t, got, http.StatusOK); data["outcome"] != "ok" || got.header.Get("Idempotent-Replayed") != "" {
+			t.Fatalf("sync retried under the busy key: %v %v", data, got.header)
 		}
 		return true
 	})
+	if refreshed := s.do(http.MethodPost, "/api/v1/mail/loops/refresh", token, nil, "Idempotency-Key", "refresh-1"); refreshed.status != http.StatusOK || refreshed.header.Get("Idempotent-Replayed") != "" {
+		t.Fatalf("refresh retried under the busy key: %d %v %s", refreshed.status, refreshed.header, refreshed.body)
+	}
+	if data := apiData(t, s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "icloud"}), http.StatusOK); data["outcome"] != "ok" {
+		t.Fatalf("sync: %v", data)
+	}
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "nope"}), http.StatusUnprocessableEntity, "invalid")
 
 	writes, fetches, searches, models := len(m.fake.Writes), len(m.fake.Fetches), len(m.fake.Searches), len(m.api.Requests())

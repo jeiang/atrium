@@ -147,7 +147,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		if err != nil {
 			return nil, err
 		}
-		op["requestBody"] = object{"required": true, "content": object{"application/json": object{"schema": schema}}}
+		op["requestBody"] = object{"required": !shape.OptionalBody, "content": object{"application/json": object{"schema": schema}}}
 	case application.BodyMultipart:
 		schema, err := w.ref(shape.Request)
 		if err != nil {

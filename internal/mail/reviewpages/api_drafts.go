@@ -57,22 +57,35 @@ type DraftsResponse struct {
 	NextCursor *string    `json:"next_cursor" api:"nullable"`
 }
 
-func draftRevision(body *int64, header string) (*int64, error) {
+func (s *service) draftRevision(ctx context.Context, id int64, body *int64, header string) (*int64, error) {
 	if header == "" {
 		return body, nil
 	}
-	raw := strings.TrimPrefix(header, "W/")
-	n, err := strconv.ParseInt(strings.Trim(raw, "\""), 10, 64)
-	if err != nil || n < 1 || (body != nil && *body != n) {
+	tag := strings.Trim(strings.TrimPrefix(header, "W/"), "\"")
+	n, err := strconv.ParseInt(tag, 10, 64)
+	if err != nil {
+		current, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: id})
+		if err != nil {
+			return nil, err
+		}
+		if application.Revision(tag) != current.Revision {
+			return nil, &application.Error{Code: application.Conflict, Reason: "stale", Message: "The draft changed since it was read."}
+		}
+		n = current.Data.Row.Revision
+	}
+	if n < 1 || (body != nil && *body != n) {
 		return nil, &application.Error{Code: application.Invalid, Message: "If-Match must match the draft revision", Fields: []application.Field{{Name: "revision", Code: "invalid", Message: "Conflicting or invalid revision"}}}
 	}
 	return &n, nil
 }
-func draftFailure(err error, reason string) error {
+func draftFailure(err error, reason string, effects []int64) error {
 	if err == nil {
 		return nil
 	}
 	e := *application.Classify(err)
+	if len(effects) > 0 {
+		e.EffectIDs = effects
+	}
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &disabled) {
 		e.Code, e.Reason = application.Conflict, "module_disabled"
@@ -123,7 +136,7 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 			return application.Read[DraftsResponse]{Revision: r.Revision, Data: out}, nil
 		}),
 		api.Command(d, mailapp.DescribeDraftUpdate(), shape(reflect.TypeFor[apiDraft]()), "PATCH /drafts/{draft_id}", func(ctx context.Context, in DraftUpdateRequest) (application.Change[apiDraft], error) {
-			rev, err := draftRevision(in.Revision, in.IfMatch)
+			rev, err := s.draftRevision(ctx, in.ID, in.Revision, in.IfMatch)
 			if err != nil {
 				return application.Change[apiDraft]{}, err
 			}
@@ -144,13 +157,13 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 				if e.Code == application.Invalid {
 					e.Reason = "invalid_draft"
 				}
-				return out, draftFailure(&e, "")
+				return out, draftFailure(&e, "", r.EffectIDs)
 			}
 			out.Data = s.currentDraft(ctx, in.ID)
 			return out, nil
 		}),
-		api.Command(d, mailapp.DescribeDraftSend(), shape(reflect.TypeFor[DraftSendResponse]()), "POST /drafts/{draft_id}/send", func(ctx context.Context, in DraftSendRequest) (application.Change[DraftSendResponse], error) {
-			rev, err := draftRevision(in.Revision, in.IfMatch)
+		api.Command(d, mailapp.DescribeDraftSend(), application.APIShape{Area: "drafts", Response: reflect.TypeFor[DraftSendResponse](), OptionalBody: true}, "POST /drafts/{draft_id}/send", func(ctx context.Context, in DraftSendRequest) (application.Change[DraftSendResponse], error) {
+			rev, err := s.draftRevision(ctx, in.ID, in.Revision, in.IfMatch)
 			if err != nil {
 				return application.Change[DraftSendResponse]{}, err
 			}
@@ -170,7 +183,7 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 				} else if current, e := s.drafts.Get(ctx, in.ID); e == nil && current != nil && current.Status == drafts.Draft && current.Revision != *rev {
 					reason = "stale"
 				}
-				return out, draftFailure(err, reason)
+				return out, draftFailure(err, reason, r.EffectIDs)
 			}
 			result := r.Data.Sent
 			refused := make([]string, len(result.Refused))
@@ -189,7 +202,7 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 				if e.Code == application.Invalid || e.Code == application.Conflict || e.Code == application.Refused {
 					reason = "not_discarded"
 				}
-				return out, draftFailure(err, reason)
+				return out, draftFailure(err, reason, nil)
 			}
 			out.Data.Draft = s.currentDraft(ctx, in.ID)
 			return out, nil
@@ -201,7 +214,7 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 			r, err := s.mail.DraftResolve(ctx, mailapp.DraftResolveInput{ID: in.ID, Outcome: in.Outcome})
 			out := application.Change[DraftResponse]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
 			if err != nil {
-				return out, draftFailure(err, "not_resolved")
+				return out, draftFailure(err, "not_resolved", r.EffectIDs)
 			}
 			out.Data.Draft = s.currentDraft(ctx, in.ID)
 			return out, nil
