@@ -243,6 +243,18 @@ CREATE TRIGGER IF NOT EXISTS usage_read_delete AFTER DELETE ON usage BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_insert AFTER INSERT ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_update AFTER UPDATE ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_delete AFTER DELETE ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
 CREATE TRIGGER IF NOT EXISTS context_ledger_read_insert AFTER INSERT ON context_ledger BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;

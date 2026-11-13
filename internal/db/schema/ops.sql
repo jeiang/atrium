@@ -37,18 +37,6 @@ CREATE TABLE IF NOT EXISTS ops_findings (
 );
 CREATE INDEX IF NOT EXISTS ops_findings_open ON ops_findings (resolved_at, created_at);
 CREATE INDEX IF NOT EXISTS ops_findings_fact ON ops_findings (fact, resolved_at);
-CREATE TRIGGER IF NOT EXISTS endpoint_probes_read_insert AFTER INSERT ON endpoint_probes BEGIN
-    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
-    ON CONFLICT(scope) DO UPDATE SET value=value+1;
-END;
-CREATE TRIGGER IF NOT EXISTS endpoint_probes_read_update AFTER UPDATE ON endpoint_probes BEGIN
-    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
-    ON CONFLICT(scope) DO UPDATE SET value=value+1;
-END;
-CREATE TRIGGER IF NOT EXISTS endpoint_probes_read_delete AFTER DELETE ON endpoint_probes BEGIN
-    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
-    ON CONFLICT(scope) DO UPDATE SET value=value+1;
-END;
 CREATE TRIGGER IF NOT EXISTS pass_run_alerts_read_insert AFTER INSERT ON pass_run_alerts BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('notify',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
