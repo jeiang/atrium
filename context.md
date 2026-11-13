@@ -415,8 +415,13 @@ behavior-parity target.
   state and prompt override, loses any v2 lease, and is dropped
   (`drop-retired-job`) when no catalog job has that name; a stored schedule
   setting then replaces the carried schedule and recomputes `next_due`.
-  `job_run_threads` and `job_resource_leases` start empty, and a source that
-  already has either table is refused. The importer prints one line per table with its
+  `job_run_threads`, `job_resource_leases` and `operation_audit` start
+  empty (`kept empty 0`), `read_revisions` is `derived`: the destination's
+  revision triggers count the imported rows per scope and no counter comes
+  from the source; a source that already has any of these tables is
+  refused, and a destination with an `operation_audit` row is refused like
+  any other populated destination. Imported `effect_resolutions` keep their
+  stored `source`. The importer prints one line per table with its
   carried, rebuilt or dropped row count, one line per setting with its
   action (carried, dropped, renamed, moved to a host key or a compiled
   constant, or reset for cutover), one line per effective source pin and per
@@ -435,6 +440,12 @@ behavior-parity target.
   action touches no mailbox and appends actor, source, outcome and the prior
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
+  A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
+  `import`. Every readable table has insert, update and delete triggers
+  that bump one counter per scope in `read_revisions` (lease, heartbeat and
+  streamed run event writes do not); the append-only
+  `operation_audit` table records application commands. Both are owned by
+  `internal/application/state`.
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,

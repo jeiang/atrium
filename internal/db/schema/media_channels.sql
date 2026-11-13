@@ -16,3 +16,39 @@ CREATE TABLE IF NOT EXISTS media_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TRIGGER IF NOT EXISTS media_channels_read_insert AFTER INSERT ON media_channels BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_channels_read_update AFTER UPDATE ON media_channels BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_channels_read_delete AFTER DELETE ON media_channels BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_seen_read_insert AFTER INSERT ON media_seen BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_seen_read_update AFTER UPDATE ON media_seen BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_seen_read_delete AFTER DELETE ON media_seen BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_state_read_insert AFTER INSERT ON media_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_state_read_update AFTER UPDATE ON media_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS media_state_read_delete AFTER DELETE ON media_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('media',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
