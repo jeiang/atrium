@@ -257,6 +257,9 @@ func (a *Agent) executeStep(dir string, s protocol.Step, undo bool) (protocol.St
 			}
 			_ = unix.Close(fd)
 			if e != nil {
+				if unix.Unlinkat(dp, leaf, unix.AT_REMOVEDIR) == nil && unix.Fsync(dp) == nil {
+					return result, false, e
+				}
 				return result, true, e
 			}
 		}

@@ -331,26 +331,44 @@ func TestMediaAgentRefusesUnsafeFilingsAndPreservesGroups(t *testing.T) {
 	if err := os.Chmod(src, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	probe := filepath.Join(a.dir, "setgid-probe")
+	if err := os.Mkdir(probe, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	setgidRefused := errors.Is(os.Chmod(probe, os.ModeSetgid|0o775), syscall.EPERM)
 	p = prepareFiling(t, a, torrentPrepare(place("downloads", "item/ep.mkv", "Group/ep.mkv")))
 	before, err := os.Stat(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	res, _ = putFiling(t, a, filingRequest("e", p))
-	if res.State != "done" {
-		t.Fatal(res)
-	}
 	after, err := os.Stat(src)
 	if err != nil || before.Mode() != after.Mode() || before.Sys().(*syscall.Stat_t).Gid != after.Sys().(*syscall.Stat_t).Gid {
 		t.Fatal("changed download permissions")
 	}
-	info, err := os.Stat(filepath.Join(a.roots["tv"], "Group"))
-	if err != nil || info.Sys().(*syscall.Stat_t).Gid != uint32(os.Getgid()) || info.Mode().Perm() != 0o775 {
-		t.Fatalf("directory permissions %v %v", info, err)
+	if setgidRefused {
+		if res.State != "failed" || res.ErrorCode != "permissions" || len(res.Steps) != 0 {
+			t.Fatalf("refused setgid directory=%+v", res)
+		}
+		if _, err := os.Lstat(filepath.Join(a.roots["tv"], "Group")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("refused setgid directory left behind: %v", err)
+		}
 	}
-	if runtime.GOOS == "linux" && info.Mode()&os.ModeSetgid == 0 {
-		t.Fatal("setgid missing")
-	}
+	t.Run("setgid group directory", func(t *testing.T) {
+		if setgidRefused {
+			t.Skip("this environment refuses setgid bits, so a setgid group directory cannot be created")
+		}
+		if res.State != "done" {
+			t.Fatal(res)
+		}
+		info, err := os.Stat(filepath.Join(a.roots["tv"], "Group"))
+		if err != nil || info.Sys().(*syscall.Stat_t).Gid != uint32(os.Getgid()) || info.Mode().Perm() != 0o775 {
+			t.Fatalf("directory permissions %v %v", info, err)
+		}
+		if runtime.GOOS == "linux" && info.Mode()&os.ModeSetgid == 0 {
+			t.Fatal("setgid missing")
+		}
+	})
 }
 func TestMediaAgentCrossDeviceFilingRefused(t *testing.T) {
 	t.Parallel()

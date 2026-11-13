@@ -580,18 +580,25 @@ func TestMediaAgentStreamsRootedFilesWithRanges(t *testing.T) {
 	if err := syscall.Mkfifo(filepath.Join(movies, "pipe.mkv"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	short, err := os.MkdirTemp("/tmp", "agent-sock-")
-	if err != nil {
-		t.Fatal(err)
+	socket := filepath.Join(movies, "socket")
+	bound := socket
+	if len(socket) >= 104 {
+		short, err := os.MkdirTemp("/tmp", "agent-sock-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = os.RemoveAll(short) }()
+		bound = filepath.Join(short, "socket")
 	}
-	defer func() { _ = os.RemoveAll(short) }()
-	sock, err := net.Listen("unix", filepath.Join(short, "socket"))
+	sock, err := net.Listen("unix", bound)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = sock.Close() }()
-	if err := os.Rename(filepath.Join(short, "socket"), filepath.Join(movies, "socket")); err != nil {
-		t.Fatal(err)
+	if bound != socket {
+		if err := os.Rename(bound, socket); err != nil {
+			t.Fatal(err)
+		}
 	}
 	const film = "/v1/files?root=movies&path=Film%20%282020%29%2FFilm.mkv"
 
