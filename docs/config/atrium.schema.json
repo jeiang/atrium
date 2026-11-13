@@ -331,7 +331,7 @@
           "type": "string"
         },
         "media_root": {
-          "description": "Ignored with a warning; use services.atrium.mediaAgent.roots.",
+          "description": "Accepted but ignored with a warning, replaced by services.atrium.mediaAgent.roots; refused once the NixOS module has services.atrium.mediaAgent.roots.",
           "type": "string"
         },
         "media_root_file": {

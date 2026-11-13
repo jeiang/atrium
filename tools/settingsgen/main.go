@@ -157,7 +157,7 @@ func schemaProperty(input hostInput) map[string]any {
 		prop["default"] = schemaDefault(input.Type, input.Default)
 	}
 	if input.Ignored != "" {
-		prop["description"] = "Ignored with a warning; use " + input.Ignored + "."
+		prop["description"] = "Accepted but ignored with a warning, replaced by " + input.Ignored + "; refused once the NixOS module has " + input.Ignored + "."
 	}
 	return prop
 }
@@ -297,7 +297,7 @@ func referenceDoc(defs []settings.Def, entries []settings.ImportEntry, byKey map
 			typ += " (" + strings.Join(input.Choices, ", ") + ")"
 		}
 		if input.Ignored != "" {
-			typ += "; ignored with a warning, use `" + input.Ignored + "`"
+			typ += "; accepted but ignored with a warning, replaced by `" + input.Ignored + "`; refused once the NixOS module has `" + input.Ignored + "`"
 		}
 		def := "none"
 		if input.Default != "" {

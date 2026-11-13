@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 func agentConnectionTOML(base, token string) string {
@@ -218,6 +219,17 @@ func TestMediaAgentConnectionTest(t *testing.T) {
 	ran = runApp(t, "connections", "test", "service/media-agent", "--json")
 	if !strings.Contains(ran.stdout, `"state": "needs_reauth"`) || strings.Contains(ran.stdout+ran.stderr, strings.Repeat("x", 48)) {
 		t.Fatalf("wrong token = %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	bare := strings.Replace(agentConnectionTOML(agent.base, wrong), "credential_files = { bearer = "+strconv.Quote(wrong)+" }\n", "", 1)
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bare.toml", bare))
+	ran = runApp(t, "connections", "test", "service/media-agent", "--json")
+	if !strings.Contains(ran.stdout, `"state": "needs_reauth"`) || !strings.Contains(ran.stdout, "bearer missing") {
+		t.Fatalf("bearer-less connection test = %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	clearModuleEnv(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bare.toml", bare))
+	if got := runSettings(t, "set", module.FlagKey(module.Media), "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "bearer missing") {
+		t.Fatalf("enabling media with a bearer-less agent connection: exit %d stderr %q", got.code, got.stderr)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

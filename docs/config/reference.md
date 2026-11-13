@@ -70,7 +70,7 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
 | `media_download_path_prefix` | string | none | `ATRIUM_MEDIA_MEDIA_DOWNLOAD_PATH_PREFIX` |
-| `media_root` | string; ignored with a warning, use `services.atrium.mediaAgent.roots` | none | `ATRIUM_MEDIA_MEDIA_ROOT` |
+| `media_root` | string; accepted but ignored with a warning, replaced by `services.atrium.mediaAgent.roots`; refused once the NixOS module has `services.atrium.mediaAgent.roots` | none | `ATRIUM_MEDIA_MEDIA_ROOT` |
 | `media_vpn_base_url` | string | none | `ATRIUM_MEDIA_MEDIA_VPN_BASE_URL` |
 
 ### web

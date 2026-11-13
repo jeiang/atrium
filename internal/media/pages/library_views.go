@@ -58,11 +58,13 @@ type MovieView struct {
 type MoviePage struct {
 	Movie MovieView `json:"movie"`
 	TTL   string    `json:"ttl"`
+	Stale string    `json:"stale"`
 }
 
 type ShowPage struct {
-	Show ShowView `json:"show"`
-	TTL  string   `json:"ttl"`
+	Show  ShowView `json:"show"`
+	TTL   string   `json:"ttl"`
+	Stale string   `json:"stale"`
 }
 
 func linkSpan(seconds int64) string {

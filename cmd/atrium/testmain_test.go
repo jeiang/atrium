@@ -115,13 +115,14 @@ config = { url = "http://qbittorrent.invalid" }
 capabilities = ["api"]
 `
 
-const defaultAgentConnection = `
-[connections."service/media-agent"]
-kind = "service/media-agent"
-label = "Media agent"
-config = { url = "http://127.0.0.1:9" }
-capabilities = ["file", "stream"]
-`
+var defaultAgentConnection = func() string {
+	dir := filepath.Join(testRoot, "host")
+	token := filepath.Join(dir, "media-agent.token")
+	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(token, []byte(strings.Repeat("t", 40)+"\n"), 0o600) != nil {
+		panic("cannot write the default media agent bearer")
+	}
+	return agentConnectionTOML("http://127.0.0.1:9", token)
+}()
 
 func hostConfigBody(webpush string) string {
 	return hostConfigBodyWith("", webpush, filepath.Join(testRoot, "host", "anthropic.key"))

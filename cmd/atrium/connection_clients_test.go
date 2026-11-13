@@ -93,7 +93,7 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	observed := func() (rows, noop, foreign int) {
 		t.Helper()
 		if err := d.Read.QueryRow(`SELECT COUNT(*), COALESCE(SUM(outcome = 'noop'), 0), COALESCE(SUM(actor <> 'service:connection-health' OR source <> 'job'), 0)
-			FROM operation_audit WHERE operation = 'connections.observe-health'`).Scan(&rows, &noop, &foreign); err != nil {
+			FROM operation_audit WHERE operation = 'connections.observe-health' AND target LIKE '%service/tmdb%'`).Scan(&rows, &noop, &foreign); err != nil {
 			t.Fatal(err)
 		}
 		return rows, noop, foreign

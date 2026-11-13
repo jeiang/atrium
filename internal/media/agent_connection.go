@@ -34,7 +34,9 @@ func testMediaAgent(ctx context.Context, lease *connections.Lease, caps []connec
 	}
 	state, reason := connections.OK, ""
 	var data json.RawMessage
-	if err != nil {
+	if _, missing := lease.Credential("bearer"); missing != nil {
+		state, reason = connections.NeedsReauth, "bearer missing"
+	} else if err != nil {
 		state, reason = connections.Failing, "unavailable"
 		var e *agentclient.Error
 		if errors.As(err, &e) && (e.Status == 401 || e.Status == 403) {

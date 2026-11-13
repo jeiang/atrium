@@ -133,8 +133,10 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 	if len(stale.Results) != 1 || stale.Results[0].Title != "Dune" {
 		t.Fatalf("a failed scan dropped catalogue entries: %+v", stale)
 	}
-	if code, body, _ := w.get(movie, false); code != http.StatusOK {
-		t.Fatalf("movie page from the stale catalogue = %d: %.300s", code, body)
+	for _, target := range []string{movie, "/apps/media/library/tv/" + libraryShow} {
+		if code, body, _ := w.get(target, false); code != http.StatusOK || !strings.Contains(body, "Showing the library as of") {
+			t.Fatalf("detail page %s from the stale catalogue = %d without the stale notice: %.300s", target, code, body)
+		}
 	}
 
 	if out := unescape(toolResult(t, "media_library_search", map[string]any{"query": "dune"})); !strings.Contains(out, `"code":"unavailable"`) {

@@ -25,7 +25,7 @@ type Module struct {
 
 func Requirements() []module.Requirement {
 	return []module.Requirement{
-		module.Connection(string(media.KindMediaAgent)),
+		module.Connection(string(media.KindMediaAgent), "bearer"),
 		module.Connection(string(media.KindQbittorrent)),
 	}
 }

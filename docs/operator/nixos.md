@@ -31,7 +31,7 @@ services.atrium = {
   enable = true;
   host = {
     core.public_url = "https://atrium.example.org";
-    media.media_root = "/var/lib/media";
+    media.media_root = "/var/lib/media"; # accepted and ignored with a warning; the media agent's roots replace it
   };
   connections."service/qbittorrent" = {
     kind = "service/qbittorrent";
@@ -89,7 +89,7 @@ The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIU
 
 | Option | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `media.enable` | bool | `false` | Lets the web and scheduler units write the media tree named by `host.media.media_root` (required) and adds `ffmpeg-headless` to their path. |
+| `media.enable` | bool | `false` | Turns on the Media section. Until the media-agent unit lands the module still asserts `host.media.media_root` and adds `ffmpeg-headless` to the units' path; atrium accepts `media_root` but ignores it with a warning; the library roots are the media agent's `roots` (`services.atrium.mediaAgent.roots`), and the key is refused once the NixOS module has that media-agent unit. |
 | `media.group` | string | `"media"` | Group that owns the media tree. The web and scheduler units write through it with umask `0002`. |
 
 ## Backup

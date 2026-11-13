@@ -73,10 +73,11 @@ type SeasonLinks struct {
 }
 
 type LibraryDetail struct {
-	Entry   media.Entry
-	Files   []FileLink
-	Seasons []SeasonLinks
-	LinkTTL int64
+	Entry     media.Entry
+	Files     []FileLink
+	Seasons   []SeasonLinks
+	LinkTTL   int64
+	Catalogue CatalogueStatus
 }
 
 type ArtInput struct {
@@ -206,7 +207,7 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 		}
 		return application.Read[LibraryDetail]{}, classify(err)
 	}
-	out := LibraryDetail{LinkTTL: set.LinkTTL}
+	out := LibraryDetail{LinkTTL: set.LinkTTL, Catalogue: catalogueStatus(snap)}
 	var content any
 	switch in.Kind {
 	case media.KindMovie:
@@ -246,7 +247,7 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 	default:
 		return application.Read[LibraryDetail]{}, notFound("not found")
 	}
-	rev, err := s.revision(ctx, "media.library-detail", in, []any{content, out.LinkTTL, snap.Generation})
+	rev, err := s.revision(ctx, "media.library-detail", in, []any{content, out.LinkTTL, snap.Generation, out.Catalogue.State, out.Catalogue.Problem})
 	if err != nil {
 		return application.Read[LibraryDetail]{}, err
 	}

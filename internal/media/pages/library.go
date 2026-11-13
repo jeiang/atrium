@@ -42,10 +42,15 @@ func (s *service) libraryIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := LibraryPage{Error: read.Data.Error, Catalogue: read.Data.Catalogue.State, Movies: libEntries(read.Data.Movies), Shows: libEntries(read.Data.Shows)}
-	if read.Data.Catalogue.State == "stale" {
-		page.Stale = read.Data.Catalogue.Problem + " Showing the library as of " + read.Data.Catalogue.ObservedAt.Local().Format("2006-01-02 15:04") + "."
-	}
+	page.Stale = staleNotice(read.Data.Catalogue)
 	s.libRender(w, r, "media_library.gohtml", page)
+}
+
+func staleNotice(c mediaapp.CatalogueStatus) string {
+	if c.State != "stale" {
+		return ""
+	}
+	return c.Problem + " Showing the library as of " + c.ObservedAt.Local().Format("2006-01-02 15:04") + "."
 }
 
 func (s *service) libDetail(w http.ResponseWriter, r *http.Request, kind string) (mediaapp.LibraryDetail, bool) {
@@ -67,7 +72,7 @@ func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
 		files[i] = FileLink{Rel: f.Rel, Name: f.Name, Size: f.Size, Public: f.Public, VPN: f.VPN}
 	}
 	view := MovieView{Dir: found.Entry.Dir, Title: found.Entry.Title, Year: found.Entry.Year, Files: files}
-	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(found.LinkTTL)})
+	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(found.LinkTTL), Stale: staleNotice(found.Catalogue)})
 }
 
 func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
@@ -87,5 +92,5 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 		seasons[i] = SeasonView{Number: season.Number, Dir: season.Dir, Episodes: episodes}
 	}
 	view := ShowView{Dir: found.Entry.Dir, Title: found.Entry.Title, Year: found.Entry.Year, Seasons: seasons}
-	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(found.LinkTTL)})
+	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(found.LinkTTL), Stale: staleNotice(found.Catalogue)})
 }
