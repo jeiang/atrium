@@ -43,7 +43,5 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/history/{start}/{n}", Uses: uses(asstapp.ThreadHistoryName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/events", Uses: uses(asstapp.RunEventsName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/runs/{run_id}", Uses: uses(asstapp.RunDetailName, asstapp.ThreadTranscriptName)},
-
-			{Kind: application.API, Target: "GET /threads/{thread_id}/runs/{run_id}/events", Uses: uses(asstapp.RunEventsName)},
 		}...)
 }
