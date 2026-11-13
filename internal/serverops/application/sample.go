@@ -13,9 +13,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	"github.com/jeiang/atrium/internal/serverops"
 )
 

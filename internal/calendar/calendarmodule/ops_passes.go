@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/web"
 )
 
 func CandidatesJob(deps jobworker.Dependencies) scheduler.Definition {
@@ -54,7 +55,7 @@ func calendarService(svc *service.Service, now func() float64, claim *scheduler.
 	})
 }
 
-func calendarCLI(env config.Env, tools registry.Source) calendarcmd.Open {
+func (m Module) calendarCLI(env config.Env, tools registry.Source) calendarcmd.Open {
 	return func(ctx context.Context) (*calapp.Service, config.Config, func(), error) {
 		cfg, err := config.Load(env)
 		if err != nil {
@@ -81,6 +82,11 @@ func calendarCLI(env config.Env, tools registry.Source) calendarcmd.Open {
 			return fail(err)
 		}
 		svc := service.New(ctx, d, cfg, env, r)
-		return calendarService(svc, assistant.Now, nil), cfg, func() { svc.Close(); _ = d.Close() }, nil
+		cliModule := m
+		cliModule.Jobs.Service = func(context.Context) (*service.Service, error) { return svc, nil }
+		app := calendarService(svc, assistant.Now, nil).WithDraftPass(func(ctx context.Context, in calapp.DraftCandidatesInput) (application.Change[candidates.Result], error) {
+			return cliModule.draftNow(ctx, &web.Deps{DB: d, Cfg: cfg, Env: env}, in)
+		})
+		return app, cfg, func() { svc.Close(); _ = d.Close() }, nil
 	}
 }

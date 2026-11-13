@@ -8,8 +8,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
@@ -55,10 +53,10 @@ func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, threadID, ru
 	ctx := r.Context()
 	read, err := p.assistant().RunEvents(ctx, asstapp.RunInput{ThreadID: threadID, RunID: runID, After: after})
 	switch {
-	case errors.Is(err, progress.ErrExpired):
+	case errors.Is(err, asstapp.ErrStreamExpired):
 		refuse(http.StatusGone, "stream_expired", "The stream no longer holds events after this cursor.", runID)
 		return
-	case errors.Is(err, progress.ErrFuture):
+	case errors.Is(err, asstapp.ErrStreamFuture):
 		refuse(http.StatusBadRequest, "bad_request", "The cursor is not in this stream.", runID)
 		return
 	case errorIs(err, application.NotFound):
@@ -71,21 +69,17 @@ func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, threadID, ru
 		return
 	}
 	key, recheck := web.StreamCredential(ctx)
-	release, err := progress.Acquire(key)
+	release, err := asstapp.AcquireStream(key)
 	if err != nil {
 		refuse(http.StatusTooManyRequests, "rate_limited", "Too many open streams.", runID)
 		return
 	}
 	defer release()
-	live := progress.Live{Stopping: p.deps.Stopping, Check: recheck, State: func(ctx context.Context) (string, bool, error) {
-		run, err := journal.GetRun(ctx, p.deps.DB.Read, runID)
-		if err != nil || run == nil {
-			return "", false, err
-		}
-		return run.State, run.State == journal.Running, nil
+	live := asstapp.StreamLive{Stopping: p.deps.Stopping, Check: recheck, State: func(ctx context.Context) (string, bool, error) {
+		return p.assistant().RunState(ctx, runID)
 	}}
-	stream := progress.Stream{RunID: runID, After: after}
-	if err := progress.Serve(ctx, w, p.deps.DB.Read, stream, live); err != nil && ctx.Err() == nil {
+	stream := asstapp.StreamSpec{RunID: runID, After: after}
+	if err := p.assistant().ServeStream(ctx, w, stream, live); err != nil && ctx.Err() == nil {
 		log.Error("event stream failed", logx.RunID, runID, logx.Err, err)
 	}
 }

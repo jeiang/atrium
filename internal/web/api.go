@@ -15,8 +15,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/auth/bearer"
-	"github.com/jeiang/atrium/internal/auth/oidc"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
 )
 
@@ -232,14 +231,14 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	tok, err := g.bearers.Authenticate(r.Context(), token)
 	switch {
 	case err == nil:
-	case errors.Is(err, oidc.ErrAPIOff):
+	case errors.Is(err, authapp.ErrAPIOff):
 		APIError(w, http.StatusNotFound, "api_unavailable", "The API is not configured.")
 		return
-	case errors.Is(err, bearer.ErrInvalid), errors.Is(err, bearer.ErrRevoked), errors.Is(err, bearer.ErrExpired), errors.Is(err, oidc.ErrToken):
+	case errors.Is(err, authapp.ErrInvalid), errors.Is(err, authapp.ErrRevoked), errors.Is(err, authapp.ErrExpired), errors.Is(err, authapp.ErrToken):
 		h.Set("WWW-Authenticate", realm+`, error="invalid_token"`)
 		APIError(w, http.StatusUnauthorized, "invalid_token", "The access token was refused.")
 		return
-	case errors.Is(err, oidc.ErrDenied):
+	case errors.Is(err, authapp.ErrDenied):
 		APIError(w, http.StatusForbidden, "forbidden", "This account has no access.")
 		return
 	default:

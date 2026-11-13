@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	"github.com/jeiang/atrium/internal/tool"
 )
 

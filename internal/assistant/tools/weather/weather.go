@@ -7,7 +7,6 @@ import (
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/weather"
 )
 
 var inputSchema = json.RawMessage(`{"type":"object","properties":{"place":{"type":"string"},"days":{"type":"integer"},"hours":{"type":"integer"}},"additionalProperties":false}`)
@@ -44,11 +43,11 @@ func handle(svc Service) tool.Handler {
 		if err != nil {
 			return nil, err
 		}
-		days, err := tool.BoundedInt(args, "days", weather.TuningWeatherForecastDays, 16, 1)
+		days, err := tool.BoundedInt(args, "days", asstapp.WeatherForecastDays, 16, 1)
 		if err != nil {
 			return nil, err
 		}
-		hours, err := tool.BoundedInt(args, "hours", weather.TuningWeatherHourlyHours, 48, 1)
+		hours, err := tool.BoundedInt(args, "hours", asstapp.WeatherHourlyHours, 48, 1)
 		if err != nil {
 			return nil, err
 		}

@@ -298,6 +298,10 @@ behavior-parity target.
   `operation_audit` row (`assistant.project-file.upload|delete`,
   `assistant.file.write` naming its effect); a project upload over the body
   cap is refused with 422 before the project is looked up.
+  Saving the chat defaults on `/settings/assistant` runs
+  `assistant.defaults-set`: the stored settings are unchanged, and it writes
+  one `operation_audit` row (`invalid` when the model, effort or context limit
+  is refused, still answered 422 with the same message).
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
@@ -577,7 +581,9 @@ behavior-parity target.
   candidates` and its job) run as `calendar.sync` and
   `calendar.draft-candidates`, one `operation_audit` row per pass (`noop`
   for an empty candidate queue; a sync that is not configured or changed
-  no file writes none); the drafting run starts through
+  no file writes none). The CLI candidate command takes the same job claim
+  as the API and scheduled pass and refuses work while paused or when mail
+  or the assistant is off; the drafting run starts through
   `assistant.thread.start`, so a missing key or exhausted budget is refused
   before a thread exists. Nightly dreaming, the daily digest and every
   scheduled prompt run (weekly review and cron jobs) run as

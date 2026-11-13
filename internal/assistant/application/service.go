@@ -15,21 +15,26 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 type Service struct {
-	db            *db.DB
-	state         *state.Store
-	now           func() float64
-	env           config.Env
-	runs          func() *service.Service
-	filesDir      string
-	ledger        *ledger.Store
-	jobs          []scheduler.Definition
-	resolveClient func(context.Context) (*anthropic.Client, error)
-	inference     *inference.Service
-	tools         registry.Source
+	db               *db.DB
+	state            *state.Store
+	now              func() float64
+	env              config.Env
+	runs             func() *service.Service
+	filesDir         string
+	ledger           *ledger.Store
+	jobs             []scheduler.Definition
+	resolveClient    func(context.Context) (*anthropic.Client, error)
+	inference        *inference.Service
+	tools            registry.Source
+	proposalBuilders map[string]*proposals.Builder
+	proposalContext  *tool.Context
+	proposalKinds    []string
 }
 
 func New(d *db.DB, env config.Env, now func() float64) *Service {

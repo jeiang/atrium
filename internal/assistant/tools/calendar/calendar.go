@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/assistant/approval"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
@@ -193,7 +193,7 @@ func baseTools() []tool.Tool {
 			Channel:     tool.ChannelOwn,
 			Contexts:    tool.Kinds{tool.Chat},
 		},
-		approval.Gate(tool.Tool{
+		asstapp.ApprovalGate(tool.Tool{
 			Name:        "calendar_delete",
 			Description: "Ask the operator to approve deleting an event that atrium created earlier (by its uid); nothing is deleted until they approve the card. Other events cannot be deleted.",
 			InputSchema: schema(`"uid":{"type":"string"}`, `["uid"]`),

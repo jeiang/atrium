@@ -16,8 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 
 	authapp "github.com/jeiang/atrium/internal/auth/application"
-	"github.com/jeiang/atrium/internal/auth/bearer"
-	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -71,8 +69,8 @@ type Guard struct {
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
 	apiShape func(*http.Request) *application.APIShape
-	sessions *oidc.Service
-	bearers  *bearer.Service
+	sessions *authapp.Sessions
+	bearers  *authapp.Service
 	errPage  ErrorPage
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access

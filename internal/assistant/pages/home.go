@@ -8,7 +8,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -27,7 +26,7 @@ func (p *pages) agenda(w http.ResponseWriter, r *http.Request) {
 }
 
 type paletteData struct {
-	Threads []threads.Listed `json:"threads"`
+	Threads []asstapp.Listed `json:"threads"`
 	Ref     bool             `json:"ref"`
 }
 
@@ -41,7 +40,7 @@ func (p *pages) palette(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	q := strings.TrimSpace(web.QueryValue(query, "q"))
 	ref, _ := strconv.ParseInt(web.QueryValue(query, "ref"), 10, 64)
-	found := []threads.Listed{}
+	found := []asstapp.Listed{}
 	read, err := p.assistant().ThreadList(r.Context(), asstapp.ThreadListInput{Q: q, Limit: paletteThreads + 1, Strict: true})
 	if err == nil {
 		found = read.Data.Items
@@ -49,7 +48,7 @@ func (p *pages) palette(w http.ResponseWriter, r *http.Request) {
 		check(err)
 	}
 	if ref != 0 {
-		found = slices.DeleteFunc(found, func(t threads.Listed) bool { return t.ID == ref })
+		found = slices.DeleteFunc(found, func(t asstapp.Listed) bool { return t.ID == ref })
 	}
 	if len(found) > paletteThreads {
 		found = found[:paletteThreads]

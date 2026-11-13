@@ -26,12 +26,13 @@ const (
 )
 
 type Service struct {
-	db       *db.DB
-	env      config.Env
-	ledger   *ledger.Store
-	now      func() float64
-	state    *state.Store
-	draftRun candidates.Run
+	db        *db.DB
+	env       config.Env
+	ledger    *ledger.Store
+	now       func() float64
+	state     *state.Store
+	draftRun  candidates.Run
+	draftPass func(context.Context, DraftCandidatesInput) (application.Change[candidates.Result], error)
 }
 
 func New(d *db.DB, env config.Env, l *ledger.Store, now func() float64) *Service {

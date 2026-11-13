@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -204,7 +206,11 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 		if err != nil {
 			return nil, err
 		}
-		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Home: home, Bindings: bindings, OnReady: start, Drain: site.Drain, Commands: site.Commands})
+		var account *authapp.Service
+		if site.DB != nil {
+			account = authapp.New(site.DB, sessions, bearer.New(site.DB, sessions))
+		}
+		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Account: account, Home: home, Bindings: bindings, OnReady: start, Drain: site.Drain, Commands: site.Commands})
 		if err != nil {
 			return nil, err
 		}

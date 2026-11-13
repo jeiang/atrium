@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
@@ -10,10 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
-	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -30,25 +26,13 @@ type AssistantData struct {
 }
 
 type PermissionRow struct {
-	Label string               `json:"label"`
-	Cells []settings.FieldView `json:"cells"`
-}
-
-func permissionFields(reg *settings.Registry) []settings.Field {
-	out := make([]settings.Field, 0, len(registry.PermissionChannelLabels)*len(registry.PermissionSituationLabels))
-	for s := range registry.PermissionSituationLabels {
-		for c := range registry.PermissionChannelLabels {
-			key := registry.PermissionKey(c, s)
-			def, _ := reg.Lookup(key)
-			out = append(out, settings.Field{Key: key, Label: registry.PermissionChannelLabels[c], Choices: def.Choices})
-		}
-	}
-	return out
+	Label string                  `json:"label"`
+	Cells []settingsapp.FieldView `json:"cells"`
 }
 
 func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	fields := permissionFields(settings.From(r.Context()))
+	fields := asstapp.PermissionFields(r.Context())
 	values := make(map[string]string, len(fields))
 	for _, f := range fields {
 		if value, ok := web.Value(form, f.Key); ok {
@@ -62,7 +46,7 @@ func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 			changes = append(changes, settingsapp.Value{Key: f.Key, Value: value, Unset: value == ""})
 		}
 	}
-	if _, err := settingsapp.Web(p.deps.DB).Set(detached(r), settingsapp.SetInput{Values: changes}); err != nil {
+	if _, err := p.settingsSvc().Set(detached(r), settingsapp.SetInput{Values: changes}); err != nil {
 		failure := application.Classify(err)
 		web.Fail(w, r, failure, func(status int) {
 			message := web.Message(failure)
@@ -93,7 +77,7 @@ func toasted(toast *tpl.Toast) func(*tpl.Frame) {
 }
 
 func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, data AssistantData, mutate func(*tpl.Frame)) {
-	read, err := settingsapp.Web(p.deps.DB).Read(r.Context(), settingsapp.ReadInput{Fields: permissionFields(settings.From(r.Context()))})
+	read, err := p.settingsSvc().Read(r.Context(), settingsapp.ReadInput{Fields: asstapp.PermissionFields(r.Context())})
 	check(err)
 	views := read.Data.Fields
 	channels := len(registry.PermissionChannelLabels)
@@ -118,9 +102,8 @@ func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	err := threads.SetDefaults(audit.With(detached(r), "operator", audit.UI), p.deps.DB, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
-	var refused threads.OptionError
-	if errors.As(err, &refused) {
+	_, err := p.assistant().DefaultsSet(asstapp.OperatorUI(detached(r)), asstapp.DefaultsSetInput{Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: web.FormString(form, "context_limit", "")})
+	if err != nil && application.Classify(err).Code == application.Invalid {
 		p.assistantPage(w, r, http.StatusUnprocessableEntity, AssistantData{Error: err.Error()}, toasted(notice("error", "Not saved", err.Error())))
 		return
 	}

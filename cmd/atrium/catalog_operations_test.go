@@ -11,14 +11,17 @@ import (
 )
 
 type catalogOperationRow struct {
-	Name      string   `json:"name"`
-	Area      string   `json:"area"`
-	Authority []string `json:"authority"`
-	Bindings  []struct {
-		Kind   string `json:"kind"`
-		Target string `json:"target"`
-	} `json:"bindings"`
-	APIRoutes []string `json:"api_routes"`
+	Name      string                    `json:"name"`
+	Area      string                    `json:"area"`
+	Authority []string                  `json:"authority"`
+	Bindings  []catalogOperationBinding `json:"bindings"`
+	APIRoutes []string                  `json:"api_routes"`
+}
+
+type catalogOperationBinding struct {
+	Kind      string   `json:"kind"`
+	Target    string   `json:"target"`
+	Delegates []string `json:"delegates"`
 }
 
 type catalogOperationsReport struct {
@@ -28,6 +31,12 @@ type catalogOperationsReport struct {
 		Kind   string `json:"kind"`
 		Target string `json:"target"`
 	} `json:"unbound"`
+	ProtocolOnly []struct {
+		Module   string `json:"module"`
+		Listener string `json:"listener"`
+		Target   string `json:"target"`
+		Reason   string `json:"reason"`
+	} `json:"protocol_only"`
 }
 
 func runCatalogOperations(t *testing.T, args ...string) (catalogOperationsReport, int) {
@@ -72,16 +81,52 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 	if !ok {
 		t.Fatalf("auth.identity missing from %+v", all.Operations)
 	}
-	if !slices.ContainsFunc(identity.Bindings, func(b struct {
-		Kind   string `json:"kind"`
-		Target string `json:"target"`
-	}) bool {
+	if !slices.ContainsFunc(identity.Bindings, func(b catalogOperationBinding) bool {
 		return b.Kind == "api" && b.Target == "GET /me"
 	}) {
 		t.Fatalf("auth.identity bindings = %+v, want api GET /me", identity.Bindings)
 	}
 	if identity.Area != "settings" {
 		t.Fatalf("auth.identity area = %q, want settings", identity.Area)
+	}
+	setting, ok := hasOperation(all.Operations, "settings.set")
+	if !ok {
+		t.Fatal("settings.set missing")
+	}
+	if !slices.ContainsFunc(setting.Bindings, func(b catalogOperationBinding) bool {
+		return b.Kind == "html" && b.Target == "POST /settings/permissions" && slices.Contains(b.Delegates, "settings.set")
+	}) {
+		t.Fatal("missing explicit settings delegation for POST /settings/permissions")
+	}
+	if slices.ContainsFunc(setting.Bindings, func(b catalogOperationBinding) bool {
+		return b.Target == "POST /settings/assistant"
+	}) {
+		t.Fatal("POST /settings/assistant claims settings.set")
+	}
+	defaults, ok := hasOperation(all.Operations, "assistant.defaults-set")
+	if !ok || !slices.ContainsFunc(defaults.Bindings, func(b catalogOperationBinding) bool {
+		return b.Kind == "html" && b.Target == "POST /settings/assistant"
+	}) {
+		t.Fatalf("assistant.defaults-set bindings = %+v, want html POST /settings/assistant", defaults.Bindings)
+	}
+	for _, name := range []string{"connections.oauth-start", "connections.oauth-complete"} {
+		op, ok := hasOperation(all.Operations, name)
+		if !ok || !slices.ContainsFunc(op.Bindings, func(b catalogOperationBinding) bool {
+			return b.Kind == "cli" && b.Target == "calendar google-auth" && slices.Contains(b.Delegates, name)
+		}) {
+			t.Fatalf("missing explicit calendar OAuth delegation for %s", name)
+		}
+	}
+	recovery, metrics := false, false
+	for _, binding := range all.ProtocolOnly {
+		if binding.Reason == "" {
+			t.Fatalf("protocol-only binding without a reason: %+v", binding)
+		}
+		recovery = recovery || (binding.Module == "core" && binding.Target == "recovery" && binding.Reason == "lifecycle")
+		metrics = metrics || (binding.Listener == "ops" && binding.Target == "GET /metrics" && binding.Reason == "transport")
+	}
+	if !recovery || !metrics {
+		t.Fatalf("protocol lifecycle/ops inventory incomplete: %+v", all.ProtocolOnly)
 	}
 
 	missing, code := runCatalogOperations(t, "--json", "--missing-api")
@@ -115,18 +160,10 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("catalog operations --unbound exited %d", code)
 	}
-	for _, u := range unbound.Unbound {
-		if u.Kind == "api" && u.Target == "GET /me" {
-			t.Fatal("--unbound lists api GET /me, which auth.identity binds")
-		}
+	if len(unbound.Unbound) != 0 {
+		t.Fatalf("unbound adapters: %+v", unbound.Unbound)
 	}
-	if !slices.ContainsFunc(unbound.Unbound, func(u struct {
-		Module string `json:"module"`
-		Kind   string `json:"kind"`
-		Target string `json:"target"`
-	}) bool {
-		return u.Kind == "cli" && u.Target == "catalog operations"
-	}) {
-		t.Fatalf("--unbound does not list the unbound catalog operations command: %+v", unbound.Unbound)
+	if len(missing.Operations) == 0 {
+		t.Fatal("missing API report unexpectedly empty before the mail API cutover")
 	}
 }

@@ -3,11 +3,12 @@ package grafanamodule
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
@@ -44,7 +45,7 @@ func (m Module) Declare(module.Context) module.Declaration {
 		Settings:    serverops.Settings(),
 		Host:        serverops.HostSettingDefs(),
 		Requires:    Requirements(),
-		Jobs:        []scheduler.Definition{serverops.SamplerJob(m.Jobs, sample)},
+		Jobs:        []scheduler.Definition{samplerJob(m.Jobs, sample)},
 		Tools:       ToolDefinitions(),
 		Connections: grafanatools.Connections(),
 		Operations:  operations,
@@ -66,5 +67,20 @@ func opsOperations() ([]application.Definition, []application.Binding) {
 		{Kind: application.Tool, Target: "grafana_search_dashboards", Uses: uses(opsapp.DashboardSearchName)},
 		{Kind: application.Tool, Target: "atrium_self_diagnose", Uses: uses(opsapp.SelfDiagnoseName)},
 		{Kind: application.Job, Target: module.Grafana + "/" + grafanatools.JobSampler, Uses: uses(opsapp.SampleName)},
+	}
+}
+
+func samplerJob(deps jobworker.Dependencies, sample func(context.Context, jobworker.Env) error) scheduler.Definition {
+	return scheduler.Definition{
+		Module: module.Grafana, Key: module.Grafana + "/" + grafanatools.JobSampler, Name: grafanatools.JobSampler, Kind: scheduler.JobBuiltin,
+		Prompt:   "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).",
+		Schedule: "*/15 * * * *", ScheduleSetting: grafanatools.KeyScheduleSampler, Persistent: true, Timeout: 5 * time.Minute,
+		Spend: scheduler.ModelFree, Needs: []string{module.Grafana, module.Assistant},
+		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+			if err := sample(ctx, e); err != nil {
+				return jobworker.Result{}, err
+			}
+			return jobworker.Result{}, serverops.Supervise(ctx, e)
+		}),
 	}
 }

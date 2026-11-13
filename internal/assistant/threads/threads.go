@@ -227,32 +227,30 @@ func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	return out, nil
 }
 
-func SetDefaults(ctx context.Context, d *db.DB, model, effort string, contextLimit any) error {
+func CleanDefaults(ctx context.Context, q db.Querier, model, effort string, contextLimit any) (Options, error) {
 	chosen := model
 	if chosen == "" {
-		current, err := Defaults(ctx, d.Read)
+		current, err := Defaults(ctx, q)
 		if err != nil {
-			return err
+			return Options{}, err
 		}
 		chosen = current.Model
 	}
 	limit, err := CleanContextLimit(contextLimit)
 	if err != nil {
+		return Options{}, err
+	}
+	return (Options{Model: chosen, Effort: effort, ContextLimit: limit}).Validate()
+}
+
+func WriteDefaults(ctx context.Context, tx *sql.Tx, o Options) error {
+	if err := setPinSafe(ctx, tx, assistant.KeyDefaultModel, o.Model); err != nil {
 		return err
 	}
-	o, err := (Options{Model: chosen, Effort: effort, ContextLimit: limit}).Validate()
-	if err != nil {
+	if err := setPinSafe(ctx, tx, assistant.KeyDefaultEffort, o.Effort); err != nil {
 		return err
 	}
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := setPinSafe(ctx, tx, assistant.KeyDefaultModel, o.Model); err != nil {
-			return err
-		}
-		if err := setPinSafe(ctx, tx, assistant.KeyDefaultEffort, o.Effort); err != nil {
-			return err
-		}
-		return setPinSafe(ctx, tx, assistant.KeyDefaultContextLimit, strconv.FormatInt(o.ContextLimit, 10))
-	})
+	return setPinSafe(ctx, tx, assistant.KeyDefaultContextLimit, strconv.FormatInt(o.ContextLimit, 10))
 }
 
 func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {

@@ -11,8 +11,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 )
 
 type dsQuery struct {

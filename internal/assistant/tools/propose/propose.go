@@ -5,19 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/db"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 const Name = "propose"
 
-func definition(kinds []proposals.Definition) tool.Tool {
-	builders := make(map[string]*proposals.Builder, len(kinds))
+func definition(kinds []asstapp.ProposalDefinition) tool.Tool {
+	builders := make(map[string]*asstapp.ProposalBuilder, len(kinds))
 	names := make([]string, 0, len(kinds))
 	var parts []string
 	for _, d := range kinds {
@@ -39,35 +37,23 @@ func definition(kinds []proposals.Definition) tool.Tool {
 			if err != nil {
 				return nil, err
 			}
-			shown := "unknown"
-			if ok {
-				shown = strconv.Quote(kind)
-			}
-			builder := builders[kind]
-			if builder == nil || builder.Build == nil {
-				return nil, tool.Error("unknown proposal kind " + shown + "; allowed: " + strings.Join(names, ", "))
-			}
 			payload, _ := args.Get("payload")
-			dict, ok := payload.(map[string]any)
-			if !ok {
-				return nil, tool.Error("payload must be an object")
-			}
-			id, err := builder.Build(ctx, tc, dict)
+			out, err := asstapp.New(tc.DB, tc.Env, tc.Now).WithProposalBuilders(tc, builders, names).Propose(ctx, asstapp.ProposeInput{Kind: kind, Present: ok, Payload: payload})
 			if err != nil {
 				return nil, err
 			}
-			if id == nil {
-				return map[string]any{"proposal_id": nil, "note": "an identical proposal already exists"}, nil
+			if out.Data.ProposalID == nil {
+				return map[string]any{"proposal_id": nil, "note": out.Data.Note}, nil
 			}
-			return map[string]any{"proposal_id": *id, "status": "pending", "note": "the operator approves or dismisses the card"}, nil
+			return map[string]any{"proposal_id": *out.Data.ProposalID, "status": out.Data.Status, "note": out.Data.Note}, nil
 		},
 		Effect: tool.Propose, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron},
 	}
 }
 
-func Definition(kinds []proposals.Definition) module.ToolDefinition {
-	return module.ToolDefinition{Tool: definition(kinds), Bind: func(ctx context.Context, _ db.Querier, _ tool.Tool) (tool.Tool, bool, error) {
-		var enabled []proposals.Definition
+func Definition(kinds []asstapp.ProposalDefinition) module.ToolDefinition {
+	return module.ToolDefinition{Tool: definition(kinds), Bind: func(ctx context.Context, _ asstapp.Querier, _ tool.Tool) (tool.Tool, bool, error) {
+		var enabled []asstapp.ProposalDefinition
 		for _, d := range kinds {
 			if module.IsEnabled(ctx, d.Kind.Module) {
 				enabled = append(enabled, d)

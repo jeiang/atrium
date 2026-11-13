@@ -152,4 +152,8 @@ func TestCatalogProposeHidesDisabledMailTriage(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'mail_triage'").Scan(&n); err != nil || n != 0 {
 		t.Fatalf("mail triage proposals = %d: %v", n, err)
 	}
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'review.propose' AND outcome = 'invalid' AND source = 'tool' AND details_json = '{}'").Scan(&audits); err != nil || audits != 1 {
+		t.Fatalf("proposal refusal audits = %d: %v", audits, err)
+	}
 }

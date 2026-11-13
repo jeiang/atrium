@@ -111,8 +111,8 @@ func TestWebSearchIsRegisteredOnlyWithAssistant(t *testing.T) {
 		t.Fatalf("tool_web_search_enabled with assistant on: exit %d stderr %q", got.code, got.stderr)
 	}
 	moduleFixture(t, flagsExcept(module.Assistant, "false"))
-	if ran := runApp(t, "calendar", "candidates"); ran.code != cli.ExitOK {
-		t.Fatalf("calendar candidates with assistant off: %d %s", ran.code, ran.stderr)
+	if ran := runApp(t, "calendar", "candidates"); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "assistant module, which is off") {
+		t.Fatalf("calendar candidates with assistant off: %d %s, want the job's module refusal", ran.code, ran.stderr)
 	}
 	if got := runSettings(t, "get", "tool_calendar_list_enabled"); got.code != cli.ExitOK {
 		t.Fatalf("tool_calendar_list_enabled with assistant off: exit %d stderr %q", got.code, got.stderr)

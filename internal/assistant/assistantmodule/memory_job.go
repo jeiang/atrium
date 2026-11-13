@@ -1,4 +1,4 @@
-package memorycmd
+package assistantmodule
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/scheduler"
 )
 
-func Job(deps jobworker.Dependencies) scheduler.Definition {
+func memoryWorkJob(deps jobworker.Dependencies) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Assistant, Key: module.Assistant + "/" + assistant.MemoryWorkName, Name: assistant.MemoryWorkName,
 		Kind: scheduler.JobBuiltin, Prompt: "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).",

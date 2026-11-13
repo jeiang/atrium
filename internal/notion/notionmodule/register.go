@@ -2,6 +2,7 @@ package notionmodule
 
 import (
 	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -47,7 +48,7 @@ func (m Module) Declare(module.Context) module.Declaration {
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}, {Module: func(_ chi.Router, d *web.Deps) { m.wikiRoutes(d) }}},
 		Groups:      SettingGroups(),
-		Commands:    []*cli.Command{notion.Command(notion.Options{Env: env, Search: search, Sync: func(ctx context.Context, d *db.DB, dir string) (any, error) { return sync(ctx, d, dir, env) }})},
+		Commands:    []*cli.Command{notion.Command(notion.Options{Open: openSession(env)})},
 		Connections: notion.Connections(),
 		Operations:  operations,
 		Bindings:    bindings,
@@ -69,6 +70,31 @@ func sync(ctx context.Context, d *db.DB, lockDir string, env config.Env) (any, e
 		return err
 	})
 	return change.Data, err
+}
+
+func openSession(env config.Env) notion.Open {
+	return func(ctx context.Context) (notion.Session, func(), error) {
+		cfg, err := config.Load(env)
+		if err != nil {
+			return notion.Session{}, nil, err
+		}
+		d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
+		if err != nil {
+			return notion.Session{}, nil, err
+		}
+		if err := config.Boot(ctx, env, d, cfg); err != nil {
+			_ = d.Close()
+			return notion.Session{}, nil, err
+		}
+		return notion.Session{
+			Search: func(ctx context.Context, query string, private bool, limit int) (notion.Result, error) {
+				return search(ctx, d, query, private, limit)
+			},
+			Sync: func(ctx context.Context) (any, error) {
+				return sync(ctx, d, filepath.Dir(cfg.DBPath), env)
+			},
+		}, func() { _ = d.Close() }, nil
+	}
 }
 
 func syncJob(deps jobworker.Dependencies) scheduler.Definition {

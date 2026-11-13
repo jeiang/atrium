@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/jeiang/atrium/internal/serverops"
 	opsapp "github.com/jeiang/atrium/internal/serverops/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -183,7 +182,7 @@ func Tools(svc Service) []tool.Tool {
 				"Severity warning or critical surfaces in the operator's attention view; the sampler resolves the finding when the fact is back to normal.",
 			InputSchema: json.RawMessage(findingSchema),
 			Handler:     finding(svc),
-			Effect:      tool.WriteUndo, Undo: serverops.FindingUndoOp,
+			Effect:      tool.WriteUndo, Undo: opsapp.FindingUndoOp,
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Worker},
