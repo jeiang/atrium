@@ -79,7 +79,8 @@ func connect(path string, opts []Option) (*DB, error) {
 	if strings.ContainsAny(path, "?#") {
 		return nil, fmt.Errorf("db: path %q contains '?' or '#'", path)
 	}
-	key := applyOptions(opts).key
+	o := applyOptions(opts)
+	key := o.key
 	writeDSN, err := dsn(path, true, key)
 	if err != nil {
 		return nil, err

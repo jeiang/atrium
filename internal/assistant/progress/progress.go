@@ -35,7 +35,10 @@ const (
 	PreviewChars = 240
 )
 
-var ErrStopped = errors.New("stopped by the operator")
+var (
+	ErrStopped  = errors.New("stopped by the operator")
+	ErrShutdown = errors.New("serve is shutting down; the run resumes on restart")
+)
 
 var dataOpts = jsonx.Opts{NoEnsureASCII: true}
 
@@ -106,10 +109,11 @@ type Writer struct {
 	buffer    []string
 	flushedAt float64
 	checkedAt float64
+	stop      <-chan struct{}
 }
 
-func NewWriter(q db.Querier, runID int64, now func() float64) *Writer {
-	return &Writer{q: q, runID: runID, now: now}
+func NewWriter(q db.Querier, runID int64, now func() float64, stop <-chan struct{}) *Writer {
+	return &Writer{q: q, runID: runID, now: now, stop: stop}
 }
 
 func (w *Writer) Event(ctx context.Context, kind string, data map[string]any) error {
@@ -144,7 +148,13 @@ func (w *Writer) Flush(ctx context.Context) error {
 }
 
 func (w *Writer) CheckStop(ctx context.Context, force bool) error {
-	if !force && w.now()-w.checkedAt < CheckSeconds {
+	if force {
+		select {
+		case <-w.stop:
+			return ErrShutdown
+		default:
+		}
+	} else if w.now()-w.checkedAt < CheckSeconds {
 		return nil
 	}
 	w.checkedAt = w.now()

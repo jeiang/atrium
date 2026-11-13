@@ -3,7 +3,6 @@ package ops
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -88,16 +88,13 @@ type Check struct {
 	Run      func(ctx context.Context, d *db.DB) error
 }
 
-type Note string
-
-func (n Note) Error() string { return string(n) }
-
 type server struct {
 	d       *db.DB
 	env     config.Env
 	ctx     context.Context
 	metrics []Metric
 	checks  []Check
+	health  func() runtime.Health
 
 	mu      sync.Mutex
 	scraped time.Time
@@ -110,11 +107,13 @@ type result struct {
 	err error
 }
 
-func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env, metrics []Metric, checks []Check) http.Handler {
-	s := &server{d: d, env: env, ctx: config.WithEnv(ctx, env), metrics: metrics, checks: checks, third: map[string]result{}}
+func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env, metrics []Metric, checks []Check, health func() runtime.Health) http.Handler {
+	s := &server{d: d, env: env, ctx: config.WithEnv(ctx, env), metrics: metrics, checks: checks, health: health, third: map[string]result{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /metrics", s.serveMetrics)
 	mux.HandleFunc("GET /readyz", s.readyz)
+	mux.HandleFunc("GET /livez", s.livez)
+	mux.HandleFunc("GET /healthz", s.healthz)
 	if withPprof {
 		mux.HandleFunc("/debug/pprof/", pprof.Index)
 		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -145,7 +144,7 @@ func (s *server) readiness(ctx context.Context) []byte {
 	b.WriteString("# HELP atrium_readiness_check_ok 1 when the readiness check passes.\n# TYPE atrium_readiness_check_ok gauge\n")
 	for _, c := range s.checks {
 		ok := 1
-		if err := s.run(ctx, c); err != nil && !errors.As(err, new(Note)) {
+		if s.run(ctx, c) != nil {
 			ok = 0
 		}
 		fmt.Fprintf(&b, "atrium_readiness_check_ok{check=%q} %d\n", c.Name, ok)
@@ -190,6 +189,12 @@ const (
 func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 	state := StateReady
 	out := map[string]string{}
+	switch h := s.health(); {
+	case !h.Started:
+		state, out["runtime"] = StateNotReady, "starting"
+	case h.Draining:
+		state, out["runtime"] = StateNotReady, "draining"
+	}
 	for _, c := range s.checks {
 		err := s.run(r.Context(), c)
 		out[c.Name] = "ok"
@@ -197,9 +202,6 @@ func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		out[c.Name] = err.Error()
-		if errors.As(err, new(Note)) {
-			continue
-		}
 		if c.Critical {
 			state = StateNotReady
 		} else if state == StateReady {
@@ -233,29 +235,53 @@ func (s *server) run(_ context.Context, c Check) error {
 	return err
 }
 
-func Start(ctx context.Context, d *db.DB, env config.Env, metrics []Metric, checks []Check) (stop func(), err error) {
+func Address(ctx context.Context) string {
 	addr := config.From(ctx).HostValue(ListenKey)
 	if addr == "" {
 		addr = DefaultListen
 	}
 	if addr == Off {
-		return func() {}, nil
+		return ""
 	}
+	return addr
+}
+
+func Server(ctx context.Context, d *db.DB, env config.Env, metrics []Metric, checks []Check, health func() runtime.Health) *http.Server {
 	withPprof := config.From(ctx).HostValue(PprofKey) == "true"
-	l, err := net.Listen("tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("ops listener: %w", err)
-	}
-	srv := &http.Server{Handler: Handler(ctx, d, withPprof, env, metrics, checks), ReadHeaderTimeout: 10 * time.Second}
-	go func() {
-		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("ops listener stopped", logx.Err, err.Error())
+	return &http.Server{Handler: Handler(ctx, d, withPprof, env, metrics, checks, health), ReadHeaderTimeout: 10 * time.Second}
+}
+
+func (s *server) livez(w http.ResponseWriter, _ *http.Request) {
+	var stalled []string
+	for _, svc := range s.health().Services {
+		if svc.Critical && svc.Stalled {
+			stalled = append(stalled, svc.Name)
 		}
-	}()
-	log.Info("ops listening", "addr", l.Addr().String())
-	return func() {
-		stop, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(stop)
-	}, nil
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if len(stalled) > 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "stalled", "services": stalled})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": "alive"})
+}
+
+type serviceReport struct {
+	Name      string         `json:"name"`
+	Status    runtime.Status `json:"status"`
+	Critical  bool           `json:"critical"`
+	Stalled   bool           `json:"stalled"`
+	Restarts  int            `json:"restarts"`
+	LastError string         `json:"last_error,omitempty"`
+}
+
+func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {
+	h := s.health()
+	services := make([]serviceReport, 0, len(h.Services))
+	for _, svc := range h.Services {
+		services = append(services, serviceReport{Name: svc.Name, Status: svc.Status, Critical: svc.Critical, Stalled: svc.Stalled, Restarts: svc.Restarts, LastError: logx.Scrub(svc.LastError)})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"started": h.Started, "draining": h.Draining, "ready": h.Ready, "degraded": h.Degraded, "services": services})
 }

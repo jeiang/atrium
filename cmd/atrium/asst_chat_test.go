@@ -397,21 +397,12 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 		t.Errorf("the stopped run kept calling the model")
 	}
 
-	api.Push(asstReply("finished"))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("outlive", "profile_get", map[string]any{"key": "k"})))
 	release = asstHold(t, api)
 	sent = len(api.Requests())
 	busy := w.start(map[string]string{"text": "outlive shutdown"})
 	asstWaitRequests(t, api, sent+1)
-	stopped2 := make(chan struct{})
-	go func() {
-		stop()
-		close(stopped2)
-	}()
-	select {
-	case <-stopped2:
-	case <-time.After(20 * time.Second):
-		t.Fatal("serve never stopped with a run in flight")
-	}
+	stopWhileHeld(t, stop, release)
 	var state string
 	if err := d.Read.QueryRow("SELECT state FROM runs WHERE id = ?", asstLastRun(t, d, busy)).Scan(&state); err != nil {
 		t.Fatal(err)
@@ -419,7 +410,6 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	if state != "running" && state != "interrupted" {
 		t.Errorf("run in flight at shutdown ended %s, want it left resumable", state)
 	}
-	release()
 }
 
 func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {

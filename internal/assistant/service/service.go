@@ -65,18 +65,20 @@ type Service struct {
 	Now       func() float64
 	Inference *inference.Service
 
-	base   context.Context
-	cancel context.CancelFunc
-	mu     *sync.Mutex
-	wg     *sync.WaitGroup
-	closed bool
+	base     context.Context
+	cancel   context.CancelFunc
+	mu       *sync.Mutex
+	wg       *sync.WaitGroup
+	stop     chan struct{}
+	stopOnce *sync.Once
+	closed   bool
 }
 
 var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
 	base, cancel := context.WithCancel(ctx)
-	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: base, cancel: cancel, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
+	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: base, cancel: cancel, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}, stop: make(chan struct{}), stopOnce: &sync.Once{}}
 	s.Inference = inference.New(d, func() float64 { return s.now() }, scopes{})
 	return s
 }
@@ -136,6 +138,11 @@ func (s *Service) StopAdmission() {
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
+}
+
+func (s *Service) Interrupt() {
+	s.StopAdmission()
+	s.stopOnce.Do(func() { close(s.stop) })
 }
 
 func (s *Service) Close() {
@@ -342,7 +349,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	if err != nil {
 		return nil, err
 	}
-	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference})
+	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference, Stop: s.stop})
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
@@ -369,24 +376,38 @@ func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o St
 }
 
 func (s *Service) inBackground(runID int64) error {
+	done, err := s.reserve()
+	if err != nil {
+		return err
+	}
+	s.background(runID, done)
+	return nil
+}
+
+func (s *Service) reserve() (func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return ErrClosed
+		return nil, ErrClosed
 	}
-	s.wg.Go(func() {
+	s.wg.Add(1)
+	return s.wg.Done, nil
+}
+
+func (s *Service) background(runID int64, done func()) {
+	go func() {
+		defer done()
 		defer func() {
 			if p := recover(); p != nil {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
 			}
 		}()
-		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) {
-			log.Info(fmt.Sprintf("background run %d cancelled", runID), logx.RunID, runID)
+		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) || errors.Is(err, progress.ErrShutdown) {
+			log.Info(fmt.Sprintf("background run %d interrupted", runID), logx.RunID, runID)
 		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
 		}
-	})
-	return nil
+	}()
 }
 
 func (s *Service) launch(ctx context.Context, runID int64) error {
@@ -573,10 +594,16 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 	if err != nil {
 		return err
 	}
-	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
+	done, err := s.reserve()
+	if err != nil {
 		return err
 	}
-	return s.inBackground(runID)
+	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
+		done()
+		return err
+	}
+	s.background(runID, done)
+	return nil
 }
 
 func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claimed map[int64]bool) (int, error) {

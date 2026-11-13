@@ -293,6 +293,11 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source, so
 	if _, _, err := sourceICloudSelection(ctx, src, pins); err != nil {
 		return nil, err
 	}
+	exclusion, err := db.TryServeLock(ctx, cfg.DBPath)
+	if err != nil {
+		return nil, fmt.Errorf("db import-v2 refused: %w", err)
+	}
+	defer func() { _ = exclusion.Close() }()
 	if err := refuseDestination(ctx, cfg.DBPath, key); err != nil {
 		return nil, err
 	}

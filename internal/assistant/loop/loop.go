@@ -74,6 +74,7 @@ type Options struct {
 	Embed     func(ctx context.Context, texts []string) ([][]float64, error)
 	Limits    journal.Limits
 	Inference *inference.Service
+	Stop      <-chan struct{}
 }
 
 type state struct {
@@ -252,6 +253,9 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		return finished, ferr
 	case ctx.Err() != nil:
 		return nil, ctx.Err()
+	case errors.Is(err, progress.ErrShutdown):
+		log.Info(fmt.Sprintf("run %d stopped for shutdown; it resumes on restart", runID), logx.RunID, runID)
+		return nil, err
 	case errors.As(err, new(*tool.Park)):
 		final = journal.Parked
 	case errors.As(err, new(inference.BudgetExceeded)), errors.As(err, new(RunLimit)), errors.Is(err, progress.ErrStopped):
@@ -378,7 +382,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 			return nil, err
 		}
 	}
-	writer := progress.NewWriter(d.Write, runID, now)
+	writer := progress.NewWriter(d.Write, runID, now, o.Stop)
 	tc := &tool.Context{
 		DB: d, Cfg: cfg, Env: env, Kind: kind, ThreadID: thread.ID, RunID: runID, AllowedURLs: allowed,
 		Embed: o.Embed, Now: now, Client: client, Progress: writer, Ledger: r.Ledger, MailOpen: r.MailOpen, Sources: o.Limits.Sources,

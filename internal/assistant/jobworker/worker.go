@@ -38,6 +38,7 @@ type Options struct {
 	Active    func() bool
 	Beat      func()
 	Recovered func(error)
+	Work      context.Context
 	Own       Own
 }
 
@@ -89,6 +90,7 @@ func New(svc *service.Service, jobs []scheduler.Definition, o Options) *schedule
 		Active:    o.Active,
 		Beat:      o.Beat,
 		Recovered: o.Recovered,
+		Work:      o.Work,
 	})
 }
 
@@ -103,7 +105,7 @@ func owned(own Own, owner string, run func(context.Context, scheduler.Run) (sche
 			return scheduler.Result{}, err
 		}
 		defer done()
-		result, err := run(work, r)
+		result, err := interruptedBy(run(work, r))
 		if errors.Is(context.Cause(work), scheduler.ErrInterrupted) {
 			return result, scheduler.ErrInterrupted
 		}
