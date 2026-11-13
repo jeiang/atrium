@@ -1,4 +1,4 @@
-package dbcmd
+package importv2
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
@@ -242,38 +241,7 @@ type importer struct {
 	notes   []string
 }
 
-func (s *service) importV2(a *cli.Args) cli.Handler {
-	source := a.Arg("path", cli.Opt{Help: "path to the v2 database to import into this fresh v3 database"})
-	sourceConfig := a.String("source-config", "", cli.Opt{Metavar: "PATH", Help: "v2 configuration file holding pinned settings, as the v2 ATRIUM_CONFIG file did"})
-	sourceEnv := a.String("source-env", "", cli.Opt{Metavar: "PATH", Help: "file of v2 ATRIUM_* environment pins, one NAME=VALUE per line"})
-	return func(e *cli.Env) int {
-		cfg, err := config.Load(s.env)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		key, err := s.currentKey(e)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		lines, err := importV2(e.Ctx, s.env, cfg, *source, *sourceConfig, *sourceEnv, key, s.clock())
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		for _, line := range lines {
-			_, _ = fmt.Fprintln(e.Stdout, line)
-		}
-		return cli.ExitOK
-	}
-}
-
-func (s *service) clock() float64 {
-	if s.now != nil {
-		return s.now()
-	}
-	return float64(time.Now().UnixNano()) / 1e9
-}
-
-func importV2(ctx context.Context, env config.Env, cfg config.Config, source, sourceConfig, sourceEnv string, key db.Key, now float64) ([]string, error) {
+func Run(ctx context.Context, env config.Env, cfg config.Config, source, sourceConfig, sourceEnv string, key db.Key, now float64, commit func(*sql.Tx, int) error) ([]string, error) {
 	if sameFile(source, cfg.DBPath) {
 		return nil, errors.New("db import-v2: the source and the destination are the same file")
 	}
@@ -375,7 +343,10 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source, so
 		}
 		lines = append(lines, secretLines...)
 		lines = append(lines, summary.Lines()...)
-		return im.checkForeignKeys()
+		if err := im.checkForeignKeys(); err != nil {
+			return err
+		}
+		return commit(tx, len(lines))
 	})
 	if err != nil {
 		return nil, err
@@ -1547,8 +1518,12 @@ func refuseDestination(ctx context.Context, path string, key db.Key) error {
 		if (plan.action != carry && plan.action != fresh && plan.table != "jobs") || plan.table == "mail_accounts" || plan.table == "subagents" {
 			continue
 		}
+		query := "SELECT COUNT(*) FROM " + quoteName(plan.table)
+		if plan.table == "operation_audit" {
+			query += " WHERE operation NOT LIKE 'maintenance.%'"
+		}
 		var n int64
-		if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+quoteName(plan.table)).Scan(&n); err != nil {
+		if err := q.QueryRowContext(ctx, query).Scan(&n); err != nil {
 			return fmt.Errorf("db import-v2: destination: %w", err)
 		}
 		if n > 0 {

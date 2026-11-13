@@ -329,6 +329,24 @@ behavior-parity target.
   module's optional `atrium-backup` timer prunes `*.backup` files in its
   directory after each successful run, keeping the newest `backup.keep`
   (default 5) plus any from the last `backup.keepDays` (default 14) days.
+  `atrium backup` and `atrium db backup` write one `operation_audit` row
+  (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
+  file count only) to the source database, including refused destinations; a
+  completed `atrium restore` writes one `maintenance.restore` row to the
+  restored database. A refused or failed restore writes nothing, since it
+  leaves the database unchanged. `db check` and `restore --verify` are not
+  audited. A completed `atrium db encrypt` or `atrium db rekey` writes one
+  `maintenance.encrypt` or `maintenance.rekey` row (key ids only) into the new
+  copy before it replaces the database, if that database has
+  `operation_audit`. A completed `atrium db import-v2` writes one
+  `maintenance.import-v2` row in the import transaction. A refused or failed
+  encrypt, rekey or import writes nothing, so the database is unchanged and
+  the import target stays fresh. Each `atrium db shell` session writes one
+  `maintenance.sql` row after the input ends, once any transaction the session
+  left open is rolled back: statement and failure counts only, never the SQL.
+  The outcome is `failed` if any statement failed. Backup, restore and shell
+  audits are skipped on a database without `operation_audit`, and the import
+  freshness check ignores `maintenance.*` audit rows.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -886,7 +904,7 @@ behavior-parity target.
   host's `web.trusted_proxy_cidrs` list, in which case exactly one valid
   `CF-Connecting-IP` names it; other forwarded headers are ignored.
 - The Sign-in settings tab shows the OIDC connection and session settings, and issues, lists and revokes API bearer tokens.
-  Issue and revoke write one `operation_audit` row each (`auth.bearer-issue`, `auth.bearer-revoke`; token id and kind only, never the secret); an invalid name or expiry answers 422.
+  Issue and revoke write one `operation_audit` row each (`auth.bearer-issue`, `auth.bearer-revoke`; token id and kind only, never the secret) and, in the same transaction, the `settings_audit` row (`auth_token.issue`, `auth_token.revoke`; id, name and kind) that the Activity page lists; an invalid name or expiry answers 422.
 - `/api/v1` is a JSON API for a native client, available in every listener.
   It accepts nothing but a bearer token: a locally issued `atr_` token, or,
   when `oidc_api_client_id` names the client, an RFC 9068 access token from

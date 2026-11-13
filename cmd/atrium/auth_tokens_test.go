@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
@@ -75,6 +77,15 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 			t.Errorf("%v: exit %d, want usage %d (stdout %q stderr %q)", bad, got.code, cli.ExitUsage, got.stdout, got.stderr)
 		}
 	}
+	for bad, want := range map[string]error{" ": bearer.ErrName, strings.Repeat("x", 101): bearer.ErrName} {
+		got := runApp(t, "auth", "token", "issue", "--name", bad)
+		if !strings.HasSuffix(got.stderr, ": error: "+want.Error()+"\n") || strings.Count(got.stderr, "\n") < 2 {
+			t.Errorf("issue --name %q: stderr %q, want the usage and the bearer refusal", bad, got.stderr)
+		}
+	}
+	if got := runApp(t, "auth", "token", "issue", "--name", "old", "--expires-at", time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)); !strings.HasSuffix(got.stderr, ": error: "+bearer.ErrExpiry.Error()+"\n") || strings.Count(got.stderr, "\n") < 2 {
+		t.Errorf("issue with a past expiry: stderr %q, want the usage and the bearer refusal", got.stderr)
+	}
 
 	listed := runApp(t, "auth", "token", "list")
 	if listed.code != cli.ExitOK {
@@ -112,8 +123,8 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 	if again := runApp(t, "auth", "token", "revoke", "1"); again.code != cli.ExitOK {
 		t.Fatalf("revoking a revoked token is not idempotent: exit %d stderr %q", again.code, again.stderr)
 	}
-	if missing := runApp(t, "auth", "token", "revoke", "999"); missing.code != cli.ExitError {
-		t.Fatalf("revoking an unknown id: exit %d, want %d", missing.code, cli.ExitError)
+	if missing := runApp(t, "auth", "token", "revoke", "999"); missing.code != cli.ExitError || missing.stderr != "error: no token 999\n" {
+		t.Fatalf("revoking an unknown id: exit %d stderr %q, want %d and the pre-operation message", missing.code, missing.stderr, cli.ExitError)
 	}
 	if bad := runApp(t, "auth", "token", "revoke", "x"); bad.code != cli.ExitUsage {
 		t.Fatalf("revoking a non-numeric id: exit %d, want usage", bad.code)
@@ -150,7 +161,7 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 		}
 		outcomes[key]++
 	}
-	want := map[string]int{"auth.bearer-issue:ok": 2, "auth.bearer-issue:invalid": 3, "auth.bearer-revoke:ok": 1, "auth.bearer-revoke:noop": 1, "auth.bearer-revoke:not_found": 1}
+	want := map[string]int{"auth.bearer-issue:ok": 2, "auth.bearer-issue:invalid": 6, "auth.bearer-revoke:ok": 1, "auth.bearer-revoke:noop": 1, "auth.bearer-revoke:not_found": 1}
 	if !maps.Equal(outcomes, want) {
 		t.Fatalf("token operation audit outcomes %v, want %v", outcomes, want)
 	}
@@ -243,5 +254,30 @@ func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
 	}
 	if refused := s.do(http.MethodGet, "/api/v1/me", secret, nil); refused.status != http.StatusUnauthorized || refused.code() != "invalid_token" {
 		t.Fatalf("a token revoked in the UI was admitted: %d %s", refused.status, refused.body)
+	}
+
+	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), db.Key{})
+	var issuedRow, revokedRow int64
+	if err := d.Read.QueryRow("SELECT id FROM settings_audit WHERE key = 'auth_token.issue' AND new_value LIKE 'id=' || ? || ' %' AND source = 'ui'", id).Scan(&issuedRow); err != nil {
+		t.Fatalf("no settings history row for the issue: %v", err)
+	}
+	if err := d.Read.QueryRow("SELECT id FROM settings_audit WHERE key = 'auth_token.revoke' AND new_value LIKE 'id=' || ? || ' %' AND source = 'ui'", id).Scan(&revokedRow); err != nil {
+		t.Fatalf("no settings history row for the revoke: %v", err)
+	}
+	var leaked int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(new_value, ''), 'atr_') > 0 OR instr(COALESCE(old_value, ''), 'atr_') > 0").Scan(&leaked); err != nil || leaked != 0 {
+		t.Fatalf("settings history holds token material: %d, %v", leaked, err)
+	}
+	code, body, _ = fetch(t, browser, http.MethodGet, s.base+"/activity?category=settings", nil)
+	if code != http.StatusOK {
+		t.Fatalf("activity: %d", code)
+	}
+	for _, row := range []int64{issuedRow, revokedRow} {
+		if !strings.Contains(body, fmt.Sprintf(`id="activity-settings-%d"`, row)) {
+			t.Errorf("activity does not list settings history row %d", row)
+		}
+	}
+	if strings.Contains(body, secret) || strings.Contains(body, "atr_") {
+		t.Errorf("activity shows token material")
 	}
 }

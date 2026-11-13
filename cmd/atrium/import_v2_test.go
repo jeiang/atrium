@@ -588,8 +588,11 @@ func TestImportV2LeavesApplicationStateNew(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = q.Close() }()
-	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit"); n != 0 {
-		t.Errorf("operation_audit holds %d rows after the import", n)
+	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit WHERE operation <> 'maintenance.import-v2'"); n != 0 {
+		t.Errorf("operation_audit holds %d carried rows after the import", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'maintenance.import-v2' AND outcome = 'ok' AND source = 'cli'"); n != 1 {
+		t.Errorf("operation_audit holds %d completed import rows, want 1", n)
 	}
 	for _, source := range []string{"ui", "cli"} {
 		if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE source = ?", source); n < 1 {
@@ -629,13 +632,39 @@ func TestImportV2LeavesApplicationStateNew(t *testing.T) {
 			t.Fatalf("settings get: exit %d stderr %q", got.code, got.stderr)
 		}
 		d := mustConnect(t, filepath.Join(target, "atrium.db"), importKey(t))
-		if _, err := d.Write.Exec("INSERT INTO operation_audit (ts, operation, actor, source, outcome) VALUES (1, 'tasks.add', 'operator', 'cli', 'ok')"); err != nil {
-			t.Fatal(err)
+		for _, operation := range []string{"maintenance.sql", "tasks.add"} {
+			if _, err := d.Write.Exec("INSERT INTO operation_audit (ts, operation, actor, source, outcome) VALUES (1, ?, 'operator', 'cli', 'ok')", operation); err != nil {
+				t.Fatal(err)
+			}
 		}
 		_ = d.Close()
 		got := runImportApp(t, app, "db", "import-v2", source)
 		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "already holds rows") || !strings.Contains(got.stderr, "operation_audit=1") {
 			t.Fatalf("import into a destination with audit history: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+	})
+
+	t.Run("a destination only inspected and backed up still imports", func(t *testing.T) {
+		target := t.TempDir()
+		app := importTestApp(t, target, clock)
+		if got := runImportApp(t, app, "settings", "get", "tz"); got.code != cli.ExitOK {
+			t.Fatalf("settings get: exit %d stderr %q", got.code, got.stderr)
+		}
+		path := filepath.Join(target, "atrium.db")
+		env := []string{"ATRIUM_DB=" + path, "ATRIUM_DB_KEY=" + rightKeyHex, "ATRIUM_CACHE_DIR=" + filepath.Join(target, "cache")}
+		if got := runProcessStdin(t, "SELECT COUNT(*) FROM threads;\n", "db shell", env...); got.code != cli.ExitOK || got.stdout != "0\n" {
+			t.Fatalf("db shell: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+		if got := runProcess(t, "db backup "+filepath.Join(target, "before.db"), env...); got.code != cli.ExitOK {
+			t.Fatalf("db backup: exit %d stderr %q", got.code, got.stderr)
+		}
+		for _, operation := range []string{"maintenance.sql", "maintenance.db-backup"} {
+			if got := strings.Join(maintenanceAudits(t, path, importKey(t), operation), ","); got != "ok:cli" {
+				t.Fatalf("%s audits = %q, want one ok row", operation, got)
+			}
+		}
+		if got := runImportApp(t, app, "db", "import-v2", source); got.code != cli.ExitOK {
+			t.Fatalf("import into an inspected destination: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 		}
 	})
 }

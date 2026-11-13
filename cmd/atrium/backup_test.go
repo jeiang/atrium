@@ -5,6 +5,7 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -162,6 +163,9 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if again := runProcess(t, "backup "+archive, env...); again.code != cli.ExitError || !strings.Contains(again.stderr, "already exists") {
 		t.Errorf("backup over an existing archive exited %d, stderr %q", again.code, again.stderr)
 	}
+	if got := maintenanceAudits(t, live, key, "maintenance.backup"); strings.Join(got, ",") != "ok:cli,refused:cli" {
+		t.Errorf("backup audits %v, want one ok and one refused row from the CLI", got)
+	}
 
 	raw, err := os.ReadFile(archive)
 	if err != nil {
@@ -286,6 +290,9 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	res := runProcess(t, "restore "+archive, env...)
 	if res.code != cli.ExitOK || !strings.Contains(res.stdout, "restored "+live) || strings.Count(res.stdout, "previous state kept at") != 2 {
 		t.Fatalf("restore exited %d, stdout %q, stderr %q", res.code, res.stdout, res.stderr)
+	}
+	if got := maintenanceAudits(t, live, key, "maintenance.restore"); strings.Join(got, ",") != "ok:cli" {
+		t.Errorf("restore audits in the restored database %v, want one ok row from the CLI", got)
 	}
 	if _, err := os.Stat(filepath.Join(state, "files", "stray.txt")); err == nil {
 		t.Error("the restored files/ holds a file that is not in the archive")
@@ -446,4 +453,26 @@ func TestBackupRestorePlaintextAndRefusesNewer(t *testing.T) {
 	if after, _ := os.ReadFile(live); !bytes.Equal(before, after) {
 		t.Error("the refused restore changed the database")
 	}
+}
+
+func maintenanceAudits(t *testing.T, path string, key db.Key, operation string) []string {
+	t.Helper()
+	d, err := db.Connect(path, db.WithKey(key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	rows, err := d.Read.Query("SELECT outcome || ':' || source FROM operation_audit WHERE operation = ? ORDER BY id", operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var s string
+		err := r.Scan(&s)
+		return s, err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
