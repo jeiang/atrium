@@ -349,14 +349,6 @@ internal/db/dbcmd/importv2.go	github.com/jeiang/atrium/internal/weather
 internal/db/dbcmd/importv2_source.go	github.com/jeiang/atrium/internal/config
 internal/db/dbcmd/importv2_source.go	github.com/jeiang/atrium/internal/settings
 internal/db/dbcmd/shell.go	github.com/jeiang/atrium/internal/db
-internal/kb/export/job.go	github.com/jeiang/atrium/internal/assistant
-internal/kb/export/job.go	github.com/jeiang/atrium/internal/assistant/jobworker
-internal/kb/export/job.go	github.com/jeiang/atrium/internal/scheduler
-internal/kb/kbcmd/import.go	github.com/jeiang/atrium/internal/config
-internal/kb/kbcmd/import.go	github.com/jeiang/atrium/internal/db
-internal/kb/kbcmd/import.go	github.com/jeiang/atrium/internal/db/key
-internal/kb/kbcmd/import.go	github.com/jeiang/atrium/internal/kb
-internal/kb/kbcmd/import.go	github.com/jeiang/atrium/internal/settings
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/config
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/db
 internal/ledger/ledgercmd/ledgercmd.go	github.com/jeiang/atrium/internal/ledger

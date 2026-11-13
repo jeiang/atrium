@@ -5,6 +5,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
@@ -15,6 +16,7 @@ type Service struct {
 	state  *state.Store
 	ledger *ledger.Store
 	now    func() float64
+	env    config.Env
 }
 
 func New(d *db.DB, store *ledger.Store, now func() float64) *Service {

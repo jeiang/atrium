@@ -10,7 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
-	"github.com/jeiang/atrium/internal/kb/export"
+	kbapp "github.com/jeiang/atrium/internal/kb/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/tasks/remind"
@@ -64,5 +64,12 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 		_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
 		return jobworker.Result{}, err
 	})
-	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), export.Job(deps)}
+	knowledgeExport := assistantJob(assistant.KnowledgeExportName, scheduler.JobBuiltin,
+		"Daily: project the knowledge base into the configured export targets (no model run).",
+		"daily 03:30", assistant.KeyKnowledgeExport, 30*time.Minute, scheduler.ModelFree)
+	knowledgeExport.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+		_, err := kbapp.New(e.Service.DB, e.Service.Runner.Ledger, e.Now).WithEnv(e.Service.Env).Export(ctx, kbapp.ExportInput{})
+		return jobworker.Result{}, err
+	})
+	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), knowledgeExport}
 }

@@ -77,6 +77,10 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records").Scan(&rows); err != nil || rows != 0 {
 		t.Fatalf("dry run wrote %d records (%v), want none", rows, err)
 	}
+	var audits, dryAudits int
+	if err := d.Read.QueryRow("SELECT COUNT(*), COUNT(*) FILTER (WHERE outcome = 'dry_run') FROM operation_audit WHERE operation = 'knowledge.import'").Scan(&audits, &dryAudits); err != nil || audits != 1 || dryAudits != 1 {
+		t.Fatalf("dry run audit rows = %d (%d dry_run, %v), want one dry_run row", audits, dryAudits, err)
+	}
 
 	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
 	if code != 0 {

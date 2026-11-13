@@ -43,6 +43,7 @@ import (
 	"github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/export"
+	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/runtime"
@@ -96,7 +97,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Open), memorycmd.Command(mc.Env, m.Now)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Open), memorycmd.Command(mc.Env, m.Now), kbcmd.Command(knowledgeCLIService(mc.Env))},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}

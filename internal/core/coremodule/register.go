@@ -26,7 +26,6 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
@@ -111,7 +110,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			bearer.Command(mc.Env),
 			secretscmd.Command(mc.Env),
 			dbcmd.Command(mc.Env, m.Now),
-			kbcmd.Command(mc.Env),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
 			catalogCommand(mc),
