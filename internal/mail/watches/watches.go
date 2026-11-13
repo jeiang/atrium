@@ -12,15 +12,15 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/jsonx"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/mailscan"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/timex"
@@ -101,6 +101,8 @@ var packageSchema = map[string]any{
 	"additionalProperties": false,
 }
 
+var packageSchemaJSON, packageSchemaErr = json.Marshal(packageSchema)
+
 func merchantKey(name string) string {
 	text := nonAlnum.ReplaceAllString(cases.Fold().String(name), " ")
 	return strings.Join(strings.Fields(text), " ")
@@ -119,15 +121,18 @@ func rowText(row mailscan.Message, body string, bodyChars int) string {
 }
 
 type Options struct {
-	Chat  Chat
-	Clock func() float64
-	Env   config.Env
+	Classifier *classifier.Service
+	Paid       *classify.Deferral
+	Clock      func() float64
+	Env        config.Env
 }
 
-type Chat func(ctx context.Context, url, system, user string, schema any, maxTokens int) (any, error)
-
-func chatJSON(ctx context.Context, url, system, user string, schema any, maxTokens int) (any, error) {
-	raw, err := llm.ChatJSON(ctx, url, system, user, schema, maxTokens)
+func judgePackage(ctx context.Context, c *classifier.Service, row mailscan.Message, body string, bodyChars int) (any, error) {
+	if packageSchemaErr != nil {
+		return nil, packageSchemaErr
+	}
+	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Package, Item: classify.MessageItem(row.Account, row.ID),
+		System: PackageSystem, User: rowText(row, body, bodyChars), Schema: packageSchemaJSON})
 	if err != nil {
 		return nil, err
 	}
@@ -136,13 +141,6 @@ func chatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
 	return answer, nil
-}
-
-func (o Options) chat() Chat {
-	if o.Chat != nil {
-		return o.Chat
-	}
-	return chatJSON
 }
 
 type tracking struct{ Carrier, Number string }
@@ -396,20 +394,19 @@ func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanRe
 	if err := r.Err(); err != nil {
 		return scanResult{}, err
 	}
-	chatURL, err := endpoint.ChatURL(ctx, d.Read)
-	if err != nil {
-		return scanResult{}, err
-	}
-	ctx, err = embed.WithModels(ctx, d.Read)
-	if err != nil {
-		return scanResult{}, err
+	paid := o.Paid
+	if paid == nil {
+		paid = &classify.Deferral{}
 	}
 	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
-		Kind: packages, Hint: "m.sent = 0 AND (" + PackageHint + ")", WindowDays: window, FetchLimit: limit, Limit: limit,
+		Kind: packages, Hint: "m.sent = 0 AND (" + PackageHint + ")", WindowDays: window, FetchLimit: limit, Limit: limit, Paid: paid,
 		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
 			items := regexPackages(row, body, carrierDomains)
 			if len(items) == 0 {
-				answer, err := o.chat()(ctx, chatURL, PackageSystem, rowText(row, body, bodyChars), packageSchema, 200)
+				if err := paid.Err(); err != nil {
+					return 0, err
+				}
+				answer, err := judgePackage(ctx, o.Classifier, row, body, bodyChars)
 				if err != nil {
 					return 0, err
 				}

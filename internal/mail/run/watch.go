@@ -78,11 +78,12 @@ func ConnectionLost(err error) bool {
 }
 
 type Watcher struct {
-	Env   config.Env
-	Cfg   config.Config
-	Open  mail.OpenFunc
-	Pass  func(d *db.DB) *Pass
-	Sleep func(ctx context.Context, d time.Duration)
+	Env         config.Env
+	Cfg         config.Config
+	Open        mail.OpenFunc
+	Classifiers Classifier
+	Pass        func(d *db.DB) *Pass
+	Sleep       func(ctx context.Context, d time.Duration)
 
 	Notify *sdnotify.Notifier
 
@@ -138,7 +139,7 @@ func waiting(h *sdnotify.Heartbeat, fn func()) {
 }
 
 func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
-	return Open(ctx, w.Env, w.Cfg, w.Open, nil)
+	return Open(ctx, w.Env, w.Cfg, w.Open, nil, w.Classifiers)
 }
 
 func settleFor(ctx context.Context, q db.Querier) (time.Duration, error) {
@@ -242,13 +243,13 @@ func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff)
 	})
 }
 
-func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error {
+func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc, classifiers Classifier) error {
 	accounts, err := SelectAccounts(ctx, requested)
 	if err != nil {
 		return err
 	}
 	notifier := sdnotify.New(func(name string) string { v, _ := env(name); return v })
-	w := &Watcher{Env: env, Cfg: cfg, Open: open, Notify: notifier}
+	w := &Watcher{Env: env, Cfg: cfg, Open: open, Classifiers: classifiers, Notify: notifier}
 	_, release, err := w.connect(ctx)
 	if err != nil {
 		return err

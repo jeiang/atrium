@@ -1,6 +1,6 @@
 {
   "cbtt_html": "<html><body><div class=\"table_date\">2026-10-14</div><table class=\"rate_table\"><tr><th>Currency</th><th>Buying</th><th>Selling</th></tr><tr><td>United States Dollar</td><td>6.7200</td><td>6.7900</td></tr></table></body></html>",
-  "chat": "replies come from llm_script.json: the system prompt picks the feature, the user prompt's first 'Subject: ' line picks a by_subject override merged onto defaults; payee replies are keyed by the 'Normalized: ' line; llm_exchanges.json lists every request and reply in order",
+  "chat": "mail classification replies come from llm_script.json: the request's JSON schema required keys pick the default whose keys match, the user prompt's first 'Subject: ' line picks a by_subject override merged onto that default; the Anthropic fixed-JSON fake reads the script, and an unknown key structure fails the test",
   "clocks": {
     "approve": 1792095600.0,
     "arrive": 1792090800.0,
@@ -21,7 +21,6 @@
   },
   "environment": {
     "ATRIUM_CACHE_DIR": "state/cache",
-    "ATRIUM_CHAT_URL": "http://llm.invalid/v1",
     "ATRIUM_CONTACTS_DIR": "state/contacts",
     "ATRIUM_DB": "state/atrium.db",
     "ATRIUM_MEDIA_MOVIES_URL": "http://movies.test",

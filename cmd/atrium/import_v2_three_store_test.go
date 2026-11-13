@@ -50,7 +50,7 @@ func TestImportV2ThreeStoresAccountForEveryRowAndPin(t *testing.T) {
 		"setting default_effort: carried -> settings.default_effort from pin config " + configPath + " assistant.default_effort",
 		"setting public_url: drop-host -> host.core.public_url; host requirement host.core.public_url = https://pin.example (pin config " + configPath + " core.public_url)",
 		"setting mail_embed_batch: drop-tuning -> internal/endpoint/tuning.go:TuningMailEmbedBatch; pin source env " + envPath + " ATRIUM_MAIL_MAIL_EMBED_BATCH value 1 differs from the compiled default 16 (changed-from-default)",
-		"pin mail_chat_ca_file: drop-host -> host.local_chat.ca_file; host requirement host.local_chat.ca_file = /operator/chat-ca.pem (pin config " + configPath + " mail.mail_chat_ca_file)",
+		"pin mail_chat_ca_file: dropped -> the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku",
 		"pin grafana_ca_file: drop-host -> service/grafana.transport.ca_file; host requirement service/grafana.transport.ca_file = /operator/grafana-ca.pem (pin config " + configPath + " grafana.grafana_ca_file)",
 		"setting assistant_enabled: carried -> settings.assistant_enabled; module flag stays an operator setting",
 		"setting oidc_access_group: dropped -> host.auth.oidc_access_groups; host requirement host.auth.oidc_access_groups = legacy-group (settings)",

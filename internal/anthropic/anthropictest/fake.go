@@ -33,6 +33,7 @@ type Response struct {
 	StartUsage          json.RawMessage `json:"-"`
 	InterruptAfterStart bool            `json:"-"`
 	Stall               bool            `json:"-"`
+	ID                  string          `json:"-"`
 }
 
 type Request struct {
@@ -62,10 +63,12 @@ type Server struct {
 	Disconnect       atomic.Bool
 	modelLists       atomic.Int64
 
-	mu       sync.Mutex
-	script   []Response
-	requests []Request
-	served   int
+	mu         sync.Mutex
+	script     []Response
+	jsonScript []Response
+	requests   []Request
+	served     int
+	jsonAnswer func(required []string, user string) (json.RawMessage, error)
 }
 
 func New(t testing.TB, script ...Response) *Server {
@@ -96,6 +99,24 @@ func (s *Server) Remaining() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.script)
+}
+
+func (s *Server) PushJSON(script ...Response) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.jsonScript = append(s.jsonScript, script...)
+}
+
+func (s *Server) JSONRemaining() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.jsonScript)
+}
+
+func (s *Server) AnswerJSON(answer func(required []string, user string) (json.RawMessage, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.jsonAnswer = answer
 }
 
 func (s *Server) RequestHook() func(Request) {
@@ -191,21 +212,48 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request, req Request) {
 		return
 	}
 	var head struct {
-		Model  string `json:"model"`
-		Stream bool   `json:"stream"`
+		Model        string `json:"model"`
+		Stream       bool   `json:"stream"`
+		OutputConfig struct {
+			Format json.RawMessage `json:"format"`
+		} `json:"output_config"`
 	}
 	_ = json.Unmarshal(req.Body, &head)
+	queue, name := &s.script, "scripted"
+	if len(head.OutputConfig.Format) > 0 {
+		if err := fixedJSONRequest(req.Body); err != nil {
+			s.t.Errorf("anthropictest: fixed JSON request: %v", err)
+			fail(w, http.StatusBadRequest, ErrorBody("invalid_request_error", err.Error()))
+			return
+		}
+		queue, name = &s.jsonScript, "scripted fixed JSON"
+	}
 	s.mu.Lock()
-	if len(s.script) == 0 {
+	var resp Response
+	switch {
+	case len(*queue) > 0:
+		resp = (*queue)[0]
+		*queue = (*queue)[1:]
+	case queue == &s.jsonScript && s.jsonAnswer != nil:
+		raw, err := answerFixedJSON(s.jsonAnswer, req.Body)
+		if err != nil {
+			s.mu.Unlock()
+			s.t.Errorf("anthropictest: %v", err)
+			fail(w, http.StatusBadRequest, ErrorBody("invalid_request_error", err.Error()))
+			return
+		}
+		resp = Reply("end_turn", Text(string(raw)))
+	default:
 		s.mu.Unlock()
-		s.t.Errorf("anthropictest: no scripted response left")
-		fail(w, http.StatusInternalServerError, ErrorBody("api_error", "no scripted response left"))
+		s.t.Errorf("anthropictest: no %s response left", name)
+		fail(w, http.StatusInternalServerError, ErrorBody("api_error", "no "+name+" response left"))
 		return
 	}
-	resp := s.script[0]
-	s.script = s.script[1:]
 	s.served++
-	id := fmt.Sprintf("msg_fake_%d", fakeIDs.Add(1))
+	id := resp.ID
+	if id == "" {
+		id = fmt.Sprintf("msg_fake_%d", fakeIDs.Add(1))
+	}
 	s.mu.Unlock()
 	switch {
 	case resp.Status != 0:
@@ -376,4 +424,71 @@ func split(block map[string]json.RawMessage) (map[string]json.RawMessage, []map[
 		deltas = append(deltas, map[string]any{"type": "compaction_delta", "content": block["content"], "encrypted_content": block["encrypted_content"]})
 	}
 	return first, deltas
+}
+
+func fixedJSONRequest(body []byte) error {
+	var req struct {
+		Model        string            `json:"model"`
+		MaxTokens    int64             `json:"max_tokens"`
+		System       json.RawMessage   `json:"system"`
+		Messages     []json.RawMessage `json:"messages"`
+		Stream       bool              `json:"stream"`
+		OutputConfig struct {
+			Effort string                     `json:"effort"`
+			Format anthropic.JSONOutputFormat `json:"format"`
+		} `json:"output_config"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		return err
+	}
+	switch {
+	case req.Model == "":
+		return fmt.Errorf("missing model")
+	case req.MaxTokens <= 0:
+		return fmt.Errorf("max_tokens %d", req.MaxTokens)
+	case len(req.Messages) != 1:
+		return fmt.Errorf("%d messages, want 1", len(req.Messages))
+	case req.OutputConfig.Format.Type != anthropic.FormatJSONSchema:
+		return fmt.Errorf("output format type %q", req.OutputConfig.Format.Type)
+	}
+	wire, err := anthropic.JSONOutputSchema(req.OutputConfig.Format.Schema)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(wire, req.OutputConfig.Format.Schema) {
+		return fmt.Errorf("schema is not in wire form")
+	}
+	return nil
+}
+
+func answerFixedJSON(answer func(required []string, user string) (json.RawMessage, error), body []byte) (json.RawMessage, error) {
+	var req struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+		OutputConfig struct {
+			Format struct {
+				Schema struct {
+					Required []string `json:"required"`
+				} `json:"schema"`
+			} `json:"format"`
+		} `json:"output_config"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+	if len(req.Messages) != 1 || req.Messages[0].Role != "user" {
+		return nil, fmt.Errorf("fixed JSON request is not one plain user message")
+	}
+	raw, err := answer(req.OutputConfig.Format.Schema.Required, req.Messages[0].Content)
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(raw) {
+		return nil, fmt.Errorf("answer for %v is not JSON", req.OutputConfig.Format.Schema.Required)
+	}
+	return raw, nil
 }

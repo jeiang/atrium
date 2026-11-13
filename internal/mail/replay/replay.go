@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
 )
@@ -20,6 +21,7 @@ const StageNone = "none"
 type Options struct {
 	Account string
 	Limit   int
+	Model   bool
 }
 
 type Line struct {
@@ -59,7 +61,10 @@ type stored struct {
 	dest   sql.NullString
 }
 
-func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
+func Run(ctx context.Context, q db.Querier, opts Options, judge *classify.Service) (Result, error) {
+	if opts.Model && judge == nil {
+		return Result{}, errors.New("replay: model mode needs a classifier")
+	}
 	now, ok, err := latestDecisionTime(ctx, q)
 	if err != nil || !ok {
 		return Result{}, err
@@ -72,7 +77,13 @@ func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	r := &router.Router{Now: func() float64 { return now }}
+	if opts.Model {
+		if ctx, err = embed.WithModels(ctx, q); err != nil {
+			return Result{}, err
+		}
+	}
+	r := &router.Router{Now: func() float64 { return now }, Classifier: judge}
+	paid := &classify.Deferral{}
 	ruleLists := map[string][]rules.Rule{}
 	tunings := map[string]router.Tuning{}
 	contexts := map[string]*router.LLMContext{}
@@ -96,11 +107,11 @@ func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
 		}
 		lc, ok := contexts[m.Account]
 		if !ok {
-			built, err := router.NewLLMContext(ctx, q, m.Account, "", tuning.FolderMin)
+			built, err := router.NewLLMContext(ctx, q, m.Account, tuning.FolderMin, paid)
 			if err != nil {
 				return Result{}, err
 			}
-			built.NoModel = true
+			built.NoModel = !opts.Model
 			lc = &built
 			contexts[m.Account] = lc
 		}

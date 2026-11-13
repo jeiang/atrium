@@ -177,6 +177,9 @@ func schemaJSON(entries []settings.ImportEntry, byKey map[string]settings.Def, h
 			destinations[dotted] = settings.CutoverDestination(entry)
 		}
 	}
+	for _, entry := range settings.RemovedOperatorInputs() {
+		destinations[entry.Module+"."+entry.Key] = settings.Destination(entry)
+	}
 	for _, input := range hostInputs(entries, byKey, host) {
 		dotted := input.Module + "." + input.Key
 		if _, ok := classes[dotted]; !ok {

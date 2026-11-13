@@ -3,8 +3,6 @@ package flags
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -12,17 +10,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/llm"
-	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/message"
 )
 
 var (
-	log = logx.Logger("atrium.flags")
-
 	automatedLocal = regexp.MustCompile(`(?i)^(no[-_.]?reply|do[-_.]?not[-_.]?reply)([+._-].*)?$`)
 
 	automatedTokens = map[string]bool{
@@ -104,8 +96,6 @@ func AutomatedDomain(domain string) bool {
 	return false
 }
 
-type Judge func(ctx context.Context, url string, m llm.Message, body string) (llm.Flags, error)
-
 func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT m.id, m.from_addr, m.from_name, m.subject, m.list_id FROM messages m WHERE m.account = ? AND m.in_inbox = 1 "+
@@ -135,10 +125,7 @@ func b2i(v bool) int {
 	return 0
 }
 
-func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now func() float64) (int, error) {
-	if judge == nil {
-		judge = llm.JudgeFlag
-	}
+func FlagAccount(ctx context.Context, d *db.DB, account string, judge *classify.Service, paid *classify.Deferral, now func() float64) (int, error) {
 	if now == nil {
 		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 	}
@@ -150,38 +137,29 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now
 	if err != nil {
 		return 0, err
 	}
-	chatURL, err := endpoint.ChatURL(ctx, d.Read)
-	if err != nil {
-		return 0, err
-	}
-	ctx, err = embed.WithModels(ctx, d.Read)
-	if err != nil {
-		return 0, err
-	}
 	known := map[string]struct{}{}
 	for _, card := range contacts.Load(contactsDir) {
 		for _, email := range card.Emails {
 			known[email] = struct{}{}
 		}
 	}
-	available := true
 	done := 0
 	for _, row := range rows {
-		var verdict llm.Flags
+		var verdict classify.Flags
 		judged := false
-		if available {
+		if !paid.Stopped() {
 			body, err := message.Body(ctx, d.Read, row.ID)
 			if err != nil {
 				return done, err
 			}
-			verdict, err = judge(ctx, chatURL, llm.Message{Subject: row.Subject, FromName: row.FromName, FromAddr: row.FromAddr}, body)
-			var unavailable *httpx.ServiceUnavailable
+			verdict, err = judge.JudgeFlag(ctx, classify.MessageItem(account, row.ID),
+				classify.Message{Subject: row.Subject, FromName: row.FromName, FromAddr: row.FromAddr}, body)
 			switch {
-			case errors.As(err, &unavailable):
-				log.Warn(fmt.Sprintf("chat unavailable, deferring flag judgment: %s", unavailable))
-				available = false
+			case paid.Note(err):
 			case err != nil:
-				return done, err
+				if _, unanswered := classify.Unanswered(err); !unanswered {
+					return done, err
+				}
 			default:
 				judged = true
 			}
