@@ -267,11 +267,6 @@ internal/assistant/tools/schedule/undo.go	database/sql
 internal/assistant/tools/schedule/undo.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/schedule/undo.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/tools/schedule/undo.go	github.com/jeiang/atrium/internal/scheduler
-internal/assistant/tools/tasks/tasks.go	database/sql
-internal/assistant/tools/tasks/tasks.go	github.com/jeiang/atrium/internal/assistant/threads
-internal/assistant/tools/tasks/tasks.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/tasks/tasks.go	github.com/jeiang/atrium/internal/ledger
-internal/assistant/tools/tasks/tasks.go	github.com/jeiang/atrium/internal/tasks
 internal/assistant/tools/weather/weather.go	github.com/jeiang/atrium/internal/weather
 internal/assistant/webfetch/tool.go	github.com/jeiang/atrium/internal/textutil
 internal/backup/backup.go	github.com/jeiang/atrium/internal/config

@@ -13,7 +13,7 @@ import (
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/tasks/remind"
+	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 )
 
 const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untrusted + " Gather, then write the review as your reply, with these " +
@@ -61,7 +61,7 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 	reminders := assistantJob(assistant.TaskRemindersName, scheduler.JobBuiltin, "Every 5 minutes: send due task reminders (no model run).",
 		"*/5 * * * *", assistant.KeyTaskReminders, 5*time.Minute, scheduler.ModelFree)
 	reminders.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-		_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
+		_, err := tasksapp.New(e.Service.DB, e.Service.Runner.Ledger, e.Now).WithEnv(e.Service.Env).Remind(ctx, tasksapp.RemindInput{})
 		return jobworker.Result{}, err
 	})
 	knowledgeExport := assistantJob(assistant.KnowledgeExportName, scheduler.JobBuiltin,
