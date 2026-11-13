@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/applier"
@@ -51,6 +52,9 @@ func (s *Service) Correct(ctx context.Context, in CorrectInput) (application.Cha
 			return err
 		}
 		out.Data.Correction = recorded
+		if in.Mode == Immediate {
+			return nil
+		}
 		out.AuditID, err = s.state.Audit(ctx, tx, state.Entry{Operation: string(CorrectName), Outcome: state.OK, Target: target, DetailsJSON: "{}"})
 		return err
 	})
@@ -62,9 +66,20 @@ func (s *Service) Correct(ctx context.Context, in CorrectInput) (application.Cha
 		return application.Change[CorrectResult]{}, s.auditRefusal(ctx, CorrectName, target, err)
 	}
 	if in.Mode == Immediate {
-		out.Data.Note = s.moveCorrection(ctx, out.Data.Correction.Account, in.MessageID)
+		var outcome state.Outcome
+		var effects []int64
+		out.Data.Note, outcome, effects = s.moveCorrection(ctx, out.Data.Correction.Account, in.MessageID)
+		out.AuditID = s.writeAudit(ctx, CorrectName, target, outcome, effects)
 	}
 	return out, nil
+}
+
+func (s *Service) correctionEffects(ctx context.Context, id, after int64) ([]int64, bool) {
+	ids, unknown, err := ledger.AutoEffectsSince(ctx, s.db.Read, id, after)
+	if err != nil {
+		correctionLog.Error(fmt.Sprintf("reading the effects of corrected message %d failed", id), logx.Err, err.Error())
+	}
+	return ids, unknown
 }
 
 type appliedOutcome struct {
@@ -73,15 +88,19 @@ type appliedOutcome struct {
 	unmoved int
 }
 
-func (s *Service) moveCorrection(ctx context.Context, account string, id int64) string {
+func (s *Service) moveCorrection(ctx context.Context, account string, id int64) (string, state.Outcome, []int64) {
 	ctx = context.WithoutCancel(ctx)
 	mode, err := mail.Mode(ctx, s.db.Read)
 	if err != nil {
 		correctionLog.Error(fmt.Sprintf("reading mail mode for corrected message %d failed", id), logx.Err, err.Error())
-		return ""
+		return "", state.Failed, nil
 	}
 	if mode != safety.Live {
-		return ""
+		return "", state.OK, nil
+	}
+	after, err := ledger.LastEffectID(ctx, s.db.Read)
+	if err != nil {
+		correctionLog.Error(fmt.Sprintf("reading the effect ledger before moving corrected message %d failed", id), logx.Err, err.Error())
 	}
 	out, err := func() (out appliedOutcome, err error) {
 		locks, err := db.ResourceLocks(ctx, s.cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
@@ -92,19 +111,34 @@ func (s *Service) moveCorrection(ctx context.Context, account string, id int64) 
 		done, err := s.applier.ApplyCorrections(db.WithHeld(ctx, locks), account, []int64{id})
 		return appliedOutcome{done.Ran, done.Written, done.Failed + done.Skipped}, err
 	}()
+	effects, unknown := s.correctionEffects(ctx, id, after)
 	if err != nil {
 		correctionLog.Error(fmt.Sprintf("moving corrected message %d failed", id), logx.Err, err.Error())
-		return " It could not be moved yet: " + err.Error() + "."
+		outcome := state.Failed
+		switch {
+		case unknown:
+			outcome = state.Unknown
+		case errors.As(err, new(*db.LockBusy)):
+			outcome = state.Refused
+		}
+		return " It could not be moved yet: " + err.Error() + ".", outcome, effects
+	}
+	outcome := state.OK
+	if unknown {
+		outcome = state.Unknown
 	}
 	switch {
 	case !out.ran:
-		return " Moving is paused; it will move after you resume."
+		return " Moving is paused; it will move after you resume.", outcome, effects
 	case out.written > 0:
-		return " The message was moved."
+		return " The message was moved.", outcome, effects
 	case out.unmoved > 0:
-		return " It could not be moved; see Decisions."
+		if !unknown {
+			outcome = state.Failed
+		}
+		return " It could not be moved; see Decisions.", outcome, effects
 	}
-	return ""
+	return "", outcome, effects
 }
 
 func (s *Service) auditRefusal(ctx context.Context, name application.Name, target string, err error) error {

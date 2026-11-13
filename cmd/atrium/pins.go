@@ -34,7 +34,7 @@ func bootstrap(env config.Env, reg *settings.Registry) func(context.Context, io.
 }
 
 func refusal(err error) error {
-	if errors.As(err, new(*fs.PathError)) {
+	if errors.As(err, new(*fs.PathError)) || errors.As(err, new(*config.FileContentError)) {
 		return err
 	}
 	return &cli.ConfigRefusal{Err: err}

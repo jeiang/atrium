@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -170,9 +171,12 @@ func TestServeExitsWithTheConfigCodeOnAPermanentRefusal(t *testing.T) {
 		want  int
 	}{
 		{"a missing key file", "ATRIUM_DB_KEY_FILE", filepath.Join(dir, "missing.key"), cli.ExitError},
-		{"a malformed key in the key file", "ATRIUM_DB_KEY_FILE", writeKey(t, dir, "short.key", "ffeedd"), cli.ExitConfig},
+		{"a malformed key in the key file", "ATRIUM_DB_KEY_FILE", writeKey(t, dir, "short.key", "ffeedd"), cli.ExitError},
+		{"an empty key file", "ATRIUM_DB_KEY_FILE", writeKey(t, dir, "empty.key", ""), cli.ExitError},
 		{"a retired environment name", "ANTHROPIC_API_KEY", "sk-ant-retired", cli.ExitConfig},
 		{"an invalid host config", "ATRIUM_HOST_CONFIG", writeKey(t, dir, "host.toml", "[db]\nkey = \"x\""), cli.ExitConfig},
+		{"an empty app key file", "ATRIUM_HOST_CONFIG", writeKey(t, dir, "appkey.toml", "[app_keys]\naction_link_key_file = "+strconv.Quote(writeKey(t, dir, "action.key", ""))+"\n"), cli.ExitError},
+		{"a host config syntax error", "ATRIUM_HOST_CONFIG", writeKey(t, dir, "syntax.toml", "[app_keys\n"), cli.ExitConfig},
 	} {
 		setEnv(t, "ATRIUM_DB_KEY", "")
 		setEnv(t, tc.key, tc.value)

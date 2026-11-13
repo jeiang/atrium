@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -73,8 +74,7 @@ func Rotate(ctx context.Context, q db.Querier) error {
 	if _, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
 		return err
 	} else if ok {
-		_, err := q.ExecContext(ctx, "DELETE FROM action_links WHERE used_ts IS NULL")
-		return err
+		return revoke(ctx, q)
 	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	var buf [32]byte
@@ -83,6 +83,14 @@ func Rotate(ctx context.Context, q db.Querier) error {
 	}
 	ctx = audit.With(ctx, "phone", audit.UI)
 	if err := store.Set(ctx, secrets.ActionLinkKey, hex.EncodeToString(buf[:]), "phone"); err != nil {
+		return err
+	}
+	return revoke(ctx, q)
+}
+
+func revoke(ctx context.Context, q db.Querier) error {
+	now := float64(time.Now().UnixMicro()) / 1e6
+	if _, err := q.ExecContext(ctx, "UPDATE action_links SET used_ts = ? WHERE used_ts IS NOT NULL AND expires_ts > ?", now, now); err != nil {
 		return err
 	}
 	_, err := q.ExecContext(ctx, "DELETE FROM action_links WHERE used_ts IS NULL")

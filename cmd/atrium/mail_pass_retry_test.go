@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
@@ -166,6 +168,87 @@ func TestPhoneApprovalRefusedByAHeldPassKeepsItsLink(t *testing.T) {
 	}
 	if n := effects(); n != applied {
 		t.Fatalf("%d effects after the third tap, want %d", n, applied)
+	}
+}
+
+func TestRevokingLinksDuringABusyPhoneApprovalKeepsTheLinkRevoked(t *testing.T) {
+	m := mailSafetyFixture(t, "live")
+	keyPath := filepath.Join(m.dir, "action-link.key")
+	if err := os.WriteFile(keyPath, []byte(strings.Repeat("ab", 32)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f := fixtureFor(t)
+	host, _ := f.lookup("ATRIUM_HOST_CONFIG")
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigAppend(t, host, m.dir, "phone-host.toml", "\n[app_keys]\naction_link_key_file = "+strconv.Quote(keyPath)+"\n"))
+	d := mustConnect(t, m.path, keyFor(t))
+	declareJobsAndParkThem(t, d)
+	m.add("INBOX", "Weekly deals", "deals@shop.test", "promo", "Everything is on sale.", `\Seen`)
+	id, uid, _ := m.racePending(t)
+	promo := m.messageID(t, "Weekly deals")
+	for key, value := range map[string]string{policy.EnabledKey: "true", policy.KindsKey: executors.MailTriage} {
+		if ran := runApp(t, "settings", "set", key, value); ran.code != cli.ExitOK {
+			t.Fatalf("settings set %s: %d %s", key, ran.code, ran.stderr)
+		}
+	}
+	ctx := config.With(testProposalContext(), f.state)
+	account := "icloud"
+	now := mail.WallClock()
+	pid, _, err := proposals.Create(ctx, d, executors.MailTriage, &account, "Archive deals",
+		map[string]any{"items": []any{map[string]any{"id": promo, "action": executors.TriageArchive}}},
+		map[string]any{"count": 1}, "archive-deals", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prop, err := proposals.Get(ctx, d.Read, pid)
+	if err != nil || prop == nil {
+		t.Fatalf("the triage proposal: %v", err)
+	}
+	approve, _, err := actionlink.MintPair(ctx, d.Write, pid, prop.Fingerprint, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := serveWatching(t, m.dir, d, m.fake)
+	m.correctToBills(t, id, uid)
+	manual, release := m.holdPassAtCopy(t, d)
+	client := mrvClient(t)
+	tap := func() (int, string) {
+		t.Helper()
+		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/actions/"+approve, nil)
+		return code, body
+	}
+
+	type tapped struct {
+		code int
+		body string
+	}
+	first := make(chan tapped, 1)
+	go func() {
+		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/actions/"+approve, nil)
+		first <- tapped{code, body}
+	}()
+	waitUntil(t, 3*time.Second, "the tap to spend its link while it waits on mail-pass", func() bool {
+		return m.count(t, "SELECT COUNT(*) FROM action_links WHERE proposal_id = ? AND used_ts IS NOT NULL", pid) == 1
+	})
+	if err := actionlink.Rotate(ctx, d.Write); err != nil {
+		t.Fatalf("revoke links: %v", err)
+	}
+	if got := <-first; got.code != http.StatusServiceUnavailable || !strings.Contains(got.body, mail.PassResource) {
+		t.Fatalf("phone approval beside a pass held at its COPY = %d %q; want 503 naming %s", got.code, got.body, mail.PassResource)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM action_links WHERE proposal_id = ? AND used_ts IS NULL", pid); n != 0 {
+		t.Fatalf("%d unused links after a revocation during the busy tap, want none", n)
+	}
+
+	release()
+	waitUntil(t, 30*time.Second, "the scheduled mail sync run", scheduledRunEnded(d, passrun.Sync, manual))
+	if code, body := tap(); code != http.StatusGone {
+		t.Fatalf("the revoked link after the pass released mail-pass = %d %q, want 410", code, body)
+	}
+	if status := m.scalar(t, "SELECT status FROM proposals WHERE id = ?", pid); status != "pending" {
+		t.Fatalf("the proposal is %s after the revoked tap, want pending", status)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE proposal_id = ?", pid); n != 0 {
+		t.Fatalf("%d effects for the revoked link, want none", n)
 	}
 }
 

@@ -290,6 +290,9 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 		t.Fatalf("correction action state = %s", state)
 	}
 	action := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct' AND state = 'done'")
+	if got := mrvScalar(t, dbPath, "SELECT outcome || ' ' || details_json FROM operation_audit WHERE operation = 'mail.correct' ORDER BY id DESC LIMIT 1"); got != `ok {"effect_ids":[`+action+`]}` {
+		t.Fatalf("the live correction audit = %s, want ok with effect %s", got, action)
+	}
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+"/live/actions/"+action+"/undo", url.Values{}, hx...)
 	if code != http.StatusOK || !strings.Contains(body, "Undone") {
 		t.Fatalf("undo = %d: %.400s", code, body)
