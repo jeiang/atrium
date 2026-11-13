@@ -132,15 +132,6 @@ func (a *Agent) putFiling(w http.ResponseWriter, r *http.Request, key string) {
 			filingProblem(w, err)
 			return
 		}
-		if rec != nil {
-			result, _ := rec.snapshot()
-			result.State = "failed"
-			result.ErrorCode = protocol.CodeUnavailable
-			rec.mu.Lock()
-			rec.started = true
-			rec.mu.Unlock()
-			rec.publish(result)
-		}
 		problem(w, 503, protocol.CodeUnavailable, "the receipt could not be made durable")
 		return
 	}
@@ -148,7 +139,7 @@ func (a *Agent) putFiling(w http.ResponseWriter, r *http.Request, key string) {
 	if !rec.started {
 		rec.started = true
 		a.filings.Add(1)
-		go func() { defer a.filings.Done(); a.execute(r.Context(), rec) }()
+		go func() { defer a.filings.Done(); a.execute(rec) }()
 	}
 	rec.mu.Unlock()
 	for {

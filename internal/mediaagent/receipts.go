@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 
 	"github.com/jeiang/atrium/internal/mediaagent/protocol"
@@ -15,12 +16,13 @@ import (
 )
 
 type receipt struct {
-	started bool
-	mu      sync.Mutex
-	request protocol.FilingRequest
-	result  protocol.FilingResult
-	changed chan struct{}
-	dir     string
+	started     bool
+	quarantined bool
+	mu          sync.Mutex
+	request     protocol.FilingRequest
+	result      protocol.FilingResult
+	changed     chan struct{}
+	dir         string
 }
 type preparedStep struct {
 	Step         protocol.Step      `json:"step"`
@@ -78,6 +80,9 @@ func keyValid(key string) bool {
 	}
 	return true
 }
+
+var errUnadmitted = errors.New("the receipt was never admitted")
+
 func (a *Agent) loadReceipts() error {
 	base := filepath.Join(a.state.dir, "filings")
 	if err := os.MkdirAll(base, 0o700); err != nil {
@@ -97,36 +102,87 @@ func (a *Agent) loadReceipts() error {
 		}
 		key := entry.Name()
 		dir := filepath.Join(base, key)
-		r := &receipt{started: true, dir: dir, changed: make(chan struct{})}
-		err := readJSON(filepath.Join(dir, "plan.json"), &r.request)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		if err == nil && (r.request.Key != key || protocol.CanonicalDigest(r.request.Plan) != r.request.PlanDigest) {
-			return errors.New("the receipt plan is invalid")
-		}
-		err = readJSON(filepath.Join(dir, "result.json"), &r.result)
-		if errors.Is(err, os.ErrNotExist) {
-			if err := a.recoverReceipt(key, r); err != nil {
-				return err
+		r, err := a.loadReceipt(key, dir)
+		if errors.Is(err, errUnadmitted) {
+			if err := os.RemoveAll(dir); err == nil {
+				if err := syncDir(base); err != nil {
+					return err
+				}
+				continue
 			}
-		} else if err != nil {
-			return err
+		}
+		if err != nil {
+			r = &receipt{started: true, quarantined: true, dir: dir, changed: make(chan struct{}), result: protocol.FilingResult{Key: key, State: "unknown", Steps: []protocol.StepResult{}, ErrorCode: protocol.CodeReceiptInvalid}}
+			a.quarantined = append(a.quarantined, key)
 		}
 		a.receipts[key] = r
 	}
 	return nil
 }
-func (a *Agent) recoverReceipt(key string, r *receipt) error {
-	result := protocol.FilingResult{Key: key, PlanDigest: r.request.PlanDigest, State: "unknown", Steps: []protocol.StepResult{}, ErrorCode: protocol.CodeUnavailable}
-	if r.request.Plan.AgentID != a.state.agentID || r.request.Plan.RootRevision != a.roots.revision {
-		r.result = result
-		return durableJSON(r.dir, "result.json", result)
+func (a *Agent) Quarantined() []string { return a.quarantined }
+func (a *Agent) loadReceipt(key, dir string) (*receipt, error) {
+	r := &receipt{started: true, dir: dir, changed: make(chan struct{})}
+	err := readJSON(filepath.Join(dir, "plan.json"), &r.request)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, errUnadmitted
 	}
-	for i, s := range r.request.Plan.Steps {
+	if err != nil {
+		return nil, err
+	}
+	req := r.request
+	if req.Key != key || protocol.CanonicalDigest(req.Plan) != req.PlanDigest || len(req.Plan.Steps) == 0 || req.UndoOf != "" && protocol.UndoKey(req.UndoOf) != key {
+		return nil, errInvalidReceipt
+	}
+	for i, s := range req.Plan.Steps {
+		if s.Index != i {
+			return nil, errInvalidReceipt
+		}
+	}
+	err = readJSON(filepath.Join(dir, "result.json"), &r.result)
+	if errors.Is(err, os.ErrNotExist) {
+		return r, a.recoverReceipt(r)
+	}
+	if err != nil {
+		return nil, err
+	}
+	res := r.result
+	switch {
+	case res.Key != key || res.PlanDigest != req.PlanDigest || res.Steps == nil || len(res.Steps) > len(req.Plan.Steps):
+		return nil, errInvalidReceipt
+	case res.State == "done" && len(res.Steps) != len(req.Plan.Steps):
+		return nil, errInvalidReceipt
+	case res.State != "done" && res.State != "partial" && res.State != "failed" && res.State != "unknown":
+		return nil, errInvalidReceipt
+	}
+	for i, s := range res.Steps {
+		if s.Index != i || s.State != "done" {
+			return nil, errInvalidReceipt
+		}
+	}
+	return r, nil
+}
+
+var errInvalidReceipt = errors.New("the receipt does not match its plan")
+
+type stepOutcome int
+
+const (
+	stepUndetermined stepOutcome = iota
+	stepNotDone
+	stepDone
+)
+
+func (a *Agent) recoverReceipt(r *receipt) error {
+	plan := r.request.Plan
+	result := protocol.FilingResult{Key: r.request.Key, PlanDigest: r.request.PlanDigest, State: "failed", Steps: []protocol.StepResult{}, ErrorCode: protocol.CodeUnavailable}
+	sameRoots := plan.AgentID == a.state.agentID && plan.RootRevision == a.roots.revision
+	for i, s := range plan.Steps {
 		var done protocol.StepResult
 		err := readJSON(filepath.Join(r.dir, fmt.Sprintf("step-%d.done", i)), &done)
 		if err == nil {
+			if done.Index != i || done.State != "done" {
+				return errInvalidReceipt
+			}
 			result.Steps = append(result.Steps, done)
 			continue
 		}
@@ -136,81 +192,112 @@ func (a *Agent) recoverReceipt(key string, r *receipt) error {
 		var prepared preparedStep
 		err = readJSON(filepath.Join(r.dir, fmt.Sprintf("step-%d.prepared", i)), &prepared)
 		if errors.Is(err, os.ErrNotExist) {
-			if len(result.Steps) > 0 {
-				result.State = "partial"
-			}
 			break
 		}
 		if err != nil {
 			return err
 		}
-		if prepared.Step.Index != i {
-			return errors.New("the prepared receipt is invalid")
+		if !reflect.DeepEqual(prepared.Step, s) {
+			return errInvalidReceipt
 		}
-		confirmed, after := a.confirmPrepared(prepared)
-		if confirmed {
-			done = protocol.StepResult{Index: i, State: "done", After: after}
-			if s.Source != nil {
-				before := s.Source.Identity
-				done.Before = &before
-			}
-			if err := durableJSON(r.dir, fmt.Sprintf("step-%d.done", i), done); err != nil {
-				return err
-			}
-			result.Steps = append(result.Steps, done)
+		outcome, step := stepUndetermined, protocol.StepResult{}
+		if sameRoots {
+			outcome, step = a.inspectPrepared(prepared)
 		}
-		break
+		if outcome == stepNotDone {
+			break
+		}
+		if outcome == stepUndetermined {
+			result.State = "unknown"
+			if !sameRoots {
+				result.ErrorCode = protocol.CodeRootChanged
+			}
+			r.result = result
+			return durableJSON(r.dir, "result.json", result)
+		}
+		if err := durableJSON(r.dir, fmt.Sprintf("step-%d.done", i), step); err != nil {
+			return err
+		}
+		result.Steps = append(result.Steps, step)
 	}
-	if len(result.Steps) == len(r.request.Plan.Steps) && len(result.Steps) > 0 {
-		result.State = "done"
-		result.ErrorCode = ""
+	switch {
+	case len(result.Steps) == len(plan.Steps):
+		result.State, result.ErrorCode = "done", ""
+	case len(result.Steps) > 0:
+		result.State = "partial"
 	}
 	r.result = result
 	return durableJSON(r.dir, "result.json", result)
 }
-func (a *Agent) confirmPrepared(p preparedStep) (bool, *protocol.Identity) {
-	s := p.Step
-	fd, _, err := a.roots.parent(s.Destination)
+func (a *Agent) parentMatches(p protocol.Path, want *protocol.Identity) bool {
+	if want == nil {
+		return false
+	}
+	fd, _, err := a.roots.parent(p)
 	if err != nil {
-		return false, nil
+		return false
 	}
 	var st unix.Stat_t
 	err = unix.Fstat(fd, &st)
 	_ = unix.Close(fd)
-	if err != nil || !sameObject(identity(st), p.Parent) {
-		return false, nil
+	return err == nil && sameObject(identity(st), *want)
+}
+func (a *Agent) inspectPrepared(p preparedStep) (stepOutcome, protocol.StepResult) {
+	s := p.Step
+	result := protocol.StepResult{Index: s.Index, State: "done"}
+	if !a.parentMatches(s.Destination, &p.Parent) {
+		return stepUndetermined, result
 	}
-	dst, err := a.roots.stat(s.Destination)
-	if err != nil {
-		return false, nil
+	dst, dstErr := a.roots.stat(s.Destination)
+	if dstErr != nil && !errors.Is(dstErr, ErrNotFound) {
+		return stepUndetermined, result
 	}
-	id := identity(dst)
-	if s.Source == nil || id != s.Source.Identity || dst.Mode&unix.S_IFMT != unix.S_IFREG {
-		return false, nil
-	}
-	if p.SourceParent == nil {
-		return false, nil
-	}
-	sp, _, err := a.roots.parent(s.Source.Path)
-	if err != nil {
-		return false, nil
-	}
-	var parent unix.Stat_t
-	err = unix.Fstat(sp, &parent)
-	_ = unix.Close(sp)
-	if err != nil || !sameObject(identity(parent), *p.SourceParent) {
-		return false, nil
-	}
-	src, err := a.roots.stat(s.Source.Path)
+	dstID := identity(dst)
 	switch s.Kind {
-	case protocol.StepLink:
-		if err == nil && identity(src) == s.Source.Identity {
-			return true, &id
+	case protocol.StepLink, protocol.StepRename:
+		if s.Source == nil || !a.parentMatches(s.Source.Path, p.SourceParent) {
+			return stepUndetermined, result
 		}
-	case protocol.StepRename:
-		if errors.Is(err, ErrNotFound) {
-			return true, &id
+		src, srcErr := a.roots.stat(s.Source.Path)
+		if srcErr != nil && !errors.Is(srcErr, ErrNotFound) {
+			return stepUndetermined, result
+		}
+		srcHere := srcErr == nil && identity(src) == s.Source.Identity && src.Mode&unix.S_IFMT == unix.S_IFREG
+		dstHere := dstErr == nil && dstID == s.Source.Identity && dst.Mode&unix.S_IFMT == unix.S_IFREG
+		before := s.Source.Identity
+		result.Before, result.After = &before, &dstID
+		switch {
+		case errors.Is(dstErr, ErrNotFound) && srcHere:
+			return stepNotDone, result
+		case s.Kind == protocol.StepLink && dstHere && srcHere:
+			return stepDone, result
+		case s.Kind == protocol.StepRename && dstHere && errors.Is(srcErr, ErrNotFound):
+			return stepDone, result
+		}
+	case protocol.StepMkdir:
+		if errors.Is(dstErr, ErrNotFound) {
+			return stepNotDone, result
+		}
+		mode := uint32(0o775)
+		if a.gid >= 0 {
+			mode = 0o2775
+		}
+		if dst.Mode&unix.S_IFMT == unix.S_IFDIR && uint32(dst.Mode)&0o7777 == mode && (a.gid < 0 || int(dst.Gid) == a.gid) {
+			result.After = &dstID
+			return stepDone, result
+		}
+	case protocol.StepUnlink, protocol.StepRmdir:
+		if s.Expect == nil {
+			return stepUndetermined, result
+		}
+		expect := *s.Expect
+		result.Before = &expect
+		if errors.Is(dstErr, ErrNotFound) {
+			return stepDone, result
+		}
+		if s.Kind == protocol.StepUnlink && dstID == expect || s.Kind == protocol.StepRmdir && sameObject(dstID, expect) {
+			return stepNotDone, result
 		}
 	}
-	return false, nil
+	return stepUndetermined, result
 }

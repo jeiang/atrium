@@ -3,7 +3,6 @@
 package mediaagent
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -96,6 +95,9 @@ func (a *Agent) inverse(key string) (protocol.FilingPlan, error) {
 		if res.State != "done" || res.After == nil {
 			continue
 		}
+		if res.Index < 0 || res.Index >= len(r.request.Plan.Steps) {
+			return protocol.FilingPlan{}, refusal(protocol.CodeReceiptInvalid)
+		}
 		s := r.request.Plan.Steps[res.Index]
 		id := *res.After
 		switch s.Kind {
@@ -113,7 +115,7 @@ func (a *Agent) inverse(key string) (protocol.FilingPlan, error) {
 	}
 	return p, nil
 }
-func (a *Agent) execute(ctx context.Context, r *receipt) {
+func (a *Agent) execute(r *receipt) {
 	a.mutationMu.Lock()
 	defer a.mutationMu.Unlock()
 	result, _ := r.snapshot()
@@ -135,7 +137,7 @@ func (a *Agent) execute(ctx context.Context, r *receipt) {
 			finish(state, protocol.CodeRootChanged)
 			return
 		}
-		if ctx.Err() != nil || a.draining.Load() {
+		if a.draining.Load() {
 			state := "failed"
 			if len(result.Steps) > 0 {
 				state = "partial"
@@ -175,8 +177,10 @@ func (a *Agent) executeStep(dir string, s protocol.Step, undo bool) (protocol.St
 	if err := unix.Fstat(dp, &dstParent); err != nil {
 		return result, false, err
 	}
-	if err := a.groupStat(dstParent, true); err != nil {
-		return result, false, err
+	if !undo || library(s.Destination.Root) {
+		if err := a.groupStat(dstParent, true); err != nil {
+			return result, false, err
+		}
 	}
 	prepared := preparedStep{Step: s, Parent: identity(dstParent)}
 	sp := -1
@@ -309,6 +313,9 @@ func (a *Agent) admit(req protocol.FilingRequest) (*receipt, error) {
 	a.receiptMu.Lock()
 	defer a.receiptMu.Unlock()
 	if r := a.receipts[req.Key]; r != nil {
+		if r.quarantined {
+			return r, nil
+		}
 		if r.request.PlanDigest != req.PlanDigest || r.request.UndoOf != req.UndoOf {
 			return nil, refusal(protocol.CodeKeyReused)
 		}
@@ -317,20 +324,22 @@ func (a *Agent) admit(req protocol.FilingRequest) (*receipt, error) {
 	if a.draining.Load() {
 		return nil, refusal(protocol.CodeDraining)
 	}
-	dir := filepath.Join(a.state.dir, "filings", req.Key)
+	base := filepath.Join(a.state.dir, "filings")
+	dir := filepath.Join(base, req.Key)
 	if err := os.Mkdir(dir, 0o700); err != nil {
+		return nil, err
+	}
+	err := syncDir(base)
+	if err == nil {
+		err = durableJSON(dir, "plan.json", req)
+	}
+	if err != nil {
+		if os.RemoveAll(dir) == nil {
+			_ = syncDir(base)
+		}
 		return nil, err
 	}
 	r := &receipt{request: req, dir: dir, changed: make(chan struct{}), result: protocol.FilingResult{Key: req.Key, PlanDigest: req.PlanDigest, State: "running", Steps: []protocol.StepResult{}}}
 	a.receipts[req.Key] = r
-	if err := syncDir(filepath.Dir(dir)); err != nil {
-		return r, err
-	}
-	if err := durableJSON(dir, "plan.json", req); err != nil {
-		return r, err
-	}
-	if err := writeDurable(dir, "digest", []byte(req.PlanDigest+"\n")); err != nil {
-		return r, err
-	}
 	return r, nil
 }

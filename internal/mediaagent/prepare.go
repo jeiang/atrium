@@ -112,12 +112,22 @@ func (a *Agent) prepare(req protocol.PrepareRequest) (protocol.PrepareResponse, 
 		missing := map[protocol.Path]bool{}
 		destinations := map[protocol.Path]bool{}
 		sources := map[protocol.Path]bool{}
+		names := map[string]string{}
 		for _, placement := range req.Placements {
 			src, dst := placement.Source, placement.Destination
 			if src.Root != req.Source.Root || src.Rel != req.Source.Rel && !strings.HasPrefix(src.Rel, req.Source.Rel+"/") || validRel(dst.Rel) != nil || !library(dst.Root) || destinations[dst] || missing[dst] {
 				return protocol.PrepareResponse{}, ErrUnsafePath
 			}
 			destinations[dst] = true
+			parts := strings.Split(dst.Rel, "/")
+			for i := 1; i <= len(parts); i++ {
+				name := protocol.Path{Root: dst.Root, Rel: strings.Join(parts[:i], "/")}
+				key := a.roots.nameKey(name)
+				if prev, ok := names[key]; ok && prev != name.Rel {
+					return protocol.PrepareResponse{}, refusal(protocol.CodeDestinationExists)
+				}
+				names[key] = name.Rel
+			}
 			if req.SourceKind == protocol.SourceImport && sources[src] {
 				return protocol.PrepareResponse{}, ErrUnsafePath
 			}

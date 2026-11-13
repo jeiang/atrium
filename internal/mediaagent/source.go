@@ -30,6 +30,8 @@ type importSnapshots struct {
 }
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, v any) bool {
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(time.Now().Add(bodyDeadline))
 	if err := protocol.Decode(r.Body, protocol.MaxBody, v); err != nil {
 		status := http.StatusBadRequest
 		code := protocol.CodeInvalidRequest
@@ -40,6 +42,7 @@ func decodeRequest(w http.ResponseWriter, r *http.Request, v any) bool {
 		problem(w, status, code, "the request body is invalid")
 		return false
 	}
+	_ = rc.SetReadDeadline(time.Time{})
 	return true
 }
 func fileProblem(w http.ResponseWriter, err error) {

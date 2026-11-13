@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,25 +26,27 @@ import (
 const (
 	shutdownGrace = 10 * time.Second
 	handlerGrace  = 5 * time.Second
+	bodyDeadline  = 15 * time.Second
 )
 
 type Agent struct {
-	cfg        Config
-	roots      *roots
-	state      *state
-	token      [sha256.Size]byte
-	tls        *tls.Config
-	hosts      map[string]bool
-	peers      []netip.Prefix
-	draining   atomic.Bool
-	inflight   sync.WaitGroup
-	settled    atomic.Bool
-	gid        int
-	receiptMu  sync.Mutex
-	mutationMu sync.Mutex
-	receipts   map[string]*receipt
-	imports    importSnapshots
-	filings    sync.WaitGroup
+	cfg         Config
+	roots       *roots
+	state       *state
+	token       [sha256.Size]byte
+	tls         *tls.Config
+	hosts       map[string]bool
+	peers       []netip.Prefix
+	draining    atomic.Bool
+	inflight    sync.WaitGroup
+	settled     atomic.Bool
+	gid         int
+	receiptMu   sync.Mutex
+	mutationMu  sync.Mutex
+	receipts    map[string]*receipt
+	quarantined []string
+	imports     importSnapshots
+	filings     sync.WaitGroup
 }
 
 func New(c Config) (*Agent, error) {
@@ -57,6 +61,12 @@ func New(c Config) (*Agent, error) {
 		a.gid, err = lookupGroup(c.Group)
 		if err != nil {
 			return nil, err
+		}
+		if a.gid != os.Getegid() {
+			groups, err := os.Getgroups()
+			if err != nil || !slices.Contains(groups, a.gid) {
+				return nil, fmt.Errorf("the media agent is not a member of group %q", c.Group)
+			}
 		}
 	}
 	for _, h := range c.Control.AllowedHosts {

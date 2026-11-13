@@ -37,6 +37,7 @@ const (
 	CodeUnavailable       = "unavailable"
 	CodeDraining          = "draining"
 	CodeIOError           = "io_error"
+	CodeReceiptInvalid    = "receipt_invalid"
 )
 
 type Problem struct {

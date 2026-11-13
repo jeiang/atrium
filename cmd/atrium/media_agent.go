@@ -41,6 +41,9 @@ func serveMediaAgent(ctx context.Context, path string, stdout, stderr io.Writer)
 		return fail(err)
 	}
 	defer func() { _ = agent.Close() }()
+	for _, key := range agent.Quarantined() {
+		_, _ = fmt.Fprintf(stderr, "warning: receipt %s is unreadable and was quarantined\n", key)
+	}
 	ln, err := agent.Listen()
 	if err != nil {
 		return fail(err)

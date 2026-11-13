@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -27,6 +28,8 @@ func TestMediaAgentCrashNeverResumes(t *testing.T) {
 	}
 	p := prepareFiling(t, a, protocol.PrepareRequest{SourceKind: protocol.SourceImport, Source: protocol.Path{Root: "import", Rel: "item"}, Placements: placements})
 	req := filingRequest("1", p)
+	writeMediaFile(t, filepath.Join(a.roots["import"], "queued", "x.srt"), "queued")
+	queued := filingRequest("3", prepareFiling(t, a, protocol.PrepareRequest{SourceKind: protocol.SourceImport, Source: protocol.Path{Root: "import", Rel: "queued"}, Placements: []protocol.Placement{place("import", "queued/x.srt", "queued.srt")}}))
 	payload, err := json.Marshal(req)
 	if err != nil {
 		t.Fatal(err)
@@ -65,15 +68,47 @@ func TestMediaAgentCrashNeverResumes(t *testing.T) {
 	if !observed {
 		t.Fatal("never observed a confirmed in-progress receipt")
 	}
+	queuedPayload, _ := json.Marshal(queued)
+	queuedRequest, _ := http.NewRequest(http.MethodPut, a.base+"/v1/filings/"+queued.Key, bytes.NewReader(queuedPayload))
+	queuedRequest.Host = mediaAgentHost
+	queuedRequest.Header.Set("Authorization", "Bearer "+a.token)
+	queuedFinished := make(chan struct{})
+	go func() {
+		defer close(queuedFinished)
+		if resp, err := mediaAgentClient.Do(queuedRequest); err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	waitFor(t, func() bool {
+		resp, _ := a.get(t, "/v1/filings/"+queued.Key, nil)
+		return resp.StatusCode == 200
+	})
+	if err := a.cmd.Process.Signal(syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	filings := filepath.Join(a.dir, "state", "filings")
+	if _, err := os.Stat(filepath.Join(filings, req.Key, "result.json")); !os.IsNotExist(err) {
+		t.Fatalf("the filing finished before the kill: %v", err)
+	}
+	if entries, err := os.ReadDir(filepath.Join(filings, queued.Key)); err != nil || len(entries) != 1 {
+		t.Fatalf("the queued filing started before the kill: %v %v", entries, err)
+	}
 	if err := a.cmd.Process.Signal(syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
 	<-a.done
 	<-finished
+	<-queuedFinished
 	a = startMediaAgent(t, mediaAgentOpts{dir: a.dir})
+	if res, body := putFiling(t, a, queued); res.State != "failed" || len(res.Steps) != 0 {
+		t.Fatalf("queued filing recovered as %s", body)
+	}
+	if _, err := os.Stat(filepath.Join(a.roots["import"], "queued", "x.srt")); err != nil {
+		t.Fatalf("the queued filing ran: %v", err)
+	}
 	result, body := putFiling(t, a, req)
-	if result.State != "done" && result.State != "partial" && result.State != "unknown" {
-		t.Fatalf("recovery=%+v", result)
+	if result.State != "partial" || result.ErrorCode != protocol.CodeUnavailable {
+		t.Fatalf("recovery=%s", body)
 	}
 	destinationCount := 0
 	for i := range 300 {
@@ -101,6 +136,10 @@ func TestMediaAgentCrashNeverResumes(t *testing.T) {
 }
 func TestMediaAgentSuspendedFilingBeyondShutdownBound(t *testing.T) {
 	t.Parallel()
+	t.Run("continued then terminated", func(t *testing.T) { t.Parallel(); suspendedFiling(t, false) })
+	t.Run("terminated while stopped", func(t *testing.T) { t.Parallel(); suspendedFiling(t, true) })
+}
+func suspendedFiling(t *testing.T, terminateWhileStopped bool) {
 	a := startMediaAgent(t, mediaAgentOpts{})
 	var placements []protocol.Placement
 	for i := range 300 {
@@ -178,16 +217,34 @@ func TestMediaAgentSuspendedFilingBeyondShutdownBound(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = a.cmd.Process.Signal(syscall.SIGCONT) })
 	time.Sleep(11 * time.Second)
-	if err := a.cmd.Process.Signal(syscall.SIGCONT); err != nil {
-		t.Fatal(err)
+	signals := []syscall.Signal{syscall.SIGCONT, syscall.SIGTERM}
+	if terminateWhileStopped {
+		signals = []syscall.Signal{syscall.SIGTERM, syscall.SIGCONT}
 	}
-	if err := a.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatal(err)
+	for _, sig := range signals {
+		if err := a.cmd.Process.Signal(sig); err != nil {
+			t.Fatal(err)
+		}
 	}
+	resent := false
 	select {
 	case <-a.done:
 	case <-time.After(16 * time.Second):
-		t.Fatal("shutdown exceeded bound after continuation")
+		if !terminateWhileStopped || runtime.GOOS != "darwin" {
+			t.Fatalf("shutdown exceeded bound after continuation: %s", a.logs.String())
+		}
+		if resp, _ := a.get(t, "/health", nil); resp.StatusCode != http.StatusOK {
+			t.Fatalf("the resumed agent neither drained nor kept serving: %d", resp.StatusCode)
+		}
+		resent = true
+		if err := a.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-a.done:
+		case <-time.After(16 * time.Second):
+			t.Fatalf("shutdown exceeded bound after a second SIGTERM: %s", a.logs.String())
+		}
 	}
 	<-finished
 	if a.err != nil {
@@ -195,8 +252,8 @@ func TestMediaAgentSuspendedFilingBeyondShutdownBound(t *testing.T) {
 	}
 	a = startMediaAgent(t, mediaAgentOpts{dir: a.dir})
 	res, body := putFiling(t, a, req)
-	if res.State != "partial" && res.State != "done" && res.State != "unknown" {
-		t.Fatalf("shutdown result %+v", res)
+	if !resent && (res.State != "partial" || res.ErrorCode != protocol.CodeDraining) || resent && res.State != "partial" && res.State != "done" {
+		t.Fatalf("shutdown result %s", body)
 	}
 	entries, err := os.ReadDir(a.roots["tv"])
 	if err != nil || len(entries) != len(res.Steps) {
