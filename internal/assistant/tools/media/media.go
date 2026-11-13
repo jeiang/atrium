@@ -99,14 +99,6 @@ func Tools() []tool.Tool {
 	}
 }
 
-func rootOf(settings media.Settings) (string, error) {
-	root, err := settings.NeedRoot()
-	if err != nil {
-		return "", tool.NotConfigured(err.Error())
-	}
-	return root, nil
-}
-
 func intArg(value any, message string) (int64, error) {
 	switch v := value.(type) {
 	case int64:
@@ -183,14 +175,6 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, er
 }
 
 func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
-	if err != nil {
-		return nil, err
-	}
-	root, err := rootOf(settings)
-	if err != nil {
-		return nil, err
-	}
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err
@@ -199,11 +183,15 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
+	read, err := mediaapp.ForTool(tc).Library(ctx, mediaapp.LibraryInput{Query: query, Limit: int(limit)})
+	if err != nil {
+		return nil, tool.Fail(err)
+	}
 	results := []any{}
-	for _, r := range settings.Search(root, query, int(limit)) {
+	for _, r := range read.Data.Results {
 		files, urls := make([]any, len(r.Files)), make([]any, len(r.Files))
 		for i, f := range r.Files {
-			files[i], urls[i] = f, settings.VPNURL(f)
+			files[i], urls[i] = f, r.VPNURLs[i]
 		}
 		results = append(results, map[string]any{
 			"kind": r.Kind, "title": r.Title, "year": r.Year, "dir": r.Dir,

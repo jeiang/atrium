@@ -17,10 +17,12 @@ import (
 )
 
 type Deps struct {
-	DB     *db.DB
-	Env    config.Env
-	Ledger *ledger.Store
-	Now    func() float64
+	DB       *db.DB
+	Env      config.Env
+	Ledger   *ledger.Store
+	Now      func() float64
+	CacheDir string
+	Links    *media.Links
 }
 
 type Service struct {

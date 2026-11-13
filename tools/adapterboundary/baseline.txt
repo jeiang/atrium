@@ -481,7 +481,6 @@ internal/media/pages/downloads_views.go	github.com/jeiang/atrium/internal/media
 internal/media/pages/errors.go	github.com/jeiang/atrium/internal/config
 internal/media/pages/errors.go	github.com/jeiang/atrium/internal/ledger
 internal/media/pages/errors.go	github.com/jeiang/atrium/internal/media
-internal/media/pages/file.go	github.com/jeiang/atrium/internal/media
 internal/media/pages/library.go	github.com/jeiang/atrium/internal/media
 internal/media/pages/module.go	github.com/jeiang/atrium/internal/config
 internal/media/pages/module.go	github.com/jeiang/atrium/internal/db

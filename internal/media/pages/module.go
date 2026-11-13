@@ -37,7 +37,6 @@ type Options struct {
 type service struct {
 	deps    *web.Deps
 	now     func() float64
-	links   *media.Links
 	effects *ledger.Store
 	app     *mediaapp.Service
 }
@@ -48,10 +47,6 @@ func (s *service) settings(ctx context.Context) media.Settings {
 		panic(err)
 	}
 	return set
-}
-
-func (s *service) artwork(set media.Settings) *media.Artwork {
-	return media.NewArtwork(s.deps.Cfg.MediaCacheDir(), set.TMDB(), set.Tuning)
 }
 
 func PublicCheck(cfg config.Config, _ config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {
@@ -69,8 +64,9 @@ func Module(o Options) web.Module {
 			panic(err)
 		}
 		d.DrainOnClose(effects.Drain)
-		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), effects: effects,
-			app: mediaapp.New(mediaapp.Deps{DB: d.DB, Env: d.Env, Ledger: effects, Now: now})}
+		links := media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath())
+		s := &service{deps: d, now: now, effects: effects,
+			app: mediaapp.New(mediaapp.Deps{DB: d.DB, Env: d.Env, Ledger: effects, Now: now, CacheDir: d.Cfg.MediaCacheDir(), Links: links})}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)

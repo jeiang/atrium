@@ -40,6 +40,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
 	ops, binds = channelOperations()
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
+	ops, binds = libraryOperations()
+	operations, bindings = append(operations, ops...), append(bindings, binds...)
 	return module.Declaration{
 		Operations: operations,
 		Bindings:   bindings,

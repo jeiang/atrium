@@ -44,3 +44,21 @@ func channelOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.Job, Target: "media/media-channels", Uses: []application.Name{mediaapp.PollName}},
 		}
 }
+
+func libraryOperations() ([]application.Definition, []application.Binding) {
+	return []application.Definition{
+			mediaapp.DescribeLibrary(),
+			mediaapp.DescribeLibraryDetail(),
+			mediaapp.DescribeArt(),
+			mediaapp.DescribeFile(),
+		}, []application.Binding{
+			{Kind: application.HTML, Target: "GET /apps/media/library", Uses: []application.Name{mediaapp.LibraryName}},
+			{Kind: application.Tool, Target: "media_library_search", Uses: []application.Name{mediaapp.LibraryName}},
+			{Kind: application.HTML, Target: "GET /apps/media/library/movie/{name}", Uses: []application.Name{mediaapp.LibraryDetailName}},
+			{Kind: application.HTML, Target: "GET /apps/media/library/tv/{name}", Uses: []application.Name{mediaapp.LibraryDetailName}},
+			{Kind: application.HTML, Target: "GET /apps/media/art/season/{name}/{number}", Uses: []application.Name{mediaapp.ArtName}},
+			{Kind: application.HTML, Target: "GET /apps/media/art/{kind}/{name}", Uses: []application.Name{mediaapp.ArtName}},
+			{Kind: application.HTML, Target: "GET /apps/media/thumb/*", Uses: []application.Name{mediaapp.ArtName}},
+			{Kind: application.HTML, Target: "GET /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
+		}
+}
