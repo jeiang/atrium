@@ -35,6 +35,7 @@ func (b *Bindings) ServeCommand(pages ...web.Page) *cli.Command {
 		Name: "serve",
 		Setup: func(args *cli.Args) cli.Handler {
 			flags := web.DefineServeFlags(args)
+			args.ExitConfigOnRefusal()
 			return func(env *cli.Env) int {
 				env.Ctx = audit.With(env.Ctx, "", "")
 				plan, ok := flags().Resolve(env.Stderr, env.Env)

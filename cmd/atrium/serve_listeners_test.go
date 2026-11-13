@@ -161,6 +161,25 @@ func TestServeExitsWithTheConfigCodeOnAPermanentRefusal(t *testing.T) {
 	if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "key") {
 		t.Fatalf("serve with a wrong database key: exit %d stderr %q; want %d (permanent, not restarted)", got.code, got.stderr, cli.ExitConfig)
 	}
+
+	dir := t.TempDir()
+	for _, tc := range []struct {
+		name  string
+		key   string
+		value string
+		want  int
+	}{
+		{"a missing key file", "ATRIUM_DB_KEY_FILE", filepath.Join(dir, "missing.key"), cli.ExitError},
+		{"a malformed key in the key file", "ATRIUM_DB_KEY_FILE", writeKey(t, dir, "short.key", "ffeedd"), cli.ExitConfig},
+		{"a retired environment name", "ANTHROPIC_API_KEY", "sk-ant-retired", cli.ExitConfig},
+		{"an invalid host config", "ATRIUM_HOST_CONFIG", writeKey(t, dir, "host.toml", "[db]\nkey = \"x\""), cli.ExitConfig},
+	} {
+		setEnv(t, "ATRIUM_DB_KEY", "")
+		setEnv(t, tc.key, tc.value)
+		if got := runApp(t, "serve", "--port", "0", "--auth", "local"); got.code != tc.want {
+			t.Errorf("serve with %s: exit %d stderr %q; want %d", tc.name, got.code, got.stderr, tc.want)
+		}
+	}
 }
 
 func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {

@@ -91,9 +91,18 @@ type action struct {
 type Args struct {
 	actions    []*action
 	extrasText string
+	configExit bool
 }
 
 func (a *Args) RejectExtras(message string) { a.extrasText = message }
+
+func (a *Args) ExitConfigOnRefusal() { a.configExit = true }
+
+type ConfigRefusal struct{ Err error }
+
+func (e *ConfigRefusal) Error() string { return e.Err.Error() }
+
+func (e *ConfigRefusal) Unwrap() error { return e.Err }
 
 func (a *Args) option(name string, k kind, o Opt) *action {
 	act := &action{Opt: o, kind: k, name: name, dest: strings.ReplaceAll(name, "-", "_"), opts: []string{"--" + name}}
@@ -224,6 +233,9 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if a.Bootstrap != nil {
 		if err := a.Bootstrap(ctx, stderr); err != nil {
 			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
+			if s.leaf != nil && s.leaf.configExit && errors.As(err, new(*ConfigRefusal)) {
+				return ExitConfig
+			}
 			return ExitError
 		}
 	}
@@ -257,10 +269,11 @@ func formatWidth() int {
 }
 
 type parser struct {
-	prog    string
-	actions []*action
-	version string
-	extras  string
+	prog       string
+	actions    []*action
+	version    string
+	extras     string
+	configExit bool
 }
 
 var helpAction = Opt{Help: "show this help message and exit"}
@@ -272,6 +285,7 @@ func newParser(prog string, c *Command, root bool) (*parser, Handler) {
 		h := c.Setup(&args)
 		p.actions = append(p.actions, args.actions...)
 		p.extras = args.extrasText
+		p.configExit = args.configExit
 		return p, h
 	}
 	dest := c.Dest

@@ -179,6 +179,11 @@ func Redeem(ctx context.Context, q db.Querier, token string, now float64, apply 
 	return apply(ctx, claims)
 }
 
+func Release(ctx context.Context, q db.Querier, nonce string, used float64) error {
+	_, err := q.ExecContext(ctx, "UPDATE action_links SET used_ts = NULL WHERE nonce = ? AND used_ts = ?", nonce, used)
+	return err
+}
+
 func sign(key []byte, claims Claims) (string, error) {
 	payload, err := json.Marshal(claims)
 	if err != nil {

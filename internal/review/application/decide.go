@@ -188,6 +188,11 @@ func (s *Service) Phone(ctx context.Context, in PhoneInput) (application.Change[
 		}
 		out.AuditID = s.audit(ctx, name, proposalTarget(claims.ProposalID), outcome, nil)
 	}
+	if delegated && out.Data.Proposal == nil && errors.As(err, new(*db.LockBusy)) {
+		if rerr := actionlink.Release(context.WithoutCancel(ctx), s.db.Write, claims.Nonce, in.Now); rerr != nil {
+			log.Error("restoring a phone link after a busy lock failed", "proposal_id", claims.ProposalID, logx.Err, rerr.Error())
+		}
+	}
 	return out, err
 }
 
@@ -220,7 +225,7 @@ func (s *Service) proposalEffects(ctx context.Context, id int64) []int64 {
 
 func pipelineRefusal(err error) *application.Error {
 	if errors.As(err, new(*db.LockBusy)) {
-		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly"}
+		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly", Cause: err}
 	}
 	var refused proposals.ProposalError
 	var disabled *module.OwnerDisabled

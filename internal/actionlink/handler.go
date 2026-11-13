@@ -41,6 +41,8 @@ func Handler(phone func(ctx context.Context, token string, now float64) (*propos
 			http.Error(w, "This link is not valid.", http.StatusBadRequest)
 		case errors.Is(err, ErrRefused):
 			http.Error(w, "This action is not allowed from the phone.", http.StatusForbidden)
+		case unfinished == nil && errors.As(err, new(*db.LockBusy)):
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		case err != nil && unfinished != nil:
 			log.Error("action link did not finish", logx.Err, err.Error())
 			text := "The action did not finish: " + err.Error() + ". The proposal is marked failed."

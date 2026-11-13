@@ -11,9 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/actionlink"
+	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
 	"github.com/jeiang/atrium/internal/passrun"
@@ -87,6 +90,82 @@ func TestDeletionApprovalRefusedByAHeldPassStaysApprovable(t *testing.T) {
 	}
 	if third := runApp(t, "proposals", "approve", proposal); third.code == cli.ExitOK {
 		t.Fatal("a third approval of an applied proposal succeeded")
+	}
+}
+
+func TestPhoneApprovalRefusedByAHeldPassKeepsItsLink(t *testing.T) {
+	m := mailSafetyFixture(t, "live")
+	d := mustConnect(t, m.path, keyFor(t))
+	declareJobsAndParkThem(t, d)
+	m.add("INBOX", "Weekly deals", "deals@shop.test", "promo", "Everything is on sale.", `\Seen`)
+	id, uid, _ := m.racePending(t)
+	promo := m.messageID(t, "Weekly deals")
+	for key, value := range map[string]string{policy.EnabledKey: "true", policy.KindsKey: executors.MailTriage} {
+		if ran := runApp(t, "settings", "set", key, value); ran.code != cli.ExitOK {
+			t.Fatalf("settings set %s: %d %s", key, ran.code, ran.stderr)
+		}
+	}
+	ctx := testProposalContext()
+	account := "icloud"
+	now := mail.WallClock()
+	pid, _, err := proposals.Create(ctx, d, executors.MailTriage, &account, "Archive deals",
+		map[string]any{"items": []any{map[string]any{"id": promo, "action": executors.TriageArchive}}},
+		map[string]any{"count": 1}, "archive-deals", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prop, err := proposals.Get(ctx, d.Read, pid)
+	if err != nil || prop == nil {
+		t.Fatalf("the triage proposal: %v", err)
+	}
+	approve, _, err := actionlink.MintPair(ctx, d.Write, pid, prop.Fingerprint, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := serveWatching(t, m.dir, d, m.fake)
+	m.correctToBills(t, id, uid)
+	manual, release := m.holdPassAtCopy(t, d)
+	client := mrvClient(t)
+	tap := func() (int, string) {
+		t.Helper()
+		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/actions/"+approve, nil)
+		return code, body
+	}
+	effects := func() int {
+		t.Helper()
+		return m.count(t, "SELECT COUNT(*) FROM effects WHERE proposal_id = ?", pid)
+	}
+
+	if code, body := tap(); code != http.StatusServiceUnavailable || !strings.Contains(body, mail.PassResource) {
+		t.Fatalf("phone approval beside a pass held at its COPY = %d %q; want 503 naming %s", code, body, mail.PassResource)
+	}
+	if status := m.scalar(t, "SELECT status FROM proposals WHERE id = ?", pid); status != "pending" {
+		t.Fatalf("the refused proposal is %s, want pending", status)
+	}
+	if n := effects(); n != 0 {
+		t.Fatalf("%d effects recorded for the refused phone approval, want none", n)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM action_links WHERE proposal_id = ? AND used_ts IS NULL", pid); n != 1 {
+		t.Fatalf("%d unused links after the busy refusal, want the link kept", n)
+	}
+
+	release()
+	waitUntil(t, 30*time.Second, "the scheduled mail sync run", scheduledRunEnded(d, passrun.Sync, manual))
+	if code, body := tap(); code != http.StatusOK {
+		t.Fatalf("phone approval after the pass released mail-pass = %d %q", code, body)
+	}
+	if status := m.scalar(t, "SELECT status FROM proposals WHERE id = ?", pid); status != "applied" {
+		t.Fatalf("the proposal is %s after its phone approval, want applied", status)
+	}
+	applied := effects()
+	if applied != 1 {
+		t.Fatalf("%d effects after the phone approval, want exactly 1", applied)
+	}
+	if code, _ := tap(); code != http.StatusGone {
+		t.Fatalf("a third tap of the same link = %d, want 410", code)
+	}
+	if n := effects(); n != applied {
+		t.Fatalf("%d effects after the third tap, want %d", n, applied)
 	}
 }
 

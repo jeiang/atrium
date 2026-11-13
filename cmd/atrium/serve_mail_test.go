@@ -41,11 +41,11 @@ func mailJobDue(t *testing.T, d *db.DB, key string) *float64 {
 	return due
 }
 
-func serveWatching(t *testing.T, dir string, d *db.DB, fakes ...*mailtest.FakeClient) {
+func serveWatching(t *testing.T, dir string, d *db.DB, fakes ...*mailtest.FakeClient) string {
 	t.Helper()
 	before := schedulerRuns(t, d, passrun.Sync)
 	started := float64(time.Now().Unix())
-	startServeIn(t, dir)
+	base := startServeIn(t, dir)
 	waitUntil(t, 30*time.Second, "serve to prime the mail sync job", func() bool {
 		due := mailJobDue(t, d, mailrun.SyncJobKey)
 		return due != nil && *due >= started
@@ -57,6 +57,7 @@ func serveWatching(t *testing.T, dir string, d *db.DB, fakes ...*mailtest.FakeCl
 		t.Fatalf("%d mail sync job runs at serve start, want the %d manual ones", n, before)
 	}
 	waitWatching(t, fakes...)
+	return base
 }
 
 func waitWatching(t *testing.T, fakes ...*mailtest.FakeClient) {

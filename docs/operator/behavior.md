@@ -78,6 +78,7 @@ Push registration is limited to 16 devices. Each notification has one 15-second 
 
 ## Phone actions
 
+- A phone Approve that waits 5 s for a running mail pass answers 503 with "try again shortly", leaves the proposal pending and keeps the link usable; every other outcome uses the link up.
 - Hitting the phone-link minting limit never drops a new proposal notification: its inbox row and push are kept without action links. Resending with no devices does not mint links; resends at the limit push without links.
 - Phone actions are off by default. `phone_actions_enabled` turns them on and `phone_actions_kinds` lists the proposal kinds that may be approved or dismissed from a notification; the web-only kinds (Gmail label merge, inbox backlog, rebalance split and merge, deletion rule) cannot be enabled.
 - When an allowed proposal is created, its notification on the assistant channel carries Approve and Dismiss actions. Each action is an HMAC-signed link valid for 12 hours and one use; at most 20 links are minted per hour. The link is the credential: `POST /actions/<token>` needs no session, but the Host check still applies and CSRF is skipped for that route.
