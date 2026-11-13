@@ -1,3 +1,6 @@
+const ASSETS = __ATRIUM_ASSETS__;
+const CACHE = `atrium-${Object.values(ASSETS).join("|")}`;
+const PRECACHE = Object.entries(ASSETS).filter(([name]) => /\.(css|js|woff2)$/.test(name)).map(([, path]) => path);
 const home = () => new URL("/", self.location.origin).href;
 
 const local = (value) => {
@@ -16,9 +19,21 @@ const open = async (target) => {
   return self.clients.openWindow(target);
 };
 
-self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting()));
+});
 
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (event) => {
+  event.waitUntil(caches.keys()
+    .then((keys) => Promise.all(keys.filter((key) => key.startsWith("atrium-") && key !== CACHE).map((key) => caches.delete(key))))
+    .then(() => self.clients.claim()));
+});
+
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (event.request.method !== "GET" || url.origin !== self.location.origin || !PRECACHE.includes(url.pathname)) return;
+  event.respondWith(caches.match(url.pathname).then((cached) => cached || fetch(event.request)));
+});
 
 self.addEventListener("push", (event) => {
   let data = {};
