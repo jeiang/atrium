@@ -759,16 +759,24 @@ func (l *Lease) Endpoint(name string) (string, error) {
 }
 
 func (l *Lease) HTTP(name string) (*http.Client, error) {
-	return l.http(name, false)
+	return l.http(name, name, transport.Options{})
 }
 
 // HTTPRead returns a client for a named endpoint whose requests are safe to
 // replay after a redirect.
 func (l *Lease) HTTPRead(name string) (*http.Client, error) {
-	return l.http(name, true)
+	return l.http(name, name+"\x00read", transport.Options{FollowRedirects: true})
 }
 
-func (l *Lease) http(name string, follow bool) (*http.Client, error) {
+// Stream returns a client for a named endpoint that does not follow redirects
+// and has no whole-request limit: a request is bounded by its context, by
+// connect for the dial and TLS handshake and by header for the response
+// headers, so a long streamed reply is not cut.
+func (l *Lease) Stream(name string, connect, header time.Duration) (*http.Client, error) {
+	return l.http(name, fmt.Sprintf("%s\x00stream\x00%s\x00%s", name, connect, header), transport.Options{Connect: connect, ResponseHeader: header})
+}
+
+func (l *Lease) http(name, key string, o transport.Options) (*http.Client, error) {
 	if l.closed {
 		return nil, errors.New("connections: the lease is closed")
 	}
@@ -780,16 +788,12 @@ func (l *Lease) http(name string, follow bool) (*http.Client, error) {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("connections: %s endpoint %q must be an http or https URL", l.id, endpoint)
 	}
-	key := name
-	if follow {
-		key += "\x00read"
-	}
 	l.shared.mu.Lock()
 	defer l.shared.mu.Unlock()
 	if client, ok := l.shared.clients[key]; ok {
 		return client, nil
 	}
-	client, err := l.newClient(0, follow, u)
+	client, err := l.newClient(o, u)
 	if err != nil {
 		return nil, err
 	}
@@ -821,7 +825,7 @@ func (l *Lease) client(name string, timeout time.Duration, follow bool) (*http.C
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("connections: %s endpoint %q must be an http or https URL", l.id, endpoint)
 	}
-	return l.newClient(timeout, follow, u)
+	return l.newClient(transport.Options{Timeout: timeout, FollowRedirects: follow}, u)
 }
 
 func guardOrigin(client *http.Client, base *url.URL) {
@@ -877,23 +881,19 @@ func (s *Store) Remove(ctx context.Context, id ID) error {
 	})
 }
 
-func (l *Lease) newClient(timeout time.Duration, follow bool, base *url.URL) (*http.Client, error) {
-	if timeout <= 0 {
-		timeout = defaultTimeout
+func (l *Lease) newClient(o transport.Options, base *url.URL) (*http.Client, error) {
+	if o.Timeout <= 0 && o.Connect <= 0 {
+		o.Timeout = defaultTimeout
 		if l.options.Timeout > 0 {
-			timeout = time.Duration(l.options.Timeout) * time.Second
+			o.Timeout = time.Duration(l.options.Timeout) * time.Second
 		}
 	}
-	client, err := transport.New(transport.Options{
-		Timeout:         timeout,
-		CAFile:          l.options.CAFile,
-		Proxy:           l.options.Proxy,
-		FollowRedirects: follow,
-	})
+	o.CAFile, o.Proxy = l.options.CAFile, l.options.Proxy
+	client, err := transport.New(o)
 	if err != nil {
 		return nil, err
 	}
-	if follow && base != nil {
+	if o.FollowRedirects && base != nil {
 		guardOrigin(client, base)
 	}
 	return l.reporting(client), nil
@@ -905,7 +905,7 @@ func (l *Lease) Transport() (*http.Client, error) {
 	if l.closed {
 		return nil, errors.New("connections: the lease is closed")
 	}
-	return l.newClient(0, false, nil)
+	return l.newClient(transport.Options{}, nil)
 }
 
 func (l *Lease) Credential(slot string) (string, error) {
