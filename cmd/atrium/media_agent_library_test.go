@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -147,11 +148,14 @@ func runCount(t *testing.T, bin string) int {
 	return strings.Count(string(b), "run\n")
 }
 
-const fakeJPEG = "\xff\xd8\xff\xe0fake-jpeg"
+const (
+	fakeJPEG        = "\xff\xd8\xff\xe0fake-jpeg"
+	fakeThumbnailer = "if [ \"$(head -c 4 /dev/fd/3)\" = fail ]; then exit 1; fi\nprintf '\\377\\330\\377\\340fake-jpeg'\n"
+)
 
 func TestMediaAgentThumbnails(t *testing.T) {
 	t.Parallel()
-	bin := fakeFFmpeg(t, "if [ \"$(head -c 4 /dev/fd/3)\" = fail ]; then exit 1; fi\nfor last; do :; done\nprintf '\\377\\330\\377\\340fake-jpeg' > \"$last\"\n")
+	bin := fakeFFmpeg(t, fakeThumbnailer)
 	a := startMediaAgent(t, mediaAgentOpts{env: []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}})
 	resp, body := a.get(t, "/health", nil)
 	var health protocol.Health
@@ -274,5 +278,142 @@ func TestMediaAgentThumbnailCancelKillsTheFFmpegTree(t *testing.T) {
 	}
 	for _, pid := range ids {
 		waitFor(t, func() bool { return syscall.Kill(pid, 0) == syscall.ESRCH })
+	}
+}
+
+func TestMediaAgentScanSkipsUnreadableFolders(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads mode 000 directories")
+	}
+	a := startMediaAgent(t, mediaAgentOpts{})
+	writeMediaFile(t, filepath.Join(a.roots["tv"], "Show", "ep.mkv"), "episode")
+	hidden := filepath.Join(a.roots["tv"], "lost+found")
+	writeMediaFile(t, filepath.Join(hidden, "inside.mkv"), "inside")
+	if err := os.Chmod(hidden, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(hidden, 0o755) })
+	var got []string
+	for _, n := range libraryPages(t, a) {
+		got = append(got, n.Root+"/"+n.Rel)
+	}
+	if want := []string{"tv/Show", "tv/Show/ep.mkv"}; !slices.Equal(got, want) {
+		t.Fatalf("library = %q, want %q", got, want)
+	}
+	if err := os.Chmod(a.roots["movies"], 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(a.roots["movies"], 0o755) })
+	if resp, body := a.get(t, "/v1/library", nil); resp.StatusCode != 500 || problemCode(t, body) != protocol.CodeIOError {
+		t.Fatalf("unreadable movies root: %d %s", resp.StatusCode, body)
+	}
+}
+
+func TestMediaAgentThumbnailAgentFailuresAreNotRemembered(t *testing.T) {
+	t.Parallel()
+	bin := fakeFFmpeg(t, "if [ -e "+"\"$0.die\" ]; then kill -9 $$; fi\n"+fakeThumbnailer)
+	a := startMediaAgent(t, mediaAgentOpts{env: []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")}})
+	writeMediaFile(t, filepath.Join(a.roots["tv"], "ep.mkv"), "episode")
+	die := filepath.Join(bin, "ffmpeg.die")
+	writeMediaFile(t, die, "")
+	thumbs := filepath.Join(a.dir, "cache", "thumbs")
+	markers := func() int {
+		matches, err := filepath.Glob(filepath.Join(thumbs, "*.none"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(matches)
+	}
+	get := func() (*http.Response, []byte) { return a.get(t, "/v1/thumbnail?root=tv&path=ep.mkv", nil) }
+	if resp, body := get(); resp.StatusCode != 503 || problemCode(t, body) != protocol.CodeUnavailable || markers() != 0 || runCount(t, bin) != 1 {
+		t.Fatalf("killed ffmpeg: %d %s markers=%d runs=%d", resp.StatusCode, body, markers(), runCount(t, bin))
+	}
+	if err := os.Remove(die); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(thumbs, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(thumbs, 0o700) })
+	if os.Geteuid() != 0 {
+		if resp, body := get(); resp.StatusCode != 503 || problemCode(t, body) != protocol.CodeUnavailable || markers() != 0 || runCount(t, bin) != 2 {
+			t.Fatalf("unwritable cache: %d %s markers=%d runs=%d", resp.StatusCode, body, markers(), runCount(t, bin))
+		}
+	}
+	if err := os.Chmod(thumbs, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if resp, body := get(); resp.StatusCode != 200 || string(body) != fakeJPEG {
+		t.Fatalf("thumbnail after the agent recovered: %d %s", resp.StatusCode, body)
+	}
+}
+
+func TestMediaAgentThumbnailCacheIsPrunedAtStartup(t *testing.T) {
+	t.Parallel()
+	a := startMediaAgent(t, mediaAgentOpts{})
+	a.terminate(t)
+	thumbs := filepath.Join(a.dir, "cache", "thumbs")
+	old := time.Now().Add(-8 * 24 * time.Hour)
+	files := map[string]bool{".thumb-123.jpg": false, "aa.jpg.none": false, "bb.jpg.none": true, "cc.jpg": true}
+	for name := range files {
+		writeMediaFile(t, filepath.Join(thumbs, name), "x")
+		if name != "bb.jpg.none" {
+			if err := os.Chtimes(filepath.Join(thumbs, name), old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	startMediaAgent(t, mediaAgentOpts{dir: a.dir})
+	for name, kept := range files {
+		if _, err := os.Lstat(filepath.Join(thumbs, name)); (err == nil) != kept {
+			t.Fatalf("%s kept=%v after startup: %v", name, kept, err)
+		}
+	}
+}
+
+func TestMediaAgentThumbnailsWithRealFFmpeg(t *testing.T) {
+	t.Parallel()
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg is not installed")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe is not installed")
+	}
+	a := startMediaAgent(t, mediaAgentOpts{})
+	show := filepath.Join(a.roots["tv"], "Show")
+	if err := os.MkdirAll(show, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	videos := []string{"ep.mkv", "ep.mp4", "ep.avi", "ep.ts", "secret.mkv"}
+	for _, name := range videos {
+		out, err := exec.Command(ffmpeg, "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc=d=2:s=320x240", "-frames:v", "20", filepath.Join(show, name)).CombinedOutput()
+		if err != nil {
+			t.Fatalf("make %s: %v %s", name, err, out)
+		}
+	}
+	writeMediaFile(t, filepath.Join(show, "concat.mkv"), "ffconcat version 1.0\nfile secret.mkv\nfile "+filepath.Join(show, "secret.mkv")+"\n")
+	writeMediaFile(t, filepath.Join(show, "playlist.mkv"), "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nsecret.mkv\n#EXT-X-ENDLIST\n")
+	get := func(rel string) (*http.Response, []byte) {
+		return a.get(t, "/v1/thumbnail?root=tv&path="+url.QueryEscape("Show/"+rel), nil)
+	}
+	for _, name := range videos[:4] {
+		if resp, body := get(name); resp.StatusCode != 200 || !strings.HasPrefix(string(body), "\xff\xd8\xff") {
+			t.Fatalf("thumbnail of %s: %d %.200q", name, resp.StatusCode, body)
+		}
+	}
+	jpegs, err := filepath.Glob(filepath.Join(a.dir, "cache", "thumbs", "*.jpg"))
+	if err != nil || len(jpegs) != 4 {
+		t.Fatalf("cached thumbnails = %d %v", len(jpegs), err)
+	}
+	for _, name := range []string{"concat.mkv", "playlist.mkv"} {
+		resp, body := get(name)
+		if resp.StatusCode != 404 || problemCode(t, body) != protocol.CodeNotFound || strings.Contains(string(body), "\xff\xd8") {
+			t.Fatalf("playlist-style %s answered %d %.200q", name, resp.StatusCode, body)
+		}
+	}
+	if after, err := filepath.Glob(filepath.Join(a.dir, "cache", "thumbs", "*.jpg")); err != nil || len(after) != 4 {
+		t.Fatalf("a playlist-style file produced a thumbnail: %d %v", len(after), err)
 	}
 }

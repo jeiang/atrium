@@ -81,8 +81,6 @@ func keyValid(key string) bool {
 	return true
 }
 
-var errUnadmitted = errors.New("the receipt was never admitted")
-
 func (a *Agent) loadReceipts() error {
 	base := filepath.Join(a.state.dir, "filings")
 	if err := os.MkdirAll(base, 0o700); err != nil {
@@ -103,14 +101,6 @@ func (a *Agent) loadReceipts() error {
 		key := entry.Name()
 		dir := filepath.Join(base, key)
 		r, err := a.loadReceipt(key, dir)
-		if errors.Is(err, errUnadmitted) {
-			if err := os.RemoveAll(dir); err == nil {
-				if err := syncDir(base); err != nil {
-					return err
-				}
-				continue
-			}
-		}
 		if err != nil {
 			r = &receipt{started: true, quarantined: true, dir: dir, changed: make(chan struct{}), result: protocol.FilingResult{Key: key, State: "unknown", Steps: []protocol.StepResult{}, ErrorCode: protocol.CodeReceiptInvalid}}
 			a.quarantined = append(a.quarantined, key)
@@ -122,11 +112,7 @@ func (a *Agent) loadReceipts() error {
 func (a *Agent) Quarantined() []string { return a.quarantined }
 func (a *Agent) loadReceipt(key, dir string) (*receipt, error) {
 	r := &receipt{started: true, dir: dir, changed: make(chan struct{})}
-	err := readJSON(filepath.Join(dir, "plan.json"), &r.request)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, errUnadmitted
-	}
-	if err != nil {
+	if err := readJSON(filepath.Join(dir, "plan.json"), &r.request); err != nil {
 		return nil, err
 	}
 	req := r.request
@@ -138,7 +124,7 @@ func (a *Agent) loadReceipt(key, dir string) (*receipt, error) {
 			return nil, errInvalidReceipt
 		}
 	}
-	err = readJSON(filepath.Join(dir, "result.json"), &r.result)
+	err := readJSON(filepath.Join(dir, "result.json"), &r.result)
 	if errors.Is(err, os.ErrNotExist) {
 		return r, a.recoverReceipt(r)
 	}

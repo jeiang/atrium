@@ -8,10 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/mediaagent/protocol"
@@ -34,7 +32,6 @@ type root struct {
 	fd   int
 	dev  uint64
 	ino  uint64
-	fold bool
 }
 
 type roots struct {
@@ -81,29 +78,11 @@ func openRoot(name, path string) (*root, error) {
 		_ = unix.Close(fd)
 		return nil, fmt.Errorf("roots.%s: %w", name, err)
 	}
-	fold := true
-	base := filepath.Base(path)
-	if swapped := swapCase(base); swapped != base {
-		var alt unix.Stat_t
-		fold = unix.Lstat(filepath.Join(filepath.Dir(path), swapped), &alt) == nil && alt.Dev == st.Dev && alt.Ino == st.Ino
-	}
-	return &root{name: name, path: path, fd: fd, dev: uint64(st.Dev), ino: st.Ino, fold: fold}, nil
-}
-
-func swapCase(s string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsUpper(r) {
-			return unicode.ToLower(r)
-		}
-		return unicode.ToUpper(r)
-	}, s)
+	return &root{name: name, path: path, fd: fd, dev: uint64(st.Dev), ino: st.Ino}, nil
 }
 
 func (rs *roots) nameKey(p protocol.Path) string {
-	if r := rs.byName[p.Root]; r != nil && r.fold {
-		return p.Root + "/" + cases.Fold().String(norm.NFC.String(p.Rel))
-	}
-	return p.Root + "/" + p.Rel
+	return p.Root + "/" + cases.Fold().String(norm.NFC.String(p.Rel))
 }
 
 func (rs *roots) close() {

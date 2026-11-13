@@ -29,12 +29,15 @@ const (
 	ffmpegNice    = "10"
 	thumbMissTTL  = 7 * 24 * time.Hour
 	thumbVersion  = "v1"
-	thumbInput    = "/dev/fd/3"
+	thumbMaxBytes = 8 << 20
+	thumbFormats  = "matroska,mov,avi,mpegts"
 )
 
 var (
 	errNoImage       = errors.New("the video has no thumbnail")
 	errNoThumbnailer = errors.New("ffmpeg and ffprobe are not available")
+	errThumbFailed   = errors.New("ffmpeg failed on the agent side")
+	thumbInputArgs   = []string{"-nostdin", "-v", "error", "-protocol_whitelist", "fd", "-format_whitelist", thumbFormats, "-threads", "1"}
 )
 
 type thumbnailer struct {
@@ -60,15 +63,21 @@ func newThumbnailer() *thumbnailer {
 	return &thumbnailer{ffmpeg: ffmpeg, ffprobe: ffprobe, nice: nice}
 }
 
-type cappedBuffer struct{ b []byte }
+type cappedBuffer struct {
+	b    []byte
+	max  int
+	over bool
+}
 
 func (c *cappedBuffer) Write(p []byte) (int, error) {
-	c.b = append(c.b, p[:min(len(p), 4096-len(c.b))]...)
+	n := min(len(p), c.max-len(c.b))
+	c.b = append(c.b, p[:n]...)
+	c.over = c.over || n < len(p)
 	return len(p), nil
 }
 
-func (t *thumbnailer) run(ctx context.Context, input *os.File, stdout io.Writer, argv ...string) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, ffmpegTimeout)
+func (t *thumbnailer) run(parent context.Context, input *os.File, stdout io.Writer, argv ...string) (int, error) {
+	ctx, cancel := context.WithTimeout(parent, ffmpegTimeout)
 	defer cancel()
 	if t.nice != "" {
 		argv = append([]string{t.nice, "-n", ffmpegNice}, argv...)
@@ -86,11 +95,17 @@ func (t *thumbnailer) run(ctx context.Context, input *os.File, stdout io.Writer,
 	if cmd.Process != nil {
 		_ = unix.Kill(-cmd.Process.Pid, unix.SIGKILL)
 	}
+	if err := parent.Err(); err != nil {
+		return -1, err
+	}
 	if ctx.Err() != nil {
-		return -1, ctx.Err()
+		return -1, fmt.Errorf("%w: %w", errThumbFailed, ctx.Err())
 	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
+		if ws, ok := exit.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			return -1, fmt.Errorf("%w: %s", errThumbFailed, ws.Signal())
+		}
 		return exit.ExitCode(), nil
 	}
 	return 0, err
@@ -133,10 +148,7 @@ func (a *Agent) generateThumbnail(ctx context.Context, t thumbTarget) error {
 	} else if miss {
 		return errNoImage
 	}
-	none := func(err error) error {
-		if ctx.Err() != nil || !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errNoImage) {
-			return err
-		}
+	none := func() error {
 		marker := t.final + ".none"
 		_ = os.Remove(marker)
 		if f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600); err == nil {
@@ -148,14 +160,22 @@ func (a *Agent) generateThumbnail(ctx context.Context, t thumbTarget) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	out := &cappedBuffer{}
-	code, err := a.thumbs.run(ctx, t.file, out, a.thumbs.ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", thumbInput)
+	out := &cappedBuffer{max: 4096}
+	code, err := a.thumbs.run(ctx, t.file, out, append(append([]string{a.thumbs.ffprobe}, thumbInputArgs...), "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", "-fd", "3", "-i", "fd:")...)
 	if err != nil {
-		return none(err)
+		return err
 	}
 	at := 0.0
 	if seconds, err := strconv.ParseFloat(strings.TrimSpace(string(out.b)), 64); code == 0 && err == nil && seconds*thumbPosition > 0 {
 		at = seconds * thumbPosition
+	}
+	image := &cappedBuffer{max: thumbMaxBytes}
+	code, err = a.thumbs.run(ctx, t.file, image, append(append([]string{a.thumbs.ffmpeg}, thumbInputArgs...), "-ss", strconv.FormatFloat(at, 'f', 2, 64), "-fd", "3", "-i", "fd:", "-frames:v", "1", "-vf", fmt.Sprintf("scale=%d:-2", thumbWidth), "-q:v", "4", "-f", "mjpeg", "pipe:1")...)
+	if err != nil {
+		return err
+	}
+	if code != 0 || len(image.b) == 0 || image.over {
+		return none()
 	}
 	tmpFile, err := os.CreateTemp(dir, ".thumb-*.jpg")
 	if err != nil {
@@ -163,18 +183,38 @@ func (a *Agent) generateThumbnail(ctx context.Context, t thumbTarget) error {
 	}
 	tmp := tmpFile.Name()
 	defer func() { _ = os.Remove(tmp) }()
-	if err := tmpFile.Close(); err != nil {
-		return err
+	_, err = tmpFile.Write(image.b)
+	if err == nil {
+		err = tmpFile.Sync()
 	}
-	code, err = a.thumbs.run(ctx, t.file, nil, a.thumbs.ffmpeg, "-v", "error", "-y", "-ss", strconv.FormatFloat(at, 'f', 2, 64), "-i", thumbInput, "-frames:v", "1", "-vf", fmt.Sprintf("scale=%d:-2", thumbWidth), "-q:v", "4", tmp)
+	if cerr := tmpFile.Close(); err == nil {
+		err = cerr
+	}
 	if err != nil {
-		return none(err)
-	}
-	if info, err := os.Lstat(tmp); code != 0 || err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
-		return none(errNoImage)
+		return err
 	}
 	if err := os.Rename(tmp, t.final); err != nil {
 		return err
 	}
 	return syncDir(dir)
+}
+
+func pruneThumbnails(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.Type().IsRegular() {
+			continue
+		}
+		if strings.HasPrefix(name, ".thumb-") {
+			_ = os.Remove(filepath.Join(dir, name))
+			continue
+		}
+		if info, err := e.Info(); err == nil && strings.HasSuffix(name, ".none") && time.Since(info.ModTime()) >= thumbMissTTL {
+			_ = os.Remove(filepath.Join(dir, name))
+		}
+	}
 }

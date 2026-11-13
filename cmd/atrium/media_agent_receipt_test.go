@@ -85,7 +85,9 @@ func TestMediaAgentRecoveryReportsTheTrueState(t *testing.T) {
 	writeReceiptFile(t, filepath.Join(filings, outOfRange.Key), "plan.json", outOfRange)
 	writeReceiptFile(t, filepath.Join(filings, outOfRange.Key), "result.json", protocol.FilingResult{Key: outOfRange.Key, PlanDigest: outOfRange.PlanDigest, State: "done", Steps: []protocol.StepResult{{Index: 7, State: "done"}}})
 	unadmitted := filingRequest("6", plan1)
-	if err := os.MkdirAll(filepath.Join(filings, unadmitted.Key), 0o700); err != nil {
+	writeReceiptFile(t, filepath.Join(filings, unadmitted.Key), "step-0.prepared", prepared(plan1))
+	empty := filingRequest("8", plan1)
+	if err := os.MkdirAll(filepath.Join(filings, empty.Key), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	a = startMediaAgent(t, mediaAgentOpts{dir: a.dir})
@@ -112,7 +114,7 @@ func TestMediaAgentRecoveryReportsTheTrueState(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(a.roots["tv"], "b1.mkv")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("undo kept the recovered link")
 	}
-	for _, req := range []protocol.FilingRequest{garbled, outOfRange} {
+	for _, req := range []protocol.FilingRequest{garbled, outOfRange, unadmitted, empty} {
 		res, _ := putFiling(t, a, req)
 		if res.State != "unknown" || res.ErrorCode != protocol.CodeReceiptInvalid {
 			t.Fatalf("quarantined receipt answered %+v", res)
@@ -121,8 +123,70 @@ func TestMediaAgentRecoveryReportsTheTrueState(t *testing.T) {
 			t.Fatalf("quarantine not reported: %s", a.logs.String())
 		}
 	}
-	if res, body := putFiling(t, a, unadmitted); res.State != "done" {
-		t.Fatalf("an unadmitted receipt directory blocked its key: %s", body)
+	if _, err := os.Stat(filepath.Join(filings, unadmitted.Key, "step-0.prepared")); err != nil {
+		t.Fatalf("the receipt without a plan lost its evidence: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(a.roots["tv"], "a.mkv")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("a receipt without a plan was executed again")
+	}
+}
+
+func TestMediaAgentRecoveryOfRenameAndUnlinkSteps(t *testing.T) {
+	t.Parallel()
+	a := startMediaAgent(t, mediaAgentOpts{})
+	imp := a.roots["import"]
+	for _, rel := range []string{"r1/a.srt", "r2/b.srt", "c1/x.txt", "c2/y.txt"} {
+		writeMediaFile(t, filepath.Join(imp, rel), rel)
+	}
+	rename := func(dir, name string) protocol.PrepareResponse {
+		return prepareFiling(t, a, protocol.PrepareRequest{SourceKind: protocol.SourceImport, Source: protocol.Path{Root: "import", Rel: dir}, Placements: []protocol.Placement{place("import", dir+"/"+name, name)}})
+	}
+	cleanup := func(dir string) protocol.PrepareResponse {
+		return prepareFiling(t, a, protocol.PrepareRequest{SourceKind: protocol.SourceImportCleanup, Source: protocol.Path{Root: "import", Rel: dir}, Cleanup: true})
+	}
+	renamed, renameNot := filingRequest("1", rename("r1", "a.srt")), filingRequest("2", rename("r2", "b.srt"))
+	unlinked, unlinkNot := filingRequest("3", cleanup("c1")), filingRequest("4", cleanup("c2"))
+	a.terminate(t)
+	filings := filepath.Join(a.dir, "state", "filings")
+	for _, c := range []struct {
+		req          protocol.FilingRequest
+		parent, from string
+	}{{renamed, a.roots["tv"], "r1"}, {renameNot, a.roots["tv"], "r2"}, {unlinked, filepath.Join(imp, "c1"), ""}, {unlinkNot, filepath.Join(imp, "c2"), ""}} {
+		if c.req.Plan.Steps[0].Kind != map[bool]string{true: protocol.StepRename, false: protocol.StepUnlink}[c.from != ""] {
+			t.Fatalf("unexpected first step %+v", c.req.Plan.Steps[0])
+		}
+		rec := map[string]any{"step": c.req.Plan.Steps[0], "parent": dirIdentity(t, c.parent)}
+		if c.from != "" {
+			rec["source_parent"] = dirIdentity(t, filepath.Join(imp, c.from))
+		}
+		dir := filepath.Join(filings, c.req.Key)
+		writeReceiptFile(t, dir, "plan.json", c.req)
+		writeReceiptFile(t, dir, "step-0.prepared", rec)
+	}
+	if err := os.Rename(filepath.Join(imp, "r1", "a.srt"), filepath.Join(a.roots["tv"], "a.srt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(imp, "c1", "x.txt")); err != nil {
+		t.Fatal(err)
+	}
+	a = startMediaAgent(t, mediaAgentOpts{dir: a.dir})
+	for _, c := range []struct {
+		req   protocol.FilingRequest
+		state string
+		steps int
+	}{{renamed, "done", 1}, {renameNot, "failed", 0}, {unlinked, "partial", 1}, {unlinkNot, "failed", 0}} {
+		if res, body := putFiling(t, a, c.req); res.State != c.state || len(res.Steps) != c.steps {
+			t.Fatalf("recovered %s=%s want %s with %d steps", c.req.Key[:1], body, c.state, c.steps)
+		}
+	}
+	for path, present := range map[string]bool{
+		filepath.Join(a.roots["tv"], "a.srt"): true, filepath.Join(imp, "r1", "a.srt"): false,
+		filepath.Join(a.roots["tv"], "b.srt"): false, filepath.Join(imp, "r2", "b.srt"): true,
+		filepath.Join(imp, "c1"): true, filepath.Join(imp, "c2", "y.txt"): true,
+	} {
+		if _, err := os.Lstat(path); (err == nil) != present {
+			t.Fatalf("%s present=%v after recovery: %v", path, present, err)
+		}
 	}
 }
 
@@ -286,17 +350,16 @@ func TestMediaAgentPrepareRefusesNameAliases(t *testing.T) {
 	a := startMediaAgent(t, mediaAgentOpts{})
 	writeMediaFile(t, filepath.Join(a.roots["downloads"], "item", "a.mkv"), "a")
 	writeMediaFile(t, filepath.Join(a.roots["downloads"], "item", "b.mkv"), "b")
-	upper, errUpper := os.Stat(a.roots["tv"])
-	lower, errLower := os.Stat(filepath.Join(filepath.Dir(a.roots["tv"]), "TV"))
-	insensitive := errUpper == nil && errLower == nil && os.SameFile(upper, lower)
 	before := mediaTreeSnapshot(t, a.dir)
-	status, body := a.json(t, http.MethodPost, "/v1/filing/prepare", torrentPrepare(place("downloads", "item/a.mkv", "Show/a.mkv"), place("downloads", "item/b.mkv", "show/b.mkv")))
-	if insensitive {
+	for _, names := range [][2]string{{"Show/a.mkv", "show/b.mkv"}, {"Caf\u00e9/a.mkv", "Cafe\u0301/b.mkv"}, {"STRASSE/a.mkv", "stra\u00dfe/b.mkv"}} {
+		status, body := a.json(t, http.MethodPost, "/v1/filing/prepare", torrentPrepare(place("downloads", "item/a.mkv", names[0]), place("downloads", "item/b.mkv", names[1])))
 		if status != 409 || problemCode(t, body) != protocol.CodeDestinationExists {
-			t.Fatalf("case-insensitive volume accepted aliased names: %d %s", status, body)
+			t.Fatalf("prepare accepted aliased names %q: %d %s", names, status, body)
 		}
-	} else if status != 200 {
-		t.Fatalf("case-sensitive volume refused distinct names: %d %s", status, body)
+	}
+	status, body := a.json(t, http.MethodPost, "/v1/filing/prepare", torrentPrepare(place("downloads", "item/a.mkv", "Show/a.mkv"), place("downloads", "item/b.mkv", "Other/b.mkv")))
+	if status != 200 {
+		t.Fatalf("prepare refused distinct names: %d %s", status, body)
 	}
 	if !reflect.DeepEqual(before, mediaTreeSnapshot(t, a.dir)) {
 		t.Fatal("prepare changed the filesystem")

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -96,6 +97,7 @@ func New(c Config) (*Agent, error) {
 		return nil, err
 	}
 	a.thumbs = newThumbnailer()
+	pruneThumbnails(filepath.Join(c.CacheDirectory, "thumbs"))
 	a.work, a.stopWork = context.WithCancel(context.Background())
 	a.settled.Store(true)
 	return a, nil
