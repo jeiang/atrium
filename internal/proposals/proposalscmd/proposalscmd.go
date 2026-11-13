@@ -42,6 +42,7 @@ type Options struct {
 	Enabled func(context.Context, db.Querier, string) (bool, error)
 	Store   func(*db.DB, config.Config) *ledger.Store
 	Tools   registry.Source
+	Namer   func(context.Context, *db.DB, config.Config) (rebalance.Namer, error)
 }
 
 func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
@@ -181,11 +182,14 @@ func Command(o Options) *cli.Command {
 				if !mailEnabled(x.Ctx, x.DB.Read) {
 					return nil
 				}
-				url, err := endpoint.ChatURL(x.Ctx, x.DB.Read)
+				if x.opts.Namer == nil {
+					return errors.New("proposal scans are not bound to a classifier")
+				}
+				namer, err := x.opts.Namer(x.Ctx, x.DB, x.Cfg)
 				if err != nil {
 					return err
 				}
-				out, err := scans.ScanAll(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(url))
+				out, err := scans.ScanAll(x.Ctx, x.DB, x.Now(), namer)
 				if err != nil {
 					return err
 				}
@@ -287,10 +291,6 @@ func Command(o Options) *cli.Command {
 func mailEnabled(ctx context.Context, q db.Querier) bool {
 	flag, err := settings.From(ctx).Resolve(ctx, q, module.FlagKey(module.Mail))
 	if err != nil || flag.Value != "true" {
-		return false
-	}
-	found, err := settings.From(ctx).Resolve(ctx, q, endpoint.KeyChatURL)
-	if err != nil || found.Value == "" {
 		return false
 	}
 	reason, err := endpoint.EmbeddingConfigured(ctx, q)

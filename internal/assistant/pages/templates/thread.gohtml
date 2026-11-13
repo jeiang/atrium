@@ -2,10 +2,10 @@
 {{define "heading"}}{{or .Data.View.Thread.Title "Thread"}}{{end}}
 {{define "header_meta"}}{{template "chat_meter" (dict "view" .Data.View)}}{{end}}
 {{define "header_actions"}}<button type="button" class="btn md:hidden" data-variant="ghost" data-size="icon-sm" id="panel-toggle" data-action="toggle-panel" aria-controls="panel" aria-expanded="false" aria-label="Work panel" title="Work panel">{{icon "panel-right"}}</button>{{end}}
-{{define "preload"}}<link rel="preload" href="/static/fonts/source-serif-4-400-normal.woff2" as="font" type="font/woff2" crossorigin>{{end}}
+{{define "preload"}}<link rel="preload" href="{{asset "fonts/source-serif-4-400-normal.woff2"}}" as="font" type="font/woff2" crossorigin>{{end}}
 {{define "content_class"}}chat-content{{end}}
 {{define "content"}}{{$d := .Data}}{{$t := $d.View.Thread}}
-<div id="workspace" class="workspace" style="--panel-w: 24rem" data-thread="{{$t.ID}}">
+<div id="workspace" class="workspace" data-thread="{{$t.ID}}">
   <div id="thread" class="reading min-h-full gap-5 pt-4">
     {{template "chat_thread" (dict "d" $d "csrf" .CSRF)}}
   </div>

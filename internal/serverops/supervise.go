@@ -10,16 +10,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/loop"
-	"github.com/jeiang/atrium/internal/assistant/prompts"
-	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -40,7 +35,10 @@ type change struct {
 type delta struct {
 	Changes []change `json:"changes"`
 	Pending bool     `json:"pending,omitempty"`
+	Charged int      `json:"charged,omitempty"`
 }
+
+const maxChargedAttempts = 2
 
 type sample struct {
 	host, metric string
@@ -65,11 +63,6 @@ func workerThread(ctx context.Context, d *db.DB, now float64) (int64, error) {
 func Supervise(ctx context.Context, e jobworker.Env) error {
 	d := e.Service.DB
 	now := e.Now()
-	set := assistant.Read(ctx, d.Read)
-	if err := set.Err(); err != nil {
-		return err
-	}
-	local := set.Text(KeyCondenser) == CondenserLocal
 	changes, err := detect(ctx, d.Read)
 	if err != nil {
 		return err
@@ -81,7 +74,7 @@ func Supervise(ctx context.Context, e jobworker.Env) error {
 		return err
 	}
 	retrying := false
-	if len(changes) == 0 && local {
+	if len(changes) == 0 {
 		id, err := WorkerThreadID(ctx, d.Read)
 		if err != nil {
 			return err
@@ -91,7 +84,7 @@ func Supervise(ctx context.Context, e jobworker.Env) error {
 			if err != nil {
 				return err
 			}
-			if last != nil && last.Pending && len(last.Changes) > 0 {
+			if last != nil && last.Pending && len(last.Changes) > 0 && last.Charged < maxChargedAttempts {
 				changes = last.Changes
 				retrying = true
 			}
@@ -104,12 +97,11 @@ func Supervise(ctx context.Context, e jobworker.Env) error {
 	if err != nil {
 		return err
 	}
-	fp := fingerprint(changes)
 	last, err := lastDelta(ctx, d.Read, threadID)
 	if err != nil {
 		return err
 	}
-	if !retrying && last != nil && fingerprint(last.Changes) == fp {
+	if !retrying && last != nil && fingerprint(last.Changes) == fingerprint(changes) {
 		return nil
 	}
 	loc, err := config.From(ctx).Location(e.Service.Env)
@@ -117,34 +109,7 @@ func Supervise(ctx context.Context, e jobworker.Env) error {
 		return err
 	}
 	text, marks := deltaText(changes)
-	if local {
-		return condense(ctx, e, threadID, now, loc, changes, text, marks)
-	}
-	budget := set.Float(KeyWorkerMonthlyUSD)
-	spend, err := inference.ThreadMonthToDate(ctx, d.Read, threadID, now, loc)
-	if err != nil {
-		return err
-	}
-	if spend >= budget {
-		return nil
-	}
-	if marks != 0 {
-		if err := threads.AddMarks(ctx, d.Write, threadID, now, marks); err != nil {
-			return err
-		}
-	}
-	maxCost := set.Float(KeyWorkerMaxRunUSD)
-	steps := int64(loop.TuningMaxStepsWorker)
-	extra := prompts.Worker
-	if _, err := e.Service.StartRun(ctx, threadID, text, service.Start{Kind: threads.Worker, Limits: journal.Limits{
-		MaxSteps: &steps, MaxCostUSD: &maxCost, SystemExtra: &extra,
-	}}); err != nil {
-		if errors.As(err, new(service.RunActive)) {
-			return nil
-		}
-		return err
-	}
-	return nil
+	return condense(ctx, e, threadID, now, loc, changes, text, marks)
 }
 
 func detect(ctx context.Context, q db.Querier) ([]change, error) {
@@ -287,10 +252,11 @@ func fingerprint(changes []change) string {
 	return strings.Join(parts, ";")
 }
 
-func deltaText(changes []change) (string, tool.Marks) { return deltaMessage(changes, false) }
+func deltaText(changes []change) (string, tool.Marks) { return deltaMessage(delta{Changes: changes}) }
 
-func deltaMessage(changes []change, pending bool) (string, tool.Marks) {
-	payload, err := json.Marshal(delta{Changes: changes, Pending: pending})
+func deltaMessage(d delta) (string, tool.Marks) {
+	changes := d.Changes
+	payload, err := json.Marshal(d)
 	if err != nil {
 		payload = []byte(`{"changes":[]}`)
 	}

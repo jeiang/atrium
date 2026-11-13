@@ -193,11 +193,14 @@ func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
 		"atrium_tool_calls_total", "atrium_tool_duration_seconds",
 		"atrium_db_transactions_total", "atrium_queue_depth",
 		"atrium_integration_state", "atrium_action_links_outstanding",
-		"atrium_endpoint_probe_ok", "atrium_notifications_undelivered",
+		"atrium_notifications_undelivered",
 	} {
 		if !strings.Contains(scrape, "# TYPE "+name+" ") {
 			t.Errorf("ops /metrics lacks %s", name)
 		}
+	}
+	if strings.Contains(scrape, "atrium_endpoint_probe") {
+		t.Errorf("ops /metrics still serves a removed endpoint probe metric:\n%s", scrape)
 	}
 	if !strings.Contains(scrape, `atrium_tool_calls_total{tool="mail_search",ok="true"}`) {
 		t.Errorf("tool metric missing:\n%s", scrape)

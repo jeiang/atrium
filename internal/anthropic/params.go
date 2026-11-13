@@ -50,7 +50,8 @@ type ToolChoice struct {
 }
 
 type OutputConfig struct {
-	Effort string `json:"effort"`
+	Effort string            `json:"effort,omitempty"`
+	Format *JSONOutputFormat `json:"format,omitempty"`
 }
 
 func (p Params) body() ([]byte, error) {

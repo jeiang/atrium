@@ -235,8 +235,14 @@ func hostKeyOf(keys map[string]settings.HostDef, name string) (d settings.HostDe
 
 func hostKeyRefusal(path, module, name string) error {
 	entry, ok := settings.ImportEntryFor(name)
+	if base, cut := strings.CutSuffix(name, "_file"); !ok && cut {
+		entry, ok = settings.ImportEntryFor(base)
+	}
 	if !ok || entry.Module != module {
 		return nil
+	}
+	if entry.Action == settings.ImportDrop && entry.Class == settings.ImportOperator {
+		return fmt.Errorf("config: %s: %s.%s was removed; use %s", path, module, name, settings.Destination(entry))
 	}
 	if entry.Module == "db" && entry.Key == "key" {
 		return fmt.Errorf("config: %s: db.key is the database key; use ATRIUM_DB_KEY_FILE", path)

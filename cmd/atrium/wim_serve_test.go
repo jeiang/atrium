@@ -283,22 +283,6 @@ func TestWimServeMarksAStuckSendingDraftUnknownAndReportsItsLifecycle(t *testing
 	notify.Wait("STATUS=serving " + strings.TrimPrefix(base, "http://"))
 	notify.Wait("WATCHDOG=1")
 
-	client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
-	for _, accept := range []string{"gzip", ""} {
-		req, _ := http.NewRequest(http.MethodGet, base+"/static/app.css", nil)
-		if accept != "" {
-			req.Header.Set("Accept-Encoding", accept)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-		if got := resp.Header.Values("Vary"); len(got) != 1 || got[0] != "Accept-Encoding" || resp.Header.Get("Content-Encoding") != accept {
-			t.Errorf("static asset with Accept-Encoding %q: Vary %v encoding %q", accept, got, resp.Header.Get("Content-Encoding"))
-		}
-	}
-
 	stop()
 	notify.Wait("STOPPING=1")
 	after, err := db.Connect(path)

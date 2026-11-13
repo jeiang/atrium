@@ -50,7 +50,13 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			}
 			return v, nil
 		},
-		"asset":    func(path string) string { return AssetURL(e.assetVersion, path) },
+		"asset": func(name string) (string, error) {
+			url, ok := e.assets[name]
+			if !ok {
+				return "", fmt.Errorf("unknown asset %q", name)
+			}
+			return url, nil
+		},
 		"icon":     icon,
 		"lbl":      lbl,
 		"labels":   func(set string) []pair { return labelSets[set] },
