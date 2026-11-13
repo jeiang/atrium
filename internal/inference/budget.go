@@ -23,11 +23,12 @@ const (
 type Reason string
 
 const (
-	ReasonMonthly   Reason = "monthly"
-	ReasonRun       Reason = "run"
-	ReasonParentRun Reason = "parent_run"
-	ReasonThread    Reason = "thread"
-	ReasonSpendCap  Reason = "spend_cap"
+	ReasonMonthly     Reason = "monthly"
+	ReasonRun         Reason = "run"
+	ReasonParentRun   Reason = "parent_run"
+	ReasonThread      Reason = "thread"
+	ReasonSpendCap    Reason = "spend_cap"
+	ReasonSourceMonth Reason = "source_month"
 )
 
 type BudgetExceeded struct {

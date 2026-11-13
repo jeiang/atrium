@@ -38,8 +38,6 @@ func Settings() []settings.Def {
 	}
 	return []settings.Def{
 		settings.Value(settings.Advanced, settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
-		ui(endpoint.KeyChatURL, settings.String, "", nil),
-		ui(endpoint.KeyChatModel, settings.String, "qwen", nonBlank),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyWriteCap, Label: "Automatic write cap", Module: module, Type: settings.Int, Default: "100",
 			Check: settings.Between(1, 1000)}),
@@ -53,10 +51,7 @@ func Settings() []settings.Def {
 }
 
 func HostSettings() []settings.HostDef {
-	return []settings.HostDef{
-		{Key: endpoint.KeyChatURL, Module: module, Type: settings.String},
-		{Key: endpoint.KeyChatModel, Module: module, Type: settings.String, Default: "qwen", Check: nonBlank},
-	}
+	return nil
 }
 
 func atLeast(lo int64) func(string) error {

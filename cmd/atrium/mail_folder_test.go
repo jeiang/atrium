@@ -14,8 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
 type folderFixture struct {
@@ -26,10 +26,9 @@ type folderFixture struct {
 func newFolderFixture(t *testing.T, mode string) folderFixture {
 	t.Helper()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	srv := llmstub.Server(t, nil)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	embed := embedstub.Server(t)
 	seedSettings(t, map[string]string{mail.KeyMode: mode})
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
 		t.Fatal(err)

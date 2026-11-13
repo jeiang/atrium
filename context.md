@@ -306,17 +306,16 @@ behavior-parity target.
   default $0.30 per night, and `dreaming_monthly_usd`, default $3 per
   calendar month). A server fallback is shown in the thread
   and its tokens are recorded as a separate usage row priced at the model
-  that served them. Mail classification uses the chat endpoint and
-  embeddings use the `service/embedding` connection; both are
-  OpenAI-compatible, local or hosted, with a CA bundle and proxy, and the
-  chat endpoint takes an optional Bearer key while the embedding connection
-  takes a host-file bearer. The endpoint package carries the resolved chat
-  and embed model, compiled body-character and batch constants and the
-  dimension through the request context. `atrium endpoints probe` and each
-  connection's Test record whether they work, and mail is held in
-  needs-settings only while an explicit Test of the current embedding
-  configuration fails; automatic health checks and runtime failures update
-  the connection's health without changing that hold. Connected content sent to a hosted model leaves
+  that served them. Mail classification is fixed-schema Haiku through the
+  `service/anthropic` connection under `monthly_budget_usd`; there is no local
+  chat endpoint. Embeddings use the `service/embedding` connection, an
+  OpenAI-compatible endpoint, local or hosted, with a CA bundle, proxy and
+  host-file bearer. The endpoint package carries the resolved embed model,
+  compiled body-character and batch constants and the dimension through the
+  request context. Each connection's Test records whether it works, and mail
+  is held in needs-settings only while an explicit Test of the current
+  embedding configuration fails; automatic health checks and runtime failures
+  update the connection's health without changing that hold. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
@@ -481,7 +480,8 @@ behavior-parity target.
   state (re-synced), knowledge and Notion
   vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
   handshakes, action links, the mail event log, ops
-  data, endpoint probes, integration health, nightly observations,
+  data, endpoint probes (removed with the chat endpoint; the embed probe
+  moves to `service/embedding`), integration health, nightly observations,
   `db_key_history` (old backups are read with the old key),
   `module_migrations` and the source's `schema_migrations`. References to
   uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
@@ -681,8 +681,8 @@ behavior-parity target.
   span is active; logs still reach VictoriaLogs through journald, with no
   OTLP log pipeline. The metrics include LLM tokens and cost by model and run
   kind, run steps and duration, tool calls and duration, mail sync counts,
-  queue depths, integration health, notification delivery, action links and
-  endpoint probes. The host owns the scrape job and the traces endpoint.
+  queue depths, integration health, notification delivery and action links.
+  The host owns the scrape job and the traces endpoint.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
@@ -749,7 +749,7 @@ behavior-parity target.
   `web_search` is offered only to that child (chat and cron offer
   `search_web` when the thread's `web_search` option is on), and it is
   excluded from the operator's subagent tool pool.
-- The `ops-sampler` built-in job runs every 15 minutes with no model call.
+- The `ops-sampler` built-in job runs every 15 minutes; sampling makes no model call.
   It reads the configured `ops_hosts` through the Grafana metrics
   datasource and the alerts endpoint, records typed samples in
   `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
@@ -760,20 +760,29 @@ behavior-parity target.
   with `{{host}}` and optionally `{{selector}}`, validated on save, and
   `ops_hosts` accepts address-shaped ids only. When a fact changes state, crosses
   the 90% memory or disk threshold, or its firing alert set changes, and
-  the change set differs from the last worker run's, it starts one worker
-  run in the persistent `Ops` thread with the typed change set and quoted
-  alert names; the worker files findings in `ops_findings` (marks from the
-  thread) and the sampler resolves a finding once its fact is back to
-  normal; resolved findings are pruned after 30 days. Findings of severity
-  warning or critical appear in the attention view and on Needs you; the
-  worker has no notify, people or internet tool and never restarts or
-  changes a host. `ops_condenser` (default `haiku`) chooses how findings are
-  produced: `haiku` starts the worker run; `local` makes one JSON-schema
-  chat call to the `mail_chat_url` endpoint with `ops_condenser_model`
-  (empty uses `mail_chat_model`) and `ops_condenser_max_tokens` (default
-  2,000), files the validated findings, and records no Anthropic usage. A
-  local failure ends the sampler run with an error and retries on the next
-  pass without falling back to Haiku.
+  the change set differs from the last one recorded in the persistent `Ops`
+  thread, it makes one fixed-schema Haiku classification request (no
+  tools, no thinking, one message, `output_config.format` json_schema) with
+  the typed change set, quoted alert names and the last 24 hours of
+  samples for those facts. The request is admitted by the inference ledger
+  on a `classification` accounting thread (role
+  `classification:ops_condenser`, never listed with chats or searched as
+  memory) under the Haiku run cap lowered to `ops_worker_max_run_usd`
+  (default $0.10), the `ops_worker_monthly_usd` source cap (default $5,
+  counting reserved, unknown and settled `classifier:ops_condenser` spend)
+  and the monthly budget; the thread cost cap does not apply. Validated
+  findings for facts in the change set go to `ops_findings` (marks from the
+  `Ops` thread); others are dropped. A refusal, provider failure or reply
+  that breaks the schema writes no finding and records the change as
+  pending; the next pass with no new change retries it once. A monthly
+  budget refusal also records a classification deferral and raises the
+  core `classification_budget` attention item pointing at
+  `/settings/usage`, which clears once the budget has room; a source cap
+  refusal records no deferral. The sampler resolves a finding once its
+  fact is back to normal; resolved findings are pruned after 30 days.
+  Findings of severity warning or critical appear in the attention view
+  and on Needs you. No worker run starts automatically and nothing
+  restarts or changes a host.
 - The Notion page view is read-only: the Edit and Link buttons are gone,
   and old `notion_link` and `notion_edit` proposals stay readable and
   dismissable. Approvals are only for external or costly actions.

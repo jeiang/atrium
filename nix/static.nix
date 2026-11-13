@@ -3,6 +3,8 @@
   stdenvNoCC,
   fetchurl,
   tailwindcss_4,
+  jq,
+  brotli,
 }: let
   npmTarball = name: version: hash:
     fetchurl {
@@ -45,6 +47,8 @@ in
       root = ../.;
       fileset = lib.fileset.unions [
         ../internal/web/assets/app.js
+        ../internal/web/assets/tokens.json
+        ../nix/webassets
         ../internal/web/assets/input.css
         ../internal/web/assets/manifest.json
         ../internal/web/assets/sw.js
@@ -54,13 +58,14 @@ in
       ];
     };
     sourceRoot = "source/internal/web/assets";
-    nativeBuildInputs = [tailwindcss_4];
+    nativeBuildInputs = [tailwindcss_4 jq brotli];
     dontConfigure = true;
     passthru = {inherit basecoat;};
     buildPhase = ''
       runHook preBuild
       mkdir -p node_modules/basecoat-css
       tar -xzf ${basecoat} --strip-components=1 -C node_modules/basecoat-css
+      jq -r -f ../../../nix/webassets/tokens.jq tokens.json > tokens.generated.css
       tailwindcss --input input.css --output app.css --minify
       grep -q '\.flex{display:flex}' app.css
       runHook postBuild
@@ -74,6 +79,7 @@ in
       install -Dm444 node_modules/basecoat-css/dist/js/all.min.js $out/basecoat/all.min.js
       tar -xzOf ${htmx} package/dist/htmx.min.js > $out/htmx.min.js
       ${lib.concatMapStrings installFont fonts}
+      bash ../../../nix/webassets/pack.sh
       runHook postInstall
     '';
   }

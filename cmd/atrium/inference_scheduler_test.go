@@ -172,7 +172,7 @@ func TestInferenceSchedulerDefersConditionalPaidWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	message, _ := res.LastInsertId()
-	asstExec(t, d, "INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (?, 'local model flagged an event', 'queued', 1)", message)
+	asstExec(t, d, "INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (?, 'model flagged an event', 'queued', 1)", message)
 	asstSpend(t, d, inference.SourceLoop, 150)
 	schedulerDue(t, d, "calendar-candidates")
 	before := len(api.Requests())

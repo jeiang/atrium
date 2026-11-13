@@ -82,7 +82,6 @@ func (p *pages) settingsRoutes(r chi.Router) {
 		p.assistantPage(w, r, status, AssistantData{}, mutate)
 	})
 	p.deps.Authenticated(http.MethodPost, "/settings/permissions", p.permissionsSave)
-	p.deps.Authenticated(http.MethodGet, "/settings/usage", p.usagePage)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
@@ -134,8 +133,3 @@ func settingsRedirect(w http.ResponseWriter, location string) {
 	w.WriteHeader(http.StatusSeeOther)
 }
 
-func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
-	usage, err := p.assistant().Usage(r.Context(), asstapp.UsageInput{})
-	check(err)
-	p.settings(w, r, http.StatusOK, "usage.gohtml", usage.Data, nil)
-}

@@ -14,9 +14,12 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
 )
@@ -27,6 +30,7 @@ const (
 	Parked      = "parked"
 	Done        = "done"
 	Failed      = "failed"
+	Accounting  = "accounting"
 )
 
 const (
@@ -153,6 +157,7 @@ type Limits struct {
 	Report           json.RawMessage
 	WebSearchMaxUses *int64
 	Sources          []int64
+	ItemKey          string
 }
 
 type limitsJSON struct {
@@ -164,10 +169,11 @@ type limitsJSON struct {
 	Report           json.RawMessage `json:"report,omitempty"`
 	WebSearchMaxUses *int64          `json:"web_search_max_uses,omitempty"`
 	Sources          *[]int64        `json:"sources,omitempty"`
+	ItemKey          string          `json:"item_key,omitempty"`
 }
 
 func (l Limits) wire() limitsJSON {
-	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice, Report: l.Report, WebSearchMaxUses: l.WebSearchMaxUses}
+	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice, Report: l.Report, WebSearchMaxUses: l.WebSearchMaxUses, ItemKey: l.ItemKey}
 	if l.AllowedTools != nil {
 		w.AllowedTools = &l.AllowedTools
 	}
@@ -199,7 +205,7 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	if err := json.Unmarshal([]byte(*raw), &stored); err != nil {
 		return Limits{}, fmt.Errorf("journal: run %d limits_json: %w", runID, err)
 	}
-	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice, Report: stored.Report, WebSearchMaxUses: stored.WebSearchMaxUses}
+	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice, Report: stored.Report, WebSearchMaxUses: stored.WebSearchMaxUses, ItemKey: stored.ItemKey}
 	if stored.AllowedTools != nil {
 		out.AllowedTools = *stored.AllowedTools
 	}
@@ -218,6 +224,118 @@ func GetRun(ctx context.Context, q db.Querier, runID int64) (*Run, error) {
 		return nil, err
 	}
 	return &r, nil
+}
+
+const (
+	classificationKind = "classification"
+	classificationText = 200
+)
+
+func StartClassification(ctx context.Context, d *db.DB, caller, itemKey string, now float64) (runID, threadID int64, err error) {
+	if err := classificationCaller(caller); err != nil {
+		return 0, 0, err
+	}
+	if itemKey == "" {
+		return 0, 0, errors.New("journal: a classification run needs an item key")
+	}
+	if err := classificationMeta("item key", itemKey); err != nil {
+		return 0, 0, err
+	}
+	limits, err := json.Marshal(Limits{ItemKey: itemKey}.wire())
+	if err != nil {
+		return 0, 0, err
+	}
+	role := classificationKind + ":" + caller
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, "SELECT id FROM threads WHERE kind = ? AND role = ? AND deleted_at IS NULL ORDER BY id LIMIT 1",
+			classificationKind, role).Scan(&threadID)
+		if errors.Is(err, sql.ErrNoRows) {
+			res, err := tx.ExecContext(ctx,
+				"INSERT INTO threads (kind, title, effort, created_at, updated_at, role, model, thinking, web_search) VALUES (?, ?, '', ?, ?, ?, ?, 'disabled', 0)",
+				classificationKind, "Classification: "+caller, now, now, role, pricing.HaikuID)
+			if err != nil {
+				return err
+			}
+			if threadID, err = res.LastInsertId(); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO runs (thread_id, kind, model, effort, state, started_at, limits_json) VALUES (?, ?, ?, '', ?, ?, ?)",
+			threadID, classificationKind, pricing.HaikuID, Accounting, now, string(limits))
+		if err != nil {
+			return err
+		}
+		runID, err = res.LastInsertId()
+		return err
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return runID, threadID, nil
+}
+
+func FinishClassification(ctx context.Context, q db.Querier, runID int64, state string, now float64, reason string) error {
+	switch {
+	case state != Done && state != Failed:
+		return fmt.Errorf("journal: classification run %d cannot finish as %q", runID, state)
+	case state == Failed && reason == "":
+		return fmt.Errorf("journal: failed classification run %d needs a reason", runID)
+	}
+	if err := classificationMeta("reason", reason); err != nil {
+		return err
+	}
+	var errText *string
+	if reason != "" {
+		errText = &reason
+	}
+	changed, err := db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ? AND state = ?",
+		state, errText, now, runID, Accounting))
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return fmt.Errorf("journal: run %d is not an open classification run", runID)
+	}
+	return nil
+}
+
+func LatestClassificationError(ctx context.Context, q db.Querier, caller string, since float64) (string, error) {
+	var reason string
+	err := q.QueryRowContext(ctx,
+		"SELECT COALESCE(r.error, '') FROM runs r JOIN threads t ON t.id = r.thread_id "+
+			"WHERE t.kind = ? AND t.role = ? AND r.kind = ? AND r.state IN (?, ?) AND r.started_at >= ? ORDER BY r.id DESC LIMIT 1",
+		classificationKind, classificationKind+":"+caller, classificationKind, Done, Failed, since).Scan(&reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return reason, err
+}
+
+func classificationCaller(caller string) error {
+	if caller == "" || len(caller) > classificationText {
+		return fmt.Errorf("journal: invalid classification caller %q", caller)
+	}
+	for _, r := range caller {
+		if (r < 'a' || r > 'z') && r != '_' {
+			return fmt.Errorf("journal: invalid classification caller %q", caller)
+		}
+	}
+	return nil
+}
+
+func classificationMeta(what, text string) error {
+	if utf8.RuneCountInString(text) > classificationText || !utf8.ValidString(text) || strings.TrimSpace(text) != text {
+		return fmt.Errorf("journal: classification %s is not sanitized", what)
+	}
+	for _, r := range text {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("journal: classification %s is not sanitized", what)
+		}
+	}
+	return nil
 }
 
 func FinishRun(ctx context.Context, q db.Querier, runID int64, state string, now float64, errText *string) error {
@@ -257,6 +375,15 @@ func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, no
 }
 
 func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, error) {
+	lease, err := leaseSeconds(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := q.ExecContext(ctx,
+		"UPDATE runs SET state = ?, error = 'crashed', ended_at = ? WHERE state = ? AND kind = ? AND started_at < ?",
+		Failed, now, Accounting, classificationKind, now-lease); err != nil {
+		return 0, err
+	}
 	res, err := q.ExecContext(ctx,
 		"UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? AND (lease_until IS NULL OR lease_until < ?)",
 		Interrupted, Running, now)

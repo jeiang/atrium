@@ -18,9 +18,10 @@ import (
 )
 
 type Options struct {
-	Env     config.Env
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
+	Env         config.Env
+	Clients     func(config.Config) mail.OpenFunc
+	Now         func() float64
+	Classifiers runpkg.Classifier
 }
 
 func (o Options) env() config.Env {
@@ -116,7 +117,7 @@ func (o Options) run(env *cli.Env, run body) error {
 	if clients == nil {
 		clients = imapclient.Opener
 	}
-	pass, release, err := runpkg.Open(env.Ctx, o.env(), cfg, clients(cfg), o.Now)
+	pass, release, err := runpkg.Open(env.Ctx, o.env(), cfg, clients(cfg), o.Now, o.Classifiers)
 	if err != nil {
 		return err
 	}

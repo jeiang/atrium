@@ -116,7 +116,6 @@ internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/media
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/inference
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/serverops
 internal/assistant/tools/propose/propose.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/propose/propose.go	github.com/jeiang/atrium/internal/proposals
@@ -153,7 +152,6 @@ internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/mai
 internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/mail/mailconn
 internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/settings
 internal/mail/accountpages/accountpages.go	github.com/jeiang/atrium/internal/settings/audit
-internal/mail/mailcmd/endpoints.go	github.com/jeiang/atrium/internal/mail
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/applier
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/backlog
 internal/mail/mailcmd/live.go	github.com/jeiang/atrium/internal/mail/live
@@ -171,13 +169,13 @@ internal/mail/mailcmd/replay.go	database/sql
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/config
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/db
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/db/key
+internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/mail/classify
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/mail/replay
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/mail/router
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/settings
 internal/mail/mailcmd/rules.go	github.com/jeiang/atrium/internal/embed
 internal/mail/mailcmd/rules.go	github.com/jeiang/atrium/internal/mail/report
 internal/mail/mailcmd/rules.go	github.com/jeiang/atrium/internal/mail/rules
-internal/mail/mailcmd/scans.go	github.com/jeiang/atrium/internal/endpoint
 internal/mail/mailcmd/scans.go	github.com/jeiang/atrium/internal/mail/rebalance
 internal/mail/mailcmd/scans.go	github.com/jeiang/atrium/internal/mail/scans
 internal/mail/mailcmd/scans.go	github.com/jeiang/atrium/internal/mail/scanutil

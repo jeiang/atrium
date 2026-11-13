@@ -60,6 +60,9 @@ func Destination(entry ImportEntry) string {
 	if entry.Class == ImportTuning {
 		return "the compiled constant " + entry.Target
 	}
+	if entry.Action == ImportDrop && entry.Class == ImportOperator && entry.Module != "" {
+		return entry.Target
+	}
 	if file, ok := appKeyFiles[entry.Key]; ok {
 		return "the app key file " + file
 	}
