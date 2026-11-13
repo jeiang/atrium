@@ -325,7 +325,14 @@ behavior-parity target.
   settings set`; a value the host file declares for one, including a
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
   application instance gets its own settings registry from the compiled
-  module declaration catalog, and every command reads the same stored operator values. There is no
+  module declaration catalog, and every command reads the same stored operator values.
+  `atrium settings`, `atrium secrets`, the settings group and section forms
+  and the assistant permission form run the same `settings.*` operations: a
+  value refused as invalid exits 2 on the command line (unknown keys, an
+  out-of-range or malformed value, an empty secret) and is answered 422 on the
+  page, a refusal (host key, pinned, secret key in `settings`, plaintext
+  database for a secret) exits 1 and is answered 409, and each change or
+  refusal writes one `operation_audit` row with key names only. There is no
   legacy pin file: `ATRIUM_CONFIG` is refused at startup, and so is an
   `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key or for a
   connection-owned host key (the refusal names the destination). Provider

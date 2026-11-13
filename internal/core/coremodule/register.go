@@ -45,6 +45,7 @@ import (
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/writes/writescmd"
@@ -52,7 +53,7 @@ import (
 
 type Module struct {
 	Version   string
-	Guard     settingscmd.Guard
+	Guard     settingsapp.Guard
 	Clients   func(config.Config) mail.OpenFunc
 	Now       func() float64
 	Resources module.Resources
@@ -60,6 +61,9 @@ type Module struct {
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
+	settingOps, settingBindings := settingsOperations()
+	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
+	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -107,9 +111,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}),
-			settingscmd.Command(mc.Env, m.Guard),
+			settingscmd.Command(openSettings),
 			bearer.Command(mc.Env),
-			secretscmd.Command(mc.Env),
+			secretscmd.Command(openSettings),
 			dbcmd.Command(mc.Env, m.Now),
 			kbcmd.Command(mc.Env),
 			backup.BackupCommand(),

@@ -79,6 +79,12 @@ func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
 	})
 }
 
+func (s *Store) Using(q db.Querier) *Store {
+	scoped := *s
+	scoped.q = q
+	return &scoped
+}
+
 func (s *Store) Reading() *Store {
 	if s.d == nil {
 		return s

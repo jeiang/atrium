@@ -4,10 +4,13 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/cli"
 )
 
 func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
@@ -116,5 +119,60 @@ func TestMediaLibraryGroupEditsTheLinkTTL(t *testing.T) {
 	}
 	if row := runSettings(t, "get", "media_link_ttl_seconds").row(t); row.Value == nil || *row.Value != "3600" {
 		t.Errorf("media_link_ttl_seconds after settings set = %+v, want 3600", row)
+	}
+}
+
+func TestSettingsSaveSameRefusalInCLIAndUI(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	seedFlagsAt(t, newTestApp(t), path, allFlagsTrue())
+	base := startServeIn(t, dir)
+	const key = "thread_cost_cap_usd"
+	ran := runSettings(t, "set", key, "-1")
+	if ran.code != cli.ExitUsage || !strings.HasPrefix(ran.stderr, "error: "+key+" ") {
+		t.Errorf("settings set %s -1 = exit %d, stderr %q; want exit 2 naming %s", key, ran.code, ran.stderr, key)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil); status != http.StatusOK {
+		t.Fatalf("GET /settings/assistant = %d", status)
+	}
+	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/spending", url.Values{key: {"-1"}}); status != http.StatusUnprocessableEntity {
+		t.Errorf("POST the group with %s=-1 = %d, want 422", key, status)
+	}
+	d := mustConnect(t, path, keyFor(t))
+	var changes int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE key = ?", key).Scan(&changes); err != nil {
+		t.Fatal(err)
+	}
+	if changes != 0 {
+		t.Errorf("refused saves wrote %d settings_audit rows", changes)
+	}
+	rows, err := d.Read.Query("SELECT source, details_json FROM operation_audit WHERE operation = 'settings.set' AND outcome = 'invalid' AND target = ? ORDER BY id", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []string
+	for rows.Next() {
+		var source, details string
+		if err := rows.Scan(&source, &details); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, source+" "+details)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{`cli {"keys":["` + key + `"]}`, `ui {"keys":["` + key + `"]}`}
+	if !slices.Equal(got, want) {
+		t.Errorf("refusal audit = %v, want %v", got, want)
 	}
 }
