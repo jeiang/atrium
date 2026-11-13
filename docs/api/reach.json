@@ -133,9 +133,14 @@
     },
     {
       "area": "tasks",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "tasks.add",
+        "tasks.done",
+        "tasks.list",
+        "tasks.update"
+      ],
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "threads",
@@ -159,6 +164,6 @@
       "bound": 0
     }
   ],
-  "total_required": 150,
-  "total_bound": 21
+  "total_required": 151,
+  "total_bound": 25
 }

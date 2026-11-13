@@ -32,6 +32,7 @@ type Source struct {
 type ListInput struct {
 	Status string
 	Limit  int
+	After  *tasks.ListKey
 }
 
 type List struct {
@@ -75,11 +76,11 @@ type Reminded struct {
 }
 
 func DescribeList() application.Definition {
-	return application.Describe[ListInput, List](ListName, application.Query, []application.Authority{application.Agent}, application.NoEffect, false)
+	return application.Describe[ListInput, List](ListName, application.Query, []application.Authority{application.Agent, application.Operator}, application.NoEffect, false)
 }
 
 func describeAgent[I any](name application.Name) application.Definition {
-	return application.Describe[I, Changed](name, application.Command, []application.Authority{application.Agent, application.Approved}, application.LocalUndoable, true)
+	return application.Describe[I, Changed](name, application.Command, []application.Authority{application.Agent, application.Approved, application.Operator}, application.LocalUndoable, true)
 }
 
 func DescribeAdd() application.Definition    { return describeAgent[AddInput](AddName) }
@@ -106,7 +107,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 	if err != nil {
 		return application.Read[List]{}, err
 	}
-	found, err := tasks.List(ctx, tx, in.Status, in.Limit)
+	found, err := tasks.List(ctx, tx, in.Status, in.Limit, in.After)
 	if err != nil {
 		return application.Read[List]{}, err
 	}
@@ -158,6 +159,9 @@ func unknownTask() error {
 }
 
 func (src Source) effect(operation, target string) ledger.New {
+	if src.ThreadID == 0 {
+		return ledger.New{Origin: "local", Operation: operation, OperationKey: operation + ":" + ledger.NewKey(), Target: target}
+	}
 	return ledger.New{Origin: "agent", Operation: operation, OperationKey: operation + ":" + ledger.NewKey(),
 		Target: target, ThreadID: &src.ThreadID, RunID: &src.RunID, ProposalID: src.ProposalID}
 }

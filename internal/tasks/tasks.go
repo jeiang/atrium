@@ -77,15 +77,37 @@ func Get(ctx context.Context, q db.Querier, id int64) (*Task, error) {
 	return &t, nil
 }
 
-func List(ctx context.Context, q db.Querier, status string, limit int) ([]Task, error) {
+type ListKey struct {
+	Rank      int     `json:"r"`
+	RemindAt  float64 `json:"a"`
+	CreatedTS float64 `json:"c"`
+	ID        int64   `json:"id"`
+}
+
+func KeyOf(t Task) ListKey {
+	k := ListKey{RemindAt: 1e18, CreatedTS: t.CreatedTS, ID: t.ID}
+	if t.Status != StatusOpen {
+		k.Rank = 1
+	}
+	if t.RemindAt != nil {
+		k.RemindAt = *t.RemindAt
+	}
+	return k
+}
+
+func List(ctx context.Context, q db.Querier, status string, limit int, after *ListKey) ([]Task, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	query := "SELECT " + columns + " FROM tasks"
+	query := "SELECT " + columns + " FROM tasks WHERE 1 = 1"
 	var args []any
 	if status != "" {
-		query += " WHERE status = ?"
+		query += " AND status = ?"
 		args = append(args, status)
+	}
+	if after != nil {
+		query += " AND (CASE status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(remind_at, 1e18), created_ts, id) > (?, ?, ?, ?)"
+		args = append(args, after.Rank, after.RemindAt, after.CreatedTS, after.ID)
 	}
 	query += " ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(remind_at, 1e18), created_ts, id LIMIT ?"
 	args = append(args, limit)
