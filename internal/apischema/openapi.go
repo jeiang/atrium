@@ -30,7 +30,7 @@ var (
 )
 
 var transportCodes = []string{
-	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "too_large", "unsupported_media_type",
+	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "command_interrupted", "command_result_withheld", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "too_large", "unsupported_media_type",
 }
 
 func Generate(cat *module.Catalog) (map[string][]byte, error) {
@@ -213,7 +213,7 @@ func errorSchema() object {
 			"fields":      object{"type": "array", "items": field},
 			"effect_ids":  object{"type": "array", "items": object{"type": "integer", "format": "int64"}},
 			"retry_after": object{"type": "integer"}, "diagnostic_id": str,
-			"type": str, "status": object{"type": "integer"}, "instance": str,
+			"type": str, "status": object{"type": "integer"}, "instance": str, "command_id": str,
 		},
 	}}}
 }

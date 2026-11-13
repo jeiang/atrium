@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/application/commands"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/cli"
@@ -78,7 +79,7 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	}
 	drain, startDrain := context.WithCancel(ctx)
 	defer startDrain()
-	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Start: func(d *web.Deps) error {
+	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Commands: commands.New(a.db).Middleware, Start: func(d *web.Deps) error {
 		return a.start(drain, d, o.Tools, o.Now)
 	}})
 	if err != nil {

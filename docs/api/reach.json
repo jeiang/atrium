@@ -2,9 +2,11 @@
   "areas": [
     {
       "area": "activity",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "commands.status"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "composer",
@@ -135,6 +137,6 @@
       "bound": 0
     }
   ],
-  "total_required": 1,
-  "total_bound": 1
+  "total_required": 2,
+  "total_bound": 2
 }

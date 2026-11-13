@@ -544,7 +544,7 @@ func TestImportV2KeysDeclaredJobsAndKeepsTheirOperatorState(t *testing.T) {
 }
 
 func TestImportV2RefusesASourceThatAlreadyHasClaimTables(t *testing.T) {
-	for _, table := range []string{"job_run_threads", "job_resource_leases", "operation_audit", "read_revisions"} {
+	for _, table := range []string{"job_run_threads", "job_resource_leases", "operation_audit", "read_revisions", "commands"} {
 		t.Run(table, func(t *testing.T) {
 			dir := t.TempDir()
 			source := copyV2Fixture(t, dir)
@@ -577,7 +577,7 @@ func TestImportV2LeavesApplicationStateNew(t *testing.T) {
 	if after := fileDigest(t, source); after != before {
 		t.Errorf("the import changed the source: %s -> %s", before, after)
 	}
-	for _, want := range []string{"operation_audit: kept empty 0", "read_revisions: derived "} {
+	for _, want := range []string{"operation_audit: kept empty 0", "commands: kept empty 0", "read_revisions: derived "} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
@@ -590,6 +590,12 @@ func TestImportV2LeavesApplicationStateNew(t *testing.T) {
 	defer func() { _ = q.Close() }()
 	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit"); n != 0 {
 		t.Errorf("operation_audit holds %d rows after the import", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM commands"); n != 0 {
+		t.Errorf("commands holds %d rows after the import", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit WHERE command_id IS NOT NULL"); n != 0 {
+		t.Errorf("%d audit rows name a command after the import", n)
 	}
 	for _, source := range []string{"ui", "cli"} {
 		if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE source = ?", source); n < 1 {

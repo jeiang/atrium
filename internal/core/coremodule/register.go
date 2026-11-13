@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
+	"github.com/jeiang/atrium/internal/application/commands"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/bearer"
@@ -62,6 +63,8 @@ type Module struct {
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
+	commandOps, commandBindings := commandOperations()
+	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -99,7 +102,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(),
-			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d) }},
+			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d) }},
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,
@@ -143,6 +146,13 @@ func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {
 	n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9)
 	if n > 0 {
 		log.Warn("recovered interrupted approved proposals", "count", n)
+	}
+	if err != nil {
+		return err
+	}
+	interrupted, err := commands.New(d).Recover(ctx)
+	if interrupted > 0 {
+		log.Warn("marked interrupted API commands", "count", interrupted)
 	}
 	return err
 }

@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/commands"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -45,6 +46,9 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 			var in I
 			if !decode(w, r, def.Name, &in, shape.Body) {
 				return
+			}
+			if shape.Sensitive {
+				commands.Withhold(r.Context())
 			}
 			change, err := run(audit.With(context.WithoutCancel(r.Context()), actor, audit.API), in)
 			if err != nil {

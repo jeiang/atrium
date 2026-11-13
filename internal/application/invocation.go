@@ -7,6 +7,7 @@ type Invocation struct {
 	RunID       int64
 	JobRunID    int64
 	Fingerprint string
+	CommandID   string
 }
 
 type invocationKey struct{}

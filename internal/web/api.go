@@ -41,6 +41,7 @@ type apiError struct {
 	Type         string       `json:"type,omitempty"`
 	Status       int          `json:"status,omitempty"`
 	Instance     string       `json:"instance,omitempty"`
+	CommandID    string       `json:"command_id,omitempty"`
 }
 
 func newAPIError(w http.ResponseWriter, status int, code, message string) apiError {
@@ -130,6 +131,12 @@ func APIError(w http.ResponseWriter, status int, code, message string, fields ..
 	JSON(w, status, map[string]apiError{"error": body})
 }
 
+func CommandError(w http.ResponseWriter, status int, code, message, commandID string) {
+	body := newAPIError(w, status, code, message)
+	body.CommandID = commandID
+	JSON(w, status, map[string]apiError{"error": body})
+}
+
 func APIErrorWith(w http.ResponseWriter, status int, code, message string, extra map[string]any) {
 	body := map[string]any{"error": newAPIError(w, status, code, message)}
 	maps.Copy(body, extra)
@@ -173,6 +180,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, optional bool) bo
 }
 
 func (d *Deps) API(method, pattern string, h http.HandlerFunc) {
+	if d.commands != nil && isUnsafe(method) {
+		h = d.commands(APIPrefix+pattern, h).ServeHTTP
+	}
 	d.route(method, APIPrefix+pattern, accessDefault, h)
 }
 
@@ -252,6 +262,6 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
-	ctx := withIdempotency(withIdentity(r.Context(), who), g.idem)
+	ctx := withIdentity(r.Context(), who)
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
