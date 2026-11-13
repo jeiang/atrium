@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -331,7 +332,9 @@ func (s *Scheduler) call(ctx context.Context, claim Claim, fn func(context.Conte
 			result, err = Result{}, errors.New(text)
 		}
 	}()
-	return fn(application.WithInvocation(ctx, application.Invocation{JobRunID: claim.JobRunID}), Run{Claim: claim, Now: s.now})
+	ctx = application.WithInvocation(ctx, application.Invocation{JobRunID: claim.JobRunID})
+	ctx = audit.With(ctx, "scheduler", audit.Job)
+	return fn(ctx, Run{Claim: claim, Now: s.now})
 }
 
 func (s *Scheduler) renew(ctx context.Context, claim Claim, stop <-chan struct{}, lose func()) {
