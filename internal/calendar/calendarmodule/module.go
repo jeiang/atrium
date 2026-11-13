@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/calendar"
+	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
@@ -36,6 +37,7 @@ func ToolDefinitions() []module.ToolDefinition {
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	command := calendarcmd.Command(mc.Env, mc.Tools)
+	operations, bindings := calendarOperations()
 	return module.Declaration{
 		Name:      module.Calendar,
 		Settings:  slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
@@ -54,10 +56,12 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			p := &calendar.Proposals{DB: d.DB, Ledger: d.Ledger, Now: d.Now, Env: d.Env}
 			return module.Effects{
 				Proposals: p.Proposals(module.Calendar),
-				Undo:      slices.Concat(p.Undo(), calendartools.Undo(d.Ledger, d.Env)),
+				Undo:      slices.Concat(p.Undo(), calapp.Undo(d.Ledger, d.Env)),
 			}
 		},
 		Connections: calendar.Connections(),
+		Operations:  operations,
+		Bindings:    bindings,
 	}
 }
 

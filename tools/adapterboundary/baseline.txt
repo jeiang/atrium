@@ -159,15 +159,7 @@ internal/assistant/subagents/websearch/websearch.go	github.com/jeiang/atrium/int
 internal/assistant/subagents/websearch/websearch.go	github.com/jeiang/atrium/internal/db
 internal/assistant/subagents/websearch/websearch.go	github.com/jeiang/atrium/internal/inference
 internal/assistant/tools/attention/attention.go	github.com/jeiang/atrium/internal/attention
-internal/assistant/tools/calendar/calendar.go	database/sql
 internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/assistant/approval
-internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/calendar
-internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/calendar/candidates
-internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/config
-internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/ledger
-internal/assistant/tools/calendar/findslot.go	github.com/jeiang/atrium/internal/calendar
-internal/assistant/tools/calendar/propose_update.go	github.com/jeiang/atrium/internal/calendar
 internal/assistant/tools/files/files.go	github.com/jeiang/atrium/internal/assistant/files
 internal/assistant/tools/files/files.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/tools/files/files.go	github.com/jeiang/atrium/internal/ledger
