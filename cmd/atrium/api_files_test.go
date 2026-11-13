@@ -565,7 +565,7 @@ func TestMultipartUploadAdmission(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	body, media := uploadBody(t, map[string]string{"text": "fifth"}, "fifth.txt", "fifth")
+	body, media := uploadBody(t, map[string]string{"text": "fifth"}, "fifth.txt", strings.Repeat("fifth", 1<<18))
 	rejected := s.do(http.MethodPost, "/api/v1/projects/1/files", token, body, "Content-Type", media, "Idempotency-Key", "fifth")
 	expectAPI(t, rejected, http.StatusTooManyRequests, "rate_limited")
 	if rejected.header.Get("Retry-After") == "" {

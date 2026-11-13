@@ -127,6 +127,9 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		if p.refused(w, r, err) {
 			return
 		}
+		reply, cancel := context.WithTimeout(ctx, replyTimeout)
+		defer cancel()
+		r = r.WithContext(reply)
 		if !web.IsPartial(r) {
 			redirect(w, r, back)
 			return
@@ -138,6 +141,9 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	if p.refused(w, r, err) {
 		return
 	}
+	reply, cancel := context.WithTimeout(ctx, replyTimeout)
+	defer cancel()
+	r = r.WithContext(reply)
 	sent := change.Data
 	if !web.IsPartial(r) {
 		redirect(w, r, back)

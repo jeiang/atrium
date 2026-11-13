@@ -2,6 +2,7 @@ package pages
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
@@ -21,20 +23,31 @@ const (
 	uploadSlack = 1 << 20
 
 	badBodyDetail   = "There was an error parsing the body"
+	mediaTypeDetail = "Unsupported media type"
 	fieldBytes      = 1 << 20
 	bodyBufferBytes = 1 << 16
 	maxParts        = 1000
 	formBytes       = 4 << 20
 )
 
+const (
+	formMedia      = "application/x-www-form-urlencoded"
+	multipartMedia = "multipart/form-data"
+	replyTimeout   = 10 * time.Second
+)
+
 var (
-	errBadBody = errors.New("unparseable multipart body")
+	errBadBody   = errors.New("unparseable multipart body")
+	errMediaType = errors.New("unsupported media type")
 )
 
 func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, error) {
 	media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || !strings.HasPrefix(media, "multipart/") {
+	switch {
+	case err == nil && media == formMedia:
 		return web.FormValues(r), nil, nil
+	case err != nil || media != multipartMedia:
+		return url.Values{}, nil, errMediaType
 	}
 	limits, err := files.ReadLimits(r.Context(), p.deps.DB.Read)
 	check(err)
@@ -50,6 +63,9 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
+			if _, err := io.Copy(io.Discard, r.Body); err != nil {
+				return form, nil, uploadReadError(err, limits.MessageCap)
+			}
 			return form, uploads, nil
 		}
 		if err != nil {
@@ -90,10 +106,18 @@ func uploadReadError(err error, messageCap int) error {
 func (p *pages) command(pattern string, h http.HandlerFunc) http.HandlerFunc {
 	command := p.deps.Command(pattern, h)
 	return func(w http.ResponseWriter, r *http.Request) {
+		if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || media != formMedia && media != multipartMedia {
+			p.fail(w, r, http.StatusUnsupportedMediaType, mediaTypeDetail)
+			return
+		}
 		limits, err := files.ReadLimits(r.Context(), p.deps.DB.Read)
 		check(err)
+		if r.ContentLength > int64(limits.MessageCap)+uploadSlack {
+			p.failureStatus(w, r, http.StatusRequestEntityTooLarge, "Not attached", files.MessageCapError(limits.MessageCap).Error())
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limits.MessageCap)+uploadSlack)
-		command(w, r)
+		command(w, r.WithContext(context.WithoutCancel(r.Context())))
 	}
 }
 
@@ -102,6 +126,9 @@ func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values,
 	switch {
 	case errors.Is(err, errBadBody):
 		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
+		return nil, nil, false
+	case errors.Is(err, errMediaType):
+		p.fail(w, r, http.StatusUnsupportedMediaType, mediaTypeDetail)
 		return nil, nil, false
 	case err != nil && strings.TrimSpace(web.FormString(form, "text", "")) == "":
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
@@ -227,6 +254,10 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 	_, uploads, err := p.parseUploads(w, r)
 	if errors.Is(err, errBadBody) {
 		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
+		return
+	}
+	if errors.Is(err, errMediaType) {
+		p.fail(w, r, http.StatusUnsupportedMediaType, mediaTypeDetail)
 		return
 	}
 	if err != nil {

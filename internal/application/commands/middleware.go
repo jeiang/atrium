@@ -31,7 +31,12 @@ var log = logx.Logger("commands")
 
 var multipartSlots = make(chan struct{}, 4)
 
-const spoolFreeFloor = 256 << 20
+const (
+	spoolFreeFloor = 256 << 20
+	envelopeMax    = 65 << 20
+	plainBodyMax   = 1 << 20
+	uploadIdle     = 30 * time.Second
+)
 
 type control struct{ withhold bool }
 
@@ -66,6 +71,41 @@ func (r *recorder) Write(p []byte) (int, error) {
 
 func (r *recorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
+type idleBody struct {
+	io.ReadCloser
+	controller *http.ResponseController
+	until      time.Time
+	done       bool
+}
+
+func (b *idleBody) extend() error {
+	b.until = time.Now().Add(uploadIdle)
+	return b.controller.SetReadDeadline(b.until)
+}
+
+func (b *idleBody) lift() {
+	if !b.done {
+		b.done = true
+		_ = b.controller.SetReadDeadline(time.Time{})
+	}
+}
+
+func (b *idleBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	switch {
+	case b.done:
+	case err != nil:
+		b.lift()
+	case n > 0 && time.Until(b.until) < uploadIdle-time.Second:
+		_ = b.extend()
+	}
+	return n, err
+}
+
+func carriesFiles(r *http.Request) bool {
+	return r.ContentLength < 0 || r.ContentLength > plainBodyMax
+}
+
 func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimSpace(r.Header.Get(IdempotencyHeader))
@@ -76,65 +116,69 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 		}
 		var fingerprint string
 		media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if media == "multipart/form-data" {
-			select {
-			case multipartSlots <- struct{}{}:
-				defer func() { <-multipartSlots }()
+		multipartForm := media == "multipart/form-data"
+		if multipartForm {
+			body := &idleBody{ReadCloser: r.Body, controller: http.NewResponseController(w)}
+			if err := body.extend(); err != nil {
+				web.APIFail(w, err)
+				return
+			}
+			defer body.lift()
+			r.Body = body
+			if carriesFiles(r) {
+				select {
+				case multipartSlots <- struct{}{}:
+					defer func() { <-multipartSlots }()
+				default:
+					w.Header().Set("Retry-After", "1")
+					web.APIFail(w, &application.Error{Code: application.RateLimited, Message: "Too many concurrent uploads."})
+					return
+				}
+				need := uint64(envelopeMax)
+				if r.ContentLength > 0 {
+					need = min(uint64(r.ContentLength), need)
+				}
+				var space unix.Statfs_t
+				if err := unix.Statfs(s.tempDir, &space); err != nil {
+					web.APIFail(w, err)
+					return
+				}
+				if uint64(space.Bavail)*uint64(space.Bsize) < spoolFreeFloor+need {
+					web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable."})
+					return
+				}
+			}
+		}
+		if key != "" {
+			mac, err := s.macKey()
+			if err != nil {
+				web.APIFail(w, err)
+				return
+			}
+			sum := requestHash(r, pattern, mac)
+			switch r.Body {
+			case nil, http.NoBody:
+				fingerprint = hex.EncodeToString(sum.Sum(nil))
 			default:
-				w.Header().Set("Retry-After", "1")
-				web.APIFail(w, &application.Error{Code: application.RateLimited, Message: "Too many concurrent uploads."})
-				return
-			}
-			controller := http.NewResponseController(w)
-			if err := controller.SetReadDeadline(time.Now().Add(2 * time.Minute)); err != nil {
-				web.APIFail(w, err)
-				return
-			}
-			defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
-			var space unix.Statfs_t
-			if err := unix.Statfs(s.tempDir, &space); err != nil {
-				web.APIFail(w, err)
-				return
-			}
-			if uint64(space.Bavail)*uint64(space.Bsize) < spoolFreeFloor+65<<20 {
-				web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable."})
-				return
-			}
-			if key != "" {
-				spool, err := os.CreateTemp(s.tempDir, "command-body-")
-				if err != nil {
-					web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable.", Cause: err})
+				hashed := io.Writer(sum)
+				if multipartForm {
+					hashed = io.Discard
+				}
+				spool, ok := s.spool(w, r, hashed)
+				if !ok {
 					return
 				}
 				defer func() { _ = spool.Close(); _ = os.Remove(spool.Name()) }()
-				original := r.Body
-				_, err = io.Copy(spool, original)
-				_ = original.Close()
-				var large *http.MaxBytesError
-				var storage *os.PathError
-				switch {
-				case errors.As(err, &large):
-					web.APIError(w, 413, "too_large", "Request too large.")
-					return
-				case errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT), errors.As(err, &storage):
-					web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable.", Cause: err})
-					return
-				case err != nil:
-					web.APIError(w, 400, "bad_request", "The request body could not be read.")
-					return
-				}
-				if _, err := spool.Seek(0, io.SeekStart); err != nil {
-					web.APIFail(w, err)
-					return
+				if body, ok := r.Body.(*idleBody); ok {
+					body.lift()
 				}
 				r.Body = io.NopCloser(spool)
-				mac, err := s.macKey()
-				if err != nil {
-					web.APIFail(w, err)
-					return
+				if !multipartForm {
+					fingerprint = hex.EncodeToString(sum.Sum(nil))
+					break
 				}
-				fingerprint, err = fingerprintStream(r, pattern, mac, spool)
-				if err != nil {
+				if fingerprint, err = fingerprintParts(r, sum, spool); err != nil {
+					var storage *os.PathError
 					if errors.As(err, &storage) {
 						web.APIFail(w, err)
 						return
@@ -142,23 +186,6 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 					web.APIError(w, http.StatusBadRequest, "bad_request", "Invalid multipart body.")
 					return
 				}
-			}
-		}
-		if key != "" && media != "multipart/form-data" {
-			mac, err := s.macKey()
-			if err != nil {
-				web.APIFail(w, err)
-				return
-			}
-			fingerprint, err = fingerprintOf(r, pattern, mac)
-			var tooLarge *http.MaxBytesError
-			switch {
-			case errors.As(err, &tooLarge):
-				web.APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
-				return
-			case err != nil:
-				web.APIError(w, http.StatusBadRequest, "bad_request", "The request body could not be read.")
-				return
 			}
 		}
 		rec, fresh, err := s.admit(r.Context(), key, r.Method, pattern, fingerprint)
@@ -185,9 +212,6 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 				web.APIError(failure, http.StatusInternalServerError, "internal", "Internal error.")
 				status, body, headers = failure.Code, failure.Body.Bytes(), failure.Header()
 			}
-			if status == 0 {
-				status = http.StatusOK
-			}
 			kept := http.Header{}
 			for name, values := range headers {
 				if name == "Content-Type" || name == "Location" || strings.HasPrefix(name, "Hx-") {
@@ -204,6 +228,36 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(out, r.WithContext(ctx))
 	})
+}
+
+func (s *Store) spool(w http.ResponseWriter, r *http.Request, sum io.Writer) (*os.File, bool) {
+	spool, err := os.CreateTemp(s.tempDir, "command-body-")
+	if err != nil {
+		web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable.", Cause: err})
+		return nil, false
+	}
+	original := r.Body
+	_, err = io.Copy(io.MultiWriter(spool, sum), original)
+	_ = original.Close()
+	if err == nil {
+		_, err = spool.Seek(0, io.SeekStart)
+	}
+	if err == nil {
+		return spool, true
+	}
+	_ = spool.Close()
+	_ = os.Remove(spool.Name())
+	var large *http.MaxBytesError
+	var storage *os.PathError
+	switch {
+	case errors.As(err, &large):
+		web.APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+	case errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT), errors.As(err, &storage):
+		web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable.", Cause: err})
+	default:
+		web.APIError(w, http.StatusBadRequest, "bad_request", "The request body could not be read.")
+	}
+	return nil, false
 }
 
 func replay(w http.ResponseWriter, rec record, fingerprint string) {
@@ -230,7 +284,7 @@ func replay(w http.ResponseWriter, rec record, fingerprint string) {
 	}
 }
 
-func fingerprintStream(r *http.Request, pattern string, mac []byte, spool *os.File) (string, error) {
+func fingerprintParts(r *http.Request, sum hash.Hash, spool *os.File) (string, error) {
 	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || params["boundary"] == "" {
 		return "", errors.New("invalid multipart boundary")
@@ -270,7 +324,6 @@ func fingerprintStream(r *http.Request, pattern string, mac []byte, spool *os.Fi
 		}
 		return parts[i].Index < parts[j].Index
 	})
-	sum := requestHash(r, pattern, mac)
 	if err := json.NewEncoder(sum).Encode(parts); err != nil {
 		return "", err
 	}
@@ -287,15 +340,4 @@ func requestHash(r *http.Request, pattern string, mac []byte) hash.Hash {
 		sum.Write([]byte{0})
 	}
 	return sum
-}
-
-func fingerprintOf(r *http.Request, pattern string, mac []byte) (string, error) {
-	sum := requestHash(r, pattern, mac)
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return "", err
-	}
-	sum.Write(body)
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	return hex.EncodeToString(sum.Sum(nil)), nil
 }

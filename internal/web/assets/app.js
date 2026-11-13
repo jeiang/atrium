@@ -121,7 +121,7 @@ document.addEventListener("close-dialogs", () => {
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
 });
 
-const swapStatuses = new Set([403, 404, 409, 422, 429]);
+const swapStatuses = new Set([403, 404, 409, 413, 422, 429]);
 document.addEventListener("htmx:beforeSwap", (event) => {
   const xhr = event.detail.xhr;
   const html = (xhr.getResponseHeader("content-type") || "").startsWith("text/html");
@@ -167,6 +167,16 @@ document.addEventListener("submit", (event) => {
   if (question && !window.confirm(question)) event.preventDefault();
 });
 
+const refusal = (xhr) => {
+  if (!xhr || !(xhr.getResponseHeader("content-type") || "").startsWith("application/json")) return "";
+  try {
+    const message = JSON.parse(xhr.responseText).error?.message;
+    return typeof message === "string" ? message : "";
+  } catch {
+    return "";
+  }
+};
+
 const failed = (title, description) => (event) => {
   const target = event.detail.target;
   if (target && target.dataset.loading) {
@@ -174,7 +184,7 @@ const failed = (title, description) => (event) => {
     const dialog = target.closest("dialog");
     if (dialog) dialog.close();
   }
-  document.getElementById("toaster").toast({ category: "error", title, description });
+  document.getElementById("toaster").toast({ category: "error", title, description: refusal(event.detail.xhr) || description });
 };
 document.addEventListener("htmx:responseError", failed("Something went wrong", "atrium could not finish that request. Try again, or reload the page."));
 document.addEventListener("htmx:sendError", failed("atrium is unreachable", "Check the connection to the server and try again."));
