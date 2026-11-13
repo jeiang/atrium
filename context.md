@@ -296,7 +296,8 @@ behavior-parity target.
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier
-  live in `oauth_states` for ten minutes; the refresh token is stored as a
+  live in `oauth_states` for ten minutes (expired rows are deleted when a new
+  consent starts); the refresh token is stored as a
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
   Test exchanges it, and a 400 or 401
   marks the integration needs-reauth.
