@@ -1,25 +1,16 @@
 package mailcmd
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	dbkey "github.com/jeiang/atrium/internal/db/key"
-	"github.com/jeiang/atrium/internal/mail/classify"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func (o Options) ReplayCommand() *cli.Command {
@@ -42,45 +33,18 @@ func (o Options) replay(env *cli.Env, account string, limit int, model bool) int
 	if err != nil {
 		return cli.Fail(env, err)
 	}
-	key, err := dbkey.Load(o.env(), settings.From(env.Ctx))
-	if err != nil {
-		return cli.Fail(env, err)
+	read, err := mailapp.New(nil, cfg, o.env(), o.Now).WithClassifiers(o.Classifiers).Replay(env.Ctx, mailapp.ReplayInput{Account: account, Limit: limit, Model: model})
+	if code, ok := unknownAccount(env, account, err); ok {
+		return code
 	}
-	q, err := db.OpenSource(cfg.DBPath, key)
-	if err != nil {
-		return cli.Fail(env, openError(cfg.DBPath, err))
-	}
-	defer func() { _ = q.Close() }()
-	if err := db.RequireV3(env.Ctx, q); err != nil {
-		return cli.Fail(env, err)
-	}
-	state := config.From(env.Ctx)
-	if err := state.LoadStoredAccounts(env.Ctx, q); err != nil {
-		return cli.Fail(env, err)
-	}
-	if err := addStoredAccounts(env.Ctx, state, q); err != nil {
-		return cli.Fail(env, err)
-	}
-	if account != "" {
-		if _, ok := state.Account(account); !ok {
-			names := make([]string, 0, len(state.Accounts()))
-			for _, a := range state.Accounts() {
-				names = append(names, strconv.Quote(a.Name))
-			}
-			slices.Sort(names)
-			return env.UsageError("argument --account: invalid choice %q (choose from %s)", account, strings.Join(names, ", "))
-		}
-	}
-	opts := replay.Options{Account: account, Limit: limit, Model: model}
-	var result replay.Result
-	if model {
-		result, err = o.replayModel(env.Ctx, cfg, q, key, opts)
-	} else {
-		result, err = replay.Run(env.Ctx, q, opts, nil)
+	var source *mailapp.ReplaySourceError
+	if errors.As(err, &source) {
+		return cli.Fail(env, openError(cfg.DBPath, source.Cause))
 	}
 	if err != nil {
 		return cli.Fail(env, err)
 	}
+	result := read.Data
 	for _, line := range result.Lines {
 		data, err := json.Marshal(line)
 		if err != nil {
@@ -93,65 +57,6 @@ func (o Options) replay(env *cli.Env, account string, limit int, model bool) int
 	}
 	_, _ = fmt.Fprint(env.Stderr, replaySummary(result.Summary))
 	return cli.ExitOK
-}
-
-func (o Options) replayModel(ctx context.Context, cfg config.Config, source *sql.DB, key db.Key, opts replay.Options) (_ replay.Result, err error) {
-	if o.Classifiers == nil {
-		return replay.Result{}, errors.New("replay --model: no classifier is bound")
-	}
-	dir, err := os.MkdirTemp("", "atrium-replay-")
-	if err != nil {
-		return replay.Result{}, err
-	}
-	defer func() { err = errors.Join(err, os.RemoveAll(dir)) }()
-	path := filepath.Join(dir, "replay.db")
-	if err := db.Backup(ctx, source, path, key); err != nil {
-		return replay.Result{}, err
-	}
-	d, err := db.Connect(path, db.WithKey(key))
-	if err != nil {
-		return replay.Result{}, err
-	}
-	defer func() { err = errors.Join(err, d.Close()) }()
-	ledger, err := db.Connect(cfg.DBPath, db.WithKey(key))
-	if err != nil {
-		return replay.Result{}, err
-	}
-	defer func() { err = errors.Join(err, ledger.Close()) }()
-	c, err := o.Classifiers(ctx, o.env(), ledger, cfg, o.Now)
-	if err != nil {
-		return replay.Result{}, err
-	}
-	return replay.Run(ctx, d.Read, opts, classify.New(c))
-}
-
-func addStoredAccounts(ctx context.Context, state *config.State, q db.Querier) error {
-	rows, err := q.QueryContext(ctx, "SELECT name, kind FROM accounts ORDER BY name")
-	if err != nil {
-		return err
-	}
-	stored, err := db.Collect(rows, func(r *sql.Rows) (config.AccountSpec, error) {
-		var name, kind string
-		err := r.Scan(&name, &kind)
-		return config.AccountSpec{Name: name, Label: name, Preset: kind, Enabled: true}, err
-	})
-	if err != nil {
-		return err
-	}
-	accounts := append([]config.AccountSpec(nil), state.Accounts()...)
-	seen := make(map[string]bool, len(accounts))
-	for _, a := range accounts {
-		seen[a.Name] = true
-	}
-	for _, a := range stored {
-		if seen[a.Name] {
-			continue
-		}
-		accounts = append(accounts, a)
-		seen[a.Name] = true
-	}
-	state.UseAccounts(accounts, nil)
-	return nil
 }
 
 func replaySummary(s replay.Summary) string {

@@ -111,16 +111,9 @@ internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/db
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail/imapclient
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail/run
-internal/mail/mailcmd/replay.go	database/sql
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/config
-internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/db
-internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/db/key
-internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/mail/classify
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/mail/replay
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/mail/router
-internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/settings
-internal/mail/mailcmd/rules.go	github.com/jeiang/atrium/internal/embed
-internal/mail/mailcmd/rules.go	github.com/jeiang/atrium/internal/mail/report
 internal/mail/mailcmd/rules.go	github.com/jeiang/atrium/internal/mail/rules
 internal/mail/mailcmd/scans.go	github.com/jeiang/atrium/internal/mail/rebalance
 internal/mail/mailcmd/scans.go	github.com/jeiang/atrium/internal/mail/scans
@@ -167,8 +160,6 @@ internal/mail/reviewpages/review.go	github.com/jeiang/atrium/internal/mail/draft
 internal/mail/reviewpages/review.go	github.com/jeiang/atrium/internal/proposals
 internal/mail/reviewpages/views.go	github.com/jeiang/atrium/internal/mail/drafts
 internal/mail/reviewpages/watches.go	github.com/jeiang/atrium/internal/mail/watches
-internal/mail/run/command.go	github.com/jeiang/atrium/internal/config
-internal/mail/run/command.go	github.com/jeiang/atrium/internal/mail
 internal/media/mediacmd/mediacmd.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/media/mediacmd/mediacmd.go	github.com/jeiang/atrium/internal/config
 internal/media/mediacmd/mediacmd.go	github.com/jeiang/atrium/internal/db

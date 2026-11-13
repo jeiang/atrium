@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"slices"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -149,4 +152,36 @@ func openError(path string, err error) error {
 		return fmt.Errorf("%s: is a directory", path)
 	}
 	return err
+}
+
+func (o Options) SyncCommand() *cli.Command {
+	return &cli.Command{Name: "sync", Setup: func(a *cli.Args) cli.Handler {
+		account := a.String("account", "", cli.Opt{})
+		return func(env *cli.Env) int {
+			cfg, err := config.Load(o.env())
+			if err == nil {
+				_, err = mailapp.New(nil, cfg, o.env(), o.now).WithOpen(o.Clients(cfg)).WithClassifiers(o.Classifiers).Sync(env.Ctx, mailapp.SyncInput{Account: *account})
+			}
+			if code, ok := unknownAccount(env, *account, err); ok {
+				return code
+			}
+			if err != nil {
+				return cli.Fail(env, err)
+			}
+			return cli.ExitOK
+		}
+	}}
+}
+
+func unknownAccount(env *cli.Env, requested string, err error) (int, bool) {
+	var unknown runpkg.UnknownAccount
+	if !errors.As(err, &unknown) {
+		return 0, false
+	}
+	var names []string
+	for _, a := range config.From(env.Ctx).Accounts() {
+		names = append(names, strconv.Quote(a.Name))
+	}
+	slices.Sort(names)
+	return env.UsageError("argument --account: invalid choice %q (choose from %s)", requested, strings.Join(names, ", ")), true
 }

@@ -24,7 +24,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
-	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -85,7 +84,7 @@ func ProposeKinds() []proposals.Definition {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers, Application: mailCLIService(mc.Env)}
 	cmds := []*cli.Command{
-		run.SyncCommand(mc.Env, m.Clients, m.classifiers),
+		mailCmds.SyncCommand(),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
@@ -114,6 +113,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	scanOps, scanBindings := mailScanOperations()
 	operations = append(operations, scanOps...)
 	bindings = append(bindings, scanBindings...)
+	passOps, passBindings := mailPassOperations()
+	operations = append(operations, passOps...)
+	bindings = append(bindings, passBindings...)
 	return module.Declaration{
 		Name:        module.Mail,
 		Operations:  operations,

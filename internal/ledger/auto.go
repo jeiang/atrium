@@ -248,3 +248,20 @@ func AutoEffectsSince(ctx context.Context, q db.Querier, messageID, after int64)
 	}
 	return ids, unknown, rows.Err()
 }
+
+type AutoEffectOutcome struct {
+	ID    int64
+	State State
+}
+
+func AutoPassEffectsSince(ctx context.Context, q db.Querier, after int64) ([]AutoEffectOutcome, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, state FROM effects WHERE id > ? AND origin = ? ORDER BY id", after, AutoOrigin)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (AutoEffectOutcome, error) {
+		var out AutoEffectOutcome
+		err := r.Scan(&out.ID, &out.State)
+		return out, err
+	})
+}

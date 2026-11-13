@@ -535,6 +535,12 @@ behavior-parity target.
   effects and retain unknown, partial and stale-revision conflict outcomes.
   Phone approvals re-check the redeemed link inside the proposal claim, so
   revocation during a pass-lock wait refuses the waiting tap.
+  Manual, scheduled and watch-admitted syncs share `mail.sync` and the
+  `mail-pass` resource claim. Its result retains per-account sync statistics
+  and committed, failed, skipped, partial and unknown effect ids.
+  Replay, shadow reports and reindexing have typed operations too. Replay
+  never contacts a mail server; default replay makes no external calls,
+  while `--model` keeps paid classification on a disposable database copy.
   Phone policy and changed-plan refusals are audited; invalid, expired and used tokens
   are not. Undo and resolve preserve the explicit proposal, effect or mail
   namespace, including unknown ids. A malformed

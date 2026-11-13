@@ -123,6 +123,7 @@ func TestServeSyncJobFilesMailOnce(t *testing.T) {
 		baseline.stage, baseline.action, baseline.dest = m.decision(t, id)
 		baseline.verbs = m.verbs()
 		baseline.state = m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+		assertSyncOperationAudit(t, m)
 	})
 	t.Run("serve", func(t *testing.T) {
 		m := mailSafetyFixture(t, "live")
@@ -146,6 +147,7 @@ func TestServeSyncJobFilesMailOnce(t *testing.T) {
 		served.stage, served.action, served.dest = m.decision(t, id)
 		served.verbs = m.verbs()
 		served.state = m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+		assertSyncOperationAudit(t, m)
 		if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
 			t.Fatalf("Bills holds %d messages after the scheduled pass, want 1", n)
 		}
@@ -462,4 +464,11 @@ func TestMailWritersWaitForTheRunningPass(t *testing.T) {
 			t.Fatalf("%d agent moves recorded beside the pass, want none", n)
 		}
 	})
+}
+
+func assertSyncOperationAudit(t *testing.T, m *mailSafety) {
+	t.Helper()
+	if count := m.scalar(t, "SELECT CAST(COUNT(*) AS TEXT) FROM operation_audit a, json_each(a.details_json, '$.effect_ids') j JOIN effects e ON e.id = j.value WHERE a.operation = 'mail.sync' AND a.outcome = 'ok' AND e.origin = 'mail_auto' AND e.operation = 'correct'"); count != "1" {
+		t.Fatalf("sync operation audits name %s correction effects, want 1", count)
+	}
 }
