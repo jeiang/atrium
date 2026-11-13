@@ -5,6 +5,7 @@ import (
 
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const (
@@ -31,7 +32,7 @@ func (s *service) needsStrip(w http.ResponseWriter, r *http.Request) {
 		s.failRead(w, r, err, "")
 		return
 	}
-	s.fragment(w, r, http.StatusOK, "_review_strip.gohtml", StripView(found.Data), nil)
+	check(s.deps.Render.Fragment(w, r, http.StatusOK, "_review_strip.gohtml", tpl.Fragment{Mode: s.mode(r.Context()), Data: StripView(found.Data)}))
 }
 
 func StripView(found reviewapp.Pending) stripData {

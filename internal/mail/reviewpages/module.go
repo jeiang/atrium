@@ -214,11 +214,13 @@ func (s *service) page(w http.ResponseWriter, r *http.Request, status int, page,
 }
 
 func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any, notice *tpl.Toast) {
-	mode, err := mail.Mode(r.Context(), s.deps.DB.Read)
+	check(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: notice}))
+}
+
+func (s *service) mode(ctx context.Context) string {
+	mode, err := mail.Mode(ctx, s.deps.DB.Read)
 	check(err)
-	n, err := needsCount(r.Context(), s.deps.DB.Read)
-	check(err)
-	check(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Mode: mode, PendingCount: n, Data: data, Toast: notice}))
+	return mode
 }
 
 func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detail string) {

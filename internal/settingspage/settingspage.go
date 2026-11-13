@@ -211,9 +211,31 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 			values[f.Key] = value
 		}
 	}
+	renderGroup := func(status int, failure *application.Error) {
+		read, err := h.svc.Read(ctx, settingsapp.ReadInput{Fields: fields})
+		if err != nil {
+			panic(err)
+		}
+		view := settings.GroupView{Module: module, Name: name, Title: group.Title, Fields: read.Data.Fields, Saved: failure == nil}
+		if failure != nil {
+			view.Error = web.Message(failure)
+			for j, f := range view.Fields {
+				if value, ok := values[f.Key]; ok && !f.Pinned {
+					view.Fields[j].Value = value
+				}
+			}
+		}
+		if err := h.d.Render.Fragment(w, r, status, "_settings_group.gohtml", view); err != nil {
+			panic(err)
+		}
+	}
 	if _, err := h.svc.Set(ctx, settingsapp.SetInput{Values: changes(fields, values)}); err != nil {
 		failure := application.Classify(err)
 		web.Fail(w, r, failure, func(status int) {
+			if web.IsPartial(r) {
+				renderGroup(status, failure)
+				return
+			}
 			views, loadErr := h.views(ctx, group.URL)
 			if loadErr != nil {
 				panic(loadErr)
@@ -233,6 +255,10 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 				h.render(w, r, status, pageData{Title: title(module), Tab: group.Tab}, shown)
 			}
 		})
+		return
+	}
+	if web.IsPartial(r) {
+		renderGroup(http.StatusOK, nil)
 		return
 	}
 	w.Header().Set("Location", group.URL+"?saved="+module+"."+name)

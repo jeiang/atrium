@@ -1056,6 +1056,7 @@ that carry them: #457 and #476 for the remaining v2 work, plus
 the owner gates #233 and #615. They do not belong in this file.
 
 Home includes its review strip, agenda and recent activity in the initial response. Thread Work rows render from the typed read; History loads on first selection. Fragment rendering skips the global page-frame reads.
+Knowledge record edits, confirmation and restoration, bulk confirmation and profile additions return scoped views. Settings group saves replace only that group, and inbox resends replace only their row. Review fragments load mail mode and the pending badge only when the rendered view needs them.
 
 - API multipart uploads share four in-process slots; excess uploads return 429 with `Retry-After: 1`. Each body has a two-minute read deadline and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.
 
