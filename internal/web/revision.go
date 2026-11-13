@@ -1,6 +1,8 @@
 package web
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -8,7 +10,8 @@ import (
 )
 
 func NotModified(w http.ResponseWriter, r *http.Request, revision application.Revision) bool {
-	tag := `W/"` + string(revision) + `"`
+	context := fmt.Sprintf("%s\x00%s\x00%t", revision, CSRFToken(r.Context()), IsPartial(r))
+	tag := fmt.Sprintf(`W/"%x"`, sha256.Sum256([]byte(context)))
 	h := w.Header()
 	h.Set("ETag", tag)
 	h.Set("Cache-Control", "private, no-cache")

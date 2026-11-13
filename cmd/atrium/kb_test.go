@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -371,6 +372,38 @@ func TestKnowledgeListRevision(t *testing.T) {
 	code, body, _ = w.get("/library/knowledge?scope=bogus", false)
 	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "scope must be work or personal") {
 		t.Fatalf("bogus scope = %d: %.300s", code, body)
+	}
+}
+
+func TestKnowledgeRevisionCookieReset(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	base, _, stop := startServeStoppable(t, dir)
+	defer stop()
+	a := asstBrowse(t, base)
+	_, oldPage, header := a.get("/library/knowledge/profile", false)
+	b := asstBrowse(t, base)
+	b.client.Jar, _ = cookiejar.New(nil)
+	b.token = ""
+	code, page, fresh := b.get("/library/knowledge/profile", false, "If-None-Match", header.Get("ETag"))
+	if code != http.StatusOK || fresh.Get("ETag") == header.Get("ETag") {
+		t.Fatalf("reset cookie conditional GET = %d, etag %q", code, fresh.Get("ETag"))
+	}
+	tokenPattern := regexp.MustCompile(`name="csrf_token" value="([^"]+)"`)
+	oldToken, newToken := tokenPattern.FindStringSubmatch(oldPage), tokenPattern.FindStringSubmatch(page)
+	if len(oldToken) != 2 || len(newToken) != 2 || oldToken[1] == newToken[1] {
+		t.Fatal("reset page did not render a fresh form token")
+	}
+	if code, _, fragment := a.get("/library/knowledge/profile", true, "If-None-Match", header.Get("ETag")); code != http.StatusOK || fragment.Get("ETag") == header.Get("ETag") {
+		t.Fatalf("fragment reused full-page validator: %d", code)
+	}
+	code, page, _ = b.post("/library/knowledge/new", url.Values{
+		"csrf_token": {newToken[1]}, "title": {"Fresh token"}, "body": {"Saved with a native form."}, "scope": {"personal"},
+	}, false)
+	if code != http.StatusSeeOther {
+		t.Fatalf("native form with fresh token = %d: %.300s", code, page)
 	}
 }
 
