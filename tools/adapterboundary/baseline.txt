@@ -39,14 +39,6 @@ internal/assistant/subagents/research/research.go	github.com/jeiang/atrium/inter
 internal/assistant/subagents/research/research.go	github.com/jeiang/atrium/internal/assistant/subagents
 internal/assistant/subagents/research/research.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/assistant/approval
-internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/config
-internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/connections
-internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/grafana/connection.go	github.com/jeiang/atrium/internal/connections
-internal/assistant/tools/grafana/grafana.go	github.com/jeiang/atrium/internal/assistant
-internal/assistant/tools/grafana/grafana.go	github.com/jeiang/atrium/internal/config
-internal/assistant/tools/grafana/grafana.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/grafana/importv2.go	github.com/jeiang/atrium/internal/connections
 internal/assistant/tools/kb/kb.go	github.com/jeiang/atrium/internal/kb
 internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/mail/mailops
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/assistant
@@ -173,9 +165,6 @@ internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/interna
 internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/internal/mail/sync
 internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/internal/proposals
 internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/internal/settings
-internal/serverops/sampler.go	github.com/jeiang/atrium/internal/assistant/jobworker
-internal/serverops/sampler.go	github.com/jeiang/atrium/internal/assistant/tools/grafana
-internal/serverops/sampler.go	github.com/jeiang/atrium/internal/scheduler
 internal/settingspage/sections.go	github.com/jeiang/atrium/internal/db
 internal/settingspage/sections.go	github.com/jeiang/atrium/internal/settings
 internal/settingspage/settingspage.go	github.com/jeiang/atrium/internal/db
