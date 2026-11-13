@@ -410,6 +410,9 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	addrFile := filepath.Join(dir, "serve-addr")
+	if _, err := os.Stat(filepath.Join(dir, "atrium.db.serve.lock")); !os.IsNotExist(err) {
+		t.Fatalf("a serve lock exists before serve started: %v", err)
+	}
 	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
 	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile)
 	stderr := &lockedBuffer{}
@@ -419,6 +422,11 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
+	serveLock := filepath.Join(dir, "atrium.db.serve.lock")
+	waitUntil(t, 60*time.Second, "serve to take its serve lock", func() bool {
+		_, err := os.Stat(serveLock)
+		return err == nil
+	})
 	time.Sleep(3 * time.Second)
 	if _, err := os.Stat(addrFile); !os.IsNotExist(err) {
 		t.Fatalf("serve reported its address while a writer held the database: %v", err)
@@ -431,9 +439,9 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 		if code := exitCode(err); code != cli.ExitOK || strings.Contains(stderr.String(), "error:") {
 			t.Fatalf("serve stopped before it was ready: exit %d, stderr %q", code, stderr.String())
 		}
-	case <-time.After(60 * time.Second):
+	case <-time.After(15 * time.Second):
 		_ = cmd.Process.Kill()
-		t.Fatalf("serve ignored SIGTERM before it was ready, stderr %q", stderr.String())
+		t.Fatalf("serve kept waiting on the database after SIGTERM, stderr %q", stderr.String())
 	}
 	if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
 		t.Fatal(err)

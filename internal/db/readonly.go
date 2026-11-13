@@ -37,7 +37,7 @@ func OpenSource(path string, key Key) (*sql.DB, error) {
 	if err := guardFile(path, key); err != nil {
 		return nil, err
 	}
-	d := Open(s, busyPragma(busyTimeout), "PRAGMA foreign_keys = OFF", "PRAGMA query_only = ON")
+	d := Open(s, busyWaitSQL(busyTimeout), "PRAGMA foreign_keys = OFF", "PRAGMA query_only = ON")
 	d.SetMaxOpenConns(1)
 	if err := guardEngine(d, key); err != nil {
 		_ = d.Close()

@@ -32,11 +32,7 @@ const (
 var log = logx.Logger("atrium.db")
 
 func connPragmas() []string {
-	return []string{busyPragma(busyTimeout), "PRAGMA foreign_keys = ON", "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864", "PRAGMA temp_store = MEMORY"}
-}
-
-func busyPragma(d time.Duration) string {
-	return fmt.Sprintf("PRAGMA busy_timeout = %d", d.Milliseconds())
+	return []string{busyWaitSQL(busyTimeout), "PRAGMA foreign_keys = ON", "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864", "PRAGMA temp_store = MEMORY"}
 }
 
 type Checkpoint struct {
@@ -51,14 +47,14 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 		return Checkpoint{}, err
 	}
 	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(ctx, busyPragma(wait)); err != nil {
+	if _, err := conn.ExecContext(ctx, busyWaitSQL(wait)); err != nil {
 		return Checkpoint{}, err
 	}
 	var c Checkpoint
 	var busy int64
 	err = conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &c.Frames, &c.Done)
 	c.Busy = busy != 0
-	if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), busyPragma(busyTimeout)); rerr != nil {
+	if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), busyWaitSQL(busyTimeout)); rerr != nil {
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 	}
 	return c, err

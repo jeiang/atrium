@@ -16,6 +16,7 @@ import (
 
 func init() {
 	sqlitevec.Auto()
+	registerBusyWait()
 	conn, err := openDriver().Open("file::memory:")
 	if err != nil {
 		panic(err)
