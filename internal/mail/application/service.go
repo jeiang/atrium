@@ -7,16 +7,18 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/live"
 )
 
 type Service struct {
-	live  *live.Live
-	db    *db.DB
-	state *state.Store
-	cfg   config.Config
-	env   config.Env
-	now   func() float64
+	draftLedger *ledger.Store
+	live        *live.Live
+	db          *db.DB
+	state       *state.Store
+	cfg         config.Config
+	env         config.Env
+	now         func() float64
 }
 
 func New(d *db.DB, cfg config.Config, env config.Env, now func() float64) *Service {

@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
@@ -461,74 +462,68 @@ func (s *service) apiDraftRow(w http.ResponseWriter, r *http.Request) (*drafts.R
 	if !ok {
 		return nil, false
 	}
-	row, err := s.drafts.Get(r.Context(), id)
-	check(err)
-	if row == nil {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown draft.")
+	found, err := s.mail.Draft(r.Context(), mailapp.DraftInput{ID: id})
+	if err != nil {
+		web.APIFail(w, err)
 		return nil, false
 	}
-	return row, true
+	return &found.Data.Row, true
 }
-
 func (s *service) currentDraft(ctx context.Context, id int64) apiDraft {
-	row, err := s.drafts.Get(ctx, id)
+	found, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: id})
 	check(err)
-	return s.draftOf(ctx, *row)
-}
-
-func (s *service) draftOf(ctx context.Context, row drafts.Row) apiDraft {
-	cards, err := s.review.DraftCards(ctx, []drafts.Row{row})
-	check(err)
-	return draftsOf(cards, reviewapp.AccountConfigured(ctx))[0]
+	return draftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(ctx))[0]
 }
 
 func (s *service) apiDraft(w http.ResponseWriter, r *http.Request) {
-	row, ok := s.apiDraftRow(w, r)
+	id, ok := web.PathID(w, r, "draft_id")
 	if !ok {
 		return
 	}
-	web.JSON(w, http.StatusOK, s.draftOf(r.Context(), *row))
+	found, err := s.mail.Draft(r.Context(), mailapp.DraftInput{ID: id})
+	if err != nil {
+		web.APIFail(w, err)
+		return
+	}
+	web.APIRead(w, r, found.Revision, draftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(r.Context()))[0])
 }
-
 func (s *service) apiDraftUpdate(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Account *string `json:"account"`
-		To      *string `json:"to"`
-		Cc      *string `json:"cc"`
-		Subject *string `json:"subject"`
-		Body    *string `json:"body"`
+		Account  *string `json:"account"`
+		To       *string `json:"to"`
+		Cc       *string `json:"cc"`
+		Subject  *string `json:"subject"`
+		Body     *string `json:"body"`
+		Revision *int64  `json:"revision"`
 	}
 	if !web.DecodeJSON(w, r, &in) {
 		return
 	}
-	row, ok := s.apiDraftRow(w, r)
+	id, ok := web.PathID(w, r, "draft_id")
 	if !ok {
 		return
 	}
-	changes := map[string]any{}
-	for name, v := range map[string]*string{"account": in.Account, "to": in.To, "cc": in.Cc, "subject": in.Subject, "body": in.Body} {
-		if v != nil {
-			changes[name] = *v
+	fields := mailapp.DraftFields{Account: in.Account, Subject: in.Subject, Body: in.Body}
+	if in.To != nil {
+		fields.To = &mailapp.Recipients{Text: *in.To}
+	}
+	if in.Cc != nil {
+		fields.Cc = &mailapp.Recipients{Text: *in.Cc}
+	}
+	_, err := s.mail.DraftUpdate(detached(r), mailapp.DraftUpdateInput{ID: id, Revision: in.Revision, Fields: fields})
+	if err != nil {
+		e := application.Classify(err)
+		switch e.Code {
+		case application.Conflict:
+			web.APIError(w, http.StatusConflict, "stale", e.Message)
+		case application.Invalid:
+			web.APIError(w, http.StatusUnprocessableEntity, "invalid_draft", e.Message)
+		default:
+			web.APIFail(w, err)
 		}
-	}
-	ctx := detached(r)
-	_, err := s.drafts.Update(ctx, row.ID, changes)
-	var invalid drafts.Error
-	var stale drafts.Stale
-	var disabled *module.OwnerDisabled
-	switch {
-	case errors.As(err, &disabled):
-		web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
-		return
-	case errors.As(err, &stale):
-		web.APIError(w, http.StatusConflict, "stale", err.Error())
-		return
-	case errors.As(err, &invalid):
-		web.APIError(w, http.StatusUnprocessableEntity, "invalid_draft", err.Error())
 		return
 	}
-	check(err)
-	web.JSON(w, http.StatusOK, s.currentDraft(ctx, row.ID))
+	web.JSON(w, http.StatusOK, s.currentDraft(detached(r), id))
 }
 
 func filedCode(f drafts.Filed) string {
@@ -589,20 +584,21 @@ func (s *service) apiDraftSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) apiDraftDiscard(w http.ResponseWriter, r *http.Request) {
-	row, ok := s.apiDraftRow(w, r)
+	id, ok := web.PathID(w, r, "draft_id")
 	if !ok {
 		return
 	}
-	ctx := detached(r)
-	err := s.drafts.Discard(ctx, row.ID)
-	var refused drafts.Error
-	var disabled *module.OwnerDisabled
-	if errors.As(err, &refused) || errors.As(err, &disabled) {
-		web.APIError(w, http.StatusConflict, "not_discarded", err.Error())
+	_, err := s.mail.DraftDiscard(detached(r), mailapp.DraftInput{ID: id})
+	if err != nil {
+		e := application.Classify(err)
+		if e.Code == application.Invalid || e.Code == application.Conflict {
+			web.APIError(w, http.StatusConflict, "not_discarded", e.Message)
+		} else {
+			web.APIFail(w, err)
+		}
 		return
 	}
-	check(err)
-	web.JSON(w, http.StatusOK, map[string]any{"draft": s.currentDraft(ctx, row.ID)})
+	web.JSON(w, http.StatusOK, map[string]any{"draft": s.currentDraft(detached(r), id)})
 }
 
 func (s *service) apiDraftResolve(w http.ResponseWriter, r *http.Request) {

@@ -165,9 +165,17 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 
 	draftPath := "/api/v1/drafts/" + strconv.FormatInt(number(t, draft["id"]), 10)
 	reviewed := number(t, draft["revision"])
-	edited := s.do(http.MethodPatch, draftPath, owner, map[string]any{"subject": "Lease renewal (signed)"})
+	edited := s.do(http.MethodPatch, draftPath, owner, map[string]any{"subject": "Lease renewal (signed)", "revision": reviewed})
 	if edited.status != http.StatusOK || number(t, edited.json["revision"]) != reviewed+1 || edited.json["subject"] != "Lease renewal (signed)" {
 		t.Fatalf("patch: %d %s", edited.status, edited.body)
+	}
+	expectAPI(t, s.do(http.MethodPatch, draftPath, owner, map[string]any{"subject": "Overwritten", "revision": reviewed}), http.StatusConflict, "stale")
+	if current := s.do(http.MethodGet, draftPath, owner, nil); current.status != http.StatusOK || current.json["subject"] != "Lease renewal (signed)" || number(t, current.json["revision"]) != reviewed+1 {
+		t.Fatalf("stale edit changed draft: %d %s", current.status, current.body)
+	}
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='mail.draft-update' AND target=? AND source='api' AND outcome='conflict'", strconv.FormatInt(number(t, draft["id"]), 10)).Scan(&audits); err != nil || audits != 1 {
+		t.Fatalf("stale draft audit: %d %v", audits, err)
 	}
 	expectAPI(t, s.do(http.MethodPatch, draftPath, owner, map[string]any{"body": "  "}), http.StatusUnprocessableEntity, "invalid_draft")
 	expectAPI(t, s.do(http.MethodPost, draftPath+"/send", owner, map[string]any{}), http.StatusUnprocessableEntity, "invalid")
@@ -382,5 +390,25 @@ func TestReviewZeroTargetsKeepTheirNamespace(t *testing.T) {
 		if code != http.StatusNotFound {
 			t.Fatalf("%s zero undo = %d", kind, code)
 		}
+	}
+}
+
+func TestDraftDiscardMissingIsHandled(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	base := startServeIn(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	fetch(t, client, http.MethodGet, base+"/review", nil)
+	if code, _, _ := fetch(t, client, http.MethodPost, base+"/drafts/999999/discard", url.Values{}); code != http.StatusConflict {
+		t.Fatalf("missing full-page discard = %d", code)
+	}
+	if code, _ := hxFetch(t, client, http.MethodPost, base+"/drafts/999999/discard", url.Values{}); code != http.StatusNotFound {
+		t.Fatalf("missing partial discard = %d", code)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var count int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='mail.draft-discard' AND target='999999' AND outcome='not_found' AND source='ui'").Scan(&count); err != nil || count != 2 {
+		t.Fatalf("missing discard audits: %d %v", count, err)
 	}
 }

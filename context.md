@@ -711,6 +711,7 @@ behavior-parity target.
   and an unknown outcome blocks the target until `atrium writes resolve
   <id>`. Pages the export did not create are never touched, and edits made in
   Notion are overwritten on the next run.
+- Draft edits carry an optional expected revision: stale edits are refused without overwriting newer content. The HTML form sends it automatically; API and tool callers may supply `revision`.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
   permission granted by the existing tools.

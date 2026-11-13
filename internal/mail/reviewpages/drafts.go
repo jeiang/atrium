@@ -3,13 +3,14 @@ package reviewpages
 import (
 	"errors"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/ledger"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
@@ -26,27 +27,33 @@ func statusNames() []string {
 	return out
 }
 
-func (s *service) draftViews(r *http.Request, rows []drafts.Row) []DraftView {
-	cards, err := s.review.DraftCards(r.Context(), rows)
-	check(err)
-	return draftViews(cards)
-}
-
 func (s *service) showDrafts(w http.ResponseWriter, r *http.Request, status drafts.Status, code int, notice *tpl.Toast) {
-	rows, err := s.drafts.List(r.Context(), status, reviewapp.DraftLimit)
-	check(err)
-	data := draftsPage{Drafts: s.draftViews(r, rows), Status: string(status), Statuses: statusNames(), Configured: reviewapp.AccountConfigured(r.Context())}
+	found, err := s.mail.Drafts(r.Context(), mailapp.DraftsInput{Status: status})
+	if err != nil {
+		s.failRead(w, r, err, "unknown draft")
+		return
+	}
+	if code == http.StatusOK && web.FragmentNotModified(w, r, found.Revision) {
+		return
+	}
+	views := make([]DraftView, len(found.Data.Cards))
+	for i, c := range found.Data.Cards {
+		views[i] = draftView(c.Row, c.Unexpected)
+	}
+	data := draftsPage{Drafts: views, Status: string(status), Statuses: statusNames(), Configured: reviewapp.AccountConfigured(r.Context())}
 	s.page(w, r, code, "drafts", "drafts.gohtml", data, notice)
 }
 
 func (s *service) draftCard(w http.ResponseWriter, r *http.Request, id int64, code int, notice *tpl.Toast) {
-	row, err := s.drafts.Get(r.Context(), id)
-	check(err)
-	if row == nil {
-		s.fail(w, r, http.StatusNotFound, "unknown draft")
+	found, err := s.mail.Draft(r.Context(), mailapp.DraftInput{ID: id})
+	if err != nil {
+		s.failRead(w, r, err, "unknown draft")
 		return
 	}
-	s.renderDraftCard(w, r, s.draftViews(r, []drafts.Row{*row})[0], code, notice)
+	if code == http.StatusOK && r.Method == http.MethodGet && web.FragmentNotModified(w, r, found.Revision) {
+		return
+	}
+	s.renderDraftCard(w, r, draftView(found.Data.Row, found.Data.Unexpected), code, notice)
 }
 
 func (s *service) renderDraftCard(w http.ResponseWriter, r *http.Request, view DraftView, code int, notice *tpl.Toast) {
@@ -67,10 +74,6 @@ func (s *service) draftsPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Has("status") {
 		status = drafts.Status(web.QueryValue(r.URL.Query(), "status"))
 	}
-	if status != "" && !slices.Contains(statusFilters, status) && status != drafts.Sending {
-		s.fail(w, r, http.StatusUnprocessableEntity, "unknown status")
-		return
-	}
 	s.showDrafts(w, r, status, http.StatusOK, nil)
 }
 
@@ -79,13 +82,15 @@ func (s *service) draftPage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	row, err := s.drafts.Get(r.Context(), id)
-	check(err)
-	if row == nil {
-		s.fail(w, r, http.StatusNotFound, "unknown draft")
+	found, err := s.mail.Draft(r.Context(), mailapp.DraftInput{ID: id})
+	if err != nil {
+		s.failRead(w, r, err, "unknown draft")
 		return
 	}
-	view := s.draftViews(r, []drafts.Row{*row})[0]
+	if web.FragmentNotModified(w, r, found.Revision) {
+		return
+	}
+	view := draftView(found.Data.Row, found.Data.Unexpected)
 	configured := reviewapp.AccountConfigured(r.Context())
 	if web.IsPartial(r) {
 		s.fragment(w, r, http.StatusOK, "_draft_preview.gohtml", draftCardData{D: view, Configured: configured}, nil)
@@ -114,33 +119,32 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	changes := map[string]any{"account": account}
-	for _, name := range []string{"to", "cc", "subject", "body"} {
-		value, _ := web.Value(form, name)
-		changes[name] = value
+	changes := mailapp.DraftFields{Account: &account}
+	to, _ := web.Value(form, "to")
+	cc, _ := web.Value(form, "cc")
+	subject, _ := web.Value(form, "subject")
+	body, _ := web.Value(form, "body")
+	changes.To = &mailapp.Recipients{Text: to}
+	changes.Cc = &mailapp.Recipients{Text: cc}
+	changes.Subject = &subject
+	changes.Body = &body
+	in := mailapp.DraftUpdateInput{ID: id, Fields: changes}
+	if text, ok := web.Value(form, "revision"); ok {
+		revision, err := strconv.ParseInt(text, 10, 64)
+		if err != nil {
+			web.Unprocessable(w, web.Missing("body", "revision"))
+			return
+		}
+		in.Revision = &revision
 	}
-	_, err := s.drafts.Update(detached(r), id, changes)
+	_, err := s.mail.DraftUpdate(detached(r), in)
 	var refused drafts.Error
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
-		row, gerr := s.drafts.Get(detached(r), id)
+		found, gerr := s.mail.Draft(detached(r), mailapp.DraftInput{ID: id, Submitted: &changes})
+		row := &found.Data.Row
 		if gerr == nil && row != nil {
-			submitted := *row
-			submitted.Account = account
-			if v, ok := changes["to"].(string); ok {
-				submitted.ToAddrs = v
-			}
-			if v, ok := changes["cc"].(string); ok {
-				submitted.CcAddrs = v
-			}
-			if v, ok := changes["subject"].(string); ok {
-				submitted.Subject = v
-			}
-			if v, ok := changes["body"].(string); ok {
-				submitted.Body = v
-			}
-			unexpected, _ := s.drafts.UnexpectedRecipients(detached(r), submitted)
-			view := draftView(submitted, unexpected)
+			view := draftView(*row, found.Data.Unexpected)
 			if web.IsPartial(r) {
 				s.renderDraftCard(w, r, view, http.StatusUnprocessableEntity, toast("error", "Not saved", err.Error()))
 			} else {
@@ -158,7 +162,12 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not saved", err.Error()))
 		return
 	}
-	check(err)
+	if err != nil {
+		web.Fail(w, r, err, func(status int) {
+			s.reply(w, r, id, drafts.Draft, status, toast("error", "Not saved", application.Classify(err).Message))
+		})
+		return
+	}
 	s.reply(w, r, id, drafts.Draft, http.StatusOK, toast("success", "Saved", "Draft updated."))
 }
 
@@ -167,14 +176,22 @@ func (s *service) draftDiscard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := s.drafts.Discard(detached(r), id)
+	_, err := s.mail.DraftDiscard(detached(r), mailapp.DraftInput{ID: id})
 	var refused drafts.Error
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not discarded", err.Error()))
 		return
 	}
-	check(err)
+	if err != nil {
+		web.Fail(w, r, err, func(status int) {
+			if application.Classify(err).Code == application.NotFound {
+				status = http.StatusConflict
+			}
+			s.reply(w, r, id, drafts.Draft, status, toast("error", "Not discarded", application.Classify(err).Message))
+		})
+		return
+	}
 	s.reply(w, r, id, drafts.Draft, http.StatusOK, toast("success", "Discarded", "Draft discarded."))
 }
 

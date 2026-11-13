@@ -94,6 +94,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	accountOps, accountBindings := mailAccountOperations()
 	operations = append(operations, accountOps...)
 	bindings = append(bindings, accountBindings...)
+	draftOps, draftBindings := mailDraftOperations()
+	operations = append(operations, draftOps...)
+	bindings = append(bindings, draftBindings...)
 	return module.Declaration{
 		Name:       module.Mail,
 		Operations: operations, Bindings: bindings,
@@ -110,7 +113,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule(mailPageService)},
-			{Module: reviewpages.MailModule(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools}), Nav: []web.NavItem{
+			{Module: reviewpages.MailModule(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Application: mailPageService}), Nav: []web.NavItem{
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},

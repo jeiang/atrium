@@ -25,6 +25,7 @@
   {{if eq $d.Status "draft"}}
   <form method="post" action="/drafts/{{$d.ID}}" class="flex flex-col gap-2" hx-post="/drafts/{{$d.ID}}" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <input type="hidden" name="revision" value="{{$d.Revision}}">
     <div role="group" class="field">
       <label for="acc-{{$d.ID}}">Send from</label>
       <select id="acc-{{$d.ID}}" name="account">
