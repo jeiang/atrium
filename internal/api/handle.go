@@ -32,7 +32,7 @@ func Query[I, O any](d *web.Deps, def application.Definition, shape application.
 			if shape.Body == application.BodyBinary {
 				body := any(read.Data).(Binary)
 				if read.Revision != "" && notModified(w, r, read.Revision) {
-					_ = body.File.Close()
+					body.close()
 					return
 				}
 				serveBinary(w, r, body)

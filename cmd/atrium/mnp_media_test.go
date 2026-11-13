@@ -203,6 +203,26 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 	switch path {
 	case "torrents/add":
 		f.added = append(f.added, form)
+		if r.MultipartForm != nil {
+			for _, header := range r.MultipartForm.File["torrents"] {
+				file, err := header.Open()
+				if err != nil {
+					http.Error(w, "upload", 400)
+					return
+				}
+				data, err := io.ReadAll(file)
+				_ = file.Close()
+				hash, hashErr := media.TorrentHash(data)
+				if err != nil || hashErr != nil {
+					http.Error(w, "torrent", 400)
+					return
+				}
+				if _, ok := f.items[hash]; !ok {
+					f.order = append(f.order, hash)
+					f.items[hash] = &mnpTorrent{hash: hash, name: header.Filename, state: "metaDL", tags: mnpTags(form.Get("tags"))}
+				}
+			}
+		}
 		if hash, ok := media.MagnetHash(form.Get("urls")); ok && hash != "" {
 			if _, ok := f.items[hash]; !ok {
 				f.order = append(f.order, hash)

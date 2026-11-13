@@ -27,19 +27,21 @@ func (b BodyKind) Valid() bool {
 }
 
 type APIShape struct {
-	Area       Area
-	Request    reflect.Type
-	Response   reflect.Type
-	Success    int
-	Body       BodyKind
-	BodyLimit  int64
-	AllowJSON  bool
-	IgnoreBody bool
-	BeforeBody func(context.Context) error
-	ID         string
-	Uncached   bool
-	Sensitive  bool
-	Errors     []Code
+	Area                 Area
+	Request              reflect.Type
+	Response             reflect.Type
+	Success              int
+	Body                 BodyKind
+	BodyLimit            int64
+	AllowJSON            bool
+	MultipartFile        string
+	MultipartAlternative string
+	IgnoreBody           bool
+	BeforeBody           func(context.Context) error
+	ID                   string
+	Uncached             bool
+	Sensitive            bool
+	Errors               []Code
 }
 
 var Codes = []Code{Invalid, BadCursor, NotFound, Unauthenticated, Forbidden, Conflict, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}

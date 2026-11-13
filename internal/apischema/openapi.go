@@ -153,7 +153,13 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		if err != nil {
 			return nil, err
 		}
-		content := object{"multipart/form-data": object{"schema": object{"allOf": []any{schema, object{"type": "object", "properties": object{"upload": object{"type": "array", "items": object{"type": "string", "format": "binary"}}}}}}}}
+		multipartSchema := object{"allOf": []any{schema, object{"type": "object", "properties": object{"upload": object{"type": "array", "items": object{"type": "string", "format": "binary"}}}}}}
+		if shape.MultipartFile != "" {
+			file := shape.MultipartFile
+			field := shape.MultipartAlternative
+			multipartSchema = object{"type": "object", "properties": object{field: object{"type": "string"}, file: object{"type": "string", "format": "binary"}}, "oneOf": []any{object{"required": []string{field}, "not": object{"required": []string{file}}}, object{"required": []string{file}, "not": object{"required": []string{field}}}}}
+		}
+		content := object{"multipart/form-data": object{"schema": multipartSchema}}
 		if shape.AllowJSON {
 			content["application/json"] = object{"schema": schema}
 		}

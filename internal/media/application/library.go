@@ -124,7 +124,7 @@ func DescribeArt() application.Definition {
 }
 
 func DescribeFile() application.Definition {
-	return application.Describe[FileInput, *FileRelay](FileName, application.Query, []application.Authority{application.PublicCapability}, application.NoEffect, false)
+	return application.Describe[FileInput, *FileRelay](FileName, application.Query, []application.Authority{application.PublicCapability, application.Operator}, application.NoEffect, false)
 }
 
 func (s *Service) snapshot(ctx context.Context, set media.Settings) (media.Snapshot, error) {
