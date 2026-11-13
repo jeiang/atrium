@@ -124,7 +124,7 @@ func mediaCursorError() error {
 }
 
 func mediaRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
-	return []application.Binding{
+	routes := []application.Binding{
 		api.Query(d, mediaapp.DescribeDownloads(), mediaShape[MediaTorrents](), "GET /media/torrents", func(ctx context.Context, in MediaPageInput) (application.Read[MediaTorrents], error) {
 			r, err := s.Downloads(ctx, mediaapp.DownloadsInput{})
 			if err != nil {
@@ -276,4 +276,5 @@ func mediaRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 			return mediaRead(r, out), e
 		}),
 	}
+	return append(append(routes, mediaLibraryRoutes(d, s)...), mediaFilingRoutes(d, s)...)
 }

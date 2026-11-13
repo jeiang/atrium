@@ -73,15 +73,21 @@
         "media.channel-remove",
         "media.channels",
         "media.downloads",
+        "media.file-item",
+        "media.filing-preview",
+        "media.ignore",
+        "media.library",
+        "media.library-detail",
         "media.poll",
         "media.release-preview",
         "media.select-files",
         "media.show-lookup",
         "media.show-search",
+        "media.sweep",
         "media.torrent-files"
       ],
-      "required": 11,
-      "bound": 11
+      "required": 17,
+      "bound": 17
     },
     {
       "area": "permissions",
@@ -159,5 +165,5 @@
     }
   ],
   "total_required": 168,
-  "total_bound": 20
+  "total_bound": 26
 }
