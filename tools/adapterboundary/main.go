@@ -54,7 +54,7 @@ var adapters = []adapter{
 	{pattern: "internal/notify/api.go"},
 	{pattern: "internal/notify/tool.go"},
 	{pattern: "internal/connections/connweb/*"},
-	{pattern: "internal/connections/cli.go"},
+	{pattern: "internal/connections/connectionscmd/*"},
 	{pattern: "internal/settings/settingscmd/*"},
 	{pattern: "internal/settingspage/*"},
 	{pattern: "internal/secrets/secretscmd/*"},

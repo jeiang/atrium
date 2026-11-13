@@ -19,6 +19,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
+	"github.com/jeiang/atrium/internal/connections/connectionscmd"
 	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
@@ -63,6 +65,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
 	settingOps, settingBindings := settingsOperations()
 	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
+	connectionOps, connectionBindings := connectionsOperations()
+	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -100,7 +104,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
-			connweb.Page(),
+			connweb.Page(connectionService),
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,
@@ -112,6 +116,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}),
 			settingscmd.Command(openSettings),
+			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearer.Command(mc.Env),
 			secretscmd.Command(openSettings),
 			dbcmd.Command(mc.Env, m.Now),
@@ -169,7 +174,7 @@ func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
 			if err != nil {
 				return err
 			}
-			return connweb.Watch(ctx, d)
+			return watchConnections(ctx, d)
 		}},
 	}
 }

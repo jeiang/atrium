@@ -293,11 +293,9 @@ internal/backup/restore.go	github.com/jeiang/atrium/internal/db/key
 internal/backup/restore.go	github.com/jeiang/atrium/internal/settings
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/calendar
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/config
-internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/connections
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/davmirror
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/db
 internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/passrun
-internal/calendar/calendarcmd/calendarcmd.go	github.com/jeiang/atrium/internal/settings/audit
 internal/calendar/calendarcmd/candidates.go	database/sql
 internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/assistant/journal
@@ -310,14 +308,6 @@ internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/co
 internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/db
 internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/mail/imapclient
 internal/calendar/calendarcmd/candidates.go	github.com/jeiang/atrium/internal/scheduler
-internal/connections/cli.go	github.com/jeiang/atrium/internal/config
-internal/connections/cli.go	github.com/jeiang/atrium/internal/db
-internal/connections/connweb/google.go	github.com/jeiang/atrium/internal/connections
-internal/connections/connweb/google.go	github.com/jeiang/atrium/internal/settings/audit
-internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/config
-internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/connections
-internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/db
-internal/connections/connweb/web.go	github.com/jeiang/atrium/internal/settings/audit
 internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/calendar
 internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/config
 internal/contacts/contactsmodule/tools.go	github.com/jeiang/atrium/internal/contacts

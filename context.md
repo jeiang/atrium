@@ -342,6 +342,12 @@ behavior-parity target.
   connection-owned host key (the refusal names the destination). Provider
   credentials come only from connection records: the Connections page, a
   connection `credential_files` entry in the host file, or `atrium secrets`.
+  Connections forms, `atrium connections`, Google consent (including
+  `calendar google-auth`), and health observation use `connections.*`
+  operations. Their audits contain connection IDs only, never credentials,
+  OAuth codes, states or token responses. OAuth exchange errors do not show
+  provider response bodies. The Connections credential form retains its
+  existing 422 refusal status.
   The only app key inputs are `app_keys.action_link_key_file` and
   `app_keys.link_key_file`. Saving a working integration turns its module on,
   and the settings audit rows show on the Done page.

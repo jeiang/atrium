@@ -1,4 +1,4 @@
-package connections
+package connectionscmd
 
 import (
 	"encoding/json"
@@ -6,12 +6,11 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 )
 
-func Command(env config.Env) *cli.Command {
-	s := &service{env: env}
+func Command(open connectionsapp.Open) *cli.Command {
+	s := &service{open: open}
 	return &cli.Command{
 		Name: "connections",
 		Commands: []*cli.Command{
@@ -21,45 +20,21 @@ func Command(env config.Env) *cli.Command {
 	}
 }
 
-type service struct{ env config.Env }
-
-func (s *service) open(e *cli.Env) (*db.DB, *Store, int) {
-	reg, err := From(e.Ctx)
-	if err != nil {
-		return nil, nil, cli.Fail(e, err)
-	}
-	cfg, err := config.Load(s.env)
-	if err != nil {
-		return nil, nil, cli.Fail(e, err)
-	}
-	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(e.Ctx).DBKey()))
-	if err != nil {
-		return nil, nil, cli.Fail(e, err)
-	}
-	if err := config.Boot(e.Ctx, s.env, d, cfg); err != nil {
-		_ = d.Close()
-		return nil, nil, cli.Fail(e, err)
-	}
-	store, err := New(d, config.From(e.Ctx).Host(), reg)
-	if err != nil {
-		_ = d.Close()
-		return nil, nil, cli.Fail(e, err)
-	}
-	return d, store, cli.ExitOK
-}
+type service struct{ open connectionsapp.Open }
 
 func (s *service) list(a *cli.Args) cli.Handler {
 	jsonOut := a.Bool("json", cli.Opt{Help: "print JSON"})
 	return func(e *cli.Env) int {
-		d, store, code := s.open(e)
-		if code != cli.ExitOK {
-			return code
-		}
-		defer func() { _ = d.Close() }()
-		views, err := store.List(e.Ctx)
+		svc, closeDB, err := s.open(e.Ctx)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
+		defer closeDB()
+		read, err := svc.List(e.Ctx, connectionsapp.ListInput{})
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		views := read.Data
 		if *jsonOut {
 			return writeJSON(e, views)
 		}
@@ -78,34 +53,16 @@ func (s *service) test(a *cli.Args) cli.Handler {
 		if (*id == "") == !*all {
 			return e.UsageError("give a connection id or --all")
 		}
-		d, store, code := s.open(e)
-		if code != cli.ExitOK {
-			return code
+		svc, closeDB, err := s.open(e.Ctx)
+		if err != nil {
+			return cli.Fail(e, err)
 		}
-		defer func() { _ = d.Close() }()
-		var views []View
-		if *all {
-			list, err := store.List(e.Ctx)
-			if err != nil {
-				return cli.Fail(e, err)
-			}
-			for _, v := range list {
-				if !v.Enabled || v.State == Unconfigured || v.State == Disabled {
-					continue
-				}
-				tested, err := store.Test(e.Ctx, v.ID)
-				if err != nil {
-					return cli.Fail(e, err)
-				}
-				views = append(views, tested)
-			}
-		} else {
-			tested, err := store.Test(e.Ctx, ID(*id))
-			if err != nil {
-				return cli.Fail(e, err)
-			}
-			views = append(views, tested)
+		defer closeDB()
+		change, err := svc.Test(e.Ctx, connectionsapp.TestInput{ID: connectionsapp.ID(*id), All: *all})
+		if err != nil {
+			return cli.Fail(e, err)
 		}
+		views := change.Data
 		if *jsonOut {
 			if code := writeJSON(e, views); code != cli.ExitOK {
 				return code
@@ -116,11 +73,11 @@ func (s *service) test(a *cli.Args) cli.Handler {
 			}
 		}
 		for _, v := range views {
-			if v.State == Failing || v.State == NeedsReauth {
+			if v.State == "failing" || v.State == "needs_reauth" {
 				return cli.ExitError
 			}
 		}
-		if !*all && len(views) == 1 && (views[0].State == Unconfigured || views[0].State == Disabled) {
+		if !*all && len(views) == 1 && (views[0].State == "unconfigured" || views[0].State == "disabled") {
 			return cli.ExitError
 		}
 		return cli.ExitOK
@@ -136,7 +93,7 @@ func writeJSON(e *cli.Env, v any) int {
 	return cli.ExitOK
 }
 
-func credentialSummary(v View) string {
+func credentialSummary(v connectionsapp.View) string {
 	var parts []string
 	for _, c := range v.Credentials {
 		state := "missing"
