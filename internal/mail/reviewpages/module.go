@@ -81,7 +81,7 @@ func newService(o Options, d *web.Deps) *service {
 	if err != nil {
 		panic(err)
 	}
-	d.DrainOnClose(effects.Drain)
+	d.DrainOnStop(effects.Drain)
 	registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
 		if d.ResumeRun == nil {
 			return proposals.ProposalError("the assistant module is not running")

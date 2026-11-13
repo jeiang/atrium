@@ -82,6 +82,7 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 	return append(out,
 		ledger.UndoDefinition{Operation: UndoFolderDelete, Undoer: ledger.Undoer{
 			Validate: validateOp(UndoFolderDelete),
+			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := undoFolderDelete(ctx, open, s, raw)
 				if err != nil {
@@ -91,6 +92,7 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 			}}},
 		ledger.UndoDefinition{Operation: UndoMoveBack, Undoer: ledger.Undoer{
 			Validate: validateOp(UndoMoveBack),
+			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := undoMailMoveBack(ctx, open, s, raw)
 				if err != nil {

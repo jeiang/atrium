@@ -148,9 +148,18 @@ func TestServeRefusesAnEmergencyListenerOffLoopback(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
 	for _, host := range []string{"localhost", "0.0.0.0", "::", "192.0.2.10", "::ffff:127.0.0.1", "fe80::1%lo0", "127.0.0.1.example"} {
 		got := runApp(t, "serve", "--port", "0", "--auth", "local", "--emergency-host", host, "--emergency-port", "0")
-		if got.code != cli.ExitError || !strings.Contains(got.stderr, "numeric loopback --emergency-host") {
+		if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "numeric loopback --emergency-host") {
 			t.Errorf("emergency host %q: exit %d stderr %q", host, got.code, got.stderr)
 		}
+	}
+}
+
+func TestServeExitsWithTheConfigCodeOnAPermanentRefusal(t *testing.T) {
+	moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_DB_KEY", "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100")
+	got := runApp(t, "serve", "--port", "0", "--auth", "local")
+	if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "key") {
+		t.Fatalf("serve with a wrong database key: exit %d stderr %q; want %d (permanent, not restarted)", got.code, got.stderr, cli.ExitConfig)
 	}
 }
 
@@ -169,8 +178,8 @@ func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 			}
 			setEnv(t, settingEnv(ops.ListenKey), "127.0.0.1:"+ports[tc.ops])
 			got := runApp(t, "serve", "--host", "127.0.0.1", "--port", ports[tc.public], "--auth", "local", "--emergency-port", ports[tc.emergency])
-			if got.code == cli.ExitOK {
-				t.Fatalf("serve with a port collision exited 0")
+			if got.code != cli.ExitError {
+				t.Fatalf("serve with a port collision exited %d, want %d (transient, restarted by systemd)", got.code, cli.ExitError)
 			}
 			time.Sleep(300 * time.Millisecond)
 			if slices.Contains(notify.Messages(), "READY=1") {

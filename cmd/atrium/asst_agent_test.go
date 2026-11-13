@@ -468,7 +468,7 @@ func TestAsstWebFetchRefusesUntypedAndNonPublicURLs(t *testing.T) {
 	}
 }
 
-func TestAsstSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
+func TestServeSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	notify := sdnotifytest.Listen(t, 2*time.Second)
 	for name, value := range notify.Env() {
@@ -479,14 +479,15 @@ func TestAsstSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	for deadline := time.Now().Add(15 * time.Second); asstCount(t, d, "SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'") != 1; time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the first tick never seeded the nightly job")
 		}
 	}
 	notify.Wait("READY=1")
-	notify.Wait("STATUS=scheduling")
 	notify.Wait("WATCHDOG=1")
 	cancel()
 	notify.Wait("STOPPING=1")
@@ -506,7 +507,9 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 	d := asstDB(t, dir)
 	seedCtx, seedCancel := context.WithCancel(context.Background())
 	seeded := make(chan appRun, 1)
-	go func() { seeded <- runAppContext(t, f, seedCtx, "agent", "scheduler") }()
+	go func() {
+		seeded <- runAppContext(t, f, seedCtx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	for deadline := time.Now().Add(15 * time.Second); asstCount(t, d, "SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'") != 1; time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			seedCancel()
@@ -554,7 +557,9 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 
 	ctx, cancel := context.WithCancel(context.Background())
 	schedDone := make(chan appRun, 1)
-	go func() { schedDone <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		schedDone <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	for range 2 {
 		select {
 		case <-arrived:

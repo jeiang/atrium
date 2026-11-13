@@ -700,7 +700,7 @@ func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T
 	defer cancel()
 	done := make(chan int, 1)
 	go func() {
-		code, _, _ := r.f.Run(ctx, "watch", "--account", "icloud")
+		code, _, _ := r.f.Run(ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
 		done <- code
 	}()
 	waitFor := func(what string, ok func() bool) {

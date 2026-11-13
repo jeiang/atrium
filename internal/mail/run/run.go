@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 var log = logx.Logger("atrium.run")
@@ -134,14 +135,31 @@ func (p *Pass) use(c *classifier.Service) {
 }
 
 func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64, classifiers Classifier) (*Pass, func(), error) {
-	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
+	d, err := connect(ctx, env, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := config.Boot(ctx, env, d, cfg); err != nil {
+	p, err := prepare(ctx, env, d, cfg, open, now, classifiers)
+	if err != nil {
 		_ = d.Close()
 		return nil, nil, err
 	}
+	return p, func() { _ = d.Close() }, nil
+}
+
+func connect(ctx context.Context, env config.Env, cfg config.Config) (*db.DB, error) {
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
+	if err != nil {
+		return nil, err
+	}
+	if err := config.Boot(ctx, env, d, cfg); err != nil {
+		_ = d.Close()
+		return nil, err
+	}
+	return d, nil
+}
+
+func prepare(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64, classifiers Classifier) (*Pass, error) {
 	if now == nil {
 		now = mail.WallClock
 	}
@@ -150,16 +168,14 @@ func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.Open
 	}
 	c, err := resolve(ctx)
 	if err != nil {
-		_ = d.Close()
-		return nil, nil, err
+		return nil, err
 	}
 	p, err := New(ctx, env, d, cfg, open, now, c)
 	if err != nil {
-		_ = d.Close()
-		return nil, nil, err
+		return nil, err
 	}
 	p.resolve, p.resolved = resolve, true
-	return p, func() { _ = d.Close() }, nil
+	return p, nil
 }
 
 func (p *Pass) SyncOne(ctx context.Context, account string) error {
@@ -281,13 +297,15 @@ const checkpointWait = time.Second
 
 var passDeadline = 20 * time.Minute
 
+const SyncJobKey = module.Mail + "/" + passrun.Sync
+
 func (p *Pass) Locked(waitCtx, workCtx context.Context, accounts []string) error {
-	lock, err := db.Exclusive(waitCtx, p.Cfg.DBPath, 0)
+	lock, err := db.ResourceLocks(waitCtx, p.Cfg.DBPath, []string{mail.PassResource}, 0)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
-	workCtx, cancel := context.WithTimeout(workCtx, passDeadline)
+	workCtx, cancel := context.WithTimeout(db.WithHeld(workCtx, lock), passDeadline)
 	defer cancel()
 	defer p.checkpoint(workCtx)
 	for _, account := range accounts {
@@ -316,10 +334,26 @@ func Sync(ctx context.Context, env config.Env, cfg config.Config, requested stri
 	if err != nil {
 		return nil, err
 	}
-	pass, release, err := Open(ctx, env, cfg, open, nil, classifiers)
+	d, err := connect(ctx, env, cfg)
 	if err != nil {
 		return nil, err
 	}
-	defer release()
-	return accounts, passrun.Track(ctx, pass.DB, passrun.Sync, func() error { return pass.Locked(ctx, ctx, accounts) })
+	defer func() { _ = d.Close() }()
+	var passErr error
+	_, err = module.Invoke(ctx, d, cfg, SyncJobKey, 0, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+		passErr = SyncPass(ctx, env, d, cfg, accounts, open, classifiers)
+		return scheduler.Result{}, passErr
+	})
+	if err == nil {
+		err = passErr
+	}
+	return accounts, err
+}
+
+func SyncPass(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, accounts []string, open mail.OpenFunc, classifiers Classifier) error {
+	pass, err := prepare(ctx, env, d, cfg, open, nil, classifiers)
+	if err != nil {
+		return err
+	}
+	return passrun.Track(ctx, d, passrun.Sync, func() error { return pass.Locked(ctx, ctx, accounts) })
 }

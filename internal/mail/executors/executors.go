@@ -1006,23 +1006,25 @@ func (e *Executors) Undo() []ledger.UndoDefinition {
 
 func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
-		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
+		lock, err := db.ResourceLocks(ctx, syncer.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = lock.Close() }()
-		_, err = syncer.One(ctx, account, open)
+		_, err = syncer.One(db.WithHeld(ctx, lock), account, open)
 		return err
 	}
 }
 
+var passLock = []string{mail.PassResource}
+
 func (e *Executors) Proposals(owner string) []proposals.Definition {
 	return []proposals.Definition{
-		{Kind: proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true}, Execute: e.ExecuteMoves},
-		{Kind: proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true}, Execute: e.ExecuteMoves},
-		{Kind: proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"}, Execute: e.ExecuteDeletion},
-		{Kind: proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"}, Execute: e.ExecuteLabelMerge},
-		{Kind: proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true}, Execute: e.ExecuteMoves},
-		{Kind: proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count"}, Execute: e.ExecuteTriage},
+		{Kind: proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true, Locks: passLock}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true, Locks: passLock}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog", Locks: passLock}, Execute: e.ExecuteDeletion},
+		{Kind: proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count", Locks: passLock}, Execute: e.ExecuteLabelMerge},
+		{Kind: proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true, Locks: passLock}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count", Locks: passLock}, Execute: e.ExecuteTriage},
 	}
 }

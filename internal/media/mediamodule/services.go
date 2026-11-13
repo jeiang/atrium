@@ -28,7 +28,7 @@ func pageService(now func() float64) func(*web.Deps) *mediaapp.Service {
 		if err != nil {
 			panic(err)
 		}
-		d.DrainOnClose(effects.Drain)
+		d.DrainOnStop(effects.Drain)
 		links := media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath())
 		return mediaapp.New(mediaapp.Deps{DB: d.DB, Env: d.Env, Ledger: effects, Now: now, CacheDir: d.Cfg.MediaCacheDir(), Links: links})
 	}

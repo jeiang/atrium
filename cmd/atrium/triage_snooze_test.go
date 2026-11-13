@@ -42,12 +42,13 @@ func TestMailTriageSnoozeRecordsReturnWhenMailIsDisabledAfterMove(t *testing.T) 
 		"VALUES (900, 'mail_triage', 'work', 'pending', ?, 'snooze receipt', ?, '{}', 'fp-snooze')", mail.WallClock(), string(payload))
 
 	startServeIn(t, m.dir)
+	waitUntil(t, 30*time.Second, "the serve watch to finish its first pass and idle", func() bool { return fake.Idling() == 1 })
 	arrived := make(chan struct{})
 	release := make(chan struct{})
 	var once sync.Once
 	defer once.Do(func() { close(release) })
 	var arrivedOnce sync.Once
-	fake.StatusHook = func(name string, count uint32) uint32 {
+	fake.SetStatusHook(func(name string, count uint32) uint32 {
 		if name != "Snoozed" {
 			return count
 		}
@@ -56,7 +57,7 @@ func TestMailTriageSnoozeRecordsReturnWhenMailIsDisabledAfterMove(t *testing.T) 
 			<-release
 		})
 		return count
-	}
+	})
 	result := make(chan appRun, 1)
 	go func() { result <- asstRunApp(m.app, context.Background(), "proposals", "approve", fmt.Sprint(900)) }()
 	select {
@@ -67,7 +68,7 @@ func TestMailTriageSnoozeRecordsReturnWhenMailIsDisabledAfterMove(t *testing.T) 
 	asstSet(t, module.FlagKey(module.Mail), "false")
 	once.Do(func() { close(release) })
 	ran := <-result
-	fake.StatusHook = nil
+	fake.SetStatusHook(nil)
 	if ran.code != cli.ExitOK {
 		t.Fatalf("approve after a disable mid-move: %d %q %q", ran.code, ran.stdout, ran.stderr)
 	}

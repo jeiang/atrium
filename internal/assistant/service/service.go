@@ -106,7 +106,7 @@ func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) 
 	if err != nil {
 		return nil, config.NotConfigured("the Anthropic connection has no API key")
 	}
-	client, err := lease.HTTP("url")
+	client, err := lease.Stream("url", anthropic.ConnectTimeout, anthropic.ResponseHeaderTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrTransport, err)
 	}

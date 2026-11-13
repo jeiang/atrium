@@ -60,6 +60,8 @@ func declaredSchedule(ctx context.Context, q db.Querier, def Definition) (string
 			log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
 		}
 		return def.Schedule, false, nil
+	case def.ScheduleSetting == "":
+		return def.Schedule, false, nil
 	}
 	found, err := settings.From(ctx).Resolve(ctx, q, def.ScheduleSetting)
 	return found.Value, found.Origin != settings.FromDefault, err

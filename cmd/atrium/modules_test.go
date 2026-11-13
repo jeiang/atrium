@@ -131,8 +131,7 @@ func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) 
 	f = &fixture{t: t, dir: dir, env: env, flags: flags}
 	f.app = newAppWith(f.lookup, imapclient.Opener, now, quietLog)
 	f.settings, f.state = f.app.Settings, f.app.State
-	fixturesByTest.Store(t, f)
-	fixturesByTest.Store(testKey(t), f)
+	registerFixture(t, f)
 	seedModuleFlags(t, f, flags)
 	f.app = newAppWith(f.lookup, imapclient.Opener, now, quietLog)
 	f.settings, f.state = f.app.Settings, f.app.State
@@ -931,8 +930,8 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if code, _, stderr := f.Run(ctx, "watch", "--account", "icloud"); code != cli.ExitOK {
-			t.Fatalf("watch with calendar %s: exit %d %q", flag, code, stderr)
+		if code, _, stderr := f.Run(ctx, "sync", "--account", "icloud"); code != cli.ExitOK {
+			t.Fatalf("sync with calendar %s: exit %d %q", flag, code, stderr)
 		}
 		d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {
@@ -990,18 +989,19 @@ func TestMailDisableDuringProposalApproval(t *testing.T) {
 	m.run(t, "live", "backlog")
 	proposal := m.scalar(t, "SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'inbox_backlog' AND status = 'pending' ORDER BY id DESC LIMIT 1")
 	startServeIn(t, m.dir)
+	waitWatching(t, fake)
 	arrived := make(chan struct{})
 	release := make(chan struct{})
 	var once sync.Once
 	defer once.Do(func() { close(release) })
 	var arrivedOnce sync.Once
-	fake.StatusHook = func(_ string, count uint32) uint32 {
+	fake.SetStatusHook(func(_ string, count uint32) uint32 {
 		arrivedOnce.Do(func() {
 			close(arrived)
 			<-release
 		})
 		return count
-	}
+	})
 	result := make(chan appRun, 1)
 	go func() { result <- asstRunApp(m.app, context.Background(), "proposals", "approve", proposal) }()
 	select {
@@ -1016,7 +1016,7 @@ func TestMailDisableDuringProposalApproval(t *testing.T) {
 	if ran.code == cli.ExitOK || !strings.Contains(ran.stderr+ran.stdout, "the mail module was disabled; start the action again") {
 		t.Fatalf("approval after disable and re-enable: %d %q %q", ran.code, ran.stdout, ran.stderr)
 	}
-	fake.StatusHook = nil
+	fake.SetStatusHook(nil)
 	if len(fake.Writes) != 0 || m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'proposal'") != 0 {
 		t.Fatalf("disabled approval wrote IMAP %v or recorded a proposal effect", m.verbs())
 	}
@@ -1072,7 +1072,7 @@ func (b midBatch) disableAfterWrite(t *testing.T, what string, run func()) {
 	var arrivedOnce, releaseOnce sync.Once
 	free := func() { releaseOnce.Do(func() { close(release) }) }
 	defer free()
-	b.fake.StatusHook = func(_ string, count uint32) uint32 {
+	b.fake.SetStatusHook(func(_ string, count uint32) uint32 {
 		if len(b.fake.Writes) > after {
 			arrivedOnce.Do(func() {
 				close(arrived)
@@ -1080,7 +1080,7 @@ func (b midBatch) disableAfterWrite(t *testing.T, what string, run func()) {
 			})
 		}
 		return count
-	}
+	})
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -1094,7 +1094,7 @@ func (b midBatch) disableAfterWrite(t *testing.T, what string, run func()) {
 	asstSet(t, module.FlagKey(module.Mail), "false")
 	free()
 	<-done
-	b.fake.StatusHook = nil
+	b.fake.SetStatusHook(nil)
 }
 
 func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
@@ -1127,6 +1127,7 @@ func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
 		}
 		client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		base := startServeIn(t, b.m.dir)
+		waitWatching(t, b.fake)
 		fetch(t, client, http.MethodGet, base+"/about", nil)
 		var status int
 		var body string
@@ -1143,6 +1144,7 @@ func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
 	t.Run("api approve", func(t *testing.T) {
 		b := midBatchFixture(t)
 		s := startAPISite(t, b.m.dir, nil)
+		waitWatching(t, b.fake)
 		var reply apiReply
 		b.disableAfterWrite(t, "approval", func() {
 			reply = s.do(http.MethodPost, "/api/v1/approvals/"+b.proposal+"/approve", s.token("owner"), nil)
@@ -1157,6 +1159,7 @@ func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
 		b := midBatchFixture(t)
 		b.m.run(t, "proposals", "approve", b.proposal)
 		s := startAPISite(t, b.m.dir, nil)
+		waitWatching(t, b.fake)
 		var reply apiReply
 		b.disableAfterWrite(t, "undo", func() {
 			reply = s.do(http.MethodPost, "/api/v1/undo/proposal:"+b.proposal, s.token("owner"), nil)
@@ -1180,6 +1183,7 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	m.run(t, "sync")
 	effect := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
 	base := startServeIn(t, m.dir)
+	waitWatching(t, m.fake)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1195,13 +1199,13 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
 	var arrivedOnce sync.Once
-	m.fake.StatusHook = func(_ string, count uint32) uint32 {
+	m.fake.SetStatusHook(func(_ string, count uint32) uint32 {
 		arrivedOnce.Do(func() {
 			close(arrived)
 			<-release
 		})
 		return count
-	}
+	})
 	type response struct {
 		status int
 		body   string
@@ -1219,7 +1223,7 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	asstSet(t, module.FlagKey(module.Mail), "false")
 	releaseOnce.Do(func() { close(release) })
 	refused := <-result
-	m.fake.StatusHook = nil
+	m.fake.SetStatusHook(nil)
 	if !strings.Contains(refused.body, "the mail module was disabled; start the action again") {
 		t.Fatalf("disabled pending undo response %d: %s", refused.status, refused.body)
 	}

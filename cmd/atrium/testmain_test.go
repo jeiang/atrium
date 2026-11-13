@@ -239,6 +239,16 @@ func testKey(t *testing.T) string {
 	return name
 }
 
+func registerFixture(t *testing.T, f *fixture) {
+	key := testKey(t)
+	fixturesByTest.Store(t, f)
+	fixturesByTest.Store(key, f)
+	t.Cleanup(func() {
+		fixturesByTest.Delete(t)
+		fixturesByTest.CompareAndDelete(key, f)
+	})
+}
+
 func fixtureFor(t *testing.T) *fixture {
 	if v, ok := fixturesByTest.Load(t); ok {
 		return v.(*fixture)

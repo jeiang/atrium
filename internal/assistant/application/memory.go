@@ -181,7 +181,7 @@ func (s *Service) memoryClient(ctx context.Context) (*anthropic.Client, error) {
 	if err != nil {
 		return nil, config.NotConfigured("the Anthropic connection has no API key")
 	}
-	httpClient, err := lease.HTTP("url")
+	httpClient, err := lease.Stream("url", anthropic.ConnectTimeout, anthropic.ResponseHeaderTimeout)
 	if err != nil {
 		return nil, err
 	}

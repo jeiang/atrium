@@ -81,6 +81,18 @@ func (x *exec) Exclusive(fn func() error) error {
 	return fn()
 }
 
+func (x *exec) PassLocked(fn func() error) error {
+	locks, err := db.ResourceLocks(x.Ctx, x.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = locks.Close() }()
+	outer := x.Ctx
+	x.Ctx = db.WithHeld(outer, locks)
+	defer func() { x.Ctx = outer }()
+	return fn()
+}
+
 type body func(x *exec) error
 
 func (o Options) leaf(name string, declare func(a *cli.Args) body) *cli.Command {

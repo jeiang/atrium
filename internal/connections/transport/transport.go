@@ -13,6 +13,8 @@ import (
 
 type Options struct {
 	Timeout         time.Duration
+	Connect         time.Duration
+	ResponseHeader  time.Duration
 	CAFile          string
 	Proxy           string
 	FollowRedirects bool
@@ -46,14 +48,21 @@ func New(o Options) (*http.Client, error) {
 		}
 		proxy = http.ProxyURL(u)
 	}
+	connect, header := o.Connect, o.ResponseHeader
+	if connect == 0 {
+		connect = o.Timeout
+	}
+	if header == 0 {
+		header = o.Timeout
+	}
 	client := &http.Client{
 		Timeout: o.Timeout,
 		Transport: &http.Transport{
 			Proxy:                 proxy,
-			DialContext:           (&net.Dialer{Timeout: o.Timeout}).DialContext,
+			DialContext:           (&net.Dialer{Timeout: connect}).DialContext,
 			TLSClientConfig:       tlsConfig,
-			TLSHandshakeTimeout:   o.Timeout,
-			ResponseHeaderTimeout: o.Timeout,
+			TLSHandshakeTimeout:   connect,
+			ResponseHeaderTimeout: header,
 		},
 	}
 	if !o.FollowRedirects {

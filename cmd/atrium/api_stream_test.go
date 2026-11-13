@@ -271,9 +271,10 @@ func TestStreamExpiredIs410(t *testing.T) {
 	activeThread, activeRun := s.start("active")
 	waitRunning(t, s.d, activeRun)
 	kept := asstCount(t, s.d, "SELECT COUNT(*) FROM run_events WHERE stream_run_id = ?", activeRun)
-	schedulerSeed(t, s.f, s.d)
+	// The site's serve already owns the database and runs the scheduler; do not
+	// start another serve just to run retention.
 	schedulerDue(t, s.d, "stream-retention")
-	schedulerRun(t, s.f, s.d, func() bool {
+	waitUntil(t, time.Minute, "expired stream retention", func() bool {
 		for _, id := range append([]int64{runID}, backlog...) {
 			if asstCount(t, s.d, "SELECT COUNT(*) FROM run_streams WHERE run_id = ? AND retained_after = terminal_seq", id) != 1 {
 				return false

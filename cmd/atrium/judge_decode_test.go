@@ -64,9 +64,9 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	code, _, stderr := f.runLogged(ctx, "watch", "--account", "icloud")
+	code, _, stderr := f.runLogged(ctx, "sync", "--account", "icloud")
 	if code != cli.ExitOK || !strings.Contains(stderr, "gave no usable answer") || !strings.Contains(stderr, "has_event") {
-		t.Fatalf("watch with a non-boolean judge answer: exit %d stderr %q", code, stderr)
+		t.Fatalf("sync with a non-boolean judge answer: exit %d stderr %q", code, stderr)
 	}
 
 	d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))

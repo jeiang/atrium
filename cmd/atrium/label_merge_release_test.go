@@ -34,7 +34,7 @@ func TestLabelMergeReleasesTheDeletionWhenTheFolderBecameNonEmpty(t *testing.T) 
 	}
 	label := mail.UTF7Encode(plan.Label)
 	calls := 0
-	f.fakes["gmail"].StatusHook = func(name string, messages uint32) uint32 {
+	f.fakes["gmail"].SetStatusHook(func(name string, messages uint32) uint32 {
 		if name != label {
 			return messages
 		}
@@ -43,7 +43,7 @@ func TestLabelMergeReleasesTheDeletionWhenTheFolderBecameNonEmpty(t *testing.T) 
 			return 1
 		}
 		return messages
-	}
+	})
 	if code, _, stderr := f.Run(context.Background(), "proposals", "approve", strconv.FormatInt(pid, 10)); code != cli.ExitOK {
 		t.Fatalf("proposals approve: exit %d stderr %q", code, stderr)
 	}

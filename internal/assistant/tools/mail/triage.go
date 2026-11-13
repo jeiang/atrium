@@ -20,7 +20,7 @@ import (
 
 func Proposals() []proposals.Definition {
 	return []proposals.Definition{{
-		Kind: proposals.Kind{Name: executors.MailTriage, Module: module.Mail},
+		Kind: proposals.Kind{Name: executors.MailTriage, Module: module.Mail, Locks: []string{mail.PassResource}},
 		Build: &proposals.Builder{
 			Description: "{items: [{id, action, label?, due?}]}: propose archive, label or snooze for a batch of messages; one proposal per run",
 			Build:       proposeTriage,

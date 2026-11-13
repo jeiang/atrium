@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error) {
@@ -68,7 +70,7 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 	settleCtx := context.WithoutCancel(ctx)
 	if err != nil {
 		var refused Refused
-		if errors.As(err, &refused) {
+		if errors.As(err, &refused) || errors.As(err, new(*db.LockBusy)) {
 			_ = s.Settle(settleCtx, ticket, Result{State: Failed, Error: err.Error()}, nil)
 			return Effect{}, err
 		}

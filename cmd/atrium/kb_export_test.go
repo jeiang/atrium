@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -285,45 +284,17 @@ func exportRuns(t *testing.T, d *db.DB, jobID int64) int {
 
 func runExport(t *testing.T, f *fixture, d *db.DB) {
 	t.Helper()
-	start := func() (context.CancelFunc, chan appRun) {
-		ctx, cancel := context.WithCancel(context.Background())
-		done := make(chan appRun, 1)
-		go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
-		return cancel, done
-	}
-	cancel, done := start()
 	var jobID int64
-	for range 100 {
-		if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = ?", "knowledge-export").Scan(&jobID); err == nil {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
+	declared := func() bool {
+		return d.Read.QueryRow("SELECT id FROM jobs WHERE name = ?", "knowledge-export").Scan(&jobID) == nil
 	}
-	cancel()
-	<-done
-	if jobID == 0 {
-		t.Fatalf("the scheduler did not create the knowledge-export job")
+	if !declared() {
+		serveUntil(t, f, "the knowledge-export job", declared)
 	}
-	if _, err := d.Write.Exec("UPDATE jobs SET next_due = NULL WHERE id != ?", jobID); err != nil {
-		t.Fatal(err)
-	}
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL WHERE id != ?", jobID)
 	before := exportRuns(t, d, jobID)
-	if _, err := d.Write.Exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE id = ?",
-		float64(time.Now().Unix())-1, jobID); err != nil {
-		t.Fatal(err)
-	}
-	cancel, done = start()
-	for range 200 {
-		if exportRuns(t, d, jobID) > before {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	cancel()
-	<-done
-	if exportRuns(t, d, jobID) == before {
-		t.Fatalf("the knowledge-export job did not run")
-	}
+	schedulerDue(t, d, "knowledge-export")
+	schedulerRun(t, f, d, func() bool { return exportRuns(t, d, jobID) > before })
 }
 
 func TestKnowledgeExportsToNotionWithProvenance(t *testing.T) {
@@ -611,7 +582,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 		}
 	}
 	exportRecord(t, d, "Diary", "private", "personal", "operator", 0, 1, 0, 0, 0)
-	base := startServeIn(t, dir)
+	base, _, stop := startServeStoppable(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -658,7 +629,9 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	if !strings.Contains(body, `value="`+normalized+`"`) {
 		t.Errorf("the page does not show the normalized parent id")
 	}
+	stop()
 	runExport(t, f, d)
+	base, _, stop = startServeStoppable(t, dir)
 	if fake.byTitle("Diary") != nil {
 		t.Errorf("private record exported to a destination that was not named")
 	}
@@ -683,7 +656,9 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	if actor != "operator" || source != "ui" || value != normalized {
 		t.Errorf("settings audit = %s/%s/%s, want operator/ui/%s", actor, source, value, normalized)
 	}
+	stop()
 	runExport(t, f, d)
+	base, _, stop = startServeStoppable(t, dir)
 	if fake.byTitle("Diary") == nil {
 		t.Errorf("private record missing after naming the destination")
 	}
@@ -695,6 +670,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	if got := settingValue(t, d, kbexport.NotionPrivateKey); got != "" {
 		t.Errorf("changing the destination kept the private confirmation: %q", got)
 	}
+	stop()
 	runExport(t, f, d)
 	if page := fake.byTitle("Diary"); page == nil || !page.trashed {
 		t.Errorf("the private record page was not removed after the destination changed")
@@ -929,7 +905,7 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 		t.Errorf("mapping row for the retracted record = %d, %v", mapped, err)
 	}
 
-	base := startServeIn(t, dir)
+	base, _, stop := startServeStoppable(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -959,6 +935,7 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 	if actor != "operator" || source != "ui" {
 		t.Errorf("settings audit actor/source = %s/%s, want operator/ui", actor, source)
 	}
+	stop()
 	runExport(t, f, d)
 	if _, err := os.Stat(filepath.Join(vault, "personal", "diary-K"+fmt.Sprint(private)+".md")); err != nil {
 		t.Errorf("private record missing after naming the folder: %v", err)

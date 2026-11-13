@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -32,6 +33,8 @@ type App struct {
 	rt        *services
 	work      context.Context
 	stopWork  context.CancelCauseFunc
+	drainMu   sync.Mutex
+	drains    []func(context.Context) error
 	draining  atomic.Bool
 	stopping  *shutdown
 	watchdog  func()
@@ -40,7 +43,7 @@ type App struct {
 func Open(ctx context.Context, env config.Env, cat *module.Catalog, mode Mode) (*App, error) {
 	cfg, err := config.Load(env)
 	if err != nil {
-		return nil, err
+		return nil, &refusal{err}
 	}
 	st := config.From(ctx)
 	k := st.DBKey()

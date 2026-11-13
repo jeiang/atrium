@@ -28,6 +28,12 @@ type services struct {
 	set       *module.Set
 	mu        sync.Mutex
 	owners    map[string]*runtime.Supervisor
+	sets      map[string]map[string]*setService
+	setMu     sync.Mutex
+	kick      chan struct{}
+	quit      chan struct{}
+	refreshed chan struct{}
+	unwatch   func()
 	work      map[string]*ownedWork
 	sched     *runtime.Supervisor
 	closed    bool
@@ -35,6 +41,11 @@ type services struct {
 	recovered atomic.Bool
 	attempted chan struct{}
 	attempt   sync.Once
+}
+
+type setService struct {
+	sup      *runtime.Supervisor
+	revision string
 }
 
 type ownedWork struct {
@@ -47,8 +58,16 @@ func (a *App) serve(ctx context.Context, set *module.Set) error {
 	if err := set.Current().Recover(ctx, a.db, a.config); err != nil {
 		return err
 	}
-	rt := &services{ctx: ctx, set: set, owners: map[string]*runtime.Supervisor{}, work: map[string]*ownedWork{}, attempted: make(chan struct{})}
+	rt := &services{ctx: ctx, set: set, owners: map[string]*runtime.Supervisor{}, sets: map[string]map[string]*setService{}, work: map[string]*ownedWork{},
+		kick: make(chan struct{}, 1), quit: make(chan struct{}), refreshed: make(chan struct{}), attempted: make(chan struct{})}
 	a.rt = rt
+	go a.refreshLoop()
+	rt.unwatch = a.state.OnAccounts(func() {
+		select {
+		case rt.kick <- struct{}{}:
+		default:
+		}
+	})
 	sched, err := runtime.New([]runtime.ServiceDefinition{{Name: schedulerService, Critical: true, Stall: schedulerStall, Run: func(run context.Context, s *runtime.Services) error {
 		return a.scheduler(func() { s.Heartbeat(schedulerService) }).Run(run, ctx.Done())
 	}}})
@@ -114,6 +133,11 @@ func (rt *services) health() []runtime.ServiceHealth {
 	for _, sup := range rt.owners {
 		sups = append(sups, sup)
 	}
+	for _, owned := range rt.sets {
+		for _, svc := range owned {
+			sups = append(sups, svc.sup)
+		}
+	}
 	rt.mu.Unlock()
 	recovery := runtime.ServiceHealth{Name: recoveryService, Critical: true, Status: runtime.StatusStarting}
 	if rt.recovered.Load() {
@@ -176,6 +200,11 @@ func (a *App) health() runtime.Health {
 }
 
 func (a *App) startOwner(owner string, snap *module.Snapshot) {
+	a.startServices(owner, snap)
+	a.refreshSets(owner)
+}
+
+func (a *App) startServices(owner string, snap *module.Snapshot) {
 	defs := snap.ServicesOf(owner)
 	if len(defs) == 0 {
 		return
@@ -196,6 +225,118 @@ func (a *App) startOwner(owner string, snap *module.Snapshot) {
 		return
 	}
 	rt.owners[owner] = sup
+}
+
+func (a *App) refreshLoop() {
+	rt := a.rt
+	defer close(rt.refreshed)
+	for {
+		select {
+		case <-rt.quit:
+			return
+		case <-rt.kick:
+			for _, d := range a.catalog.Declarations() {
+				if d.ServiceSets != nil {
+					a.refreshSets(d.Name)
+				}
+			}
+		}
+	}
+}
+
+func (a *App) refreshSets(owner string) {
+	rt := a.rt
+	rt.setMu.Lock()
+	defer rt.setMu.Unlock()
+	if rt.set.Halting(owner) {
+		return
+	}
+	var want []module.SetService
+	if fn := rt.set.Current().ServiceSetsOf(owner); fn != nil {
+		var err error
+		if want, err = fn(rt.ctx); err != nil {
+			log.Error("module service set is unavailable", logx.Module, owner, logx.Err, err.Error())
+			return
+		}
+	}
+	revisions := make(map[string]string, len(want))
+	for _, w := range want {
+		revisions[w.Service.Name] = w.Revision
+	}
+	rt.mu.Lock()
+	if rt.closed {
+		rt.mu.Unlock()
+		return
+	}
+	current := rt.sets[owner]
+	keep := make(map[string]*setService, len(want))
+	var stale []*setService
+	for name, svc := range current {
+		if rev, ok := revisions[name]; ok && rev == svc.revision {
+			keep[name] = svc
+		} else {
+			stale = append(stale, svc)
+		}
+	}
+	rt.sets[owner] = keep
+	rt.mu.Unlock()
+	if err := drainSets(stale, reconcileTimeout); err != nil {
+		log.Error("module service did not stop before the change", logx.Module, owner, logx.Err, err.Error())
+	}
+	for _, w := range want {
+		if keep[w.Service.Name] != nil {
+			continue
+		}
+		sup, err := runtime.New([]runtime.ServiceDefinition{w.Service})
+		if err != nil {
+			log.Error("module service is invalid", logx.Module, owner, logx.Err, err.Error())
+			continue
+		}
+		sup.SetWork(a.setWork(owner))
+		rt.mu.Lock()
+		if rt.closed {
+			rt.mu.Unlock()
+			return
+		}
+		if err := sup.Start(rt.ctx); err != nil {
+			rt.mu.Unlock()
+			log.Error("module service did not start", logx.Module, owner, logx.Err, err.Error())
+			continue
+		}
+		keep[w.Service.Name] = &setService{sup: sup, revision: w.Revision}
+		rt.mu.Unlock()
+	}
+}
+
+func drainSets(svcs []*setService, limit time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+	errs := make([]error, len(svcs))
+	var wg sync.WaitGroup
+	for i, svc := range svcs {
+		wg.Go(func() { errs[i] = svc.sup.Drain(ctx) })
+	}
+	wg.Wait()
+	return errors.Join(errs...)
+}
+
+func (a *App) setWork(owner string) runtime.WorkFunc {
+	return func(ctx context.Context) (context.Context, func(), error) {
+		run, release, err := a.own(ctx, owner)
+		if err != nil {
+			return nil, nil, err
+		}
+		if a.work == nil {
+			return run, release, nil
+		}
+		run, cancel := context.WithCancelCause(run)
+		stop := context.AfterFunc(a.work, func() { cancel(context.Cause(a.work)) })
+		return run, func() {
+			stop()
+			cancel(nil)
+			release()
+		}, nil
+	}
 }
 
 func (a *App) own(ctx context.Context, owner string) (context.Context, func(), error) {
@@ -226,10 +367,13 @@ func (a *App) own(ctx context.Context, owner string) (context.Context, func(), e
 }
 
 func (rt *services) stopOwner(ctx context.Context, owner string) error {
+	rt.setMu.Lock()
+	defer rt.setMu.Unlock()
 	rt.mu.Lock()
-	sup, w := rt.owners[owner], rt.work[owner]
+	sup, w, owned := rt.owners[owner], rt.work[owner], rt.sets[owner]
 	delete(rt.owners, owner)
 	delete(rt.work, owner)
+	delete(rt.sets, owner)
 	rt.mu.Unlock()
 	var err error
 	if sup != nil {
@@ -237,6 +381,11 @@ func (rt *services) stopOwner(ctx context.Context, owner string) error {
 	}
 	if w != nil {
 		w.cancel(&module.OwnerDisabled{Module: owner})
+	}
+	for _, svc := range owned {
+		err = errors.Join(err, svc.sup.Drain(ctx))
+	}
+	if w != nil {
 		err = errors.Join(err, wait(ctx, &w.wg))
 	}
 	return err
@@ -246,6 +395,10 @@ func (rt *services) drainOwners(work, settle context.Context) error {
 	if rt.unhook != nil {
 		rt.unhook()
 	}
+	rt.unwatch()
+	close(rt.quit)
+	<-rt.refreshed
+	rt.setMu.Lock()
 	rt.mu.Lock()
 	rt.closed = true
 	sups := make([]*runtime.Supervisor, 0, len(rt.owners))
@@ -253,19 +406,32 @@ func (rt *services) drainOwners(work, settle context.Context) error {
 		sups = append(sups, sup)
 		delete(rt.owners, owner)
 	}
-	rt.mu.Unlock()
-	var err error
-	for _, sup := range sups {
-		err = errors.Join(err, drainSupervisor(sup, work, settle))
+	for owner, owned := range rt.sets {
+		for _, svc := range owned {
+			sups = append(sups, svc.sup)
+		}
+		delete(rt.sets, owner)
 	}
-	return err
+	rt.mu.Unlock()
+	rt.setMu.Unlock()
+	errs := make([]error, len(sups))
+	var wg sync.WaitGroup
+	for i, sup := range sups {
+		wg.Go(func() { errs[i] = drainSupervisor(sup, work, settle) })
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 func (rt *services) drainScheduler(work, settle context.Context) error {
-	var err error
-	if rt.sched != nil {
-		err = drainSupervisor(rt.sched, work, settle)
+	if rt.sched == nil {
+		return nil
 	}
+	return drainSupervisor(rt.sched, work, settle)
+}
+
+func (rt *services) settleOwned(settle context.Context) error {
+	var err error
 	rt.mu.Lock()
 	owned := rt.work
 	rt.work = map[string]*ownedWork{}

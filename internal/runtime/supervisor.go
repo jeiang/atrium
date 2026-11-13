@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jeiang/atrium/internal/logx"
@@ -35,17 +36,22 @@ type Supervisor struct {
 	cancel   context.CancelFunc
 	done     chan struct{}
 	states   map[string]*state
+	work     WorkFunc
 }
+
+type WorkFunc func(context.Context) (context.Context, func(), error)
 
 type Services struct {
 	name     string
 	state    *state
+	work     WorkFunc
 	cancel   context.CancelCauseFunc
 	wg       sync.WaitGroup
 	mu       sync.Mutex
 	closers  []func() error
 	canceled bool
 	closed   chan struct{}
+	healthy  atomic.Bool
 }
 
 func New(defs []ServiceDefinition) (*Supervisor, error) {
@@ -58,6 +64,12 @@ func New(defs []ServiceDefinition) (*Supervisor, error) {
 		s.states[def.Name] = &state{name: def.Name, critical: def.Critical, stall: def.Stall, status: StatusStopped}
 	}
 	return s, nil
+}
+
+func (s *Supervisor) SetWork(fn WorkFunc) {
+	s.mu.Lock()
+	s.work = fn
+	s.mu.Unlock()
 }
 
 func (s *Supervisor) Start(ctx context.Context) error {
@@ -91,12 +103,12 @@ func (s *Supervisor) loop(ctx context.Context, def ServiceDefinition, st *state)
 	for {
 		started := time.Now()
 		log.Info(fmt.Sprintf("service %s started", def.Name))
-		err := s.instance(ctx, def, st)
+		healthy, err := s.instance(ctx, def, st)
 		if ctx.Err() != nil {
 			st.set(StatusStopped)
 			return
 		}
-		if time.Since(started) >= def.Backoff.ResetAfter {
+		if healthy || (def.Backoff.ResetAfter > 0 && time.Since(started) >= def.Backoff.ResetAfter) {
 			attempt = 0
 		}
 		delay := backoffDelay(def.Backoff, attempt)
@@ -132,9 +144,12 @@ func backoffDelay(b Backoff, attempt int) time.Duration {
 	return half + rand.N(delay-half+1)
 }
 
-func (s *Supervisor) instance(ctx context.Context, def ServiceDefinition, st *state) error {
+func (s *Supervisor) instance(ctx context.Context, def ServiceDefinition, st *state) (bool, error) {
 	inst, cancel := context.WithCancelCause(ctx)
-	svc := &Services{name: def.Name, state: st, cancel: cancel, closed: make(chan struct{})}
+	s.mu.Lock()
+	work := s.work
+	s.mu.Unlock()
+	svc := &Services{name: def.Name, state: st, work: work, cancel: cancel, closed: make(chan struct{})}
 	stop := context.AfterFunc(inst, svc.close)
 	st.begin()
 	err := guard(func() error { return def.Run(inst, svc) })
@@ -148,16 +163,17 @@ func (s *Supervisor) instance(ctx context.Context, def ServiceDefinition, st *st
 		<-svc.closed
 	}
 	svc.wg.Wait()
+	healthy := svc.healthy.Load()
 	if ctx.Err() != nil {
-		return nil
+		return healthy, nil
 	}
 	if cause := context.Cause(inst); cause != nil && !errors.Is(cause, context.Canceled) {
-		return cause
+		return healthy, cause
 	}
 	if err == nil {
 		err = errUnexpectedReturn
 	}
-	return err
+	return healthy, err
 }
 
 func guard(fn func() error) (err error) {
@@ -184,6 +200,18 @@ func (s *Services) Go(ctx context.Context, name string, fn func(context.Context)
 		}
 		s.cancel(fmt.Errorf("%s: %w", name, err))
 	})
+}
+
+func (s *Services) Work(ctx context.Context) (context.Context, func(), error) {
+	detached := context.WithoutCancel(ctx)
+	if s.work == nil {
+		return detached, func() {}, nil
+	}
+	return s.work(detached)
+}
+
+func (s *Services) Healthy() {
+	s.healthy.Store(true)
 }
 
 func (s *Services) Heartbeat(name string) {

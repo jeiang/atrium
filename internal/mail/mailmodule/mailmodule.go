@@ -33,9 +33,10 @@ import (
 )
 
 type Module struct {
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
-	Jobs    jobworker.Dependencies
+	Clients   func(config.Config) mail.OpenFunc
+	Now       func() float64
+	Jobs      jobworker.Dependencies
+	Resources module.Resources
 }
 
 func (m Module) classifiers(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, now func() float64) (*classifier.Service, error) {
@@ -80,7 +81,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers, Application: mailCLIService(mc.Env)}
 	cmds := []*cli.Command{
 		run.SyncCommand(mc.Env, m.Clients, m.classifiers),
-		run.WatchCommand(mc.Env, m.Clients, m.classifiers),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
@@ -98,14 +98,16 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations = append(operations, draftOps...)
 	bindings = append(bindings, draftBindings...)
 	return module.Declaration{
-		Name:       module.Mail,
-		Operations: operations, Bindings: bindings,
-		Recover:   reviewpages.RecoverDrafts,
-		Settings:  slices.Concat(mail.Settings(), tracking.SettingsDefs()),
-		Host:      mail.HostSettings(),
-		Attention: AttentionSources(),
-		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs)},
-		Requires:  Requirements(),
+		Name:        module.Mail,
+		Operations:  operations,
+		Bindings:    bindings,
+		Recover:     reviewpages.RecoverDrafts,
+		Settings:    slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Host:        mail.HostSettings(),
+		Attention:   AttentionSources(),
+		Jobs:        []scheduler.Definition{mailcmd.TrackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		ServiceSets: m.watchServices(mc.Env),
+		Requires:    Requirements(),
 		Pages: []web.Page{
 			{Module: pages.Module(mailPageService), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},

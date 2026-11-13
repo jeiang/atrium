@@ -135,5 +135,5 @@ settings the operator edits in the UI or pins from the host.
   Refuse unknown future schema versions before writes.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
-- Unit names, environment variable names, and `atrium-run` are host-facing
-  contracts. Coordinate breaking changes with the consumer.
+- Unit names (`atrium.service`), environment variable names, and
+  `atrium-run` are host-facing contracts. Coordinate breaking changes with the consumer.

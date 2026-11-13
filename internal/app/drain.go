@@ -54,10 +54,39 @@ func (a *App) drainWork(sd *shutdown) error {
 		})
 	}
 	wg.Wait()
+	var owned error
+	if a.rt != nil {
+		owned = a.rt.settleOwned(sd.settle)
+	}
+	owned = errors.Join(owned, a.settleDrains(sd.settle))
 	if a.stopWork != nil {
 		a.stopWork(context.Canceled)
 	}
-	return errors.Join(owners, sched, sd.last())
+	return errors.Join(owners, sched, owned, sd.last())
+}
+
+func (a *App) drainOnStop(drain func(context.Context) error) {
+	a.drainMu.Lock()
+	a.drains = append(a.drains, drain)
+	a.drainMu.Unlock()
+}
+
+func (a *App) settleDrains(settle context.Context) error {
+	a.drainMu.Lock()
+	drains := a.drains
+	a.drains = nil
+	a.drainMu.Unlock()
+	errs := make([]error, len(drains))
+	var wg sync.WaitGroup
+	for i, drain := range drains {
+		wg.Go(func() {
+			if err := drain(settle); err != nil {
+				errs[i] = fmt.Errorf("could not drain work before closing the database: %w", err)
+			}
+		})
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 func checkpoint(ctx context.Context, d *db.DB) error {
@@ -66,7 +95,7 @@ func checkpoint(ctx context.Context, d *db.DB) error {
 		return fmt.Errorf("the final checkpoint failed: %w", err)
 	}
 	if c.Busy {
-		return errors.New("the final checkpoint is incomplete: the database was busy")
+		log.Warn("the final checkpoint is incomplete: the database was busy")
 	}
 	return nil
 }

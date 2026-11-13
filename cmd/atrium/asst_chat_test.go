@@ -352,6 +352,46 @@ func TestAsstAskOperatorParksTheRunUntilTheOperatorAnswers(t *testing.T) {
 	}
 }
 
+func TestAsstStreamedReplyOutlivesTheConnectionTimeoutAndStopsPromptly(t *testing.T) {
+	t.Parallel()
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+	base, _, _ := startServeStoppable(t, dir)
+	w := asstBrowse(t, base)
+
+	held := asstReply("held")
+	held.Trickle = 16 * time.Second
+	api.Push(held)
+	began := time.Now()
+	thread := w.start(map[string]string{"text": "long reply"})
+	if state, errText := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
+		t.Fatalf("held run %s %q", state, errText)
+	}
+	if elapsed := time.Since(began); elapsed < 16*time.Second {
+		t.Fatalf("the held run settled after %s, before its reply ended", elapsed)
+	}
+
+	stalled := asstReply("stalled")
+	stalled.Trickle = 5 * time.Minute
+	api.Push(stalled)
+	sent := len(api.Requests())
+	stopped := w.start(map[string]string{"text": "stop me"})
+	asstWaitRequests(t, api, sent+1)
+	code, body, _ := w.post(fmt.Sprintf("/chat/%d/stop", stopped), url.Values{}, false)
+	w.want(code, http.StatusNoContent, body)
+	asked := time.Now()
+	if state, errText := asstSettle(t, d, asstLastRun(t, d, stopped)); state != "failed" || !strings.Contains(errText, "stop") {
+		t.Fatalf("stopped run %s %q", state, errText)
+	}
+	if waited := time.Since(asked); waited > 5*time.Second {
+		t.Fatalf("the stopped run settled %s after the stop", waited)
+	}
+	if len(api.Requests()) != sent+1 {
+		t.Errorf("the stopped run kept calling the model")
+	}
+}
+
 func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))

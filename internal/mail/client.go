@@ -2,10 +2,12 @@ package mail
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/safety"
@@ -147,19 +149,49 @@ type Client interface {
 }
 
 type OpenOptions struct {
-	Account string
-	Q       db.Querier
+	Account  string
+	Q        db.Querier
+	ReadOnly bool
+	// SentOnly opens a session for the operator-send Sent copy. It does not take the mail-pass
+	// lock: a pass never writes Sent (a protected folder), so the APPEND conflicts with nothing a
+	// pass does. Every write except APPEND to the operator-send mailbox is refused.
+	SentOnly bool
 }
 
 type OpenFunc func(ctx context.Context, opts OpenOptions) (Client, error)
 
-func Gated(conn Conn, q db.Querier) Client { return gate{conn: conn, q: q} }
+var ErrReadOnly = errors.New("mail: write on a read-only IMAP session")
+
+var ErrSentOnly = errors.New("mail: a Sent-copy session only appends to the operator-send mailbox")
+
+func Gated(ctx context.Context, opts OpenOptions, dial func() (Conn, error)) (Client, error) {
+	var lock *db.LockSet
+	if !opts.ReadOnly && !opts.SentOnly {
+		path := config.From(ctx).DBPath()
+		if path == "" {
+			return nil, errors.New("mail: no database path for the " + PassResource + " lock")
+		}
+		var err error
+		if lock, err = db.ResourceLocks(ctx, path, []string{PassResource}, db.ShortLockWait); err != nil {
+			return nil, err
+		}
+	}
+	conn, err := dial()
+	if err != nil {
+		_ = lock.Close()
+		return nil, err
+	}
+	return gate{conn: conn, q: opts.Q, readOnly: opts.ReadOnly, sentOnly: opts.SentOnly, lock: lock}, nil
+}
 
 func (g gate) Settings() db.Querier { return g.q }
 
 type gate struct {
-	conn Conn
-	q    db.Querier
+	conn     Conn
+	q        db.Querier
+	readOnly bool
+	sentOnly bool
+	lock     *db.LockSet
 }
 
 func (gate) gated() {}
@@ -167,6 +199,14 @@ func (gate) gated() {}
 func (g gate) check(ctx context.Context, action, target string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if g.readOnly {
+		return ErrReadOnly
+	}
+	if g.sentOnly {
+		if sent, ok := safety.OperatorSendTarget(ctx); !ok || action != ActionAppend || target != sent {
+			return ErrSentOnly
+		}
 	}
 	var mode safety.ModeFunc
 	if g.q != nil {
@@ -180,7 +220,10 @@ func (g gate) check(ctx context.Context, action, target string) error {
 
 func (g gate) Connect(ctx context.Context) error { return g.conn.Connect(ctx) }
 
-func (g gate) Close() { g.conn.Close() }
+func (g gate) Close() {
+	g.conn.Close()
+	_ = g.lock.Close()
+}
 
 func (g gate) HasCapability(name string) bool { return g.conn.HasCapability(name) }
 

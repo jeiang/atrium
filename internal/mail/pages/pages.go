@@ -103,7 +103,7 @@ func Module(reads func(*web.Deps) *mailapp.Service) func(chi.Router, *web.Deps) 
 		if err != nil {
 			panic(err)
 		}
-		d.DrainOnClose(store.Drain)
+		d.DrainOnStop(store.Drain)
 		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: store, Env: d.Env, Open: open, Syncer: syncer, Now: wallClock, Approvals: cat.Approvals()})
 		if err != nil {
 			panic(err)

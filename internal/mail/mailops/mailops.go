@@ -88,7 +88,15 @@ func (e *PartialMove) OutcomeUnknown() bool { return e.Unconfirmed || OutcomeUnk
 func (e *PartialMove) Partial() bool { return true }
 
 func Session(ctx context.Context, open mail.OpenFunc, q db.Querier, account string, fn func(mail.Client) error) error {
-	client, err := open(ctx, mail.OpenOptions{Account: account, Q: q})
+	return session(ctx, open, mail.OpenOptions{Account: account, Q: q}, fn)
+}
+
+func ReadSession(ctx context.Context, open mail.OpenFunc, q db.Querier, account string, fn func(mail.Client) error) error {
+	return session(ctx, open, mail.OpenOptions{Account: account, Q: q, ReadOnly: true}, fn)
+}
+
+func session(ctx context.Context, open mail.OpenFunc, opts mail.OpenOptions, fn func(mail.Client) error) error {
+	client, err := open(ctx, opts)
 	if err != nil {
 		return err
 	}

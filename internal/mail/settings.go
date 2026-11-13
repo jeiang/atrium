@@ -16,6 +16,8 @@ import (
 
 const module = "mail"
 
+const PassResource = "mail-pass"
+
 const (
 	KeyMode                   = "mail_mode"
 	KeyWriteCap               = "write_cap"

@@ -143,7 +143,7 @@ func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
 	fake := mailtest.NewFakeClient()
 	fake.AddBox("INBOX", mailtest.NewBox(1))
 	t.Cleanup(imapclient.UseDialer(func(context.Context, config.AccountSpec, string) (mail.Conn, error) {
-		return fake, nil
+		return fake.Conn(), nil
 	}))
 	ca := smtpCert(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

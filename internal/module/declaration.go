@@ -66,11 +66,17 @@ type Declaration struct {
 	Attention         []attention.Source
 	Jobs              []scheduler.Definition
 	Services          []runtime.ServiceDefinition
+	ServiceSets       func(context.Context) ([]SetService, error)
 	Recover           func(context.Context, *db.DB, config.Config) error
 	Metrics           []ops.Metric
 	Checks            []ops.Check
 	Operations        []application.Definition
 	Bindings          []application.Binding
+}
+
+type SetService struct {
+	Service  runtime.ServiceDefinition
+	Revision string
 }
 
 type EffectDeps struct {

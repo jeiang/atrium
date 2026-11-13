@@ -4,8 +4,6 @@ internal/actionlink/handler.go	github.com/jeiang/atrium/internal/proposals
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/settings
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/threads
-internal/assistant/agentcmd/scheduler.go	github.com/jeiang/atrium/internal/assistant/jobworker
-internal/assistant/agentcmd/scheduler.go	github.com/jeiang/atrium/internal/sdnotify
 internal/assistant/agentcmd/subagents.go	github.com/jeiang/atrium/internal/assistant/pricing
 internal/assistant/agentcmd/tick.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/assistant/agentcmd/tick.go	github.com/jeiang/atrium/internal/scheduler

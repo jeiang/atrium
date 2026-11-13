@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	BaseURLEnv     = "ANTHROPIC_BASE_URL"
-	connectTimeout = 5 * time.Second
-	readTimeout    = 10 * time.Minute
+	BaseURLEnv            = "ANTHROPIC_BASE_URL"
+	ConnectTimeout        = 5 * time.Second
+	ResponseHeaderTimeout = 10 * time.Minute
 )
 
 type Client struct {
@@ -77,8 +77,8 @@ func spendCapNoRetry(req *http.Request, next option.MiddlewareNext) (*http.Respo
 
 func defaultHTTPClient() *http.Client {
 	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.DialContext = (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext
-	t.ResponseHeaderTimeout = readTimeout
+	t.DialContext = (&net.Dialer{Timeout: ConnectTimeout, KeepAlive: 30 * time.Second}).DialContext
+	t.ResponseHeaderTimeout = ResponseHeaderTimeout
 	return &http.Client{Transport: t}
 }
 

@@ -145,7 +145,7 @@ func TestServeDrainSettlesAHeldExternalWriteThenStopsCleanly(t *testing.T) {
 		}
 	}
 
-	idle := restartServe(t, dir)
+	idle := serveCLIProcess(t, dir)
 	started := time.Now()
 	if code := idle.stop(t, syscall.SIGTERM); code != cli.ExitOK {
 		t.Fatalf("idle serve exit %d: %s", code, idle.stderr.String())

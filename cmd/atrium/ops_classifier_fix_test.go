@@ -97,7 +97,9 @@ func TestOpsClassifierUsesTheCurrentAnthropicKeyInALongLivedScheduler(t *testing
 	runs := samplerRuns(t, d)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	defer func() {
 		cancel()
 		<-done

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -82,6 +83,9 @@ func startServeProcess(t *testing.T, cmd *exec.Cmd, addrFile string) *serveProce
 	t.Helper()
 	p := &serveProcess{stderr: &lockedBuffer{}, cmd: cmd, done: make(chan error, 1)}
 	cmd.Stdout, cmd.Stderr = &lockedBuffer{}, p.stderr
+	if err := os.Remove(addrFile); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -177,4 +181,26 @@ func envWithout(env []string, prefix string) []string {
 		}
 	}
 	return out
+}
+
+func TestRemovedDaemonCommandsReturnUsage(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{{"watch"}, {"agent", "scheduler"}} {
+		t.Run(strings.Join(args, "-"), func(t *testing.T) {
+			cmd := cliExitProcessArgs(t, args)
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			if code := exitCode(cmd.Run()); code != cli.ExitUsage {
+				t.Fatalf("%v exit = %d, want %d: %s", args, code, cli.ExitUsage, stderr.String())
+			}
+			help := cliExitProcessArgs(t, append(args[:len(args)-1:len(args)-1], "--help"))
+			out, err := help.Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if regexp.MustCompile(`\b` + args[len(args)-1] + `\b`).Match(out) {
+				t.Fatalf("retired command appears in help: %s", out)
+			}
+		})
+	}
 }

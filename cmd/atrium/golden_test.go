@@ -248,8 +248,8 @@ capabilities = ["api"]
 	env := config.Map(vars)
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
-			return mail.Gated(fakes[opts.Account], opts.Q), nil
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return fakes[opts.Account].Open(ctx, opts)
 		}
 	}
 	app := newAppWith(env, clients, func() float64 { return data.world.Clock }, quietLog)
@@ -266,8 +266,7 @@ capabilities = ["api"]
 		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}
 	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, embedURL: embed.URL + "/v1", api: api}
-	fixturesByTest.Store(t, f)
-	fixturesByTest.Store(testKey(t), f)
+	registerFixture(t, f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"), appKey(t, env))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
@@ -398,9 +397,6 @@ func TestCLIGoldens(t *testing.T) {
 				argv[i] = strings.ReplaceAll(arg, "{tmp}", tmp)
 			}
 			limit := 60 * time.Second
-			if len(argv) > 0 && argv[0] == "watch" {
-				limit = 35 * time.Second
-			}
 			ctx, cancel := context.WithTimeout(context.Background(), limit)
 			defer cancel()
 			code, stdout, stderr := f.Run(ctx, argv...)
@@ -421,13 +417,13 @@ func TestCLIGoldens(t *testing.T) {
 	}
 }
 
-func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
+func TestWritingCommandsTakeTheMailPassLock(t *testing.T) {
 	t.Parallel()
 	data := loadGoldenData(t)
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
 			f := newFixture(t, data, nil, "")
-			lock, err := db.Exclusive(context.Background(), filepath.Join(f.dir, "atrium.db"), db.ShortLockWait)
+			lock, err := db.ResourceLocks(context.Background(), filepath.Join(f.dir, "atrium.db"), []string{mail.PassResource}, db.ShortLockWait)
 			if err != nil {
 				t.Fatal(err)
 			}

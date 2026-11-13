@@ -110,7 +110,7 @@ func strictIMAPRig(t *testing.T, creds map[string]string, fakes map[string]*mail
 		if !ok {
 			return nil, fmt.Errorf("unexpected account %q", a.Name)
 		}
-		return fake, nil
+		return fake.Conn(), nil
 	}))
 }
 

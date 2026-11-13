@@ -191,7 +191,7 @@ func (s *Set) Halt(owners []string) {
 	}
 }
 
-func (s *Set) halting(owner string) bool {
+func (s *Set) Halting(owner string) bool {
 	s.hooks.Lock()
 	defer s.hooks.Unlock()
 	return s.halted[owner]
@@ -299,6 +299,15 @@ func (n *Snapshot) ServicesOf(owner string) []runtime.ServiceDefinition {
 	for _, d := range n.set.decls {
 		if d.Name == owner && n.Enabled(owner) {
 			return slices.Clone(d.Services)
+		}
+	}
+	return nil
+}
+
+func (n *Snapshot) ServiceSetsOf(owner string) func(context.Context) ([]SetService, error) {
+	for _, d := range n.set.decls {
+		if d.Name == owner && n.Enabled(owner) {
+			return d.ServiceSets
 		}
 	}
 	return nil

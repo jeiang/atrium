@@ -33,9 +33,9 @@ func TestRetiredSettingEnvironmentVariableWarns(t *testing.T) {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS", "3")
-	var logs bytes.Buffer
+	logs := &lockedBuffer{}
 	previous := slog.Default()
-	logx.Setup(&logs)
+	logx.Setup(logs)
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	if r := runSettings(t, "list"); r.code != cli.ExitOK {
 		t.Fatalf("settings list with a retired variable: exit %d stderr %q", r.code, r.stderr)

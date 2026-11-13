@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/config"
@@ -33,6 +34,7 @@ type Response struct {
 	StartUsage          json.RawMessage `json:"-"`
 	InterruptAfterStart bool            `json:"-"`
 	Stall               bool            `json:"-"`
+	Trickle             time.Duration   `json:"-"`
 	ID                  string          `json:"-"`
 }
 
@@ -329,6 +331,23 @@ func (s sse) send(event string, data any) {
 	}
 }
 
+func (s *Server) trickle(r *http.Request, out sse, index int, hold time.Duration) bool {
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	end := time.NewTimer(hold)
+	defer end.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return false
+		case <-end.C:
+			return true
+		case <-tick.C:
+			out.send("content_block_delta", map[string]any{"type": "content_block_delta", "index": index, "delta": map[string]any{"type": "text_delta", "text": " "}})
+		}
+	}
+}
+
 func (s *Server) stream(w http.ResponseWriter, r *http.Request, id, model string, resp Response) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.WriteHeader(http.StatusOK)
@@ -361,6 +380,9 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request, id, model string
 		out.send("content_block_start", map[string]any{"type": "content_block_start", "index": i, "content_block": first})
 		for _, d := range deltas {
 			out.send("content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": d})
+		}
+		if i == 0 && resp.Trickle > 0 && !s.trickle(r, out, i, resp.Trickle) {
+			return
 		}
 		out.send("content_block_stop", map[string]any{"type": "content_block_stop", "index": i})
 	}

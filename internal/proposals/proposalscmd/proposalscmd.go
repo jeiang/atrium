@@ -189,7 +189,7 @@ func Command(o Options) *cli.Command {
 				if err != nil {
 					return err
 				}
-				out, err := scans.ScanAll(x.Ctx, x.DB, x.Now(), namer)
+				out, err := scans.Manual(x.Ctx, x.DB, x.Cfg, x.Now(), namer)
 				if err != nil {
 					return err
 				}

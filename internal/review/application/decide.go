@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/permission"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
@@ -218,6 +219,9 @@ func (s *Service) proposalEffects(ctx context.Context, id int64) []int64 {
 }
 
 func pipelineRefusal(err error) *application.Error {
+	if errors.As(err, new(*db.LockBusy)) {
+		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly"}
+	}
 	var refused proposals.ProposalError
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
@@ -227,6 +231,9 @@ func pipelineRefusal(err error) *application.Error {
 }
 
 func ledgerRefusal(err error) *application.Error {
+	if errors.As(err, new(*db.LockBusy)) {
+		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly"}
+	}
 	var refused ledger.Refused
 	var conflict *ledger.Conflict
 	var settled *ledger.SettledMeanwhile

@@ -32,6 +32,9 @@ type Kind struct {
 	Messages bool
 	CountKey string
 	Approval bool
+	// Locks are resources an approval holds before its executor writes anything, so a busy
+	// lock refuses the approval while the proposal is still open and can be approved again.
+	Locks []string
 }
 
 type DismissHook func(ctx context.Context, p *Proposal) error

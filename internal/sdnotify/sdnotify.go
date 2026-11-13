@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"sync/atomic"
 	"time"
 )
 
@@ -29,13 +28,6 @@ func New(getenv func(string) string) *Notifier {
 
 func (n *Notifier) Enabled() bool { return n != nil && n.addr != "" }
 
-func (n *Notifier) Interval() time.Duration {
-	if n == nil {
-		return 0
-	}
-	return n.interval
-}
-
 func (n *Notifier) send(msg string) {
 	if !n.Enabled() {
 		return
@@ -57,20 +49,6 @@ func (n *Notifier) Ready()          { n.send("READY=1") }
 func (n *Notifier) Stopping()       { n.send("STOPPING=1") }
 func (n *Notifier) Status(s string) { n.send("STATUS=" + s) }
 func (n *Notifier) Watchdog()       { n.send("WATCHDOG=1") }
-
-type Heartbeat struct{ last atomic.Int64 }
-
-func NewHeartbeat() *Heartbeat {
-	h := &Heartbeat{}
-	h.Beat()
-	return h
-}
-
-func (h *Heartbeat) Beat() { h.last.Store(time.Now().UnixNano()) }
-
-func (h *Heartbeat) Fresh(maxAge time.Duration) bool {
-	return time.Since(time.Unix(0, h.last.Load())) <= maxAge
-}
 
 func (n *Notifier) RunWatchdog(ctx context.Context, alive func() bool) {
 	if !n.Enabled() || n.interval <= 0 {

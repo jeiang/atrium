@@ -563,6 +563,18 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 	if executor == nil {
 		return nil, ProposalError(fmt.Sprintf("no executor for kind %s", strconv.Quote(prop.Kind)))
 	}
+	if locks := p.Registry.mustKind(prop.Kind).Locks; len(locks) > 0 {
+		path := config.From(ctx).DBPath()
+		if path == "" {
+			return nil, errors.New("proposals: no database path for the approval locks")
+		}
+		set, err := db.ResourceLocks(ctx, path, locks, db.ShortLockWait)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = set.Close() }()
+		ctx = db.WithHeld(ctx, set)
+	}
 	claimed, err := p.claim(ctx, id, Approved, who)
 	if err != nil {
 		return nil, err

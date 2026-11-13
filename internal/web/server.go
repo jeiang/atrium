@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 	"unicode/utf8"
 
 	"github.com/felixge/httpsnoop"
@@ -81,23 +80,13 @@ type Deps struct {
 	owner         string
 	registrations *registrations
 	coreRoutes    func(*Deps)
-	onClose       func(func() error)
+	drain         func(func(context.Context) error)
 }
 
-const drainTimeout = 15 * time.Second
-
-func (d *Deps) DrainOnClose(drain func(context.Context) error) {
-	if d.onClose == nil {
-		return
+func (d *Deps) DrainOnStop(drain func(context.Context) error) {
+	if d.drain != nil {
+		d.drain(drain)
 	}
-	d.onClose(func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
-		defer cancel()
-		if err := drain(ctx); err != nil {
-			return fmt.Errorf("could not drain work before closing the database: %w", err)
-		}
-		return nil
-	})
 }
 
 func (d *Deps) SettingsAt(url string, render SettingsRender) {
@@ -148,6 +137,7 @@ type Options struct {
 	Policy       *Policy
 	OnReady      func(*Deps) error
 	Bindings     map[string][]application.Binding
+	Drain        func(func(context.Context) error)
 	Commands     func(pattern string, next http.Handler) http.Handler
 }
 
@@ -166,7 +156,6 @@ type Server struct {
 	stop          chan struct{}
 	stopOnce      sync.Once
 	starting      atomic.Bool
-	closers       []func() error
 	routes        []routeRule
 	registrations *registrations
 }
@@ -235,7 +224,7 @@ func New(o Options) (*Server, error) {
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
-		onClose:  func(f func() error) { s.closers = append(s.closers, f) },
+		drain:    o.Drain,
 		commands: o.Commands, router: core, routes: &s.routes, owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
@@ -374,12 +363,7 @@ func (s *Server) StopStreams() { s.stopOnce.Do(func() { close(s.stop) }) }
 
 func (s *Server) Close() error {
 	s.StopStreams()
-	var err error
-	for i := len(s.closers) - 1; i >= 0; i-- {
-		err = errors.Join(err, s.closers[i]())
-	}
-	s.closers = nil
-	return err
+	return nil
 }
 
 func IsPartial(r *http.Request) bool {

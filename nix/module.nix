@@ -269,107 +269,46 @@
 
   writeTimeout = "45min";
 
-  authArgs = auth: lib.concatMapStringsSep " " (mode: "--auth ${mode}") (lib.splitString "+" auth);
+  needsPublicHost = cfg.web.auth != "local";
 
-  webUnit = {
-    description,
-    host,
-    port,
-    auth,
-  }: let
-    needsHost = auth != "local";
-  in {
-    inherit description;
-    environment = appEnvironment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
+  atriumService = {
+    description = "atrium";
+    after = ["network-online.target"] ++ cfg.embeddingServerUnits;
+    wants = ["network-online.target"] ++ cfg.embeddingServerUnits;
+    environment = appEnvironment // lib.optionalAttrs needsPublicHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
+    # Transient failures (an address not yet available, a held lock, a dependency down) exit 1
+    # and are retried every 5 s without limit; permanent refusals exit 2 (usage) or 78
+    # (invalid configuration, database key or schema) and stop the unit.
+    unitConfig.StartLimitIntervalSec = 0;
     serviceConfig =
-      mediaWriter
+      hardening
+      // mediaWriter
       // lib.optionalAttrs (writePaths != []) {ReadWritePaths = writePaths;}
       // {
-        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString cfg.web.local.enable " --emergency-host 127.0.0.1 --emergency-port ${toString cfg.web.local.port}";
+        ExecStart = lib.concatStringsSep " " ([(lib.getExe cfg.package) "serve" "--host" (lib.escapeShellArg cfg.web.host) "--port" (lib.escapeShellArg (toString cfg.port))]
+          ++ lib.concatMap (mode: ["--auth" (lib.escapeShellArg mode)]) (lib.splitString "+" cfg.web.auth)
+          ++ lib.optionals needsPublicHost ["--allowed-host" (lib.escapeShellArg cfg.web.allowedHost)]
+          ++ lib.optionals cfg.web.emergency.enable ["--emergency-host" "127.0.0.1" "--emergency-port" (lib.escapeShellArg (toString cfg.web.emergency.port))]);
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;
         TimeoutStopSec = "150s";
         KillMode = "mixed";
-        Restart = "always";
-        RestartSec = 5;
+        KillSignal = "SIGTERM";
+        Restart = "on-failure";
+        RestartSec = "5s";
+        RestartPreventExitStatus = "2 78";
       };
     wantedBy = ["multi-user.target"];
   };
 
-  unitBase = {
-    after = ["network-online.target"] ++ cfg.embeddingServerUnits;
-    wants = ["network-online.target"] ++ cfg.embeddingServerUnits;
-    environment = appEnvironment;
-    serviceConfig = hardening;
-  };
-
-  units = {
-    atrium-watch = {
-      description = "Watch the atrium mailboxes for new mail";
-      serviceConfig = {
-        ExecStart = "${lib.getExe cfg.package} watch";
-        Type = "notify";
-        WatchdogSec = writeTimeout;
-        TimeoutStartSec = writeTimeout;
-        TimeoutStopSec = writeTimeout;
-        Restart = "on-failure";
-        RestartSec = 10;
-      };
-      wantedBy = ["multi-user.target"];
-    };
-
-    atrium-web = webUnit {
-      description = "atrium web UI";
-      inherit (cfg.web) host auth;
-      inherit (cfg) port;
-    };
-
-    atrium-sync = {
-      description = "Reconcile the atrium mail index";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${lib.getExe cfg.package} sync";
-        TimeoutStopSec = writeTimeout;
-      };
-      timer = {
-        wantedBy = ["timers.target"];
-        timerConfig = {
-          OnActiveSec = "2m";
-          OnUnitActiveSec = "15m";
-        };
-      };
-    };
-
-    atrium-scan = {
-      description = "Scan the mailboxes for rebalance, deletion and label proposals";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${lib.getExe cfg.package} proposals scan-all";
-        TimeoutStopSec = writeTimeout;
-        TimeoutStartSec = "2h";
-      };
-      timer = {
-        wantedBy = ["timers.target"];
-        timerConfig = {
-          OnCalendar = "monthly";
-          Persistent = true;
-        };
-      };
-    };
-  };
-
-  unitNames = let
-    timers = lib.filterAttrs (_: unit: unit ? timer) units;
-  in
-    lib.sort builtins.lessThan (
-      map (name: "${name}.service") (builtins.attrNames units)
-      ++ map (name: "${name}.timer") (builtins.attrNames timers)
-    );
+  unitNames = ["atrium.service"];
 in {
   imports = [
     (lib.mkRemovedOptionModule ["services" "atrium" "backup" "onCalendar"] "Use services.atrium.backup.schedule in the atrium schedule grammar (for example \"daily 03:00\"); translate a nondefault OnCalendar expression by hand.")
+    (lib.mkRemovedOptionModule ["services" "atrium" "web" "local" "enable"] "Use services.atrium.web.emergency.enable; the emergency listener runs in atrium.service.")
+    (lib.mkRemovedOptionModule ["services" "atrium" "web" "local" "port"] "Use services.atrium.web.emergency.port; the emergency listener runs in atrium.service.")
     (lib.mkRemovedOptionModule ["services" "atrium" "modelServerUnits"] "use services.atrium.embeddingServerUnits for the service/embedding server; the local chat server is retired and mail classification uses the service/anthropic connection under monthly_budget_usd")
   ];
 
@@ -560,11 +499,11 @@ in {
         description = "Socket peer addresses or CIDRs allowed to name the client in CF-Connecting-IP, rendered as host.web.trusted_proxy_cidrs. Empty keys every request by its socket address.";
       };
 
-      local = {
+      emergency = {
         enable = mkOption {
           type = types.bool;
           default = true;
-          description = "Serve the emergency listener on 127.0.0.1 from the atrium-web process (serve --emergency-port), trusting every loopback request like --auth local, for access over an SSH tunnel.";
+          description = "Serve the emergency listener on 127.0.0.1 from atrium.service (serve --emergency-port), trusting every loopback request like --auth local, for access over an SSH tunnel.";
         };
 
         port = mkOption {
@@ -709,16 +648,16 @@ in {
         message = "services.atrium.web.auth = \"local\" needs a numeric loopback services.atrium.web.host such as 127.0.0.1 or ::1";
       }
       {
-        assertion = !cfg.web.local.enable || cfg.web.local.port != cfg.port;
-        message = "services.atrium.web.local.port must differ from services.atrium.port; both listeners run in atrium-web";
+        assertion = !cfg.web.emergency.enable || cfg.web.emergency.port != cfg.port;
+        message = "services.atrium.web.emergency.port must differ from services.atrium.port; both listeners run in atrium.service";
       }
       {
         assertion = let
           listen = toString (renderedHost.core.ops_listen or "127.0.0.1:9180");
           port = lib.last (lib.splitString ":" listen);
         in
-          builtins.elem listen ["" "off"] || (port != toString cfg.port && (!cfg.web.local.enable || port != toString cfg.web.local.port));
-        message = "services.atrium.host.core.ops_listen must use a port other than services.atrium.port and services.atrium.web.local.port; all three listeners run in atrium-web";
+          builtins.elem listen ["" "off"] || (port != toString cfg.port && (!cfg.web.emergency.enable || port != toString cfg.web.emergency.port));
+        message = "services.atrium.host.core.ops_listen must use a port other than services.atrium.port and services.atrium.web.emergency.port; all three listeners run in atrium.service";
       }
       {
         assertion = !cfg.backup.enable || backupScheduleValid;
@@ -738,9 +677,6 @@ in {
       ["d ${cacheDir} 0750 ${cfg.user} ${cfg.group} -"]
       ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 ${cfg.user} ${cfg.group} -";
 
-    systemd = {
-      services = lib.mapAttrs (_: unit: lib.recursiveUpdate unitBase (lib.removeAttrs unit ["timer"])) units;
-      timers = lib.mapAttrs' (name: unit: lib.nameValuePair name unit.timer) (lib.filterAttrs (_: unit: unit ? timer) units);
-    };
+    systemd.services.atrium = atriumService;
   };
 }

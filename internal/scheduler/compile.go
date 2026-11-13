@@ -55,8 +55,6 @@ func Compile(defs []Definition) ([]Definition, error) {
 			return nil, bad("takes its schedule from both a setting and the host")
 		case def.Every > 0 && (def.ScheduleSetting != "" || def.ScheduleHost != ""):
 			return nil, bad("has a fixed interval and a configurable schedule")
-		case def.Every == 0 && def.ScheduleHost == "" && def.ScheduleSetting == "":
-			return nil, bad("needs its own schedule setting")
 		case def.ScheduleSetting != "" && (settingKeys[def.ScheduleSetting] || def.ScheduleSetting == KeyMinInterval):
 			return nil, bad("needs its own schedule setting")
 		case def.Overlap:

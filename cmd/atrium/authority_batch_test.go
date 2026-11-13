@@ -410,7 +410,9 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		)
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan appRun, 1)
-		go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+		go func() {
+			done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+		}()
 		var thread int64
 		for deadline := time.Now().Add(20 * time.Second); ; {
 			err := d.Read.QueryRow("SELECT thread_id FROM job_runs WHERE job_id = ? AND thread_id IS NOT NULL ORDER BY id DESC LIMIT 1", job).Scan(&thread)
