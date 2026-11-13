@@ -87,7 +87,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:       module.Assistant,
 		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,18 +111,34 @@ type result struct {
 func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env, metrics []Metric, checks []Check, health func() runtime.Health) http.Handler {
 	s := &server{d: d, env: env, ctx: config.WithEnv(ctx, env), metrics: metrics, checks: checks, health: health, third: map[string]result{}}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /metrics", s.serveMetrics)
-	mux.HandleFunc("GET /readyz", s.readyz)
-	mux.HandleFunc("GET /livez", s.livez)
-	mux.HandleFunc("GET /healthz", s.healthz)
-	if withPprof {
-		mux.HandleFunc("/debug/pprof/", pprof.Index)
-		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	}
+	protocolRoutes(s, withPprof, mux.HandleFunc)
 	return mux
+}
+
+func protocolRoutes(s *server, withPprof bool, mount func(string, func(http.ResponseWriter, *http.Request))) {
+	mount("GET /metrics", s.serveMetrics)
+	mount("GET /readyz", s.readyz)
+	mount("GET /livez", s.livez)
+	mount("GET /healthz", s.healthz)
+	if withPprof {
+		mount("/debug/pprof/", pprof.Index)
+		mount("/debug/pprof/cmdline", pprof.Cmdline)
+		mount("/debug/pprof/profile", pprof.Profile)
+		mount("/debug/pprof/symbol", pprof.Symbol)
+		mount("/debug/pprof/trace", pprof.Trace)
+	}
+}
+
+func ProtocolRoutes() []string {
+	out := make([]string, 0, 9)
+	protocolRoutes(nil, true, func(pattern string, _ func(http.ResponseWriter, *http.Request)) {
+		if strings.HasPrefix(pattern, "/") {
+			pattern = "* " + pattern
+		}
+		out = append(out, pattern)
+	})
+	slices.Sort(out)
+	return out
 }
 
 func (s *server) serveMetrics(w http.ResponseWriter, r *http.Request) {

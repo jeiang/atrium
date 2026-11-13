@@ -19,8 +19,9 @@ import (
 )
 
 type catalogBinding struct {
-	Kind   application.BindingKind `json:"kind"`
-	Target string                  `json:"target"`
+	Kind      application.BindingKind `json:"kind"`
+	Target    string                  `json:"target"`
+	Delegates []application.Name      `json:"delegates,omitempty"`
 }
 
 type catalogOperation struct {
@@ -44,8 +45,16 @@ type catalogUnbound struct {
 }
 
 type catalogReport struct {
-	Operations []catalogOperation `json:"operations"`
-	Unbound    []catalogUnbound   `json:"unbound,omitempty"`
+	Operations   []catalogOperation `json:"operations"`
+	Unbound      []catalogUnbound   `json:"unbound"`
+	ProtocolOnly []catalogProtocol  `json:"protocol_only"`
+}
+
+type catalogProtocol struct {
+	Module   string `json:"module"`
+	Listener string `json:"listener,omitempty"`
+	Target   string `json:"target"`
+	Reason   string `json:"reason"`
 }
 
 func catalogCommand(mc module.Context) *cli.Command {
@@ -59,7 +68,7 @@ func catalogCommand(mc module.Context) *cli.Command {
 			require := a.Bool("require-api", cli.Opt{Help: "exit 1 when an operator operation has no typed API binding"})
 			return func(env *cli.Env) int {
 				cat := mc.Catalog()
-				report := catalogReport{Operations: catalogOperations(cat, *missing || *require)}
+				report := catalogReport{Operations: catalogOperations(cat, *missing || *require), Unbound: []catalogUnbound{}, ProtocolOnly: catalogProtocols(cat)}
 				if *unbound {
 					found, err := catalogUnboundItems(env, cat)
 					if err != nil {
@@ -123,9 +132,9 @@ func catalogCommand(mc module.Context) *cli.Command {
 func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation {
 	bound := map[application.Name][]catalogBinding{}
 	areas := map[application.Name]application.Area{}
-	for _, b := range cat.Bindings() {
+	for _, b := range catalogBindings(cat) {
 		for _, name := range b.Uses {
-			bound[name] = append(bound[name], catalogBinding{Kind: b.Kind, Target: b.Target})
+			bound[name] = append(bound[name], catalogBinding{Kind: b.Kind, Target: b.Target, Delegates: b.Delegates})
 			if _, ok := areas[name]; !ok && b.API != nil {
 				areas[name] = b.API.Area
 			}
@@ -154,7 +163,7 @@ func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation 
 }
 
 func catalogUnboundItems(env *cli.Env, cat *module.Catalog) ([]catalogUnbound, error) {
-	var out []catalogUnbound
+	out := []catalogUnbound{}
 	if set := module.SetFrom(env.Ctx); set != nil {
 		routes, err := web.Unbound(env.Ctx, set.Pages())
 		if err != nil {

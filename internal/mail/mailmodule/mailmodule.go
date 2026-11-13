@@ -117,16 +117,17 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations = append(operations, passOps...)
 	bindings = append(bindings, passBindings...)
 	return module.Declaration{
-		Name:        module.Mail,
-		Operations:  operations,
-		Bindings:    bindings,
-		Recover:     reviewpages.RecoverDrafts,
-		Settings:    slices.Concat(mail.Settings(), tracking.SettingsDefs()),
-		Host:        mail.HostSettings(),
-		Attention:   AttentionSources(),
-		Jobs:        []scheduler.Definition{mailcmd.TrackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
-		ServiceSets: m.watchServices(mc.Env),
-		Requires:    Requirements(),
+		Name:           module.Mail,
+		Operations:     operations,
+		Bindings:       append(bindings, finalBindings()...),
+		Recover:        reviewpages.RecoverDrafts,
+		Settings:       slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Host:           mail.HostSettings(),
+		Attention:      AttentionSources(),
+		Jobs:           []scheduler.Definition{mailcmd.TrackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		ServiceSets:    m.watchServices(mc.Env),
+		ServiceSetName: "mail/watch",
+		Requires:       Requirements(),
 		Pages: []web.Page{
 			{Module: pages.Module(mailPageService), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},

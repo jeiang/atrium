@@ -39,7 +39,7 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	command := calendarcmd.Command(mc.Env, calendarCLI(mc.Env, mc.Tools))
+	command := calendarcmd.Command(mc.Env, m.calendarCLI(mc.Env, mc.Tools))
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
 		Name:      module.Calendar,

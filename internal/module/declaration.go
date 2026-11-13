@@ -67,6 +67,7 @@ type Declaration struct {
 	Jobs              []scheduler.Definition
 	Services          []runtime.ServiceDefinition
 	ServiceSets       func(context.Context) ([]SetService, error)
+	ServiceSetName    string
 	Recover           func(context.Context, *db.DB, config.Config) error
 	Metrics           []ops.Metric
 	Checks            []ops.Check

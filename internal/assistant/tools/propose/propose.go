@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -39,27 +39,15 @@ func definition(kinds []proposals.Definition) tool.Tool {
 			if err != nil {
 				return nil, err
 			}
-			shown := "unknown"
-			if ok {
-				shown = strconv.Quote(kind)
-			}
-			builder := builders[kind]
-			if builder == nil || builder.Build == nil {
-				return nil, tool.Error("unknown proposal kind " + shown + "; allowed: " + strings.Join(names, ", "))
-			}
 			payload, _ := args.Get("payload")
-			dict, ok := payload.(map[string]any)
-			if !ok {
-				return nil, tool.Error("payload must be an object")
-			}
-			id, err := builder.Build(ctx, tc, dict)
+			out, err := asstapp.New(tc.DB, tc.Env, tc.Now).WithProposalBuilders(tc, builders, names).Propose(ctx, asstapp.ProposeInput{Kind: kind, Present: ok, Payload: payload})
 			if err != nil {
 				return nil, err
 			}
-			if id == nil {
-				return map[string]any{"proposal_id": nil, "note": "an identical proposal already exists"}, nil
+			if out.Data.ProposalID == nil {
+				return map[string]any{"proposal_id": nil, "note": out.Data.Note}, nil
 			}
-			return map[string]any{"proposal_id": *id, "status": "pending", "note": "the operator approves or dismisses the card"}, nil
+			return map[string]any{"proposal_id": *out.Data.ProposalID, "status": out.Data.Status, "note": out.Data.Note}, nil
 		},
 		Effect: tool.Propose, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron},
 	}

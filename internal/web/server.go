@@ -189,7 +189,12 @@ func New(o Options) (*Server, error) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
 	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, base: o.Ctx, db: o.DB}
-	s.registrations = &registrations{seen: map[routeKey]string{}, bindings: o.Bindings}
+	bindings := maps.Clone(o.Bindings)
+	if bindings == nil {
+		bindings = map[string][]application.Binding{}
+	}
+	bindings["core"] = append(BuiltinBindings(auth.OIDC()), bindings["core"]...)
+	s.registrations = &registrations{seen: map[routeKey]string{}, bindings: bindings}
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
 	if o.DB != nil {
 		s.bearers = bearer.New(o.DB, o.OIDC)

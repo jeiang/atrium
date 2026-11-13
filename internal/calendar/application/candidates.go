@@ -14,13 +14,22 @@ const DraftCandidatesName application.Name = "calendar.draft-candidates"
 
 type DraftCandidatesInput struct{}
 
+func (s *Service) WithDraftPass(pass func(context.Context, DraftCandidatesInput) (application.Change[candidates.Result], error)) *Service {
+	out := *s
+	out.draftPass = pass
+	return &out
+}
+
 func (s *Service) WithDraftRun(run candidates.Run) *Service {
 	out := *s
 	out.draftRun = run
 	return &out
 }
 
-func (s *Service) DraftCandidates(ctx context.Context, _ DraftCandidatesInput) (application.Change[candidates.Result], error) {
+func (s *Service) DraftCandidates(ctx context.Context, in DraftCandidatesInput) (application.Change[candidates.Result], error) {
+	if s.draftPass != nil {
+		return s.draftPass(ctx, in)
+	}
 	_, limit, err := calendar.CandidateLimits(ctx, s.db.Read)
 	var result candidates.Result
 	if err == nil {

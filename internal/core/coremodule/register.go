@@ -106,6 +106,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
 	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
+	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {

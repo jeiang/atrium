@@ -52,7 +52,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, mediaRoutes(nil, nil)...)
 	return module.Declaration{
 		Operations: operations,
-		Bindings:   bindings,
+		Bindings:   append(bindings, finalBindings()...),
 		Name:       module.Media,
 		Requires:   Requirements(),
 		Jobs:       mediacmd.Jobs(m.Jobs, openService),
