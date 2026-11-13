@@ -65,10 +65,10 @@ func openRoot(name, path string) (*root, error) {
 		return nil, fmt.Errorf("roots.%s: %w", name, err)
 	}
 	if st.Mode&unix.S_IFMT == unix.S_IFLNK {
-		return nil, fmt.Errorf("roots.%s must not be a symbolic link", name)
+		return nil, &ConfigError{err: fmt.Errorf("roots.%s must not be a symbolic link", name)}
 	}
 	if st.Mode&unix.S_IFMT != unix.S_IFDIR {
-		return nil, fmt.Errorf("roots.%s must be a directory", name)
+		return nil, &ConfigError{err: fmt.Errorf("roots.%s must be a directory", name)}
 	}
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {

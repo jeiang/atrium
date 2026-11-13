@@ -47,6 +47,11 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 		return Checkpoint{}, err
 	}
 	defer func() { _ = conn.Close() }()
+	release, err := holdGate(ctx, conn, wait)
+	if err != nil {
+		return Checkpoint{}, err
+	}
+	defer release()
 	if _, err := conn.ExecContext(ctx, busyWaitSQL(wait)); err != nil {
 		return Checkpoint{}, err
 	}
@@ -92,7 +97,8 @@ func connect(path string, opts []Option) (*DB, error) {
 		return nil, err
 	}
 	pragmas := connPragmas()
-	w := Open(writeDSN, append(append([]string{}, pragmas...), cachePragma(smallCacheKiB))...)
+	gate := &writeGate{}
+	w := sql.OpenDB(connector{drv: openDriver(), dsn: writeDSN, pragmas: append(append([]string{}, pragmas...), cachePragma(smallCacheKiB)), gate: gate})
 	w.SetMaxOpenConns(1)
 	if err := guardEngine(w, key); err != nil {
 		_ = w.Close()
@@ -101,6 +107,10 @@ func connect(path string, opts []Option) (*DB, error) {
 	if err := setWAL(w); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
+	}
+	if gate.path, err = CanonicalPath(path); err != nil {
+		_ = w.Close()
+		return nil, err
 	}
 	r := newReader(readDSN, pragmas, smallCacheKiB)
 	k := newKNN(readDSN, pragmas)
@@ -247,6 +257,7 @@ type connector struct {
 	drv     driver.Driver
 	dsn     string
 	pragmas []string
+	gate    *writeGate
 }
 
 func (c connector) Driver() driver.Driver { return c.drv }
@@ -270,7 +281,15 @@ func (c connector) Connect(ctx context.Context) (driver.Conn, error) {
 			return nil, fmt.Errorf("db: %s: %w", p, err)
 		}
 	}
-	return conn, nil
+	if c.gate == nil {
+		return conn, nil
+	}
+	g, ok := conn.(gateableConn)
+	if !ok {
+		_ = conn.Close()
+		return nil, fmt.Errorf("db: %T cannot take the write gate", conn)
+	}
+	return &gatedConn{gateableConn: g, gate: c.gate}, nil
 }
 
 func SerializeFloat32(v []float32) []byte {
