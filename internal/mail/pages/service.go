@@ -18,12 +18,11 @@ func (s *service) page(w http.ResponseWriter, r *http.Request, status int, page,
 }
 
 func (s *service) fragment(w http.ResponseWriter, r *http.Request, name string, data any, notice *tpl.Toast) {
-	f, err := s.deps.Render.Frame(r, "", data)
+	mode, err := s.reads.Mode(r.Context())
 	if err != nil {
 		panic(err)
 	}
-	f.Toast = notice
-	if err := s.deps.Render.Fragment(w, r, http.StatusOK, name, f); err != nil {
+	if err := s.deps.Render.Fragment(w, r, http.StatusOK, name, tpl.Fragment{Data: data, Toast: notice, Mode: mode}); err != nil {
 		panic(err)
 	}
 }

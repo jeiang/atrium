@@ -8,6 +8,13 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 )
 
+type HomePage struct {
+	asstapp.Home
+	Needs       any
+	Receipts    any
+	AgendaError string
+}
+
 type ThreadPage struct {
 	View     *asstapp.Transcript  `json:"view"`
 	ThreadID int64                `json:"thread_id"`

@@ -89,6 +89,14 @@ type Frame struct {
 	Data          any
 }
 
+type Fragment struct {
+	CSRF         string
+	Mode         string
+	PendingCount int
+	Toast        *Toast
+	Data         any
+}
+
 type SidebarThreads struct {
 	Pinned   []SidebarThread
 	Dated    []SidebarGroup
@@ -161,17 +169,16 @@ func (e *Engine) Page(w io.Writer, name string, f *Frame) error {
 	return execute(w, set, layout, f)
 }
 
-func (e *Engine) Fragment(w io.Writer, name string, f *Frame) error {
+func (e *Engine) Fragment(w io.Writer, name string, f Fragment) error {
 	if !strings.HasPrefix(name, "_") || e.shared.Lookup(name) == nil {
 		return fmt.Errorf("tpl: no fragment %q", name)
 	}
 	return execute(w, e.shared, name, f)
 }
 
-func execute(w io.Writer, set *template.Template, name string, f *Frame) error {
-	root := *f
+func execute(w io.Writer, set *template.Template, name string, data any) error {
 	var b bytes.Buffer
-	if err := set.ExecuteTemplate(&b, name, &root); err != nil {
+	if err := set.ExecuteTemplate(&b, name, data); err != nil {
 		return err
 	}
 	_, err := w.Write(b.Bytes())

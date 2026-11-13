@@ -52,8 +52,10 @@ type Work struct {
 }
 
 type Need struct {
-	ID    int64  `json:"id"`
-	Title string `json:"title"`
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Status   string `json:"status"`
+	KindIcon string `json:"kind_icon"`
 }
 
 type Transcript struct {
@@ -344,7 +346,7 @@ func work(ctx context.Context, q db.Querier, threadID int64, now float64) (Work,
 	}
 	w.Needs = make([]Need, len(pending))
 	for i, p := range pending {
-		w.Needs[i] = Need{ID: p.ID, Title: p.Title}
+		w.Needs[i] = Need{ID: p.ID, Title: p.Title, Status: p.Status}
 	}
 	if w.Sources == nil {
 		w.Sources = []workspace.Source{}

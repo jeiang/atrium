@@ -43,9 +43,11 @@ type Options struct {
 	Knowledge func(*web.Deps) *kbapp.Service
 	Assistant func(*web.Deps) *asstapp.Service
 	API       func(*web.Deps, func() *asstapp.Service)
+	Home      func(*web.Deps) func(context.Context) (any, any, error)
 }
 
 type pages struct {
+	home      func(context.Context) (any, any, error)
 	deps      *web.Deps
 	svc       func() *service.Service
 	knowledge func() *kbapp.Service
@@ -68,7 +70,7 @@ func Module(o Options) web.Module {
 			}
 			return svc
 		})
-		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now}
+		p := &pages{home: o.Home(d), deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)
@@ -145,9 +147,7 @@ func (p *pages) page(w http.ResponseWriter, r *http.Request, name string, data a
 }
 
 func (p *pages) fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any) {
-	f, err := p.deps.Render.Frame(r, "", data)
-	check(err)
-	check(p.deps.Render.Fragment(w, r, status, name, f))
+	check(p.deps.Render.Fragment(w, r, status, name, data))
 }
 
 func (p *pages) fail(w http.ResponseWriter, r *http.Request, status int, detail string) {
@@ -163,9 +163,7 @@ func (p *pages) failureStatus(w http.ResponseWriter, r *http.Request, status int
 		p.fail(w, r, status, description)
 		return
 	}
-	f, err := p.deps.Render.Frame(r, "", nil)
-	check(err)
-	f.Toast = &tpl.Toast{Category: "error", Title: title, Description: description}
+	f := tpl.Fragment{Toast: &tpl.Toast{Category: "error", Title: title, Description: description}}
 	w.Header().Set("HX-Reswap", "none")
 	check(p.deps.Render.Fragment(w, r, status, "_toast.gohtml", f))
 }

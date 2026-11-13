@@ -282,13 +282,21 @@
             "format": "int64",
             "type": "integer"
           },
+          "kind_icon": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
           "title": {
             "type": "string"
           }
         },
         "required": [
           "id",
-          "title"
+          "title",
+          "status",
+          "kind_icon"
         ],
         "type": "object"
       },

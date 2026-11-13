@@ -1053,3 +1053,5 @@ behavior-parity target.
 Detailed feature scope and acceptance criteria belong in the open issues
 that carry them: #457 and #476 for the remaining v2 work, plus
 the owner gates #233 and #615. They do not belong in this file.
+
+Home includes its review strip, agenda and recent activity in the initial response. Thread Work rows render from the typed read; History loads on first selection. Fragment rendering skips the global page-frame reads.

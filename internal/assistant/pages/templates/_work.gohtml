@@ -6,9 +6,7 @@
   <h2 id="work-needs" class="eyebrow flex items-center gap-1.5">{{icon "bell" "size-3.5"}}Needs you</h2>
   <ul class="flex flex-col gap-2" data-needs>
     {{range $w.Needs}}
-    <li id="needs-{{.ID}}" class="rounded-md border px-3 py-2 text-sm" hx-get="/proposals/{{.ID}}/card?view=row" hx-trigger="load" hx-swap="outerHTML">
-      <a class="flex min-w-0 items-center gap-2 underline-offset-4 hover:underline" href="#proposal-{{.ID}}">{{icon "list-checks" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{.Title}}</span></a>
-    </li>
+    {{template "proposal_row" (dict "p" . "toast" nil "pending_oob" false "pending_count" 0)}}
     {{end}}
   </ul>
 </section>

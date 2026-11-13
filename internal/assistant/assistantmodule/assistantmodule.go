@@ -47,8 +47,10 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
+	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
@@ -99,7 +101,20 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService, API: threadAPI}),
+			Module: chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService, API: threadAPI, Home: func(d *web.Deps) func(context.Context) (any, any, error) {
+				reader := reviewpages.Reads(d)
+				return func(ctx context.Context) (any, any, error) {
+					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
+					if err != nil {
+						return nil, nil, err
+					}
+					activity, err := reader.Activity(ctx, reviewapp.ActivityInput{})
+					if err != nil {
+						return nil, nil, err
+					}
+					return reviewpages.StripView(pending.Data), reviewpages.ReceiptsView(activity.Data), nil
+				}
+			}}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{

@@ -31,20 +31,24 @@ func (s *service) needsStrip(w http.ResponseWriter, r *http.Request) {
 		s.failRead(w, r, err, "")
 		return
 	}
+	s.fragment(w, r, http.StatusOK, "_review_strip.gohtml", StripView(found.Data), nil)
+}
+
+func StripView(found reviewapp.Pending) stripData {
 	left := stripItems
 	take := func(n int) int {
 		n = min(n, left)
 		left -= n
 		return n
 	}
-	pending := found.Data.Approvals[:take(len(found.Data.Approvals))]
-	blocked := found.Data.Blocked[:take(len(found.Data.Blocked))]
-	rows := found.Data.Drafts[:take(len(found.Data.Drafts))]
-	s.fragment(w, r, http.StatusOK, "_review_strip.gohtml", stripData{
+	pending := found.Approvals[:take(len(found.Approvals))]
+	blocked := found.Blocked[:take(len(found.Blocked))]
+	rows := found.Drafts[:take(len(found.Drafts))]
+	return stripData{
 		Proposals: proposalViews(pending), Blocked: proposalViews(blocked),
-		Drafts: draftViews(rows), Configured: found.Data.Configured,
-		Count: found.Data.Count, More: found.Data.Count > stripItems-left,
-	}, nil)
+		Drafts: draftViews(rows), Configured: found.Configured,
+		Count: found.Count, More: found.Count > stripItems-left,
+	}
 }
 
 func (s *service) recentActivity(w http.ResponseWriter, r *http.Request) {
@@ -53,8 +57,12 @@ func (s *service) recentActivity(w http.ResponseWriter, r *http.Request) {
 		s.failRead(w, r, err, "")
 		return
 	}
+	s.fragment(w, r, http.StatusOK, "_receipts.gohtml", ReceiptsView(found.Data), nil)
+}
+
+func ReceiptsView(found reviewapp.Activity) receiptsData {
 	kept := make([]reviewapp.ActivityEntry, 0, recentItems)
-	for _, e := range found.Data.Entries {
+	for _, e := range found.Entries {
 		if len(kept) == recentItems {
 			break
 		}
@@ -62,7 +70,7 @@ func (s *service) recentActivity(w http.ResponseWriter, r *http.Request) {
 			kept = append(kept, e)
 		}
 	}
-	s.fragment(w, r, http.StatusOK, "_receipts.gohtml", receiptsData{Entries: kept}, nil)
+	return receiptsData{Entries: kept}
 }
 
 func receiptView(r *http.Request) bool {

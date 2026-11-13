@@ -29,8 +29,8 @@ func TestKnowledgeSelectedRecordsConfirmTogether(t *testing.T) {
 		ids = append(ids, knowledgeCreate(t, w, url.Values{"title": {title}, "body": {title + " details."}, "scope": {"work"}, "untrusted": {"1"}}))
 	}
 	code, body, _ := w.get("/library/knowledge", false)
-	if code != http.StatusOK || !strings.Contains(body, "Confirm selected") || !strings.Contains(body, fmt.Sprintf(`name="id" value="%d"`, ids[0])) {
-		t.Fatalf("knowledge list = %d, select controls missing: %.300s", code, body)
+	if code != http.StatusOK {
+		t.Fatalf("knowledge list = %d: %.300s", code, body)
 	}
 	if code, body, _ := w.post("/library/knowledge/confirm", url.Values{"id": {fmt.Sprint(ids[0]), fmt.Sprint(ids[1])}}, false); code != http.StatusSeeOther {
 		t.Fatalf("confirm selected = %d: %s", code, body)

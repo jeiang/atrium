@@ -32,7 +32,20 @@ func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", read.Data)
 		return
 	}
-	p.page(w, r, "chat.gohtml", read.Data)
+	data := HomePage{Home: read.Data}
+	if read.Data.View == "" && read.Data.Q == "" {
+		data.Needs, data.Receipts, err = p.home(r.Context())
+		check(err)
+		if data.Agenda {
+			day, err := p.assistant().Home(r.Context(), asstapp.HomeInput{Agenda: true})
+			if err != nil {
+				data.AgendaError = application.Classify(err).Error()
+			} else {
+				data.Day = day.Data.Day
+			}
+		}
+	}
+	p.page(w, r, "chat.gohtml", data)
 }
 
 func (p *pages) threadList(w http.ResponseWriter, r *http.Request, q, view string) {
