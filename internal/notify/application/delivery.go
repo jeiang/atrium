@@ -23,6 +23,11 @@ type UnsubscribeInput struct {
 	DeviceID *int64
 }
 type ResendInput struct{ ID int64 }
+type MarkInput struct {
+	ID   int64
+	Read bool
+}
+type Subscribed struct{ ID int64 }
 type SendInput struct {
 	Message notify.Message
 	RunKind *tool.Kind
@@ -41,15 +46,27 @@ func (s *Service) ChannelContent(ctx context.Context, in ChannelContentInput) (a
 	id, err := s.mutate(ctx, ChannelContentName, "channel", func(tx *sql.Tx) error { return notify.SetContent(ctx, tx, in.Name, in.Content) })
 	return application.Change[Empty]{AuditID: id}, err
 }
-func (s *Service) Subscribe(ctx context.Context, in SubscribeInput) (application.Change[Empty], error) {
-	if in.Transport == "" {
-		in.Transport = notify.TransportWebPush
-	}
-	id, err := s.mutate(ctx, SubscribeName, "push-device", func(tx *sql.Tx) error {
-		_, err := notify.RegisterDevice(ctx, tx, notify.RegisterDeviceInput{Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: in.Label})
+func (s *Service) Mark(ctx context.Context, in MarkInput) (application.Change[Empty], error) {
+	id, err := s.mutate(ctx, MarkName, notificationTarget(in.ID), func(tx *sql.Tx) error {
+		found, err := notify.MarkRead(ctx, tx, in.ID, in.Read, stamp())
+		if err == nil && !found {
+			err = &application.Error{Code: application.NotFound, Message: "No such notification."}
+		}
 		return err
 	})
 	return application.Change[Empty]{AuditID: id}, err
+}
+func (s *Service) Subscribe(ctx context.Context, in SubscribeInput) (application.Change[Subscribed], error) {
+	if in.Transport == "" {
+		in.Transport = notify.TransportWebPush
+	}
+	var device int64
+	id, err := s.mutate(ctx, SubscribeName, "push-device", func(tx *sql.Tx) error {
+		var err error
+		device, err = notify.RegisterDevice(ctx, tx, notify.RegisterDeviceInput{Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: in.Label})
+		return err
+	})
+	return application.Change[Subscribed]{Data: Subscribed{ID: device}, AuditID: id}, err
 }
 func (s *Service) Unsubscribe(ctx context.Context, in UnsubscribeInput) (application.Change[Empty], error) {
 	id, err := s.mutate(ctx, UnsubscribeName, "push-device", func(tx *sql.Tx) error {

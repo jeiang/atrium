@@ -60,7 +60,6 @@ func serve(d *web.Deps, service *notifyapp.Service) {
 	d.Authenticated(http.MethodPost, page+"/push/{id}/remove", h.owned(h.removeDevice))
 	d.Authenticated(http.MethodGet, inboxPage, h.inbox)
 	d.Authenticated(http.MethodPost, inboxPage+"/{id}/resend", h.owned(h.resend))
-	d.API(http.MethodGet, "/inbox", h.apiInbox)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {

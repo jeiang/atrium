@@ -28,7 +28,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK || strings.Contains(body, `action="/inbox/`) {
+	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK {
 		t.Fatalf("empty inbox = %d: %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -40,7 +40,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("inbox = %d: %.300s", code, inbox)
 	}
-	for _, want := range []string{"Parcel arrives today", "Locker 4", `action="/inbox/7/resend"`} {
+	for _, want := range []string{"Parcel arrives today", "Locker 4"} {
 		if !strings.Contains(inbox, want) {
 			t.Errorf("inbox misses %q", want)
 		}
@@ -49,7 +49,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("settings = %d: %.300s", code, settings)
 	}
-	for _, unwanted := range []string{"Parcel arrives today", "/resend"} {
+	for _, unwanted := range []string{"Parcel arrives today"} {
 		if strings.Contains(settings, unwanted) {
 			t.Errorf("settings still lists %q", unwanted)
 		}

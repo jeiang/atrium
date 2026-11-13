@@ -27,16 +27,19 @@ var (
 )
 
 type Notification struct {
-	ID         int64      `json:"id"`
-	TS         float64    `json:"ts"`
-	Title      string     `json:"title"`
-	Body       string     `json:"body"`
-	ThreadID   *int64     `json:"thread_id"`
-	RunID      *int64     `json:"run_id"`
-	ThreadLink *string    `json:"thread_link"`
-	Channel    string     `json:"channel"`
-	Delivered  store.Flag `json:"delivered"`
-	Error      *string    `json:"error"`
+	ID         int64       `json:"id"`
+	TS         float64     `json:"ts"`
+	Title      string      `json:"title"`
+	Body       string      `json:"body"`
+	ThreadID   *int64      `json:"thread_id"`
+	RunID      *int64      `json:"run_id"`
+	ThreadLink *string     `json:"thread_link"`
+	Channel    string      `json:"channel"`
+	Delivered  store.Flag  `json:"delivered"`
+	Error      *string     `json:"error"`
+	Priority   *int64      `json:"priority"`
+	Actions    []ActionRef `json:"actions"`
+	ReadAt     *float64    `json:"read_at"`
 }
 
 type Action struct {
@@ -308,12 +311,28 @@ func nullID(id int64) any {
 	return id
 }
 
+func MarkRead(ctx context.Context, q db.Querier, id int64, read bool, now float64) (bool, error) {
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return false, err
+	}
+	var at any
+	if read {
+		at = now
+	}
+	res, err := q.ExecContext(ctx, "UPDATE notifications SET read_at = CASE WHEN ? IS NULL THEN NULL ELSE COALESCE(read_at, ?) END WHERE id = ?", at, at, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 func Recent(ctx context.Context, q db.Querier, limit int) ([]Notification, error) {
 	return RecentBefore(ctx, q, 0, limit)
 }
 
 func RecentBefore(ctx context.Context, q db.Querier, before int64, limit int) ([]Notification, error) {
-	query, args := "SELECT id, ts, title, body, thread_id, run_id, thread_link, COALESCE(channel, ''), delivered, error FROM notifications", []any{}
+	query, args := "SELECT id, ts, title, body, thread_id, run_id, thread_link, COALESCE(channel, ''), delivered, error, priority, actions_json, read_at FROM notifications", []any{}
 	if before > 0 {
 		query += " WHERE id < ?"
 		args = append(args, before)
@@ -327,7 +346,11 @@ func RecentBefore(ctx context.Context, q db.Querier, before int64, limit int) ([
 		var threadID, runID sql.NullInt64
 		var link, failure sql.NullString
 		var delivered int64
-		if err := r.Scan(&n.ID, &n.TS, &n.Title, &n.Body, &threadID, &runID, &link, &n.Channel, &delivered, &failure); err != nil {
+		var actions string
+		if err := r.Scan(&n.ID, &n.TS, &n.Title, &n.Body, &threadID, &runID, &link, &n.Channel, &delivered, &failure, &n.Priority, &actions, &n.ReadAt); err != nil {
+			return n, err
+		}
+		if err := json.Unmarshal([]byte(actions), &n.Actions); err != nil {
 			return n, err
 		}
 		n.Delivered = store.Flag(delivered != 0)

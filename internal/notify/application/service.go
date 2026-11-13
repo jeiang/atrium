@@ -46,6 +46,7 @@ const (
 	SendName           application.Name = "notifications.send"
 	PhonePolicyName    application.Name = "notifications.phone-policy"
 	RevokeLinksName    application.Name = "notifications.revoke-links"
+	MarkName           application.Name = "notifications.mark"
 )
 
 func Describe() []application.Definition {
@@ -54,7 +55,8 @@ func Describe() []application.Definition {
 		application.Describe[Empty, Configuration](ConfigurationName, application.Query, op, application.NoEffect, false),
 		application.Describe[InboxInput, Inbox](InboxName, application.Query, op, application.NoEffect, false),
 		application.Describe[ChannelContentInput, Empty](ChannelContentName, application.Command, op, application.NoEffect, true),
-		application.Describe[SubscribeInput, Empty](SubscribeName, application.Command, op, application.NoEffect, true),
+		application.Describe[MarkInput, Empty](MarkName, application.Command, op, application.NoEffect, true),
+		application.Describe[SubscribeInput, Subscribed](SubscribeName, application.Command, op, application.NoEffect, true),
 		application.Describe[UnsubscribeInput, Empty](UnsubscribeName, application.Command, op, application.NoEffect, true),
 		application.Describe[Empty, TestResult](TestName, application.Command, op, application.External, true),
 		application.Describe[ResendInput, Delivery](ResendName, application.Command, op, application.External, true),
