@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 const (
@@ -26,6 +28,9 @@ const (
 )
 
 type StartInput struct {
+	Title        *string
+	Claim        *scheduler.Claim
+	Marks        threads.Marks
 	Kind         threads.Kind
 	ProjectID    int64
 	About        string
@@ -66,7 +71,7 @@ func (e KindMismatch) Error() string {
 
 func DescribeThreadStart() application.Definition {
 	return application.Describe[StartInput, Started](ThreadStartName, application.Command,
-		[]application.Authority{application.Operator}, application.External, true)
+		[]application.Authority{application.Operator, application.System}, application.External, true)
 }
 
 func (s *Service) WithRuns(runs func() *service.Service) *Service {
@@ -233,16 +238,32 @@ func (s *Service) threadStart(ctx context.Context, in StartInput, started *Start
 			return 0, err
 		}
 	}
-	threadID, err := threads.Create(ctx, s.db.Write, s.now(), threads.Spec{
-		Kind: kind, ProjectID: project, Model: in.Model, Effort: in.Effort, ContextLimit: in.ContextLimit,
-		Thinking: in.Thinking, WebSearch: in.WebSearch, CostCapUSD: in.CostCapUSD,
+	var threadID int64
+	err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		var jobID *int64
+		if in.Claim != nil {
+			jobID = &in.Claim.Job.ID
+		}
+		id, err := threads.Create(ctx, tx, s.now(), threads.Spec{
+			Kind: kind, ProjectID: project, Model: in.Model, Effort: in.Effort, ContextLimit: in.ContextLimit,
+			Thinking: in.Thinking, WebSearch: in.WebSearch, CostCapUSD: in.CostCapUSD,
+			Title: in.Title, JobID: jobID, Marks: in.Marks,
+		})
+		if err != nil {
+			return err
+		}
+		threadID = id
+		if in.Claim != nil {
+			return scheduler.AttachThread(ctx, tx, *in.Claim, id)
+		}
+		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
 	started.ThreadID = threadID
 	runID, err := s.firstRun(ctx, threadID, kind, text, operatorText, in)
-	if runID == 0 && err != nil {
+	if runID == 0 && err != nil && in.Claim == nil {
 		discarded, derr := s.runs().DiscardUnused(context.WithoutCancel(ctx), threadID)
 		if discarded {
 			started.ThreadID = 0
@@ -261,9 +282,11 @@ func (s *Service) firstRun(ctx context.Context, threadID int64, kind threads.Kin
 	if err != nil || text == "" {
 		return 0, err
 	}
-	refs, err := references.Resolve(ctx, s.db.Read, threadID, operatorText)
-	if err != nil {
-		return 0, err
+	var refs []json.RawMessage
+	if in.Claim == nil {
+		if refs, err = references.Resolve(ctx, s.db.Read, threadID, operatorText); err != nil {
+			return 0, err
+		}
 	}
 	return s.begin(ctx, threadID, text, service.Start{Kind: kind, Operator: in.Operator, Files: append(attached, refs...)}, in.ToolChoice, in.Wait)
 }

@@ -26,6 +26,7 @@ type SampleInput struct{}
 type SampleResult struct {
 	Hosts   int `json:"hosts"`
 	Samples int `json:"samples"`
+	Failed  int `json:"failed_hosts"`
 }
 
 type sampleRow struct {
@@ -36,22 +37,20 @@ type sampleRow struct {
 }
 
 func (s *Service) Sample(ctx context.Context, _ SampleInput) (application.Change[SampleResult], error) {
-	rows, hosts, err := s.collect(ctx)
+	rows, result, err := s.collect(ctx)
+	if errors.As(err, new(config.NotConfigured)) || err == nil && result.Hosts == 0 {
+		return application.Change[SampleResult]{Data: result}, err
+	}
 	if err != nil {
-		outcome := state.Failed
-		var missing config.NotConfigured
-		if errors.As(err, &missing) {
-			outcome = state.Refused
-		}
-		if auditErr := s.auditAlone(ctx, SampleName, "ops_samples", outcome); auditErr != nil {
+		if auditErr := s.auditAlone(ctx, SampleName, "ops_samples", state.Failed); auditErr != nil {
 			return application.Change[SampleResult]{}, errors.Join(err, auditErr)
 		}
 		return application.Change[SampleResult]{}, err
 	}
-	result := SampleResult{Hosts: hosts, Samples: len(rows)}
-	if hosts == 0 {
-		auditID, err := s.writeAudit(ctx, state.Noop)
-		return application.Change[SampleResult]{Data: result, AuditID: auditID}, err
+	entry := state.Entry{Operation: string(SampleName), Outcome: state.OK, Target: "ops_samples"}
+	if result.Failed > 0 {
+		entry.Outcome = state.Partial
+		entry.DetailsJSON = fmt.Sprintf(`{"failed_hosts":%d}`, result.Failed)
 	}
 	now := s.clock()
 	var auditID int64
@@ -67,7 +66,7 @@ func (s *Service) Sample(ctx context.Context, _ SampleInput) (application.Change
 			return err
 		}
 		var err error
-		auditID, err = s.state.Audit(ctx, tx, state.Entry{Operation: string(SampleName), Outcome: state.OK, Target: "ops_samples"})
+		auditID, err = s.state.Audit(ctx, tx, entry)
 		return err
 	})
 	if err != nil {
@@ -76,80 +75,89 @@ func (s *Service) Sample(ctx context.Context, _ SampleInput) (application.Change
 	return application.Change[SampleResult]{Data: result, AuditID: auditID}, nil
 }
 
-func (s *Service) writeAudit(ctx context.Context, outcome state.Outcome) (int64, error) {
-	var id int64
-	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		id, err = s.state.Audit(ctx, tx, state.Entry{Operation: string(SampleName), Outcome: outcome, Target: "ops_samples"})
-		return err
-	})
-	return id, err
-}
-
-func (s *Service) collect(ctx context.Context) ([]sampleRow, int, error) {
+func (s *Service) collect(ctx context.Context) ([]sampleRow, SampleResult, error) {
 	host := serverops.HostValues(ctx)
 	hosts, selector, queries := host.Hosts, host.Selector, host.Queries
 	if len(hosts) == 0 {
-		return nil, 0, nil
+		return nil, SampleResult{}, nil
 	}
 	access, err := grafanatools.Load(ctx, s.db.Read)
 	if err != nil {
-		return nil, 0, err
+		return nil, SampleResult{}, err
 	}
 	uid := access.MetricsUID
 	if uid == "" {
-		return nil, 0, config.NotConfigured("the Grafana connection has no metrics datasource UID")
+		return nil, SampleResult{}, config.NotConfigured("the Grafana connection has no metrics datasource UID")
 	}
 	lim, err := grafanatools.ReadLimits(ctx, s.db.Read)
 	if err != nil {
-		return nil, 0, err
+		return nil, SampleResult{}, err
 	}
 	var rows []sampleRow
+	var sampled []string
+	var hostErr error
 	for _, host := range hosts {
-		for _, metric := range serverops.Metrics[:len(serverops.Metrics)-1] {
-			expr := strings.ReplaceAll(queries[metric], "{{selector}}", selector)
-			expr = strings.ReplaceAll(expr, "{{host}}", host)
-			payload, err := grafanatools.Query(ctx, s.db.Read, lim, http.MethodPost, "/api/ds/query", "", map[string]any{
-				"queries": []any{map[string]any{
-					"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "instant": true, "range": false,
-				}},
-				"from": "now-5m", "to": "now",
-			})
-			if err != nil {
-				return nil, 0, err
-			}
-			value, found, err := instantValue(payload)
-			if err != nil {
-				return nil, 0, err
-			}
-			if !found {
-				continue
-			}
-			var up *string
-			if metric == serverops.MetricUp {
-				s := "down"
-				if value != 0 {
-					s = "up"
-				}
-				up = &s
-			}
-			rows = append(rows, sampleRow{host: host, metric: metric, value: value, state: up})
+		hostRows, err := s.sampleHost(ctx, lim, uid, host, selector, queries)
+		if err != nil {
+			hostErr = err
+			continue
 		}
+		rows = append(rows, hostRows...)
+		sampled = append(sampled, host)
 	}
-	alerts, err := firingAlerts(ctx, s.db.Read, lim, "instance", hosts)
+	result := SampleResult{Hosts: len(hosts), Failed: len(hosts) - len(sampled)}
+	if len(sampled) == 0 {
+		return nil, result, hostErr
+	}
+	alerts, err := firingAlerts(ctx, s.db.Read, lim, "instance", sampled)
 	if err != nil {
-		return nil, 0, err
+		return nil, result, err
 	}
-	for _, host := range hosts {
+	for _, host := range sampled {
 		names := alerts[host]
 		sort.Strings(names)
 		detail, err := json.Marshal(map[string]any{"alerts": names})
 		if err != nil {
-			return nil, 0, err
+			return nil, result, err
 		}
 		rows = append(rows, sampleRow{host: host, metric: serverops.MetricAlerts, value: float64(len(names)), detail: new(string(detail))})
 	}
-	return rows, len(hosts), nil
+	result.Samples = len(rows)
+	return rows, result, nil
+}
+
+func (s *Service) sampleHost(ctx context.Context, lim grafanatools.Limits, uid, host, selector string, queries map[string]string) ([]sampleRow, error) {
+	var rows []sampleRow
+	for _, metric := range serverops.Metrics[:len(serverops.Metrics)-1] {
+		expr := strings.ReplaceAll(queries[metric], "{{selector}}", selector)
+		expr = strings.ReplaceAll(expr, "{{host}}", host)
+		payload, err := grafanatools.Query(ctx, s.db.Read, lim, http.MethodPost, "/api/ds/query", "", map[string]any{
+			"queries": []any{map[string]any{
+				"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "instant": true, "range": false,
+			}},
+			"from": "now-5m", "to": "now",
+		})
+		if err != nil {
+			return nil, err
+		}
+		value, found, err := instantValue(payload)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			continue
+		}
+		var up *string
+		if metric == serverops.MetricUp {
+			s := "down"
+			if value != 0 {
+				s = "up"
+			}
+			up = &s
+		}
+		rows = append(rows, sampleRow{host: host, metric: metric, value: value, state: up})
+	}
+	return rows, nil
 }
 
 func instantValue(payload any) (float64, bool, error) {

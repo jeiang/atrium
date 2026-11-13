@@ -3,11 +3,12 @@ package app
 import (
 	"context"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
-	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
@@ -33,7 +34,7 @@ type Dependencies struct {
 }
 
 func Builtins(d Dependencies) []module.Builder {
-	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Classifier: classifierFor, Now: d.Now, Attention: attentionSources}
+	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Classifier: classifierFor, Now: d.Now, Start: asstapp.ScheduledStart}
 	return []module.Builder{
 		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now, Resources: d.Bindings.Resources, Jobs: jobs},
 		contactsmodule.Module{Jobs: jobs},
@@ -58,12 +59,4 @@ func Catalog(d Dependencies, mc module.Context) (*module.Catalog, error) {
 
 func Docs() (*module.Catalog, error) {
 	return Catalog(Dependencies{}, module.Context{})
-}
-
-func attentionSources(ctx context.Context) []attention.Source {
-	set := module.SetFrom(ctx)
-	if set == nil || set.Current() == nil {
-		return nil
-	}
-	return set.Current().Attention()
 }
