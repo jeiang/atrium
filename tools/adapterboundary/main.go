@@ -57,6 +57,7 @@ var adapters = []adapter{
 	{pattern: "internal/settings/settingscmd/*"},
 	{pattern: "internal/settingspage/*"},
 	{pattern: "internal/secrets/secretscmd/*"},
+	{pattern: "internal/auth/bearercmd/*"},
 	{pattern: "internal/web/api.go"},
 	{pattern: "internal/web/auth_routes.go"},
 	{pattern: "internal/web/auth_settings.go"},

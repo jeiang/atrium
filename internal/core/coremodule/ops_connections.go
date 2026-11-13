@@ -37,9 +37,7 @@ func connectionService(d *web.Deps) (*connectionsapp.Service, error) {
 }
 
 func watchConnections(ctx context.Context, d *db.DB) error {
-	if !audit.HasActor(ctx) {
-		ctx = audit.With(ctx, "service:connection-health", audit.Job)
-	}
+	ctx = audit.With(ctx, "service:connection-health", audit.Job)
 	svc, err := connectionsapp.New(ctx, d)
 	if err != nil {
 		return err

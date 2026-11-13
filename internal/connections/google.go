@@ -68,8 +68,12 @@ var ErrUnknownConsent = errors.New("this consent link is unknown or already used
 
 func (s *Store) SaveOAuthState(ctx context.Context, state, verifier, capability, redirect string, commits ...Commit) error {
 	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		now := s.now()
+		if _, err := tx.ExecContext(ctx, "DELETE FROM oauth_states WHERE created_ts < ?", float64(now.Add(-GoogleStateTTL).UnixNano())/1e9); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, "INSERT INTO oauth_states (state, verifier, capability, redirect_uri, created_ts) VALUES (?, ?, ?, ?, ?)",
-			state, verifier, capability, redirect, s.stamp()); err != nil {
+			state, verifier, capability, redirect, float64(now.UnixNano())/1e9); err != nil {
 			return err
 		}
 		return committed(ctx, tx, true, commits)

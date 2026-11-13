@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -122,18 +123,36 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 		t.Fatalf("the revoked token has no revocation time: %v", phone)
 	}
 
-	var audits, leaked int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE key IN ('auth_token.issue', 'auth_token.revoke')").Scan(&audits); err != nil {
+	var issued, leaked int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'auth.bearer-issue' AND outcome = 'ok' AND target = '1' AND source = 'cli'").Scan(&issued); err != nil {
 		t.Fatal(err)
 	}
-	if audits < 3 {
-		t.Fatalf("issuance and revocation left %d audit rows, want at least 3", audits)
+	if issued != 1 {
+		t.Fatalf("issuing token 1 left %d operation audit rows, want 1", issued)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE new_value LIKE '%atr_%' OR old_value LIKE '%atr_%'").Scan(&leaked); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE instr(details_json, 'atr_') > 0 OR instr(details_json, ?) > 0 OR instr(details_json, ?) > 0 OR instr(details_json, ?) > 0",
+		secret, strings.TrimSpace(second.stdout), hash).Scan(&leaked); err != nil {
 		t.Fatal(err)
 	}
 	if leaked != 0 {
-		t.Fatalf("%d audit rows hold a token secret", leaked)
+		t.Fatalf("%d operation audit rows hold token material", leaked)
+	}
+	outcomes := map[string]int{}
+	rows, err := d.Read.Query("SELECT operation || ':' || outcome FROM operation_audit WHERE operation IN ('auth.bearer-issue', 'auth.bearer-revoke')")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			t.Fatal(err)
+		}
+		outcomes[key]++
+	}
+	want := map[string]int{"auth.bearer-issue:ok": 2, "auth.bearer-issue:invalid": 3, "auth.bearer-revoke:ok": 1, "auth.bearer-revoke:noop": 1, "auth.bearer-revoke:not_found": 1}
+	if !maps.Equal(outcomes, want) {
+		t.Fatalf("token operation audit outcomes %v, want %v", outcomes, want)
 	}
 }
 
@@ -195,10 +214,10 @@ func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
 		t.Fatalf("a token issued in the UI cannot read the API: %d %s", me.status, me.body)
 	}
 
-	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {" "}}); code != http.StatusOK || !strings.Contains(body, "name") {
+	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {" "}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "name") {
 		t.Fatalf("a blank name was not refused: %d %.300s", code, body)
 	}
-	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {"x"}, "expires_at": {"tomorrow"}}); code != http.StatusOK || !strings.Contains(body, "RFC 3339") {
+	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {"x"}, "expires_at": {"tomorrow"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "RFC 3339") {
 		t.Fatalf("a bad expiry was not refused: %d %.300s", code, body)
 	}
 

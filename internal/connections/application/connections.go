@@ -168,6 +168,9 @@ func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (app
 		}
 		ids = append(ids, v.ID)
 	}
+	if len(ids) == 0 {
+		return application.Change[struct{}]{}, nil
+	}
 	auditID, err := s.command(ctx, ObserveHealthName, ids, func(commit connections.Commit) error {
 		_, err := s.pass(ctx, ids, true, commit)
 		return err
@@ -196,6 +199,9 @@ func (s *Service) pass(ctx context.Context, ids []ID, silent bool, commit connec
 		}
 		if err != nil {
 			var committed *connections.CommittedError
+			if i == len(ids)-1 && errors.As(err, &committed) {
+				return out, err
+			}
 			if changed || (nextChanged && errors.As(err, &committed)) {
 				return out, &partialError{cause: err}
 			}

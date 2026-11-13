@@ -11,7 +11,8 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
-	"github.com/jeiang/atrium/internal/auth/bearer"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
+	"github.com/jeiang/atrium/internal/auth/bearercmd"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/backup"
@@ -116,7 +117,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}),
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
-			bearer.Command(mc.Env),
+			bearercmd.Command(authapp.CLI(mc.Env)),
 			secretscmd.Command(openSettings),
 			dbcmd.Command(mc.Env, m.Now),
 			backup.BackupCommand(),
