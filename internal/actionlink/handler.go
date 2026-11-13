@@ -31,6 +31,8 @@ func Handler(phone func(ctx context.Context, token string, now float64) (*propos
 		}
 		unfinished, err := phone(r.Context(), chi.URLParam(r, "token"), now())
 		switch {
+		case errors.Is(err, ErrUnavailable):
+			http.Error(w, "action link unavailable", http.StatusInternalServerError)
 		case errors.Is(err, ErrUsed):
 			http.Error(w, "This link was already used.", http.StatusGone)
 		case errors.Is(err, ErrExpired):

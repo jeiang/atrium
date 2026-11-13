@@ -14,11 +14,19 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 )
 
-type UndoInput struct {
-	ProposalID int64
-	EffectID   int64
-	ActionID   int64
+type TargetKind string
+
+const (
+	ProposalTarget TargetKind = "proposal"
+	EffectTarget   TargetKind = "effect"
+	MailTarget     TargetKind = "mail"
+)
+
+type Target struct {
+	Kind TargetKind
+	ID   int64
 }
+type UndoInput struct{ Target Target }
 
 type UndoResult struct {
 	Proposal *proposals.Proposal
@@ -29,11 +37,9 @@ type UndoResult struct {
 }
 
 type ResolveInput struct {
-	ProposalID int64
-	EffectID   int64
-	ActionID   int64
-	Outcome    string
-	Evidence   json.RawMessage
+	Target   Target
+	Outcome  string
+	Evidence json.RawMessage
 }
 
 type ResolveResult struct {
@@ -42,22 +48,12 @@ type ResolveResult struct {
 	Mail     *live.Resolved
 }
 
-func targetOf(proposal, effect, action int64) (string, error) {
-	named := 0
-	for _, id := range []int64{proposal, effect, action} {
-		if id != 0 {
-			named++
-		}
+func targetOf(t Target) (string, error) {
+	switch t.Kind {
+	case ProposalTarget, EffectTarget, MailTarget:
+		return string(t.Kind) + ":" + strconv.FormatInt(t.ID, 10), nil
 	}
-	switch {
-	case named > 1:
-		return "", invalid("target", "Name one proposal, effect or mail action.")
-	case effect != 0:
-		return effectTarget(effect), nil
-	case action != 0:
-		return "mail:" + strconv.FormatInt(action, 10), nil
-	}
-	return proposalTarget(proposal), nil
+	return "", invalid("target", "Name one proposal, effect or mail action.")
 }
 
 func (s *Service) knownAction(ctx context.Context, id int64) error {
@@ -85,40 +81,40 @@ func (s *Service) Undo(ctx context.Context, in UndoInput) (application.Change[Un
 	if err != nil {
 		return application.Change[UndoResult]{}, err
 	}
-	target, err := targetOf(in.ProposalID, in.EffectID, in.ActionID)
+	target, err := targetOf(in.Target)
 	if err != nil {
 		return application.Change[UndoResult]{}, err
 	}
-	if in.EffectID != 0 {
-		return s.undoEffect(ctx, in.EffectID, who, target)
+	if in.Target.Kind == EffectTarget {
+		return s.undoEffect(ctx, in.Target.ID, who, target)
 	}
-	if in.ActionID != 0 {
-		if err := s.knownAction(ctx, in.ActionID); err != nil {
+	if in.Target.Kind == MailTarget {
+		if err := s.knownAction(ctx, in.Target.ID); err != nil {
 			return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, nil)
 		}
-		done, err := s.live.Undo(ctx, in.ActionID)
+		done, err := s.live.Undo(ctx, in.Target.ID)
 		if err != nil {
 			if refused := mailRefusal(err); refused != nil {
-				return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, refused, nil)
+				return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, refused, []int64{in.Target.ID})
 			}
-			return application.Change[UndoResult]{}, err
+			return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, []int64{in.Target.ID})
 		}
-		return application.Change[UndoResult]{Data: UndoResult{Mail: &done}, AuditID: s.audit(ctx, UndoName, target, state.OK, nil)}, nil
+		return application.Change[UndoResult]{Data: UndoResult{Mail: &done}, EffectIDs: []int64{in.Target.ID, done.UndoEffectID}, AuditID: s.audit(ctx, UndoName, target, state.OK, []int64{in.Target.ID, done.UndoEffectID})}, nil
 	}
-	if err := s.known(ctx, in.ProposalID); err != nil {
+	if err := s.known(ctx, in.Target.ID); err != nil {
 		return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, nil)
 	}
-	outcome, err := s.pipeline.Undo(ctx, in.ProposalID, who)
-	out := application.Change[UndoResult]{Data: UndoResult{Outcome: outcome}, EffectIDs: s.proposalEffects(ctx, in.ProposalID)}
-	after, gerr := proposals.Get(ctx, s.db.Read, in.ProposalID)
+	outcome, err := s.pipeline.Undo(ctx, in.Target.ID, who)
+	out := application.Change[UndoResult]{Data: UndoResult{Outcome: outcome}, EffectIDs: s.proposalEffects(ctx, in.Target.ID)}
+	after, gerr := proposals.Get(ctx, s.db.Read, in.Target.ID)
 	if gerr != nil {
-		return out, gerr
+		return out, s.refusal(ctx, UndoName, target, gerr, out.EffectIDs)
 	}
 	out.Data.Proposal = after
 	if err != nil {
 		refused := pipelineRefusal(err)
 		if refused == nil {
-			return out, err
+			return out, s.refusal(ctx, UndoName, target, err, out.EffectIDs)
 		}
 		refused.EffectIDs = out.EffectIDs
 		if len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
@@ -141,11 +137,11 @@ func (s *Service) undoEffect(ctx context.Context, id int64, who proposals.Resolv
 		if refused := ledgerRefusal(err); refused != nil {
 			return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, refused, []int64{id})
 		}
-		return application.Change[UndoResult]{}, err
+		return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, []int64{id})
 	}
 	forward, err := s.ledger.Get(ctx, id)
 	if err != nil {
-		return application.Change[UndoResult]{}, err
+		return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, []int64{id})
 	}
 	effects := []int64{id, undo.ID}
 	return application.Change[UndoResult]{
@@ -158,42 +154,45 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (application.Cha
 	if err != nil {
 		return application.Change[ResolveResult]{}, err
 	}
-	target, err := targetOf(in.ProposalID, in.EffectID, in.ActionID)
+	target, err := targetOf(in.Target)
 	if err != nil {
 		return application.Change[ResolveResult]{}, err
 	}
-	if in.EffectID != 0 {
-		found, err := s.ledger.Resolve(ctx, in.EffectID, ledger.Resolution{Outcome: in.Outcome, Evidence: in.Evidence}, ledger.Resolver{Actor: who.Actor, Source: who.Source}, nil)
+	if in.Target.Kind == EffectTarget {
+		found, err := s.ledger.Resolve(ctx, in.Target.ID, ledger.Resolution{Outcome: in.Outcome, Evidence: in.Evidence}, ledger.Resolver{Actor: who.Actor, Source: who.Source}, nil)
 		if err != nil {
 			if refused := ledgerRefusal(err); refused != nil {
-				return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, refused, []int64{in.EffectID})
+				return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, refused, []int64{in.Target.ID})
 			}
-			return application.Change[ResolveResult]{}, err
+			return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, []int64{in.Target.ID})
 		}
-		effects := []int64{in.EffectID}
+		effects := []int64{in.Target.ID}
 		return application.Change[ResolveResult]{
 			Data: ResolveResult{Effect: &found}, EffectIDs: effects, AuditID: s.audit(ctx, ResolveName, target, state.OK, effects),
 		}, nil
 	}
-	if in.ActionID != 0 {
-		done, err := s.live.Resolve(ctx, in.ActionID, in.Outcome, who)
+	if in.Target.Kind == MailTarget {
+		if err := s.knownAction(ctx, in.Target.ID); err != nil {
+			return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, []int64{in.Target.ID})
+		}
+		done, err := s.live.Resolve(ctx, in.Target.ID, in.Outcome, who)
 		if err != nil {
 			if refused := mailRefusal(err); refused != nil {
-				return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, refused, nil)
+				return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, refused, []int64{in.Target.ID})
 			}
-			return application.Change[ResolveResult]{}, err
+			return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, []int64{in.Target.ID})
 		}
-		return application.Change[ResolveResult]{Data: ResolveResult{Mail: &done}, AuditID: s.audit(ctx, ResolveName, target, state.OK, nil)}, nil
+		return application.Change[ResolveResult]{Data: ResolveResult{Mail: &done}, EffectIDs: []int64{in.Target.ID}, AuditID: s.audit(ctx, ResolveName, target, state.OK, []int64{in.Target.ID})}, nil
 	}
-	if err := s.known(ctx, in.ProposalID); err != nil {
+	if err := s.known(ctx, in.Target.ID); err != nil {
 		return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, nil)
 	}
-	resolved, err := s.pipeline.Resolve(ctx, in.ProposalID, in.Outcome, who)
+	resolved, err := s.pipeline.Resolve(ctx, in.Target.ID, in.Outcome, who)
 	if err != nil {
 		if refused := pipelineRefusal(err); refused != nil {
-			return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, refused, nil)
+			return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, refused, []int64{in.Target.ID})
 		}
-		return application.Change[ResolveResult]{}, err
+		return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, nil)
 	}
 	return application.Change[ResolveResult]{
 		Data: ResolveResult{Proposal: &resolved}, EffectIDs: resolved.Settled, AuditID: s.audit(ctx, ResolveName, target, state.OK, resolved.Settled),

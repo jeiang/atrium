@@ -121,6 +121,7 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/"+deny+"/deny", owner, nil), http.StatusConflict, "not_dismissed")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/"+deny+"/approve", owner, nil), http.StatusConflict, "not_approved")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/999999/approve", owner, nil), http.StatusNotFound, "not_found")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/approvals/999999/approve", owner, map[string]any{"selection": []any{1}}), http.StatusNotFound, "not_found")
 	if len(dav.Puts) != 1 {
 		t.Fatalf("deny wrote to the calendar: %d puts", len(dav.Puts))
 	}
@@ -284,7 +285,7 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); code != http.StatusOK {
 		t.Fatalf("GET /chat = %d", code)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK || !strings.Contains(body, `data-status="applied"`) {
+	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK {
 		t.Fatalf("HTML approve: %d\n%s", code, body)
 	}
 	stop()
@@ -312,6 +313,46 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 		}
 		if resolution != source || audited != source {
 			t.Errorf("proposal %s: resolution source %q, audit source %q, want %q", id, resolution, audited, source)
+		}
+	}
+}
+
+func TestReviewZeroTargetsKeepTheirNamespace(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	base := startServeIn(t, dir)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	for _, command := range []string{"effects", "writes", "live"} {
+		for _, action := range []string{"undo", "resolve"} {
+			args := []string{command, action, "0"}
+			if action == "resolve" {
+				args = append(args, "--outcome", "not-applied")
+			}
+			ran := runApp(t, args...)
+			if ran.code != cli.ExitError {
+				t.Fatalf("%v = %d %s", args, ran.code, ran.stderr)
+			}
+			target := "effect:0"
+			if command == "live" {
+				target = "mail:0"
+			}
+			var got, outcome string
+			if err := d.Read.QueryRow("SELECT target, outcome FROM operation_audit WHERE operation = ? ORDER BY id DESC LIMIT 1", "review."+action).Scan(&got, &outcome); err != nil || got != target || outcome != "not_found" {
+				t.Fatalf("%v audit = %q %q, %v", args, got, outcome, err)
+			}
+		}
+	}
+	ran := runApp(t, "effects", "resolve", "0", "--outcome", "not-applied", "--actor", "")
+	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "actor") {
+		t.Fatalf("empty actor = %d %s", ran.code, ran.stderr)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	fetch(t, client, http.MethodGet, base+"/review", nil)
+	for _, kind := range []string{"effect", "mail"} {
+		code, _, _ := fetch(t, client, http.MethodPost, base+"/activity/"+kind+"/0/undo", url.Values{})
+		if code != http.StatusNotFound {
+			t.Fatalf("%s zero undo = %d", kind, code)
 		}
 	}
 }

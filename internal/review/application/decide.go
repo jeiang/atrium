@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/actionlink"
@@ -23,8 +24,9 @@ var log = logx.Logger("atrium.review")
 type Selection map[string]any
 
 type ApproveInput struct {
-	ProposalID int64
-	Selection  Selection
+	ProposalID     int64
+	Selection      Selection
+	SelectionValue any
 }
 
 type DismissInput struct {
@@ -43,7 +45,10 @@ type PhoneInput struct {
 }
 
 func WithOrigin(ctx context.Context, actor, source string) (context.Context, error) {
-	if actor == "" || !audit.Source(source).Valid() {
+	if actor == "" {
+		return ctx, ledger.Refused("a resolution needs an actor")
+	}
+	if !audit.Source(source).Valid() {
 		return ctx, invalid("source", "Unknown resolution source.")
 	}
 	return audit.With(ctx, actor, audit.Source(source)), nil
@@ -63,6 +68,13 @@ func (s *Service) Approve(ctx context.Context, in ApproveInput) (application.Cha
 	}
 	if err := s.known(ctx, in.ProposalID); err != nil {
 		return application.Change[Decision]{}, s.refusal(ctx, ApproveName, proposalTarget(in.ProposalID), err, nil)
+	}
+	if in.SelectionValue != nil {
+		chosen, ok := in.SelectionValue.(map[string]any)
+		if !ok {
+			return application.Change[Decision]{}, s.refusal(ctx, ApproveName, proposalTarget(in.ProposalID), invalid("selection", "selection must be an object."), nil)
+		}
+		in.Selection = chosen
 	}
 	return s.approve(ctx, in, who)
 }
@@ -92,7 +104,7 @@ func (s *Service) approve(ctx context.Context, in ApproveInput, who proposals.Re
 			}
 			return out, s.refusal(ctx, ApproveName, target, refused, nil)
 		}
-		return out, err
+		return out, s.refusal(ctx, ApproveName, target, err, out.EffectIDs)
 	}
 	outcome := state.OK
 	if !out.Data.Applied {
@@ -123,11 +135,11 @@ func (s *Service) dismiss(ctx context.Context, in DismissInput, who proposals.Re
 		if refused := pipelineRefusal(err); refused != nil {
 			return application.Change[Decision]{}, s.refusal(ctx, DismissName, target, refused, nil)
 		}
-		return application.Change[Decision]{}, err
+		return application.Change[Decision]{}, s.refusal(ctx, DismissName, target, err, nil)
 	}
 	done, err := proposals.Get(ctx, s.db.Read, in.ProposalID)
 	if err != nil {
-		return application.Change[Decision]{}, err
+		return application.Change[Decision]{}, s.refusal(ctx, DismissName, target, err, nil)
 	}
 	return application.Change[Decision]{Data: Decision{Proposal: done}, AuditID: s.audit(ctx, DismissName, target, state.OK, nil)}, nil
 }
@@ -135,12 +147,24 @@ func (s *Service) dismiss(ctx context.Context, in DismissInput, who proposals.Re
 func (s *Service) Phone(ctx context.Context, in PhoneInput) (application.Change[Decision], error) {
 	ctx = audit.With(ctx, "phone", audit.Phone)
 	who := proposals.Resolver{Actor: "phone", Source: string(audit.Phone)}
-	pol, err := policy.Load(ctx, s.db.Read)
+	claims, err := actionlink.Verify(ctx, s.db.Write, in.Token, in.Now)
 	if err != nil {
 		return application.Change[Decision]{}, err
 	}
+	name := DismissName
+	if claims.Action == actionlink.Approve {
+		name = ApproveName
+	}
+	pol, err := policy.Load(ctx, s.db.Read)
+	if err != nil {
+		s.audit(ctx, name, proposalTarget(claims.ProposalID), state.Failed, nil)
+		return application.Change[Decision]{}, fmt.Errorf("%w: %w", actionlink.ErrUnavailable, err)
+	}
+	entered := false
+	delegated := false
 	var out application.Change[Decision]
 	err = actionlink.Redeem(ctx, s.db.Write, in.Token, in.Now, func(ctx context.Context, claims actionlink.Claims) error {
+		entered = true
 		prop, err := proposals.Get(ctx, s.db.Write, claims.ProposalID)
 		if err != nil {
 			return err
@@ -151,6 +175,7 @@ func (s *Service) Phone(ctx context.Context, in PhoneInput) (application.Change[
 		if prop.Kind == permission.Kind || !pol.Allows(prop.Kind) {
 			return actionlink.ErrRefused
 		}
+		delegated = true
 		if claims.Action == actionlink.Approve {
 			out, err = s.approve(ctx, ApproveInput{ProposalID: prop.ID}, who)
 			return err
@@ -158,6 +183,16 @@ func (s *Service) Phone(ctx context.Context, in PhoneInput) (application.Change[
 		out, err = s.dismiss(ctx, DismissInput{ProposalID: prop.ID}, who)
 		return err
 	})
+	if entered && !delegated && err != nil {
+		outcome := state.Failed
+		if errors.Is(err, actionlink.ErrInvalid) {
+			outcome = state.Invalid
+		}
+		if errors.Is(err, actionlink.ErrRefused) {
+			outcome = state.Refused
+		}
+		out.AuditID = s.audit(ctx, name, proposalTarget(claims.ProposalID), outcome, nil)
+	}
 	return out, err
 }
 
@@ -217,6 +252,7 @@ func ledgerRefusal(err error) *application.Error {
 func (s *Service) refusal(ctx context.Context, name application.Name, target string, err error, effects []int64) error {
 	var e *application.Error
 	if !errors.As(err, &e) {
+		s.audit(ctx, name, target, state.Failed, effects)
 		return err
 	}
 	outcome := state.Refused
@@ -240,7 +276,8 @@ func (s *Service) audit(ctx context.Context, name application.Name, target strin
 			details = string(raw)
 		}
 	}
-	id, err := s.state.Audit(ctx, nil, state.Entry{Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: details})
+	inv, _ := application.InvocationOf(ctx)
+	id, err := s.state.Audit(context.WithoutCancel(ctx), nil, state.Entry{ThreadID: inv.ThreadID, RunID: inv.RunID, JobRunID: inv.JobRunID, Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: details})
 	if err != nil {
 		log.Error("operation audit failed", "operation", string(name), logx.Err, err.Error())
 	}

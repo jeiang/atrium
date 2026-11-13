@@ -57,7 +57,7 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := s.review.Undo(detached(r), reviewapp.UndoInput{ActionID: id})
+	_, err := s.review.Undo(detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
 	s.mailDecided(w, r, id, err, "Not undone", toast("success", "Undone"))
 }
 
@@ -89,7 +89,7 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
-	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{ActionID: id, Outcome: outcome})
+	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}, Outcome: outcome})
 	s.mailDecided(w, r, id, err, "Not settled", resolvedToast(outcome))
 }
 
@@ -99,7 +99,7 @@ func (s *service) undoEffect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	_, err := s.review.Undo(ctx, reviewapp.UndoInput{EffectID: id})
+	_, err := s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}})
 	s.effectDecided(w, r, id, err, "Not undone", toast("success", "Undone"))
 }
 
@@ -127,7 +127,7 @@ func (s *service) resolveEffect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
-	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{EffectID: id, Outcome: outcome})
+	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}, Outcome: outcome})
 	s.effectDecided(w, r, id, err, "Not settled", resolvedToast(outcome))
 }
 

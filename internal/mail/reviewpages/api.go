@@ -204,13 +204,10 @@ func (s *service) apiApprove(w http.ResponseWriter, r *http.Request) {
 	input := reviewapp.ApproveInput{ProposalID: id}
 	if len(in.Selection) > 0 && string(in.Selection) != "null" {
 		picked, err := jsonx.Loads(in.Selection)
-		chosen, isMap := picked.(map[string]any)
-		if err != nil || !isMap {
-			const message = "selection must be an object."
-			web.APIError(w, http.StatusUnprocessableEntity, "bad_selection", message, web.FieldError{Type: "invalid", Loc: []string{"body", "selection"}, Msg: message})
-			return
+		if err != nil {
+			panic(err)
 		}
-		input.Selection = chosen
+		input.SelectionValue = picked
 	}
 	done, err := s.review.Approve(detached(r), input)
 	var extra map[string]any
@@ -262,7 +259,7 @@ func (s *service) apiResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	_, err := s.review.Resolve(ctx, reviewapp.ResolveInput{ProposalID: id, Outcome: in.Outcome})
+	_, err := s.review.Resolve(ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}, Outcome: in.Outcome})
 	if apiRefused(w, err, "not_resolved", "Unknown approval.", nil) {
 		return
 	}
@@ -345,7 +342,7 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 			web.APIError(w, http.StatusNotFound, "not_found", missing)
 			return
 		}
-		_, err = s.review.Undo(ctx, reviewapp.UndoInput{EffectID: id})
+		_, err = s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}})
 		if apiRefused(w, err, "not_undone", missing, nil) {
 			return
 		}
@@ -353,7 +350,7 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 		check(err)
 		web.JSON(w, http.StatusOK, map[string]any{"entry": entry, "undone": true})
 	case "proposal":
-		done, err := s.review.Undo(ctx, reviewapp.UndoInput{ProposalID: id})
+		done, err := s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}})
 		outcome := done.Data.Outcome
 		var extra map[string]any
 		if done.Data.Proposal != nil && (len(outcome.Outcomes) > 0 || outcome.SyncError != nil) {
@@ -440,7 +437,7 @@ func (s *service) apiEffectResolve(w http.ResponseWriter, r *http.Request) {
 	if !web.DecodeOptionalJSON(w, r, &in) {
 		return
 	}
-	done, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{EffectID: id, Outcome: in.Outcome, Evidence: in.Evidence})
+	done, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}, Outcome: in.Outcome, Evidence: in.Evidence})
 	if apiRefused(w, err, "not_resolved", "Unknown effect.", nil) {
 		return
 	}
@@ -452,7 +449,7 @@ func (s *service) apiEffectUndo(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	done, err := s.review.Undo(detached(r), reviewapp.UndoInput{EffectID: id})
+	done, err := s.review.Undo(detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}})
 	if apiRefused(w, err, "not_undone", "Unknown effect.", nil) {
 		return
 	}

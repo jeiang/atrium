@@ -248,7 +248,7 @@ func Command(o Options) *cli.Command {
 			id := a.IntArg("id", cli.Opt{})
 			outcome := a.String("outcome", "", cli.Opt{Choices: proposals.Outcomes, Help: "what the operator found: applied, not-applied or partial for a write; undone or not-undone for an undo"})
 			return func(x *exec) error {
-				resolved, err := x.review().Resolve(x.Ctx, reviewapp.ResolveInput{ProposalID: int64(*id), Outcome: *outcome})
+				resolved, err := x.review().Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}, Outcome: *outcome})
 				if err != nil {
 					return err
 				}
@@ -263,7 +263,7 @@ func Command(o Options) *cli.Command {
 		o.leaf("undo", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
 			return func(x *exec) error {
-				result, err := x.review().Undo(x.Ctx, reviewapp.UndoInput{ProposalID: int64(*id)})
+				result, err := x.review().Undo(x.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}})
 				outcome := result.Data.Outcome
 				if err == nil || len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
 					x.JSON(outcome.Dict())

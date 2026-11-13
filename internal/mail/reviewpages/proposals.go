@@ -223,7 +223,7 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	done, err := s.review.Undo(detached(r), reviewapp.UndoInput{ProposalID: id})
+	done, err := s.review.Undo(detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}})
 	outcome := done.Data.Outcome
 	refused, answered := s.decided(w, r, err, "unknown proposal")
 	if answered {
@@ -293,7 +293,7 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
-	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{ProposalID: id, Outcome: outcome})
+	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}, Outcome: outcome})
 	refused, answered := s.decided(w, r, err, "unknown proposal")
 	if answered {
 		return

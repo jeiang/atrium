@@ -131,7 +131,7 @@ func listActions(x *exec, limit int, kind string) error {
 }
 
 func undoAction(x *exec, id int64) error {
-	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Undo(x.Ctx, reviewapp.UndoInput{ActionID: id})
+	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Undo(x.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func undoAction(x *exec, id int64) error {
 }
 
 func resolveAction(x *exec, id int64, outcome string) error {
-	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Resolve(x.Ctx, reviewapp.ResolveInput{ActionID: id, Outcome: outcome})
+	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}, Outcome: outcome})
 	if err != nil {
 		return err
 	}

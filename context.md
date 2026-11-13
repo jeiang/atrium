@@ -441,7 +441,11 @@ behavior-parity target.
   `import`; it is the entry point that made the decision, so an `/api/v1`
   approval records `api` and a web one `ui`. Approve, dismiss, undo and
   resolve are the `review.*` operations shared by every entry point, each
-  audited in `operation_audit` after the ledger settles. A malformed
+  audited in `operation_audit` after the ledger settles, even after caller
+  cancellation. Audit provenance comes only from the trusted invocation. Phone
+  policy and changed-plan refusals are audited; invalid, expired and used tokens
+  are not. Undo and resolve preserve the explicit proposal, effect or mail
+  namespace, including unknown ids. A malformed
   approval selection is invalid input (`atrium proposals approve` exits 2,
   the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
