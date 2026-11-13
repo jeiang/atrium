@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -65,6 +66,7 @@ func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 			trusted := args.Repeated("trusted-proxy", cli.Opt{Help: "socket peer CIDR allowed to set CF-Connecting-IP; repeatable"})
 			noServices := args.Bool("no-services", cli.Opt{Help: "serve the web UI only; another serve process runs the scheduler and background services"})
 			return func(env *cli.Env) int {
+				env.Ctx = audit.With(env.Ctx, "", "")
 				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, trusted: *trusted, pages: pages, env: env.Env, boot: boot, services: !*noServices})
 			}
 		},
