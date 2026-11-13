@@ -2,11 +2,6 @@ internal/actionlink/handler.go	github.com/jeiang/atrium/internal/config
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/db
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/proposals
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/settings
-internal/actionlink/pages/pages.go	github.com/jeiang/atrium/internal/actionlink
-internal/actionlink/pages/pages.go	github.com/jeiang/atrium/internal/actionlink/policy
-internal/actionlink/pages/pages.go	github.com/jeiang/atrium/internal/db
-internal/actionlink/pages/pages.go	github.com/jeiang/atrium/internal/settings
-internal/actionlink/pages/pages.go	github.com/jeiang/atrium/internal/settings/audit
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/service
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/assistant/threads
 internal/assistant/agentcmd/agentcmd.go	github.com/jeiang/atrium/internal/config
@@ -476,9 +471,6 @@ internal/media/pages/module.go	github.com/jeiang/atrium/internal/ledger
 internal/media/pages/module.go	github.com/jeiang/atrium/internal/mail/imapclient
 internal/media/pages/module.go	github.com/jeiang/atrium/internal/media
 internal/media/pages/module.go	github.com/jeiang/atrium/internal/settings
-internal/notify/web.go	github.com/jeiang/atrium/internal/db
-internal/notify/web.go	github.com/jeiang/atrium/internal/settings
-internal/notify/web.go	github.com/jeiang/atrium/internal/settings/audit
 internal/notion/command.go	github.com/jeiang/atrium/internal/config
 internal/notion/command.go	github.com/jeiang/atrium/internal/db
 internal/notion/command.go	github.com/jeiang/atrium/internal/embed

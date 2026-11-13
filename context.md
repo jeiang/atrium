@@ -451,7 +451,10 @@ behavior-parity target.
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
   streamed run event writes do not); the append-only
   `operation_audit` table records application commands. Both are owned by
-  `internal/application/state`.
+  `internal/application/state`. Notification inbox, channel and device controls,
+  delivery, and phone policy commands use `notifications.*` operations. The
+  inbox read is bounded to 100 items (API default 50); failed push delivery
+  remains explicit and keeps its inbox record.
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,

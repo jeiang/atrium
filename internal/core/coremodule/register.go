@@ -9,7 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
-	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/bearer"
@@ -94,7 +93,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
-			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
