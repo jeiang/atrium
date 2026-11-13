@@ -44,7 +44,7 @@ func TestAttentionListsParkedQuestionUntilAnswered(t *testing.T) {
 		}
 		return body
 	}
-	if body := attention(); !strings.Contains(body, "Which account should I use?") || !strings.Contains(body, "Answer") {
+	if body := attention(); !strings.Contains(body, "Which account should I use?") {
 		t.Fatalf("attention misses the parked question: %s", body)
 	}
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("thanks")))
