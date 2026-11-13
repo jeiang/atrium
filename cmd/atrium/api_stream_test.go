@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +28,12 @@ type streamSite struct {
 
 func newStreamSite(t *testing.T) *streamSite {
 	t.Helper()
-	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	return newStreamSiteAt(t, nil)
+}
+
+func newStreamSiteAt(t *testing.T, now func() float64) *streamSite {
+	t.Helper()
+	dir, api, f := moduleFixtureAt(t, flagsExcept("", ""), now)
 	warm(t, api)
 	s := &streamSite{apiSite: &apiSite{t: t}, api: api, d: asstDB(t, dir), f: f, token: localAPIToken(t, "streams")}
 	s.restart()
@@ -240,4 +246,50 @@ func TestStreamCaps(t *testing.T) {
 		}
 	}
 	t.Fatal("an open stream ended without its terminal event")
+}
+
+func TestStreamExpiredIs410(t *testing.T) {
+	var shift atomic.Int64
+	s := newStreamSiteAt(t, func() float64 {
+		return float64(time.Now().Add(time.Duration(shift.Load())).UnixMicro()) / 1e6
+	})
+	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("old answer")))
+	threadID, runID := s.start("old")
+	_, last := s.events(s.token, threadID, runID, "")
+	shift.Store(int64(31 * 24 * time.Hour))
+	free := s.hold()
+	for range 8 {
+		s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("late")))
+	}
+	activeThread, activeRun := s.start("active")
+	waitRunning(t, s.d, activeRun)
+	kept := asstCount(t, s.d, "SELECT COUNT(*) FROM run_events WHERE stream_run_id = ?", activeRun)
+	schedulerSeed(t, s.f, s.d)
+	schedulerDue(t, s.d, "stream-retention")
+	schedulerRun(t, s.f, s.d, func() bool {
+		return asstCount(t, s.d, "SELECT COUNT(*) FROM run_streams WHERE run_id = ? AND retained_after = terminal_seq", runID) == 1
+	})
+
+	path := fmt.Sprintf("/api/v1/threads/%d/runs/%d/events", threadID, runID)
+	expired := s.do(http.MethodGet, path, s.token, nil)
+	expectAPI(t, expired, http.StatusGone, "stream_expired")
+	if number(t, expired.json["run_id"]) != runID {
+		t.Fatalf("expired answer names run %v", expired.json["run_id"])
+	}
+	if got := s.do(http.MethodGet, path, s.token, nil, "Last-Event-ID", last); got.status != http.StatusNoContent {
+		t.Fatalf("resume at the pruned terminal: %d", got.status)
+	}
+	if n := asstCount(t, s.d, "SELECT COUNT(*) FROM run_events WHERE stream_run_id = ?", runID); n != 0 {
+		t.Fatalf("%d expired events kept", n)
+	}
+	if n := asstCount(t, s.d, "SELECT COUNT(*) FROM run_events WHERE stream_run_id = ?", activeRun); n < kept {
+		t.Fatalf("the active stream lost events: %d of %d", n, kept)
+	}
+	if detail := s.do(http.MethodGet, fmt.Sprintf("/api/v1/threads/%d", threadID), s.token, nil); detail.status != http.StatusOK {
+		t.Fatalf("thread detail after pruning: %d", detail.status)
+	}
+	if resp := s.open(activeThread, activeRun); resp.StatusCode != http.StatusOK {
+		t.Fatalf("active stream after pruning: %d", resp.StatusCode)
+	}
+	free()
 }

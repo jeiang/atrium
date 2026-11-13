@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
@@ -70,5 +72,12 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 		_, err := kbapp.New(e.Service.DB, e.Service.Runner.Ledger, e.Now).WithEnv(e.Service.Env).Export(ctx, kbapp.ExportInput{})
 		return jobworker.Result{}, err
 	})
-	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), knowledgeExport}
+	streams := assistantJob(assistant.StreamRetentionName, scheduler.JobBuiltin,
+		"Daily: drop run event streams finished more than 30 days ago (no model run).", "", "", 10*time.Minute, scheduler.ModelFree)
+	streams.Every = 24 * time.Hour
+	streams.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+		_, err := asstapp.New(e.Service.DB, e.Service.Env, e.Now).StreamRetention(ctx, asstapp.StreamRetentionInput{})
+		return jobworker.Result{}, err
+	})
+	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), knowledgeExport, streams}
 }
