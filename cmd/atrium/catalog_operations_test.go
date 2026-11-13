@@ -93,12 +93,21 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 	if !ok {
 		t.Fatal("settings.set missing")
 	}
-	for _, target := range []string{"POST /settings/assistant", "POST /settings/permissions"} {
-		if !slices.ContainsFunc(setting.Bindings, func(b catalogOperationBinding) bool {
-			return b.Kind == "html" && b.Target == target && slices.Contains(b.Delegates, "settings.set")
-		}) {
-			t.Fatalf("missing explicit settings delegation for %s", target)
-		}
+	if !slices.ContainsFunc(setting.Bindings, func(b catalogOperationBinding) bool {
+		return b.Kind == "html" && b.Target == "POST /settings/permissions" && slices.Contains(b.Delegates, "settings.set")
+	}) {
+		t.Fatal("missing explicit settings delegation for POST /settings/permissions")
+	}
+	if slices.ContainsFunc(setting.Bindings, func(b catalogOperationBinding) bool {
+		return b.Target == "POST /settings/assistant"
+	}) {
+		t.Fatal("POST /settings/assistant claims settings.set")
+	}
+	defaults, ok := hasOperation(all.Operations, "assistant.defaults-set")
+	if !ok || !slices.ContainsFunc(defaults.Bindings, func(b catalogOperationBinding) bool {
+		return b.Kind == "html" && b.Target == "POST /settings/assistant"
+	}) {
+		t.Fatalf("assistant.defaults-set bindings = %+v, want html POST /settings/assistant", defaults.Bindings)
 	}
 	for _, name := range []string{"connections.oauth-start", "connections.oauth-complete"} {
 		op, ok := hasOperation(all.Operations, name)

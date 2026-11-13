@@ -103,7 +103,7 @@ func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
 func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	_, err := p.assistant().DefaultsSet(asstapp.OperatorUI(detached(r)), asstapp.DefaultsSetInput{Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: web.FormString(form, "context_limit", "")})
-	if application.Classify(err).Code == application.Invalid {
+	if err != nil && application.Classify(err).Code == application.Invalid {
 		p.assistantPage(w, r, http.StatusUnprocessableEntity, AssistantData{Error: err.Error()}, toasted(notice("error", "Not saved", err.Error())))
 		return
 	}
