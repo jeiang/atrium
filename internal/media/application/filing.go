@@ -78,6 +78,10 @@ func (s *Service) fileItem(ctx context.Context, in FilingInput) (Filed, error) {
 		return Filed{}, invalid("plan", plan.Error)
 	}
 	if err := set.Apply(ctx, s.d.Ledger, set, item, plan.Ops, root); err != nil {
+		var partial *media.PartialError
+		if errors.As(err, &partial) {
+			return Filed{Item: item, Dests: partial.Placed}, classify(err)
+		}
 		return Filed{}, classifyFiling(err)
 	}
 	dests := make([]string, len(plan.Ops))
@@ -138,6 +142,10 @@ func (s *Service) find(ctx context.Context, id string) (media.Settings, string, 
 }
 
 func classifyFiling(err error) error {
+	var partial *media.PartialError
+	if errors.As(err, &partial) {
+		return classify(err)
+	}
 	var plan media.PlanError
 	if errors.As(err, &plan) {
 		return &application.Error{Code: application.Invalid, Message: err.Error(), Cause: err}

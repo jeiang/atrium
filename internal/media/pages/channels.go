@@ -148,7 +148,9 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 	case !added.Data.Polled:
 		s.chPage(w, r, chToast("success", title, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil, false)
 	case added.Data.PollFail != nil:
-		s.chPage(w, r, chToast("error", title, "Nothing downloaded: "+added.Data.PollFail.Error()), http.StatusOK, "", nil, nil, false)
+		poll := added.Data.Poll
+		poll.Errors = append(poll.Errors, added.Data.PollFail.Error())
+		s.chPage(w, r, chPolled(title, "nothing downloaded", poll), http.StatusOK, "", nil, nil, false)
 	default:
 		s.chPage(w, r, chPolled(title, "no matching releases yet", added.Data.Poll), http.StatusOK, "", nil, nil, false)
 	}
@@ -224,6 +226,12 @@ func (s *service) channelPoll(w http.ResponseWriter, r *http.Request) {
 	out, err := s.app.Poll(r.Context(), mediaapp.PollInput{})
 	if err != nil {
 		failure := application.Classify(err)
+		if len(out.Data.Result.Added) > 0 {
+			poll := out.Data.Result
+			poll.Errors = append(poll.Errors, failure.Error())
+			s.chPage(w, r, chPolled("Poll stopped", "nothing new", poll), http.StatusUnprocessableEntity, "", nil, nil, false)
+			return
+		}
 		web.Fail(w, r, failure, func(status int) {
 			if status == http.StatusInternalServerError {
 				s.deps.Error(w, r, status, failure.Error())

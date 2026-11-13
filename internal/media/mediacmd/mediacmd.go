@@ -32,7 +32,7 @@ func skipped(err error) (map[string]any, bool) {
 func channels(ctx context.Context, svc *mediaapp.Service) (any, error) {
 	polled, err := svc.Poll(ctx, mediaapp.PollInput{SkipWithoutChannels: true})
 	if err != nil {
-		return nil, err
+		return polled.Data.Result.Dict(), err
 	}
 	if !polled.Data.Ran {
 		return map[string]any{}, nil
@@ -43,7 +43,7 @@ func channels(ctx context.Context, svc *mediaapp.Service) (any, error) {
 func sweep(ctx context.Context, svc *mediaapp.Service) (any, error) {
 	swept, err := svc.Sweep(ctx, mediaapp.SweepInput{})
 	if err != nil {
-		return nil, err
+		return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "errors": anys(swept.Data.Errors)}, err
 	}
 	return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "errors": anys(swept.Data.Errors)}, nil
 }
@@ -135,6 +135,10 @@ func handler(cfgEnv config.Env, run job, clock func() float64, open Open) func(*
 				out, err = missing, nil
 			}
 			if err != nil {
+				if out != nil {
+					body, _ := json.MarshalIndent(out, "", "  ")
+					_, _ = fmt.Fprintln(env.Stdout, string(body))
+				}
 				return cli.Fail(env, err)
 			}
 			body, _ := json.MarshalIndent(out, "", "  ")

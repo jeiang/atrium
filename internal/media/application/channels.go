@@ -277,7 +277,11 @@ func (s *Service) ChannelAdd(ctx context.Context, in ChannelAddInput) (applicati
 		if err == nil {
 			effects = []int64{effect.ID}
 		}
-		id, err = s.record(ctx, ChannelAddName, fmt.Sprintf("channel:%d", out.Channel.ID), map[string]any{"effect_ids": effects}, classifyChannel(err, true))
+		target := "channel:new"
+		if err == nil {
+			target = fmt.Sprintf("channel:%d", out.Channel.ID)
+		}
+		id, err = s.record(ctx, ChannelAddName, target, map[string]any{"effect_ids": effects}, classifyChannel(err, true))
 	} else {
 		id, err = s.local(ctx, ChannelAddName, nil, func(tx *sql.Tx) (string, error) {
 			row, err := set.AddChannel(ctx, tx, in.Name, in.IMDB, in.Pattern, in.CaseSensitive, in.TMDBID)
@@ -294,14 +298,9 @@ func (s *Service) ChannelAdd(ctx context.Context, in ChannelAddInput) (applicati
 	if in.Backfill {
 		out.Polled = true
 		polled, err := s.Poll(ctx, PollInput{Only: &out.Channel.ID, Force: true})
+		out.Poll = polled.Data.Result
 		if err != nil {
-			failure, err := known(err)
-			if err != nil {
-				return application.Change[ChannelAdded]{}, err
-			}
-			out.PollFail = failure
-		} else {
-			out.Poll = polled.Data.Result
+			out.PollFail = application.Classify(err)
 		}
 	}
 	return application.Change[ChannelAdded]{Data: out, EffectIDs: effects, AuditID: id}, nil
@@ -428,11 +427,22 @@ func DescribePoll() application.Definition {
 
 func (s *Service) Poll(ctx context.Context, in PollInput) (application.Change[Polled], error) {
 	out, err := s.poll(ctx, in)
-	id, err := s.record(ctx, PollName, "", map[string]any{"added": len(out.Result.Added), "errors": len(out.Result.Errors)}, err)
-	if err != nil {
-		return application.Change[Polled]{}, err
+	outcome := state.Noop
+	if len(out.Result.Added) > 0 {
+		outcome = state.OK
 	}
-	return application.Change[Polled]{Data: out, AuditID: id}, nil
+	failure := err
+	if failure == nil && len(out.Result.Errors) > 0 {
+		failure = &application.Error{Code: application.Unavailable, Message: "Channel poll failed."}
+	}
+	if failure != nil && len(out.Result.Added) > 0 {
+		failure = &application.Error{Code: application.Partial, Message: "Channel poll stopped after adding torrents.", Cause: failure}
+		if err != nil {
+			err = failure
+		}
+	}
+	id, _ := s.recordOutcome(ctx, PollName, "", map[string]any{"added": len(out.Result.Added), "errors": len(out.Result.Errors)}, outcome, failure)
+	return application.Change[Polled]{Data: out, AuditID: id}, err
 }
 
 func (s *Service) poll(ctx context.Context, in PollInput) (Polled, error) {
@@ -447,10 +457,7 @@ func (s *Service) poll(ctx context.Context, in PollInput) (Polled, error) {
 		return Polled{}, err
 	}
 	result, err := media.Poll(ctx, s.d.DB, s.d.Ledger, s.d.Env, set, media.PollOptions{Now: s.d.Now, Only: in.Only, Force: in.Force})
-	if err != nil {
-		return Polled{}, classify(err)
-	}
-	return Polled{Result: result, Ran: true}, nil
+	return Polled{Result: result, Ran: true}, classify(err)
 }
 
 func classifyChannel(err error, invalidInput bool) error {

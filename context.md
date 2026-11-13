@@ -48,12 +48,16 @@ behavior-parity target.
   is no tutorial text; guidance is `title` tooltips on controls.
   Media is the app at `/apps/media`. Adding a torrent takes a magnet link or
   a `.torrent` file, never both, and the page and `media_add_magnet` both
-  refuse a magnet without a v1 info hash (`xt=urn:btih:`) before anything is
-  recorded; the tool refuses it before an approval card exists. A new channel
-  backfills only when its "download what is already out" box is ticked; the
-  box starts unticked, so the first poll just records current releases. The
-  `media-sweep` job run ends in error when qBittorrent reports errors during
-  the pass; `atrium media sweep` still prints them in `errors` and exits 0. The Library section holds Knowledge
+  refuse a magnet without a v1 info hash (`xt=urn:btih:`) before any effect is
+  recorded; the refusal is audited, and the tool creates no approval card. A
+  new channel backfills only when its "download what is already out" box is
+  ticked; the box starts unticked, so the first poll just records current
+  releases. A failed backfill still shows the channel as saved and reports
+  completed downloads with the poll error. Empty polls (including job passes
+  without channels), sweeps and thumbnail passes are audited as `noop`;
+  failed passes with completed work are `partial`. The `media-sweep` job
+  ends in error when qBittorrent reports errors; `atrium media sweep` still
+  prints them in `errors` and exits 0. The Library section holds Knowledge
   (`/library/knowledge`): the operator's records with search, scope and
   state filters, checkboxes on unconfirmed rows with Confirm selected, a
   record page with confirm, edit, retract, restore and

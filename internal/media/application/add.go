@@ -52,6 +52,14 @@ func CheckMagnet(uri string) (string, error) {
 	return hash, nil
 }
 
+func (s *Service) CheckMagnet(ctx context.Context, uri string) error {
+	_, err := CheckMagnet(uri)
+	if err != nil {
+		_, err = s.record(ctx, AddName, "", nil, err)
+	}
+	return err
+}
+
 func (s *Service) Add(ctx context.Context, in AddInput) (application.Change[Added], error) {
 	out, err := s.add(ctx, in)
 	id, err := s.record(ctx, AddName, out.Hash, map[string]any{"kind": kindOf(in.Media), "proposal_id": in.ProposalID}, err)
@@ -115,7 +123,7 @@ func (s *Service) add(ctx context.Context, in AddInput) (Added, error) {
 	}
 	if in.Media {
 		if _, err := set.SelectFiles(ctx, s.d.Ledger, set, req.Scope, nil); err != nil {
-			return out, classifyWrite(err)
+			return out, &application.Error{Code: application.Partial, Message: "Torrent added, but file selection failed.", Cause: err}
 		}
 	}
 	return out, nil

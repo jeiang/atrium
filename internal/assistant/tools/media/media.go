@@ -229,12 +229,12 @@ func addMagnetArgs(args tool.Args) (string, bool, error) {
 	return magnet, asMedia, nil
 }
 
-func checkAddMagnet(_ context.Context, _ *tool.Context, args tool.Args) error {
+func checkAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) error {
 	magnet, _, err := addMagnetArgs(args)
 	if err != nil {
 		return err
 	}
-	if _, err := mediaapp.CheckMagnet(magnet); err != nil {
+	if err := mediaapp.ForTool(tc).CheckMagnet(ctx, magnet); err != nil {
 		return tool.Fail(err)
 	}
 	return nil

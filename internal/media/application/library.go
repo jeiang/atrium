@@ -93,11 +93,11 @@ func DescribeLibrary() application.Definition {
 }
 
 func DescribeLibraryDetail() application.Definition {
-	return application.Describe[LibraryDetailInput, LibraryDetail](LibraryDetailName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
+	return application.Describe[LibraryDetailInput, LibraryDetail](LibraryDetailName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
 }
 
 func DescribeArt() application.Definition {
-	return application.Describe[ArtInput, *FileStream](ArtName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
+	return application.Describe[ArtInput, *FileStream](ArtName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
 }
 
 func DescribeFile() application.Definition {
@@ -160,6 +160,7 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 		return application.Read[LibraryDetail]{}, notFound("not found")
 	}
 	out := LibraryDetail{LinkTTL: set.LinkTTL}
+	var content any
 	switch in.Kind {
 	case media.KindMovie:
 		found, err := set.Movie(root, in.Name)
@@ -167,6 +168,7 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 			return application.Read[LibraryDetail]{}, notFound("not found")
 		}
 		out.Entry = found.Entry
+		content = found
 		out.Files = make([]FileLink, len(found.Files))
 		for i, f := range found.Files {
 			if out.Files[i], err = s.link(ctx, set, f.Rel); err != nil {
@@ -180,6 +182,7 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 			return application.Read[LibraryDetail]{}, notFound("not found")
 		}
 		out.Entry = found.Entry
+		content = found
 		out.Seasons = make([]SeasonLinks, len(found.Seasons))
 		for i, season := range found.Seasons {
 			episodes := make([]EpisodeLink, len(season.Episodes))
@@ -196,7 +199,7 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 	default:
 		return application.Read[LibraryDetail]{}, notFound("not found")
 	}
-	rev, err := s.revision(ctx, "media.library-detail", in, out.Entry)
+	rev, err := s.revision(ctx, "media.library-detail", in, []any{content, out.LinkTTL})
 	if err != nil {
 		return application.Read[LibraryDetail]{}, err
 	}

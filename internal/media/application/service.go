@@ -54,8 +54,11 @@ func (s *Service) revision(ctx context.Context, projection string, input, data a
 }
 
 func (s *Service) record(ctx context.Context, name application.Name, target string, details map[string]any, err error) (int64, error) {
+	return s.recordOutcome(ctx, name, target, details, state.OK, err)
+}
+
+func (s *Service) recordOutcome(ctx context.Context, name application.Name, target string, details map[string]any, outcome state.Outcome, err error) (int64, error) {
 	err = classify(err)
-	outcome := state.OK
 	if err != nil {
 		outcome = outcomeOf(application.Classify(err).Code)
 	}
@@ -113,9 +116,12 @@ func classify(err error) error {
 	var missing config.NotConfigured
 	var conflict *ledger.Conflict
 	var gone media.NotFound
+	var partial *media.PartialError
 	switch {
 	case errors.As(err, &done):
 		return err
+	case errors.As(err, &partial):
+		return &application.Error{Code: application.Partial, Message: "Media change stopped after completing some work.", Cause: err}
 	case errors.As(err, &conflict):
 		return &application.Error{Code: application.Conflict, Message: "an earlier change to this torrent is unresolved", Cause: err}
 	case errors.As(err, &missing):
@@ -129,6 +135,10 @@ func classify(err error) error {
 }
 
 func classifyWrite(err error) error {
+	var partial *media.PartialError
+	if errors.As(err, &partial) {
+		return classify(err)
+	}
 	if err != nil && media.IsQbit(err) && !media.QbitDefinite(err) {
 		return &application.Error{Code: application.Unknown, Message: err.Error(), Cause: err}
 	}

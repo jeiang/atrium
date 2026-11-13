@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/media"
 )
 
@@ -32,16 +33,23 @@ func (s *Service) Sweep(ctx context.Context, _ SweepInput) (application.Change[S
 	if failure == nil && len(out.Errors) > 0 {
 		failure = SweepFailure(out)
 	}
-	id, rerr := s.record(ctx, SweepName, "", map[string]any{"selected": len(out.Selected), "removed": len(out.Removed), "errors": len(out.Errors)}, failure)
-	if err != nil {
-		return application.Change[Swept]{}, rerr
+	if failure != nil && len(out.Selected)+len(out.Removed) > 0 {
+		failure = &application.Error{Code: application.Partial, Message: "Media sweep stopped after completing some work.", Cause: failure}
+		if err != nil {
+			err = failure
+		}
 	}
-	return application.Change[Swept]{Data: out, AuditID: id}, nil
+	outcome := state.OK
+	if len(out.Selected)+len(out.Removed) == 0 {
+		outcome = state.Noop
+	}
+	id, _ := s.recordOutcome(ctx, SweepName, "", map[string]any{"selected": len(out.Selected), "removed": len(out.Removed), "errors": len(out.Errors)}, outcome, failure)
+	return application.Change[Swept]{Data: out, AuditID: id}, err
 }
 
 func SweepFailure(out Swept) error {
 	code := application.Unavailable
-	if len(out.Removed) > 0 {
+	if len(out.Selected)+len(out.Removed) > 0 {
 		code = application.Partial
 	}
 	return &application.Error{Code: code, Message: fmt.Sprintf("media sweep: %d errors", len(out.Errors))}
@@ -53,14 +61,13 @@ func (s *Service) sweep(ctx context.Context) (Swept, error) {
 		return Swept{}, err
 	}
 	selected, err := set.SelectFiles(ctx, s.d.Ledger, set, media.Scope{}, nil)
+	out := Swept{Selected: selected}
 	if err != nil {
-		return Swept{}, classify(err)
+		return out, classify(err)
 	}
 	swept, err := media.Sweep(ctx, s.d.Ledger, set)
-	if err != nil {
-		return Swept{}, classify(err)
-	}
-	return Swept{Selected: selected, Removed: swept.Removed, Errors: swept.Errors}, nil
+	out.Removed, out.Errors = swept.Removed, swept.Errors
+	return out, classify(err)
 }
 
 type ThumbnailsInput struct{}
@@ -77,7 +84,11 @@ func DescribeThumbnails() application.Definition {
 
 func (s *Service) Thumbnails(ctx context.Context, _ ThumbnailsInput) (application.Change[Thumbnails], error) {
 	out, err := s.thumbnails(ctx)
-	id, err := s.record(ctx, ThumbnailsName, "", map[string]any{"generated": out.Generated, "remaining": out.Remaining}, err)
+	outcome := state.OK
+	if out.Generated == 0 {
+		outcome = state.Noop
+	}
+	id, err := s.recordOutcome(ctx, ThumbnailsName, "", map[string]any{"generated": out.Generated, "remaining": out.Remaining}, outcome, err)
 	if err != nil {
 		return application.Change[Thumbnails]{}, err
 	}
