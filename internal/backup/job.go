@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -32,7 +33,10 @@ const (
 	defaultKeepDays = 14
 	archivePattern  = "atrium-*.backup"
 	archiveStamp    = "20060102T150405Z"
+	jobTimeout      = 2 * time.Hour
 )
+
+var stagedName = regexp.MustCompile(`^\.atrium-(snapshot|\d{8}T\d{6}Z\.backup)\.\d+(-wal|-shm|-journal)?$`)
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
@@ -57,7 +61,7 @@ func Job(env config.Env) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Core, Key: JobKey, Name: passrun.Backup, Kind: scheduler.JobBuiltin,
 		Prompt:   "Daily: write a verified backup archive to the backup directory, then prune old archives (no model run).",
-		Schedule: DefaultSchedule, ScheduleHost: KeySchedule, Persistent: true, RunsWhilePaused: true, Timeout: 2 * time.Hour,
+		Schedule: DefaultSchedule, ScheduleHost: KeySchedule, Persistent: true, RunsWhilePaused: true, Timeout: jobTimeout,
 		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, Resources: []string{passrun.Backup},
 		Run: func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
 			return scheduled(ctx, env, run.Claim, time.Now())
@@ -86,6 +90,9 @@ func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now t
 	}
 	defer func() { _ = d.Close() }()
 	err = passrun.Track(ctx, d, passrun.Backup, func() error {
+		if err := sweepStaged(dir, now.Add(-jobTimeout)); err != nil {
+			return err
+		}
 		dest := filepath.Join(dir, "atrium-"+now.UTC().Format(archiveStamp)+".backup")
 		if _, err := os.Lstat(dest); err == nil {
 			return fmt.Errorf("backup destination %s already exists", dest)
@@ -126,6 +133,33 @@ func hostInt(ctx context.Context, key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+func sweepStaged(dir string, before time.Time) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, e := range entries {
+		if !stagedName.MatchString(e.Name()) || !e.Type().IsRegular() {
+			continue
+		}
+		info, err := e.Info()
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if info.ModTime().Before(before) {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func prune(dir string, keep, keepDays int, now time.Time) error {

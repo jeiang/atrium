@@ -148,4 +148,22 @@ func TestNotionJobBacksOffAndSkipsWithoutAConnection(t *testing.T) {
 	if ok, failed, _ := passRows(t, dir, passrun.NotionSync); ok != 0 || failed != 1 {
 		t.Fatalf("notion-sync pass rows ok=%d failed=%d after the skip, want 0 and 1", ok, failed)
 	}
+
+	runs := schedulerRuns(t, d, passrun.NotionSync)
+	manualSkips := func() int {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.owner LIKE 'manual/%' AND r.status = 'skipped_unconfigured' AND r.ended_at IS NOT NULL", passrun.NotionSync)
+	}
+	manual := runApp(t, "notion", "sync")
+	if n := schedulerRuns(t, d, passrun.NotionSync); n != runs+1 || manualSkips() != 1 {
+		t.Fatalf("%d notion job runs and %d manual skips after a manual sync beside a scheduled skip (exit %d %q), want %d and 1", n, manualSkips(), manual.code, manual.stderr, runs+1)
+	}
+	for range 2 {
+		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, notion.JobKey)
+		if ran := runApp(t, "agent", "tick"); ran.code != cli.ExitOK {
+			t.Fatalf("agent tick after the manual sync: exit %d %q", ran.code, ran.stderr)
+		}
+	}
+	if n := schedulerRuns(t, d, passrun.NotionSync); n != runs+2 || manualSkips() != 1 {
+		t.Fatalf("%d notion job runs and %d manual skips after two more scheduled skips, want %d and 1", n, manualSkips(), runs+2)
+	}
 }

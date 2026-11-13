@@ -181,8 +181,8 @@ func TestBackupCommandSharesTheJobClaim(t *testing.T) {
 
 	manual := filepath.Join(t.TempDir(), "manual.backup")
 	got := runApp(t, "backup", manual)
-	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "held by another invocation") {
-		t.Fatalf("backup beside the running job = (%d, %q), want a held-lock refusal", got.code, got.stderr)
+	if got.code != cli.ExitError || !strings.Contains(got.stderr, "held by another invocation") {
+		t.Fatalf("backup beside the running job = (%d, %q), want exit %d and a held-lock refusal", got.code, got.stderr, cli.ExitError)
 	}
 	if _, err := os.Lstat(manual); !os.IsNotExist(err) {
 		t.Fatalf("refused backup left %s: %v", manual, err)

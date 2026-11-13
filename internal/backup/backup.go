@@ -92,7 +92,7 @@ func writeBackup(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, d
 	if err != nil {
 		return 0, err
 	}
-	files, err := listFiles(cfg.FilesDir())
+	files, err := listFiles(ctx, cfg.FilesDir())
 	if err != nil {
 		return 0, err
 	}
@@ -113,7 +113,7 @@ func writeBackup(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, d
 	if err != nil {
 		return 0, err
 	}
-	err = writeArchive(out, header, key, snapshot.Path(), files)
+	err = writeArchive(ctx, out, header, key, snapshot.Path(), files)
 	if err == nil {
 		err = out.Sync()
 	}

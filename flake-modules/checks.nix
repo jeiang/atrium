@@ -95,6 +95,41 @@
     secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connections.\"service/qbittorrent\".credential_files.api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connections.\"service/notion\".credential_files.token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "connections.\"service/anthropic\".credential_files.api_key" {secretFiles."anthropic.anthropic_api_key" = "/run/x";}; assert refusedWith "connections.\"service/oidc\".credential_files.client_secret" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "atrium settings set monthly_budget_usd" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
     opsPortRefused = assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {web.local.port = 9180;}; assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {host.core.ops_listen = "127.0.0.1:8480";}; assert !(refusedWith "services.atrium.host.core.ops_listen" {host.core.ops_listen = "off";}); true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
+    backupOptionsRefused = let
+      schedule = value: {
+        backup = {
+          enable = true;
+          schedule = value;
+        };
+      };
+      evaluates = backup:
+        (builtins.tryEval (builtins.deepSeq
+          (host {
+            web.allowedHost = "atrium.example.org";
+            inherit backup;
+          }).config.services.atrium.renderedHost.core
+          true)).success;
+    in
+      assert refusedWith "services.atrium.backup.schedule" {backup.onCalendar = "daily";};
+      assert builtins.all (value: refusedWith "is not in the atrium schedule grammar" (schedule value)) ["monthly 1 04:00" "daily 24:00" "weekly 02:30" "daily" "0 4 1 *"];
+      assert !(builtins.any (value: refusedWith "services.atrium.backup.schedule" (schedule value)) ["daily 03:00" "weekly mon 02:30" "Weekly Monday 2:30" "0 4 1 * *" "*/30 2-4 * jan-mar mon-fri"]);
+      assert evaluates {
+        enable = true;
+        keep = 10000;
+        keepDays = 36500;
+      };
+      assert !(evaluates {
+        enable = true;
+        keep = 10001;
+      });
+      assert !(evaluates {
+        enable = true;
+        keepDays = 36501;
+      });
+      assert !(evaluates {
+        enable = true;
+        keep = 0;
+      }); true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
     appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
@@ -172,7 +207,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && connectionRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && connectionRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

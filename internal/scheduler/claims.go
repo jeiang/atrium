@@ -290,7 +290,7 @@ func (s *Scheduler) Finish(ctx context.Context, c Claim, o Result) error {
 		if err := clearClaim(ctx, tx, c, "lease_owner = NULL, lease_until = NULL"); err != nil {
 			return err
 		}
-		if o.Status == StatusSkippedUnconfigured && o.ThreadID == nil {
+		if o.Status == StatusSkippedUnconfigured && o.ThreadID == nil && !c.manual {
 			if err := mergeUnconfigured(ctx, tx, c, o.Error, now); err != nil {
 				return err
 			}
@@ -306,7 +306,7 @@ func (s *Scheduler) Finish(ctx context.Context, c Claim, o Result) error {
 func mergeUnconfigured(ctx context.Context, tx *sql.Tx, c Claim, text *string, now float64) error {
 	var prev int64
 	err := tx.QueryRowContext(ctx, "SELECT p.id FROM job_runs p WHERE p.job_id = ? AND p.id = (SELECT MAX(id) FROM job_runs WHERE job_id = ? AND id < ?) "+
-		"AND p.status = ? AND p.ended_at IS NOT NULL AND p.error IS ? "+
+		"AND p.status = ? AND p.ended_at IS NOT NULL AND p.error IS ? AND COALESCE(p.owner, '') NOT LIKE 'manual/%' "+
 		"AND NOT EXISTS (SELECT 1 FROM job_run_threads WHERE job_run_id IN (p.id, ?))",
 		c.Job.ID, c.Job.ID, c.JobRunID, StatusSkippedUnconfigured, text, c.JobRunID).Scan(&prev)
 	if errors.Is(err, sql.ErrNoRows) {

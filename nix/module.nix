@@ -11,6 +11,20 @@
   schema = lib.importJSON ../docs/config/atrium.schema.json;
   reference = "docs/config/reference.md";
 
+  backupScheduleValid = let
+    clock = "([01]?[0-9]|2[0-3]):[0-5][0-9]";
+    num = "[0-9*/,-]+";
+    named = "[0-9a-z*/,-]+";
+    s = "[[:space:]]+";
+    forms = [
+      "daily${s}${clock}"
+      "weekly${s}(mon|tue|wed|thu|fri|sat|sun)[^[:space:]]*${s}${clock}"
+      "${num}${s}${num}${s}${num}${s}${named}${s}${named}"
+    ];
+    value = lib.toLower cfg.backup.schedule;
+  in
+    builtins.any (form: builtins.match "[[:space:]]*${form}[[:space:]]*" value != null) forms;
+
   stateDirName = lib.removePrefix "/var/lib/" cfg.stateDir;
   cacheDir = "${cfg.stateDir}/cache";
   mirrorDir = "${cfg.stateDir}/mirrors";
@@ -354,6 +368,10 @@
       ++ map (name: "${name}.timer") (builtins.attrNames timers)
     );
 in {
+  imports = [
+    (lib.mkRemovedOptionModule ["services" "atrium" "backup" "onCalendar"] "Use services.atrium.backup.schedule in the atrium schedule grammar (for example \"daily 03:00\"); translate a nondefault OnCalendar expression by hand.")
+  ];
+
   options.services.atrium = {
     enable = mkEnableOption "atrium";
 
@@ -586,19 +604,19 @@ in {
       schedule = mkOption {
         type = types.str;
         default = "daily 03:00";
-        description = "When the backup job runs, in the atrium schedule grammar (for example `daily 03:00`, `weekly mon 02:30`, `monthly 1 04:00`), in the operator time zone. A missed run while atrium was down runs once at start. An invalid value logs a warning and the job keeps `daily 03:00`. Rendered as host key core.backup_schedule.";
+        description = "When the backup job runs, in the atrium schedule grammar (`daily HH:MM`, `weekly DOW HH:MM` or a 5-field cron expression, for example `daily 03:00`, `weekly mon 02:30`, `0 4 1 * *`), in the operator time zone. A missed run while atrium was down runs once at start. Evaluation refuses a value outside that grammar. Rendered as host key core.backup_schedule.";
       };
 
       keep = mkOption {
-        type = types.ints.positive;
+        type = types.ints.between 1 10000;
         default = 5;
-        description = "Number of newest `*.backup` archives in backup.directory that pruning always keeps, whatever their age.";
+        description = "Number of newest `atrium-*.backup` archives in backup.directory that pruning always keeps, whatever their age.";
       };
 
       keepDays = mkOption {
-        type = types.ints.unsigned;
+        type = types.ints.between 0 36500;
         default = 14;
-        description = "Archives modified within this many days are kept even beyond backup.keep; older ones are deleted after each successful run.";
+        description = "`atrium-*.backup` archives modified within this many days are kept even beyond backup.keep; older ones are deleted after each successful run.";
       };
     };
 
@@ -700,6 +718,10 @@ in {
         in
           builtins.elem listen ["" "off"] || (port != toString cfg.port && (!cfg.web.local.enable || port != toString cfg.web.local.port));
         message = "services.atrium.host.core.ops_listen must use a port other than services.atrium.port and services.atrium.web.local.port; all three listeners run in atrium-web";
+      }
+      {
+        assertion = !cfg.backup.enable || backupScheduleValid;
+        message = "services.atrium.backup.schedule \"${cfg.backup.schedule}\" is not in the atrium schedule grammar; use `daily HH:MM`, `weekly DOW HH:MM` or a 5-field cron expression";
       }
     ];
 
