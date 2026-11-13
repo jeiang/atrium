@@ -232,7 +232,7 @@ func LastEffectID(ctx context.Context, q db.Querier) (int64, error) {
 }
 
 func AutoEffectsSince(ctx context.Context, q db.Querier, messageID, after int64) (ids []int64, unknown bool, err error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, state FROM effects WHERE id > ? AND message_id = ? AND origin = ? ORDER BY id", after, messageID, AutoOrigin)
+	rows, err := q.QueryContext(ctx, "SELECT id, state FROM effects WHERE id > ? AND message_id = ? AND origin = ? AND direction = 'forward' ORDER BY id", after, messageID, AutoOrigin)
 	if err != nil {
 		return nil, false, err
 	}
@@ -255,7 +255,7 @@ type AutoEffectOutcome struct {
 }
 
 func AutoPassEffectsSince(ctx context.Context, q db.Querier, after int64) ([]AutoEffectOutcome, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, state FROM effects WHERE id > ? AND origin = ? ORDER BY id", after, AutoOrigin)
+	rows, err := q.QueryContext(ctx, "SELECT id, state FROM effects WHERE id > ? AND origin = ? AND direction = 'forward' ORDER BY id", after, AutoOrigin)
 	if err != nil {
 		return nil, err
 	}

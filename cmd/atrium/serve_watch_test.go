@@ -310,3 +310,29 @@ func TestServeWatchInShadowWritesNothing(t *testing.T) {
 		t.Fatalf("the watch pass decided %s %s %s, want the correction to Bills recorded", stage, action, dest)
 	}
 }
+
+func TestServeQuietWatchPassesLeaveNoOperationAudit(t *testing.T) {
+	m := mailSafetyFixture(t, "shadow")
+	d := mustConnect(t, m.path, keyFor(t))
+	declareJobsAndParkThem(t, d)
+	_, logs, _ := startServeWith(t, m.dir, true)
+	waitWatching(t, m.fake)
+	effects := m.count(t, "SELECT COUNT(*) FROM effects")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	for wake := 1; wake <= 3; wake++ {
+		passes := strings.Count(logs.String(), "icloud: 0 new, 0 gone")
+		if err := m.fake.Wake(ctx); err != nil {
+			t.Fatalf("wake %d of the IDLE: %v", wake, err)
+		}
+		waitUntil(t, 60*time.Second, "the IDLE change to run a watch pass", func() bool {
+			return strings.Count(logs.String(), "icloud: 0 new, 0 gone") > passes && m.fake.Idling() == 1
+		})
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects"); n != effects {
+		t.Fatalf("the quiet watch passes recorded %d effects, want %d", n, effects)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.sync'"); n != 0 {
+		t.Fatalf("quiet watch passes wrote %d mail.sync audit rows, want none", n)
+	}
+}

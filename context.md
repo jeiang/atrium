@@ -537,10 +537,14 @@ behavior-parity target.
   move, folder-create, draft-send and draft-resolve audits link their ledger
   effects and retain unknown, partial and stale-revision conflict outcomes.
   Phone approvals re-check the redeemed link inside the proposal claim, so
-  revocation during a pass-lock wait refuses the waiting tap.
+  revocation during a pass-lock wait refuses the waiting tap; revoke re-stamps
+  every used link, including expired ones.
   Manual, scheduled and watch-admitted syncs share `mail.sync` and the
   `mail-pass` resource claim. Its result retains per-account sync statistics
-  and committed, failed, skipped, partial and unknown effect ids.
+  and committed, failed, skipped, partial and unknown forward effect ids.
+  A pass that never claimed `mail-pass` is audited `canceled` (context ended)
+  or `refused` (busy lock). A watch pass with no effects and no error writes
+  no audit row.
   Replay, shadow reports and reindexing have typed operations too. Replay
   never contacts a mail server; default replay makes no external calls,
   while `--model` keeps paid classification on a disposable database copy.

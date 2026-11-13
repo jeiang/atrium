@@ -90,7 +90,7 @@ func Rotate(ctx context.Context, q db.Querier) error {
 
 func revoke(ctx context.Context, q db.Querier) error {
 	now := float64(time.Now().UnixMicro()) / 1e6
-	if _, err := q.ExecContext(ctx, "UPDATE action_links SET used_ts = ? WHERE used_ts IS NOT NULL AND expires_ts > ?", now, now); err != nil {
+	if _, err := q.ExecContext(ctx, "UPDATE action_links SET used_ts = ? WHERE used_ts IS NOT NULL", now); err != nil {
 		return err
 	}
 	_, err := q.ExecContext(ctx, "DELETE FROM action_links WHERE used_ts IS NULL")

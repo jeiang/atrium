@@ -151,7 +151,7 @@ func (s *Service) Sync(ctx context.Context, in SyncInput) (application.Change[Pa
 func (s *Service) syncPass(ctx context.Context, p *run.Pass, accounts []string) (application.Change[PassResult], error) {
 	lock, err := db.ResourceLocks(ctx, s.cfg.DBPath, []string{mail.PassResource}, 0)
 	if err != nil {
-		return application.Change[PassResult]{AuditID: s.writeAudit(ctx, SyncName, "", auditOutcome(err), nil)}, err
+		return application.Change[PassResult]{AuditID: s.writeAudit(ctx, SyncName, "", lockOutcome(err), nil)}, err
 	}
 	defer func() { _ = lock.Close() }()
 	work := ctx
@@ -166,7 +166,8 @@ func (s *Service) syncPass(ctx context.Context, p *run.Pass, accounts []string) 
 	synced, err := p.Run(work, accounts)
 	out := application.Change[PassResult]{Data: PassResult{Synced: synced}}
 	if readErr == nil {
-		effects, readErr := ledger.AutoPassEffectsSince(context.WithoutCancel(work), s.db.Read, after)
+		var effects []ledger.AutoEffectOutcome
+		effects, readErr = ledger.AutoPassEffectsSince(context.WithoutCancel(work), s.db.Read, after)
 		if readErr != nil {
 			log.Error("reading mail pass effects failed", logx.Err, readErr.Error())
 		} else {
@@ -201,6 +202,22 @@ func (s *Service) syncPass(ctx context.Context, p *run.Pass, accounts []string) 
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		outcome = state.Canceled
 	}
+	// A watch admits a pass on every IDLE wake or poll interval; a quiet one leaves no audit row,
+	// since operation_audit is never pruned.
+	if s.pass != nil && err == nil && readErr == nil && len(out.EffectIDs) == 0 {
+		return out, nil
+	}
 	out.AuditID = s.writeAudit(ctx, SyncName, "", outcome, out.EffectIDs)
 	return out, err
+}
+
+// lockOutcome classifies a pass that never ran because mail-pass was not claimed.
+func lockOutcome(err error) state.Outcome {
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return state.Canceled
+	case errors.As(err, new(*db.LockBusy)):
+		return state.Refused
+	}
+	return auditOutcome(err)
 }
