@@ -11,7 +11,7 @@ func attentionToolService(tc *tool.Context) *attentionapp.Service {
 }
 
 func attentionOperations() ([]application.Definition, []application.Binding) {
-	return []application.Definition{attentionapp.DescribeRead()}, []application.Binding{
-		{Kind: application.Tool, Target: "attention", Uses: []application.Name{attentionapp.ReadName}},
-	}
+	return []application.Definition{attentionapp.DescribeRead()}, append(searchAPIBindings(nil),
+		application.Binding{Kind: application.Tool, Target: "attention", Uses: []application.Name{attentionapp.ReadName}},
+	)
 }

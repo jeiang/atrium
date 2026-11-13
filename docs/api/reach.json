@@ -130,10 +130,11 @@
     {
       "area": "review",
       "operations": [
+        "attention.read",
         "review.pending"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "schedules",
@@ -211,6 +212,6 @@
       "bound": 0
     }
   ],
-  "total_required": 167,
-  "total_bound": 64
+  "total_required": 168,
+  "total_bound": 65
 }

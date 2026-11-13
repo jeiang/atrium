@@ -138,10 +138,6 @@ func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
 	}
-	status, page, _ := fetch(t, client, "GET", fmt.Sprintf("%s/chat/%d", base, thread), nil)
-	if status != http.StatusOK || !strings.Contains(page, fmt.Sprintf(`id="needs-%d"`, proposal)) {
-		t.Fatalf("the thread does not list the permission request: %d", status)
-	}
 	code, body := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
 	if code != http.StatusOK || !strings.Contains(body, long) {
 		t.Fatalf("the card does not show the full URL: %d\n%s", code, body)

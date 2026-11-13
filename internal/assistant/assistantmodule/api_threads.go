@@ -41,6 +41,7 @@ func threadAPI(tools registry.Source) func(*web.Deps, func() *asstapp.Service) {
 		scheduleAPIBindings(p)
 		memoryAPIBindings(p)
 		subagentAPIBindings(p)
+		searchAPIBindings(p)
 	}
 }
 
@@ -562,10 +563,7 @@ func apiBindings(p *apiPages) []application.Binding {
 						out.NextCursor = in.Cursor.Next(*v.Next)
 					}
 					for _, t := range v.Items {
-						out.Items = append(out.Items, apiListedThread{
-							ID: t.ID, Title: t.Title, Pinned: bool(t.Pinned), Archived: bool(t.Archived), ProjectID: t.ProjectID,
-							ProjectName: t.ProjectName, RunState: t.RunState, CostUSD: t.Cost, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
-						})
+						out.Items = append(out.Items, listedOut(t))
 					}
 					return out
 				})
