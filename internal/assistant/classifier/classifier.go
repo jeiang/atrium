@@ -89,14 +89,18 @@ func (e *Unanswered) Unwrap() error { return e.Cause }
 func (c Caller) Source() string { return "classifier:" + string(c) }
 
 type Service struct {
-	db     *db.DB
-	ledger *inference.Service
-	client *anthropic.Client
-	now    func() float64
+	db          *db.DB
+	ledger      *inference.Service
+	client      *anthropic.Client
+	unavailable error
+	now         func() float64
 }
 
-func New(d *db.DB, ledger *inference.Service, client *anthropic.Client, now func() float64) *Service {
-	return &Service{db: d, ledger: ledger, client: client, now: now}
+func New(d *db.DB, ledger *inference.Service, client *anthropic.Client, unavailable error, now func() float64) *Service {
+	if client == nil && unavailable == nil {
+		unavailable = config.NotConfigured("the Anthropic connection is not configured")
+	}
+	return &Service{db: d, ledger: ledger, client: client, unavailable: unavailable, now: now}
 }
 
 func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, error) {
@@ -128,8 +132,7 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 		return nil, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonRetryLater}
 	}
 	if s.client == nil {
-		return nil, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonUnavailable,
-			Cause: config.NotConfigured("the Anthropic connection is not configured")}
+		return nil, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonUnavailable, Cause: s.unavailable}
 	}
 	limits, err := def.caps(ctx, s.db.Read)
 	if err != nil {

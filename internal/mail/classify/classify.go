@@ -77,7 +77,7 @@ func (d *Deferral) Note(err error) bool {
 	if d.first == nil {
 		d.first = deferred
 		log.Warn("paid classification deferred for the rest of this pass; free stages continue",
-			"caller", string(deferred.Caller), "item", deferred.ItemKey, "reason", deferred.Reason)
+			"caller", string(deferred.Caller), "item", deferred.ItemKey, "reason", deferred.Reason, logx.Err, deferred.Error())
 	}
 	return true
 }

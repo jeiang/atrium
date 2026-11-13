@@ -744,6 +744,15 @@ func TestMailPassWithAnUnbuildableAnthropicTransportRunsFreeStages(t *testing.T)
 	if n := strings.Count(stderr, "paid classification waits: the Anthropic connection transport cannot be built"); n != 1 {
 		t.Errorf("%d transport warnings, want 1: %q", n, stderr)
 	}
+	deferral := ""
+	for line := range strings.SplitSeq(stderr, "\n") {
+		if strings.Contains(line, "paid classification deferred for the rest of this pass") {
+			deferral = line
+		}
+	}
+	if !strings.Contains(deferral, "CA bundle") || strings.Contains(deferral, "is not configured") {
+		t.Errorf("the pass deferral log does not name the transport cause: %q", deferral)
+	}
 	if n := r.count(t, "SELECT COUNT(*) FROM messages WHERE account = 'icloud' AND subject = ?", fresh); n != 1 {
 		t.Errorf("sync fetched %d copies of the new mail, want 1", n)
 	}

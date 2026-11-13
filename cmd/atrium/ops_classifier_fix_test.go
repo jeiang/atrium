@@ -270,3 +270,41 @@ func TestWorkerFindingRefusesAnUnchangedFact(t *testing.T) {
 		t.Errorf("ops_finding wrote a finding for an unchanged fact")
 	}
 }
+
+func TestOpsSamplerNamesWhyTheAnthropicTransportCannotBeBuilt(t *testing.T) {
+	dir, fake, api, f, d := opsClassifierFixture(t, nil)
+	hostPath, _ := f.lookup("ATRIUM_HOST_CONFIG")
+	raw, err := os.ReadFile(hostPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := os.ReadFile(filepath.Join(testRoot, "host", "anthropic.key"))
+	if err != nil || strings.TrimSpace(string(key)) == "" || !strings.Contains(string(raw), "anthropic.key") {
+		t.Fatalf("the host config does not name a readable shared Anthropic key: %v", err)
+	}
+	ca := filepath.Join(dir, "missing-ca.pem")
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, hostPath, dir, "host-broken-ca.toml", map[string]string{
+		`kind = "service/anthropic"`: `kind = "service/anthropic"` + "\ntransport = { ca_file = " + strconv.Quote(ca) + " }",
+	}))
+	before := len(classificationRequests(t, api))
+	fake.setUp(0)
+	tickOpsSampler(t, f, d)
+	if sent := classificationRequests(t, api); len(sent) != before {
+		t.Fatalf("an unbuildable transport sent %d paid classification requests", len(sent)-before)
+	}
+	var status, text string
+	if err := d.Read.QueryRow("SELECT status, COALESCE(error, '') FROM job_runs WHERE job_id = (SELECT id FROM jobs WHERE name = ?) ORDER BY id DESC LIMIT 1",
+		serveropsJobName).Scan(&status, &text); err != nil {
+		t.Fatal(err)
+	}
+	if status != "skipped_unconfigured" {
+		t.Errorf("sampler status with an unbuildable transport = %q, want skipped_unconfigured", status)
+	}
+	want := "the Anthropic connection transport cannot be built: CA bundle " + ca + " cannot be read"
+	if !strings.Contains(text, want) || strings.Contains(text, "is not configured") {
+		t.Errorf("sampler result text = %q, want the transport cause %q", text, want)
+	}
+	if strings.Contains(text, strings.TrimSpace(string(key))) {
+		t.Errorf("sampler result text carries the API key")
+	}
+}
