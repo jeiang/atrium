@@ -323,6 +323,13 @@
     "media": {
       "additionalProperties": false,
       "properties": {
+        "media_download_path_prefix": {
+          "type": "string"
+        },
+        "media_download_path_prefix_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_movies_url": {
           "type": "string"
         },
@@ -645,6 +652,7 @@
     "media.media_channel_pattern_chars": "tuning",
     "media.media_channel_seen_ttl_seconds": "tuning",
     "media.media_child_limit": "tuning",
+    "media.media_download_path_prefix": "host",
     "media.media_eztv_limit": "tuning",
     "media.media_eztv_timeout_seconds": "tuning",
     "media.media_eztv_url": "host",

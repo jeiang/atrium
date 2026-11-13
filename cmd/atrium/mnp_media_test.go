@@ -353,9 +353,8 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 		name  = "Lanterns.S01E08.1080p.WEB.h264-ETHEL"
 	)
 	dir := t.TempDir()
-	root := mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
+	_, root := agentLibrary(t, dir, qbURL)
 
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, name+".mkv"), make([]byte, 100))

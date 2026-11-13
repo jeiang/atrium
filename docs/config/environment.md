@@ -34,6 +34,7 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_GRAFANA_OPS_QUERY_FAILED_UNITS` | `grafana.ops_query_failed_units` |
 | `ATRIUM_GRAFANA_OPS_QUERY_MEM` | `grafana.ops_query_mem` |
 | `ATRIUM_GRAFANA_OPS_QUERY_UP` | `grafana.ops_query_up` |
+| `ATRIUM_MEDIA_MEDIA_DOWNLOAD_PATH_PREFIX` | `media.media_download_path_prefix` |
 | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` | `media.media_movies_url` |
 | `ATRIUM_MEDIA_MEDIA_ROOT` | `media.media_root` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |

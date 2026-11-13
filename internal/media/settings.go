@@ -17,15 +17,16 @@ import (
 const module = "media"
 
 const (
-	KeyRoot          = "media_root"
-	KeyQbitURL       = "media_qbittorrent_url"
-	KeyMoviesURL     = "media_movies_url"
-	KeyTVURL         = "media_tv_url"
-	KeyLinkTTL       = "media_link_ttl_seconds"
-	KeyEZTVURL       = "media_eztv_url"
-	KeyLinkKey       = "link_key"
-	KeyTMDBURL       = "media_tmdb_url"
-	KeyTMDBImagesURL = "media_tmdb_images_url"
+	KeyRoot           = "media_root"
+	KeyDownloadPrefix = "media_download_path_prefix"
+	KeyQbitURL        = "media_qbittorrent_url"
+	KeyMoviesURL      = "media_movies_url"
+	KeyTVURL          = "media_tv_url"
+	KeyLinkTTL        = "media_link_ttl_seconds"
+	KeyEZTVURL        = "media_eztv_url"
+	KeyLinkKey        = "link_key"
+	KeyTMDBURL        = "media_tmdb_url"
+	KeyTMDBImagesURL  = "media_tmdb_images_url"
 )
 
 const (
@@ -44,6 +45,7 @@ func SettingsDefs() []settings.Def {
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
 		{Key: KeyRoot, Module: module, Type: settings.String},
+		{Key: KeyDownloadPrefix, Module: module, Type: settings.String},
 		{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
 		{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
 	}
@@ -106,16 +108,17 @@ type Tuning struct {
 
 type Settings struct {
 	Tuning
-	Root       string
-	QbitLease  *connections.Lease
-	QbitStore  *connections.Store
-	TMDBLease  *connections.Lease
-	TMDBStore  *connections.Store
-	EZTVLease  *connections.Lease
-	AgentLease *connections.Lease
-	MoviesURL  string
-	TVURL      string
-	PublicURL  string
+	Root           string
+	DownloadPrefix string
+	QbitLease      *connections.Lease
+	QbitStore      *connections.Store
+	TMDBLease      *connections.Lease
+	TMDBStore      *connections.Store
+	EZTVLease      *connections.Lease
+	AgentLease     *connections.Lease
+	MoviesURL      string
+	TVURL          string
+	PublicURL      string
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
@@ -139,6 +142,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return n
 	}
 	out.Root = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyRoot)), "/")
+	out.DownloadPrefix = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyDownloadPrefix)), "/")
 	out.MoviesURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyMoviesURL)), "/")
 	out.TVURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyTVURL)), "/")
 	out.LinkTTL = whole(KeyLinkTTL)

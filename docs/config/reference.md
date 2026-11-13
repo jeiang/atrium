@@ -69,6 +69,7 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
+| `media_download_path_prefix` | string | none | `ATRIUM_MEDIA_MEDIA_DOWNLOAD_PATH_PREFIX` |
 | `media_movies_url` | string | none | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` |
 | `media_root` | string | none | `ATRIUM_MEDIA_MEDIA_ROOT` |
 | `media_tv_url` | string | none | `ATRIUM_MEDIA_MEDIA_TV_URL` |

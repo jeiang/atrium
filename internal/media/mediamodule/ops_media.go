@@ -71,10 +71,12 @@ func filingOperations() ([]application.Definition, []application.Binding) {
 			mediaapp.DescribeIgnore(),
 			mediaapp.DescribeSweep(),
 			mediaapp.DescribeThumbnails(),
+			mediaapp.DescribeFilingInspect(),
 		}, []application.Binding{
 			{Kind: application.HTML, Target: "POST /apps/media/file", Uses: []application.Name{mediaapp.FilingPreviewName, mediaapp.FileItemName, mediaapp.DownloadsName}},
 			{Kind: application.HTML, Target: "POST /apps/media/ignore", Uses: []application.Name{mediaapp.IgnoreName, mediaapp.DownloadsName}},
 			{Kind: application.CLI, Target: "media sweep", Uses: []application.Name{mediaapp.SweepName}},
+			{Kind: application.CLI, Target: "media inspect-filing", Uses: []application.Name{mediaapp.FilingInspectName}},
 			{Kind: application.Job, Target: "media/media-sweep", Uses: []application.Name{mediaapp.SweepName}},
 			{Kind: application.Job, Target: "media/media-thumbnails", Uses: []application.Name{mediaapp.ThumbnailsName}},
 		}

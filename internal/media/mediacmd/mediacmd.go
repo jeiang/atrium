@@ -107,6 +107,7 @@ func Command(cfgEnv config.Env, clock func() float64, open Open) *cli.Command {
 		Commands: []*cli.Command{
 			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(cfgEnv, media.JobChannels, channels, clock, open)},
 			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(cfgEnv, media.JobSweep, sweep, clock, open)},
+			{Name: "inspect-filing", Help: "show the media agent receipt and current file evidence for a filing effect", Setup: inspectFiling(cfgEnv, clock, open)},
 		},
 	}
 }
@@ -146,6 +147,37 @@ func handler(cfgEnv config.Env, name string, run job, clock func() float64, open
 				return cli.Fail(env, err)
 			}
 			body, _ := json.MarshalIndent(out, "", "  ")
+			_, _ = fmt.Fprintln(env.Stdout, string(body))
+			return cli.ExitOK
+		}
+	}
+}
+
+func inspectFiling(cfgEnv config.Env, clock func() float64, open Open) func(*cli.Args) cli.Handler {
+	return func(a *cli.Args) cli.Handler {
+		id := a.IntArg("effect-id", cli.Opt{Help: "the filing effect to inspect"})
+		return func(env *cli.Env) int {
+			cfg, err := config.Load(cfgEnv)
+			if err != nil {
+				return cli.Fail(env, err)
+			}
+			d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(env.Ctx).DBKey()))
+			if err != nil {
+				return cli.Fail(env, err)
+			}
+			defer func() { _ = d.Close() }()
+			if err := config.Boot(env.Ctx, cfgEnv, d, cfg); err != nil {
+				return cli.Fail(env, err)
+			}
+			svc, err := open(env.Ctx, d, cfgEnv, cfg, clock)
+			if err != nil {
+				return cli.Fail(env, err)
+			}
+			out, err := svc.InspectFiling(env.Ctx, mediaapp.InspectFilingInput{EffectID: int64(*id)})
+			if err != nil {
+				return cli.Fail(env, err)
+			}
+			body, _ := json.MarshalIndent(out.Data, "", "  ")
 			_, _ = fmt.Fprintln(env.Stdout, string(body))
 			return cli.ExitOK
 		}

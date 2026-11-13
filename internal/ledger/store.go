@@ -560,6 +560,21 @@ func (s *Store) renewLive(stop chan struct{}) {
 	}
 }
 
+func (s *Store) Progress(ctx context.Context, t Ticket, after json.RawMessage) error {
+	res, err := s.DB.Write.ExecContext(ctx, "UPDATE effects SET after_json = ? WHERE id = ? AND token = ? AND state = 'intent'", scrubText(after), t.ID, t.Token)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		if err != nil {
+			return err
+		}
+		return &SettledMeanwhile{ID: t.ID}
+	}
+	s.notifyChange()
+	return nil
+}
+
 func (s *Store) Settle(ctx context.Context, t Ticket, r Result, local Mutation) error {
 	defer s.untrack(t.ID)
 	ctx = context.WithoutCancel(ctx)
