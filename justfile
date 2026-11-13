@@ -19,7 +19,7 @@ e2e pattern pkg="./cmd/atrium":
   trap 'rm -rf "$bin"' EXIT
   go build -o "$bin/atrium" ./cmd/atrium
   go test -count=1 -exec true {{pkg}} >/dev/null
-  ATRIUM_E2E_BINARY="$bin/atrium" bash tools/e2e-loopback go test -count=1 -run "{{pattern}}" {{pkg}}
+  ATRIUM_E2E_BINARY="$bin/atrium" bash tools/e2e-loopback go test -count=1 -timeout 30m -run "{{pattern}}" {{pkg}}
 
 test-pkg pkg run=".":
   {{dev}} go test -count=1 -run "{{run}}" {{pkg}}
