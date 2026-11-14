@@ -21,7 +21,7 @@ const (
 )
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: KindICloud, Validate: validateICloud, Test: testICloud}}
+	return []connections.Definition{{Kind: KindICloud, CredentialSlots: []string{"mail/*/password"}, Validate: validateICloud, Test: testICloud}}
 }
 
 func validateICloud(c connections.Candidate) error {

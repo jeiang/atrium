@@ -175,3 +175,24 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 		t.Fatalf("agent down: %+v", down)
 	}
 }
+
+func TestMediaRelayRefusesWhenMediaIsOffAtBoot(t *testing.T) {
+	const rel = "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
+	_, _, f := moduleFixture(t, flagsExcept("media", "false"))
+	token := localAPIToken(t, "media-off")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stop() })
+	s := &apiSite{t: t, base: base}
+	id := mediaAPIID(rel)
+	for _, path := range []string{"/api/v1/media/files/" + id + "/content", "/api/v1/media/files/" + id + "/thumbnail", "/api/v1/media/art/movie/" + id} {
+		expectAPI(t, s.do(http.MethodGet, path, token, nil), http.StatusConflict, "module_disabled")
+	}
+	if got := s.do(http.MethodHead, "/api/v1/media/files/"+id+"/content", token, nil); got.status != http.StatusConflict {
+		t.Fatalf("HEAD content with media off: %d", got.status)
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/media/torrents", token, map[string]any{"magnet": "magnet:?xt=urn:btih:" + strings.Repeat("a", 40)}, "Idempotency-Key", "add-1"), http.StatusConflict, "module_disabled")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/media/filings/"+strings.Repeat("a", 40), token, map[string]any{"action": "file"}, "Idempotency-Key", "file-1"), http.StatusConflict, "module_disabled")
+}

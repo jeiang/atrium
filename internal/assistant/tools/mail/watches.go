@@ -7,14 +7,13 @@ import (
 	"strconv"
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 var packagesSchema = json.RawMessage(`{"type":"object","properties":{"active_only":{"type":"boolean"}},"additionalProperties":false}`)
 
 var birthdaysSchema = json.RawMessage(`{"type":"object","properties":{"days":{"type":"integer","minimum":0,"maximum":` +
-	strconv.Itoa(birthdays.MaxDays) + `}},"additionalProperties":false}`)
+	strconv.Itoa(mailapp.BirthdaysMaxDays) + `}},"additionalProperties":false}`)
 
 func watchTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	return []tool.Tool{
@@ -92,12 +91,12 @@ func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args, sv
 		}
 		days = &n
 	}
-	loc, err := zone(ctx, tc.Env)
+	loc, err := zone(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
 	now := localTime(tc.Now(), loc)
-	read, err := svc(tc).UpcomingBirthdays(ctx, mailapp.UpcomingBirthdaysInput{Today: birthdays.Date(now.Year(), now.Month(), now.Day()), Days: days})
+	read, err := svc(tc).UpcomingBirthdays(ctx, mailapp.UpcomingBirthdaysInput{Today: mailapp.BirthdayDate(now.Year(), now.Month(), now.Day()), Days: days})
 	if err != nil {
 		return nil, mailboxFail(err)
 	}

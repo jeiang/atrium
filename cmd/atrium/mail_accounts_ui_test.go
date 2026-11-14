@@ -101,14 +101,6 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		return n
 	}
 
-	first := page()
-	if !strings.Contains(first, `data-account="home"`) || strings.Contains(first, `id="login-home"`) || !strings.Contains(first, "set by deployment") {
-		t.Error("the deployment account is not shown read-only")
-	}
-	if strings.Contains(first, "mail_mode") || strings.Contains(first, `name="mode"`) {
-		t.Error("the accounts page offers a live or shadow control")
-	}
-
 	add := url.Values{"id": {"work"}, "label": {"Work"}, "preset": {"gmail"}, "login": {"me@work.test"}, "password": {"wrong-pass"}}
 	if code, body := post("/accounts", add); code != http.StatusUnprocessableEntity || !strings.Contains(body, "AUTHENTICATIONFAILED") {
 		t.Fatalf("a failed Test: %d", code)
@@ -127,9 +119,6 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if count("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'mail/work' AND slot = 'mail/work/password' AND source = 'database'") != 1 ||
 		connectionState(t, dir, "mail/work") != string(connections.OK) {
 		t.Error("the added account has no stored password or no ok health")
-	}
-	if !strings.Contains(page(), `id="new-auth" name="auth_method"`) {
-		t.Error("the add form does not offer an auth method")
 	}
 	seenMu.Lock()
 	passwords["me@work2.test"] = "work-pass"

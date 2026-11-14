@@ -20,9 +20,10 @@ const (
 
 func Connections() []connections.Definition {
 	return []connections.Definition{{
-		Kind:     KindShip24,
-		Validate: validateConnection,
-		Test:     testConnection,
+		Kind:            KindShip24,
+		CredentialSlots: []string{"api_key"},
+		Validate:        validateConnection,
+		Test:            testConnection,
 	}}
 }
 

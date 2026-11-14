@@ -6,10 +6,8 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/assistant/approval"
-	"github.com/jeiang/atrium/internal/config"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -17,12 +15,12 @@ import (
 var trackPackageSchema = json.RawMessage(`{"type":"object","properties":{"package_id":{"type":"integer"},"tracking_number":{"type":"string"},"carrier":{"type":"string"},"destination_country":{"type":"string"},"destination_postcode":{"type":"string"}},"additionalProperties":false}`)
 
 func trackingTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
-	return []tool.Tool{approval.Gate(tool.Tool{
+	return []tool.Tool{asstapp.ApprovalGate(tool.Tool{
 		Name: "track_package",
 		Description: "Ask the operator to approve registering a package's tracking number with Ship24 (a paid lookup); nothing is sent until they approve the card. " +
 			"Use the id from the packages tool, or give a tracking_number. Undoable.",
 		InputSchema: trackPackageSchema,
-		Effect:      tool.Propose, Undo: tracking.UndoUntrack,
+		Effect:      tool.Propose, Undo: mailapp.UndoUntrack,
 		Annotated: true,
 		Channel:   tool.ChannelOwn,
 		Contexts:  tool.Kinds{tool.Chat},
@@ -70,12 +68,12 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args, svc fun
 }
 
 func trackingFailed(err error) error {
-	var quota tracking.QuotaError
-	var failure tracking.Error
-	var missing config.NotConfigured
-	var status *tracking.StatusError
-	var limited *tracking.RateLimitError
-	var transport *tracking.TransportError
+	var quota mailapp.TrackingQuotaError
+	var failure mailapp.TrackingError
+	var missing mailapp.NotConfigured
+	var status *mailapp.TrackingStatusError
+	var limited *mailapp.TrackingRateLimitError
+	var transport *mailapp.TrackingTransportError
 	switch {
 	case errors.As(err, &quota):
 		return tool.Error(quota.Error())

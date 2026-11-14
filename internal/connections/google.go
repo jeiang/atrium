@@ -99,7 +99,7 @@ func (s *Store) ConsumeOAuthState(ctx context.Context, state string) (OAuthState
 }
 
 func Connections() []Definition {
-	return []Definition{{Kind: KindGoogle, Validate: validateGoogle, Test: testGoogle}}
+	return []Definition{{Kind: KindGoogle, CredentialSlots: []string{"oauth/client_secret", "oauth/calendar/refresh", "oauth/gmail/refresh"}, Validate: validateGoogle, Test: testGoogle}}
 }
 
 func validateGoogle(c Candidate) error {

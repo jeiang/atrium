@@ -4,18 +4,16 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func Proposals(svc func(*tool.Context) *mailapp.Service) []proposals.Definition {
-	return []proposals.Definition{{
-		Kind: proposals.Kind{Name: executors.MailTriage, Module: module.Mail, Locks: []string{mail.PassResource}},
-		Build: &proposals.Builder{
+func Proposals(svc func(*tool.Context) *mailapp.Service) []proposalsapp.Definition {
+	return []proposalsapp.Definition{{
+		Kind: proposalsapp.Kind{Name: mailapp.MailTriage, Module: module.Mail, Locks: []string{mailapp.PassResource}},
+		Build: &proposalsapp.Builder{
 			Description: "{items: [{id, action, label?, due?}]}: propose archive, label or snooze for a batch of messages; one proposal per run",
 			Build: func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error) {
 				return proposeTriage(ctx, tc, payload, svc)
@@ -55,7 +53,7 @@ func triageRequests(payload map[string]any) ([]triageRequest, error) {
 			return nil, tool.Error("each item needs an action")
 		}
 		switch action {
-		case executors.TriageArchive, executors.TriageLabel, executors.TriageSnooze:
+		case mailapp.TriageArchive, mailapp.TriageLabel, mailapp.TriageSnooze:
 		default:
 			return nil, tool.Error("action must be archive, label or snooze")
 		}
@@ -63,13 +61,13 @@ func triageRequests(payload map[string]any) ([]triageRequest, error) {
 		if label, ok := item["label"].(string); ok {
 			req.Label = strings.TrimSpace(label)
 		}
-		if req.Action == executors.TriageLabel && req.Label == "" {
+		if req.Action == mailapp.TriageLabel && req.Label == "" {
 			return nil, tool.Error("a label action needs a label")
 		}
 		if due, ok := item["due"].(string); ok {
 			req.Due = strings.TrimSpace(due)
 		}
-		if req.Action == executors.TriageSnooze && req.Due == "" {
+		if req.Action == mailapp.TriageSnooze && req.Due == "" {
 			return nil, tool.Error("a snooze action needs a due time")
 		}
 		out = append(out, req)

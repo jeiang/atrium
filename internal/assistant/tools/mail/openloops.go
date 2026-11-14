@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -21,14 +19,14 @@ func enum(values ...string) string {
 	return string(b)
 }
 
-var loopsLimitBound = tool.NewCeiling(assistant.TuningAgentMailMaxLoopsLimit, 1, assistant.TuningAgentMailMaxLoopsLimit)
+var loopsLimitBound = tool.NewCeiling(mailapp.AgentMailMaxLoopsLimit, 1, mailapp.AgentMailMaxLoopsLimit)
 
 var openLoopsSchema = json.RawMessage(`{"type":"object","properties":{"state":{"type":"string","enum":` +
-	enum(openloops.States[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
+	enum(mailapp.LoopStates[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
 	`"additionalProperties":false}`)
 
 var commitmentsSchema = json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","enum":` +
-	enum(openloops.CommitmentStatuses[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
+	enum(mailapp.CommitmentStatuses[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
 	`"additionalProperties":false}`)
 
 func openLoopTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
@@ -79,7 +77,7 @@ func oneOf(args tool.Args, name string, allowed []string) (string, error) {
 }
 
 func openLoops(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
-	state, err := oneOf(args, "state", openloops.States[:])
+	state, err := oneOf(args, "state", mailapp.LoopStates[:])
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +85,7 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*
 	if err != nil {
 		return nil, err
 	}
-	loc, err := zone(ctx, tc.Env)
+	loc, err := zone(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +109,7 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*
 }
 
 func commitments(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
-	status, err := oneOf(args, "status", openloops.CommitmentStatuses[:])
+	status, err := oneOf(args, "status", mailapp.CommitmentStatuses[:])
 	if err != nil {
 		return nil, err
 	}

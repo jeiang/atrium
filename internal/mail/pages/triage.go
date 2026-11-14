@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -28,7 +27,7 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	text := strings.TrimSpace(web.QueryValue(q, "q"))
 	ctx := r.Context()
 	read, err := s.reads.Triage(ctx, mailapp.TriageInput{Account: account, Stage: stage, Agreement: agreement, Q: text, Offset: offset, Full: !web.IsPartial(r)})
-	var unknown triage.FilterError
+	var unknown mailapp.TriageFilterError
 	if errors.As(err, &unknown) {
 		s.fail(w, r, http.StatusUnprocessableEntity, unknown.Error())
 		return

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -120,6 +121,24 @@ func TestWikiAPI(t *testing.T) {
 		t.Fatalf("detail: %v", page)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/wiki/66666666-6666-6666-6666-666666666666", token, nil), http.StatusNotFound, "not_found")
+	listTitles := func(path string) ([]string, int) {
+		pages, _ := apiData(t, s.do(http.MethodGet, path, token, nil), http.StatusOK)["pages"].([]any)
+		titles, private := []string{}, 0
+		for _, p := range pages {
+			p := p.(map[string]any)
+			titles = append(titles, p["title"].(string))
+			if p["private"] == true {
+				private++
+			}
+		}
+		return titles, private
+	}
+	if titles, private := listTitles("/api/v1/wiki/pages"); len(titles) != 2 || private != 1 || !slices.Contains(titles, "Garden plan") {
+		t.Fatalf("wiki list: %v (%d private)", titles, private)
+	}
+	if titles, _ := listTitles("/api/v1/wiki/pages?q=nothingmatcheshere"); len(titles) != 0 {
+		t.Fatalf("wiki list with no match: %v", titles)
+	}
 	expectField(t, s.do(http.MethodGet, search+"&limit=0", token, nil), "limit")
 
 	fake.mu.Lock()

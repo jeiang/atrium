@@ -13,34 +13,23 @@ import (
 	"syscall"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	runpkg "github.com/jeiang/atrium/internal/mail/run"
 )
 
 type Options struct {
-	Env         config.Env
-	Clients     func(config.Config) mail.OpenFunc
+	Load        func() (mailapp.Config, error)
+	Clients     func(mailapp.Config) mailapp.OpenFunc
 	Now         func() float64
-	Classifiers runpkg.Classifier
-	Application func(*runpkg.Pass) *mailapp.Service
-}
-
-func (o Options) env() config.Env {
-	if o.Env != nil {
-		return o.Env
-	}
-	return config.OS
+	Open        func(context.Context) (*mailapp.Pass, func(), error)
+	Standalone  func(mailapp.Config, func() float64) *mailapp.Service
+	Application func(*mailapp.Pass) *mailapp.Service
 }
 
 func (o Options) now() float64 {
 	if o.Now != nil {
 		return o.Now()
 	}
-	return mail.WallClock()
+	return mailapp.WallClock()
 }
 
 type exitError struct {
@@ -53,7 +42,7 @@ func (e *exitError) Error() string { return e.text }
 func failure(code int, err error) error { return &exitError{code: code, text: err.Error()} }
 
 type exec struct {
-	*runpkg.Pass
+	*mailapp.Pass
 	Ctx    context.Context
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -76,7 +65,7 @@ func (x *exec) JSON(value any) {
 }
 
 func (x *exec) Exclusive(fn func() error) error {
-	lock, err := db.Exclusive(x.Ctx, x.Cfg.DBPath, db.ShortLockWait)
+	lock, err := mailapp.Exclusive(x.Ctx, x.Cfg.DBPath)
 	if err != nil {
 		return err
 	}
@@ -85,13 +74,13 @@ func (x *exec) Exclusive(fn func() error) error {
 }
 
 func (x *exec) PassLocked(fn func() error) error {
-	locks, err := db.ResourceLocks(x.Ctx, x.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
+	held, locks, err := mailapp.PassLocks(x.Ctx, x.Cfg.DBPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = locks.Close() }()
 	outer := x.Ctx
-	x.Ctx = db.WithHeld(outer, locks)
+	x.Ctx = held
 	defer func() { x.Ctx = outer }()
 	return fn()
 }
@@ -126,15 +115,7 @@ func (o Options) execute(env *cli.Env, run body) int {
 }
 
 func (o Options) run(env *cli.Env, run body) error {
-	cfg, err := config.Load(o.env())
-	if err != nil {
-		return err
-	}
-	clients := o.Clients
-	if clients == nil {
-		clients = imapclient.Opener
-	}
-	pass, release, err := runpkg.Open(env.Ctx, o.env(), cfg, clients(cfg), o.Now, o.Classifiers)
+	pass, release, err := o.Open(env.Ctx)
 	if err != nil {
 		return err
 	}
@@ -158,9 +139,9 @@ func (o Options) SyncCommand() *cli.Command {
 	return &cli.Command{Name: "sync", Setup: func(a *cli.Args) cli.Handler {
 		account := a.String("account", "", cli.Opt{})
 		return func(env *cli.Env) int {
-			cfg, err := config.Load(o.env())
+			cfg, err := o.Load()
 			if err == nil {
-				_, err = mailapp.New(nil, cfg, o.env(), o.now).WithOpen(o.Clients(cfg)).WithClassifiers(o.Classifiers).Sync(env.Ctx, mailapp.SyncInput{Account: *account})
+				_, err = o.Standalone(cfg, o.now).WithOpen(o.Clients(cfg)).Sync(env.Ctx, mailapp.SyncInput{Account: *account})
 			}
 			if code, ok := unknownAccount(env, *account, err); ok {
 				return code
@@ -174,13 +155,13 @@ func (o Options) SyncCommand() *cli.Command {
 }
 
 func unknownAccount(env *cli.Env, requested string, err error) (int, bool) {
-	var unknown runpkg.UnknownAccount
+	var unknown mailapp.UnknownAccount
 	if !errors.As(err, &unknown) {
 		return 0, false
 	}
 	var names []string
-	for _, a := range config.From(env.Ctx).Accounts() {
-		names = append(names, strconv.Quote(a.Name))
+	for _, name := range mailapp.AccountNames(env.Ctx) {
+		names = append(names, strconv.Quote(name))
 	}
 	slices.Sort(names)
 	return env.UsageError("argument --account: invalid choice %q (choose from %s)", requested, strings.Join(names, ", ")), true

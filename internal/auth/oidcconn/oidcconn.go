@@ -17,7 +17,7 @@ const Kind connections.Kind = "service/oidc"
 func Source() oidc.Source { return source{} }
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: Kind, Validate: validate, Test: test}}
+	return []connections.Definition{{Kind: Kind, CredentialSlots: []string{"client_secret"}, Validate: validate, Test: test}}
 }
 
 func validate(c connections.Candidate) error {

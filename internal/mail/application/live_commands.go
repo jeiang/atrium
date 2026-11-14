@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"slices"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
@@ -100,6 +101,8 @@ func (s *Service) ApplyDeletions(ctx context.Context, in ApplyDeletionsInput) (a
 		outcome = state.Partial
 	} else if failed > 0 {
 		outcome = state.Failed
+	} else if err == nil && len(in.Accounts) > 0 && !slices.ContainsFunc(out.Accounts, func(a AccountDeletions) bool { return a.Ran }) {
+		outcome = state.Refused
 	}
 	auditID := s.writeAudit(ctx, ApplyDeletionsName, "", outcome, nil)
 	if err != nil {

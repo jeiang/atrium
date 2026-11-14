@@ -7,10 +7,11 @@
         "review.activity",
         "review.effect",
         "review.effects",
+        "review.undo",
         "review.undoable"
       ],
-      "required": 5,
-      "bound": 5
+      "required": 6,
+      "bound": 6
     },
     {
       "area": "composer",
@@ -35,9 +36,16 @@
     },
     {
       "area": "drafts",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "mail.draft",
+        "mail.draft-discard",
+        "mail.draft-resolve",
+        "mail.draft-send",
+        "mail.draft-update",
+        "mail.drafts"
+      ],
+      "required": 6,
+      "bound": 6
     },
     {
       "area": "files",
@@ -82,13 +90,14 @@
         "connections.oauth-configure",
         "connections.oauth-setup",
         "connections.oauth-start",
+        "connections.save-fields",
         "connections.test",
         "connections.test-save",
         "contacts.lookup",
         "contacts.sync"
       ],
-      "required": 12,
-      "bound": 12
+      "required": 13,
+      "bound": 13
     },
     {
       "area": "knowledge",
@@ -117,9 +126,54 @@
     },
     {
       "area": "mail",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "mail.account-add",
+        "mail.account-remove",
+        "mail.account-test",
+        "mail.account-update",
+        "mail.accounts",
+        "mail.apply-deletions",
+        "mail.backlog",
+        "mail.commitment-dismiss",
+        "mail.commitment-done",
+        "mail.commitments",
+        "mail.correct",
+        "mail.live-actions",
+        "mail.live-status",
+        "mail.loop-dismiss",
+        "mail.loop-snooze",
+        "mail.loops-dismiss-matching",
+        "mail.message",
+        "mail.open-loops",
+        "mail.package-dismiss",
+        "mail.packages",
+        "mail.pause",
+        "mail.poll-trackers",
+        "mail.rebaseline",
+        "mail.refresh-loops",
+        "mail.refresh-watches",
+        "mail.reindex",
+        "mail.replay",
+        "mail.resume",
+        "mail.rule-create",
+        "mail.rule-delete",
+        "mail.rule-preview",
+        "mail.rule-reorder",
+        "mail.rule-update",
+        "mail.rules",
+        "mail.rules-export",
+        "mail.rules-import",
+        "mail.scan-deletions",
+        "mail.scan-gmail-labels",
+        "mail.scan-rebalance",
+        "mail.search",
+        "mail.shadow-report",
+        "mail.sync",
+        "mail.triage",
+        "mail.upcoming-birthdays"
+      ],
+      "required": 44,
+      "bound": 44
     },
     {
       "area": "media",
@@ -177,11 +231,14 @@
     {
       "area": "proposals",
       "operations": [
+        "review.approve",
+        "review.dismiss",
         "review.proposal",
-        "review.proposals"
+        "review.proposals",
+        "review.resolve"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "review",
@@ -287,13 +344,61 @@
       "area": "wiki",
       "operations": [
         "wiki.detail",
+        "wiki.list",
         "wiki.search",
         "wiki.sync"
       ],
-      "required": 3,
-      "bound": 3
+      "required": 4,
+      "bound": 4
     }
   ],
-  "total_required": 206,
-  "total_bound": 141
+  "approval_reached": [
+    {
+      "operation": "assistant.lookup",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.memory.search",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.memory.zoom",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.research",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.result.recall",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.schedule.create",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.search-web",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.weather",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.web-fetch",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "calendar.request-delete",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "mail.propose-tracking",
+      "reached_via": "review.approve"
+    }
+  ],
+  "total_required": 208,
+  "total_bound": 208,
+  "total_approval_reached": 11
 }

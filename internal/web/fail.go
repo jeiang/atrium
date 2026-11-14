@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"maps"
 	"math"
 	"net/http"
 	"strconv"
@@ -70,7 +71,27 @@ func APIFail(w http.ResponseWriter, err error) {
 	for _, f := range e.Fields {
 		body.Fields = append(body.Fields, FieldError{Type: f.Code, Loc: []string{"body", f.Name}, Msg: f.Message})
 	}
+	var extended *bodyError
+	if errors.As(err, &extended) {
+		out := map[string]any{"error": body}
+		maps.Copy(out, extended.extra)
+		JSON(w, status, out)
+		return
+	}
 	JSON(w, status, map[string]apiError{"error": body})
+}
+
+type bodyError struct {
+	err   error
+	extra map[string]any
+}
+
+func (e *bodyError) Error() string { return e.err.Error() }
+
+func (e *bodyError) Unwrap() error { return e.err }
+
+func WithBody(err error, extra map[string]any) error {
+	return &bodyError{err: err, extra: extra}
 }
 
 func failHeaders(w http.ResponseWriter, e *application.Error) {

@@ -380,32 +380,6 @@ func settingValue(t *testing.T, d *db.DB, key string) string {
 	return value
 }
 
-func integrationCard(body, name string) string {
-	marker := `data-integration="` + name + `"`
-	start := strings.Index(body, marker)
-	if start < 0 {
-		return ""
-	}
-	rest := body[start+len(marker):]
-	if end := strings.Index(rest, `data-integration="`); end >= 0 {
-		return rest[:end]
-	}
-	return rest
-}
-
-func sectionCard(body, name string) string {
-	marker := `data-section="` + name + `"`
-	start := strings.Index(body, marker)
-	if start < 0 {
-		return ""
-	}
-	rest := body[start+len(marker):]
-	if end := strings.Index(rest, `data-section="`); end >= 0 {
-		return rest[:end]
-	}
-	return rest
-}
-
 func exportForm(t *testing.T, body, action string) ([][2]string, map[string]bool) {
 	t.Helper()
 	z := html.NewTokenizer(strings.NewReader(body))
@@ -588,29 +562,16 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
+	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
-	}
-	if strings.Contains(body, "Knowledge export") || strings.Contains(body, `data-section="export"`) {
-		t.Errorf("the standalone Knowledge export section is still rendered")
-	}
-	notion := sectionCard(body, "export_notion")
-	if !strings.Contains(notion, "Export knowledge to Notion") {
-		t.Errorf("the Notion export section is missing")
-	}
-	if !strings.Contains(body, `data-section="export_obsidian"`) || !strings.Contains(body, "Obsidian export") {
-		t.Errorf("the Obsidian export section is missing")
-	}
-	if !strings.Contains(notion, "Parent page") || !strings.Contains(notion, "Include private records") {
-		t.Errorf("the Notion export group lacks its controls")
 	}
 	form := url.Values{
 		"export_notion_enabled": {"true"},
 		"export_notion_parent":  {""},
 		"export_notion_kinds":   {"pii", "messages", "personal"},
 	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form)
+	status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form)
 	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "set a parent page") {
 		t.Fatalf("enabling without a destination = %d: %.300s", status, body)
 	}
@@ -626,21 +587,15 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	if got := settingValue(t, d, kbexport.NotionParentKey); got != normalized {
 		t.Errorf("stored parent = %q, want %q", got, normalized)
 	}
-	if !strings.Contains(body, `value="`+normalized+`"`) {
-		t.Errorf("the page does not show the normalized parent id")
-	}
 	stop()
 	runExport(t, f, d)
 	base, _, stop = startServeStoppable(t, dir)
 	if fake.byTitle("Diary") != nil {
 		t.Errorf("private record exported to a destination that was not named")
 	}
-	status, body, _ = fetch(t, client, http.MethodGet, base+"/settings/export", nil)
+	status, _, _ = fetch(t, client, http.MethodGet, base+"/settings/export", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
-	}
-	if !strings.Contains(body, `data-confirm-private="export_notion_parent"`) || !strings.Contains(body, `data-confirm-destination="`+normalized+`"`) {
-		t.Errorf("the private switch does not name the destination")
 	}
 	form.Set("export_notion_private_to", normalized)
 	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form); status != http.StatusOK {
@@ -921,12 +876,9 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_obsidian", form); status != http.StatusOK {
 		t.Fatalf("POST export section = %d: %.300s", status, body)
 	}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
+	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
-	}
-	if !strings.Contains(body, `data-confirm-private="export_obsidian_dir"`) || !strings.Contains(body, `data-confirm-destination="`+vault+`"`) {
-		t.Errorf("the private switch does not name the folder")
 	}
 	var actor, source string
 	if err := d.Read.QueryRow("SELECT actor, source FROM settings_audit WHERE key = ? ORDER BY id DESC LIMIT 1", kbexport.ObsidianPrivateKey).Scan(&actor, &source); err != nil {

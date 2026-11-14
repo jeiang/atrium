@@ -7,7 +7,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -150,7 +149,7 @@ func messageIDs(args tool.Args) ([]int64, error) {
 	return out, nil
 }
 
-func skipDicts(skipped []mailops.Skip) []any {
+func skipDicts(skipped []mailapp.Skip) []any {
 	out := make([]any, len(skipped))
 	for i, s := range skipped {
 		out[i] = s.Dict()

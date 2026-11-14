@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -13,6 +14,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -708,5 +710,203 @@ func TestDraftDiscardMissingIsHandled(t *testing.T) {
 	var count int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='mail.draft-discard' AND target='999999' AND outcome='not_found' AND source='ui'").Scan(&count); err != nil || count != 2 {
 		t.Fatalf("missing discard audits: %d %v", count, err)
+	}
+}
+
+func jsonKeys(t *testing.T, raw string) []string {
+	t.Helper()
+	dec := json.NewDecoder(strings.NewReader(raw))
+	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
+		t.Fatalf("not a JSON object: %v %.300s", err, raw)
+	}
+	var keys []string
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			t.Fatal(err)
+		}
+		keys = append(keys, tok.(string))
+		var skip json.RawMessage
+		if err := dec.Decode(&skip); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return keys
+}
+
+func fieldJSON(t *testing.T, raw, key string) string {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		t.Fatal(err)
+	}
+	return string(fields[key])
+}
+
+func commandAudit(t *testing.T, d *db.DB, reply apiReply) string {
+	t.Helper()
+	command := reply.header.Get("Atrium-Command-Id")
+	var operation, actor, source, outcome, target string
+	if err := d.Read.QueryRow("SELECT operation, actor, source, outcome, target FROM operation_audit WHERE command_id = ?", command).Scan(&operation, &actor, &source, &outcome, &target); err != nil || command == "" {
+		t.Fatalf("audit for command %q: %v", command, err)
+	}
+	return strings.Join([]string{operation, actor, source, outcome, target}, " ")
+}
+
+func TestTypedReviewRoutesKeepTheirBytes(t *testing.T) {
+	dir, dav := davFixture(t)
+	reviewSMTP(t, dir)
+	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
+	approve := proposalID(t, toolResult(t, "calendar_create", event))
+	event["title"] = "Haircut"
+	deny := proposalID(t, toolResult(t, "calendar_create", event))
+	toolResult(t, "task_add", map[string]any{"title": "Undo me", "due": "2026-11-09"})
+	toolResult(t, "file_write", map[string]any{"name": "guard.txt", "content": "original"})
+	toolResult(t, "task_add", map[string]any{"title": "Resolve me", "due": "2026-11-09"})
+	s := startAPISite(t, dir, nil)
+	owner := s.token("owner")
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	audits := func(operation, target, outcome string) int {
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND target = ? AND outcome = ? AND source = 'api' AND actor = 'operator'", operation, target, outcome).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	approvePath := "/api/v1/approvals/" + approve + "/approve"
+	expectAPI(t, s.do(http.MethodPost, approvePath, "", nil), http.StatusUnauthorized, "unauthenticated")
+	browser := oidcBrowser(t, s.base, s.idp, "owner")
+	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+approvePath, url.Values{}); code != http.StatusUnauthorized {
+		t.Fatalf("approve with a browser session = %d: %.300s", code, body)
+	}
+	if len(dav.Puts) != 0 || audits("review.approve", "proposal:"+approve, "ok") != 0 {
+		t.Fatalf("an unauthenticated approve ran: %d puts", len(dav.Puts))
+	}
+
+	done := s.do(http.MethodPost, approvePath, owner, nil)
+	if keys := jsonKeys(t, done.body); done.status != http.StatusOK || !slices.Equal(keys, []string{"approval", "outcome", "summary"}) ||
+		!strings.HasPrefix(done.header.Get("Content-Type"), "application/json") || done.json["outcome"] != "applied" {
+		t.Fatalf("approve: %d %v %s", done.status, done.header, done.body)
+	}
+	approval := fieldJSON(t, done.body, "approval")
+	wantApproval := []string{"id", "kind", "kind_label", "module", "approval", "status", "account", "title", "thread_id", "run_id", "created_at", "decided_at", "applied_at", "undone_at", "undoable", "blocked", "blocked_effect", "blocked_undo", "args", "preview", "result"}
+	if keys := jsonKeys(t, approval); !slices.Equal(keys, wantApproval) {
+		t.Fatalf("approval fields = %v, want legacy order %v", keys, wantApproval)
+	}
+	if a := done.json["approval"].(map[string]any); strconv.FormatInt(number(t, a["id"]), 10) != approve || a["status"] != "applied" {
+		t.Fatalf("approved approval: %v", a)
+	}
+	if got := commandAudit(t, d, done); got != "review.approve operator api ok proposal:"+approve {
+		t.Fatalf("approve audit = %q", got)
+	}
+	if len(dav.Puts) != 1 {
+		t.Fatalf("approve wrote %d events, want 1", len(dav.Puts))
+	}
+	again := s.do(http.MethodPost, approvePath, owner, nil)
+	expectAPI(t, again, http.StatusConflict, "not_approved")
+	if e := again.json["error"].(map[string]any); e["message"] == "" || len(dav.Puts) != 1 || audits("review.approve", "proposal:"+approve, "refused") != 1 {
+		t.Fatalf("repeated approve: %s, %d puts", again.body, len(dav.Puts))
+	}
+
+	denyPath := "/api/v1/approvals/" + deny + "/deny"
+	denied := s.do(http.MethodPost, denyPath, owner, map[string]any{})
+	if denied.status != http.StatusOK || !slices.Equal(jsonKeys(t, denied.body), []string{"approval"}) || denied.json["approval"].(map[string]any)["status"] != "dismissed" {
+		t.Fatalf("deny: %d %s", denied.status, denied.body)
+	}
+	if got := commandAudit(t, d, denied); got != "review.dismiss operator api ok proposal:"+deny {
+		t.Fatalf("deny audit = %q", got)
+	}
+	expectAPI(t, s.do(http.MethodPost, denyPath, owner, nil), http.StatusConflict, "not_dismissed")
+	if len(dav.Puts) != 1 {
+		t.Fatalf("deny wrote to the calendar: %d puts", len(dav.Puts))
+	}
+
+	var undoTask, resolveTask int64
+	if err := d.Read.QueryRow("SELECT MIN(id), MAX(id) FROM effects WHERE operation = 'task_add' AND direction = 'forward'").Scan(&undoTask, &resolveTask); err != nil || undoTask == resolveTask {
+		t.Fatalf("task effects %d %d: %v", undoTask, resolveTask, err)
+	}
+	undoID := strconv.FormatInt(undoTask, 10)
+	undone := s.do(http.MethodPost, "/api/v1/effects/"+undoID+"/undo", owner, nil)
+	if undone.status != http.StatusOK || !slices.Equal(jsonKeys(t, undone.body), []string{"effect", "undo", "undone"}) || undone.json["undone"] != true {
+		t.Fatalf("effect undo: %d %s", undone.status, undone.body)
+	}
+	forward, reverse := undone.json["effect"].(map[string]any), undone.json["undo"].(map[string]any)
+	inverse := number(t, reverse["id"])
+	if reverse["direction"] != "undo" || number(t, reverse["undo_of"]) != undoTask || number(t, forward["undone_by"]) != inverse || forward["undoable"] != false {
+		t.Fatalf("effect undo pair: %s", undone.body)
+	}
+	if got := commandAudit(t, d, undone); got != "review.undo operator api ok effect:"+undoID {
+		t.Fatalf("undo audit = %q", got)
+	}
+	var left int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE title = 'Undo me'").Scan(&left); err != nil || left != 0 {
+		t.Fatalf("undo left %d tasks, %v", left, err)
+	}
+	inverseID := strconv.FormatInt(inverse, 10)
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/effects/"+inverseID+"/undo", owner, nil), http.StatusConflict, "not_undone")
+	if audits("review.undo", "effect:"+inverseID, "refused") != 1 {
+		t.Fatal("the refused undo of an undo has no audit row")
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/effects/"+undoID+"/undo", owner, nil), http.StatusConflict, "not_undone")
+	outside := s.do(http.MethodPost, "/api/v1/undo/elsewhere:"+undoID, owner, nil)
+	expectAPI(t, outside, http.StatusNotFound, "not_found")
+	if e := outside.json["error"].(map[string]any); e["message"] != "Unknown undo entry." {
+		t.Fatalf("undo outside its namespace: %s", outside.body)
+	}
+	var inverses int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE undo_of = ?", undoTask).Scan(&inverses); err != nil || inverses != 1 {
+		t.Fatalf("undo of effect %d has %d inverses, %v", undoTask, inverses, err)
+	}
+
+	var fileEffect, fileThread int64
+	if err := d.Read.QueryRow("SELECT id, thread_id FROM effects WHERE operation = 'file_write' AND direction = 'forward'").Scan(&fileEffect, &fileThread); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "files", strconv.FormatInt(fileThread, 10), "guard.txt")
+	if err := os.WriteFile(file, []byte("changed outside the write"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fileID := strconv.FormatInt(fileEffect, 10)
+	refused := s.do(http.MethodPost, "/api/v1/undo/write:"+fileID, owner, nil)
+	expectAPI(t, refused, http.StatusConflict, "not_undone")
+	if raw, err := os.ReadFile(file); err != nil || string(raw) != "changed outside the write" {
+		t.Fatalf("out-of-scope undo changed the file: %q, %v", raw, err)
+	}
+	var undoCount int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE undo_of = ? AND state = 'failed'", fileEffect).Scan(&undoCount); err != nil || undoCount != 1 {
+		t.Fatalf("out-of-scope undo recorded %d failed inverse effects, %v", undoCount, err)
+	}
+	if e := s.do(http.MethodGet, "/api/v1/effects/"+fileID, owner, nil); e.status != http.StatusOK || e.json["undone_at"] != nil || e.json["undone_by"] != nil {
+		t.Fatalf("out-of-scope undo marked the write undone: %d %s", e.status, e.body)
+	}
+	if audits("review.undo", "effect:"+fileID, "refused") != 1 {
+		t.Fatal("the out-of-scope undo has no refusal audit row")
+	}
+
+	resolveID := strconv.FormatInt(resolveTask, 10)
+	if _, err := d.Write.Exec("UPDATE effects SET state = 'unknown', settled_at = lease_at WHERE id = ?", resolveTask); err != nil {
+		t.Fatal(err)
+	}
+	if blocked := s.do(http.MethodGet, "/api/v1/effects/"+resolveID, owner, nil); blocked.status != http.StatusOK || blocked.json["blocked"] != true {
+		t.Fatalf("unknown effect: %d %s", blocked.status, blocked.body)
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/effects/"+resolveID+"/undo", owner, nil), http.StatusConflict, "not_undone")
+	resolved := s.do(http.MethodPost, "/api/v1/effects/"+resolveID+"/resolve", owner, map[string]any{"outcome": "applied"})
+	if resolved.status != http.StatusOK || !slices.Equal(jsonKeys(t, resolved.body), []string{"effect"}) {
+		t.Fatalf("effect resolve: %d %s", resolved.status, resolved.body)
+	}
+	if e := resolved.json["effect"].(map[string]any); number(t, e["id"]) != resolveTask || e["blocked"] != false || e["effective_outcome"] != "done" || e["resolution"] == nil {
+		t.Fatalf("resolved effect: %s", resolved.body)
+	}
+	if got := commandAudit(t, d, resolved); got != "review.resolve operator api ok effect:"+resolveID {
+		t.Fatalf("resolve audit = %q", got)
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/effects/"+undoID+"/resolve", owner, map[string]any{"outcome": "applied"}), http.StatusConflict, "not_resolved")
+	missing := s.do(http.MethodPost, "/api/v1/effects/999999/resolve", owner, map[string]any{"outcome": "applied"})
+	expectAPI(t, missing, http.StatusNotFound, "not_found")
+	if e := missing.json["error"].(map[string]any); e["message"] != "Unknown effect." {
+		t.Fatalf("resolve of an unknown effect: %s", missing.body)
 	}
 }

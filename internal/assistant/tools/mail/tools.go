@@ -6,10 +6,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -47,8 +45,8 @@ func intArg(value any, message string) (int64, error) {
 	return 0, tool.Error(message)
 }
 
-func zone(ctx context.Context, env config.Env) (*time.Location, error) {
-	loc, err := scheduler.Zone(config.From(ctx).TZName(env))
+func zone(ctx context.Context, tc *tool.Context) (*time.Location, error) {
+	loc, err := mailapp.Zone(ctx, tc.Env)
 	if err != nil {
 		return nil, tool.Error("invalid time zone")
 	}

@@ -119,6 +119,12 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	if _, err := os.Stat(filepath.Join(dir, "missing.db")); err == nil {
 		t.Error("db check created the missing database")
 	}
+	if got := runProcessStdin(t, otherKeyHex+"\n", "db rekey", dbEnv(filepath.Join(dir, "missing.db")), keyEnv(rightKeyHex)); got.code != cli.ExitError {
+		t.Errorf("db rekey of a missing database exited %d, stderr %q; want %d", got.code, got.stderr, cli.ExitError)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, "missing.db*")); len(left) != 0 {
+		t.Errorf("db rekey of a missing database left %v", left)
+	}
 
 	backup := filepath.Join(dir, "backup.db")
 	got := runProcess(t, "db backup "+backup, dbEnv(live), keyEnv(rightKeyHex))

@@ -1,4 +1,4 @@
-package mailtools
+package mailmodule
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -59,7 +59,7 @@ func validateOp(name string) func(json.RawMessage) error {
 	}
 }
 
-func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
+func mailUndo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 	var out []ledger.UndoDefinition
 	for _, name := range []string{"draft_delete", "draft_restore"} {
 		out = append(out, ledger.UndoDefinition{Operation: name, Undoer: ledger.Undoer{
@@ -80,8 +80,8 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 		}})
 	}
 	return append(out,
-		ledger.UndoDefinition{Operation: UndoFolderDelete, Undoer: ledger.Undoer{
-			Validate: validateOp(UndoFolderDelete),
+		ledger.UndoDefinition{Operation: mailapp.UndoFolderDelete, Undoer: ledger.Undoer{
+			Validate: validateOp(mailapp.UndoFolderDelete),
 			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := undoFolderDelete(ctx, open, s, raw)
@@ -90,8 +90,8 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 				}
 				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 			}}},
-		ledger.UndoDefinition{Operation: UndoMoveBack, Undoer: ledger.Undoer{
-			Validate: validateOp(UndoMoveBack),
+		ledger.UndoDefinition{Operation: mailapp.UndoMoveBack, Undoer: ledger.Undoer{
+			Validate: validateOp(mailapp.UndoMoveBack),
 			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := undoMailMoveBack(ctx, open, s, raw)
@@ -123,7 +123,7 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 }
 
 func mailUndoFailure(err error) error {
-	var missing config.NotConfigured
+	var missing mailapp.NotConfigured
 	if errors.As(err, &missing) {
 		return ledger.Refused(missing.Error())
 	}
@@ -177,7 +177,7 @@ func undoFolderDelete(ctx context.Context, open mail.OpenFunc, store *ledger.Sto
 		return nil, ledger.Refused("folder undo payload is missing the account or folder")
 	}
 	if open == nil {
-		return nil, config.NotConfigured("the mail opener is not configured")
+		return nil, mailapp.NotConfigured("the mail opener is not configured")
 	}
 	deleted := false
 	err := mailops.Session(ctx, open, store.DB.Write, plan.Account, func(client mail.Client) error {
@@ -211,7 +211,7 @@ func undoMailMoveBack(ctx context.Context, open mail.OpenFunc, store *ledger.Sto
 		return nil, ledger.Refused("move undo payload is invalid")
 	}
 	if open == nil {
-		return nil, config.NotConfigured("the mail opener is not configured")
+		return nil, mailapp.NotConfigured("the mail opener is not configured")
 	}
 	return live.UndoMoveBack(ctx, open, store.DB.Write, plan)
 }
@@ -223,7 +223,7 @@ func undoPackageUntrack(ctx context.Context, store *ledger.Store, raw json.RawMe
 	}
 	result, err := tracking.Unsubscribe(ctx, store.DB.Write, u)
 	if err != nil {
-		var missing config.NotConfigured
+		var missing mailapp.NotConfigured
 		if errors.As(err, &missing) {
 			return nil, ledger.Refused(missing.Error())
 		}

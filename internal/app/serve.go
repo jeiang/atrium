@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
@@ -88,7 +89,8 @@ func permanentRefusal(err error) bool {
 		errors.As(err, new(settings.Invalid)) ||
 		errors.As(err, new(settings.InvalidDef)) ||
 		errors.As(err, new(settings.FieldInvalid)) ||
-		errors.As(err, new(*settings.PinnedError))
+		errors.As(err, new(*settings.PinnedError)) ||
+		errors.As(err, new(*connections.Invalid))
 }
 
 func (b *Bindings) serve(ctx context.Context, o ListenOptions) error {

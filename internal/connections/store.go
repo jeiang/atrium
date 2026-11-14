@@ -11,13 +11,16 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections/transport"
@@ -118,6 +121,9 @@ func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, conf
 	if err != nil {
 		return err
 	}
+	if err := validateEndpointURLs(id, configJSON); err != nil {
+		return err
+	}
 	now := s.stamp()
 	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
@@ -193,6 +199,15 @@ func (s *Store) EnsureCredential(ctx context.Context, id ID, slot string, genera
 func (s *Store) ReconcileHost(ctx context.Context) error {
 	if s.d == nil {
 		return errors.New("connections: host reconciliation needs a writable database")
+	}
+	for _, id := range sortedKeys(s.host.Connections) {
+		raw, err := json.Marshal(s.host.Connections[id].Config)
+		if err != nil {
+			return err
+		}
+		if err := validateEndpointURLs(ID(id), raw); err != nil {
+			return err
+		}
 	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Validate != nil {
 		if err := s.reg.sync.Validate(ctx, s.host); err != nil {
@@ -417,14 +432,91 @@ func changedEndpoint(from, to string) (string, bool) {
 	return "", false
 }
 
-func endpointIdentity(key, value string) (string, bool) {
+func endpointURLField(key string) bool {
 	name := strings.ToLower(strings.TrimSpace(key))
-	if name != "url" && name != "api" && name != "host" && !strings.HasSuffix(name, "_url") && !strings.HasSuffix(name, "_host") {
+	return name == "url" || name == "api" || name == "issuer" || strings.HasSuffix(name, "_url") || endpointHostField(name)
+}
+
+func endpointHostField(key string) bool {
+	name := strings.ToLower(strings.TrimSpace(key))
+	return name == "host" || strings.HasSuffix(name, "_host")
+}
+
+func validateEndpointURLs(id ID, raw json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return &Invalid{Cause: fmt.Errorf("connections: %s: config must be an object", id)}
+	}
+	for _, field := range sortedKeys(fields) {
+		if !endpointURLField(field) {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(fields[field], &value); err != nil {
+			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a string", id, field)}
+		}
+		value = strings.TrimSpace(value)
+		if endpointHostField(field) {
+			if _, _, ok := endpointHost(value); !ok {
+				return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a host name or IP address with an optional port, without userinfo or a path", id, field)}
+			}
+			continue
+		}
+		u, err := url.Parse(value)
+		if err != nil {
+			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a valid endpoint without URL userinfo", id, field)}
+		}
+		if u.User != nil {
+			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must not contain URL userinfo", id, field)}
+		}
+	}
+	return nil
+}
+
+func endpointHost(value string) (host, port string, ok bool) {
+	if value == "" {
+		return "", "", true
+	}
+	if strings.ContainsAny(value, `@/\`) || strings.ContainsFunc(value, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+		return "", "", false
+	}
+	if _, err := netip.ParseAddr(value); err == nil {
+		return strings.ToLower(value), "", true
+	}
+	host = value
+	if h, p, err := net.SplitHostPort(value); err == nil {
+		if _, err := strconv.ParseUint(p, 10, 16); err != nil {
+			return "", "", false
+		}
+		host, port = h, p
+	} else if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
+		host = value[1 : len(value)-1]
+	}
+	if host == "" {
+		return "", "", false
+	}
+	if _, err := netip.ParseAddr(host); err != nil && strings.ContainsAny(host, ":[]") {
+		return "", "", false
+	}
+	return strings.ToLower(host), port, true
+}
+
+func endpointIdentity(key, value string) (string, bool) {
+	if strings.EqualFold(strings.TrimSpace(key), "preset") {
+		return strings.TrimSpace(value), true
+	}
+	if !endpointURLField(key) {
 		return "", false
 	}
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return "", true
+	}
+	if endpointHostField(key) {
+		if host, port, ok := endpointHost(value); ok {
+			return "//" + host + ":" + port, true
+		}
+		return value, true
 	}
 	u, err := url.Parse(value)
 	if err != nil {
@@ -1023,6 +1115,9 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if !ok {
 		return View{}, UnknownKind(lease.kind)
 	}
+	if err := validateEndpointURLs(id, lease.Config()); err != nil {
+		return View{}, err
+	}
 	results, err := def.Test(ctx, lease, lease.caps)
 	if err != nil {
 		return View{}, err
@@ -1326,8 +1421,23 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate) (*Lease, error) {
 	caps := make([]Capability, 0, len(cand.Capabilities))
 	caps = append(caps, cand.Capabilities...)
-	creds, err := s.loadCredentials(ctx, s.q, current.ID)
+	tx, err := s.d.Read.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var revision int64
+	if err := tx.QueryRowContext(ctx, "SELECT revision FROM connections WHERE id = ?", current.ID).Scan(&revision); err != nil {
+		return nil, err
+	}
+	if revision != current.revisionValue() {
+		return nil, &Conflict{ID: current.ID, Revision: current.revisionValue()}
+	}
+	creds, err := s.loadCredentials(ctx, tx, current.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	for _, c := range cand.Credentials {
@@ -1340,7 +1450,7 @@ func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate
 		config = current.Config
 	}
 	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
-	lease.shared = s.sharedFor(current.ID, current.revisionValue())
+	lease.shared = &shared{clients: map[string]*http.Client{}, tokens: map[string]string{}}
 	return lease, nil
 }
 
@@ -1363,6 +1473,9 @@ func validateCandidate(def Definition, cand Candidate, current View) error {
 	if !json.Valid(cand.Config) {
 		return &Invalid{Cause: errors.New("connections: config must be valid JSON")}
 	}
+	if err := validateEndpointURLs(current.ID, cand.Config); err != nil {
+		return err
+	}
 	if current.ConfigSource == SourceHost {
 		var want, got map[string]string
 		_ = json.Unmarshal(current.Config, &want)
@@ -1377,11 +1490,34 @@ func validateCandidate(def Definition, cand Candidate, current View) error {
 		}
 	}
 	for _, c := range cand.Credentials {
+		known := false
+		for _, pattern := range def.CredentialSlots {
+			if matched, _ := path.Match(pattern, c.Slot); matched {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return &Invalid{Cause: errors.New("connections: unknown credential slot for this connection kind")}
+		}
 		if c.HostFileRef != "" {
 			return &Invalid{Cause: errors.New("connections: a host file credential is only accepted from host configuration")}
 		}
-		if c.Value == "" {
-			return MissingCredential{Slot: c.Slot}
+	}
+	if current.ConfigSource == SourceOperator {
+		if field, changed := changedEndpoint(string(current.Config), string(cand.Config)); changed {
+			for _, stored := range current.Credentials {
+				replaced := false
+				for _, c := range cand.Credentials {
+					if c.Slot == stored.Slot && c.Value != "" {
+						replaced = true
+						break
+					}
+				}
+				if stored.Present && !replaced {
+					return &Invalid{Cause: &CredentialEndpointChanged{ID: current.ID, Field: field}}
+				}
+			}
 		}
 	}
 	return nil

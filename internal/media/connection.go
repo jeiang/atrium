@@ -23,16 +23,18 @@ const eztvProbeIMDb = "tt0000001"
 
 func Connections() []connections.Definition {
 	return []connections.Definition{
-		{Kind: KindMediaAgent, Validate: validateMediaAgent, Test: testMediaAgent},
+		{Kind: KindMediaAgent, CredentialSlots: []string{"bearer"}, Validate: validateMediaAgent, Test: testMediaAgent},
 		{
-			Kind:     KindQbittorrent,
-			Validate: validateQbitConnection,
-			Test:     testQbitConnection,
+			Kind:            KindQbittorrent,
+			CredentialSlots: []string{"api_key"},
+			Validate:        validateQbitConnection,
+			Test:            testQbitConnection,
 		},
 		{
-			Kind:     KindTMDB,
-			Validate: validateTMDBConnection,
-			Test:     testTMDBConnection,
+			Kind:            KindTMDB,
+			CredentialSlots: []string{"read_token"},
+			Validate:        validateTMDBConnection,
+			Test:            testTMDBConnection,
 		},
 		{
 			Kind:     KindEZTV,

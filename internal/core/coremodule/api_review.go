@@ -174,7 +174,7 @@ func pathless(s string) string {
 
 func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Binding {
 	registerPayload()
-	return []application.Binding{
+	return append([]application.Binding{
 		api.Query(d, reviewapp.DescribeOne(reviewapp.ProposalsName), application.APIShape{Area: "proposals", Errors: []application.Code{application.Invalid}},
 			"GET /proposals", func(ctx context.Context, in ProposalsRequest) (application.Read[ProposalsPage], error) {
 				var before int64
@@ -236,7 +236,7 @@ func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Bind
 			"PUT /permissions", func(ctx context.Context, in reviewapp.PermissionsUpdateInput) (application.Change[reviewapp.PermissionsUpdated], error) {
 				return svc().UpdatePermissions(ctx, in)
 			}),
-	}
+	}, reviewWireRoutes(d, svc)...)
 }
 
 func rawJSON(v any) json.RawMessage {

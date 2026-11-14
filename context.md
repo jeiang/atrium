@@ -1,106 +1,43 @@
 # Application context
 
 `docs/vision.md` describes the goals. This file records current behavior,
-accepted direction, and unresolved choices. Planned capabilities below are
-not claims about the running application. v2 is a from-scratch Go
-application, not a port of the earlier Python application; there is no
-behavior-parity target.
+accepted direction, and unresolved choices. Planned capabilities are not
+claims about the running application. Operator contracts are in
+`docs/operator/behavior.md`; deployment options are in `docs/operator/nixos.md`.
 
 ## Current application
 
+### Operator interaction
+
 - One operator per instance. The application is a Go CLI and web service
-  with embedded assets, packaged and deployed through a NixOS module. The
-  module takes typed deployment options, application settings rendered to
-  TOML, and secret settings as files delivered through systemd
-  credentials to every unit and `atrium-run`. Calendar and
-  contacts sign in with an iCloud mail account's app password or a Google
-  OAuth client consented from the integrations page.
-- The application brings together mail, calendar, contacts, Notion,
-  media, notifications, and read-only Grafana access. The assistant adds
-  chat, files, projects, scheduled work, and research subagents. The
-  new-thread composer takes the model, effort, context size, thinking, web
-  search and cost cap. The built-in system prompt and the knowledge tool
-  descriptions carry the knowledge guidance: search before writing, one
-  record per durable fact, keep durable facts only, cite records, and report
-  possibly stale records. There is no skills feature; the
-  `skills` table and `runs.skills_json` remain from it, unused and not
-  dropped.
-- The web interface is server-rendered Go templates with Basecoat, htmx
-  and one static script under a strict CSP; a push service worker is the
-  only other script. A sidebar holds Today, the Review, Library and Apps
-  entries, the thread list (pinned, by day, by project groups) and
-  Settings; Review, Library and Apps are tabbed sections. Below 768px a
-  tab bar holds Today, Threads, Review and Library. `/chat` is home and
-  shows the day: a welcome screen with starter prompts until the first
-  thread exists, then a headline built in code from the Review count, up
-  to three Needs you cards that act in place, a docked ask bar that starts
-  a new thread (one row on a phone until it is used; it can carry one
-  "about" chip for a mail message, knowledge record, package, project
-  file or agenda event, sent as a line that names the item by id, uid
-  or file name), and a panel with the day's calendar events and the most
-  recent undoable writes as plain sentences. The headline adds the next
-  timed event and the brief lists the day's digest lines when one was
-  posted. The thread list is at `/chat?view=all`. The ask
-  bar keeps the run options behind one chip. Today is also one chat thread
-  per calendar day in the configured time zone, found by role and title,
-  reached at `/today`; the digest posts there and home does not show it. A
-  ⌘K / Ctrl+K command palette searches threads, pages and actions. There
-  is no tutorial text; guidance is `title` tooltips on controls.
-  Signed media file links relay GET/HEAD and range/conditional responses from the
-  configured `service/media-agent` connection; its bearer stays on that origin,
-  with no redirects or proxy, and links remain expiring and Host-guarded.
-  Media is the app at `/apps/media`. Adding a torrent takes a magnet link or
-  a `.torrent` file, never both, and the page and `media_add_magnet` both
-  refuse a magnet without a v1 info hash (`xt=urn:btih:`) before any effect is
-  recorded; the refusal is audited, and the tool creates no approval card. A
-  new channel backfills only when its "download what is already out" box is
-  ticked; the box starts unticked, so the first poll just records current
-  releases. A failed backfill still shows the channel as saved and reports
-  completed downloads with the poll error. Empty polls (including job passes
-  without channels), sweeps and thumbnail passes are audited as `noop`;
-  failed passes with completed work are `partial`. The `media-sweep` job
-  ends in error when qBittorrent reports errors; `atrium media sweep` still
-  prints them in `errors` and exits 0. The Library section holds Knowledge
-  (`/library/knowledge`): the operator's records with search, scope and
-  state filters, checkboxes on unconfirmed rows with Confirm selected, a
-  record page with confirm, edit, retract, restore and
-  purge, and a profile view that renders the system
-  prompt's profile block and each pinned record's place in it. An unknown
-  scope filter is refused with a 422 and the reason instead of being reset;
-  the list, record and profile pages answer with a weak `ETag` and a 304
-  when nothing they show has changed. Confirm all on the unconfirmed or
-  imported filter confirms each record in its own step and reports how
-  many were confirmed and how many were refused (a retracted record is
-  refused); Confirm selected stops at the first refused record and keeps
-  the ones confirmed before it. Each knowledge command writes one
-  operation audit row; a refused command answers 409 and a rejected edit
-  keeps the submitted values on the 422 page. Projects
-  have no pages of their own beyond create and edit, and a
-  project can be marked private so its knowledge and threads stay inside
-  it. The sidebar collapses to a rail; chat uses a
-  centred reading column with serif
-  assistant prose, the operator's messages in a bubble on the right, and
-  a thread menu for pin, archive, delete and the settings summary. Drafts and proposals the assistant creates are cards in
-  the thread that act through the Drafts and `/proposals/{id}/…` endpoints,
-  so the send gate and approval pipeline are unchanged. There is no
-  Proposals page: pending approvals show in their thread, in the thread's
-  Work panel and on Review Needs you, which also lists blocked proposals.
-  The agent acts directly on internal, undoable actions (tasks, knowledge
-  records, mail folders and moves) and records undo on Done; external,
-  irreversible or paid actions ask with an approval
-  card, and the tool registry enforces this from each tool's effect. The
-  light, dark or system
-  theme and the rail state are cookies the server applies on the next
-  render.
-- Review and Activity remain available when a capability is disabled, including
-  its historical proposals and effects. Actions on those records require the
-  owning capability to remain enabled for the operation. Draft, loop and package
-  pages belong to mail and are unavailable while mail is off; the pause controls
-  stay available through the CLI, and their web routes return not found.
+  with embedded assets, SQLCipher state, and a NixOS module. The host supplies
+  external services, reverse proxy configuration, credentials, persistence,
+  and off-host backups. Updating this repository does not update a host's pin.
+- The application joins mail, calendar, contacts, Notion, media, notifications,
+  and read-only Grafana access with assistant chat, files, projects,
+  knowledge, tasks, scheduled work, and research children. Skills and code
+  execution are not active assistant capabilities.
+- Today is home at `/chat`. Its initial response includes Needs you, the agenda,
+  and recent activity. A new home message starts a thread. Review holds
+  decisions and history; Library holds knowledge, wiki, files, rules, and
+  schedules. Projects group threads and can restrict their content to a
+  private project. Draft and proposal cards in chat use the same send and
+  approval services as their dedicated views. The `/chat/agenda` fragment
+  answers 404 when the calendar module is off and 503 `unavailable` when the
+  calendar cannot be listed, for example when no calendar is configured.
+- Internal undoable tools can act directly and record undo. External,
+  irreversible, or paid tools follow their declared approval policy and the
+  permission table. This is enforced in code, not left to the prompt.
+- Review and Activity retain historical proposals and effects when a module
+  is unavailable. Approval and undo require their owner to be enabled.
+  Ordinary proposal dismissal does not bind or check the owner; permission
+  requests also require their registered dismissal hook. Disabling a module
+  does not delete its data.
+
+### Prompts, history, retrieval, and knowledge
 - The system prompt and subagent rules are operator-editable settings over
   built-in defaults; the untrusted-data preamble is fixed in code and always
-  comes first. Edits apply to every thread's next request until the
-  frozen-prefix work lands.
+  comes first. Edits apply to every thread's next request.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
   `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
@@ -115,17 +52,15 @@ behavior-parity target.
   operator message may also carry a knowledge block: eligible records
   (unmarked, unpinned, live, private only inside its project)
   matched by exact title or alias, full-text search and one embedding
-  bounded by a two-second window, within `kb_retrieval_tokens` (default
-  1,500; 0 disables) and `kb_retrieval_distance` (default 0.35). A timed-out
-  or unavailable embedding leaves the exact and lexical matches; `kb_search`
+  bounded by a two-second window, within the compiled 1,500-token retrieval
+  budget and maximum embedding distance of 0.35.
+  A timed-out or unavailable embedding leaves the exact and lexical matches; `kb_search`
   reports `semantic` false and the skipped step is logged. The block is
   stored with the message and expanded when the request is built, so it
   replays byte for byte and adds nothing to the tools, system prompt or
   history prefix;
-  retrieval adds no marks. Client- and
-  server-side transcript compaction and their settings are gone; the chat
-  meter and the attachment check measure against the thread's context
-  limit, and the old projection and ledger rows stay untouched.
+  retrieval adds no marks. The chat meter and attachment check measure
+  against the thread's context limit.
 - Memory is the knowledge store. A record has a title, aliases, a body, a
   scope (personal or a project) and marks; `kb_search` and `kb_get` return
   personal records visible to the reader's project plus the marks of the
@@ -139,30 +74,32 @@ behavior-parity target.
   retract must name a record in the writer thread's project. Pinned,
   confirmed, unmarked records outside a private project, or in the reader's
   own project, form the system prompt's profile block within
-  `agent_kb_profile_tokens`, and a private record without a project never
+  the compiled 2,000-token profile budget, and a private record without a project never
   enters it. Dreaming also receives
   code-built signals (failed runs, undone writes, dismissed proposals and
   denied permission requests) and may write `Lesson: …` records with the
   tool names as aliases and the thread where it happened as their source.
-  The nightly dreaming job
-  gathers the last 24 hours in code (chat and scheduled threads, skipping
-  threads of private projects, plus a compact index of live records) and
-  runs one Haiku write step with `kb_search`, `kb_get`, `kb_write`,
-  `kb_retract`, `task_add` and `task_list`. The morning digest runs in code
-  after the nightly run and posts a card of at most ten lines into the
+  The nightly dreaming job gathers the last 24 hours in code (chat and
+  scheduled threads, skipping private projects, plus a compact live-record
+  index). It splits unmarked and marked sources into separate threads and
+  runs Haiku write steps with `kb_search`, `kb_get`, `kb_write`, `kb_retract`,
+  `task_add`, and `task_list`.
+  The morning digest runs in code after the nightly run and posts a card of at most ten lines into the
   day's Today thread; with `digest_notify` on it also pushes the lines.
   Titles appear only for unmarked sources; marked items and records show
   as counts that link to the review page or the unconfirmed Knowledge
-  filter. Nothing is posted when there is nothing to act on. Records carry provenance to a
-  gathered `source.thread_id`; the write thread takes the union of the
-  gathered marks, so records from clean threads are unmarked while records
-  from marked sources stay unconfirmed and out of the prompt until the
-  operator confirms them; confirmation keeps their marks, so a `pii` or
-  `messages` record still stays out of the profile. Dreaming is capped at `dreaming_max_cost_usd`
-  ($0.30) per night and `dreaming_monthly_usd` ($3) per calendar month; at
-  the monthly cap it does not run and raises an attention item. The Notion wiki is read-only
-  for the operator: sync and the Wiki tab remain, the agent has no Notion
-  tools, and the old `notion_link`/`notion_edit` proposals stay readable.
+  filter. Nothing is posted when there is nothing to act on. Records carry
+  provenance to a gathered `source.thread_id`; each write thread inherits
+  its gathered marks. Confirmation clears `untrusted`, but preserves `pii`
+  and `messages`; those records stay out of the profile. Dreaming is capped
+  at `dreaming_max_cost_usd` ($0.30) per night and `dreaming_monthly_usd` ($3)
+  per calendar month. At the monthly cap it does not run and raises an
+  attention item. The Notion wiki is read-only for the operator. Sync and
+  the Wiki view remain; the agent has no Notion tools.
+- Isolated research and worker runs receive neither the operator profile
+  nor the project prompt block.
+
+### Notifications, attention, and mail
 - Notifications are recorded in an in-app inbox first and pushed best
   effort through Web Push on one of three channels (assistant, media,
   system). The inbox insert is one local effect keyed by the source
@@ -170,8 +107,9 @@ behavior-parity target.
   poll), so repeating an occurrence adds no second row; producers mark the
   occurrence in the same transaction and a push failure only records the
   transport error. Each channel's content setting sends the full text (`auto`,
-  `full`) or only the title `atrium` (`title`). ntfy is removed; the
-  `ntfy_channels` table stays and only its `content` column is read.
+  `full`) or only the title `atrium` (`title`). There is no ntfy delivery;
+  the `ntfy_channels` table holds the channels and only its `content`
+  column is read.
 - Web Push devices subscribe from the Notifications settings page. The VAPID
   key is a generated secret (`webpush_vapid_private_key`) or the
   `service/webpush` connection's `credential_files.vapid_private` host file,
@@ -217,6 +155,8 @@ behavior-parity target.
   Rotating the generated `action_link_key` invalidates
   outstanding links; the phone action section of the Notifications settings
   tab shows the outstanding count and revokes links. With a host-file key, revocation deletes outstanding links without rewriting the key.
+  A phone approval that meets a busy lock leaves the proposal pending and
+  the link usable.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -227,6 +167,13 @@ behavior-parity target.
   the Google OAuth wizard's Gmail refresh token, refreshes the access token
   once for concurrent callers, reconnects or retries AUTH once after a
   rejected token, and reports needs-reauth or expiring health.
+- The bearer API exposes existing mail message, triage, rule, correction,
+  account and live-state operations under `/api/v1/mail`. Corrections require
+  an explicit immediate or deferred mode. Account creation still tests before
+  saving; deployment-pinned accounts cannot be removed. Pause and resume do
+  not change mail mode or grant go-live eligibility.
+
+### Models, spending, and runs
 - The assistant uses the Anthropic API. A static catalog in
   `internal/assistant/pricing` holds Haiku 5.5, Sonnet 5.5 and Opus 5.5 with
   their ids, context window, maximum output, effort levels, thinking modes
@@ -310,11 +257,11 @@ behavior-parity target.
   to Sonnet and Opus without it. The loop ends a run with a clear thread
   message and run error on refusal (with the `stop_details` category),
   `max_tokens`, `model_context_window_exceeded`, an empty `pause_turn` or
-  `end_turn`, a repeated identical tool call and result (`doom_loop_threshold`,
-  default 3) and the per-run-kind step cap (`max_steps_chat`, `_cron`,
-  `_nightly`, default 24; subagents use `agent_subagent_max_steps`). The
-  nightly dreaming run also has its own caps (`dreaming_max_cost_usd`,
-  default $0.30 per night, and `dreaming_monthly_usd`, default $3 per
+  `end_turn`, a repeated identical tool call and result (three in a row) and
+  the per-run-kind step cap (24 for chat; subagents 12); both bounds are
+  compiled constants. The nightly dreaming run also has its own caps
+  (`dreaming_max_cost_usd`, default $0.30 per night, and
+  `dreaming_monthly_usd`, default $3 per
   calendar month). A server fallback is shown in the thread
   and its tokens are recorded as a separate usage row priced at the model
   that served them. Mail classification is fixed-schema Haiku through the
@@ -339,6 +286,21 @@ behavior-parity target.
   hash of the text that was sent, so an edit re-queues it, a write-back whose
   row changed, was retracted or was deleted in flight is discarded, and a
   retraction or deletion removes the vector in the same transaction.
+
+### Connections and integrations
+- Connection endpoint edits on the Connections page and the PUT/test and
+  PATCH/save-fields APIs refuse to retain a stored credential across an endpoint
+  identity change. Replace every retained credential in the same request or
+  disconnect first. Refusal happens before the connectivity test; an unchanged
+  endpoint can keep its credentials. Issuer and provider preset changes also
+  count as endpoint identity changes. Endpoint URLs cannot contain userinfo,
+  and `host`/`*_host` fields accept only a host name or IP literal with an
+  optional port, including during v2 import and host reconciliation; refusals
+  name the connection and field, never the value. A host declaration refused
+  at boot is a permanent configuration refusal (exit 78). The health watch
+  records a stored row that fails these rules as failing without sending a
+  request. Credential slots must belong to the
+  connection kind, and credential values remain write-only.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
@@ -356,11 +318,18 @@ behavior-parity target.
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
   Test exchanges it, and a 400 or 401
   marks the integration needs-reauth.
+
+### State, backups, settings, and keys
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
-  and `atrium restore` (with a `--verify` dry run) restores them.
+  and `atrium restore` (with a `--verify` dry run) restores them. Restore
+  stages the archive, refuses a newer schema, checks it for tampering, and
+  verifies and migrates the staged copy before it replaces anything. An
+  archive made under an earlier key opens with `--key-file`. Install takes
+  the serve exclusion, and an existing database that cannot be opened is
+  replaced only with `--replace-unopenable`, which keeps it aside.
   `atrium backup` and `atrium db backup` write one `operation_audit` row
   (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
   file count only) to the source database, including refused destinations; a
@@ -385,8 +354,7 @@ behavior-parity target.
   shutdown) writes `atrium-<UTC>.backup` and, after a successful archive,
   prunes `atrium-*.backup` beyond the newest keep that are older than
   keep_days. No directory means `skipped_unconfigured`. `atrium backup`
-  shares the job's claim. NixOS `backup.schedule` replaced `onCalendar`;
-  there is no backup unit.
+  shares the job's claim. There is no backup unit or timer.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -397,9 +365,9 @@ behavior-parity target.
   the host file and its `ATRIUM_<MODULE>_<KEY>` variables, never from the
   database: a database row with a host key is ignored, and `atrium settings
   set`/`unset` and the Settings pages refuse it with its host destination.
-  Twelve tuning values (body cap, page and preview sizes, run history, HTTP
-  timeout, calendar event, occurrence and candidate limits, contacts results
-  and pass-run retention) are compiled constants, not settings. Operator
+  Tuning values (body caps, page and preview sizes, run and step limits,
+  timeouts, retention windows and similar bounds) are compiled constants,
+  not settings. Operator
   settings are database rows edited in the application or with `atrium
   settings set`; a value the host file declares for one, including a
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
@@ -428,8 +396,7 @@ behavior-parity target.
   provider response bodies. The Connections credential form retains its
   existing 422 refusal status.
   The only app key inputs are `app_keys.action_link_key_file` and
-  `app_keys.link_key_file`. Saving a working integration turns its module on,
-  and the settings audit rows show on the Done page.
+  `app_keys.link_key_file`.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; stored API keys and tokens are refused on a plaintext
   database. A database key (`ATRIUM_DB_KEY`, `ATRIUM_DB_KEY_FILE`, or the
@@ -441,21 +408,32 @@ behavior-parity target.
   `atrium db` rekeys an encrypted database from a
   key read from a file or standard input (after a verified re-encrypted copy,
   recording the retired key id in `db_key_history`; it refuses unless it can
-  take exclusive access, so the atrium units and timers using the database must be stopped), writes encrypted
+  take exclusive access, so the atrium units using the database must be stopped), writes encrypted
   DB-only backups through the SQLite backup API, runs SQL from standard
-  input, and checks integrity with FTS5 and vec0 counts. The v3 baseline is
-  the schema in `internal/db/schema/`, created by migration 1 as a single
-  step. The schema files are edited directly until the freeze in phase 11;
-  every later change is an additive migration in `internal/db/migrate.go`.
+  input, and checks integrity with FTS5 and vec0 counts. Destructive
+  database commands and `serve` share one lock that resolves the canonical
+  database path and refuses a hard-linked database. `db check` and
+  `db rekey` on a missing database path fail without creating a file.
+- The `*.sql` files in `internal/db/schema/` are the frozen v3 baseline,
+  migration 1; every later schema change is a new additive migration in
+  `internal/db/migrate.go`. A CLI e2e checks the canonical schema dump in
+  `testdata/schema/baseline.v3.txt` and the migration-1 golden database,
+  then compares the migrated fixture with a fresh keyed database. A database
+  at an unknown future schema version is refused
+  before any write. A binary downgrade does not reverse a migration and can
+  require restoring an earlier database, losing later writes.
   A database with tables but no v3 marker is refused before any write with
-  a message naming `atrium db import-v2`. `atrium db import-v2 <path>`
+  a message naming `atrium db import-v2`.
+
+### Database import
+- `atrium db import-v2 <path>`
   copies a v2 database at schema version 11 into the configured database,
   which must be a fresh v3 database (created through the normal boot path
   when absent); the source is opened read-only and never written.
   `--source-config` names the v2 `ATRIUM_CONFIG` file and `--source-env` a
   `NAME=VALUE` file, and their pins decide the effective source value before
   a shadowed row. It
-  refuses a source that already has the v3 marker, is not at version 11,
+  refuses a source that is the destination file, already has the v3 marker, is not at version 11,
   has an embedding index rebuild in progress, or has a v2 mail or agent
   write in flight (a held row with no error, a proposal action with a live
   lease, or a `drafts` send); it refuses a destination that already holds
@@ -482,8 +460,9 @@ behavior-parity target.
   `embedded_hash` cleared so vectors rebuild), projects, threads with their
   messages, files, plans and queue, agent profile, skills, operator-edited
   subagents, jobs, agent events, tasks, proposals, media
-  channels, the seen list and media state, and the current calendar month's
-  usage rows. Converted into effect-ledger rows with their old identity
+  channels, the seen list and media state, and the usage rows of the import
+  calendar month only; older usage stays only in the v2 source. Converted
+  into effect-ledger rows with their old identity
   preserved: v2 automatic actions and the resolutions that settle them, v2
   agent writes with their resolutions, and v2 proposal actions. A service
   credential whose owner has a connection record (qBittorrent, TMDB, EZTV,
@@ -496,8 +475,8 @@ behavior-parity target.
   state (re-synced), knowledge and Notion
   vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
   handshakes, action links, the mail event log, ops
-  data, endpoint probes (removed with the chat endpoint; the embed probe
-  moves to `service/embedding`), integration health, nightly observations,
+  data, endpoint probes (the embed probe belongs to `service/embedding`),
+  integration health, nightly observations,
   `db_key_history` (old backups are read with the old key),
   `module_migrations` and the source's `schema_migrations`. References to
   uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
@@ -524,11 +503,13 @@ behavior-parity target.
   binary imports it first.
   `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
-  Every settings write and secret change appends
+
+### Audit and resolution
+- Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
-  `/activity`. Known secret values are scrubbed from log output and
-  effect snapshots. An operator can settle a blocked unknown, partial
+  `/activity`. Known secret values are scrubbed from log output, exported
+  trace attributes and effect snapshots. An operator can settle a blocked unknown, partial
   or in-flight mail write or undo after checking the mailbox
   (`atrium proposals resolve`, `atrium live resolve`, or the web buttons); the
   action touches no mailbox and appends actor, source, outcome and the prior
@@ -567,7 +548,12 @@ behavior-parity target.
   delivery, and phone policy commands use `notifications.*` operations. The
   inbox read is bounded to 100 items (API default 50); failed push delivery
   remains explicit and keeps its inbox record.
-- Modules are toggled at runtime. The built-in modules are always compiled
+
+### Modules, scheduling, and observability
+- `serve` runs supervised mail watches and scheduled work; `agent tick` is
+  a one-shot pass. The NixOS module ships `atrium.service`, the optional
+  `atrium-media-agent.service` and no atrium timers.
+- The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
   metrics, checks, proposals, effect handlers and scheduled jobs; module
@@ -621,8 +607,7 @@ behavior-parity target.
   The Notion mirror is the model-free `notion/notion-sync` serve job
   (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
   on shutdown). Its CLI shares the `notion-sync` resource and claim;
-  unconfigured skips record no pass row. The former systemd service and
-  timer are removed when this job is activated. Nightly
+  unconfigured skips record no pass row. Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
   executes; immediately before a child runs, on the first pass or in
@@ -661,7 +646,7 @@ behavior-parity target.
   while it lives. Lock identity is the canonical path after resolving
   symlinks, so a hard link or bind mount of the same database gets separate
   lock files and only the database lease fences it; `serve` refuses hard
-  links at start in slice 3c.
+  links at start.
   The scheduler seeds every catalog job, cancels a keyed job no longer
   declared, and a job whose needed module is off
   records `skipped_module`. Core (settings, secrets, `db`,
@@ -674,24 +659,29 @@ behavior-parity target.
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
-  atrium's own read-only CalDAV/CardDAV sync (vdirsyncer is gone). A disabled
+  atrium's own read-only CalDAV/CardDAV sync. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
   calendar-candidate stage and notification sends are skipped (the mail pause
   controls stay available), and its tables remain.
-  The first start
-  after the module wiring adopts a database that already holds operator data
-  (settings, secrets, accounts, threads or usage rows): every module whose
-  required settings are met is enabled, so a Phase A installation keeps every
-  feature; an empty database starts core only. `atrium settings set
-  <name>_enabled true` is refused with the unmet reasons. The assistant tool
+  On its first start the application seeds the module flags. A database
+  that already holds operator data (settings, secrets, accounts, threads or
+  usage rows) gets every module whose required settings are met enabled; an
+  empty database starts core only. `atrium settings set <name>_enabled true`
+  is refused with the unmet reasons. A module flag change takes effect after
+  the atrium units restart: the running application has no control that
+  writes a flag, a module's Settings page marks "Restart atrium to apply"
+  when the stored flag differs from the running state, and the API refuses
+  module flags. The assistant tool
   registry is built from the enabled modules' tools.
   Each run and dispatch resolves the current handler-bound tool registry.
   Pending mutations retain their owner's generation and refuse before recording
   a write intent if that owner was disabled, including after re-enablement.
   Started effects finish their ledger settlement; unknown outcomes stay blocked.
   Dismissing a proposal remains possible while its owner is disabled.
-  Settings transactions publish a new module snapshot only after commit.
+  Each settings save made by the running serve re-evaluates the modules
+  after commit and publishes the new snapshot; a failed transaction changes
+  no running module state.
   Modules also declare typed application operations and the HTML, API, CLI,
   tool, job and service entries bound to them; compiling the catalog rejects
   a binding to an unknown or foreign operation or a missing entry, and `serve`
@@ -700,13 +690,20 @@ behavior-parity target.
   [--require-api]` prints that catalog without a database or credentials;
   `--unbound` prints only the mounted routes, commands, tools, jobs and
   services that no operation binds (`[]` when there are none),
-  `--missing-api` prints only the operator operations without a typed API
-  binding, and `--require-api` exits 1 when an operation has no API
-  binding. `GET /api/v1/me` is bound to `auth.identity`.
-  Routes mount once with their declaration owner and check that snapshot on
-  each request, so changes committed by the running application take effect
-  without remounting or restarting; disabled routes keep the rendered 404
-  page or the API's JSON `not_found` response.
+  `--missing-api` prints only the operations the API does not reach, and
+  `--require-api` exits 1 when there is one or when an API binding has no
+  shape. An operation with the
+  `operator` or `operator_send` authority needs its own typed API route; one
+  whose only operator-class authority is `approved` is reached through
+  `review.approve` (`reached_via` in `--json`), which needs a typed route and
+  a non-server tool binding that can propose it. An operation without
+  `operator` or `operator_send` authority has no API route of its own: the
+  catalog refuses such a binding. `GET /api/v1/me` is bound to
+  `auth.identity`.
+  Routes mount once with their declaration owner and check the current
+  snapshot on each request, so a requirement change published by a settings
+  save takes effect without remounting; disabled routes keep the rendered
+  404 page or the API's JSON `not_found` response.
   The owner route registrar seals before listening and refuses later mounts,
   including empty subrouter mounts.
   A core evaluation failure names its owner and aborts startup; no
@@ -729,8 +726,6 @@ behavior-parity target.
   fields, when anything assigns an exported package-level function variable
   under `internal/`, or when an `internal/` package imports `internal/app`.
   The tool registry may add the enable settings of the tools it registers.
-  `just check-quick` and the `ownership` flake check run both; `just verify`
-  runs the registration check.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on
   the loopback ops listener (`ops_listen`, `off` disables), and every command
   can export OTLP/HTTP traces when the host sets `otel_traces_endpoint` (empty
@@ -739,26 +734,143 @@ behavior-parity target.
   calls, integration checks, notification delivery and database transactions;
   attributes are an allowlist of opaque ids, counts, durations and bounded
   names, never prompts, completions, mail content, addresses, tool arguments
-  or results, or secrets. Log records carry `TRACE_ID` and `SPAN_ID` when a
-  span is active; logs still reach VictoriaLogs through journald, with no
-  OTLP log pipeline. The metrics include LLM tokens and cost by model and run
-  kind, run steps and duration, tool calls and duration, mail sync counts,
-  queue depths, integration health, notification delivery and action links.
+  or results, or secrets; string values are scrubbed and clipped, and span
+  events and links are dropped. Log messages and attributes are scrubbed of
+  known secrets. Log records carry `TRACE_ID` and `SPAN_ID` when a span is
+  active; logs go to journald, with no OTLP log pipeline. The metrics include
+  LLM tokens and cost by model and run kind, run steps and duration, tool
+  calls and duration, mail sync counts, queue depths, integration health,
+  notification delivery and action links. The ops listener also serves
+  `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
+  stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   The host owns the scrape job and the traces endpoint.
-- The host owns external services, reverse proxy authentication,
-  persistence, and backups. Updating this repository does not update the
-  host's pinned application input.
 
-- A standalone `atrium media-agent --config FILE` process now provides authenticated rooted streaming without opening the main database. Listener peers are checked before TLS/headers, connections are capped at 256, headers at 16 KiB, and ranges at 16 parts (larger range sets are ignored). Root/state/cache overlap is checked on resolved paths and filesystem identities. SIGHUP drains and exits non-zero. This does not yet move main-side media filesystem work or deploy an agent service.
-- The media agent now supports read-only source/import/directory metadata and preparation, durable receipt-keyed filing, progress and inspection, and receipt-derived undo. Torrent plans hardlink downloads; import plans use exclusive rename; cleanup refuses remaining videos and is non-undoable. Mutations are globally serialized, preserve library-group permissions, and never copy across devices or replace destinations. Crash recovery only inspects receipts; identical replay returns the terminal result and never resumes. Main files media through the agent: the downloads queue maps each tagged torrent's qBittorrent content path to the agent `downloads` root by the `media_download_path_prefix` string prefix (no main-side stat) and lists imports, sources and show folders through the agent; filing re-checks the torrent (hash, `media` tag, complete, unchanged path), prepares the plan, records one `media_file` effect with a deterministic receipt key and `media-agent:<agent>:<root>/<path>` claims, streams progress into the held effect, and settles from the agent result (a transport loss stays `unknown`, blocks repeats and is never retried). Only a `done` filing tags the torrent `filed`. An import with no video left (samples count as videos) gets a non-undoable `media_import_cleanup` effect. `atrium media inspect-filing <effect-id>` prints the receipt and current evidence. Undo asks the agent for the receipt-derived inverse; filings made before the agent are refused. The service unit remains pending.
-- The library catalogue, `media_library_search`, library pages, episode thumbnails and the `media-thumbnails` job read from the media agent; the main process has no media filesystem access. The host key `media_root` is refused at startup (exit 78) and at Nix evaluation, naming `services.atrium.mediaAgent.roots`. The media module requires the `service/media-agent` connection. One catalogue per process is refreshed by the noncritical `media-catalogue` service every minute and after each filing (complete scan snapshots only; one restart when a snapshot expires; 30 s bound). A failed refresh keeps the previous catalogue and marks it stale (the library page says so; the tool and page JSON report `catalogue` state); with no catalogue yet, library reads answer 503 rather than an empty library. Thumbnails are generated and cached by the agent; `/apps/media/thumb/*` relays them behind login and shows the placeholder when the agent has none or is unavailable.
-- VPN library links come from one host key, `media.media_vpn_base_url` (https origin; http only on loopback), as `<base>/library/{movies,tv}/<path>`, served by the media agent's `[vpn]` listener (GET/HEAD only on those two prefixes, exact Host allow-list, peer CIDR check, no bearer, everything else 404). Unset means no VPN link. `media_movies_url`/`media_tv_url` are refused. Signed public links are unchanged.
-- Bearer media file reads resolve opaque ids through catalogue detail before streaming through the media agent. GET/HEAD content supports byte ranges without opening library paths in main; thumbnails, artwork and path-free filing inspection are API resources. Torrent adds accept either the existing JSON magnet form or multipart magnet/torrent input under shared upload admission and the existing torrent size cap.
-- The media torrent polling fragment requests the torrent-only downloads view, skipping filing queue/source and show-directory reads. Other media fragments already use their own operation and minimal fragment renderer; complete library and channel navigations retain their page frames.
-- The NixOS module adds `atrium-media-agent.service` (`services.atrium.mediaAgent.*`): it renders the agent TOML (never `vpn.allow_loopback`), the `service/media-agent` connection and `host.media.media_vpn_base_url`; the agent unit is the only one with media filesystem access (one writable library directory holding all four roots, setgid folders kept, own state and cache directories, bearer and VPN TLS by `LoadCredential`, no database or app keys); `atrium.service` lost the media group, media `ReadWritePaths` and ffmpeg, and has `InaccessiblePaths=-<library directory>` (also on `atrium-run`); the agent's groups must differ from the atrium group. The agent exits 78 on permanent configuration errors (`RestartPreventExitStatus=78`) and 1 on transient ones; evaluation checks `vpn.allowedPeers` are CIDR prefixes and derives the rendered `allowed_hosts` and default base URL from `vpn.allowedHosts` plus the listen port.
+### Media agent
+- A standalone `atrium media-agent --config FILE` process owns all media
+  filesystem access and never opens the main database. The NixOS module
+  runs it as `atrium-media-agent.service` with its own user, state and cache
+  directories, a group that must differ from the atrium group, and one
+  writable library directory holding the four roots; `atrium.service` and
+  `atrium-run` have that directory in `InaccessiblePaths`. The agent exits 78
+  on permanent configuration errors and 1 on transient ones.
+- The control listener requires a bearer and an accepted Host, and checks
+  the peer before TLS and headers. Connections are capped at 256, headers at
+  16 KiB and ranges at 16 parts (larger range sets are ignored). Root, state
+  and cache overlap is checked on resolved paths and filesystem identities.
+  SIGHUP drains and exits nonzero.
+- The agent provides read-only source, import and directory metadata and
+  preparation, durable receipt-keyed filing, progress and inspection, and
+  receipt-derived undo. Torrent plans hardlink downloads; import plans use
+  exclusive rename; cleanup refuses remaining videos and is not undoable.
+  Mutations are serialized, never copy across devices and never replace
+  destinations. A source must already belong to the library group and be
+  group-readable (directories also group-writable and searchable), or the
+  agent refuses it. Crash recovery only inspects receipts; identical replay
+  returns the terminal result and never resumes.
+- Main files media through the agent. The downloads queue maps each tagged
+  torrent's qBittorrent content path to the agent `downloads` root by the
+  `media_download_path_prefix` string prefix (no main-side stat). Filing
+  re-checks the torrent (hash, `media` tag, complete, unchanged path),
+  prepares the plan, records one `media_file` effect with a deterministic
+  receipt key and `media-agent:<agent>:<root>/<path>` claims, streams progress
+  into the held effect, and settles from the agent result. A transport loss
+  stays `unknown`, blocks repeats and is never retried. Only a `done` filing
+  tags the torrent `filed`. An import with no video left (samples count as
+  videos) gets a non-undoable `media_import_cleanup` effect. `atrium media
+  inspect-filing <effect-id>` prints the receipt and current evidence. Undo
+  asks the agent for the receipt-derived inverse; filings made before the
+  agent are refused.
+- The library catalogue, `media_library_search`, library pages, episode
+  thumbnails and the `media-thumbnails` job read from the agent. The host key
+  `media_root` is refused at startup (exit 78) and at Nix evaluation, naming
+  `services.atrium.mediaAgent.roots`. The media module requires the
+  `service/media-agent` connection. One catalogue per process is refreshed by
+  the noncritical `media-catalogue` service every minute and after each
+  filing (complete scan snapshots only; 30 s bound). A failed refresh keeps
+  the previous catalogue and marks it stale; with no catalogue yet, library
+  reads answer 503 rather than an empty library. The agent generates and
+  caches thumbnails and remembers a failed thumbnail for seven days;
+  `/apps/media/thumb/*` relays them behind login and shows the placeholder
+  when the agent has none or is unavailable.
+- VPN library links come from one host key, `media.media_vpn_base_url`
+  (https origin; http only on loopback), as `<base>/library/{movies,tv}/<path>`,
+  served by the agent's `[vpn]` listener: GET and HEAD only on those two
+  prefixes, exact Host allow-list, peer CIDR check, no bearer, everything else
+  404. Unset means no VPN link. `media_movies_url` and `media_tv_url` are
+  refused. Signed public links are unchanged.
+- Bearer media file reads resolve opaque ids through catalogue detail before
+  streaming through the agent. GET and HEAD content support byte ranges
+  without opening library paths in main; thumbnails, artwork and path-free
+  filing inspection are API resources. Torrent adds accept the JSON magnet
+  form or multipart magnet or torrent input under shared upload admission
+  and the torrent size cap.
+
+## Application services and adapters
+
+- An application operation has a stable name, query or command kind, typed
+  input and output, authority list, effect classification and command audit
+  policy. Authorities are `operator`, `agent`, `operator_send`, `approved`,
+  `system`, `public_capability` and `bootstrap`. They describe callers and
+  completeness requirements; declaring an authority is not authentication
+  and does not authorize a request. Authentication and domain safety checks
+  run in their own layers.
+- Module declarations bind operations to API, HTML, CLI, tool, job and
+  service entries. Compilation rejects duplicate or incomplete operation
+  definitions, unknown operations, undeclared targets, invalid API shapes
+  and foreign ownership. Pure protocol entries are `protocol-only` bindings
+  with a reason (`transport`, `redirect`, `static`, `coordinator`,
+  `native-tool` or `lifecycle`); they have no operation.
+- The owner-tagged web registrar mounts routes once. Its strict `Seal`
+  rejects a declared HTML or API binding that its owner did not mount and any
+  mounted route without a binding, and refuses later registration.
+- An owned API command checks its module before reading the body (409
+  `module_disabled`) and again during execution (503 `module_disabled` with
+  `Retry-After: 5`). A binary API relay owned by a module (media content and
+  artwork, file downloads) answers 409 `module_disabled` before relaying when
+  that module is off. Only
+  `POST /api/v1/mail/live/pause` is unowned. The
+  owner generation follows a pending mutation to ledger admission: a halted
+  owner cannot start a new effect, an effect already started finishes
+  recording its result, and re-enabling an owner does not make an old
+  generation valid.
+- Adapters translate HTTP, forms, CLI arguments, tools and job inputs into
+  application service calls. `tools/adapterboundary` rejects `database/sql`
+  and internal domain imports from the declared adapter paths; shared
+  adapter infrastructure and packages named `application` are allowed, and
+  the two composition roots are classified separately. There is no per-edge
+  allowlist.
+
+### Serve lifecycle
+
+- Serve opens and validates state, binds every configured listener, composes
+  and seals the routes, and starts supervised work before announcing
+  `READY=1`. A listener bind failure closes the sockets already opened and
+  never announces readiness. A listener failure after readiness stops the
+  other listeners too. The serve lock excludes a second resident process on
+  the same database.
+- Serve exits 0 for a clean stop, including a signal before readiness; 1 for
+  a transient refusal or an unclean stop; 2 for usage; and 78 for a
+  permanent configuration, key or schema refusal, with the reason on stderr.
+  A missing or unreadable key file or malformed key-file content is
+  transient. A readable, well-formed key that cannot open the database is
+  permanent, and so is an encrypted database without a configured key. The
+  NixOS unit restarts failures every 5 seconds with no start limit, but not
+  exit 2 or 78.
+- The database key is 64 hexadecimal digits from `ATRIUM_DB_KEY`,
+  `ATRIUM_DB_KEY_FILE` or the `db-key` credential. Configuring a key never
+  converts an existing plaintext file; that mismatch is refused. Keyed
+  backup archives need the key under which they were made, also after a
+  rekey.
 
 ## Current authority boundaries
 
+- Database writes use `DB.Write` and `WithTx`; `DB.Read` is query-only. The
+  cross-process write gate uses `<db>.write-queue.lock` and
+  `<db>.write.lock`. Gate admission waits up to 30 seconds and SQLite has a
+  separate 30-second busy budget, so contended work can wait about 60
+  seconds. Both waits respond to context cancellation. Approvals, assistant
+  mail moves and undo wait five seconds for the mail pass before refusing as
+  busy, so they can be retried after the pass.
 - The effect ledger (`internal/ledger`) owns the `effects`, `effect_resources`,
   `effect_claims`, `effect_resolutions` and `effect_import_refs` tables and
   every external write. A write records an intent before the external call; a
@@ -771,6 +883,12 @@ behavior-parity target.
   Undo and resolve handlers come from the compiled module catalog at every
   entry point, including mail proposal effects and media effects; the effect
   state and the relevant write gate still determine whether an undo can run.
+  Settlement continues on a cancellation-detached context. Resolving an
+  unknown or partial effect appends actor, source, outcome, prior state and
+  evidence to `effect_resolutions`; it does not rewrite the raw attempt.
+  Blocking and undo use the effective resolution, so a draft can become sent
+  while its raw SMTP effect stays unknown. A failed, partial or unknown
+  inverse is not treated as a completed undo.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
   go-live eligibility, verification, caps, and the effect ledger. The mode is
@@ -784,6 +902,11 @@ behavior-parity target.
   UID EXPUNGE. A due snooze in shadow mode records a skipped effect and stays
   pending. Proposal undo reverses completed effects newest first and stops at
   the first reversal that does not complete.
+- Going live takes a baseline of the read, unflagged inbox messages present
+  at that moment, and automatic filing and deletion never touch them. A
+  failed automatic write is retried a bounded number of times (three, a
+  compiled constant), and automatic deletion runs at most once a day per
+  account.
 - The assistant creates mail folders and moves messages with direct,
   undoable writes through the effect ledger; shadow mode records the effect
   without a mailbox write, pause and the write cap apply, protected folders
@@ -802,7 +925,10 @@ behavior-parity target.
   external write records an effect first; Notion mutations are not retried,
   and an unknown outcome blocks the target until `atrium writes resolve
   <id>`. Pages the export did not create are never touched, and edits made in
-  Notion are overwritten on the next run.
+  Notion are overwritten on the next run. The Obsidian export likewise
+  writes and removes only the files it tracks. Private records are exported
+  only with consent recorded for that exact destination; changing the
+  destination clears the consent.
 - Draft edits carry an optional expected revision: stale edits are refused without overwriting newer content. The HTML form sends it automatically; API and tool callers may supply `revision`.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
@@ -858,9 +984,9 @@ behavior-parity target.
   Findings of severity warning or critical appear in the attention view
   and on Needs you. No worker run starts automatically and nothing
   restarts or changes a host.
-- The Notion page view is read-only: the Edit and Link buttons are gone,
-  and old `notion_link` and `notion_edit` proposals stay readable and
-  dismissable. Approvals are only for external or costly actions.
+- The Notion page view is read-only, and `notion_link` and `notion_edit`
+  proposals from v2 stay readable and dismissable. Approvals are only for
+  external or costly actions.
 - Threads carry marks, recorded with `threads.tainted_at` as the first
   mark time. The set is a bitmask: `untrusted` (someone else wrote the
   text), `pii` (identifiers that reach, locate or impersonate a person),
@@ -960,11 +1086,11 @@ behavior-parity target.
   `web_search` option is on; its channel is internet, so the permission
   table can ask with the exact `query` and `question` on the card. The
   child is a `search_web` sub thread with no project; it has the server
-  `web_search` (at most `search_web_max_searches`, default 5),
+  `web_search` (at most 5 searches, a compiled constant),
   `web_fetch`, `recall` and `report`, and its allowlist starts with the
   URLs typed in `query`/`question`, never the parent's. Its run caps are
-  `search_web_max_cost_usd` (default 0.15, search fees included) and
-  `search_web_max_steps` (default 8); it uses `search_web_model` (default
+  `search_web_max_cost_usd` (default 0.15, search fees included) and a
+  compiled 8-step cap; it uses `search_web_model` (default
   Haiku 5.5) at medium effort and shares the subagent concurrency gate.
   The child reports an answer and up to `max_sources` citations. Code
   keeps a citation only when its URL appeared in a `web_search_tool_result`
@@ -974,13 +1100,18 @@ behavior-parity target.
   set is dropped with its `[n]` marker. Only surviving URLs are added to
   the parent's allowlist. The server `web_search` is offered only to this
   child, and the seeded `web` research role is retired.
+- `web_fetch` fetches only a URL the operator typed in the thread or that a
+  verified `search_web` citation added; text in a page or tool result cannot
+  add URLs. The fetcher uses no proxy, follows only http and https redirects
+  up to a bound, and connects only to public addresses, checking the
+  resolved and dialed address on every redirect.
 - An operator message may carry reference blocks: `@thread/12` (a whole
   thread) or `@thread/12/m34` (one message) is resolved when the message
   is sent and stored as
   `{"type":"reference","thread_id","seq","title","text","marks","tokens"}`.
   The text is the source thread's operator and assistant text, oldest
-  first, newest exchanges only when it exceeds `agent_ref_tokens`
-  (default 8,000); a message reference carries that message's text and is
+  first, newest exchanges only when it exceeds 8,000 tokens (a compiled
+  constant); a message reference carries that message's text and is
   refused when it has none. At most three references per message;
   unknown or deleted threads, the reading thread itself and over-limit
   references are refused with nothing stored. `Prepare` ORs the blocks'
@@ -1037,8 +1168,8 @@ behavior-parity target.
   drafts store and writes registry as the Review pages, so approval scope,
   the ledger, the send revision check and the mail gate are unchanged. Every
   unsafe request is a durable command (`Atrium-Command-Id`,
-  `GET /api/v1/commands/{id}`); an `Idempotency-Key` is shared across
-  bearers and replays the stored result for 24 hours after the command ends,
+  `GET /api/v1/commands/{id}`); an `Idempotency-Key` is scoped to the
+  principal and replays the stored result for 24 hours after the command ends,
   bodies and fingerprints are kept only for keyed requests, retryable
   `408`/`429`/`5xx` outcomes free the key unless an effect was recorded, and
   rows are pruned 30 days after they end (operator behavior has the codes).
@@ -1053,8 +1184,25 @@ behavior-parity target.
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
   and `atrium writes list` go through the `review.*` operations in
   `internal/review/application`.
-- Code execution is not part of the application. The code-mode worker
-  command and units are removed; coding may return as an external module.
+- Every `/api/v1` route is a typed binding mounted through `internal/api`.
+  `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
+  catalog (`atrium catalog openapi --output docs/api`, drift-checked by
+  `--check`). Approval-only operations count as reached through
+  `review.approve` and are listed separately in `reach.json`. The run event
+  stream is documented in `docs/api/run-stream.md` (heartbeats,
+  `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
+  retention); it sends a heartbeat every 15 seconds and allows 4 streams per
+  subject and 16 per server. Static assets are served from content-hashed
+  immutable URLs.
+- Draft PATCH and send accept the resource ETag through `If-Match` and still
+  compare revisions; knowledge PATCH has no `If-Match`. Opaque cursors bind
+  the operation, filters and path parameters and are at most 2,048
+  characters; pages usually default to 50 items and allow at most 100.
+- Multipart bodies containing file parts share four in-process upload slots; excess uploads return 429 with `Retry-After: 1`. A multipart body counts as carrying files unless its first 1 MiB holds every part and the closing boundary with no file part; a malformed or truncated body counts as carrying files. Multipart bodies have a 30-second idle read deadline from their first byte and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.
+- Multipart thread options match JSON options, including finite, nonnegative `cost_cap_usd`. Keyed multipart retries fingerprint parsed names, values, file names, content types and bytes rather than MIME boundaries; duplicate parts retain their per-field order. File and project API lists use stable keyset cursors. Previously issued thread-list and transcript cursors remain accepted. Disabled assistant commands refuse before reading bodies; the legacy stop route still ignores its optional body. Text downloads declare UTF-8. API assistant refusals use fixed operator-safe messages; unexpected failures return `internal` with a diagnostic ID.
+- Search has its own `assistant.search` operation; its cursors are shared with `/threads?q=…`. New cursors bind the operation, filters and path parameters; legacy thread and inbox cursors remain accepted. Schedule history remains readable for cancelled jobs and returns not_found for absent jobs on every page. API subagent saves refuse built-in definitions without changing the CLI's editing behavior. OpenAPI marks handler-required schedule and enabled fields as required, while queued memory work remains optional.
+- Code execution is not part of the application. There is no code-mode
+  worker; coding may return as an external module.
 
 ## Accepted direction
 
@@ -1075,9 +1223,10 @@ behavior-parity target.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
-- **Telemetry:** OpenTelemetry traces to VictoriaTraces, Prometheus metrics, and a `trace_id` in logs.
+- **Telemetry:** traces and metrics are implemented (see Observability); the
+  trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
-- **An iOS app** through the `/api/v1` JSON API. Chat, the run stream, the inbox, approvals, undo entries and drafts are implemented; attachments and push device registration (APNs) are deferred.
+- **An iOS app** through the `/api/v1` JSON API. Chat with attachments, the run stream, the inbox, approvals, undo entries and drafts are implemented; APNs push registration is deferred.
 - **Birthdays** have no page; the agent keeps access.
 - **Open loops** cover only mail addressed to the owner that needs a reply.
 
@@ -1086,20 +1235,18 @@ behavior-parity target.
 - Independent instances for other operators, without owner-specific source
   changes.
 
-Detailed feature scope and acceptance criteria belong in the open issues
-that carry them: #457 and #476 for the remaining v2 work, plus
-the owner gates #233 and #615. They do not belong in this file.
+## Open decisions
 
-The standalone `watch` and `agent scheduler` commands are removed. Run `serve`
-for supervised watches and scheduled work; `agent tick` remains a one-shot.
-
-The NixOS module ships one `atrium.service` unit and no atrium timers; the emergency listener options are `web.emergency.*`.
-
-Home includes its review strip, agenda and recent activity in the initial response. Thread Work rows render from the typed read; History loads on first selection. Fragment rendering skips the global page-frame reads.
-Knowledge record edits, confirmation and restoration, bulk confirmation and profile additions return scoped views. Settings group saves replace only that group, and inbox resends replace only their row. Review fragments load mail mode and the pending badge only when the rendered view needs them.
-
-- Multipart bodies containing file parts share four in-process upload slots; excess uploads return 429 with `Retry-After: 1`. A multipart body counts as carrying files unless its first 1 MiB holds every part and the closing boundary with no file part; a malformed or truncated body counts as carrying files. Multipart bodies have a 30-second idle read deadline from their first byte and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.
-
-- Multipart thread options match JSON options, including finite, nonnegative `cost_cap_usd`. Keyed multipart retries fingerprint parsed names, values, file names, content types and bytes rather than MIME boundaries; duplicate parts retain their per-field order. File and project API lists use stable keyset cursors. Previously issued thread-list and transcript cursors remain accepted. Disabled assistant commands refuse before reading bodies; the legacy stop route still ignores its optional body. Text downloads declare UTF-8. API assistant refusals use fixed operator-safe messages; unexpected failures return `internal` with a diagnostic ID.
-
-- Search has its own `assistant.search` operation; its cursors are shared with `/threads?q=…`. New cursors bind the operation, filters and path parameters; legacy thread and inbox cursors remain accepted. Schedule history remains readable for cancelled jobs and returns not_found for absent jobs on every page. API subagent saves refuse built-in definitions without changing the CLI's editing behavior. OpenAPI marks handler-required schedule and enabled fields as required, while queued memory work remains optional.
+- Knowledge PATCH has no `If-Match` precondition, so its conditional reads
+  give no optimistic concurrency guarantee for writes.
+- Four lifecycle services use protocol-only `lifecycle` bindings instead of
+  application operations: assistant initialization, core embedding index,
+  core recovery and media catalogue refresh.
+- Module flags are restart-only. There is no runtime toggle and no
+  cross-process signal from `atrium settings set` to a running serve.
+- A settings save in the running serve re-checks every module's
+  requirements after commit and can turn a module on or drain it. Whether
+  requirement changes should publish on their own is unresolved.
+- A connection's endpoint identity, which decides whether stored
+  credentials may be kept across an edit, is a field-name heuristic over
+  `url`, `api`, `host` and fields ending in `_url` or `_host`.

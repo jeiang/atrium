@@ -211,10 +211,14 @@ func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
 }
 
 func (s *Store) List(ctx context.Context, status Status, limit int) ([]Row, error) {
+	return s.ListPage(ctx, status, 0, limit)
+}
+
+func (s *Store) ListPage(ctx context.Context, status Status, offset, limit int) ([]Row, error) {
 	if status != "" {
-		return s.queryRows(ctx, "SELECT "+columns+" FROM drafts WHERE status = ? ORDER BY updated_at DESC LIMIT ?", string(status), limit)
+		return s.queryRows(ctx, "SELECT "+columns+" FROM drafts WHERE status = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?", string(status), limit, offset)
 	}
-	return s.queryRows(ctx, "SELECT "+columns+" FROM drafts ORDER BY updated_at DESC LIMIT ?", limit)
+	return s.queryRows(ctx, "SELECT "+columns+" FROM drafts ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?", limit, offset)
 }
 
 var lineBreakRE = regexp.MustCompile(`[\r\n]`)

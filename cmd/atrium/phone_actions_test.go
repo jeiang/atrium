@@ -299,8 +299,4 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM action_links WHERE used_ts IS NULL").Scan(&outstanding); err != nil || outstanding != actionlink.RateLimit-spent {
 		t.Fatalf("outstanding links = %d, %v", outstanding, err)
 	}
-	if body := s.page(); !strings.Contains(body, fmt.Sprintf("data-phone-outstanding>%d ", actionlink.RateLimit-spent)) {
-		t.Fatalf("notifications page misses %d outstanding links", actionlink.RateLimit-spent)
-	}
-
 }

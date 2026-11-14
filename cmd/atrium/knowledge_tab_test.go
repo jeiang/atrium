@@ -48,6 +48,9 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
 	w := asstBrowse(t, base)
+	if code, body, _ := w.get("/library/knowledge/new", false); code != http.StatusOK {
+		t.Fatalf("new record page = %d: %.300s", code, body)
+	}
 
 	// A marked thread cannot call kb_write on this base, so the marked record is
 	// created through the operator form's mark checkboxes.

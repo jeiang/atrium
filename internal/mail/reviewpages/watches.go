@@ -4,12 +4,11 @@ import (
 	"net/http"
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 type watchesPage struct {
-	Packages []watches.Package `json:"packages"`
+	Packages []mailapp.Package `json:"packages"`
 }
 
 func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tpl.Toast) {

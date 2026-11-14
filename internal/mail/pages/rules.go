@@ -14,9 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/ruleedit"
-	"github.com/jeiang/atrium/internal/mail/rules"
-	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -33,7 +30,7 @@ var ruleProblems = map[string]string{
 var ruleIDPrefix = regexp.MustCompile(`^[^:\s]+: `)
 
 func ruleProblem(err error) string {
-	var refused rules.RuleError
+	var refused mailapp.RuleError
 	if errors.As(err, &refused) {
 		if friendly, ok := ruleProblems[refused.Code]; ok {
 			return friendly
@@ -52,7 +49,7 @@ func (s *service) ruleViews(ctx context.Context, account string) []mailapp.RuleV
 	check(err)
 	return read.Data.List.Rules
 }
-func (s *service) folderMap(ctx context.Context) map[string][]triage.Folder {
+func (s *service) folderMap(ctx context.Context) map[string][]mailapp.TriageFolder {
 	read, err := s.reads.Rules(ctx, mailapp.RulesInput{Folders: true})
 	check(err)
 	return read.Data.Folders
@@ -88,7 +85,7 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 		in.MessageID = &sourceID
 	}
 	read, err := s.reads.Rules(r.Context(), in)
-	var refused rules.RuleError
+	var refused mailapp.RuleError
 	if errors.As(err, &refused) {
 		s.fail(w, r, http.StatusNotFound, refused.Error())
 		return
@@ -112,12 +109,12 @@ func (s *service) ruleCondition(w http.ResponseWriter, r *http.Request) {
 	if web.FragmentNotModified(w, r, read.Revision) {
 		return
 	}
-	s.fragment(w, r, "_condition_row.gohtml", read.Data.Condition, nil)
+	check(s.deps.Render.Fragment(w, r, http.StatusOK, "_condition_row.gohtml", tpl.Fragment{Data: read.Data.Condition}))
 }
 
 type previewData struct {
-	Preview *ruleedit.Preview `json:"preview"`
-	Error   *string           `json:"error"`
+	Preview *mailapp.RulePreviewResult `json:"preview"`
+	Error   *string                    `json:"error"`
 }
 
 type ruleForm struct {
@@ -127,7 +124,7 @@ type ruleForm struct {
 
 func readRuleForm(form url.Values) ruleForm {
 	return ruleForm{
-		account: web.FormString(form, "account", ""), action: web.FormString(form, "action", string(rules.ActionFile)), dest: web.FormString(form, "dest", ""),
+		account: web.FormString(form, "account", ""), action: web.FormString(form, "action", string(mailapp.RuleActionFile)), dest: web.FormString(form, "dest", ""),
 		fields: form["field"], ops: form["op"], values: form["value"],
 	}
 }
@@ -151,10 +148,10 @@ func conditionList(fields, ops, values []string) []any {
 		}
 		condition := map[string]any{"field": field, "op": op}
 		switch {
-		case slices.Contains(rules.ValuelessOps, op):
+		case slices.Contains(mailapp.RuleValuelessOps, op):
 		case op == "in" || op == "suffix":
 			condition["value"] = splitList(value)
-		case field == rules.AgeField && isDigits(strings.TrimSpace(value)):
+		case field == mailapp.RuleAgeField && isDigits(strings.TrimSpace(value)):
 			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err != nil {
 				panic(err)
@@ -177,10 +174,10 @@ func conditionViewsFromForm(fields, ops, values []string) []mailapp.ConditionVie
 		}
 		view := mailapp.ConditionView{Field: field, Op: op}
 		switch {
-		case slices.Contains(rules.ValuelessOps, op):
+		case slices.Contains(mailapp.RuleValuelessOps, op):
 		case op == "in" || op == "suffix":
 			view.Value = splitList(value)
-		case field == rules.AgeField && isDigits(strings.TrimSpace(value)):
+		case field == mailapp.RuleAgeField && isDigits(strings.TrimSpace(value)):
 			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err != nil {
 				panic(err)
@@ -199,7 +196,7 @@ func (f ruleForm) raw() map[string]any {
 	if f.account != "" {
 		account = f.account
 	}
-	if rules.Action(f.action) != rules.ActionDelete && f.dest != "" {
+	if mailapp.RuleAction(f.action) != mailapp.RuleActionDelete && f.dest != "" {
 		dest = f.dest
 	}
 	return map[string]any{"account": account, "action": f.action, "dest": dest, "when": conditionList(f.fields, f.ops, f.values)}
@@ -211,7 +208,7 @@ func (f ruleForm) view(id string) mailapp.RuleView {
 		account := f.account
 		view.Account = &account
 	}
-	if rules.Action(f.action) != rules.ActionDelete && f.dest != "" {
+	if mailapp.RuleAction(f.action) != mailapp.RuleActionDelete && f.dest != "" {
 		dest := f.dest
 		view.Dest = &dest
 	}
@@ -220,9 +217,9 @@ func (f ruleForm) view(id string) mailapp.RuleView {
 
 func (s *service) rulePreview(w http.ResponseWriter, r *http.Request) {
 	raw := readRuleForm(web.FormValues(r)).raw()
-	raw["id"] = ruleedit.PreviewID
+	raw["id"] = mailapp.RulePreviewID
 	read, err := s.reads.RulePreview(r.Context(), mailapp.RulePreviewInput{Rule: raw})
-	var invalid rules.RuleError
+	var invalid mailapp.RuleError
 	if errors.As(err, &invalid) {
 		problem := ruleProblem(err)
 		s.fragment(w, r, "_rule_preview.gohtml", previewData{Error: &problem}, nil)
@@ -242,7 +239,7 @@ func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, is
 	}
 	done, err := save(ctx, mailapp.RuleInput{ID: id, Rule: raw})
 	rule := done.Data
-	var invalid rules.RuleError
+	var invalid mailapp.RuleError
 	if errors.As(err, &invalid) {
 		data := mailapp.RuleEdit{
 			Rule: form.view(id), IsNew: isNew, Folders: s.folderMap(ctx), Suggestions: []mailapp.ConditionView{},

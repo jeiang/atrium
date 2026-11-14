@@ -85,6 +85,9 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 	if err != nil {
 		return nil, err
 	}
+	if err := validateEndpointURLs(ID(s.ID), configJSON); err != nil {
+		return nil, fmt.Errorf("db import-v2: %w", err)
+	}
 	transportJSON, err := json.Marshal(compact(s.Transport))
 	if err != nil {
 		return nil, err

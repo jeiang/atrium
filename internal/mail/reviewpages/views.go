@@ -1,7 +1,7 @@
 package reviewpages
 
 import (
-	"github.com/jeiang/atrium/internal/mail/drafts"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
@@ -89,7 +89,7 @@ func draftViews(cards []reviewapp.DraftCard) []DraftView {
 	return out
 }
 
-func draftView(row drafts.Row, unexpected []string) DraftView {
+func draftView(row mailapp.DraftRow, unexpected []string) DraftView {
 	return DraftView{
 		ID: row.ID, Status: string(row.Status), Revision: row.Revision, Account: row.Account, InReplyToMessageID: row.InReplyToMessageID, ThreadID: row.ThreadID,
 		UpdatedAt: row.UpdatedAt, Unexpected: unexpected, ToAddrs: row.ToAddrs, CcAddrs: row.CcAddrs, Subject: row.Subject,

@@ -7,10 +7,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/replay"
-	"github.com/jeiang/atrium/internal/mail/router"
 )
 
 func (o Options) ReplayCommand() *cli.Command {
@@ -29,11 +26,11 @@ func (o Options) replay(env *cli.Env, account string, limit int, model bool) int
 	if limit < 0 {
 		return env.UsageError("argument --limit: must be a whole number of at least 0")
 	}
-	cfg, err := config.Load(o.env())
+	cfg, err := o.Load()
 	if err != nil {
 		return cli.Fail(env, err)
 	}
-	read, err := mailapp.New(nil, cfg, o.env(), o.Now).WithClassifiers(o.Classifiers).Replay(env.Ctx, mailapp.ReplayInput{Account: account, Limit: limit, Model: model})
+	read, err := o.Standalone(cfg, o.Now).Replay(env.Ctx, mailapp.ReplayInput{Account: account, Limit: limit, Model: model})
 	if code, ok := unknownAccount(env, account, err); ok {
 		return code
 	}
@@ -59,13 +56,13 @@ func (o Options) replay(env *cli.Env, account string, limit int, model bool) int
 	return cli.ExitOK
 }
 
-func replaySummary(s replay.Summary) string {
-	parts := make([]string, 0, len(router.Stages)+1)
-	for _, stage := range router.Stages {
+func replaySummary(s mailapp.ReplaySummary) string {
+	parts := make([]string, 0, len(mailapp.RouterStages)+1)
+	for _, stage := range mailapp.RouterStages {
 		parts = append(parts, fmt.Sprintf("%s=%d", stage, s.Stages[stage]))
 	}
-	if n := s.Stages[replay.StageNone]; n > 0 {
-		parts = append(parts, fmt.Sprintf("%s=%d", replay.StageNone, n))
+	if n := s.Stages[mailapp.ReplayStageNone]; n > 0 {
+		parts = append(parts, fmt.Sprintf("%s=%d", mailapp.ReplayStageNone, n))
 	}
 	return fmt.Sprintf("messages replayed: %d\nby stage: %s\ndifferences: %d\n",
 		s.Messages, strings.Join(parts, ", "), s.Differ)

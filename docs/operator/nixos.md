@@ -1,223 +1,345 @@
 # NixOS module options
 
-The flake's `nixosModules.default` defines `services.atrium`. All options below sit under that prefix. Nothing is created unless `services.atrium.enable` is true.
+The flake's `nixosModules.default` imports `nix/module.nix` and supplies the
+platform's static application package. All names below are under
+`services.atrium`. Enabling the module creates the configured application
+user/group, `atrium.service`, and `atrium-run`. The media agent is optional.
+There are no atrium timers.
 
-The module has a small set of typed deployment options. Host configuration goes in `host`, host connections in `connections`, and app signing key files in `secretFiles`; all use the keys of the [configuration reference](../config/reference.md). Host keys are read only from the host file and its environment, never from the database. Twelve tuning values are compiled constants, not settings. Operator preferences are not host configuration: set them in the application, where they are stored in the database and audited, except the `<name>_enabled` module flags, which the host may also declare; a declared flag wins and is read-only. A cut-over operator or tuning key in `host` fails evaluation with its destination. The mail mode is one of those operator settings: change it with `atrium settings set mail_mode shadow|live`, so `host.mail.mail_mode` fails evaluation with that command.
+Host requirements go in `host`, declared connections in `connections`, and
+operator choices in database settings. The [configuration reference](../config/reference.md)
+owns the host-key inventory. The tables below cover the options declared by
+`nix/module.nix`, including its read-only internal outputs. A required value has
+no default; a `null` default is not a usable credential or listener value.
 
-## Core
+## Application and configuration
 
-| Option | Type | Default | Meaning |
+| Option | Type | Default | Effect |
 | --- | --- | --- | --- |
-| `enable` | bool | `false` | Enables the module. |
-| `package` | package | the flake's static Go build for the host platform | The atrium application used by every unit and by `atrium-run`. |
-| `stateDir` | path under `/var/lib` | `"/var/lib/atrium"` | Holds the database (`atrium.db`), the message cache (`cache/messages`) and the calendar and contacts mirrors (`mirrors/`). Managed through systemd `StateDirectory`. The mirror directory was named `vdirsyncer/` before v2; that directory is no longer read, and the mirrors re-sync from the providers. |
-| `user` | string | `"atrium"` | Static system user of every unit and of `atrium-run`. |
-| `group` | string | `"atrium"` | Group of that user. |
-| `uid` | int | `880` | uid of the user and gid of the group. |
-| `port` | port | `8480` | Port of the public listener. |
-| `host` | TOML table per module | `{}` | Host configuration, rendered to the file named by `ATRIUM_HOST_CONFIG`. Only host keys from the configuration reference are accepted; operator and tuning keys, and derived keys such as `export.export_obsidian_dir`, fail evaluation with their destination, except the `<name>_enabled` module flags, which are operator settings the host may declare. Host values are read-only in the application, and a database row with a host key is ignored. |
-| `connections` | attribute set of connection | `{}` | Host-owned connections by id. Each has `kind`, optional `label`, `config`, `transport`, `capabilities` and `credentialFiles` (slot to host file). Each file is delivered through `LoadCredential`; secret values never enter the Nix store. The kind must be one the application registers. |
-| `mailAccounts` | attribute set of mail account | `{}` | Mail accounts by id, rendered as `mail/<id>` connections of kind `mail` with the `imap` and `smtp` capabilities and the password as a host-file credential. Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile`, and optional `label` and `enabled`. The password file is delivered through `LoadCredential`; the id keys the account's cached mail, so keep it stable. |
-| `secretFiles` | attribute set of string | `{}` | App signing key files as `"<module>.<key>" = "<host file>"`, delivered through systemd `LoadCredential` and rendered as `host.app_keys.<key>_file`. Only `action_links.action_link_key` and `media.link_key` are accepted; their bytes sign and verify links and are never copied into the database. Connection credentials belong in `connections.<id>.credentialFiles`, host secret inputs in `host.<module>.<key>_file`, and the database key in `database.keyFile`. Any other key fails evaluation with its destination. |
-| `database.keyFile` | null or string | `null` | Host file holding the database key, delivered as the `db-key` credential and `ATRIUM_DB_KEY_FILE`. |
-| `initialTimezone` | null or string | `time.timeZone` | Time zone stored as the operator `tz` value when a fresh database has none. A stored or imported value wins, and the operator can change it afterwards. |
-| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token is a connection credential in `connections."service/tmdb".credentialFiles.read_token`; the Grafana token is a connection credential until its owner is cut over; the Notion token is a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts reuse an iCloud mail account for their CalDAV and CardDAV login. |
-| `embeddingServerUnits` | list of string | `[]` | Units serving the `service/embedding` endpoint. The application units start after them and want them. |
+| `enable` | boolean | `false` | Enables module configuration. |
+| `package` | package | Static application package from the flake; no default when importing `nix/module.nix` alone | Binary used by the service and `atrium-run`. |
+| `stateDir` | string matching `/var/lib/[^/]+` | `"/var/lib/atrium"` | Systemd state directory containing `atrium.db`, `cache/messages`, and calendar/contact mirrors under `mirrors`. |
+| `user` | string | `"atrium"` | Static application service and CLI user. |
+| `group` | string | `"atrium"` | Application user's primary group. |
+| `uid` | integer | `880` | Application user uid and group gid. |
+| `port` | port | `8480` | Public listener port. |
+| `host` | TOML-compatible attribute set | `{}` | Read-only host requirements rendered to `ATRIUM_HOST_CONFIG`. Unknown, retired, operator-only, or compiled tuning keys fail evaluation with their destination. Module flags are host-declarable exceptions among operator settings. |
+| `connections` | attribute set of connection submodules | `{}` | Host-owned connections keyed by id; fields are below. |
+| `mailAccounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections and password credentials; fields are below. |
+| `secretFiles` | attribute set of strings | `{}` | App signing key file paths, delivered through `LoadCredential`. Only `action_links.action_link_key` and `media.link_key` are accepted. |
+| `database.keyFile` | null or string | `null` | Absolute host key-file path, delivered as the `db-key` credential. |
+| `initialTimezone` | null or string | `config.time.timeZone` | Seeds `tz` only when no operator/imported value exists. |
+| `environmentFiles` | list of strings | `[]` | `EnvironmentFile` paths for the application service and `atrium-run`, not the agent. Accepted environment inputs still undergo startup validation. |
+| `embeddingServerUnits` | list of strings | `[]` | Adds embedding-service units to the application's `After` and `Wants`. |
 
-The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and the `mail/<id>` connections from `mailAccounts`. It does not pin an operator setting.
+The module derives mirror paths, backup inputs, tracing destination, Obsidian
+export path, proxy CIDRs, and generated connections in the host file. The
+application does not read host-owned values from database setting rows. A
+host-declared module flag wins over a stored flag and is read-only. A flag
+change requires restarting serve; there is no runtime module-toggle UI or API.
+
+### Connection fields
+
+These are fields of each `connections.<id>` submodule, not top-level settings.
+
+| Field | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `kind` | string | Required | Registered connection kind, such as `service/oidc`. Nix requires it to be nonempty; the application validates the registered kind. |
+| `label` | string | Attribute name `<id>` | Display label. |
+| `config` | attribute set of strings | `{}` | Public fixed fields such as URL, issuer, client id, and selectors. |
+| `transport` | attribute set of strings | `{}` | Host transport fields such as CA file or proxy. |
+| `capabilities` | list of strings | `[]` | Enabled connection capabilities. |
+| `credentialFiles` | attribute set of strings | `{}` | Credential slot to host file path; each becomes a systemd credential. |
+
+Credentials never become literal secret values in the generated host TOML.
+The application validates credential slots. On host takeover of an
+operator-owned connection, a changed endpoint cannot retain a stored database
+credential: replace it with a declared credential file or disconnect first.
+The operator UI and API enforce the corresponding replacement rule before
+contacting a changed endpoint.
+
+### Mail account fields
+
+| Field of `mailAccounts.<id>` | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `label` | null or string | `null` | Display name, falling back to the account id. |
+| `preset` | `"icloud"` or `"gmail"` | Required | Supplies provider hosts and folder behavior. |
+| `login` | string | Required | IMAP/SMTP login. |
+| `passwordFile` | string | Required | App-password file delivered as `mail-account-<id>`. |
+| `enabled` | boolean | `true` | Whether the account is opened and synced. |
+
+Generated accounts use password authentication and `imap`/`smtp` capabilities.
+The account id keys cached mail and must remain stable. Operator-added accounts
+can also use the application's supported OAuth flows; the shorthand above is
+for host-owned password accounts.
+
+## Web listeners
+
+| Option | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `web.host` | string | `"0.0.0.0"` | Public bind address. |
+| `web.auth` | `"proxy"`, `"oidc"`, `"proxy+oidc"`, or `"local"` | `"oidc"` | Authentication modes, emitted as separate `--auth` arguments. Local requires numeric loopback. |
+| `web.allowedHost` | null or string | `null` | Accepted public Host; required unless auth is local. Also passed as `ATRIUM_PUBLIC_HOST`. |
+| `web.trustedProxyCidrs` | list of strings | `[]` | Peer addresses/CIDRs allowed to supply `CF-Connecting-IP`; rendered as `web.trusted_proxy_cidrs`. |
+| `web.emergency.enable` | boolean | `true` | Adds a local-mode listener on `127.0.0.1` inside `atrium.service`. |
+| `web.emergency.port` | port | `8481` | Emergency port; must differ from public and ops ports. |
+
+OIDC-only ignores proxy identity headers. Its public sign-in stays closed until
+the `service/oidc` connection is configured. OIDC connection selectors are
+`access_groups`, `access_emails`, and `access_domains`; its API client id is
+`config.api_client_id`. The client secret belongs in `credentialFiles.client_secret`.
+
+`host.core.ops_listen` defaults in the application to `127.0.0.1:9180`; empty or
+`off` disables it. Evaluation checks public, emergency, and enabled ops port
+collisions. The public port is not automatically opened in the firewall.
+
+Proxy modes require a trusted reverse proxy to strip or overwrite `Remote-*`
+headers. Do not publicly proxy the emergency listener. `/api/v1` remains
+bearer-only in every listener and does not use browser/proxy authentication;
+with `proxy` or `proxy+oidc`, the reverse proxy must pass `/api/v1` through
+without forward authentication.
+
+### First start and recovery
+
+1. Set `database.keyFile` before the first start of `atrium.service`. The key
+   is 64 hexadecimal digits in a host secret file, never in Nix, an
+   environment literal or a command argument. Keep an offline copy.
+2. Start `atrium.service`. With `web.emergency.enable`, the same process opens
+   `127.0.0.1:8481` on the same database. Reach it only through an SSH or VPN
+   tunnel that ends on the host.
+3. Register an OIDC client whose redirect URI is the public URL plus
+   `/auth/callback`, then declare `host.core.public_url` and the
+   `service/oidc` connection with its secret in `credentialFiles`. Until that
+   connection validates, `/login` shows the closed state and proxy headers
+   grant nothing.
+4. `atrium-run db check` succeeds with the key and refuses without it; it
+   does not create a missing database.
+
+If public sign-in breaks, use the emergency listener: it shares settings and
+API tokens with the public listener. If the database key is lost, the database
+and archives made under it cannot be opened.
+
+## Media and agent
+
+| Option | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `media.enable` | boolean | `false` | Requires a local agent or an explicit `service/media-agent` connection. It is not a filesystem access grant. |
+| `media.group` | string | `"media"` | Default library/agent group, not a supplementary application group. |
+| `mediaAgent.enable` | boolean | `false` | Adds the agent unit/user/group and generates `service/media-agent`. |
+| `mediaAgent.package` | package | `services.atrium.package` | Package used for `atrium media-agent`. |
+| `mediaAgent.ffmpegPackage` | package | `pkgs.ffmpeg-headless` | Supplies ffmpeg and ffprobe on the agent's path. |
+| `mediaAgent.user` | string | `"atrium-media-agent"` | Agent system user; must differ from the application user. |
+| `mediaAgent.group` | string | `media.group` | Agent primary group and library group; new library folders use mode 2775 under umask 0002. |
+| `mediaAgent.listen` | string | `"127.0.0.1:8482"` | Loopback control IP and port; also the allowed control Host and generated connection URL. |
+| `mediaAgent.bearerFile` | null or string | `null` | Absolute file holding at least 32 bearer bytes; required when enabling the agent. Delivered to both units. |
+| `mediaAgent.capabilities` | list of `"scan"`, `"thumbnail"`, `"file"`, `"stream"` | All four | Enabled capabilities on the generated connection. |
+| `mediaAgent.roots.movies` | string | Required | Absolute movies root. |
+| `mediaAgent.roots.tv` | string | Required | Absolute TV root. |
+| `mediaAgent.roots.downloads` | string | Required | Download root used as hardlink source; the agent does not write it. |
+| `mediaAgent.roots.import` | string | Required | Manual import root used as rename source. |
+
+All four roots must be clean, absolute, non-overlapping paths under one common
+library parent. That parent cannot be a broad system directory or overlap
+application state; roots cannot be under `/home` or `/root`. A download root
+outside the shared parent fails evaluation when the resulting common parent is
+broad. Hardlinks and renames also require compatible filesystems at runtime;
+there is no cross-device copy fallback.
+
+The agent's primary and supplementary groups must not include the application
+group, which can read application state. The application unit and `atrium-run`
+get `InaccessiblePaths=-<library-parent>` and no media group or ffmpeg path.
+The agent gets the parent as its one explicit `ReadWritePaths` entry so filing
+can link/rename across roots in one mount. Backup/export destinations must not
+overlap that inaccessible parent. Setting an explicit `service/media-agent`
+connection together with `mediaAgent.enable` is refused. Download and import
+sources must already be in the agent group, group-readable and, for
+directories, group-writable; the agent refuses other sources and does not
+change download inodes. Make the download client write with that group and
+umask 0002.
+
+### VPN listener
+
+| Option | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `mediaAgent.vpn.enable` | boolean | `false` | Adds TLS library GET/HEAD routes, derives VPN links, and opens the VPN port only on the named interface. |
+| `mediaAgent.vpn.listen` | string | `""` | Required explicit non-loopback, non-wildcard IP and port when VPN is enabled. |
+| `mediaAgent.vpn.interface` | null or string | `null` | Required mesh interface for its firewall rule. |
+| `mediaAgent.vpn.allowedPeers` | list of strings | `[]` | Required nonempty CIDR prefixes with lengths; `/0` is refused. Peers are checked at accept. |
+| `mediaAgent.vpn.allowedHosts` | list of strings | `[]` | Required nonempty Host list. Bare names gain the listen port unless it is 443; explicit ports must match. |
+| `mediaAgent.vpn.baseUrl` | string | `https://<first rendered allowed Host>`; `https://` when the list is empty | VPN library origin; must be HTTPS with an authority in the rendered Host list. |
+| `mediaAgent.vpn.tls.certificateFile` | null or string | `null` | Required certificate-chain file, passed through credentials. Players must trust it. |
+| `mediaAgent.vpn.tls.keyFile` | null or string | `null` | Required matching TLS private-key file, passed through credentials. |
+
+The VPN listener has no bearer and exposes only GET/HEAD for
+`/library/movies/*` and `/library/tv/*`. It uses peer CIDRs and exact Host checks.
+The module never emits `allow_loopback`. It derives
+`host.media.media_vpn_base_url`; declaring that host key as well is refused.
+`media_root`, `media_movies_url`, and `media_tv_url` are not replacements for
+these options and are refused by the application/configuration schema.
+
+## Backup, export, and monitoring
+
+| Option | Type | Default | Effect |
+| --- | --- | --- | --- |
+| `backup.enable` | boolean | `false` | Configures the backup job inside serve, creates the destination, and grants write access. No timer or separate backup service. |
+| `backup.directory` | string | `"/var/backups/atrium"` | Archive directory, created mode 0750 for the application user/group; renders `core.backup_directory`. |
+| `backup.schedule` | string | `"daily 03:00"` | Operator-time-zone schedule; renders `core.backup_schedule`. Evaluation checks daily, weekly, or five-field cron grammar. A missed occurrence runs once on start. |
+| `backup.keep` | integer, 1 through 10000 | `5` | Newest matching archives always kept regardless of age; renders `core.backup_keep`. |
+| `backup.keepDays` | integer, 0 through 36500 | `14` | Also keeps matching archives modified within this many days; renders `core.backup_keep_days`. |
+| `knowledgeExport.obsidianDirectory` | null or string | `null` | Absolute generated-vault destination; renders `export.export_obsidian_dir` and adds application/CLI write access. The directory must be available and writable. |
+| `observability.tracesEndpoint` | null or string | `null` | Full OTLP/HTTP traces URL; renders `core.otel_traces_endpoint`. Null leaves tracing unconfigured. |
+| `monitoring.ruleFile` | path, read-only | `nix/monitoring/atrium.rules.yml` | Prometheus/vmalert rule file for host provisioning. |
+| `monitoring.dashboardFile` | path, read-only | `nix/monitoring/atrium-dashboard.json` | Grafana dashboard for host provisioning. |
+
+Backup pruning applies only after successful archive creation to regular
+`atrium-*.backup` files directly in the directory, including old v2 archives and
+matching manually created files. It keeps the newest count plus the recent-age
+set, not only five files within fourteen days. Other names remain untouched.
+Off-host copies and offline database keys belong to host backup policy. Old
+archives need their original database key after a rekey.
+
+### Read-only internal outputs
+
+These are declared module options, but not operator inputs.
+
+| Option | Type | Default/effect |
+| --- | --- | --- |
+| `runProperties` | list of strings | Computed systemd property arguments for `atrium-run`, including credentials and hardening. |
+| `unitNames` | list of strings | `["atrium.service"]`, plus `"atrium-media-agent.service"` when enabled. |
+| `renderedMediaAgent` | attribute set | Computed agent TOML data, including control, roots, state/cache, and optional VPN fields. |
+| `renderedHost` | attribute set | Computed host TOML data, including derived values and connection tables. |
+
+## Units, credentials, and hardening
+
+`atrium.service` serves public/emergency/ops listeners and owns scheduler jobs,
+mail watches, and background services. It is `Type=notify` with a one-minute
+watchdog, `TimeoutStartSec=45min`, `TimeoutStopSec=150s`, `KillMode=mixed`, and
+`KillSignal=SIGTERM`. It uses `Restart=on-failure`, `RestartSec=5s`,
+`RestartPreventExitStatus=2 78`, and no start limit. Serve's own drain is bounded
+to 120 seconds. All listeners bind before readiness. Exit codes and failure
+semantics are detailed in [Behavior](behavior.md#start-stop-and-restart).
+
+The application and `atrium-run` share:
+
+- `User`, `Group`, `StateDirectory`, state mode 0750, and umask 0027.
+- `EnvironmentFile` and `LoadCredential` declarations.
+- `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`,
+  `ProtectKernelModules`, `ProtectKernelLogs`, `ProtectClock`,
+  `RestrictSUIDSGID`, and `LockPersonality`.
+- Optional `ReadWritePaths` for export/backup and, with a local agent,
+  `InaccessiblePaths` for the library parent.
+
+`atrium-run` invokes `systemd-run --pipe --wait --collect --quiet
+--expand-environment=no`. Dollar signs in CLI arguments stay literal. It uses
+the same application environment except `ATRIUM_DB_KEY_FILE` and the public
+Host environment value. The service uses `ATRIUM_DB_KEY_FILE=%d/db-key`;
+the CLI looks up `db-key` in its own `CREDENTIALS_DIRECTORY`. It never borrows
+the caller's credential directory. Files under home directories are hidden,
+and `PrivateTmp` means caller `/tmp` files are not a shared import area. File
+inputs must be service-readable; outputs need an allowed writable location.
+
+`database.keyFile` adds `LoadCredential=db-key:<path>`. App signing files use
+their two accepted dotted credential names. Connection credentials use
+generated `connection-<id>-<slot>` names; mail passwords use `mail-account-<id>`.
+Host `_file` inputs also become credentials. Rendered TOML holds credential
+paths, not secret bytes. `secretFiles."db.key"` is refused in favor of
+`database.keyFile`; connection tokens and every other non-app key in
+`secretFiles` are refused with their destination. Declaring the same app key
+through both `secretFiles` and `host.app_keys` is refused.
+
+`atrium-media-agent.service` has no application database or app-key credential.
+It receives only its bearer and optional VPN TLS files. It is `Type=notify`
+with `WatchdogSec=1min`, `TimeoutStopSec=150s`, `KillMode=mixed`, SIGTERM,
+`Restart=on-failure`, a five-second restart delay, no start limit, and
+`RestartPreventExitStatus=78`. It has no reload action; SIGHUP drains and exits
+nonzero. State is `/var/lib/atrium-media-agent` and cache is
+`/var/cache/atrium-media-agent`, both mode 0700. Receipt state must persist and
+be backed up separately from expendable thumbnails.
+
+Agent hardening includes `NoNewPrivileges`, `ProtectSystem=strict`,
+`ProtectHome`, `PrivateTmp`, `PrivateDevices`, kernel tunable/module/log,
+control-group, clock, and hostname protection, `ProtectProc=invisible`,
+`RestrictNamespaces`, `RestrictRealtime`, `LockPersonality`, empty capability
+sets, native syscall architecture, `SystemCallFilter=@system-service`, and
+`RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`.
+
+## Configuration examples and checks
+
+These are configuration fragments, not a secret-generation or deployment
+walkthrough. Secret paths are references to files supplied by the host.
 
 ```nix
 services.atrium = {
   enable = true;
-  host = {
-    core.public_url = "https://atrium.example.org";
-  };
-  connections."service/qbittorrent" = {
-    kind = "service/qbittorrent";
-    config.url = "http://127.0.0.1:8081";
-    capabilities = ["api"];
-    credentialFiles.api_key = config.sops.secrets.qbittorrent-api-key.path;
-  };
-  connections."service/notion" = {
-    kind = "service/notion";
-    config.api = "https://api.notion.com";
-    capabilities = ["api"];
-    credentialFiles.token = config.sops.secrets.notion-token.path;
-  };
-  secretFiles."action_links.action_link_key" = config.sops.secrets.action-link-key.path;
-  database.keyFile = config.sops.secrets.atrium-db-key.path;
+  database.keyFile = "/run/secrets/db-key";
+  host.core.public_url = "https://atrium.example.org";
   web.allowedHost = "atrium.example.org";
+  connections."service/oidc" = {
+    kind = "service/oidc";
+    config = {
+      preset = "generic";
+      issuer = "https://idp.example.org";
+      client_id = "atrium";
+      access_groups = "atrium_access";
+    };
+    capabilities = ["discovery" "client_auth"];
+    credentialFiles.client_secret = "/run/secrets/oidc-client-secret";
+  };
 };
 ```
 
-## First hour: keyed database and local bootstrap
-
-Before the first start, generate a 32-byte hex database key outside the Nix store:
-
-```sh
-(umask 077; openssl rand -hex 32 > atrium-db-key)
+```nix
+services.atrium = {
+  media.enable = true;
+  mediaAgent = {
+    enable = true;
+    bearerFile = "/run/secrets/media-agent-bearer";
+    roots = {
+      movies = "/srv/media/movies";
+      tv = "/srv/media/tv";
+      downloads = "/srv/media/downloads";
+      import = "/srv/media/import";
+    };
+    vpn = {
+      enable = true;
+      listen = "100.64.0.10:8483";
+      interface = "wt0";
+      allowedPeers = ["100.64.0.0/10"];
+      allowedHosts = ["media.mesh.example:8483"];
+      tls.certificateFile = "/run/secrets/media-vpn.crt";
+      tls.keyFile = "/run/secrets/media-vpn.key";
+    };
+  };
+};
 ```
 
-Import that file into the host's secret manager as `atrium-db-key`, keep an offline copy, and securely remove the temporary file after importing it. Set `database.keyFile = config.sops.secrets.atrium-db-key.path;` as in the example **before** starting `atrium.service`. Do not put the key bytes in Nix, an environment literal or a command argument. Both the service and `atrium-run` receive `LoadCredential=db-key:<host path>`. The service uses `ATRIUM_DB_KEY_FILE=%d/db-key`, which systemd resolves to its credentials directory. Transient `systemd-run` environment properties do not expand specifiers: `atrium-run` instead uses the application's `db-key` credential lookup inside the transient unit's own `CREDENTIALS_DIRECTORY`. Neither path expands the caller's environment or renders key bytes. A configured key file that is missing or unreadable stops startup with exit 1, which `atrium.service` retries every 5 s, without creating a plaintext database. Never replace an existing database's key with a newly generated one: use the existing key, or the offline encryption/rekey workflow for an existing database.
+The second fragment extends an enabled application configuration. Evaluation
+is not proof that host files, TLS names, permissions, network interfaces, or
+systemd activation work at runtime.
 
-The public listener defaults to OIDC. Until its connection configuration validates, `/login` answers `200` in the closed, unconfigured state, `/chat` redirects to sign-in, and forged `Remote-User` or `Remote-Groups` headers grant no access. This does not disable health/static endpoints or change the bearer-only API contract.
+## Import boundary and retired host contracts
 
-1. Start the configured `atrium.service`. With the default `web.emergency.enable = true`, the same process opens `127.0.0.1:8481` for local operator access to the same keyed database. Do not expose or reverse-proxy that listener.
-2. From the operator's computer, tunnel to the host (substitute its SSH name):
+The v3 module has one application unit, not separate web, watch, sync, scan,
+mirror, scheduler, or backup services or timers. The module does not remove
+host-owned units or references outside its declarations. When moving from v2,
+remove or retarget host references to the v2 module's units, including
+`restartUnits`, pause hooks, and monitoring rules: the `atrium-web`,
+`atrium-web-local`, `atrium-watch`, and `atrium-agent-scheduler` services, and
+the `atrium-sync`, `atrium-scan`, `atrium-notion-sync`, `atrium-dav-sync`, and
+`atrium-backup` services with their timers. Model-server units such as
+`atrium-llm`, `atrium-embed`, and `atrium-models-fetch` are host-owned; list
+the units that serve the embedding endpoint in `embeddingServerUnits` and
+retarget other references to them. Use `unitNames` for current units.
 
-   ```sh
-   ssh -N -L 8481:127.0.0.1:8481 operator@host
-   ```
+The removed `web.local.enable`/`.port`, `modelServerUnits`, and
+`backup.onCalendar` options have explicit evaluation errors naming
+`web.emergency.*`, `embeddingServerUnits`, and `backup.schedule` respectively.
+There is no `settings`, `mediaRoot`, or `web.local.port` input in this option
+reference. Legacy service credential keys are not accepted app signing files.
 
-   Open `http://127.0.0.1:8481/settings/auth` for Sign-in and `http://127.0.0.1:8481/settings/connections` for connection health. Local access still enforces loopback peers, Host validation, CSRF and same-origin checks.
-3. Register an OIDC client with the provider, using the public HTTPS URL plus `/auth/callback` as its redirect URI. Declare `host.core.public_url` and the `service/oidc` host connection below with the actual issuer, client ID, admission selectors and secret-file path. Deliver the client secret through the host secret manager, not through a Nix string containing its value. Apply that host configuration through the host's normal deployment workflow; a restart loads the declaration. The local Sign-in page shows the effective configuration, not an OIDC setup wizard.
-
-   ```nix
-   services.atrium = {
-     host.core.public_url = "https://atrium.example.org";
-     connections."service/oidc" = {
-       kind = "service/oidc";
-       config = {
-         preset = "generic";
-         issuer = "https://idp.example.org";
-         client_id = "atrium";
-         groups_claim = "groups";
-         access_groups = "atrium_access";
-       };
-       capabilities = ["discovery" "client_auth"];
-       credentialFiles.client_secret = config.sops.secrets.atrium-oidc-client-secret.path;
-     };
-   };
-   ```
-
-   For a provider without groups, use its supported preset and explicit `access_emails` or `access_domains` instead of the group selector. Grant only the intended operator.
-4. Run `sudo atrium-run connections test service/oidc`. Discovery tests issuer endpoints and signing keys; client authentication remains untested until an interactive login succeeds. OIDC activates automatically when its configuration validates: there is no separate activate command or button. Visit the public HTTPS URL and complete a real sign-in with the admitted account. Keep the emergency tunnel available until that succeeds.
-5. To check the keyed database offline, run:
-
-   ```sh
-   sudo systemctl stop atrium.service
-   sudo atrium-run db check
-   sudo systemctl start atrium.service
-   ```
-
-   `db check` exits zero with the right credential. Without the key it refuses the encrypted database; it does not turn it into a plaintext database or create a missing database. Retain the key with the backups.
-
-If the emergency listener was explicitly disabled, stop `atrium.service` and run the same installed binary and credentials with `sudo atrium-run serve --host 127.0.0.1 --port 8481 --auth local`. Use the same tunnel and settings URLs, then stop that foreground serve before restarting `atrium.service`. A second concurrent serve on the same database is refused by the serve lock; do not start a second process beside the service for bootstrap. The emergency listener avoids that stop/start because it is part of the existing serve process.
-
-## Removed and renamed options
-
-These options are removed; setting one now fails evaluation as an unknown option. Use the replacement instead.
-
-- `id` → `uid`, `user` and `group`
-- `settings` → `host` for host keys; operator preferences are set in the application
-- `mode` → the operator `mail_mode` setting (a fresh import starts in `shadow`)
-- `chatUrl` → none; the local chat endpoint is retired and mail classification uses the `service/anthropic` connection under `monthly_budget_usd`; `embedUrl` → `connections."service/embedding"`
-- `modelServerUnits` → `embeddingServerUnits` for the embedding server; the local chat server has no replacement unit
-- `host.mail.mail_chat_url`, `mail_chat_model`, `mail_chat_max_tokens`, `mail_chat_ca_file`, `mail_chat_proxy`, `mail_chat_key_file` and `secretFiles."mail.mail_chat_key"` → the `service/anthropic` connection and `monthly_budget_usd`; evaluation fails naming that replacement
-- `publicUrl` → `host.core.public_url`
-- `timeZone` → `initialTimezone`; the operator `tz` value is editable after bootstrap
-- `icloudAppleId` → the Settings page
-- `extraEnvironment` → `host`, `connections` and `secretFiles` (app signing keys only); raw secret environment variables are refused at startup
-- `web.port` → `port`
-- `web.oidc.enable` → `web.auth = "proxy+oidc"` (or `"oidc"` for OIDC only)
-- `media.root`, `media.moviesUrl`, `media.tvUrl` → `host.media.*`; qBittorrent, TMDB and EZTV are `connections."service/{qbittorrent,tmdb,eztv}"`
-- `grafanaUrl` → `connections."service/grafana".config.url`
-- `secretFiles."db.key"` → `database.keyFile`
-- `vdirsyncer` options and the `stateDir/vdirsyncer/` directory → `stateDir/mirrors/`; the old directory is not read and the mirrors re-sync.
-
-The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIUM_PUBLIC_URL` and the others listed in [Settings and secrets](behavior.md#settings-and-secrets)) are not read and do not pin anything. `ATRIUM_CONFIG` and its pin file are gone; a startup that still sets it, an operator or tuning `ATRIUM_<MODULE>_<KEY>` variable, a raw secret variable such as `ANTHROPIC_API_KEY`, or a connection-owned host key such as `ATRIUM_GRAFANA_GRAFANA_URL` is refused with the destination to use instead.
-
-## Web listeners
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `web.host` | string | `"0.0.0.0"` | Address the public listener binds. |
-| `web.auth` | `"proxy"`, `"oidc"`, `"proxy+oidc"` or `"local"` | `"oidc"` | One `--auth` flag per `+`-separated mode. The default `oidc` accepts OIDC sessions only, ignores proxy headers and keeps public operator access closed until OIDC is configured through local bootstrap. `proxy` trusts the reverse proxy's `Remote-Groups` header containing `atrium_access`; `proxy+oidc` accepts either, so the proxy must strip or overwrite `Remote-*` on every request. These modes require `web.allowedHost`. `/api/v1` stays bearer-only in every mode: locally issued `atr_` tokens work without OIDC; OIDC access tokens need OIDC mode and `host.auth.oidc_api_client_id`. Pass `/api/v1` through the reverse proxy without forward authentication. `local` trusts every loopback request and requires a numeric loopback `web.host` (`127.0.0.1` or `::1`). |
-| `web.allowedHost` | null or string | `null` | The one Host header the public listener accepts (`ATRIUM_PUBLIC_HOST`). The configuration fails to evaluate with `web.auth = "proxy"`, `"oidc"` or `"proxy+oidc"` while it is null. |
-| `web.trustedProxyCidrs` | list of string | `[]` | Socket peer addresses or CIDRs allowed to set `CF-Connecting-IP`, rendered as `host.web.trusted_proxy_cidrs` (or the repeated `serve --trusted-proxy` flag). Empty keys every request by its socket address. The deployment must strip or overwrite the header on every request; a loopback peer is not trusted automatically. |
-| `web.emergency.enable` | bool | `true` | Serves the emergency listener on `127.0.0.1` from the `atrium.service` process (`serve --emergency-port`), trusting every loopback request like `--auth local`. |
-| `web.emergency.port` | port | `8481` | Port of the emergency listener; must differ from `port` and from the port of `host.core.ops_listen`. |
-
-## Media
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `media.enable` | bool | `false` | Turns on the Media section. Needs the `service/media-agent` connection: `mediaAgent.enable`, or an explicit `connections."service/media-agent"` for an agent on another host; evaluation fails otherwise. `atrium.service` has no media filesystem access (with `mediaAgent.enable` it and `atrium-run` get `InaccessiblePaths=-<roots' parent>`, so a world-readable library stays unreadable to them), no media group and no ffmpeg. `host.media.media_root` is refused at evaluation and at startup (exit 78) with `services.atrium.mediaAgent.roots` named. |
-| `media.group` | string | `"media"` | Group that owns the media tree; the default `mediaAgent.group`. |
-
-### Media agent
-
-`mediaAgent.enable` adds `atrium-media-agent.service`, the only process that reads or writes the media tree, renders its TOML configuration, and renders `[connections."service/media-agent"]` for `atrium.service` with `config.url = "http://<listen>"`, `capabilities` and `credential_files.bearer`. Declaring that connection yourself while `mediaAgent.enable` is set fails evaluation.
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `mediaAgent.enable` | bool | `false` | Adds the agent unit, its user and the `service/media-agent` connection. |
-| `mediaAgent.package` | package | `package` | Package whose `atrium media-agent` runs. |
-| `mediaAgent.ffmpegPackage` | package | `pkgs.ffmpeg-headless` | Provides `ffmpeg` and `ffprobe` on the agent unit's path; without them the `thumbnail` capability is not advertised. |
-| `mediaAgent.user` | string | `"atrium-media-agent"` | System user created for the agent; must differ from `user`. |
-| `mediaAgent.group` | string | `media.group` | Primary group of the agent user and the agent's `group`; it, and any supplementary group of the agent user, must differ from `group`, which reads `stateDir`: new library folders get it with mode `2775` (setgid) under umask `0002`, and filing sources must be readable by it. |
-| `mediaAgent.listen` | string | `"127.0.0.1:8482"` | Control listener, `IP:port`, loopback only (`[::1]:8482` for IPv6); its port must differ from `port` and `web.emergency.port`. Rendered as the agent's `control.listen` and `control.allowed_hosts`. |
-| `mediaAgent.bearerFile` | string | required | Host file with the shared bearer token (at least 32 bytes). Delivered through `LoadCredential` to the agent (`control.token_file`) and to `atrium.service` (`credential_files.bearer`); never in the store. |
-| `mediaAgent.capabilities` | list of `scan`, `thumbnail`, `file`, `stream` | all four | Enabled capabilities of the connection. |
-| `mediaAgent.roots.{movies,tv,downloads,import}` | string | required | Clean absolute, non-overlapping paths, outside `/home` and `/root`. They must share one parent directory (for example `/srv/media`) other than `/`, `/var`, `/var/lib`, `/srv` and similar system directories, and not overlapping `stateDir`: that parent is the agent's one `ReadWritePaths` entry, because filing hardlinks from `downloads` and renames from `import` and both need one mount. The agent never writes `downloads`. `backup.directory` and `knowledgeExport.obsidianDirectory` must not overlap that parent, which `atrium.service` cannot access. |
-| `mediaAgent.vpn.enable` | bool | `false` | Renders the agent's `[vpn]` table and `host.media.media_vpn_base_url`, and opens the VPN port on `vpn.interface` only. `allow_loopback` is never rendered. |
-| `mediaAgent.vpn.listen` | string | none | Mesh `IP:port`; never a wildcard or loopback address. |
-| `mediaAgent.vpn.interface` | string | none | Mesh interface (for example `wt0`); required with `vpn.enable`. |
-| `mediaAgent.vpn.allowedPeers` | list of string | `[]` | Peer CIDR prefixes with a length (`100.64.0.0/10`, `100.64.0.7/32`); at least one, never `0.0.0.0/0` or `::/0`. A bare address fails evaluation. |
-| `mediaAgent.vpn.allowedHosts` | list of string | `[]` | Host names the listener answers; at least one. Each is rendered as an `allowed_hosts` entry with `:<vpn.listen port>` appended unless the port is 443, the Host header players send. An explicit `host:port` must use the `vpn.listen` port. |
-| `mediaAgent.vpn.baseUrl` | string | `https://<first rendered allowed host>` | Rendered as `host.media.media_vpn_base_url`; must be an `https` URL whose host and port are one of the rendered `allowed_hosts`. Setting that host key directly while `vpn.enable` is set fails evaluation. |
-| `mediaAgent.vpn.tls.certificateFile`, `.keyFile` | string | none | Certificate chain and key for the names in `allowedHosts`, delivered through `LoadCredential`; required with `vpn.enable`. Players must trust the certificate. |
-
-`atrium-media-agent.service` is `Type=notify` with `WatchdogSec=1min` (the agent sends watchdog pings), `Restart=on-failure`, `RestartSec=5s`, `RestartPreventExitStatus=78` (the agent exits 78 for a permanent configuration error and 1 for a transient one, such as a missing credential file or a mesh address that is not up yet), no start limit, `TimeoutStopSec=150s` and `KillMode=mixed`. It has no `ExecReload`: SIGHUP stops the agent with exit 129 and systemd restarts it. It runs as `mediaAgent.user`:`mediaAgent.group` with `UMask=0002`, `StateDirectory=atrium-media-agent` (mode `0700`, filing receipts), `CacheDirectory=atrium-media-agent` (mode `0700`, thumbnails), `ReadWritePaths` the roots' parent, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, `PrivateDevices`, kernel, cgroup, clock and hostname protections, `ProtectProc=invisible`, `RestrictNamespaces`, `NoNewPrivileges`, an empty capability set, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`, `SystemCallArchitectures=native` and `SystemCallFilter=@system-service`. It keeps setgid library folders, so it does not set `RestrictSUIDSGID`. It gets only its bearer and VPN TLS credentials: no database, database key, host configuration, environment files or app keys. `atrium.service` starts after it and wants it.
-
-## Backup
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `backup.enable` | bool | `false` | Turns on the `core/backup` job inside `atrium.service` by rendering the `core.backup_*` host keys, creates `backup.directory` and grants `atrium.service` write access to it. With the default the job records `skipped_unconfigured` and writes nothing. There is no backup unit or timer. |
-| `backup.directory` | string | `"/var/backups/atrium"` | Directory created for the atrium user. Each run writes one new `atrium-<UTC timestamp>.backup` archive there in the format of `atrium backup`, with the database key of `atrium.service`, so a keyed database produces a keyed archive. Rendered as host key `core.backup_directory`. |
-| `backup.schedule` | string | `"daily 03:00"` | When the job runs, in the atrium schedule grammar (`daily HH:MM`, `weekly DOW HH:MM` or a 5-field cron expression, for example `daily 03:00`, `weekly mon 02:30`, `0 4 1 * *`), in the operator time zone. A run missed while atrium was down runs once at start. Evaluation refuses a value outside that grammar. Rendered as host key `core.backup_schedule`. Replaces `backup.onCalendar`, which is removed: evaluation refuses a host that still sets it, naming `backup.schedule`, and a nondefault `onCalendar` must be translated by hand. |
-| `backup.keep` | int, 1 to 10000 | `5` | Number of newest `atrium-*.backup` archives in `backup.directory` that are always kept, whatever their age. Host key `core.backup_keep`. |
-| `backup.keepDays` | int, 0 to 36500 | `14` | `atrium-*.backup` archives modified within this many days are also kept; older archives beyond the newest `backup.keep` are deleted. Host key `core.backup_keep_days`. |
-
-After each successful run, the job prunes the regular files named `atrium-*.backup` directly in `backup.directory`, including archives written by hand under that name; other files, such as a pre-migration backup with another name, are never touched. It keeps the newest `backup.keep` by modification time plus any modified within `backup.keepDays` days, and deletes the rest. The newest archive is never deleted, and a failed run prunes nothing. Copying archives off the host belongs to the host's own backup tooling. An archive made under a database key restores only with that key; the key must be kept outside the host's state (for example in the host's secrets store plus an offline copy), because after loss of the key a keyed archive cannot be opened. After `atrium db rekey`, archives made before the rekey still need the old key. The `restore-drill` flake check runs `atrium backup` and `atrium restore --verify` on the golden database, plaintext and keyed, and expects a corrupted archive, a wrong key and a missing key to be refused.
-
-## Knowledge export
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `knowledgeExport.obsidianDirectory` | null or string | `null` | Folder the `knowledge-export` job writes the generated Obsidian vault to. It is the one source for `export.export_obsidian_dir` and adds the folder to the scheduler unit's `ReadWritePaths`; the folder must exist and be writable by the atrium user. The operator syncs it, and atrium deletes only the files it created and recorded. |
-
-## Monitoring
-
-| Option | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `monitoring.ruleFile` | path | `nix/monitoring/atrium.rules.yml` | Prometheus alert rules for atrium's ops metrics, for `services.prometheus.ruleFiles` or vmalert. Read-only. |
-| `monitoring.dashboardFile` | path | `nix/monitoring/atrium-dashboard.json` | Grafana dashboard for atrium's ops metrics, for Grafana dashboard provisioning. Read-only. |
-| `observability.tracesEndpoint` | null or string | `null` | Full OTLP/HTTP traces URL, such as `http://traces.example:10428/insert/opentelemetry/v1/traces`; it is written as `core.otel_traces_endpoint` in the host configuration. `null` disables tracing. The standard `OTEL_SDK_DISABLED=true` turns export off without a settings change. |
-
-The metrics on the ops listener are listed in [Operations](behavior.md#operations). The ops listener stays loopback by default; a host that scrapes it over a mesh sets `host.core.ops_listen` to the mesh address.
-
-## Units and atrium-run
-
-The module defines `atrium.service`, plus `atrium-media-agent.service` with `mediaAgent.enable` (see Media agent), and no timers. `atrium.service` serves the web listeners, runs the scheduled jobs and watches every mail account for new mail (one supervised IDLE watch per account, `mail-watch/<account>` in the ops `/healthz`); `atrium-watch` is removed. The mail pass runs inside `atrium.service` as the job `mail/sync`, first 2 minutes after start and then every 15 minutes from its previous start, and the proposal scans as `mail/scan` on the first of every month at 00:00 operator time (a missed month runs once at the next start); `atrium-sync`, `atrium-scan` and their timers are removed. Every mail pass (the scheduled jobs, `atrium sync`, `atrium proposals scan-all`, the account watches and the sync after an approved proposal or an undo) and every other mail writer (approving a proposal, the assistant's `mail_move` and `mail_folder_create`, every undo of a mail change, filing the Sent copy of a sent iCloud mail, moving a correction made on the message page, `atrium live deletions`, `atrium live rebaseline`, `atrium loops refresh` and `atrium watches refresh`) takes the `mail-pass` resource before it opens its mailbox session, so no two of them run at once: a manual `atrium sync` or `atrium proposals scan-all` waits for a running pass, and the sync after an approval waits up to 5 seconds. Every other writer also waits up to 5 seconds and then stops before writing anything: an approval is marked failed and can be approved again, an undo is recorded as failed and can be retried, the assistant tool reports the busy error, a Sent copy is reported as failed, the message page says the message could not be moved yet and the next pass moves it, and a command exits with the busy error. The monthly scan holds `mail-pass` for up to 2 hours, so during a scan a sync after an approval reports a sync error after 5 seconds. A job run left `running` by an interrupted serve or a restored backup is recorded as `worker lost` when `atrium sync` or `atrium proposals scan-all` runs while serve is stopped, and the command then runs. Backups run inside `atrium.service` as the job `core/backup` (there is no `atrium-backup` unit or timer); `atrium backup` shares the job's claim and refuses while the job runs. The Notion mirror runs inside `atrium.service` as `notion/notion-sync`, first 3 minutes after start and then every 15 minutes from its previous start; `atrium-notion-sync.service` and its timer are removed. The iCloud mirrors run inside `atrium.service` as the jobs `calendar/caldav` and `contacts/carddav` (there is no `atrium-dav-sync` unit): each runs 1 minute after `atrium serve` starts and then every 15 minutes from the start of its previous run. A mirror job records `skipped_module` while its module is off or needs settings and `skipped_unconfigured` (no pass) while the iCloud login or its directory is missing. A failed run is retried after 1 minute, doubling per consecutive failure up to 15 minutes.
-
-`atrium.service` is a `Type=notify` unit with a systemd watchdog (`WatchdogSec` 1 min); it signals readiness after its migrations, and a command skipped because its module is off signals readiness before it exits. `atrium.service` serves the public listener, the emergency listener (with `web.emergency.enable`) and the ops listener on `127.0.0.1:9180` from one process, binds all three before it signals readiness, and runs the background services and scheduled jobs. It uses `Restart=on-failure`, `RestartSec=5s`, `TimeoutStartSec=45min` and `KillSignal=SIGTERM`. Upgrading removes every older atrium unit and timer. `atrium.service` has `TimeoutStopSec=150s` and `KillMode=mixed`: a stop sends SIGTERM to the main process only, which drains for at most 120 s (see [behavior](behavior.md#operations)); systemd kills the whole unit only after 150 s.
-
-`atrium serve` exits 0 after a clean stop, including a SIGTERM that arrives before it is ready. It exits 1 for a transient failure: an address that is not available yet, a held lock, a dependency that is down, a failed migration, a stop that was not clean, or a key or secret file that is missing, unreadable, empty or does not parse (its writer may still be writing it). It exits 78 (`EX_CONFIG`) for a permanent refusal: invalid configuration or settings (including an invalid serve flag value and a removed host key or environment variable such as `media_movies_url`), a missing or wrong database key, or a database schema this build does not know. It exits 2 on a usage error. It prints the reason to stderr (the journal). `atrium.service` sets `RestartPreventExitStatus=2 78`, so a permanent refusal stops the unit until you fix the cause shown by `journalctl -u atrium` and run `systemctl start atrium.service`; transient failures restart every 5 s without limit (`StartLimitIntervalSec=0`), so the service comes up once, for example, its listen address appears.
-
-`atrium-run` runs the atrium binary through `systemd-run --pipe --wait --expand-environment=no` as the atrium user, with the same state directory, environment files, credentials (`LoadCredential`), environment and filesystem hardening as the service. Dollar signs in command arguments stay literal. Commands read secrets from their own unit's credentials directory, not the caller's environment. `ProtectHome`, `PrivateTmp` and `ProtectSystem=strict` also apply to CLI file arguments: put import sources in a service-readable location outside home directories and `/tmp`, and put writable outputs under `stateDir` or an explicitly configured writable export/backup directory. The `module` flake check compares exact credential and hardening properties; Linux `module-config` also boots the real keyed unit and exercises `atrium-run`.
-
-## Upgrading
-
-- Update the flake input that pins this repository and run `nixos-rebuild switch`. The units run pending migrations when they open the database; a binary refuses a database that records a newer schema, so a downgrade needs a backup taken before the upgrade.
-- v2 to v3 is a database import, not a migration. Stop the atrium units and timers, then run `atrium-run db import-v2 /path/to/v2/atrium.db` with the configured database pointing at a fresh path; the importer creates and migrates it through the normal boot path. `--source-config` names the v2 `ATRIUM_CONFIG` file and `--source-env` a `NAME=VALUE` file whose pins decide the effective source value before a shadowed row. It refuses a source that is not at v2 schema version 11, that has an embedding index rebuild in progress, or that has a mail or agent write in flight, and it refuses a destination that already holds rows. It carries mail accounts, mailboxes and messages with their ids, the learned mail data and action ledger, the active message vectors and index row, settings and secrets (readable only with the same database key), the `settings_audit` history unchanged, knowledge records, threads, tasks, proposals, media channels and the current month's spend. Every source setting row gets an action; host rows become host requirements, tuning rows become compiled constants, an unknown public row is dropped and named without its value, and an unknown nonempty secret refuses the import by name. It rebuilds the full-text and knowledge indexes and does not carry run history, memory, Notion or wiki state, notifications, sessions or ops data. The import prints one line per table with its carried, rebuilt or dropped row count, one line per setting, per source pin and per secret, and a totals line ending in `unmapped_operator_choices=0`. Keep the v2 database and a backup until the v3 copy is verified; rollback restores the v2 database and loses writes made in v3.
-- The old `stateDir/vdirsyncer/` directory is not read; the calendar and contacts mirrors under `stateDir/mirrors/` re-sync from the providers.
-- A database key must be kept outside the host state; an archive made under a key restores only with that key, and archives made before a `db rekey` need the old key.
-
-The standalone `atrium watch` and `atrium agent scheduler` commands are removed.
-`atrium.service` (`atrium serve`) owns their work; `atrium-run agent tick` remains a one-shot.
-
-### Single-unit migration
-
-Rename `services.atrium.web.local.enable` and `.port` to `services.atrium.web.emergency.enable` and `.port`; the old options fail evaluation with the replacement named. Replace references to `atrium-web.service` or `atrium-watch.service` in restart, pause, alert and dashboard configuration with `atrium.service`. Remove `backup.onCalendar` and set `backup.schedule` only for a nondefault schedule. Stop and disable `atrium-web`, `atrium-watch`, `atrium-sync`, `atrium-scan`, `atrium-notion-sync`, `atrium-dav-sync`, `atrium-backup`, `atrium-agent-scheduler` and `atrium-web-local` services and their timers before the first new serve, then confirm `systemctl list-units 'atrium*'` lists only `atrium.service` (and `atrium-media-agent.service` with `mediaAgent.enable`).
+An existing v2 database is imported with `atrium db import-v2` into a fresh
+path after its writers stop. It is not opened and upgraded in place. The
+importer accepts schema 11, carries durable state and write evidence, drops
+transient histories/sessions/mirrors, reports host requirements, and resets
+mail to shadow. It refuses a non-empty destination or unsafe in-flight source
+writes. Details are in [Behavior](behavior.md#importing-an-existing-database).

@@ -37,17 +37,26 @@ type APIShape struct {
 	MultipartFile        string
 	MultipartAlternative string
 	IgnoreBody           bool
+	OptionalBody         bool
 	BeforeBody           func(context.Context) error
 	ID                   string
 	Uncached             bool
+	ReadOnlyPost         bool
 	Sensitive            bool
+	Unowned              bool
 	Errors               []Code
 }
 
 var Codes = []Code{Invalid, BadCursor, NotFound, Unauthenticated, Forbidden, Conflict, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}
 
+const ApproveOperation Name = "review.approve"
+
 func RequiresAPI(authority []Authority) bool {
-	return slices.ContainsFunc(authority, func(a Authority) bool { return a == Operator || a == OperatorSend || a == Approved })
+	return slices.ContainsFunc(authority, func(a Authority) bool { return a == Operator || a == OperatorSend })
+}
+
+func ApprovalOnly(authority []Authority) bool {
+	return slices.Contains(authority, Approved) && !RequiresAPI(authority)
 }
 
 const UnionDiscriminator = "kind"

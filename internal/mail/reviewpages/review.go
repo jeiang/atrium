@@ -1,23 +1,10 @@
 package reviewpages
 
 import (
-	"context"
 	"net/http"
 
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/proposals"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
-
-func needsCount(ctx context.Context, q db.Querier) (int, error) {
-	n, err := proposals.NeedsCount(ctx, q)
-	if err != nil {
-		return 0, err
-	}
-	d, err := drafts.CountNeeds(ctx, q)
-	return n + d, err
-}
 
 type needsData struct {
 	Proposals  []ProposalView      `json:"proposals"`

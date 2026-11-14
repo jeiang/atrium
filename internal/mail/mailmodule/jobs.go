@@ -6,11 +6,13 @@ import (
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/scans"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -90,5 +92,18 @@ func (m Module) watchServices(env config.Env) func(context.Context) ([]module.Se
 			out = append(out, module.SetService{Service: w.AccountService(account), Revision: run.AccountRevision(ctx, account)})
 		}
 		return out, nil
+	}
+}
+
+func trackingJob(deps jobworker.Dependencies) scheduler.Definition {
+	return scheduler.Definition{
+		Module: module.Mail, Key: module.Mail + "/" + tracking.JobPackageTracking, Name: tracking.JobPackageTracking, Kind: scheduler.JobBuiltin,
+		Prompt:   "Hourly: refresh active Ship24 package trackers (no model run).",
+		Schedule: "0 * * * *", ScheduleSetting: tracking.KeySchedulePackageTracking, Persistent: true, Timeout: 15 * time.Minute,
+		Spend: scheduler.ModelFree, Needs: []string{module.Mail},
+		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+			_, err := mailapp.New(e.Service.DB, e.Service.Cfg, e.Service.Env, e.Now).PollTrackers(ctx, struct{}{})
+			return jobworker.Result{}, err
+		}),
 	}
 }

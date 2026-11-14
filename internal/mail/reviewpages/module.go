@@ -13,19 +13,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 
-	"github.com/jeiang/atrium/internal/actionlink"
-	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/live"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -42,79 +32,29 @@ func Templates() fs.FS {
 	return sub
 }
 
-func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
-	_, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx)
-	return err
+type Options struct {
+	Compose func(*web.Deps) Services
+	Phone   func(func(context.Context, string, float64) (*proposalsapp.Proposal, error), func() float64) http.HandlerFunc
+	Routes  func(*web.Deps, *reviewapp.Service)
 }
 
-type Options struct {
-	Application func(*web.Deps) *mailapp.Service
-	Clients     func(config.Config) mail.OpenFunc
-	Enabled     func(context.Context, db.Querier, string) (bool, error)
-	Tools       registry.Source
-	Routes      func(*web.Deps, *reviewapp.Service)
+type Services struct {
+	Mail   *mailapp.Service
+	Review *reviewapp.Service
 }
 
 type service struct {
-	mail     *mailapp.Service
-	deps     *web.Deps
-	now      func() float64
-	pipeline *proposals.Pipeline
-	live     *live.Live
-	open     mail.OpenFunc
-	ledger   *ledger.Store
-	drafts   *drafts.Store
-	registry *proposals.Registry
-	review   *reviewapp.Service
+	mail   *mailapp.Service
+	deps   *web.Deps
+	now    func() float64
+	review *reviewapp.Service
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func newService(o Options, d *web.Deps) *service {
-	open := imapclient.Opener(d.Cfg)
-	if o.Clients != nil {
-		open = o.Clients(d.Cfg)
-	}
-	now := wallClock
-	syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-	cat := module.SetFrom(d.Ctx).Catalog()
-	effects, err := cat.Ledger(d.DB, d.Env, open, now)
-	if err != nil {
-		panic(err)
-	}
-	d.DrainOnStop(effects.Drain)
-	registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
-		if d.ResumeRun == nil {
-			return proposals.ProposalError("the assistant module is not running")
-		}
-		return d.ResumeRun(ctx, runID)
-	}})
-	if err != nil {
-		panic(err)
-	}
-	liveSvc := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now}
-	draftStore := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now}
-	pipeline := &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled}
-	var mailService *mailapp.Service
-	if o.Application != nil {
-		mailService = o.Application(d).WithSender(draftStore)
-	}
-	return &service{
-		mail:     mailService,
-		deps:     d,
-		now:      now,
-		pipeline: pipeline,
-		live:     liveSvc,
-		open:     open,
-		ledger:   effects,
-		drafts:   draftStore,
-		registry: registry,
-		review:   reviewapp.New(reviewapp.Deps{DB: d.DB, Ledger: effects, Drafts: draftStore, Live: liveSvc, Registry: registry, Pipeline: pipeline}),
-	}
-}
-
-func Reads(d *web.Deps) *reviewapp.Service {
-	return newService(Options{}, d).review
+	built := o.Compose(d)
+	return &service{mail: built.Mail, deps: d, now: wallClock, review: built.Review}
 }
 
 func Module(o Options) web.Module {
@@ -122,7 +62,7 @@ func Module(o Options) web.Module {
 		s := newService(o, d)
 
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-			n, err := needsCount(ctx, d.DB.Read)
+			n, err := s.review.NeedsCount(ctx)
 			f.PendingCount = n
 			return err
 		})
@@ -136,7 +76,7 @@ func Module(o Options) web.Module {
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)
 		r.Post("/proposals/{proposal_id}/undo", s.proposalUndo)
 		r.Post("/proposals/{proposal_id}/resolve", s.proposalResolve)
-		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.phone, s.now))
+		d.Public(http.MethodPost, "/actions/{token}", o.Phone(s.phone, s.now))
 
 		r.Get("/activity", s.activityPage)
 		r.Get("/activity/recent", s.recentActivity)
@@ -146,7 +86,6 @@ func Module(o Options) web.Module {
 		r.Post("/activity/effect/{effect_id}/undo", s.undoEffect)
 		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
 
-		s.apiRoutes(d)
 		if o.Routes != nil {
 			o.Routes(d, s.review)
 		}
@@ -173,7 +112,6 @@ func MailModule(o Options) web.Module {
 
 		r.Get("/watches", s.watchesPage)
 		r.Post("/watches/packages/{package_id}/dismiss", s.packageDismiss)
-		s.mailAPIRoutes(d)
 	}
 }
 
@@ -222,7 +160,7 @@ func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, n
 }
 
 func (s *service) mode(ctx context.Context) string {
-	mode, err := mail.Mode(ctx, s.deps.DB.Read)
+	mode, err := s.review.Mode(ctx)
 	check(err)
 	return mode
 }

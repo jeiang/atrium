@@ -12,10 +12,11 @@ import (
 
 func Connections() []connections.Definition {
 	return []connections.Definition{{
-		Kind:     KindWebPush,
-		Validate: validatePushConnection,
-		Test:     testPushConnection,
-		Silent:   silentPushConnection,
+		Kind:            KindWebPush,
+		CredentialSlots: []string{"vapid_private"},
+		Validate:        validatePushConnection,
+		Test:            testPushConnection,
+		Silent:          silentPushConnection,
 	}}
 }
 

@@ -20,7 +20,7 @@ const (
 	UndoableName  application.Name = "review.undoable"
 	EffectsName   application.Name = "review.effects"
 	EffectName    application.Name = "review.effect"
-	ApproveName   application.Name = "review.approve"
+	ApproveName   application.Name = application.ApproveOperation
 	DismissName   application.Name = "review.dismiss"
 	UndoName      application.Name = "review.undo"
 	ResolveName   application.Name = "review.resolve"

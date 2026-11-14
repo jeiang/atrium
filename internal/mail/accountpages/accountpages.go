@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -61,7 +60,7 @@ func (h handlers) renderWith(w http.ResponseWriter, r *http.Request, status int,
 	}
 	data.Accounts, data.Presets, data.Indexes, data.Fields = read.Data.Accounts, read.Data.Presets, read.Data.Indexes, read.Data.Fields
 	if data.Failed == "mail" {
-		settings.EchoFields(r.Context(), data.Fields, data.Form)
+		settingsapp.EchoFields(r.Context(), data.Fields, data.Form)
 	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {

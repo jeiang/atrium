@@ -9,7 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/rules"
 )
 
 func (o Options) RulesCommand() *cli.Command {
@@ -52,7 +51,7 @@ func importRules(x *exec, file string) error {
 	}
 	done, err := x.opts.Application(x.Pass).RulesImport(x.Ctx, mailapp.RulesImportInput{Document: document})
 	if err != nil {
-		var ruleErr rules.RuleError
+		var ruleErr mailapp.RuleError
 		if errors.As(err, &ruleErr) {
 			return failure(cli.ExitUsage, err)
 		}

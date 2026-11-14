@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -52,6 +53,13 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 	def, ok := s.reg.Lookup(lease.kind)
 	if !ok {
 		return View{}, UnknownKind(lease.kind)
+	}
+	if err := validateEndpointURLs(id, lease.Config()); err != nil {
+		var invalid *Invalid
+		if !errors.As(err, &invalid) {
+			return View{}, err
+		}
+		return s.record(ctx, id, lease.revision, []Result{{State: Failing, Reason: err.Error()}}, false, commits...)
 	}
 	action := def.Test
 	if def.Silent != nil {

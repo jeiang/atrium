@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -30,11 +31,19 @@ type apiPages struct {
 	deps      *web.Deps
 	assistant func() *asstapp.Service
 	tools     registry.Source
+	events    http.HandlerFunc
 }
 
-func threadAPI(tools registry.Source) func(*web.Deps, func() *asstapp.Service) {
-	return func(d *web.Deps, assistant func() *asstapp.Service) {
-		p := &apiPages{deps: d, assistant: assistant, tools: tools}
+func (p *apiPages) handle(b application.Binding) application.Binding {
+	if p == nil {
+		return api.Handle(nil, b, nil)
+	}
+	return api.Handle(p.deps, b, p.events)
+}
+
+func threadAPI(tools registry.Source) func(*web.Deps, func() *asstapp.Service, http.HandlerFunc) {
+	return func(d *web.Deps, assistant func() *asstapp.Service, events http.HandlerFunc) {
+		p := &apiPages{deps: d, assistant: assistant, tools: tools, events: events}
 		apiBindings(p)
 		fileAPIBindings(p)
 		projectAPIBindings(p)
@@ -576,7 +585,7 @@ func apiBindings(p *apiPages) []application.Binding {
 					return out
 				})
 			}),
-		{Kind: application.API, Target: "GET /threads/{thread_id}/runs/{run_id}/events", Uses: []application.Name{asstapp.RunEventsName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiEventsRequest](), Response: reflect.TypeFor[apiStreamEvent](), Body: application.BodyEventStream, Success: 200, Errors: []application.Code{application.NotFound, application.RateLimited}}},
+		p.handle(application.Binding{Kind: application.API, Target: "GET /threads/{thread_id}/runs/{run_id}/events", Uses: []application.Name{asstapp.RunEventsName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiEventsRequest](), Response: reflect.TypeFor[apiStreamEvent](), Body: application.BodyEventStream, Success: 200, Errors: []application.Code{application.NotFound, application.RateLimited}}}),
 		apiQuery(p, asstapp.DescribeThreadTranscript(), threadsArea(application.NotFound, application.Invalid), "GET /threads/{thread_id}",
 			func(ctx context.Context, svc *asstapp.Service, in apiTranscriptRequest) (application.Read[apiTranscript], error) {
 				req := asstapp.TranscriptInput{ID: in.ThreadID, Limit: int(in.Limit)}
