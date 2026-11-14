@@ -33,10 +33,10 @@ func TestEveryAreaReachableFromSchema(t *testing.T) {
 			Area       string   `json:"area"`
 			Operations []string `json:"operations"`
 		} `json:"areas"`
-		ApprovalReached []reachApprovalRow `json:"approval_reached"`
-		TotalRequired        int `json:"total_required"`
-		TotalBound           int `json:"total_bound"`
-		TotalApprovalReached int `json:"total_approval_reached"`
+		ApprovalReached      []reachApprovalRow `json:"approval_reached"`
+		TotalRequired        int                `json:"total_required"`
+		TotalBound           int                `json:"total_bound"`
+		TotalApprovalReached int                `json:"total_approval_reached"`
 	}
 	readJSON(t, filepath.Join(out, "reach.json"), &reach)
 	if len(application.Areas) != 22 || len(reach.Areas) != len(application.Areas) {
