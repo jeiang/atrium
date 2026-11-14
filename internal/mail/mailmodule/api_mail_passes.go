@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/mail/scans"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -134,7 +135,7 @@ func mailOutcome(effects []ledger.AutoEffectOutcome, err error) (string, []int64
 func outcomeError(outcome, message string, ids []int64, cause error) error {
 	code := map[string]application.Code{outcomeRefused: application.Refused, outcomeUnknown: application.Unknown, outcomePartial: application.Partial, outcomeFailed: application.Conflict}[outcome]
 	if code == "" {
-		return cause
+		return withEffects(cause, ids)
 	}
 	if message == "" && cause != nil {
 		message = cause.Error()
@@ -143,6 +144,35 @@ func outcomeError(outcome, message string, ids []int64, cause error) error {
 		message = "The mail pass finished with outcome " + outcome + "."
 	}
 	return &application.Error{Code: code, Reason: outcome, Message: message, EffectIDs: ids, Cause: cause}
+}
+
+func mailSynced(done application.Change[mailapp.PassResult], err error) (application.Change[MailSynced], error) {
+	if len(done.EffectIDs) == 0 && errors.As(err, new(*db.LockBusy)) {
+		return application.Change[MailSynced]{}, passBusy(err)
+	}
+	if err != nil && done.AuditID == 0 {
+		return application.Change[MailSynced]{}, withEffects(unknownMailAccount(err), done.EffectIDs)
+	}
+	r := done.Data
+	outcome := outcomeOK
+	switch {
+	case len(r.Unknown) > 0:
+		outcome = outcomeUnknown
+	case len(r.Partial) > 0 || len(r.Committed) > 0 && (err != nil || len(r.Failed) > 0):
+		outcome = outcomePartial
+	case len(r.Failed) > 0:
+		outcome = outcomeFailed
+	case err != nil:
+		return application.Change[MailSynced]{}, withEffects(err, done.EffectIDs)
+	}
+	if outcome != outcomeOK {
+		return application.Change[MailSynced]{}, outcomeError(outcome, "", done.EffectIDs, err)
+	}
+	out := application.Change[MailSynced]{Data: MailSynced{Outcome: outcome, Accounts: []MailAccountSynced{}, Committed: append([]int64{}, r.Committed...), Skipped: append([]int64{}, r.Skipped...)}, AuditID: done.AuditID, EffectIDs: done.EffectIDs}
+	for _, a := range r.Synced {
+		out.Data.Accounts = append(out.Data.Accounts, MailAccountSynced{Account: a.Account, New: a.Stats.New, GoneIDs: append([]int64{}, a.Stats.GoneIDs...), FlagChanges: a.Stats.FlagChanges, Mailboxes: a.Stats.Mailboxes})
+	}
+	return out, nil
 }
 
 func unknownMailAccount(err error) error {
@@ -165,10 +195,10 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 	effects := []application.Code{application.Refused, application.Unknown, application.Partial, application.Conflict, application.Unavailable}
 	scan := func(def application.Definition, target string, do func(*mailapp.Service, context.Context) (application.Change[scanutil.Result], error)) application.Binding {
 		return api.Command(d, def, application.APIShape{Area: area, Errors: refusals}, target, func(ctx context.Context, _ struct{}) (out application.Change[MailScanned], err error) {
-			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, scans.JobKey, func(ctx context.Context, p *run.Pass) error {
 				done, err := do(mailCLIService(d.Env)(p).WithNamer(rebalance.SuggestName(p.Classifier)), ctx)
 				out = application.Change[MailScanned]{Data: MailScanned{Outcome: outcomeOK, Candidates: done.Data.Candidates, Created: done.Data.Created}, AuditID: done.AuditID, EffectIDs: done.EffectIDs}
-				return err
+				return withEffects(err, done.EffectIDs)
 			})
 			return out, err
 		})
@@ -195,7 +225,7 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 			return application.Change[MailBacklog]{Data: MailBacklog{Outcome: outcomeOK, Created: done.Data.Created, Accounts: accounts}, AuditID: done.AuditID}, err
 		}),
 		api.Command(d, mailapp.DescribeRebaseline(), application.APIShape{Area: area, Errors: refusals}, "POST /mail/live/rebaseline", func(ctx context.Context, _ struct{}) (out application.Change[MailRebaselined], err error) {
-			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
 				done, err := mailCLIService(d.Env)(p).WithSync(p.SyncAll).Rebaseline(ctx, struct{}{})
 				if err != nil {
 					return err
@@ -210,7 +240,7 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 			return out, err
 		}),
 		api.Command(d, mailapp.DescribeApplyDeletions(), application.APIShape{Area: area, Errors: effects}, "POST /mail/live/deletions/apply", func(ctx context.Context, _ struct{}) (out application.Change[MailDeletions], err error) {
-			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
 				accounts, err := run.SelectAccounts(ctx, "")
 				if err != nil {
 					return err
@@ -241,39 +271,13 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 			})
 			return out, err
 		}),
-		api.Command(d, mailapp.DescribeSync(), application.APIShape{Area: area, Errors: append([]application.Code{application.Invalid}, effects...)}, "POST /mail/sync", func(ctx context.Context, in MailSyncRequest) (application.Change[MailSynced], error) {
-			locks, err := db.ResourceLocks(ctx, d.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
-			if err != nil {
-				return application.Change[MailSynced]{}, passBusy(err)
-			}
-			defer func() { _ = locks.Close() }()
-			done, err := mailapp.New(d.DB, d.Cfg, d.Env, mail.WallClock).WithOpen(passes.open()).WithClassifiers(m.classifiers).Sync(db.WithHeld(ctx, locks), mailapp.SyncInput{Account: in.Account})
-			if errors.As(err, new(*db.LockBusy)) {
-				return application.Change[MailSynced]{}, passBusy(err)
-			}
-			if err != nil && done.AuditID == 0 {
-				return application.Change[MailSynced]{}, unknownMailAccount(err)
-			}
-			r := done.Data
-			outcome := outcomeOK
-			switch {
-			case len(r.Unknown) > 0:
-				outcome = outcomeUnknown
-			case len(r.Partial) > 0 || len(r.Committed) > 0 && (err != nil || len(r.Failed) > 0):
-				outcome = outcomePartial
-			case len(r.Failed) > 0:
-				outcome = outcomeFailed
-			case err != nil:
-				return application.Change[MailSynced]{}, err
-			}
-			if outcome != outcomeOK {
-				return application.Change[MailSynced]{}, outcomeError(outcome, "", done.EffectIDs, err)
-			}
-			out := application.Change[MailSynced]{Data: MailSynced{Outcome: outcome, Accounts: []MailAccountSynced{}, Committed: append([]int64{}, r.Committed...), Skipped: append([]int64{}, r.Skipped...)}, AuditID: done.AuditID, EffectIDs: done.EffectIDs}
-			for _, a := range r.Synced {
-				out.Data.Accounts = append(out.Data.Accounts, MailAccountSynced{Account: a.Account, New: a.Stats.New, GoneIDs: append([]int64{}, a.Stats.GoneIDs...), FlagChanges: a.Stats.FlagChanges, Mailboxes: a.Stats.Mailboxes})
-			}
-			return out, nil
+		api.Command(d, mailapp.DescribeSync(), application.APIShape{Area: area, Errors: append([]application.Code{application.Invalid}, effects...)}, "POST /mail/sync", func(ctx context.Context, in MailSyncRequest) (out application.Change[MailSynced], err error) {
+			err = passes.job(ctx, run.SyncJobKey, func(ctx context.Context) error {
+				done, err := mailapp.New(d.DB, d.Cfg, d.Env, mail.WallClock).WithOpen(passes.open()).WithClassifiers(m.classifiers).Sync(ctx, mailapp.SyncInput{Account: in.Account})
+				out, err = mailSynced(done, err)
+				return err
+			})
+			return out, err
 		}),
 		api.Query(d, mailapp.DescribeReplay(), application.APIShape{Area: area, Body: application.BodyJSON, ReadOnlyPost: true, Errors: []application.Code{application.Invalid}}, "POST /mail/replay", func(ctx context.Context, in MailReplayRequest) (application.Read[MailReplay], error) {
 			ctx = config.With(ctx, config.From(ctx).Detached())

@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -72,14 +73,14 @@ func (s *draftAPI) draftRevision(ctx context.Context, id int64, body *int64, hea
 	tag := strings.Trim(strings.TrimPrefix(header, "W/"), "\"")
 	n, err := strconv.ParseInt(tag, 10, 64)
 	if err != nil {
-		current, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: id})
+		current, err := s.read(ctx, id)
 		if err != nil {
 			return nil, err
 		}
 		if application.Revision(tag) != current.Revision {
 			return nil, &application.Error{Code: application.Conflict, Reason: "stale", Message: "The draft changed since it was read."}
 		}
-		n = current.Data.Row.Revision
+		n = current.Data.Revision
 	}
 	if n < 1 || (body != nil && *body != n) {
 		return nil, &application.Error{Code: application.Invalid, Message: "If-Match must match the draft revision", Fields: []application.Field{{Name: "revision", Code: "invalid", Message: "Conflicting or invalid revision"}}}
@@ -122,12 +123,7 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 	shape := func(t reflect.Type) application.APIShape { return application.APIShape{Area: "drafts", Response: t} }
 	return []application.Binding{
 		api.Query(d, mailapp.DescribeDraft(), shape(reflect.TypeFor[reviewpages.Draft]()), "GET /drafts/{draft_id}", func(ctx context.Context, in DraftRequest) (application.Read[reviewpages.Draft], error) {
-			r, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: in.ID})
-			out := application.Read[reviewpages.Draft]{Revision: r.Revision}
-			if err == nil {
-				out.Data = s.currentDraft(ctx, in.ID)
-			}
-			return out, err
+			return s.read(ctx, in.ID)
 		}),
 		api.Query(d, mailapp.DescribeDrafts(), shape(reflect.TypeFor[DraftsResponse]()), "GET /drafts", func(ctx context.Context, in DraftsRequest) (application.Read[DraftsResponse], error) {
 			var offset int
@@ -243,12 +239,21 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 	}
 }
 
-func (s *draftAPI) currentDraft(ctx context.Context, id int64) reviewpages.Draft {
+func (s *draftAPI) read(ctx context.Context, id int64) (application.Read[reviewpages.Draft], error) {
 	found, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: id})
+	if err != nil {
+		return application.Read[reviewpages.Draft]{}, err
+	}
+	draft := reviewpages.DraftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(ctx))[0]
+	return application.Read[reviewpages.Draft]{Revision: application.Revision(state.Revision(string(mailapp.DraftName), nil, draft, "operator")), Data: draft}, nil
+}
+
+func (s *draftAPI) currentDraft(ctx context.Context, id int64) reviewpages.Draft {
+	found, err := s.read(ctx, id)
 	if err != nil {
 		panic(err)
 	}
-	return reviewpages.DraftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(ctx))[0]
+	return found.Data
 }
 
 func draftFiled(f drafts.Filed) string {

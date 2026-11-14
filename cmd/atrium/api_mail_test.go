@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	mailrun "github.com/jeiang/atrium/internal/mail/run"
 )
 
 func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
@@ -259,6 +261,16 @@ func TestMailPassesAPI(t *testing.T) {
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "nope"}), http.StatusUnprocessableEntity, "invalid")
 
 	writes, fetches, searches, models := len(m.fake.Writes), len(m.fake.Fetches), len(m.fake.Searches), len(m.api.Requests())
+	rows := func() string {
+		t.Helper()
+		var out []string
+		for _, table := range []string{"operation_audit", "effects", "messages", "decisions", "live_baseline", "proposals", "job_runs"} {
+			out = append(out, table+"="+strconv.Itoa(count("SELECT COUNT(*) FROM "+table)))
+		}
+		return strings.Join(out, " ")
+	}
+	liveState := func() string { return s.do(http.MethodGet, "/api/v1/mail/live", token, nil).body }
+	beforeRows, beforeLive := rows(), liveState()
 	replayed := apiData(t, s.do(http.MethodPost, "/api/v1/mail/replay", token, map[string]any{"account": "icloud"}), http.StatusOK)
 	if summary, _ := replayed["summary"].(map[string]any); summary == nil || summary["messages"] == nil {
 		t.Fatalf("replay: %v", replayed)
@@ -269,16 +281,29 @@ func TestMailPassesAPI(t *testing.T) {
 	if len(m.fake.Writes) != writes || len(m.fake.Fetches) != fetches || len(m.fake.Searches) != searches || len(m.api.Requests()) != models {
 		t.Fatalf("replay made external calls: writes %d->%d fetches %d->%d searches %d->%d model %d->%d", writes, len(m.fake.Writes), fetches, len(m.fake.Fetches), searches, len(m.fake.Searches), models, len(m.api.Requests()))
 	}
+	if after := rows(); after != beforeRows {
+		t.Fatalf("replay changed stored rows: %s -> %s", beforeRows, after)
+	}
+	if after := liveState(); after != beforeLive {
+		t.Fatalf("replay changed the live account state: %s -> %s", beforeLive, after)
+	}
 
 	apply := "/api/v1/mail/live/deletions/apply"
+	refusedAudits := func() int {
+		return count("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.apply-deletions' AND outcome = 'refused'")
+	}
 	apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/pause", token, nil), http.StatusOK)
+	opens, refusals := m.fake.Opens(), refusedAudits()
 	paused := s.do(http.MethodPost, apply, token, nil)
 	expectAPI(t, paused, http.StatusConflict, "refused")
-	if len(m.fake.Writes) != writes || len(m.fake.Boxes["Bills"].Box.Messages) != 1 {
-		t.Fatalf("paused deletions wrote %v", m.verbs()[writes:])
+	if len(m.fake.Writes) != writes || len(m.fake.Boxes["Bills"].Box.Messages) != 1 || m.fake.Opens() != opens {
+		t.Fatalf("paused deletions reached IMAP: %d sessions, wrote %v", m.fake.Opens()-opens, m.verbs()[writes:])
+	}
+	if n := refusedAudits(); n != refusals+1 {
+		t.Fatalf("paused deletions audited %d refusals, want %d", n, refusals+1)
 	}
 	apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/resume", token, nil), http.StatusOK)
-	done := s.do(http.MethodPost, apply, token, nil)
+	done := s.do(http.MethodPost, apply, token, nil, "Idempotency-Key", "apply-1")
 	data := apiData(t, done, http.StatusOK)
 	ids, _ := done.json["effect_ids"].([]any)
 	accounts, _ := data["accounts"].([]any)
@@ -292,7 +317,15 @@ func TestMailPassesAPI(t *testing.T) {
 	if len(log) != 3 || log[0].Verb != "COPY" || log[1].Verb != "STORE" || !strings.Contains(strings.Join(log[1].Args, " "), `\Deleted`) || log[2].Verb != "EXPUNGE" || len(m.fake.Boxes["Bills"].Box.Messages) != 0 {
 		t.Fatalf("apply deletions wrote %+v, want COPY, STORE \\Deleted, UID EXPUNGE", log)
 	}
-	writes = len(m.fake.Writes)
+	writes, opens = len(m.fake.Writes), m.fake.Opens()
+	audits, effectRows := count("SELECT COUNT(*) FROM operation_audit"), count("SELECT COUNT(*) FROM effects")
+	replay := s.do(http.MethodPost, apply, token, nil, "Idempotency-Key", "apply-1")
+	if replay.status != http.StatusOK || replay.header.Get("Idempotent-Replayed") == "" || replay.body != done.body {
+		t.Fatalf("keyed second apply was not the stored result: %d %v %s", replay.status, replay.header, replay.body)
+	}
+	if m.fake.Opens() != opens || len(m.fake.Writes) != writes || count("SELECT COUNT(*) FROM operation_audit") != audits || count("SELECT COUNT(*) FROM effects") != effectRows {
+		t.Fatalf("keyed replay ran a pass: %d sessions, writes %v", m.fake.Opens()-opens, m.verbs()[writes:])
+	}
 	if again := apiData(t, s.do(http.MethodPost, apply, token, nil), http.StatusOK); again["outcome"] != "ok" || len(m.fake.Writes) != writes {
 		t.Fatalf("second deletion pass: %v, writes %v", again, m.verbs()[writes:])
 	}
@@ -314,5 +347,118 @@ func TestMailPassesAPI(t *testing.T) {
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/mail/shadow-report?since=bogus", token, nil), http.StatusUnprocessableEntity, "invalid")
 	if len(m.fake.Writes) != writes {
 		t.Fatalf("scans, rebaseline or backlog wrote %v", m.verbs()[writes:])
+	}
+}
+
+func TestMailApplyDeletionsAPIRefusedInShadow(t *testing.T) {
+	const from = "statements@bank.test"
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	m := mailSafetyFixture(t, "shadow")
+	m.add("Bills", "Old statement", from, "old", "Your statement is ready.", `\Seen`)
+	m.run(t, "sync")
+	rulesFile := filepath.Join(m.dir, "rules.json")
+	if err := os.WriteFile(rulesFile, []byte(`{"rules":[{"id":"old","account":"icloud","action":"delete","when":[{"field":"from_addr","op":"eq","value":"`+from+`"}]}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.run(t, "rules", "import", rulesFile)
+	d := mustConnect(t, m.path, keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	count := func(query string) int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow(query).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	token := localAPIToken(t, "api")
+	base, _, stop, err := startServeAppArgs(t, m.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stop() })
+	s := &apiSite{t: t, base: base}
+	waitUntil(t, 60*time.Second, "mail-pass to be free", func() bool {
+		return s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}).status == http.StatusOK
+	})
+	opens, writes := m.fake.Opens(), len(m.fake.Writes)
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/live/deletions/apply", token, nil, "Idempotency-Key", "shadow-1"), http.StatusConflict, "refused")
+	if m.fake.Opens() != opens || len(m.fake.Writes) != writes || len(m.fake.Boxes["Bills"].Box.Messages) != 1 {
+		t.Fatalf("shadow deletions reached IMAP: %d sessions, wrote %v", m.fake.Opens()-opens, m.verbs()[writes:])
+	}
+	if n := count("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.apply-deletions' AND outcome = 'refused'"); n != 1 {
+		t.Fatalf("shadow deletions audited %d refusals", n)
+	}
+	if n := count("SELECT COUNT(*) FROM effects WHERE operation = 'trash'"); n != 0 {
+		t.Fatalf("shadow deletions wrote %d trash intents", n)
+	}
+}
+
+func TestMailSyncAPIDrainsOnShutdown(t *testing.T) {
+	const from = "statements@bank.test"
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	m := mailSafetyFixture(t, "live")
+	m.add("Bills", "Old statement", from, "old", "Your statement is ready.", `\Seen`)
+	m.run(t, "sync")
+	d := mustConnect(t, m.path, keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	count := func(query string, args ...any) int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow(query, args...).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	token := localAPIToken(t, "api")
+	logs := &lockedBuffer{}
+	base, _, stop, err := startServeAppArgs(t, m.app, logs, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stop() })
+	s := &apiSite{t: t, base: base}
+	waitUntil(t, 60*time.Second, "mail-pass to be free", func() bool {
+		return s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}).status == http.StatusOK
+	})
+	arrived, release := make(chan struct{}), make(chan struct{})
+	var arrivedOnce, releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+	m.fake.SetStatusHook(func(_ string, n uint32) uint32 {
+		arrivedOnce.Do(func() {
+			close(arrived)
+			<-release
+		})
+		return n
+	})
+	m.add("Bills", "New statement", from, "new", "Another statement.", "")
+	replied := make(chan apiReply, 1)
+	go func() {
+		replied <- s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}, "Idempotency-Key", "shutdown-1")
+	}()
+	select {
+	case <-arrived:
+	case <-time.After(60 * time.Second):
+		t.Fatalf("the API sync never reached IMAP: %s", logs.String())
+	}
+	running := "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ? AND r.status = 'running' AND r.owner LIKE 'manual/%'"
+	if n := count(running, mailrun.SyncJobKey); n != 1 {
+		t.Fatalf("the API sync is not a claimed %s run: %d running", mailrun.SyncJobKey, n)
+	}
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		releaseOnce.Do(func() { close(release) })
+	}()
+	stop()
+	select {
+	case <-replied:
+	case <-time.After(15 * time.Second):
+		t.Fatal("the API sync outlived serve")
+	}
+	if n := count(running, mailrun.SyncJobKey); n != 0 {
+		t.Fatalf("the API sync run was left running: %d", n)
+	}
+	if n := count("SELECT COUNT(*) FROM effects e WHERE e.state IN ('intent', 'unknown') AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id)"); n != 0 {
+		t.Fatalf("shutdown left %d unsettled effects", n)
 	}
 }

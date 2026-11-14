@@ -92,17 +92,53 @@ type mailPasses struct {
 
 func (p mailPasses) open() mail.OpenFunc { return p.m.Clients(p.d.Cfg) }
 
-func (p mailPasses) locked(ctx context.Context, fn func(context.Context, *run.Pass) error) error {
-	pass, err := run.Prepare(ctx, p.d.Env, p.d.DB, p.d.Cfg, p.open(), mail.WallClock, p.m.classifiers)
-	if err != nil {
-		return err
-	}
-	locks, err := db.ResourceLocks(ctx, p.d.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
-	if err != nil {
+var errServeStopping = errors.New("mail: serve is stopping")
+
+func (p mailPasses) job(ctx context.Context, key string, fn func(context.Context) error) error {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	stop := context.AfterFunc(p.d.Ctx, func() { cancel(context.Cause(p.d.Ctx)) })
+	defer stop()
+	go func() {
+		select {
+		case <-p.d.Stopping:
+			cancel(errServeStopping)
+		case <-ctx.Done():
+		}
+	}()
+	ran := false
+	_, err := module.Invoke(ctx, p.d.DB, p.d.Cfg, key, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+		ran = true
+		return scheduler.Result{}, fn(ctx)
+	})
+	if !ran {
 		return passBusy(err)
 	}
-	defer func() { _ = locks.Close() }()
-	return fn(db.WithHeld(ctx, locks), pass)
+	return err
+}
+
+func (p mailPasses) locked(ctx context.Context, key string, fn func(context.Context, *run.Pass) error) error {
+	return p.job(ctx, key, func(ctx context.Context) error {
+		pass, err := run.Prepare(ctx, p.d.Env, p.d.DB, p.d.Cfg, p.open(), mail.WallClock, p.m.classifiers)
+		if err != nil {
+			return err
+		}
+		return fn(ctx, pass)
+	})
+}
+
+func withEffects(err error, ids []int64) error {
+	if err == nil || len(ids) == 0 {
+		return err
+	}
+	classified := *application.Classify(err)
+	if len(classified.EffectIDs) == 0 {
+		classified.EffectIDs = ids
+	}
+	if classified.Cause == nil {
+		classified.Cause = err
+	}
+	return &classified
 }
 
 const busyRetryAfter = 2 * time.Second
@@ -134,7 +170,7 @@ func mailPage[T any](items []T, c api.Cursor, limit api.Limit, fetch func(int) (
 func mailRefreshed(change application.Change[mailapp.RefreshResult], err error) (application.Change[MailRefreshed], error) {
 	out := application.Change[MailRefreshed]{AuditID: change.AuditID, EffectIDs: change.EffectIDs}
 	if err != nil {
-		return out, err
+		return out, withEffects(err, change.EffectIDs)
 	}
 	out.Data.Result, err = json.Marshal(change.Data.Result)
 	return out, err
@@ -205,14 +241,14 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})
 		}),
 		api.Command(d, mailapp.DescribeRefreshLoops(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/loops/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
-			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshLoops(ctx, struct{}{}))
 				return err
 			})
 			return out, err
 		}),
 		api.Command(d, mailapp.DescribeRefreshWatches(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/watches/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
-			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshWatches(ctx, struct{}{}))
 				return err
 			})

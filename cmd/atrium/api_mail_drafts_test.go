@@ -222,6 +222,15 @@ func TestDraftSendRaceSentCopyAndResolveSent(t *testing.T) {
 	}
 	expectAPI(t, s.do(http.MethodPatch, race, token, map[string]any{"subject": "Overwritten"}, "If-Match", etag), http.StatusConflict, "stale")
 	etag = s.do(http.MethodGet, race, token, nil).header.Get("ETag")
+	counter := scalar("SELECT CAST(value AS TEXT) FROM read_revisions WHERE scope = 'mail'")
+	apiData(t, s.do(http.MethodPatch, lost, token, map[string]any{"subject": "Lost plans soon", "revision": 1}), http.StatusOK)
+	apiData(t, s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}), http.StatusOK)
+	if moved := scalar("SELECT CAST(value AS TEXT) FROM read_revisions WHERE scope = 'mail'"); moved == counter {
+		t.Fatalf("unrelated mail writes left the mail counter at %s", counter)
+	}
+	if again := s.do(http.MethodGet, race, token, nil).header.Get("ETag"); again != etag {
+		t.Fatalf("unrelated mail writes changed the draft ETag: %s -> %s", etag, again)
+	}
 	if n := len(smtp.sent()); n != 0 {
 		t.Fatalf("updates reached SMTP: %d", n)
 	}
