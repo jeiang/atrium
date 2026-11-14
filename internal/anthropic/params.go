@@ -21,6 +21,8 @@ const (
 
 const IterationFallbackMessage = "fallback_message"
 
+const ThinkingDisabled = "disabled"
+
 const (
 	ToolChoiceAny  = "any"
 	ToolChoiceTool = "tool"

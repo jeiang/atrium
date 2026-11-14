@@ -963,7 +963,7 @@ claims about the running application. Operator contracts are in
   the 90% memory or disk threshold, or its firing alert set changes, and
   the change set differs from the last one recorded in the persistent `Ops`
   thread, it makes one fixed-schema Haiku classification request (no
-  tools, no thinking, one message, `output_config.format` json_schema) with
+  tools, thinking disabled, one message, `output_config.format` json_schema) with
   the typed change set, quoted alert names and the last 24 hours of
   samples for those facts. The request is admitted by the inference ledger
   on a `classification` accounting thread (role

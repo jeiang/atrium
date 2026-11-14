@@ -450,11 +450,12 @@ func split(block map[string]json.RawMessage) (map[string]json.RawMessage, []map[
 
 func fixedJSONRequest(body []byte) error {
 	var req struct {
-		Model        string            `json:"model"`
-		MaxTokens    int64             `json:"max_tokens"`
-		System       json.RawMessage   `json:"system"`
-		Messages     []json.RawMessage `json:"messages"`
-		Stream       bool              `json:"stream"`
+		Model        string             `json:"model"`
+		MaxTokens    int64              `json:"max_tokens"`
+		Thinking     anthropic.Thinking `json:"thinking"`
+		System       json.RawMessage    `json:"system"`
+		Messages     []json.RawMessage  `json:"messages"`
+		Stream       bool               `json:"stream"`
 		OutputConfig struct {
 			Effort string                     `json:"effort"`
 			Format anthropic.JSONOutputFormat `json:"format"`
@@ -470,6 +471,8 @@ func fixedJSONRequest(body []byte) error {
 		return fmt.Errorf("missing model")
 	case req.MaxTokens <= 0:
 		return fmt.Errorf("max_tokens %d", req.MaxTokens)
+	case req.Thinking != anthropic.Thinking{Type: anthropic.ThinkingDisabled}:
+		return fmt.Errorf("thinking %+v, want disabled", req.Thinking)
 	case len(req.Messages) != 1:
 		return fmt.Errorf("%d messages, want 1", len(req.Messages))
 	case req.OutputConfig.Format.Type != anthropic.FormatJSONSchema:

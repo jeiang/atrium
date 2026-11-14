@@ -132,10 +132,13 @@ func TestOpsSamplerClassifiesAChangeInOneFixedHaikuRequest(t *testing.T) {
 	if body["model"] != pricing.HaikuID {
 		t.Errorf("model = %v, want %s", body["model"], pricing.HaikuID)
 	}
-	for _, key := range []string{"tools", "tool_choice", "thinking", "context_management"} {
+	for _, key := range []string{"tools", "tool_choice", "context_management"} {
 		if _, ok := body[key]; ok {
 			t.Errorf("classification request carries %s", key)
 		}
+	}
+	if thinking, _ := body["thinking"].(map[string]any); len(thinking) != 1 || thinking["type"] != "disabled" {
+		t.Errorf("classification request thinking: %v", body["thinking"])
 	}
 	if max, _ := body["max_tokens"].(float64); max != 2000 {
 		t.Errorf("max_tokens = %v, want 2000", body["max_tokens"])

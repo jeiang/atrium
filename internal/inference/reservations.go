@@ -389,8 +389,8 @@ func classificationShape(model string, r Request) error {
 		return errors.New("inference: classification requires the Haiku model")
 	case len(p.Tools) > 0:
 		return errors.New("inference: classification may not use tools")
-	case p.Thinking != nil:
-		return errors.New("inference: classification may not use thinking")
+	case p.Thinking == nil || p.Thinking.Type != anthropic.ThinkingDisabled || p.Thinking.Display != "":
+		return errors.New("inference: classification must disable thinking")
 	case p.ToolChoice != nil:
 		return errors.New("inference: classification may not set a tool choice")
 	case len(p.ContextManagement) > 0:
