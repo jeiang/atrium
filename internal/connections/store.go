@@ -11,13 +11,16 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections/transport"
@@ -431,7 +434,12 @@ func changedEndpoint(from, to string) (string, bool) {
 
 func endpointURLField(key string) bool {
 	name := strings.ToLower(strings.TrimSpace(key))
-	return name == "url" || name == "api" || name == "host" || name == "issuer" || strings.HasSuffix(name, "_url") || strings.HasSuffix(name, "_host")
+	return name == "url" || name == "api" || name == "issuer" || strings.HasSuffix(name, "_url") || endpointHostField(name)
+}
+
+func endpointHostField(key string) bool {
+	name := strings.ToLower(strings.TrimSpace(key))
+	return name == "host" || strings.HasSuffix(name, "_host")
 }
 
 func validateEndpointURLs(id ID, raw json.RawMessage) error {
@@ -447,7 +455,14 @@ func validateEndpointURLs(id ID, raw json.RawMessage) error {
 		if err := json.Unmarshal(fields[field], &value); err != nil {
 			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a string", id, field)}
 		}
-		u, err := url.Parse(strings.TrimSpace(value))
+		value = strings.TrimSpace(value)
+		if endpointHostField(field) {
+			if _, _, ok := endpointHost(value); !ok {
+				return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a host name or IP address with an optional port, without userinfo or a path", id, field)}
+			}
+			continue
+		}
+		u, err := url.Parse(value)
 		if err != nil {
 			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a valid endpoint without URL userinfo", id, field)}
 		}
@@ -456,6 +471,34 @@ func validateEndpointURLs(id ID, raw json.RawMessage) error {
 		}
 	}
 	return nil
+}
+
+func endpointHost(value string) (host, port string, ok bool) {
+	if value == "" {
+		return "", "", true
+	}
+	if strings.ContainsAny(value, `@/\`) || strings.ContainsFunc(value, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+		return "", "", false
+	}
+	if _, err := netip.ParseAddr(value); err == nil {
+		return strings.ToLower(value), "", true
+	}
+	host = value
+	if h, p, err := net.SplitHostPort(value); err == nil {
+		if _, err := strconv.ParseUint(p, 10, 16); err != nil {
+			return "", "", false
+		}
+		host, port = h, p
+	} else if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
+		host = value[1 : len(value)-1]
+	}
+	if host == "" {
+		return "", "", false
+	}
+	if _, err := netip.ParseAddr(host); err != nil && strings.ContainsAny(host, ":[]") {
+		return "", "", false
+	}
+	return strings.ToLower(host), port, true
 }
 
 func endpointIdentity(key, value string) (string, bool) {
@@ -468,6 +511,12 @@ func endpointIdentity(key, value string) (string, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return "", true
+	}
+	if endpointHostField(key) {
+		if host, port, ok := endpointHost(value); ok {
+			return "//" + host + ":" + port, true
+		}
+		return value, true
 	}
 	u, err := url.Parse(value)
 	if err != nil {

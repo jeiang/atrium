@@ -155,7 +155,13 @@ An `issuer` or provider `preset` change is an endpoint identity change too.
 
 Endpoint URLs cannot carry userinfo (`user:password@`). Such a URL is refused
 at save, at Test, at v2 import, and at boot host reconciliation; the refusal
-names the connection and field, never the URL.
+names the connection and field, never the URL. Host fields (`host`, `*_host`
+such as `imap_host`) take a host name, IPv4 address, or IPv6 literal (bare or
+bracketed) with an optional port; `@`, `/`, `\`, whitespace, and control
+characters are refused. A host-declared connection refused at boot stops
+`serve` with exit 78. The background health check sends no request for a
+stored row that fails these rules; it records the connection as failing with
+the field named.
 
 Module flags are restart-only. Change `<name>_enabled` through `atrium settings
 set` or host configuration, then restart serve. Settings pages show module

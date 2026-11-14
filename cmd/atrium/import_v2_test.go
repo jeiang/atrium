@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -1090,7 +1091,8 @@ func TestImportV2RefusesConnectionEndpointUserinfo(t *testing.T) {
 	source := copyV2Fixture(t, dir)
 	const password = "import-userinfo-must-not-be-stored"
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO settings (key, value) VALUES ('mail_embed_url', %q)", "https://operator:"+password+"@embedding.example/v1"))
-	reply := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	app := importTestApp(t, dir, clock)
+	reply := runImportApp(t, app, "db", "import-v2", source)
 	output := reply.stdout + reply.stderr
 	if reply.code == cli.ExitOK || !strings.Contains(output, "service/embedding") || !strings.Contains(output, "url") || !strings.Contains(output, "userinfo") {
 		t.Fatal("v2 import did not refuse endpoint userinfo with the connection and field")
@@ -1109,6 +1111,49 @@ func TestImportV2RefusesConnectionEndpointUserinfo(t *testing.T) {
 	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(old_value, '') || COALESCE(new_value, ''), ?) > 0", password); count != "0" {
 		t.Fatal("refused v2 import stored userinfo in the audit")
 	}
+	fresh := t.TempDir()
+	if got := runImportApp(t, importTestApp(t, fresh, clock), "settings", "list"); got.code != cli.ExitOK {
+		t.Fatalf("booting a fresh database: exit %d stderr %q", got.code, got.stderr)
+	}
+	baseline, err := db.Connect(filepath.Join(fresh, "atrium.db"), db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = baseline.Close() }()
+	if refused, booted := tableRowCounts(t, d), tableRowCounts(t, baseline); !maps.Equal(refused, booted) {
+		t.Fatalf("the refused import left rows: %v, a fresh boot has %v", refused, booted)
+	}
+	editImportSource(t, source, "UPDATE settings SET value = 'https://embedding.example/v1' WHERE key = 'mail_embed_url'")
+	if again := runImportApp(t, app, "db", "import-v2", source); again.code != cli.ExitOK {
+		t.Fatalf("rerun with the corrected source: exit %d stderr %q", again.code, again.stderr)
+	}
+	if stored := importValue(t, d.Read, "SELECT json_extract(config_json, '$.url') FROM connections WHERE id = 'service/embedding'"); stored != "https://embedding.example/v1" {
+		t.Fatalf("corrected import stored embedding url %q", stored)
+	}
+}
+
+func tableRowCounts(t *testing.T, d *db.DB) map[string]int64 {
+	t.Helper()
+	rows, err := d.Read.Query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND sql NOT LIKE 'CREATE VIRTUAL TABLE%' ORDER BY name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int64{}
+	for _, name := range names {
+		counts[name] = importCount(t, d.Read, "SELECT COUNT(*) FROM \""+name+"\"")
+	}
+	return counts
 }
 
 func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {

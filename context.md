@@ -294,8 +294,12 @@ claims about the running application. Operator contracts are in
   disconnect first. Refusal happens before the connectivity test; an unchanged
   endpoint can keep its credentials. Issuer and provider preset changes also
   count as endpoint identity changes. Endpoint URLs cannot contain userinfo,
-  including during v2 import and host reconciliation; refusals name the
-  connection and field, never the URL. Credential slots must belong to the
+  and `host`/`*_host` fields accept only a host name or IP literal with an
+  optional port, including during v2 import and host reconciliation; refusals
+  name the connection and field, never the value. A host declaration refused
+  at boot is a permanent configuration refusal (exit 78). The health watch
+  records a stored row that fails these rules as failing without sending a
+  request. Credential slots must belong to the
   connection kind, and credential values remain write-only.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
