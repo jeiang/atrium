@@ -54,6 +54,7 @@ type SearchInput struct {
 	Query   string
 	Filters search.Filters
 	Limit   int
+	Offset  int
 	Embed   embed.TextsFunc `json:"-"`
 }
 type SearchHit struct {
@@ -76,7 +77,7 @@ func DescribeMessage() application.Definition {
 	return application.Describe[MessageInput, MessageResult](MessageName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
 }
 func DescribeSearch() application.Definition {
-	return application.Describe[SearchInput, SearchResult](SearchName, application.Query, []application.Authority{application.Agent}, application.NoEffect, false)
+	return application.Describe[SearchInput, SearchResult](SearchName, application.Query, []application.Authority{application.Agent, application.Operator}, application.NoEffect, false)
 }
 func clip(s string, n int) string {
 	for i := range s {
@@ -116,7 +117,7 @@ func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, 
 }
 
 func (s *Service) Search(ctx context.Context, in SearchInput) (application.Read[SearchResult], error) {
-	found, err := search.Search(ctx, s.db.KNN, search.Query{Text: in.Query, Filters: in.Filters, Limit: in.Limit}, in.Embed)
+	found, err := search.Search(ctx, s.db.KNN, search.Query{Text: in.Query, Filters: in.Filters, Limit: in.Limit, Offset: in.Offset}, in.Embed)
 	if err != nil {
 		return application.Read[SearchResult]{}, err
 	}
@@ -147,7 +148,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (application.Read[
 		}
 		results[i] = SearchHit{h.ID, h.Account, h.Folder, iso(h.DateTS), from, recips, h.Subject, tool.Clip(h.Snippet, assistant.TuningAgentMailSnippetChars)}
 	}
-	rev, err := s.snapshot(ctx, SearchName, []any{in.Query, in.Filters, in.Limit}, func(db.Querier) error { return nil })
+	rev, err := s.snapshot(ctx, SearchName, []any{in.Query, in.Filters, in.Limit, in.Offset}, func(db.Querier) error { return nil })
 	return application.Read[SearchResult]{Revision: rev, Data: SearchResult{found.Semantic, results, marks}}, err
 }
 

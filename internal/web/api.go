@@ -189,7 +189,11 @@ func (d *Deps) Command(pattern string, h http.HandlerFunc) http.HandlerFunc {
 }
 
 func (d *Deps) DeclaredAPI(method, pattern string, shape application.APIShape, h http.HandlerFunc) {
-	d.API(method, pattern, h)
+	if shape.ReadOnlyPost {
+		d.route(method, APIPrefix+pattern, accessDefault, h)
+	} else {
+		d.API(method, pattern, h)
+	}
 	(*d.routes)[len(*d.routes)-1].api = &shape
 }
 
@@ -310,3 +314,5 @@ func RequestOrigin(ctx context.Context) string {
 	origin, _ := ctx.Value(originKey{}).(string)
 	return origin
 }
+
+func (d *Deps) Owner() string { return d.owner }

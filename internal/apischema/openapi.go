@@ -122,9 +122,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 			params = append(params, p)
 		}
 	}
-	if unsafe {
+	if unsafe && !shape.ReadOnlyPost {
 		params = append(params, object{"name": "Idempotency-Key", "in": "header", "schema": object{"type": "string", "minLength": 1, "maxLength": 255}})
-	} else if kind == application.Query && shape.Body != application.BodyEventStream && !shape.Uncached {
+	} else if kind == application.Query && !shape.ReadOnlyPost && shape.Body != application.BodyEventStream && !shape.Uncached {
 		params = append(params, object{"name": "If-None-Match", "in": "header", "schema": object{"type": "string"}})
 	}
 	id := string(b.Uses[0])
@@ -147,7 +147,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		if err != nil {
 			return nil, err
 		}
-		op["requestBody"] = object{"required": true, "content": object{"application/json": object{"schema": schema}}}
+		op["requestBody"] = object{"required": !shape.OptionalBody, "content": object{"application/json": object{"schema": schema}}}
 	case application.BodyMultipart:
 		schema, err := w.ref(shape.Request)
 		if err != nil {
@@ -170,9 +170,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		}
 	}
 	headers := object{}
-	if unsafe {
+	if unsafe && !shape.ReadOnlyPost {
 		headers["Atrium-Command-Id"] = object{"schema": object{"type": "string"}}
-	} else if kind == application.Query && shape.Body != application.BodyEventStream && !shape.Uncached {
+	} else if kind == application.Query && !shape.ReadOnlyPost && shape.Body != application.BodyEventStream && !shape.Uncached {
 		headers["ETag"] = object{"schema": object{"type": "string"}}
 	}
 	success := object{"description": http.StatusText(shape.Success), "headers": headers}

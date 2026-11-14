@@ -55,7 +55,8 @@ func parseRules(tag string) rules {
 	return out
 }
 
-func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, body application.BodyKind, ignoreBody bool) bool {
+func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, shape application.APIShape) bool {
+	body, ignoreBody := shape.Body, shape.IgnoreBody
 	rv := reflect.ValueOf(v).Elem()
 	query := r.URL.Query()
 	cursorQuery := r.URL.Query()
@@ -133,7 +134,7 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 	case application.BodyMultipart:
 		media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if media == "application/json" || (r.Header.Get("Content-Type") == "" && r.ContentLength == 0) {
-			return decodeBody(w, r, v, rv.Type())
+			return decodeBody(w, r, v, rv.Type(), shape.OptionalBody)
 		}
 		decoder, ok := v.(interface{ DecodeMultipart(*multipart.Reader) error })
 		if err != nil || params["boundary"] == "" || !ok {
@@ -161,7 +162,7 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 		}
 		return true
 	case application.BodyJSON:
-		return decodeBody(w, r, v, rv.Type())
+		return decodeBody(w, r, v, rv.Type(), shape.OptionalBody)
 	case application.BodyNone:
 		if r.ContentLength != 0 {
 			web.APIError(w, http.StatusBadRequest, "bad_request", "This request takes no body.")
@@ -171,8 +172,11 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 	return true
 }
 
-func decodeBody(w http.ResponseWriter, r *http.Request, v any, t reflect.Type) bool {
+func decodeBody(w http.ResponseWriter, r *http.Request, v any, t reflect.Type, optional bool) bool {
 	if len(checkBody(t, json.RawMessage("{}"), nil)) == 0 {
+		if optional {
+			return web.DecodeOptionalJSON(w, r, v)
+		}
 		return web.DecodeJSON(w, r, v)
 	}
 	var raw bytes.Buffer

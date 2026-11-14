@@ -37,10 +37,13 @@ type APIShape struct {
 	MultipartFile        string
 	MultipartAlternative string
 	IgnoreBody           bool
+	OptionalBody         bool
 	BeforeBody           func(context.Context) error
 	ID                   string
 	Uncached             bool
+	ReadOnlyPost         bool
 	Sensitive            bool
+	Unowned              bool
 	Errors               []Code
 }
 

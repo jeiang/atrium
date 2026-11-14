@@ -23,8 +23,9 @@ type PauseResult struct {
 	NoticeError error `json:"-"`
 }
 type LiveActionsInput struct {
-	Limit int
-	Kind  string
+	Limit  int
+	Kind   string
+	Offset int
 }
 
 func (s *Service) WithLive(l *live.Live) *Service { s.live = l; return s }
@@ -76,7 +77,7 @@ func (s *Service) LiveStatus(ctx context.Context, in struct{}) (application.Read
 	return application.Read[live.Status]{Revision: rev, Data: out}, err
 }
 func (s *Service) LiveActions(ctx context.Context, in LiveActionsInput) (application.Read[[]live.Action], error) {
-	out, err := s.liveService().List(ctx, "", in.Kind, in.Limit, 0)
+	out, err := s.liveService().List(ctx, "", in.Kind, in.Limit, in.Offset)
 	if err != nil {
 		return application.Read[[]live.Action]{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jeiang/atrium/internal/mail"
@@ -107,6 +108,7 @@ type FakeClient struct {
 	FailWrite    func(FakeWrite) error
 	Idle         bool
 
+	opens      atomic.Int64
 	hookMu     sync.Mutex
 	statusHook func(imapName string, messages uint32) uint32
 	idle       sync.Mutex
@@ -128,7 +130,10 @@ func NewFakeClient() *FakeClient {
 	return f
 }
 
+func (f *FakeClient) Opens() int { return int(f.opens.Load()) }
+
 func (f *FakeClient) Open(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+	f.opens.Add(1)
 	return mail.Gated(ctx, opts, func() (mail.Conn, error) { return f.Conn(), nil })
 }
 

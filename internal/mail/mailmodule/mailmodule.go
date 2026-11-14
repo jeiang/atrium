@@ -5,6 +5,8 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -116,6 +118,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	passOps, passBindings := mailPassOperations()
 	operations = append(operations, passOps...)
 	bindings = append(bindings, passBindings...)
+	bindings = append(bindings, mailAPIRoutes(nil)...)
+	bindings = append(bindings, mailWorkRoutes(nil, m)...)
+	bindings = append(bindings, mailPassRoutes(nil, m)...)
+	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
 		Name:           module.Mail,
 		Operations:     operations,
@@ -129,6 +135,12 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		ServiceSetName: "mail/watch",
 		Requires:       Requirements(),
 		Pages: []web.Page{
+			{Module: func(_ chi.Router, d *web.Deps) {
+				mailAPIRoutes(d)
+				mailWorkRoutes(d, m)
+				mailPassRoutes(d, m)
+				mailDraftRoutes(d, m)
+			}},
 			{Module: pages.Module(mailPageService), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},

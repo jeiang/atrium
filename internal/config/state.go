@@ -27,6 +27,13 @@ func NewState(reg *settings.Registry) *State {
 	return &State{settings: reg}
 }
 
+func (s *State) Detached() *State {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return &State{core: s.core, accounts: s.accounts, passwords: s.passwords, settings: s.settings, host: s.host, reconcile: s.reconcile,
+		credential: s.credential, hostAccounts: s.hostAccounts, dbKey: s.dbKey, dbPath: s.dbPath}
+}
+
 func (s *State) SetDBKey(k db.Key) {
 	s.mu.Lock()
 	s.dbKey = k

@@ -246,7 +246,9 @@ func checkAPIShape(b application.Binding, def application.Definition) string {
 		return "binds an operation no operator can reach"
 	case !shape.Area.Valid():
 		return "has unknown area " + string(shape.Area)
-	case safe != (def.Kind == application.Query):
+	case shape.ReadOnlyPost && (def.Kind != application.Query || method != http.MethodPost || shape.Body != application.BodyJSON):
+		return "read-only POST requires a JSON query"
+	case !shape.ReadOnlyPost && safe != (def.Kind == application.Query):
 		return "uses method " + method + " for a " + string(def.Kind)
 	case shape.Body == application.BodyMultipart && shape.BodyLimit <= 0:
 		return "multipart body has no byte limit"

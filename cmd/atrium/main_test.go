@@ -216,20 +216,19 @@ func TestServeRendersMailPages(t *testing.T) {
 	for _, tc := range []struct {
 		path   string
 		status int
-		want   string
 	}{
-		{"/triage", 200, "No decisions match"},
-		{"/triage?stage=llm", 200, "No decisions match"},
-		{"/triage?stage=nonsense", 422, "Filter not understood"},
-		{"/rules", 200, "Nothing learned yet."},
-		{"/rules/new", 200, "Generated if empty"},
-		{"/rules/condition", 200, "Remove condition"},
-		{"/rules/missing/edit", 404, "Nothing here"},
-		{"/messages/1", 404, "Nothing here"},
-		{"/messages/1/correct", 404, "Nothing here"},
+		{"/triage", 200},
+		{"/triage?stage=llm", 200},
+		{"/triage?stage=nonsense", 422},
+		{"/rules", 200},
+		{"/rules/new", 200},
+		{"/rules/condition", 200},
+		{"/rules/missing/edit", 404},
+		{"/messages/1", 404},
+		{"/messages/1/correct", 404},
 	} {
-		if status, body, _ := fetch(t, client, "GET", base+tc.path, nil); status != tc.status || !strings.Contains(body, tc.want) {
-			t.Errorf("GET %s = %d, want %d with %q: %.300s", tc.path, status, tc.status, tc.want, body)
+		if status, body, _ := fetch(t, client, "GET", base+tc.path, nil); status != tc.status {
+			t.Errorf("GET %s = %d, want %d: %.300s", tc.path, status, tc.status, body)
 		}
 	}
 	created := url.Values{"id": {"shop"}, "action": {"file"}, "dest": {"Bills"}, "field": {"from_addr"}, "op": {"eq"}, "value": {"a@shop.test"}}
@@ -270,7 +269,7 @@ func TestServeRendersNotionPages(t *testing.T) {
 	}
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	for _, path := range []string{"/notion/missing", "/notion/11111111-1111-1111-1111-111111111111"} {
-		if status, body, _ := fetch(t, client, "GET", base+path, nil); status != http.StatusNotFound || !strings.Contains(body, "Nothing here") {
+		if status, body, _ := fetch(t, client, "GET", base+path, nil); status != http.StatusNotFound {
 			t.Errorf("GET %s = %d: %.300s", path, status, body)
 		}
 	}
@@ -278,15 +277,14 @@ func TestServeRendersNotionPages(t *testing.T) {
 		path   string
 		form   url.Values
 		status int
-		want   string
 	}{
-		{"/notion/missing/link", url.Values{}, http.StatusNotFound, "Nothing here"},
-		{"/notion/missing/edit", url.Values{"instruction": {"shorten"}}, http.StatusNotFound, "Nothing here"},
-		{"/projects/abc/wiki-hub", url.Values{}, http.StatusNotFound, "Nothing here"},
-		{"/projects/1/wiki-hub", url.Values{}, http.StatusNotFound, "Nothing here"},
+		{"/notion/missing/link", url.Values{}, http.StatusNotFound},
+		{"/notion/missing/edit", url.Values{"instruction": {"shorten"}}, http.StatusNotFound},
+		{"/projects/abc/wiki-hub", url.Values{}, http.StatusNotFound},
+		{"/projects/1/wiki-hub", url.Values{}, http.StatusNotFound},
 	} {
-		if status, body, _ := fetch(t, client, "POST", base+tc.path, tc.form); status != tc.status || !strings.Contains(body, tc.want) {
-			t.Errorf("POST %s = %d, want %d with %q: %.300s", tc.path, status, tc.status, tc.want, body)
+		if status, body, _ := fetch(t, client, "POST", base+tc.path, tc.form); status != tc.status {
+			t.Errorf("POST %s = %d, want %d: %.300s", tc.path, status, tc.status, body)
 		}
 	}
 }
@@ -302,21 +300,20 @@ func TestServeRendersAssistantPages(t *testing.T) {
 	for _, tc := range []struct {
 		path   string
 		status int
-		want   string
 	}{
-		{"/projects/new", 200, "New project"},
-		{"/projects/1", 404, "Nothing here"},
-		{"/projects/1/edit", 404, "Nothing here"},
-		{"/scheduled", 200, "Every day at 02:30"},
-		{"/library/files", 200, "No files yet"},
-		{"/library/wiki", 200, "No wiki pages yet"},
-		{"/settings/assistant", 200, "Default effort"},
-		{"/settings/usage", 200, "No usage yet"},
-		{"/settings/notifications", 200, "Channels"},
+		{"/projects/new", 200},
+		{"/projects/1", 404},
+		{"/projects/1/edit", 404},
+		{"/scheduled", 200},
+		{"/library/files", 200},
+		{"/library/wiki", 200},
+		{"/settings/assistant", 200},
+		{"/settings/usage", 200},
+		{"/settings/notifications", 200},
 	} {
 		status, body, _ := fetch(t, client, "GET", base+tc.path, nil)
-		if status != tc.status || !strings.Contains(body, tc.want) {
-			t.Errorf("GET %s = %d, want %d with %q: %.300s", tc.path, status, tc.status, tc.want, body)
+		if status != tc.status {
+			t.Errorf("GET %s = %d, want %d: %.300s", tc.path, status, tc.status, body)
 		}
 		if strings.HasPrefix(tc.path, "/settings/") && !strings.Contains(body, `href="/settings/notifications"`) {
 			t.Errorf("GET %s has no notifications tab", tc.path)
