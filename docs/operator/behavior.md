@@ -14,8 +14,10 @@ and also starts an emergency listener on `127.0.0.1:8481` in the same process.
 All configured public, emergency, and ops sockets must bind before readiness.
 A failed bind closes the sockets already opened. A listener failure while
 running stops the other listeners and produces a failed exit. A second serve
-on the same database is refused by its serve lock. `watch` and `agent scheduler`
-are not commands; `agent tick` remains a one-shot pass over due work.
+on the same database is refused by its serve lock. `serve` runs scheduled work
+and mail watches; `agent tick` is a one-shot pass over due work. It exits 0
+when it finished work or nothing was due, 75 when every due job was locked by
+another invocation and nothing started, and 1 on an error.
 
 SIGTERM starts a bounded drain. New work and streams stop, running work has a
 105-second window, and effect/interrupted-run settlement has another 15 seconds.
@@ -40,28 +42,49 @@ configuration, and an unknown future schema are permanent refusals.
 Every admitted identity is the one operator with full authority. There is no
 administrator role or remote emergency bypass.
 
-- Proxy mode requires the `Remote-Groups` admission header. Only use it behind
-  a proxy that strips or overwrites incoming `Remote-*` headers. OIDC-only
-  listeners do not accept those headers as identity.
+- Proxy mode requires a `Remote-Groups` header that lists `atrium_access`;
+  otherwise the request gets 403. Only use proxy mode behind a proxy that
+  strips or overwrites incoming `Remote-*` headers. OIDC-only listeners do not
+  accept those headers as identity.
 - OIDC uses the host-declared `service/oidc` connection. `access_groups`,
   `access_emails`, and `access_domains` select admitted identities. Until the
   connection is configured, public sign-in stays closed; the emergency listener
   can still reach settings on the same database.
 - Local and emergency listeners require a numeric loopback bind address and
-  loopback socket peers. A forwarded header never makes a remote peer local.
-  Do not expose that listener through a public reverse proxy.
-- Requests still enforce accepted Host, CSRF, same-origin, and CSP rules.
-  `/healthz` is the Host-check exception. Signed media and phone action links
-  have narrowly scoped credentials, not general operator sessions.
+  loopback socket peers; a non-loopback peer gets 403. A forwarded header never
+  makes a remote peer local. Without an explicit allowed Host, a local listener
+  accepts `localhost`, `127.0.0.1` and `[::1]`. Do not expose that listener
+  through a public reverse proxy.
+- Requests still enforce accepted Host, CSRF, same-origin, and CSP rules. A
+  Host outside the accepted list gets 400 `Bad Host header`; `GET /healthz` is
+  the only exception (HEAD is not exempt). CSRF and same-origin failures get
+  403. Signed media and phone action links have narrowly scoped credentials,
+  not general operator sessions.
 - Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
   Such a peer must send exactly one valid value; otherwise the request is 400.
   Other forwarded-address headers do not choose a rate-limit identity.
 
-Sign-in and API rate limits are per listener and in process. A rate-limited
-request returns 429 with `Retry-After` and does not perform the requested action.
-The emergency listener has its own limiter, not a separate database or token
-store. The ops listener is separate; public operator routes do not expose
-`/metrics`, `/readyz`, or profiling.
+Public requests are limited in process by token buckets owned by each listener:
+10 sign-in requests a minute per client address, 120 `/api/v1` requests a minute
+per address and 60 a minute per bearer token. A refused request returns 429 with
+`Retry-After` and `no-store` and changes nothing. The limits are code constants,
+not settings, and a restart clears them. The emergency listener has its own
+limiter, not a separate database or token store.
+
+## Ops listener, tracing, and logs
+
+The ops listener (`ops_listen`, default `127.0.0.1:9180`, `off` disables) is
+separate from the operator routes and serves `/metrics`, `/readyz`, `/livez`,
+`/healthz` and, with `ops_pprof`, profiling. `/readyz` reports `ready`,
+`degraded`, or `not_ready` with 503. `/livez` answers 503 when serve is stalled.
+`/healthz` reports the runtime state. Public operator routes do not expose these.
+
+Every command can export OTLP/HTTP traces when the host sets
+`otel_traces_endpoint`. Span attributes are an allowlist of ids, counts,
+durations and bounded names; string values are scrubbed of known secrets and
+clipped, and span events and links are dropped. Prompts, completions, mail
+content, addresses, tool arguments and results are not exported. Log messages
+and attributes are scrubbed of known secret values. Logs go to journald.
 
 ## Database keys and backups
 
@@ -78,6 +101,13 @@ from the state directory and keep an offline copy. Changing a secret-manager
 file does not rekey an existing database; `atrium db rekey` owns that operation.
 Archives made before rekeying still require the earlier key.
 
+`atrium db encrypt` converts a stopped plaintext database to the configured key
+through a verified fresh copy. `atrium db rekey` re-encrypts an encrypted
+database to a key read from a file or standard input, also through a verified
+copy, and records the retired key id. Both, like restore, need exclusive
+access: stop the atrium units first. They share the serve lock, which resolves
+the canonical database path and refuses a hard-linked database.
+
 `atrium backup` writes a consistent database-and-upload archive while serve
 runs. The scheduled backup is a job inside serve, not a unit or timer. With
 `backup.enable`, it writes timestamped `atrium-*.backup` archives and prunes
@@ -89,8 +119,15 @@ failed backup creation does not prune archives. v2 archives named
 archive needs another name or location. Off-host copying belongs to the host.
 
 Restore replaces database and uploaded state and requires resident users of the
-database to be stopped. Downgrading a binary does not reverse migrations and
-can require restoring a pre-upgrade database, losing later writes.
+database to be stopped. `atrium restore --verify ARCHIVE` checks an archive
+without installing it. Restore stages the archive, refuses a newer schema,
+checks it for tampering, and verifies and migrates the staged copy before it
+replaces anything. `--key-file PATH` opens an archive made under an earlier
+key. If the existing database cannot be opened with the configured key or the
+archive's key, restore refuses, because a running instance cannot be ruled out;
+`--replace-unopenable` replaces it and keeps the old database aside.
+Downgrading a binary does not reverse migrations and can require restoring a
+pre-upgrade database, losing later writes.
 
 ## Settings, connections, and modules
 
@@ -144,6 +181,11 @@ go-live eligibility.
   current message state, safe folders, and the per-account write cap. Read,
   unflagged inbox filing, contact flagging, corrections, and deletion rules
   retain their separate eligibility checks. Reaching a cap defers the rest.
+- Going live takes a baseline: mail that is read, unflagged and in the inbox at
+  that moment is never touched by the automatic inbox pass. A failed automatic
+  write is retried at most three times. Rule-based deletion runs at most once a
+  day per account. An automatic action the operator has undone is not applied
+  again.
 - Trash, Sent, Drafts, Junk, and provider system folders are protected from
   automatic filing. Destinations must be existing safe folders. A changed
   server message is skipped rather than overwritten from stale cached state.
@@ -201,10 +243,16 @@ releases the block and governs later undo. Resolving a draft as sent updates
 the draft but leaves its original SMTP attempt unknown; it does not resend.
 A partial undo must be checked and resolved rather than repeatedly invoked.
 
-Phone action links are optional, signed, expiring, and one-use. They authorize
-only their proposal action and still check Host. Revoke removes unused links
-and stamps used rows, including expired ones. Link minting limits do not drop
-the proposal's inbox notification or prevent a push without action links.
+Phone action links are off by default. `phone_actions_enabled` turns them on
+and `phone_actions_kinds` lists the proposal kinds that may be approved or
+dismissed from a notification; web-only kinds cannot be enabled, and phone
+links never decide a permission request. One stored nonce mints an Approve and
+a Dismiss link. A link is valid for 12 hours and one use, and at most 20 links
+are minted per hour. `POST /actions/<token>` needs no session but still checks
+Host. A phone approval that meets a busy lock answers 503, leaves the proposal
+pending and keeps the link usable. Revoke removes unused links and stamps used
+rows, including expired ones. Link minting limits do not drop the proposal's
+inbox notification or prevent a push without action links.
 
 ## Assistant and daily work
 
@@ -217,22 +265,62 @@ is unavailable. Full page navigations are not conditional fragment responses.
 
 Assistant runs use the Anthropic connection and a static supported-model
 catalog. A missing key or refused budget prevents a paid start before a new
-thread exists. Unknown models fail closed. Paid calls reserve spending before
-dispatch; tool permissions, run-kind limits, and approval are enforced in code.
-Model-free jobs do not require a paid run. Scheduled prompts do not expand
-chat `@` references.
+thread exists. Unknown models fail closed. Model-free jobs do not require a
+paid run. Scheduled prompts do not expand chat `@` references. Content sent to
+the hosted model leaves the host.
+
+Spending is reserved before dispatch: the full cold prompt, the maximum output,
+8,000 input tokens per allowed web search, and the search fees. The monthly
+budget defaults to $150. Scheduled work stops at 80% of it, chat at its own
+share capped at 95%, and the last 5% is kept for classification. Each model has
+a per-run cap that also covers subagent runs, and every subagent request must
+fit each ancestor run's cap. A thread cap (default $10, lower if the composer
+set one) covers a thread and its subagent threads. An attempt with an unknown
+outcome stays reserved and expires to an estimated charge after 24 hours. A
+stream stopped mid-generation is charged for what it delivered, never below the
+usage the provider reported. Reservations keep their calendar month, so a time
+zone change does not move spend, and earlier-month reservations count until
+they settle or expire. A memory job refused by the monthly budget waits for the
+next month, a run-cap refusal fails it, and other refusals back off. A provider
+spend-cap reply stops the run as a budget stop.
+
+Tool permissions, run-kind limits, and approval are enforced in code. A fixed
+untrusted-data preamble comes before the editable system prompt. Each tool has
+a channel: none, own accounts, notify, other people, or internet. Own-account
+and notify actions act at once and appear on Done with Undo. Other people
+always asks. Internet allows, asks or denies depending on what the thread
+holds; once untrusted text is present, other people and internet can only ask
+or deny, and editing the table cannot loosen that. An ask creates a permission
+request and parks the run without calling the tool; Deny resumes with a
+refusal. Approval re-checks the current table, tool settings and thread marks
+before the call. Scheduled, nightly and subagent runs never park, so an ask
+there is a deny. `web_fetch` reaches only URLs the operator typed or a verified
+`search_web` citation added; it uses no proxy and connects only to public
+addresses, checked on every redirect.
 
 Knowledge is the durable memory store. Records have scope, marks, and source
-provenance; confirmed and operator/import-written records are protected from
-agent edits and retraction. Eligible pinned, confirmed, unmarked records form
-the assistant profile. Private projects restrict their content to that project.
-Nightly dreaming can write unconfirmed records within its spending limits.
-Notion wiki pages are read-only mirrors; the assistant has no Notion editing
-tools. There is no skills feature.
+provenance; an edit can only add marks. Confirmed and operator/import-written
+records are protected from agent edits and retraction. Confirmation clears
+`untrusted` but keeps `pii` and `messages`, so such records stay out of the
+profile. Eligible pinned, confirmed, unmarked records form the assistant
+profile. Private projects restrict their content to that project, and nightly
+dreaming skips their threads. Nightly dreaming can write unconfirmed records
+within its spending limits. Notion wiki pages are read-only mirrors; the
+assistant has no Notion editing tools. There is no skills feature.
+
+The knowledge export is one-way. It overwrites only the Notion pages it
+created and the Obsidian files it tracks, and never touches other pages or
+files; edits made at the destination are overwritten on the next run. Private
+records are exported only with consent recorded for that exact destination,
+and changing the destination clears the consent.
 
 Notifications enter the in-app inbox before best-effort Web Push. A push failure
-does not roll back the inbox occurrence. Web Push device registration is bounded;
-phone action links do not replace normal proposal authorization.
+does not roll back the inbox occurrence. Registration is limited to 16 devices,
+and each notification has one 15-second delivery budget across all devices. A
+push goes only to public HTTPS addresses, with no proxy and no redirects; a
+redirect is a failed delivery. A 404 or 410 deletes the device; other failures
+count against it. The body is at most 240 characters. Revoking a bearer token
+removes devices registered with that token.
 
 ## API
 
@@ -269,7 +357,9 @@ legacy thread/transcript/inbox cursors are supported; old cursors missing a
 path scope are refused as `bad_cursor`.
 
 The assistant event stream is durable and reconnectable with `Last-Event-ID`.
-It is not a separate run. Multipart file requests share four upload slots;
+It is not a separate run. It sends a heartbeat every 15 seconds. At most 4
+streams per credential and 16 per server are open at once; more get 429.
+Finished streams are kept for 30 days. Multipart file requests share four upload slots;
 excess requests get 429 with `Retry-After: 1`. A bounded 1 MiB scan determines
 whether a multipart request has files; malformed or incomplete bodies count
 as file-bearing. Multipart reads have a 30-second idle deadline. Uploads also
@@ -299,16 +389,22 @@ are refused inputs.
   across devices. A repeated receipt returns its prior result, including
   partial, failed, or unknown outcomes. Crash recovery inspects; it never
   resumes unfinished steps.
-- Keep agent state permanently as recovery evidence, not cache. Invalid or
+- Keep agent state permanently as recovery evidence, not cache. Receipts have
+  no retention bound, so disk use and startup memory grow with filings. Invalid or
   inconsistent receipts are quarantined and answer unknown. Undo derives
   guarded inverse steps from the forward receipt. Import cleanup is
   non-undoable.
 - qBittorrent content paths must fit `media_download_path_prefix`. Only a
   confirmed successful filing tags the torrent filed. A lost agent answer
   leaves an unknown effect, blocks repetition, and requires inspection.
+- Sources must already belong to the configured library group and be
+  group-readable, with directories group-writable; otherwise the agent refuses
+  them and does not change download inodes.
 - A failed catalog refresh retains the old snapshot marked stale. Until one
   exists, library reads return 503 rather than an empty library. Thumbnails
-  are generated and cached by the agent.
+  are generated and cached by the agent. A video ffmpeg cannot read is
+  remembered for seven days and answers 404; an agent-side failure answers 503
+  and is retried on the next request.
 - Signed public file links expire and still check Host. Content supports
   GET/HEAD and ranges. Relays do not recompress media; a broken stream aborts
   the connection instead of presenting truncated content as complete. API
@@ -328,9 +424,10 @@ is not modified.
 
 Mail and learned state, durable operator records, threads/messages/files,
 proposals and converted write evidence, active message vectors, jobs without
-leases, media state, eligible settings/secrets, and historical usage carry.
-Run/tool/job history, sessions, phone links, notification delivery history,
-mirrors, old memory projections, and transient health/ops data do not. Full-text
-and memory indexes rebuild, Notion re-syncs, built-in subagents are reseeded,
-and mail starts in shadow. The importer reports host requirements separately
-and records one import operation audit row.
+leases, media state, and eligible settings/secrets carry. Usage carries only
+from the calendar month of the import; keep the v2 database for older usage
+history. Run/tool/job history, sessions, phone links, notification delivery
+history, mirrors, old memory projections, and transient health/ops data do not.
+Full-text and memory indexes rebuild, Notion re-syncs, built-in subagents are
+reseeded, and mail starts in shadow. The importer reports host requirements
+separately and records one import operation audit row.

@@ -88,13 +88,36 @@ OIDC-only ignores proxy identity headers. Its public sign-in stays closed until
 the `service/oidc` connection is configured. OIDC connection selectors are
 `access_groups`, `access_emails`, and `access_domains`; its API client id is
 `config.api_client_id`. The client secret belongs in `credentialFiles.client_secret`.
-Proxy modes require a trusted reverse proxy to strip or overwrite `Remote-*`
-headers. Do not publicly proxy the emergency listener. `/api/v1` remains
-bearer-only in every listener and does not use browser/proxy authentication.
 
 `host.core.ops_listen` defaults in the application to `127.0.0.1:9180`; empty or
 `off` disables it. Evaluation checks public, emergency, and enabled ops port
 collisions. The public port is not automatically opened in the firewall.
+
+Proxy modes require a trusted reverse proxy to strip or overwrite `Remote-*`
+headers. Do not publicly proxy the emergency listener. `/api/v1` remains
+bearer-only in every listener and does not use browser/proxy authentication;
+with `proxy` or `proxy+oidc`, the reverse proxy must pass `/api/v1` through
+without forward authentication.
+
+### First start and recovery
+
+1. Set `database.keyFile` before the first start of `atrium.service`. The key
+   is 64 hexadecimal digits in a host secret file, never in Nix, an
+   environment literal or a command argument. Keep an offline copy.
+2. Start `atrium.service`. With `web.emergency.enable`, the same process opens
+   `127.0.0.1:8481` on the same database. Reach it only through an SSH or VPN
+   tunnel that ends on the host.
+3. Register an OIDC client whose redirect URI is the public URL plus
+   `/auth/callback`, then declare `host.core.public_url` and the
+   `service/oidc` connection with its secret in `credentialFiles`. Until that
+   connection validates, `/login` shows the closed state and proxy headers
+   grant nothing.
+4. `atrium-run db check` succeeds with the key and refuses without it; it
+   does not create a missing database.
+
+If public sign-in breaks, use the emergency listener: it shares settings and
+API tokens with the public listener. If the database key is lost, the database
+and archives made under it cannot be opened.
 
 ## Media and agent
 
@@ -128,7 +151,11 @@ get `InaccessiblePaths=-<library-parent>` and no media group or ffmpeg path.
 The agent gets the parent as its one explicit `ReadWritePaths` entry so filing
 can link/rename across roots in one mount. Backup/export destinations must not
 overlap that inaccessible parent. Setting an explicit `service/media-agent`
-connection together with `mediaAgent.enable` is refused.
+connection together with `mediaAgent.enable` is refused. Download and import
+sources must already be in the agent group, group-readable and, for
+directories, group-writable; the agent refuses other sources and does not
+change download inodes. Make the download client write with that group and
+umask 0002.
 
 ### VPN listener
 
@@ -286,26 +313,21 @@ services.atrium = {
 };
 ```
 
-The second fragment extends an enabled application configuration. These values
-were checked against option declarations. The repository's `module` check
-evaluates representative default and full configurations, derived credentials,
-unit properties, and refused configurations; it does not extract fenced
-examples from this document. `just check-eval` evaluates the flake checks
-without building them. Evaluation is not proof that host files, TLS names,
-permissions, network interfaces, or systemd activation work at runtime.
-
-Linux runtime checks include `module-config` and, on x86_64 Linux,
-`module-keyed`; `api-client-swift` is also x86_64-Linux-only. The keyed check
-exercises systemd credentials with a keyed database. These cannot be replaced
-by successful Darwin evaluation. The `module` evaluation check compares the
-application and CLI hardening/credential properties.
+The second fragment extends an enabled application configuration. Evaluation
+is not proof that host files, TLS names, permissions, network interfaces, or
+systemd activation work at runtime.
 
 ## Import boundary and retired host contracts
 
 The v3 module has one application unit, not separate web, watch, sync, scan,
-mirror, scheduler, or backup services/timers. Host restart, pause, and monitoring
-references must target current units. The module does not remove arbitrary
-host-owned services or old references outside its declarations.
+mirror, scheduler, or backup services or timers. The module does not remove
+host-owned units or references outside its declarations. When moving from v2,
+remove or retarget host references to these units, including `restartUnits`,
+pause hooks, and monitoring rules: `atrium-web`, `atrium-web-local`,
+`atrium-watch`, `atrium-agent-scheduler`, `atrium-sync` and its timer,
+`atrium-scan` and its timer, `atrium-notion-sync` and its timer,
+`atrium-dav-sync` and its timer, `atrium-backup` and its timer, and
+`atrium-llm`. Use `unitNames` for current units.
 
 The removed `web.local.enable`/`.port`, `modelServerUnits`, and
 `backup.onCalendar` options have explicit evaluation errors naming
