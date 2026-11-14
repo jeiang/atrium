@@ -127,12 +127,15 @@ settings the operator edits in the UI or pins from the host.
   and never trust a forwarded client address from an untrusted peer.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
-- The files in `internal/db/schema/` are the v3 baseline under construction
-  and are edited directly until the freeze in phase 11. Every schema change
-  updates `atrium db import-v2` and its end-to-end test in the same pull
-  request. After the freeze every change is an additive migration. Row
-  rewrites require explicit approval and validation on a database copy.
-  Refuse unknown future schema versions before writes.
+- The files in `internal/db/schema/` are the v3 baseline, migration 1,
+  frozen from this commit: never edit them. From the v3 cutover, every
+  schema change is a new additive migration in `internal/db/migrate.go`,
+  with an e2e that migrates a database from the previous version and
+  compares its schema with a fresh one. Row rewrites require explicit
+  approval and validation on a database copy. Refuse unknown future schema
+  versions before writes. `atrium db import-v2` is the only path from v2
+  data into a fresh v3 database, carrying the importer's selected durable
+  records, settings and credentials.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names (`atrium.service`), environment variable names, and

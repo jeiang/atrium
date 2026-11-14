@@ -404,8 +404,11 @@ claims about the running application. Operator contracts are in
   input, and checks integrity with FTS5 and vec0 counts. Destructive
   database commands and `serve` share one lock that resolves the canonical
   database path and refuses a hard-linked database.
-- The v3 baseline is migration 1; every later change is an additive
-  migration. A database at an unknown future schema version is refused
+- The files in `internal/db/schema/` are the frozen v3 baseline, migration 1;
+  every later schema change is a new additive migration in
+  `internal/db/migrate.go`. A CLI e2e checks the canonical schema dump and
+  the migration-1 golden database, then compares the migrated fixture with
+  a fresh keyed database. A database at an unknown future schema version is refused
   before any write. A binary downgrade does not reverse a migration and can
   require restoring an earlier database, losing later writes.
   A database with tables but no v3 marker is refused before any write with
