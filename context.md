@@ -22,7 +22,9 @@ claims about the running application. Operator contracts are in
   decisions and history; Library holds knowledge, wiki, files, rules, and
   schedules. Projects group threads and can restrict their content to a
   private project. Draft and proposal cards in chat use the same send and
-  approval services as their dedicated views.
+  approval services as their dedicated views. The `/chat/agenda` fragment
+  answers 404 when the calendar module is off and 503 `unavailable` when the
+  calendar cannot be listed, for example when no calendar is configured.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.
@@ -406,7 +408,8 @@ claims about the running application. Operator contracts are in
   DB-only backups through the SQLite backup API, runs SQL from standard
   input, and checks integrity with FTS5 and vec0 counts. Destructive
   database commands and `serve` share one lock that resolves the canonical
-  database path and refuses a hard-linked database.
+  database path and refuses a hard-linked database. `db check` and
+  `db rekey` on a missing database path fail without creating a file.
 - The `*.sql` files in `internal/db/schema/` are the frozen v3 baseline,
   migration 1; every later schema change is a new additive migration in
   `internal/db/migrate.go`. A CLI e2e checks the canonical schema dump in
@@ -689,7 +692,9 @@ claims about the running application. Operator contracts are in
   `operator` or `operator_send` authority needs its own typed API route; one
   whose only operator-class authority is `approved` is reached through
   `review.approve` (`reached_via` in `--json`), which needs a typed route and
-  a non-server tool binding that can propose it. `GET /api/v1/me` is bound to
+  a non-server tool binding that can propose it. An operation without
+  `operator` or `operator_send` authority has no API route of its own: the
+  catalog refuses such a binding. `GET /api/v1/me` is bound to
   `auth.identity`.
   Routes mount once with their declaration owner and check the current
   snapshot on each request, so a requirement change published by a settings
@@ -816,7 +821,10 @@ claims about the running application. Operator contracts are in
   mounted route without a binding, and refuses later registration.
 - An owned API command checks its module before reading the body (409
   `module_disabled`) and again during execution (503 `module_disabled` with
-  `Retry-After: 5`). Only `POST /api/v1/mail/live/pause` is unowned. The
+  `Retry-After: 5`). A binary API relay owned by a module (media content and
+  artwork, file downloads) answers 409 `module_disabled` before relaying when
+  that module is off. Only
+  `POST /api/v1/mail/live/pause` is unowned. The
   owner generation follows a pending mutation to ledger admission: a halted
   owner cannot start a new effect, an effect already started finishes
   recording its result, and re-enabling an owner does not make an old

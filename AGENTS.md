@@ -12,7 +12,7 @@ settings the operator edits in the UI or pins from the host.
   direction, and open decisions.
 - Keep development rules in this file, product goals in `docs/vision.md`,
   and application context in `context.md`. Do not duplicate their contents.
-- v2 is not a port of the Python application and has no parity target; do
+- atrium is not a port of the Python application and has no parity target; do
   not add parity tests or parity notes.
 - Update `context.md` when a change alters the behavior, boundaries, or
   decisions it records. Distinguish implemented behavior from planned

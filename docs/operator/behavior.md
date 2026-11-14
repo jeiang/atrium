@@ -106,7 +106,8 @@ through a verified fresh copy. `atrium db rekey` re-encrypts an encrypted
 database to a key read from a file or standard input, also through a verified
 copy, and records the retired key id. Both, like restore, need exclusive
 access: stop the atrium units first. They share the serve lock, which resolves
-the canonical database path and refuses a hard-linked database.
+the canonical database path and refuses a hard-linked database. `db rekey`, like
+`db check`, fails on a missing database path without creating a file.
 
 `atrium backup` writes a consistent database-and-upload archive while serve
 runs. The scheduled backup is a job inside serve, not a unit or timer. With
@@ -168,7 +169,7 @@ commit. That can change route/service availability without a restart if
 requirements changed. Connection saves themselves do not publish a new module
 snapshot. A failed settings transaction changes no running module state.
 Ordinary disabled module pages return 404. Owned API commands and binary relays
-return `module_disabled` before starting their work. Review and Activity keep
+return 409 `module_disabled` before starting their work. Review and Activity keep
 historical proposals and effects visible; owning-module checks still apply to
 approval, undo, and other mutations.
 
@@ -265,8 +266,9 @@ Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
 response. A new home message starts a thread. Review keeps decisions and
 history; Library holds knowledge, wiki, files, rules, and schedules. Projects
 group threads. Draft and proposal cards in chat call the same send/approval
-services as their dedicated views. `/chat/agenda` returns 503 if the calendar
-is unavailable. Full page navigations are not conditional fragment responses.
+services as their dedicated views. `/chat/agenda` returns 404 when the calendar
+module is off and 503 when the calendar cannot be listed, for example when none
+is configured. Full page navigations are not conditional fragment responses.
 
 Assistant runs use the Anthropic connection and a static supported-model
 catalog. A missing key or refused budget prevents a paid start before a new
@@ -333,7 +335,11 @@ removes devices registered with that token.
 never authorize API requests. Locally issued `atr_` tokens and configured OIDC
 access tokens use a persisted hash, revocation, and usage gate. Token issue
 shows its secret once. API responses evolve additively within v1; generated
-[OpenAPI](../api/openapi.json) is the route and type reference.
+[OpenAPI](../api/openapi.json) is the route and type reference. Every operation
+an operator can call directly (`operator` or `operator_send` authority) has its
+own typed route, and no other operation does. Operations that run only after
+approval are reached through the approval route
+(`POST /api/v1/approvals/{id}/approve`).
 
 Commands use typed outcomes and durable command receipts. Supply an
 `Idempotency-Key` to replay a matching completed request instead of executing

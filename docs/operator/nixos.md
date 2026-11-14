@@ -322,12 +322,14 @@ systemd activation work at runtime.
 The v3 module has one application unit, not separate web, watch, sync, scan,
 mirror, scheduler, or backup services or timers. The module does not remove
 host-owned units or references outside its declarations. When moving from v2,
-remove or retarget host references to these units, including `restartUnits`,
-pause hooks, and monitoring rules: `atrium-web`, `atrium-web-local`,
-`atrium-watch`, `atrium-agent-scheduler`, `atrium-sync` and its timer,
-`atrium-scan` and its timer, `atrium-notion-sync` and its timer,
-`atrium-dav-sync` and its timer, `atrium-backup` and its timer, and
-`atrium-llm`. Use `unitNames` for current units.
+remove or retarget host references to the v2 module's units, including
+`restartUnits`, pause hooks, and monitoring rules: the `atrium-web`,
+`atrium-web-local`, `atrium-watch`, and `atrium-agent-scheduler` services, and
+the `atrium-sync`, `atrium-scan`, `atrium-notion-sync`, `atrium-dav-sync`, and
+`atrium-backup` services with their timers. Model-server units such as
+`atrium-llm`, `atrium-embed`, and `atrium-models-fetch` are host-owned; list
+the units that serve the embedding endpoint in `embeddingServerUnits` and
+retarget other references to them. Use `unitNames` for current units.
 
 The removed `web.local.enable`/`.port`, `modelServerUnits`, and
 `backup.onCalendar` options have explicit evaluation errors naming
