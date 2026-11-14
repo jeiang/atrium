@@ -112,7 +112,7 @@ func (s *service) ruleCondition(w http.ResponseWriter, r *http.Request) {
 	if web.FragmentNotModified(w, r, read.Revision) {
 		return
 	}
-	s.fragment(w, r, "_condition_row.gohtml", read.Data.Condition, nil)
+	check(s.deps.Render.Fragment(w, r, http.StatusOK, "_condition_row.gohtml", tpl.Fragment{Data: read.Data.Condition}))
 }
 
 type previewData struct {

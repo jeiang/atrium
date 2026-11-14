@@ -82,7 +82,7 @@ func (s *service) messagePage(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, bad...)
 		return
 	}
-	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id, Draft: true})
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id, Draft: !web.IsPartial(r)})
 	check(err)
 	if read.Data.View == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown message")
@@ -108,11 +108,15 @@ func (s *service) correctForm(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	found := s.loadMessage(w, r, id)
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id, Folders: true})
+	check(err)
+	found := read.Data.View
 	if found == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown message")
 		return
 	}
-	s.fragment(w, r, "_correct.gohtml", correctData{Correct: s.correctContext(r, found, context, found.CorrectedTo, nil)}, nil)
+	correct := &correctForm{MessageID: found.ID, Account: found.Account, Context: context, Folders: read.Data.Folders, Selected: found.CorrectedTo}
+	s.fragment(w, r, "_correct.gohtml", correctData{Correct: correct}, nil)
 }
 
 func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
