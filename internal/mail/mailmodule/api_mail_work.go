@@ -192,7 +192,8 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 				r, err = svc().OpenLoops(ctx, mailapp.OpenLoopsInput{State: in.State, Limit: n, Snooze: true})
 				return r.Data.Loops, err
 			})
-			return application.Read[MailLoopsPage]{Revision: r.Revision, Data: MailLoopsPage{Items: items, NextCursor: next, SnoozeDefault: r.Data.SnoozeDefault}}, err
+			page := MailLoopsPage{Items: items, NextCursor: next, SnoozeDefault: r.Data.SnoozeDefault}
+			return application.Read[MailLoopsPage]{Revision: servedRevision(mailapp.DescribeOpenLoops().Name, page), Data: page}, err
 		}),
 		api.Query(d, mailapp.DescribeCommitments(), application.APIShape{Area: area}, "GET /mail/commitments", func(ctx context.Context, in MailCommitmentsRequest) (application.Read[MailCommitmentsPage], error) {
 			var r application.Read[mailapp.CommitmentsResult]
@@ -201,7 +202,8 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 				r, err = svc().Commitments(ctx, mailapp.CommitmentsInput{Status: in.View, Limit: n})
 				return r.Data.Commitments, err
 			})
-			return application.Read[MailCommitmentsPage]{Revision: r.Revision, Data: MailCommitmentsPage{Items: items, NextCursor: next}}, err
+			page := MailCommitmentsPage{Items: items, NextCursor: next}
+			return application.Read[MailCommitmentsPage]{Revision: servedRevision(mailapp.DescribeCommitments().Name, page), Data: page}, err
 		}),
 		api.Query(d, mailapp.DescribePackages(), application.APIShape{Area: area}, "GET /mail/packages", func(ctx context.Context, in MailPackagesRequest) (application.Read[MailPackagesPage], error) {
 			r, err := svc().Packages(ctx, mailapp.PackagesInput{ActiveOnly: in.Active})
@@ -209,7 +211,8 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 				return application.Read[MailPackagesPage]{}, err
 			}
 			items, next, err := mailPage(r.Data.Packages, in.Cursor, in.Limit, nil)
-			return application.Read[MailPackagesPage]{Revision: r.Revision, Data: MailPackagesPage{Items: items, NextCursor: next}}, err
+			page := MailPackagesPage{Items: items, NextCursor: next}
+			return application.Read[MailPackagesPage]{Revision: servedRevision(mailapp.DescribePackages().Name, page), Data: page}, err
 		}),
 		api.Query(d, mailapp.DescribeUpcomingBirthdays(), application.APIShape{Area: area, Errors: []application.Code{application.NotConfigured}}, "GET /mail/birthdays", func(ctx context.Context, in MailBirthdaysRequest) (application.Read[MailBirthdays], error) {
 			loc, err := config.From(ctx).Location(d.Env)
@@ -218,7 +221,8 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			}
 			now := time.Now().In(loc)
 			r, err := svc().UpcomingBirthdays(ctx, mailapp.UpcomingBirthdaysInput{Today: birthdays.Date(now.Year(), now.Month(), now.Day()), Days: in.Days})
-			return application.Read[MailBirthdays]{Revision: r.Revision, Data: MailBirthdays{Upcoming: r.Data.Upcoming}}, err
+			out := MailBirthdays{Upcoming: r.Data.Upcoming}
+			return application.Read[MailBirthdays]{Revision: servedRevision(mailapp.DescribeUpcomingBirthdays().Name, out), Data: out}, err
 		}),
 		api.Command(d, mailapp.DescribeLoopSnooze(), application.APIShape{Area: area, Errors: []application.Code{application.NotFound}}, "POST /mail/loops/{loop_id}/snooze", func(ctx context.Context, in MailLoopSnooze) (application.Change[MailLoopSnoozed], error) {
 			r, err := svc().LoopSnooze(ctx, mailapp.LoopSnoozeInput{ID: in.ID, Days: in.Days})

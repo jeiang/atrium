@@ -282,6 +282,9 @@ func TestDraftSendRaceSentCopyAndResolveSent(t *testing.T) {
 	if resolved.status != http.StatusOK || resolved.json["draft"].(map[string]any)["status"] != "sent" {
 		t.Fatalf("resolve as sent: %d %s", resolved.status, resolved.body)
 	}
+	if source := scalar("SELECT source FROM effect_resolutions ORDER BY id DESC LIMIT 1"); source != "api" {
+		t.Fatalf("API draft resolution audited with source %q", source)
+	}
 	if got := s.do(http.MethodPost, lost+"/send", token, map[string]any{"revision": number(t, resolved.json["draft"].(map[string]any)["revision"])}); got.status != http.StatusConflict || len(smtp.sent()) != 2 {
 		t.Fatalf("send after resolving as sent: %d, %d SMTP transactions", got.status, len(smtp.sent()))
 	}

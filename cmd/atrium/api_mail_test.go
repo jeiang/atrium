@@ -421,10 +421,15 @@ func TestMailSyncAPIDrainsOnShutdown(t *testing.T) {
 	waitUntil(t, 60*time.Second, "mail-pass to be free", func() bool {
 		return s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}).status == http.StatusOK
 	})
+	running := "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ? AND r.status = 'running' AND r.owner LIKE 'manual/%'"
 	arrived, release := make(chan struct{}), make(chan struct{})
 	var arrivedOnce, releaseOnce sync.Once
 	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
 	m.fake.SetStatusHook(func(_ string, n uint32) uint32 {
+		var claimed int
+		if err := d.Read.QueryRow(running, mailrun.SyncJobKey).Scan(&claimed); err != nil || claimed != 1 {
+			return n
+		}
 		arrivedOnce.Do(func() {
 			close(arrived)
 			<-release
@@ -433,15 +438,19 @@ func TestMailSyncAPIDrainsOnShutdown(t *testing.T) {
 	})
 	m.add("Bills", "New statement", from, "new", "Another statement.", "")
 	replied := make(chan apiReply, 1)
-	go func() {
-		replied <- s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}, "Idempotency-Key", "shutdown-1")
-	}()
-	select {
-	case <-arrived:
-	case <-time.After(60 * time.Second):
-		t.Fatalf("the API sync never reached IMAP: %s", logs.String())
+	deadline := time.After(60 * time.Second)
+	for waiting := true; waiting; {
+		go func() {
+			replied <- s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}, "Idempotency-Key", "shutdown-"+strconv.FormatInt(time.Now().UnixNano(), 10))
+		}()
+		select {
+		case <-arrived:
+			waiting = false
+		case <-replied:
+		case <-deadline:
+			t.Fatalf("the API sync never reached IMAP: %s", logs.String())
+		}
 	}
-	running := "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = ? AND r.status = 'running' AND r.owner LIKE 'manual/%'"
 	if n := count(running, mailrun.SyncJobKey); n != 1 {
 		t.Fatalf("the API sync is not a claimed %s run: %d running", mailrun.SyncJobKey, n)
 	}

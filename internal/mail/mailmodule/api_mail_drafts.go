@@ -245,7 +245,11 @@ func (s *draftAPI) read(ctx context.Context, id int64) (application.Read[reviewp
 		return application.Read[reviewpages.Draft]{}, err
 	}
 	draft := reviewpages.DraftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(ctx))[0]
-	return application.Read[reviewpages.Draft]{Revision: application.Revision(state.Revision(string(mailapp.DraftName), nil, draft, "operator")), Data: draft}, nil
+	return application.Read[reviewpages.Draft]{Revision: servedRevision(mailapp.DraftName, draft), Data: draft}, nil
+}
+
+func servedRevision(name application.Name, data any) application.Revision {
+	return application.Revision(state.Revision(string(name), nil, data, "operator"))
 }
 
 func (s *draftAPI) currentDraft(ctx context.Context, id int64) reviewpages.Draft {

@@ -129,7 +129,7 @@ func (s *Service) DraftResolve(ctx context.Context, in DraftResolveInput) (appli
 		s.writeAudit(ctx, DraftResolveName, target, state.Refused, nil)
 		return application.Change[DraftResolveResult]{}, &application.Error{Code: application.Forbidden, Message: "only the operator can resolve a draft"}
 	}
-	effect, err := s.sender.ResolveUnknown(ctx, in.ID, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
+	effect, err := s.sender.ResolveUnknown(ctx, in.ID, verdict, ledger.Resolver{Actor: "operator", Source: string(audit.SourceOf(ctx))})
 	var effects []int64
 	if effect != 0 {
 		effects = []int64{effect}

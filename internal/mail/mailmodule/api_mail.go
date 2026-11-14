@@ -295,7 +295,7 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 				return application.Read[MailMessage]{}, err
 			}
 			out, err := mailWire[MailMessage](r.Data.View)
-			return application.Read[MailMessage]{Revision: r.Revision, Data: out}, err
+			return application.Read[MailMessage]{Revision: servedRevision(mailapp.MessageName, out), Data: out}, err
 		}),
 		api.Query(d, mailapp.DescribeSearch(), application.APIShape{Area: area}, "GET /mail/messages", func(ctx context.Context, in MailSearchRequest) (application.Read[MailSearchPage], error) {
 			offset, err := mailOffset(in.Cursor)
@@ -324,7 +324,8 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 				return application.Read[MailRulesPage]{}, err
 			}
 			items, next, err := mailSlice(items, in.Cursor, in.Limit)
-			return application.Read[MailRulesPage]{Revision: r.Revision, Data: MailRulesPage{Items: items, NextCursor: next}}, err
+			page := MailRulesPage{Items: items, NextCursor: next}
+			return application.Read[MailRulesPage]{Revision: servedRevision(mailapp.RulesName, page), Data: page}, err
 		}),
 		api.Query(d, mailapp.DescribeRulePreview(), application.APIShape{Area: area, Body: application.BodyJSON, ReadOnlyPost: true, Errors: refusable}, "POST /mail/rules/preview", func(ctx context.Context, in MailRuleRequest) (application.Read[ruleedit.Preview], error) {
 			raw, err := mailRuleMap(in.Rule)
@@ -339,7 +340,7 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 				return application.Read[MailRulesDocument]{}, err
 			}
 			out, err := mailWire[MailRulesDocument](r.Data)
-			return application.Read[MailRulesDocument]{Revision: r.Revision, Data: out}, err
+			return application.Read[MailRulesDocument]{Revision: servedRevision(mailapp.DescribeRulesExport().Name, out), Data: out}, err
 		}),
 		api.Command(d, mailapp.DescribeRulesImport(), application.APIShape{Area: area, Body: application.BodyMultipart, BodyLimit: 1 << 20, Errors: refusable}, "POST /mail/rules/import", func(ctx context.Context, in MailRulesImport) (application.Change[mailapp.RulesImportResult], error) {
 			var raw any
@@ -394,7 +395,8 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 			}
 			items := slices.DeleteFunc(r.Data.Accounts, func(a mailapp.Account) bool { return in.Account != "" && a.ID != in.Account })
 			items, next, err := mailSlice(items, in.Cursor, in.Limit)
-			return application.Read[MailAccountsPage]{Revision: r.Revision, Data: MailAccountsPage{Items: items, NextCursor: next}}, err
+			page := MailAccountsPage{Items: items, NextCursor: next}
+			return application.Read[MailAccountsPage]{Revision: servedRevision(mailapp.DescribeAccounts().Name, page), Data: page}, err
 		}),
 		api.Command(d, mailapp.DescribeAccountAdd(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: refusable}, "POST /mail/accounts", func(ctx context.Context, in MailAccountAdd) (application.Change[MailAccountResult], error) {
 			r, err := svc().AccountAdd(ctx, mailapp.AccountAddInput{ID: in.ID, Label: in.Label, Preset: in.Preset, Login: in.Login, AuthMethod: in.AuthMethod, Password: in.Password})
