@@ -11,9 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/logx"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/corrections"
-	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/mail/triage"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web"
@@ -57,7 +54,7 @@ func backTo(r *http.Request) backLink {
 	return backLink{URL: "/chat", Label: "Chat"}
 }
 
-func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) *message.View {
+func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) *mailapp.MessageView {
 	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id})
 	found := read.Data.View
 	check(err)
@@ -67,7 +64,7 @@ func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) 
 	return found
 }
 
-func (s *service) correctContext(r *http.Request, found *message.View, context string, selected, problem *string) *correctForm {
+func (s *service) correctContext(r *http.Request, found *mailapp.MessageView, context string, selected, problem *string) *correctForm {
 	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: found.ID, Folders: true})
 	folders := read.Data.Folders
 	check(err)
@@ -143,7 +140,7 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	var problem *string
 	done, err := s.reads.Correct(ctx, mailapp.CorrectInput{MessageID: id, Folder: dest, Mode: mode})
-	var rejected corrections.Error
+	var rejected mailapp.CorrectionError
 	switch {
 	case errors.As(err, &rejected):
 		text := rejected.Error()
@@ -178,7 +175,7 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case context == contextRow && partial:
-		row, err := triage.Get(ctx, s.deps.DB.Read, id)
+		row, err := s.reads.TriageRow(ctx, id)
 		check(err)
 		if row == nil {
 			s.fail(w, r, http.StatusNotFound, "message has no decision")
@@ -239,7 +236,7 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	found, err := s.live.Get(ctx, id)
 	check(err)
-	row, err := triage.Get(ctx, s.deps.DB.Read, found.MessageID)
+	row, err := s.reads.TriageRow(ctx, found.MessageID)
 	check(err)
 	if row == nil {
 		s.fail(w, r, http.StatusNotFound, "message has no decision")

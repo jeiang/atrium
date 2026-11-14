@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	runpkg "github.com/jeiang/atrium/internal/mail/run"
@@ -23,7 +22,7 @@ import (
 
 type Options struct {
 	Env         config.Env
-	Clients     func(config.Config) mail.OpenFunc
+	Clients     func(config.Config) mailapp.OpenFunc
 	Now         func() float64
 	Classifiers runpkg.Classifier
 	Application func(*runpkg.Pass) *mailapp.Service
@@ -40,7 +39,7 @@ func (o Options) now() float64 {
 	if o.Now != nil {
 		return o.Now()
 	}
-	return mail.WallClock()
+	return mailapp.WallClock()
 }
 
 type exitError struct {
@@ -85,7 +84,7 @@ func (x *exec) Exclusive(fn func() error) error {
 }
 
 func (x *exec) PassLocked(fn func() error) error {
-	locks, err := db.ResourceLocks(x.Ctx, x.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
+	locks, err := db.ResourceLocks(x.Ctx, x.Cfg.DBPath, []string{mailapp.PassResource}, db.ShortLockWait)
 	if err != nil {
 		return err
 	}

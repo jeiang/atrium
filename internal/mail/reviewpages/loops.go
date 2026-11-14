@@ -8,7 +8,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -27,20 +26,20 @@ func snoozeChoicesFor(def int) []int {
 const loopLimit = 100
 
 type loopsPage struct {
-	Owe           []openloops.Loop       `json:"owe"`
-	Waiting       []openloops.Loop       `json:"waiting"`
-	Commitments   []openloops.Commitment `json:"commitments"`
-	SnoozeChoices []int                  `json:"snooze_choices"`
-	SnoozeDefault int                    `json:"snooze_default"`
+	Owe           []mailapp.Loop       `json:"owe"`
+	Waiting       []mailapp.Loop       `json:"waiting"`
+	Commitments   []mailapp.Commitment `json:"commitments"`
+	SnoozeChoices []int                `json:"snooze_choices"`
+	SnoozeDefault int                  `json:"snooze_default"`
 }
 
 func (s *service) showLoops(w http.ResponseWriter, r *http.Request, notice *tpl.Toast) {
 	ctx := r.Context()
-	owe, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: openloops.OweReply, Limit: loopLimit, Snooze: true})
+	owe, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: mailapp.LoopOweReply, Limit: loopLimit, Snooze: true})
 	check(err)
-	waiting, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: openloops.Waiting, Limit: loopLimit})
+	waiting, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: mailapp.LoopWaiting, Limit: loopLimit})
 	check(err)
-	commitments, err := s.mail.Commitments(ctx, mailapp.CommitmentsInput{Status: openloops.Open, Limit: loopLimit})
+	commitments, err := s.mail.Commitments(ctx, mailapp.CommitmentsInput{Status: mailapp.CommitmentOpen, Limit: loopLimit})
 	check(err)
 	snoozeDefault := owe.Data.SnoozeDefault
 	choices := snoozeChoicesFor(snoozeDefault)

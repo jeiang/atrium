@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
@@ -26,8 +25,8 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func nullable[T any](v *T) any {
@@ -92,7 +91,7 @@ type dismissView struct {
 
 func (x *exec) JSON(value any) {
 	switch value.(type) {
-	case proposals.ProposalView, []reviewapp.ProposalSummary, dismissView:
+	case proposalsapp.ProposalView, []reviewapp.ProposalSummary, dismissView:
 		enc := json.NewEncoder(x.Stdout)
 		enc.SetEscapeHTML(false)
 		enc.SetIndent("", "  ")
@@ -181,7 +180,8 @@ func Command(o Options) *cli.Command {
 	return &cli.Command{Name: "proposals", Commands: []*cli.Command{
 		o.leaf("scan-all", func(*cli.Args) body {
 			return func(x *exec) error {
-				if !mailEnabled(x.Ctx, x.DB.Read) {
+				scanner := mailapp.New(x.DB, x.Cfg, config.OS, x.Now)
+				if !scanner.ScansEnabled(x.Ctx) {
 					return nil
 				}
 				if x.opts.Namer == nil {
@@ -191,13 +191,13 @@ func Command(o Options) *cli.Command {
 				if err != nil {
 					return err
 				}
-				out, err := scans.Manual(x.Ctx, x.DB, x.Cfg, mailapp.New(x.DB, x.Cfg, config.OS, x.Now).WithNamer(namer).Scans(x.Now()))
+				out, err := scans.Manual(x.Ctx, x.DB, x.Cfg, scanner.WithNamer(namer).Scans(x.Now()))
 				if err != nil {
 					return err
 				}
 				var b strings.Builder
 				b.WriteByte('{')
-				for i, s := range scans.All {
+				for i, s := range mailapp.ScanKinds {
 					if i > 0 {
 						b.WriteByte(',')
 					}
@@ -213,7 +213,7 @@ func Command(o Options) *cli.Command {
 			}
 		}),
 		o.leaf("list", func(a *cli.Args) body {
-			status := a.String("status", "", cli.Opt{Choices: proposals.Statuses[:]})
+			status := a.String("status", "", cli.Opt{Choices: proposalsapp.Statuses[:]})
 			kind := a.String("kind", "", cli.Opt{})
 			return func(x *exec) error {
 				found, err := reviewapp.New(reviewapp.Deps{DB: x.DB}).Proposals(x.Ctx, reviewapp.ProposalsInput{Status: *status, Kind: *kind})
@@ -262,7 +262,7 @@ func Command(o Options) *cli.Command {
 		}),
 		o.leaf("resolve", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
-			outcome := a.String("outcome", "", cli.Opt{Choices: proposals.Outcomes, Help: "what the operator found: applied, not-applied or partial for a write; undone or not-undone for an undo"})
+			outcome := a.String("outcome", "", cli.Opt{Choices: proposalsapp.Outcomes, Help: "what the operator found: applied, not-applied or partial for a write; undone or not-undone for an undo"})
 			return func(x *exec) error {
 				resolved, err := x.review().Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}, Outcome: *outcome})
 				if err != nil {
@@ -288,15 +288,6 @@ func Command(o Options) *cli.Command {
 			}
 		}),
 	}}
-}
-
-func mailEnabled(ctx context.Context, q db.Querier) bool {
-	flag, err := settings.From(ctx).Resolve(ctx, q, module.FlagKey(module.Mail))
-	if err != nil || flag.Value != "true" {
-		return false
-	}
-	reason, err := endpoint.EmbeddingConfigured(ctx, q)
-	return err == nil && reason == ""
 }
 
 func (o Options) execute(env *cli.Env, run body) int {

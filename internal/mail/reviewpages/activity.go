@@ -77,7 +77,7 @@ func (s *service) mailDecided(w http.ResponseWriter, r *http.Request, id int64, 
 		}
 		notice = toast("error", title, refused.Error())
 	}
-	found, err := s.live.Get(detached(r), id)
+	found, err := s.review.LiveAction(detached(r), id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
@@ -119,7 +119,7 @@ func (s *service) effectDecided(w http.ResponseWriter, r *http.Request, id int64
 		}
 		notice = toast("error", title, refused.Error())
 	}
-	found, err := s.ledger.Get(detached(r), id)
+	found, err := s.review.StoredEffect(detached(r), id)
 	check(err)
 	s.undone(w, r, reviewapp.EffectEntry(found), notice)
 }

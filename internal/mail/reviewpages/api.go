@@ -11,8 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/jsonx"
-	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/drafts"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -133,7 +132,7 @@ func (s *service) apiPending(w http.ResponseWriter, r *http.Request) {
 	data := found.Data
 	unknown := 0
 	for _, c := range data.Drafts {
-		if c.Row.Status == drafts.Unknown {
+		if c.Row.Status == mailapp.DraftUnknown {
 			unknown++
 		}
 	}
@@ -304,8 +303,8 @@ func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) undoEffectEntry(ctx context.Context, id int64) (*reviewapp.UndoEntry, error) {
-	e, err := s.ledger.Get(ctx, id)
-	var missing *ledger.NotFound
+	e, err := s.review.StoredEffect(ctx, id)
+	var missing *reviewapp.EffectNotFound
 	if errors.As(err, &missing) {
 		return nil, nil
 	}
@@ -403,7 +402,7 @@ func (s *service) apiEffects(w http.ResponseWriter, r *http.Request) {
 		web.APIFail(w, err)
 		return
 	}
-	web.APIRead(w, r, found.Revision, web.List[ledger.Effect]{Items: found.Data})
+	web.APIRead(w, r, found.Revision, web.List[reviewapp.Effect]{Items: found.Data})
 }
 
 func (s *service) apiEffect(w http.ResponseWriter, r *http.Request) {
@@ -480,7 +479,7 @@ func APIReadBindings() []application.Binding {
 	return []application.Binding{
 		{Kind: application.API, Target: "GET /pending", Uses: []application.Name{reviewapp.PendingName}, API: &application.APIShape{Area: "review", Request: reflect.TypeFor[struct{}](), Response: reflect.TypeFor[pendingBody](), Body: application.BodyNone, Success: 200}},
 		{Kind: application.API, Target: "GET /undo", Uses: []application.Name{reviewapp.UndoableName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiUndoRequest](), Response: reflect.TypeFor[web.List[reviewapp.UndoEntry]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
-		{Kind: application.API, Target: "GET /effects", Uses: []application.Name{reviewapp.EffectsName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectsRequest](), Response: reflect.TypeFor[web.List[ledger.Effect]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
-		{Kind: application.API, Target: "GET /effects/{effect_id}", Uses: []application.Name{reviewapp.EffectName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectRequest](), Response: reflect.TypeFor[ledger.Effect](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound}}},
+		{Kind: application.API, Target: "GET /effects", Uses: []application.Name{reviewapp.EffectsName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectsRequest](), Response: reflect.TypeFor[web.List[reviewapp.Effect]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+		{Kind: application.API, Target: "GET /effects/{effect_id}", Uses: []application.Name{reviewapp.EffectName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectRequest](), Response: reflect.TypeFor[reviewapp.Effect](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound}}},
 	}
 }

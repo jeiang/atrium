@@ -4,17 +4,13 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/httpx"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 var (
-	mailLimitBound = tool.NewCeiling(assistant.TuningAgentMailMaxResults, 1, assistant.TuningAgentMailMaxResults)
-	mailBodyBound  = tool.NewCeiling(assistant.TuningAgentMailBodyChars, 100, assistant.TuningAgentMailBodyChars)
+	mailLimitBound = tool.NewCeiling(mailapp.AgentMailMaxResults, 1, mailapp.AgentMailMaxResults)
+	mailBodyBound  = tool.NewCeiling(mailapp.AgentMailBodyChars, 100, mailapp.AgentMailBodyChars)
 )
 
 var mailKinds = tool.AllKinds
@@ -61,10 +57,10 @@ func mailTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	}
 }
 
-func embedder(tc *tool.Context) embed.TextsFunc {
+func embedder(tc *tool.Context) mailapp.TextsFunc {
 	return func(ctx context.Context, _ string, texts []string) ([][]float64, error) {
 		if tc.Embed == nil {
-			return nil, &httpx.ServiceUnavailable{Msg: "no embedder configured"}
+			return nil, &mailapp.ServiceUnavailable{Msg: "no embedder configured"}
 		}
 		return tc.Embed(ctx, texts)
 	}
@@ -79,12 +75,12 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args, svc func(
 	if err != nil {
 		return nil, err
 	}
-	var filters search.Filters
+	var filters mailapp.SearchFilters
 	for _, f := range [...]struct {
 		arg string
 		set func(string)
-	}{{"account", func(v string) { filters.Account = search.Text(v) }},
-		{"folder", func(v string) { filters.Folder = search.Text(v) }}} {
+	}{{"account", func(v string) { filters.Account = mailapp.SearchText(v) }},
+		{"folder", func(v string) { filters.Folder = mailapp.SearchText(v) }}} {
 		text, ok, err := tool.TextArg(args, f.arg, false)
 		if err != nil {
 			return nil, err
@@ -104,9 +100,9 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args, svc func(
 		if !ok {
 			continue
 		}
-		day, err := search.Day(text, f.arg == "until")
+		day, err := mailapp.SearchDay(text, f.arg == "until")
 		if err != nil {
-			return nil, tool.Error("bad date filter: " + httpx.Message(err))
+			return nil, tool.Error("bad date filter: " + mailapp.ErrorMessage(err))
 		}
 		f.set(day)
 	}

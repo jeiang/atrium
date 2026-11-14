@@ -10,13 +10,12 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-var statusFilters = []drafts.Status{drafts.Draft, drafts.Unknown, drafts.Sent, drafts.Discarded}
+var statusFilters = []mailapp.DraftStatus{mailapp.DraftOpen, mailapp.DraftUnknown, mailapp.DraftSent, mailapp.DraftDiscarded}
 
 func statusNames() []string {
 	out := make([]string, len(statusFilters))
@@ -26,7 +25,7 @@ func statusNames() []string {
 	return out
 }
 
-func (s *service) showDrafts(w http.ResponseWriter, r *http.Request, status drafts.Status, code int, notice *tpl.Toast) {
+func (s *service) showDrafts(w http.ResponseWriter, r *http.Request, status mailapp.DraftStatus, code int, notice *tpl.Toast) {
 	found, err := s.mail.Drafts(r.Context(), mailapp.DraftsInput{Status: status})
 	if err != nil {
 		s.failRead(w, r, err, "unknown draft")
@@ -57,12 +56,12 @@ func (s *service) draftCard(w http.ResponseWriter, r *http.Request, id int64, co
 
 func (s *service) renderDraftCard(w http.ResponseWriter, r *http.Request, view DraftView, code int, notice *tpl.Toast) {
 	data := draftCardData{D: view, Configured: reviewapp.AccountConfigured(r.Context()), Partial: true}
-	n, err := needsCount(r.Context(), s.deps.DB.Read)
+	n, err := s.review.NeedsCount(r.Context())
 	check(err)
 	check(s.deps.Render.Fragment(w, r, code, "_draft.gohtml", tpl.Fragment{Data: data, Toast: notice, PendingCount: n}))
 }
 
-func (s *service) reply(w http.ResponseWriter, r *http.Request, id int64, status drafts.Status, code int, notice *tpl.Toast) {
+func (s *service) reply(w http.ResponseWriter, r *http.Request, id int64, status mailapp.DraftStatus, code int, notice *tpl.Toast) {
 	if web.IsPartial(r) {
 		s.draftCard(w, r, id, code, notice)
 		return
@@ -71,9 +70,9 @@ func (s *service) reply(w http.ResponseWriter, r *http.Request, id int64, status
 }
 
 func (s *service) draftsPage(w http.ResponseWriter, r *http.Request) {
-	status := drafts.Draft
+	status := mailapp.DraftOpen
 	if r.URL.Query().Has("status") {
-		status = drafts.Status(web.QueryValue(r.URL.Query(), "status"))
+		status = mailapp.DraftStatus(web.QueryValue(r.URL.Query(), "status"))
 	}
 	s.showDrafts(w, r, status, http.StatusOK, nil)
 }
@@ -139,9 +138,9 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 		in.Revision = &revision
 	}
 	_, err := s.mail.DraftUpdate(detached(r), in)
-	var refused drafts.Error
+	var refused mailapp.DraftError
 	var disabled *module.OwnerDisabled
-	var stale drafts.Stale
+	var stale mailapp.DraftStale
 	code := http.StatusUnprocessableEntity
 	if errors.As(err, &stale) {
 		code = http.StatusConflict
@@ -163,16 +162,16 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		s.reply(w, r, id, drafts.Draft, code, toast("error", "Not saved", err.Error()))
+		s.reply(w, r, id, mailapp.DraftOpen, code, toast("error", "Not saved", err.Error()))
 		return
 	}
 	if err != nil {
 		web.Fail(w, r, err, func(status int) {
-			s.reply(w, r, id, drafts.Draft, status, toast("error", "Not saved", application.Classify(err).Message))
+			s.reply(w, r, id, mailapp.DraftOpen, status, toast("error", "Not saved", application.Classify(err).Message))
 		})
 		return
 	}
-	s.reply(w, r, id, drafts.Draft, http.StatusOK, toast("success", "Saved", "Draft updated."))
+	s.reply(w, r, id, mailapp.DraftOpen, http.StatusOK, toast("success", "Saved", "Draft updated."))
 }
 
 func (s *service) draftDiscard(w http.ResponseWriter, r *http.Request) {
@@ -181,10 +180,10 @@ func (s *service) draftDiscard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err := s.mail.DraftDiscard(detached(r), mailapp.DraftInput{ID: id})
-	var refused drafts.Error
+	var refused mailapp.DraftError
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
-		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not discarded", err.Error()))
+		s.reply(w, r, id, mailapp.DraftOpen, http.StatusConflict, toast("error", "Not discarded", err.Error()))
 		return
 	}
 	if err != nil {
@@ -192,11 +191,11 @@ func (s *service) draftDiscard(w http.ResponseWriter, r *http.Request) {
 			if application.Classify(err).Code == application.NotFound {
 				status = http.StatusConflict
 			}
-			s.reply(w, r, id, drafts.Draft, status, toast("error", "Not discarded", application.Classify(err).Message))
+			s.reply(w, r, id, mailapp.DraftOpen, status, toast("error", "Not discarded", application.Classify(err).Message))
 		})
 		return
 	}
-	s.reply(w, r, id, drafts.Draft, http.StatusOK, toast("success", "Discarded", "Draft discarded."))
+	s.reply(w, r, id, mailapp.DraftOpen, http.StatusOK, toast("success", "Discarded", "Draft discarded."))
 }
 
 func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
@@ -205,27 +204,27 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	revision, _ := web.Value(web.FormValues(r), "revision")
-	var result drafts.Result
+	var result mailapp.DraftSendOutcome
 	var err error
 	if rev, perr := strconv.ParseInt(revision, 10, 64); perr == nil {
 		var done application.Change[mailapp.DraftSendResult]
 		done, err = s.mail.DraftSend(detached(r), mailapp.DraftSendInput{ID: id, Revision: rev})
 		result = done.Data.Sent
 	} else {
-		err = drafts.Error("draft changed, review again")
+		err = mailapp.DraftError("draft changed, review again")
 	}
-	var unknown drafts.OutcomeUnknown
+	var unknown mailapp.DraftOutcomeUnknown
 	if errors.As(err, &unknown) {
-		s.reply(w, r, id, drafts.Unknown, http.StatusConflict, toast("error", "Send outcome unknown", err.Error()))
+		s.reply(w, r, id, mailapp.DraftUnknown, http.StatusConflict, toast("error", "Send outcome unknown", err.Error()))
 		return
 	}
-	var refused drafts.Error
+	var refused mailapp.DraftError
 	if errors.As(err, &refused) {
-		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not sent", err.Error()))
+		s.reply(w, r, id, mailapp.DraftOpen, http.StatusConflict, toast("error", "Not sent", err.Error()))
 		return
 	}
 	if err != nil {
-		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not sent", err.Error()))
+		s.reply(w, r, id, mailapp.DraftOpen, http.StatusConflict, toast("error", "Not sent", err.Error()))
 		return
 	}
 	detail := result.Filed.String()
@@ -239,7 +238,7 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 		}
 		detail += "; refused: " + strings.Join(addrs, ", ")
 	}
-	s.reply(w, r, id, drafts.Draft, http.StatusOK, toast("success", "Sent", detail))
+	s.reply(w, r, id, mailapp.DraftOpen, http.StatusOK, toast("success", "Sent", detail))
 }
 
 func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
@@ -254,12 +253,12 @@ func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verdict := done.Data.Status
-	var refused drafts.Error
+	var refused mailapp.DraftError
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
-		s.reply(w, r, id, drafts.Unknown, http.StatusConflict, toast("error", "Not updated", err.Error()))
+		s.reply(w, r, id, mailapp.DraftUnknown, http.StatusConflict, toast("error", "Not updated", err.Error()))
 		return
 	}
 	check(err)
-	s.reply(w, r, id, drafts.Unknown, http.StatusOK, toast("success", "Updated", "Draft marked "+string(verdict)+"."))
+	s.reply(w, r, id, mailapp.DraftUnknown, http.StatusOK, toast("success", "Updated", "Draft marked "+string(verdict)+"."))
 }

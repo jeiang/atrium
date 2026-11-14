@@ -122,7 +122,7 @@ func Module(o Options) web.Module {
 		s := newService(o, d)
 
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-			n, err := needsCount(ctx, d.DB.Read)
+			n, err := s.review.NeedsCount(ctx)
 			f.PendingCount = n
 			return err
 		})
@@ -221,7 +221,7 @@ func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, n
 }
 
 func (s *service) mode(ctx context.Context) string {
-	mode, err := mail.Mode(ctx, s.deps.DB.Read)
+	mode, err := s.review.Mode(ctx)
 	check(err)
 	return mode
 }

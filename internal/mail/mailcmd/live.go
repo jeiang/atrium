@@ -9,10 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/backlog"
-	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
@@ -35,12 +32,12 @@ func (o Options) LiveCommand() *cli.Command {
 		o.leaf("deletions", func(*cli.Args) body { return liveDeletions }),
 		o.leaf("actions", func(a *cli.Args) body {
 			limit := a.Int("limit", 20, cli.Opt{})
-			kind := a.String("kind", "", cli.Opt{Choices: live.Kinds[:]})
+			kind := a.String("kind", "", cli.Opt{Choices: mailapp.LiveKinds[:]})
 			return func(x *exec) error { return listActions(x, *limit, *kind) }
 		}),
 		o.leaf("resolve", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
-			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposals.OutcomeUndone, proposals.OutcomeNotUndone, proposals.OutcomeApplied, proposals.OutcomeNotApplied}, Required: true, Help: "what the mailbox shows for the blocked write"})
+			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposalsapp.OutcomeUndone, proposalsapp.OutcomeNotUndone, proposalsapp.OutcomeApplied, proposalsapp.OutcomeNotApplied}, Required: true, Help: "what the mailbox shows for the blocked write"})
 			return func(x *exec) error { return resolveAction(x, int64(*id), *outcome) }
 		}),
 		o.leaf("undo", func(a *cli.Args) body {
@@ -54,7 +51,7 @@ func liveBacklog(x *exec) error {
 	done, err := x.opts.Application(x.Pass).WithClock(x.Now).Backlog(x.Ctx, struct{}{})
 	result := done.Data
 	if err != nil {
-		var backlogErr backlog.Error
+		var backlogErr mailapp.BacklogError
 		if errors.As(err, &backlogErr) {
 			return failure(cli.ExitUsage, err)
 		}
@@ -99,7 +96,7 @@ func setPaused(paused bool) body {
 
 func liveDeletions(x *exec) error {
 	return x.PassLocked(func() error {
-		accounts, err := run.SelectAccounts(x.Ctx, "")
+		accounts, err := mailapp.SelectAccounts(x.Ctx)
 		if err != nil {
 			return err
 		}

@@ -10,17 +10,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/mail/rules"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -40,12 +36,12 @@ func PauseModule(reads func(*web.Deps) *mailapp.Service) func(chi.Router, *web.D
 	return func(r chi.Router, d *web.Deps) {
 		s := &service{reads: reads(d), deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-			mode, err := mail.Mode(ctx, d.DB.Read)
+			mode, err := s.reads.Mode(ctx)
 			if err != nil {
 				return err
 			}
 			f.Mode = mode
-			f.Paused = safety.IsPaused(d.Cfg.PausePath())
+			f.Paused = s.reads.Paused()
 			return nil
 		})
 		r.With(bindMail).Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
@@ -71,10 +67,10 @@ func bindMail(next http.Handler) http.Handler {
 
 func Globals() map[string]any {
 	return map[string]any{
-		"stages":        slices.Clone(router.Stages[:]),
-		"rule_fields":   append(slices.Clone(rules.FieldNames), rules.AgeField),
-		"rule_ops":      append(slices.Clone(rules.Ops), rules.AgeOp),
-		"valueless_ops": slices.Clone(rules.ValuelessOps),
+		"stages":        slices.Clone(mailapp.RouterStages[:]),
+		"rule_fields":   append(slices.Clone(mailapp.RuleFieldNames), mailapp.RuleAgeField),
+		"rule_ops":      append(slices.Clone(mailapp.RuleOps), mailapp.RuleAgeOp),
+		"valueless_ops": slices.Clone(mailapp.RuleValuelessOps),
 	}
 }
 

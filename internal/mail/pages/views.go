@@ -6,9 +6,6 @@ import (
 	"strings"
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -56,19 +53,19 @@ func isDigits(s string) bool {
 }
 
 type messageData struct {
-	Message   *message.View `json:"message"`
-	Back      backLink      `json:"back"`
-	FromDraft *drafts.Row   `json:"from_draft"`
-	Correct   *correctForm  `json:"correct"`
+	Message   *mailapp.MessageView `json:"message"`
+	Back      backLink             `json:"back"`
+	FromDraft *mailapp.DraftRow    `json:"from_draft"`
+	Correct   *correctForm         `json:"correct"`
 }
 
 type correctForm struct {
-	MessageID int64           `json:"message_id"`
-	Account   string          `json:"account"`
-	Context   string          `json:"context"`
-	Folders   []triage.Folder `json:"folders"`
-	Selected  *string         `json:"selected"`
-	Error     *string         `json:"error"`
+	MessageID int64                  `json:"message_id"`
+	Account   string                 `json:"account"`
+	Context   string                 `json:"context"`
+	Folders   []mailapp.TriageFolder `json:"folders"`
+	Selected  *string                `json:"selected"`
+	Error     *string                `json:"error"`
 }
 
 type correctData struct {
@@ -76,8 +73,8 @@ type correctData struct {
 }
 
 type rowData struct {
-	Row     *triage.Row  `json:"row"`
-	Correct *correctForm `json:"correct"`
+	Row     *mailapp.TriageRow `json:"row"`
+	Correct *correctForm       `json:"correct"`
 }
 
 type moved struct {
