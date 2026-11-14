@@ -129,10 +129,13 @@ func TestMailPassRoutesThroughTheClassifier(t *testing.T) {
 	if body["model"] != pricing.HaikuID || body["max_tokens"] != float64(80) {
 		t.Errorf("folder request model/max_tokens: %v %v", body["model"], body["max_tokens"])
 	}
-	for _, key := range []string{"tools", "tool_choice", "thinking"} {
+	for _, key := range []string{"tools", "tool_choice"} {
 		if _, ok := body[key]; ok {
 			t.Errorf("folder request carries %s", key)
 		}
+	}
+	if thinking, _ := body["thinking"].(map[string]any); len(thinking) != 1 || thinking["type"] != "disabled" {
+		t.Errorf("folder request thinking: %v", body["thinking"])
 	}
 	format := body["output_config"].(map[string]any)["format"].(map[string]any)
 	enum := format["schema"].(map[string]any)["properties"].(map[string]any)["folder"].(map[string]any)["enum"]
