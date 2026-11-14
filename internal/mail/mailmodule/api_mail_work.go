@@ -94,11 +94,11 @@ func (p mailPasses) open() mail.OpenFunc { return p.m.Clients(p.d.Cfg) }
 
 var errServeStopping = errors.New("mail: serve is stopping")
 
-func (p mailPasses) job(ctx context.Context, key string, fn func(context.Context) error) error {
+const passTimeout = 20 * time.Minute
+
+func (p mailPasses) stoppable(ctx context.Context) (context.Context, func()) {
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
 	stop := context.AfterFunc(p.d.Ctx, func() { cancel(context.Cause(p.d.Ctx)) })
-	defer stop()
 	go func() {
 		select {
 		case <-p.d.Stopping:
@@ -106,18 +106,46 @@ func (p mailPasses) job(ctx context.Context, key string, fn func(context.Context
 		case <-ctx.Done():
 		}
 	}()
+	return ctx, func() {
+		stop()
+		cancel(nil)
+	}
+}
+
+func domainOutcome(err error) bool {
+	var classified *application.Error
+	if !errors.As(err, &classified) {
+		return false
+	}
+	switch classified.Code {
+	case application.Refused, application.Invalid, application.Unavailable, application.NotFound, application.Forbidden, application.NotConfigured:
+		return true
+	}
+	return false
+}
+
+func (p mailPasses) job(ctx context.Context, key string, fn func(context.Context) error) error {
+	ctx, stop := p.stoppable(ctx)
+	defer stop()
 	ran := false
+	var outcome error
 	_, err := module.Invoke(ctx, p.d.DB, p.d.Cfg, key, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 		ran = true
-		return scheduler.Result{}, fn(ctx)
+		if outcome = fn(ctx); domainOutcome(outcome) {
+			return scheduler.Result{}, nil
+		}
+		return scheduler.Result{}, outcome
 	})
 	if !ran {
 		return passBusy(err)
 	}
+	if outcome != nil {
+		return outcome
+	}
 	return err
 }
 
-func (p mailPasses) locked(ctx context.Context, key string, fn func(context.Context, *run.Pass) error) error {
+func (p mailPasses) jobPass(ctx context.Context, key string, fn func(context.Context, *run.Pass) error) error {
 	return p.job(ctx, key, func(ctx context.Context) error {
 		pass, err := run.Prepare(ctx, p.d.Env, p.d.DB, p.d.Cfg, p.open(), mail.WallClock, p.m.classifiers)
 		if err != nil {
@@ -125,6 +153,24 @@ func (p mailPasses) locked(ctx context.Context, key string, fn func(context.Cont
 		}
 		return fn(ctx, pass)
 	})
+}
+
+func (p mailPasses) locked(ctx context.Context, fn func(context.Context, *run.Pass) error) error {
+	ctx, stop := p.stoppable(ctx)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, passTimeout)
+	defer cancel()
+	locks, err := db.ResourceLocks(ctx, p.d.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
+	if err != nil {
+		return passBusy(err)
+	}
+	defer func() { _ = locks.Close() }()
+	ctx = db.WithHeld(ctx, locks)
+	pass, err := run.Prepare(ctx, p.d.Env, p.d.DB, p.d.Cfg, p.open(), mail.WallClock, p.m.classifiers)
+	if err != nil {
+		return err
+	}
+	return fn(ctx, pass)
 }
 
 func withEffects(err error, ids []int64) error {
@@ -245,14 +291,14 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})
 		}),
 		api.Command(d, mailapp.DescribeRefreshLoops(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/loops/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
-			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshLoops(ctx, struct{}{}))
 				return err
 			})
 			return out, err
 		}),
 		api.Command(d, mailapp.DescribeRefreshWatches(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/watches/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
-			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshWatches(ctx, struct{}{}))
 				return err
 			})

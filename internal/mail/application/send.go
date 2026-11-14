@@ -62,6 +62,9 @@ func (s *Service) writeAudit(ctx context.Context, name application.Name, target 
 }
 
 func auditOutcome(err error) state.Outcome {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return state.Canceled
+	}
 	var classified *application.Error
 	if !errors.As(err, &classified) {
 		return state.Failed

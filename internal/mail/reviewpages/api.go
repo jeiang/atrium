@@ -41,7 +41,9 @@ type apiApproval struct {
 	Result        json.RawMessage `json:"result"`
 }
 
-type Draft struct {
+type Draft = apiDraft
+
+type apiDraft struct {
 	ID                   int64    `json:"id"`
 	ThreadID             *int64   `json:"thread_id"`
 	Account              string   `json:"account"`

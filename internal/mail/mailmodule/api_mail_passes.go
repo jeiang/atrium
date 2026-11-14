@@ -195,7 +195,7 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 	effects := []application.Code{application.Refused, application.Unknown, application.Partial, application.Conflict, application.Unavailable}
 	scan := func(def application.Definition, target string, do func(*mailapp.Service, context.Context) (application.Change[scanutil.Result], error)) application.Binding {
 		return api.Command(d, def, application.APIShape{Area: area, Errors: refusals}, target, func(ctx context.Context, _ struct{}) (out application.Change[MailScanned], err error) {
-			err = passes.locked(ctx, scans.JobKey, func(ctx context.Context, p *run.Pass) error {
+			err = passes.jobPass(ctx, scans.JobKey, func(ctx context.Context, p *run.Pass) error {
 				done, err := do(mailCLIService(d.Env)(p).WithNamer(rebalance.SuggestName(p.Classifier)), ctx)
 				out = application.Change[MailScanned]{Data: MailScanned{Outcome: outcomeOK, Candidates: done.Data.Candidates, Created: done.Data.Created}, AuditID: done.AuditID, EffectIDs: done.EffectIDs}
 				return withEffects(err, done.EffectIDs)
@@ -225,7 +225,7 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 			return application.Change[MailBacklog]{Data: MailBacklog{Outcome: outcomeOK, Created: done.Data.Created, Accounts: accounts}, AuditID: done.AuditID}, err
 		}),
 		api.Command(d, mailapp.DescribeRebaseline(), application.APIShape{Area: area, Errors: refusals}, "POST /mail/live/rebaseline", func(ctx context.Context, _ struct{}) (out application.Change[MailRebaselined], err error) {
-			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				done, err := mailCLIService(d.Env)(p).WithSync(p.SyncAll).Rebaseline(ctx, struct{}{})
 				if err != nil {
 					return err
@@ -240,7 +240,7 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 			return out, err
 		}),
 		api.Command(d, mailapp.DescribeApplyDeletions(), application.APIShape{Area: area, Errors: effects}, "POST /mail/live/deletions/apply", func(ctx context.Context, _ struct{}) (out application.Change[MailDeletions], err error) {
-			err = passes.locked(ctx, run.SyncJobKey, func(ctx context.Context, p *run.Pass) error {
+			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				accounts, err := run.SelectAccounts(ctx, "")
 				if err != nil {
 					return err

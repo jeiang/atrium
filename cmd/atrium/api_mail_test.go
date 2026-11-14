@@ -372,7 +372,8 @@ func TestMailApplyDeletionsAPIRefusedInShadow(t *testing.T) {
 		return n
 	}
 	token := localAPIToken(t, "api")
-	base, _, stop, err := startServeAppArgs(t, m.app, &lockedBuffer{}, "--auth", "local")
+	logs := &lockedBuffer{}
+	base, _, stop, err := startServeAppArgs(t, m.app, logs, "--auth", "local")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,8 +382,27 @@ func TestMailApplyDeletionsAPIRefusedInShadow(t *testing.T) {
 	waitUntil(t, 60*time.Second, "mail-pass to be free", func() bool {
 		return s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}).status == http.StatusOK
 	})
+	syncRun := func() string {
+		t.Helper()
+		var out string
+		if err := d.Read.QueryRow("SELECT COALESCE(CAST(j.last_run_id AS TEXT), '') || ':' || COALESCE(r.status, '') || ':' || COALESCE(r.error, '') FROM jobs j LEFT JOIN job_runs r ON r.id = j.last_run_id WHERE j.declaration_key = ?", mailrun.SyncJobKey).Scan(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	before := syncRun()
 	opens, writes := m.fake.Opens(), len(m.fake.Writes)
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/live/deletions/apply", token, nil, "Idempotency-Key", "shadow-1"), http.StatusConflict, "refused")
+	if after := syncRun(); after != before {
+		t.Fatalf("a refused API apply changed the sync job's last run: %s -> %s", before, after)
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "nope"}), http.StatusUnprocessableEntity, "invalid")
+	if got := syncRun(); !strings.Contains(got, ":ok:") {
+		t.Fatalf("an API sync with an unknown account recorded the sync run as %s", got)
+	}
+	if strings.Contains(logs.String(), "crashed") {
+		t.Fatalf("API mail commands logged a crashed job: %s", logs.String())
+	}
 	if m.fake.Opens() != opens || len(m.fake.Writes) != writes || len(m.fake.Boxes["Bills"].Box.Messages) != 1 {
 		t.Fatalf("shadow deletions reached IMAP: %d sessions, wrote %v", m.fake.Opens()-opens, m.verbs()[writes:])
 	}

@@ -6282,7 +6282,7 @@
         "additionalProperties": false,
         "properties": {
           "draft": {
-            "$ref": "#/components/schemas/ReviewpagesDraft"
+            "$ref": "#/components/schemas/ReviewpagesapiDraft"
           }
         },
         "required": [
@@ -6304,7 +6304,7 @@
         "additionalProperties": false,
         "properties": {
           "draft": {
-            "$ref": "#/components/schemas/ReviewpagesDraft"
+            "$ref": "#/components/schemas/ReviewpagesapiDraft"
           },
           "filed": {
             "type": "string"
@@ -6356,7 +6356,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ReviewpagesDraft"
+              "$ref": "#/components/schemas/ReviewpagesapiDraft"
             },
             "type": "array"
           },
@@ -9242,81 +9242,6 @@
         ],
         "type": "object"
       },
-      "ReviewpagesDraft": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "type": "string"
-          },
-          "account_configured": {
-            "type": "boolean"
-          },
-          "body": {
-            "type": "string"
-          },
-          "cc": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "number"
-          },
-          "id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "in_reply_to_message_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "revision": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "sent_at": {
-            "type": "number"
-          },
-          "smtp_result": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "string"
-          },
-          "thread_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "to": {
-            "type": "string"
-          },
-          "unexpected_recipients": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "updated_at": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "id",
-          "account",
-          "to",
-          "cc",
-          "subject",
-          "body",
-          "status",
-          "revision",
-          "created_at",
-          "updated_at",
-          "unexpected_recipients",
-          "account_configured"
-        ],
-        "type": "object"
-      },
       "ReviewpagesapiApproval": {
         "additionalProperties": false,
         "properties": {
@@ -9405,6 +9330,81 @@
         ],
         "type": "object"
       },
+      "ReviewpagesapiDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "account_configured": {
+            "type": "boolean"
+          },
+          "body": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "in_reply_to_message_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "revision": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sent_at": {
+            "type": "number"
+          },
+          "smtp_result": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "to": {
+            "type": "string"
+          },
+          "unexpected_recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updated_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "account",
+          "to",
+          "cc",
+          "subject",
+          "body",
+          "status",
+          "revision",
+          "created_at",
+          "updated_at",
+          "unexpected_recipients",
+          "account_configured"
+        ],
+        "type": "object"
+      },
       "ReviewpagespendingBody": {
         "additionalProperties": false,
         "properties": {
@@ -9425,7 +9425,7 @@
           },
           "drafts": {
             "items": {
-              "$ref": "#/components/schemas/ReviewpagesDraft"
+              "$ref": "#/components/schemas/ReviewpagesapiDraft"
             },
             "type": "array"
           }
@@ -14507,7 +14507,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReviewpagesDraft"
+                  "$ref": "#/components/schemas/ReviewpagesapiDraft"
                 }
               }
             },
@@ -14655,7 +14655,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReviewpagesDraft"
+                  "$ref": "#/components/schemas/ReviewpagesapiDraft"
                 }
               }
             },
