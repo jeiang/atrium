@@ -22,40 +22,119 @@ func (e InvalidError) Error() string { return string(e) }
 
 type Binder func(ctx context.Context, q db.Querier, t tool.Tool) (bound tool.Tool, ok bool, err error)
 
+type UnknownTool struct{ Name string }
+
+func (e *UnknownTool) Error() string { return "unknown tool " + e.Name }
+
+type AlreadyHandled struct{ Name string }
+
+func (e *AlreadyHandled) Error() string { return "tool " + e.Name + " already has a handler" }
+
 type Registry struct {
 	tools    []tool.Tool
+	pending  []tool.Tool
 	binders  map[string]Binder
 	settings *settings.Registry
+	owners   map[string]func(context.Context) error
 }
 
 type Source func() (*Registry, error)
 
+func (r *Registry) Has(name string) bool { return r.known(name) }
+
+func (r *Registry) SetOwner(name string, check func(context.Context) error) {
+	if r.owners == nil {
+		r.owners = make(map[string]func(context.Context) error)
+	}
+	r.owners[name] = check
+}
+
+func (r *Registry) CheckOwner(ctx context.Context, name string) error {
+	if check := r.owners[name]; check != nil {
+		return check(ctx)
+	}
+	return nil
+}
+
+func (r *Registry) Clone() *Registry {
+	clone := *r
+	clone.tools = slices.Clone(r.tools)
+	clone.pending = slices.Clone(r.pending)
+	return &clone
+}
+
 func New(reg *settings.Registry) *Registry {
-	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, settings: reg}
+	return &Registry{binders: map[string]Binder{}, settings: reg}
 }
 
 func (r *Registry) Add(tools ...tool.Tool) error {
+	seen := make(map[string]bool, len(tools))
 	for _, t := range tools {
-		if err := validate(t); err != nil {
+		if err := validate(t, false); err != nil {
 			return err
 		}
-		if slices.ContainsFunc(r.tools, func(e tool.Tool) bool { return e.Name == t.Name }) {
+		if seen[t.Name] || r.known(t.Name) {
 			return DuplicateError([]string{t.Name})
 		}
+		seen[t.Name] = true
 	}
 	for _, t := range tools {
-		key := settingKey(t.Name)
-		if _, ok := r.settings.Lookup(key); ok {
-			continue
-		}
-		if err := r.settings.Register(settings.Value(settings.Advanced, settings.Def{
-			Key: key, Module: "tools", Type: settings.Bool, Default: "true",
-		})); err != nil {
+		if err := r.registerSetting(t.Name); err != nil {
 			return err
 		}
 	}
 	r.tools = append(r.tools, tools...)
 	return nil
+}
+
+func (r *Registry) Declare(t tool.Tool) error {
+	if t.Server || t.Handler != nil {
+		return InvalidError(fmt.Sprintf("tool %s is declared with a handler or as a server tool", t.Name))
+	}
+	if err := validate(t, true); err != nil {
+		return err
+	}
+	if r.known(t.Name) {
+		return DuplicateError([]string{t.Name})
+	}
+	if err := r.registerSetting(t.Name); err != nil {
+		return err
+	}
+	r.pending = append(r.pending, t)
+	return nil
+}
+
+func (r *Registry) Handle(name string, h tool.Handler) error {
+	i := slices.IndexFunc(r.pending, func(t tool.Tool) bool { return t.Name == name })
+	if i < 0 {
+		if slices.ContainsFunc(r.tools, func(t tool.Tool) bool { return t.Name == name }) {
+			return &AlreadyHandled{Name: name}
+		}
+		return &UnknownTool{Name: name}
+	}
+	t := r.pending[i]
+	t.Handler = h
+	if err := validate(t, false); err != nil {
+		return err
+	}
+	r.pending = slices.Delete(r.pending, i, i+1)
+	r.tools = append(r.tools, t)
+	return nil
+}
+
+func (r *Registry) known(name string) bool {
+	return slices.ContainsFunc(r.tools, func(t tool.Tool) bool { return t.Name == name }) ||
+		slices.ContainsFunc(r.pending, func(t tool.Tool) bool { return t.Name == name })
+}
+
+func (r *Registry) registerSetting(name string) error {
+	key := settingKey(name)
+	if _, ok := r.settings.Lookup(key); ok {
+		return nil
+	}
+	return r.settings.Register(settings.Value(settings.Advanced, settings.Def{
+		Key: key, Module: "tools", Type: settings.Bool, Default: "true",
+	}))
 }
 
 func settingKey(name string) string { return "tool_" + name + "_enabled" }
@@ -117,12 +196,12 @@ func (s Set) Has(name string) bool {
 		slices.ContainsFunc(s.Server, func(t tool.Tool) bool { return t.Name == name })
 }
 
-func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, q db.Querier) (Set, error) {
+func (r *Registry) candidates(ctx context.Context, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, q db.Querier) ([]tool.Tool, Situation, Table, error) {
 	found, err := r.For(kind)
 	if err != nil {
-		return Set{}, err
+		return nil, Clean, Table{}, err
 	}
-	var candidates []tool.Tool
+	var out []tool.Tool
 	privateTools := false
 	for _, t := range found {
 		if !allow.Has(t.Name) {
@@ -136,16 +215,24 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webS
 		}
 		enabled, err := r.enabled(ctx, q, t.Name)
 		if err != nil {
-			return Set{}, err
+			return nil, Clean, Table{}, err
 		}
 		if !enabled {
 			continue
 		}
 		privateTools = privateTools || t.Marks.Kinds() != 0
-		candidates = append(candidates, t)
+		out = append(out, t)
 	}
 	situation := Classify(marks.Set, PromptCarriesKnowledge(kind), privateTools)
 	table, err := r.loadTable(ctx, q)
+	if err != nil {
+		return nil, Clean, Table{}, err
+	}
+	return out, situation, table, nil
+}
+
+func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, q db.Querier) (Set, error) {
+	candidates, situation, table, err := r.candidates(ctx, kind, role, webSearch, marks, allow, q)
 	if err != nil {
 		return Set{}, err
 	}
@@ -178,12 +265,55 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webS
 			}
 			t = bound
 		}
-		if t.ChannelOf != nil || (decision == Ask && !hasCard(t)) {
-			t = Gate(t, table, situation, kind)
-		}
 		set.Dispatch = append(set.Dispatch, t)
 	}
 	return set, nil
+}
+
+func (r *Registry) Authorize(ctx context.Context, q db.Querier, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, name string, args tool.Args) (tool.Tool, Decision, error) {
+	candidates, situation, table, err := r.candidates(ctx, kind, role, webSearch, marks, allow, q)
+	if err != nil {
+		return tool.Tool{}, Denied, err
+	}
+	var found *tool.Tool
+	for i := range candidates {
+		if candidates[i].Name == name {
+			found = &candidates[i]
+			break
+		}
+	}
+	if found == nil || found.Server {
+		return tool.Tool{}, Denied, nil
+	}
+	t := *found
+	channel := t.Channel
+	if t.ChannelOf != nil {
+		channel = t.ChannelOf(args)
+	}
+	decision := table.Decide(channel, situation, kind)
+	switch {
+	case decision == Ask && hasCard(t):
+		decision = Allowed
+	case decision == Ask && kind != tool.Chat:
+		decision = Denied
+	}
+	if decision == Denied {
+		return t, Denied, nil
+	}
+	if b, ok := r.binders[t.Name]; ok && q != nil {
+		bound, keep, err := b(ctx, q, t)
+		if err != nil {
+			return tool.Tool{}, Denied, err
+		}
+		if !keep {
+			return tool.Tool{}, Denied, nil
+		}
+		if bound.Name != t.Name || bound.Effect != t.Effect || bound.Channel != t.Channel || !slices.Equal(bound.Contexts, t.Contexts) {
+			return tool.Tool{}, Denied, InvalidError(fmt.Sprintf("binder for %s changed its name, effect, channel or run kinds", t.Name))
+		}
+		t = bound
+	}
+	return t, decision, nil
 }
 
 func (r *Registry) SubagentPool() ([]tool.Tool, error) {
@@ -212,7 +342,7 @@ func sharedWorkerTool(name string) bool {
 	return name == "atrium_self_diagnose" || strings.HasPrefix(name, "grafana_")
 }
 
-func validate(t tool.Tool) error {
+func validate(t tool.Tool, pending bool) error {
 	switch {
 	case t.Name == "":
 		return InvalidError("tool has no name")
@@ -220,7 +350,7 @@ func validate(t tool.Tool) error {
 		return InvalidError(fmt.Sprintf("tool %s is write_undo without an undo op", t.Name))
 	case !t.Annotated:
 		return InvalidError(fmt.Sprintf("tool %s is not annotated", t.Name))
-	case t.Handler == nil && !t.Server:
+	case t.Handler == nil && !t.Server && !pending:
 		return InvalidError(fmt.Sprintf("tool %s has no handler", t.Name))
 	case t.Handler != nil && t.Server:
 		return InvalidError(fmt.Sprintf("server tool %s has a handler", t.Name))

@@ -3,10 +3,12 @@ package module
 import (
 	"context"
 	"database/sql"
-	"errors"
 
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -18,20 +20,24 @@ const (
 	seedAdopted = "adopted"
 )
 
-func init() {
-	for _, name := range Builtins {
-		settings.MustRegister(FlagDef(name))
-	}
+func FlagHostDef(name string) settings.HostDef {
+	return settings.HostDef{Key: FlagKey(name), Module: Core, Type: settings.Bool, Default: "false"}
 }
 
-var operatorTables = []string{"settings", "secrets", "accounts", "threads", "usage"}
+var operatorData = []func(context.Context, db.Querier) (bool, error){
+	settings.HasRows,
+	settings.SecretsHasRows,
+	accounts.ExistsAny,
+	threads.HasRows,
+	inference.HasRows,
+}
 
-func (s *Set) unmet(ctx context.Context, p Probe, r Registration, states map[string]State) ([]Unmet, error) {
+func (s *Set) unmet(ctx context.Context, p Probe, r Declaration, states map[string]State) ([]Unmet, error) {
 	var out []Unmet
 	for _, rq := range r.Requires {
 		reason, err := rq.Check(ctx, p)
 		if err != nil {
-			return nil, err
+			return nil, &requirementError{name: rq.Name, err: err}
 		}
 		if reason != "" {
 			out = append(out, Unmet{Name: rq.Name, Reason: reason})
@@ -46,9 +52,7 @@ func (s *Set) unmet(ctx context.Context, p Probe, r Registration, states map[str
 }
 
 func seeded(ctx context.Context, q db.Querier) (bool, error) {
-	var n int
-	err := q.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM settings_audit WHERE key = ? AND source = ?", seedKey, string(audit.Migration)).Scan(&n)
+	n, err := audit.CountForKeySource(ctx, q, seedKey, string(audit.Migration))
 	return n > 0, err
 }
 
@@ -79,33 +83,30 @@ func (s *Set) Seed(ctx context.Context, d *db.DB) error {
 }
 
 func hasOperatorData(ctx context.Context, q db.Querier) (bool, error) {
-	for _, t := range operatorTables {
-		var one int
-		err := q.QueryRowContext(ctx, "SELECT 1 FROM "+t+" LIMIT 1").Scan(&one)
-		if err == nil {
-			return true, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
+	for _, has := range operatorData {
+		found, err := has(ctx, q)
+		if err != nil {
 			return false, err
+		}
+		if found {
+			return true, nil
 		}
 	}
 	return false, nil
 }
 
 func (s *Set) adoptMissing(ctx context.Context, d *db.DB) error {
-	var first string
-	err := d.Read.QueryRowContext(ctx, "SELECT new_value FROM settings_audit WHERE key = ? AND source = ? ORDER BY id LIMIT 1",
-		seedKey, string(audit.Migration)).Scan(&first)
+	first, err := audit.NewValueForKeySource(ctx, d.Read, seedKey, string(audit.Migration))
 	if err != nil || first != seedAdopted {
 		return err
 	}
 	pending := map[string]bool{}
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if r.Core {
 			continue
 		}
-		var n int
-		if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM settings_audit WHERE key = ?", FlagKey(r.Name)).Scan(&n); err != nil {
+		n, err := audit.CountForKey(ctx, d.Read, FlagKey(r.Name))
+		if err != nil {
 			return err
 		}
 		if n == 0 {
@@ -121,7 +122,7 @@ func (s *Set) adoptMissing(ctx context.Context, d *db.DB) error {
 
 func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) error {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
-	statuses, _, err := evaluate(ctx, s.regs, func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error) {
+	statuses, _, err := evaluate(ctx, s.decls, func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error) {
 		unmet, err := s.unmet(ctx, probe, r, states)
 		return unmet, len(unmet) == 0, err
 	})
@@ -132,7 +133,7 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 	for _, st := range statuses {
 		byName[st.Name] = st
 	}
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if r.Core {
 			continue
 		}
@@ -142,6 +143,9 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 			value = "true"
 		}
 		if only != nil && !only[r.Name] {
+			continue
+		}
+		if settings.HostOwnedKey(FlagKey(r.Name)) {
 			continue
 		}
 		if _, pinned, err := s.reg.Pinned(FlagKey(r.Name)); err != nil {

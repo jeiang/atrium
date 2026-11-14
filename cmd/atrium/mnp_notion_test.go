@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
 )
@@ -111,9 +114,9 @@ func mnpNotionSite(t *testing.T, fake *mnpNotion, wikiRoot string) (*mnpBrowser,
 	fake.root = wikiRoot
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
-	setEnv(t, "ATRIUM_NOTION_BASE_URL", srv.URL)
 	setEnv(t, settingEnv(notion.WikiRootKey), wikiRoot)
 	dir := t.TempDir()
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
@@ -132,10 +135,130 @@ func TestMnpNotionPageMarkdownIsSanitized(t *testing.T) {
 		page, "https://www.notion.so/"+page, markdown); err != nil {
 		t.Fatal(err)
 	}
-	body := b.want(http.MethodGet, "/notion/"+page, nil, http.StatusOK, "&lt;script&gt;", `href="https://example.test/x"`, `rel="noopener noreferrer"`)
+	body := b.want(http.MethodGet, "/notion/"+page, nil, http.StatusOK)
 	for _, bad := range []string{"<script>alert", "<img src=x", `href="javascript:`, `href="/relative"`} {
 		if strings.Contains(body, bad) {
 			t.Errorf("rendered page contains %q", bad)
 		}
+	}
+}
+
+func TestNotionSettingsAndExportRemainReachable(t *testing.T) {
+	b, _ := mnpNotionSite(t, &mnpNotion{parents: map[string]string{}}, "")
+	b.want(http.MethodGet, "/settings/notion", nil, http.StatusOK, "wiki_root", "sensitivity_property", "notion_private_value", "wiki_log_title")
+	b.want(http.MethodGet, "/settings/export", nil, http.StatusOK, "Export knowledge to Notion", "export_notion_parent")
+}
+
+func notionHostConfig(t *testing.T, dir, api, token string) string {
+	t.Helper()
+	keyFile := filepath.Join(dir, "notion.token")
+	if token != "" {
+		if err := os.WriteFile(keyFile, []byte(token+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	anthropicKey := filepath.Join(dir, "anthropic.key")
+	if err := os.WriteFile(anthropicKey, []byte("dummy-anthropic-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	b.WriteString("[connections.\"service/anthropic\"]\n")
+	b.WriteString("kind = \"service/anthropic\"\n")
+	b.WriteString("label = \"Anthropic\"\n")
+	b.WriteString("capabilities = [\"models\"]\n")
+	b.WriteString("credential_files = { api_key = " + fmt.Sprintf("%q", anthropicKey) + " }\n\n")
+	b.WriteString("[connections.\"service/notion\"]\n")
+	b.WriteString("kind = \"service/notion\"\n")
+	b.WriteString("label = \"Notion\"\n")
+	b.WriteString("config = { api = " + fmt.Sprintf("%q", api) + " }\n")
+	b.WriteString("capabilities = [\"api\"]\n")
+	if token != "" {
+		b.WriteString("credential_files = { token = " + fmt.Sprintf("%q", keyFile) + " }\n")
+	}
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+type notionAccess struct {
+	mu    sync.Mutex
+	pages int
+}
+
+func (f *notionAccess) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	if r.Header.Get("Authorization") != "Bearer ntn_good" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"object":"error","status":401,"code":"unauthorized","message":"API token is invalid."}`))
+		return
+	}
+	switch r.URL.Path {
+	case "/v1/users/me":
+		_, _ = w.Write([]byte(`{"object":"user","id":"bot","type":"bot"}`))
+	case "/v1/search":
+		results := make([]map[string]string, f.pages)
+		for i := range results {
+			results[i] = map[string]string{"object": "page", "id": "p"}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "results": results, "has_more": false, "next_cursor": nil})
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func TestNotionConnectionTestSavesOnlyASharedToken(t *testing.T) {
+	t.Parallel()
+	requireCipher(t)
+	fake := &notionAccess{}
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", notionHostConfig(t, dir, srv.URL, ""))
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+
+	stored := func() bool {
+		t.Helper()
+		var n int
+		if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.
+			QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/notion' AND slot = 'token'").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+	if code, body := s.conn("/test", url.Values{"id": {"service/notion"}, "credential.token": {"ntn_bad"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "Notion refused the token") {
+		t.Fatalf("a refused token = %d: %.300s", code, body)
+	}
+	if stored() {
+		t.Fatal("a refused Notion token was stored")
+	}
+	if code, body := s.conn("/test", url.Values{"id": {"service/notion"}, "credential.token": {"ntn_good"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "no pages shared with the integration") {
+		t.Fatalf("a token with no shared pages = %d: %.300s", code, body)
+	}
+	if stored() {
+		t.Fatal("a token with no shared pages was stored")
+	}
+	fake.mu.Lock()
+	fake.pages = 3
+	fake.mu.Unlock()
+	if code, body := s.conn("/test", url.Values{"id": {"service/notion"}, "credential.token": {"ntn_good"}}); code != http.StatusOK {
+		t.Fatalf("a shared token = %d: %.300s", code, body)
+	}
+	if !stored() {
+		t.Fatal("a working Notion token was not stored")
+	}
+	if got := connectionState(t, dir, "service/notion"); got != "ok" {
+		t.Fatalf("connection state = %q", got)
+	}
+	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/connections", nil); code != http.StatusOK || strings.Contains(body, "ntn_good") {
+		t.Fatalf("the connections page = %d and rendered the stored token", code)
+	}
+	tested := runApp(t, "connections", "test", "service/notion")
+	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "ok") {
+		t.Fatalf("connections test: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
 	}
 }

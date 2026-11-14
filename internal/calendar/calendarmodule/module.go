@@ -3,33 +3,70 @@ package calendarmodule
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/go-chi/chi/v5"
+
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/calendar"
+	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/web"
 )
 
-type Module struct{}
+type Module struct {
+	Jobs jobworker.Dependencies
+}
 
-func (Module) Register(mc module.Context) module.Registration {
-	command := calendarcmd.Command(mc.Env, mc.Tools)
-	return module.Registration{
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Candidates()}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{{Name: "calendar credentials", Check: credentials}}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return calendartools.Definitions()
+}
+
+func (m Module) Declare(mc module.Context) module.Declaration {
+	command := calendarcmd.Command(m.calendarCLI(mc.Env, mc.Tools), connectionsapp.CLI(mc.Env))
+	operations, bindings := m.calendarOperations()
+	return module.Declaration{
 		Name:      module.Calendar,
-		Attention: []attention.Source{attentionsources.Candidates()},
-		Requires:  []module.Requirement{{Name: "calendar credentials", Check: credentials}},
+		Settings:  slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
+		Host:      calendar.HostSettings(),
+		Sections:  calendar.Sections(),
+		Attention: AttentionSources(),
+		Jobs:      []scheduler.Definition{CandidatesJob(m.Jobs), CalDAVJob(m.Jobs)},
+		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},
 		},
-		Tools: func(r *registry.Registry) error { return r.Add(calendartools.Tools()...) },
+		Tools: ToolDefinitions(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			p := &calendar.Proposals{DB: d.DB, Ledger: d.Ledger, Now: d.Now, Env: d.Env}
+			return module.Effects{
+				Proposals: p.Proposals(module.Calendar),
+				Undo:      slices.Concat(p.Undo(), calapp.Undo(d.Ledger, d.Env)),
+			}
+		},
+		Connections: calendar.Connections(),
+		Operations:  operations,
+		Bindings:    bindings,
+		Pages:       []web.Page{{Module: func(_ chi.Router, d *web.Deps) { m.calendarRoutes(d) }}},
 	}
 }
 
@@ -54,21 +91,17 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 		return "", nil
 	}
 
-	google, err := p.Settings.Resolve(ctx, p.Q, calendar.GoogleClientIDKey)
+	set, err := calendar.LoadSettings(ctx, p.Q)
 	if err != nil {
 		return "", err
 	}
-	if err := p.Settings.Validate(calendar.GoogleClientIDKey, google.Value); err != nil {
-		var invalid settings.Invalid
-		if !errors.As(err, &invalid) {
-			return "", err
+	if set.Google != nil {
+		clientID, _ := set.Google.Endpoint("client_id")
+		secret, _ := set.Google.Credential("oauth/client_secret")
+		grant, _ := set.Google.Credential("oauth/calendar/refresh")
+		if strings.TrimSpace(clientID) != "" && secret != "" && grant != "" {
+			return "", nil
 		}
-		google.Value = ""
-	}
-	secret, _ := p.Env("GOOGLE_OAUTH_CLIENT_SECRET")
-	refresh, _ := p.Env("GOOGLE_REFRESH_TOKEN")
-	if strings.TrimSpace(google.Value) != "" && strings.TrimSpace(secret) != "" && strings.TrimSpace(refresh) != "" {
-		return "", nil
 	}
 	return "an iCloud CalDAV login or Google Calendar credentials are required (" + icloudErr.Error() + ")", nil
 }

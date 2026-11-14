@@ -1,7 +1,7 @@
-{{template "knowledge_form" (dict "form" .Data "csrf" .CSRF)}}
+{{template "knowledge_form" (dict "form" .Data "csrf" .CSRF "target" "body" "swap" "innerHTML")}}
 
 {{define "knowledge_form"}}{{$f := .form}}{{$v := $f.Values}}
-<form method="post" action="{{$f.Action}}" class="flex flex-col gap-4" hx-post="{{$f.Action}}" hx-target="body" hx-disabled-elt="find button[type=submit]">
+<form method="post" action="{{$f.Action}}" class="flex flex-col gap-4" hx-post="{{$f.Action}}" hx-target="{{.target}}" hx-swap="{{.swap}}" hx-disabled-elt="find button[type=submit]">
   <input type="hidden" name="csrf_token" value="{{.csrf}}">
   {{if $f.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$f.Error}}</p>{{end}}
   <div role="group" class="field">

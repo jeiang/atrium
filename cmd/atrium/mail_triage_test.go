@@ -10,21 +10,18 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
 func TestMailTriageProposalArchivesThroughTheCLI(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	srv := llmstub.Server(t, nil)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, settingEnv(mail.KeyMode), "live")
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	embed := embedstub.Server(t)
+	seedSettings(t, map[string]string{mail.KeyMode: "live"})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
@@ -131,7 +128,7 @@ S: {t} OK
 		t.Fatalf("proposal status = %q, %v", status, err)
 	}
 	var action string
-	if err := d.Read.QueryRow("SELECT action FROM proposal_actions WHERE proposal_id = ? AND kind = 'write' AND state = 'ok'", id).Scan(&action); err != nil {
+	if err := d.Read.QueryRow("SELECT action_json FROM effects WHERE proposal_id = ? AND direction = 'forward' AND state = 'done' AND operation = 'move'", id).Scan(&action); err != nil {
 		t.Fatalf("no recorded move: %v", err)
 	}
 	if !strings.Contains(action, `"op":"move"`) || !strings.Contains(action, `"dest_imap":"Archive"`) {

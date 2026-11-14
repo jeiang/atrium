@@ -8,10 +8,11 @@ import (
 	"github.com/jeiang/atrium/internal/ops"
 )
 
-func init() {
+func Metrics() []ops.Metric {
+	var out []ops.Metric
 	for _, metric := range obs.Metrics() {
 		metric := metric
-		ops.Register(ops.Metric{
+		out = append(out, ops.Metric{
 			Name: metric.Name, Help: metric.Help, Type: metric.Type,
 			Collect: func(context.Context, db.Querier) ([]ops.Sample, error) {
 				samples := metric.Snapshot()
@@ -23,4 +24,5 @@ func init() {
 			},
 		})
 	}
+	return out
 }

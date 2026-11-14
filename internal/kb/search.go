@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/textsearch"
 )
 
@@ -20,6 +21,12 @@ const (
 	semanticLimit = 50
 	exactMinChars = 3
 )
+
+var log = logx.Logger("knowledge/search")
+
+func semanticSkipped(ctx context.Context, operation, reason string) {
+	log.WarnContext(ctx, "semantic search skipped", "operation", operation, logx.Reason, reason)
+}
 
 type SearchFilter struct {
 	Query     string
@@ -119,23 +126,15 @@ func lexical(ctx context.Context, q db.Querier, match string, f SearchFilter) ([
 }
 
 func knn(ctx context.Context, q db.Querier, idx embed.Index, blob []byte, k int) ([]int64, error) {
-	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.KBTable()).Scan(&total); err != nil {
+	total, err := embed.KBCount(ctx, q, idx)
+	if err != nil {
 		return nil, err
 	}
 	if total == 0 {
 		return nil, nil
 	}
 	k = min(k, total, embed.KNNMax)
-	rows, err := q.QueryContext(ctx, "SELECT rowid FROM "+idx.KBTable()+" WHERE embedding MATCH ? AND k = ? ORDER BY distance", blob, k)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
-		var id int64
-		err := r.Scan(&id)
-		return id, err
-	})
+	return embed.KBIDs(ctx, q, idx, blob, k)
 }
 
 func visibleIDs(ctx context.Context, q db.Querier, ids []int64, f SearchFilter) (map[int64]bool, error) {
@@ -218,9 +217,31 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 	semantic := false
 	if f.Embed != nil {
 		idx, ierr := embed.Active(ctx, q)
-		if ierr == nil {
-			vectors, verr := f.Embed(ctx, []string{embed.QueryText(query)})
-			if verr == nil && len(vectors) > 0 {
+		if err := ctx.Err(); err != nil {
+			return Result{}, err
+		}
+		if ierr != nil {
+			semanticSkipped(ctx, "kb_search", "no_index")
+		} else {
+			embedCtx, cancel := context.WithTimeout(ctx, RetrievalWindow)
+			vectors, verr := f.Embed(embedCtx, []string{embed.QueryText(query)})
+			expired := errors.Is(embedCtx.Err(), context.DeadlineExceeded)
+			cancel()
+			if err := ctx.Err(); err != nil {
+				return Result{}, err
+			}
+			switch {
+			case expired:
+				semanticSkipped(ctx, "kb_search", "timeout")
+			case verr != nil:
+				var unavailable *httpx.ServiceUnavailable
+				if !errors.As(verr, &unavailable) && !errors.Is(verr, httpx.ErrPayload) && !errors.Is(verr, httpx.ErrMissing) {
+					return Result{}, verr
+				}
+				semanticSkipped(ctx, "kb_search", "unavailable")
+			case len(vectors) == 0 || len(vectors[0]) == 0:
+				semanticSkipped(ctx, "kb_search", "no_vector")
+			default:
 				near, kerr := knn(ctx, q, idx, embed.Serialize(vectors[0]), semanticLimit)
 				if kerr != nil {
 					return Result{}, kerr
@@ -235,11 +256,6 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 					}
 				}
 				semantic = true
-			} else if verr != nil {
-				var unavailable *httpx.ServiceUnavailable
-				if !errors.As(verr, &unavailable) && !errors.Is(verr, httpx.ErrPayload) && !errors.Is(verr, httpx.ErrMissing) {
-					return Result{}, verr
-				}
 			}
 		}
 	}

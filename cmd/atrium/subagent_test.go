@@ -7,9 +7,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 func systemText(t *testing.T, r anthropictest.Request) string {
@@ -38,7 +39,7 @@ func TestSubagentRequestOmitsTheOperatorProfile(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "remember where I live"); ran.code != cli.ExitOK {
 		t.Fatalf("profile run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("UPDATE kb_records SET pinned = 1, confirmed_at = 1 WHERE id = 1"); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func TestSubagentRequestOmitsTheOperatorProfile(t *testing.T) {
 
 func runError(t *testing.T, dir, where string, args ...any) string {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var text *string
 	if err := d.Read.QueryRow("SELECT error FROM runs WHERE "+where+" ORDER BY id DESC LIMIT 1", args...).Scan(&text); err != nil {
@@ -82,8 +83,7 @@ func runError(t *testing.T, dir, where string, args ...any) string {
 
 func TestSubagentSpendCountsTowardTheParentRunCap(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(assistant.KeyDefaultModel), pricing.HaikuID)
-	setEnv(t, settingEnv(budget.RunCapKey(pricing.HaikuID)), "0.05")
+	seedSettings(t, map[string]string{assistant.KeyDefaultModel: pricing.HaikuID, inference.RunCapKey(pricing.HaikuID): "0.05"})
 	over := anthropictest.Usage{Input: 1000, Output: 120_000}
 
 	start := warm(t, api)

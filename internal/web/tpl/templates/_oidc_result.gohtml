@@ -1,6 +1,0 @@
-{{$d := .Data}}
-{{if $d.Passed}}
-{{if $d.Groups}}<div class="flex flex-wrap gap-2">{{range $d.Groups}}<span class="badge" data-variant="secondary">{{.}}</span>{{end}}</div>{{end}}
-{{else}}
-<div class="alert" data-variant="destructive" role="alert">{{icon "circle-alert"}}<p>{{$d.Reason}}</p></div>
-{{end}}

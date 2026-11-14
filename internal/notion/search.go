@@ -142,8 +142,8 @@ type nearRow struct {
 }
 
 func knn(ctx context.Context, q Querier, idx embed.Index, blob []byte, k int, includePrivate bool) ([]nearRow, error) {
-	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.NotionTable()).Scan(&total); err != nil {
+	total, err := embed.NotionCount(ctx, q, idx)
+	if err != nil {
 		return nil, err
 	}
 	if total == 0 {
@@ -152,20 +152,13 @@ func knn(ctx context.Context, q Querier, idx embed.Index, blob []byte, k int, in
 	k = min(k, total, embed.KNNMax)
 	var out []nearRow
 	for _, visibility := range visibilities(includePrivate) {
-		rows, err := q.QueryContext(ctx,
-			"SELECT rowid, distance FROM "+idx.NotionTable()+" WHERE embedding MATCH ? AND k = ? AND visibility = ?", blob, k, visibility)
+		got, err := embed.NotionHits(ctx, q, idx, blob, k, visibility)
 		if err != nil {
 			return nil, err
 		}
-		got, err := db.Collect(rows, func(r *sql.Rows) (nearRow, error) {
-			var n nearRow
-			err := r.Scan(&n.rid, &n.distance)
-			return n, err
-		})
-		if err != nil {
-			return nil, err
+		for _, h := range got {
+			out = append(out, nearRow{rid: h.ID, distance: h.Distance})
 		}
-		out = append(out, got...)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].distance < out[j].distance })
 	return out, nil
@@ -410,10 +403,7 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 	if embedTexts == nil {
 		embedTexts = embed.Texts
 	}
-	limits, err := LoadSearch(ctx, q)
-	if err != nil {
-		return Result{}, err
-	}
+	limits := DefaultSearchLimits()
 	query = strings.TrimSpace(query)
 	if query == "" {
 		hits, err := recent(ctx, q, limits, includePrivate, limit)
@@ -571,12 +561,11 @@ func RelatedPages(ctx context.Context, q Querier, pageID string, limit int) ([]R
 		taken[id] = true
 		out = append(out, Related{PageRef: pageRef(info.id, info.title, info.url, info.path, private != 0), Linked: true, Score: 1.0})
 	}
-	var blob []byte
 	idx, err := embed.Active(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	err = q.QueryRowContext(ctx, "SELECT embedding FROM "+idx.NotionTable()+" WHERE rowid = ?", page.RID).Scan(&blob)
+	blob, err := embed.NotionEmbedding(ctx, q, idx, page.RID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out[:min(len(out), limit)], nil
 	}

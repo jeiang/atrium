@@ -6,16 +6,24 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/config"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func Tools() []tool.Tool {
-	RegisterProposalKinds()
+func Definitions(svc func(*tool.Context) *mailapp.Service) []module.ToolDefinition {
+	tools := Tools(svc)
+	defs := make([]module.ToolDefinition, len(tools))
+	for i, t := range tools {
+		defs[i] = module.ToolDefinition{Tool: t}
+	}
+	return defs
+}
+
+func Tools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	var out []tool.Tool
-	for _, group := range [][]tool.Tool{mailTools(), folderTools(), draftTools(), openLoopTools(), watchTools(), trackingTools()} {
+	for _, group := range [][]tool.Tool{mailTools(svc), folderTools(svc), draftTools(svc), openLoopTools(svc), watchTools(svc), trackingTools(svc)} {
 		out = append(out, group...)
 	}
 	return out
@@ -37,8 +45,8 @@ func intArg(value any, message string) (int64, error) {
 	return 0, tool.Error(message)
 }
 
-func zone(ctx context.Context, env config.Env) (*time.Location, error) {
-	loc, err := scheduler.Zone(config.From(ctx).TZName(env))
+func zone(ctx context.Context, tc *tool.Context) (*time.Location, error) {
+	loc, err := mailapp.Zone(ctx, tc.Env)
 	if err != nil {
 		return nil, tool.Error("invalid time zone")
 	}

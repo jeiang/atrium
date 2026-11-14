@@ -2,22 +2,31 @@ package assistantmodule
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net/http"
-	"strings"
+	"slices"
+	"sync"
 
-	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/go-chi/chi/v5"
+
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
-	"github.com/jeiang/atrium/internal/assistant/budget"
+	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
+	"github.com/jeiang/atrium/internal/assistant/approval"
+	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
+	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
@@ -31,62 +40,87 @@ import (
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
+	webfetchtools "github.com/jeiang/atrium/internal/assistant/tools/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/inference/opsmetrics"
+	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/kb/export"
+	"github.com/jeiang/atrium/internal/kb/kbcmd"
+	"github.com/jeiang/atrium/internal/mail/mailmodule"
+	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/proposals"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/tasks"
+	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
 
-func init() {
-	integrations.Register(integrations.Integration{
-		Name: "anthropic", Label: "Anthropic", Module: module.Assistant, SecretKey: secrets.AnthropicAPIKey,
-		Help: "Console API key from a workspace with a monthly spend limit; use one workspace per instance.",
-		Test: testAnthropic,
-	})
-}
-
-func testAnthropic(ctx context.Context, c integrations.Conn) (string, error) {
-	env := c.Env
-	if env == nil {
-		env = config.OS
-	}
-	client, err := anthropic.New(c.Secret, env, anthropic.HTTPClient(c.HTTP))
-	if err != nil {
-		return "", err
-	}
-	ids, err := client.ModelIDs(ctx)
-	var failure *anthropic.APIError
-	switch {
-	case errors.As(err, &failure) && failure.StatusCode == http.StatusUnauthorized:
-		return "", fmt.Errorf("%w: Anthropic refused the key", integrations.ErrAuth)
-	case errors.As(err, &failure) && failure.StatusCode == http.StatusForbidden:
-		return "", fmt.Errorf("the key may not list models: %s", failure.Message)
-	case err != nil:
-		return "", err
-	}
-	return fmt.Sprintf("%d models available", len(ids)), nil
-}
-
 type Module struct {
-	Callables []map[string]worker.Callable
+	ProposeKinds []proposals.Definition
+	Now          func() float64
+	Jobs         jobworker.Dependencies
+	Open         func(context.Context) (context.Context, *service.Service, func(), error)
+	Start        func(context.Context) error
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
-	return module.Registration{
-		Name:      module.Assistant,
-		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(), serverops.AttentionSource(mc.Env), dreaming.Attention(mc.Env)},
-		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
+func (m Module) Declare(mc module.Context) module.Declaration {
+	knowledgeOps, knowledgeBindings := m.knowledgeOperations()
+	taskOps, taskBindings := m.taskOperations()
+	projectOps, projectBindings := projectOperations()
+	threadOps, threadBindings := threadOperations()
+	fileOps, fileBindings := fileOperations()
+	scheduleOps, scheduleBindings := scheduleOperations()
+	memoryOps, memoryBindings := memoryOperations()
+	researchOps, researchBindings := researchOperations()
+	agentOps, agentBindings := agentOperations()
+	attentionOps, attentionBindings := attentionOperations()
+	opsOps, opsBindings := opsOperations()
+	jobOps, jobBindings := jobOperations()
+	return module.Declaration{
+		Name:       module.Assistant,
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
+		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
+			prompts.Settings(), registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
+			export.Settings(), weather.SettingsDefs()),
+		Host:      export.HostSettings(),
+		Sections:  export.Sections(),
+		Attention: AttentionSources(mc.Env),
+		Metrics:   opsmetrics.Metrics(),
+		Jobs:      Jobs(m.Jobs),
+		Services: []runtime.ServiceDefinition{{Name: "assistant", Run: func(ctx context.Context, _ *runtime.Services) error {
+			if err := m.Start(ctx); err != nil {
+				return err
+			}
+			return module.Idle(ctx)
+		}}},
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
+			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI(mc.Tools), Home: func(d *web.Deps) func(context.Context) (any, any, error) {
+				reader := mailmodule.ReviewReads(d)
+				return func(ctx context.Context) (any, any, error) {
+					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
+					if err != nil {
+						return nil, nil, err
+					}
+					activity, err := reader.Activity(ctx, reviewapp.ActivityInput{})
+					if err != nil {
+						return nil, nil, err
+					}
+					return reviewpages.StripView(pending.Data), reviewpages.ReceiptsView(activity.Data), nil
+				}
+			}}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{
@@ -95,54 +129,74 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Section: "library", Label: "Files", URL: "/library/files", Icon: "paperclip", Page: "library_files", Order: 20},
 				{Section: "library", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 40},
 				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
-				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
-		}},
-		Settings: []settings.Group{
-			{Name: "spending", Title: "Spending", Keys: append([]string{
-				budget.BudgetKey, budget.ChatKey, budget.UnattendedKey, budget.ThreadCapKey,
-			}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
-				assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
-			{Name: "background", Title: "Background work", Keys: []string{
-				assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
-				memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
-			}},
+		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
+		Groups:   SettingGroups(),
+		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, agentOpen(m.Open), subagentCLIService(mc.Env, mc.Tools, m.Now), agentTick(m.Open)), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
+		Leaves:   map[string]module.Leaf{"kb import": {Always: true}},
+		Tools:    ToolDefinitions(m.ProposeKinds),
+		Effects: func(d module.EffectDeps) module.Effects {
+			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
+			return module.Effects{
+				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
+				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger)),
+				Resolve:   export.Resolve(d.Ledger),
+			}
 		},
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Callables...), memorycmd.Command(mc.Env)},
-		Tools:    addTools,
+		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections(), weather.Connections()),
 	}
 }
 
-func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
-	key, err := secrets.Credential(ctx, p.Q, secrets.AnthropicAPIKey)
-	if err != nil {
-		return "", err
+func pageAssistant(runs func(context.Context) (*service.Service, error)) func(*web.Deps) *asstapp.Service {
+	return func(d *web.Deps) *asstapp.Service {
+		svc := sync.OnceValue(func() *service.Service {
+			s, err := runs(d.Ctx)
+			if err != nil {
+				panic(err)
+			}
+			return s
+		})
+		return assistantService(d).WithRuns(svc)
 	}
-	if strings.TrimSpace(key) == "" {
-		return secrets.AnthropicAPIKey + " is not set", nil
-	}
-	return "", nil
 }
 
-func addTools(r *registry.Registry) error {
+func AttentionSources(env config.Env) []attention.Source {
+	return []attention.Source{
+		attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(),
+		serverops.AttentionSource(env), dreaming.Attention(env),
+	}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "spending", Title: "Spending", Keys: append([]string{inference.ThreadCapKey}, append(runCaps(), assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "background", Title: "Background work", Keys: []string{
+			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
+			memory.ModelKey, memory.EffortKey,
+		}},
+	}
+}
+
+func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
+	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
 	for _, tools := range [][]tool.Tool{
-		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
-		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
-		proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
-		kbtools.Tools(), weathertools.Tools(), opstools.Tools(),
+		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
+		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
+		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
+		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(opsToolService),
 	} {
-		if err := r.Add(tools...); err != nil {
-			return err
+		for _, t := range tools {
+			defs = append(defs, module.ToolDefinition{Tool: t})
 		}
 	}
-	return nil
+	return append(defs, research.Definition(), lookup.Definition(), websearch.Definition(), report.Definition())
 }
 
 func runCaps() []string {
 	models := pricing.Models()
 	keys := make([]string, len(models))
 	for i, m := range models {
-		keys[i] = budget.RunCapKey(m.ID)
+		keys[i] = inference.RunCapKey(m.ID)
 	}
 	return keys
 }

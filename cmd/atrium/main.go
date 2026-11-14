@@ -6,86 +6,104 @@ import (
 	"os"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
-	"github.com/jeiang/atrium/internal/assistant/budget"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
-	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
-	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
-	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
+	"github.com/jeiang/atrium/internal/app"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
-	"github.com/jeiang/atrium/internal/core/coremodule"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	kbcallables "github.com/jeiang/atrium/internal/kb/export"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/mailcmd"
-	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/media/mediacmd"
-	"github.com/jeiang/atrium/internal/media/mediamodule"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/notify/notifymodule"
-	"github.com/jeiang/atrium/internal/notion/notionmodule"
-	"github.com/jeiang/atrium/internal/serverops"
-	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/sdk"
 )
 
 var version = "dev"
 
 func main() {
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
 	ctx, stop := cli.SignalContext(context.Background())
-	reg := settings.New()
-	code := newApp(config.OS, reg, config.NewState(reg), sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
-	stop()
-	os.Exit(code)
+	defer stop()
+	if len(args) > 0 && args[0] == mediaAgentCommand {
+		return runMediaAgent(ctx, args, os.Stdout, os.Stderr)
+	}
+	return newApp(config.OS).Run(ctx, args, os.Stdout, os.Stderr)
 }
 
-func newApp(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module) *cli.App {
-	return newAppWith(env, reg, st, mods, imapclient.Opener, nil, logx.Setup)
+func newApp(env config.Env) *cli.App {
+	return newAppWith(env, imapclient.Opener, nil, logx.Setup)
 }
 
-func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
-	set := newSet(env, reg, st, mods, clients, now)
-	app := cli.New("atrium", setup)
-	app.Version = version
-	app.Env = env
-	app.Settings = reg
-	app.State = st
-	app.SetupContext = func(ctx context.Context) context.Context { return module.WithSet(ctx, set) }
-	app.Bootstrap = bootstrap(env, reg)
-	app.Add(append(set.Commands(), web.ServeCommand(set, set.Pages()...))...)
-	return app
-}
-
-func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *module.Set {
+func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
 	var set *module.Set
+	var cat *module.Catalog
+	mc := module.Context{
+		Current: func() *module.Snapshot {
+			if set == nil {
+				return nil
+			}
+			return set.Current()
+		},
+		Evaluate: func(ctx context.Context, q db.Querier) (*module.Snapshot, error) {
+			if set == nil {
+				return nil, module.ErrNotEvaluated
+			}
+			return set.Evaluate(ctx, q)
+		},
+		Catalog: func() *module.Catalog { return cat },
+		Env:     env,
+	}
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
 	}
-	all := append([]module.Module{
-		coremodule.Module{Version: version, Guard: guard, Clients: clients, Now: now},
-		contactsmodule.Module{},
-		mailmodule.Module{Clients: clients, Now: now},
-		calendarmodule.Module{},
-		notionmodule.Module{Env: env},
-		mediamodule.Module{Now: now},
-		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables(), serverops.Callables()}},
-		notifymodule.Module{Budget: budgetStatus},
-		grafanamodule.Module{},
-	}, mods...)
-	set, err := module.NewSet(reg, st, env, all...)
+	bind := app.NewBindings(env, mc.Tools, now)
+	cat, err := app.Catalog(app.Dependencies{
+		Version:  version,
+		Guard:    guard,
+		Clients:  clients,
+		Now:      now,
+		Env:      env,
+		Budget:   budgetStatus,
+		Bindings: bind,
+	}, mc)
 	if err != nil {
 		panic(err)
 	}
-	return set
+	reg := cat.Settings()
+	st := config.NewState(reg)
+	st.SetConnectionReconciler(connections.Reconcile)
+	st.SetAccountCredential(cat.AccountCredential())
+	st.SetHostAccounts(cat.HostAccounts())
+	set, err = module.NewSet(cat, reg, env, func(ctx context.Context) (*db.DB, config.Config, error) {
+		a, err := app.Open(ctx, env, cat, app.OneShot)
+		if err != nil {
+			return nil, config.Config{}, err
+		}
+		return a.DB(), a.Config(), nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	c := cli.New("atrium", setup)
+	c.Version = version
+	c.Env = env
+	c.Settings = reg
+	c.State = st
+	c.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
+	c.Bootstrap = bootstrap(env, reg)
+	c.Add(append(set.Commands(), bind.ServeCommand(set.Pages()...))...)
+	return c
 }
 
 func budgetStatus(ctx context.Context, q db.Querier, now float64, loc *time.Location) (notify.Budget, error) {
-	st, err := budget.StatusAt(ctx, q, now, loc)
-	return notify.Budget{SpentUSD: st.SpentUSD, BudgetUSD: st.BudgetUSD, Share: st.Share}, err
+	st, err := inference.StatusAt(ctx, q, now, loc)
+	return notify.Budget{
+		SpentUSD: st.SpentUSD, BudgetUSD: st.BudgetUSD, Share: st.Share,
+		CommittedUSD: st.CommittedUSD, ReservedUSD: st.ReservedUSD, UnknownUSD: st.UnknownUSD,
+		ExpiredUSD: st.ExpiredUSD, InteractiveCeilingUSD: st.InteractiveCeilingUSD,
+	}, err
 }

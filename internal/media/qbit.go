@@ -18,6 +18,7 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/urlx"
 )
 
@@ -60,6 +61,38 @@ var (
 type QbitError string
 
 func (e QbitError) Error() string { return string(e) }
+
+type QbitStatusError struct {
+	Path   string
+	Status int
+}
+
+func (e *QbitStatusError) Error() string {
+	return fmt.Sprintf("qBittorrent: %s: %d", e.Path, e.Status)
+}
+
+type QbitRejected string
+
+func (e QbitRejected) Error() string { return string(e) }
+
+func IsQbit(err error) bool {
+	var failure QbitError
+	var rejected QbitRejected
+	var status *QbitStatusError
+	return errors.As(err, &failure) || errors.As(err, &rejected) || errors.As(err, &status)
+}
+
+func QbitDefinite(err error) bool {
+	var rejected QbitRejected
+	if errors.As(err, &rejected) {
+		return true
+	}
+	var status *QbitStatusError
+	if errors.As(err, &status) {
+		return status.Status >= 400 && status.Status < 500
+	}
+	return false
+}
 
 type Torrent struct {
 	Hash        string  `json:"hash"`
@@ -291,6 +324,14 @@ func TorrentHash(data []byte) (string, error) {
 	if !found {
 		return "", QbitError("not a torrent file")
 	}
+	fields, isInfo := info[0].(bdict)
+	if !isInfo {
+		return "", QbitError("not a torrent file")
+	}
+	pieces, isBytes := fields["pieces"][0].([]byte)
+	if !isBytes || len(pieces) == 0 || len(pieces)%sha1.Size != 0 {
+		return "", QbitError("the torrent has no v1 info hash")
+	}
 	sum := sha1.Sum(data[info[1].(int):info[2].(int)]) //nolint:gosec // the BitTorrent v1 info hash is SHA-1
 	return hex.EncodeToString(sum[:]), nil
 }
@@ -298,6 +339,7 @@ func TorrentHash(data []byte) (string, error) {
 type Qbit struct {
 	base, key string
 	http      *http.Client
+	report    func(context.Context, connections.State, string)
 }
 
 func NewQbit(base, key string, client *http.Client) *Qbit {
@@ -323,14 +365,26 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
+			q.observe(ctx, connections.Failing, "qBittorrent unreachable: "+failure.class)
 			return nil, QbitError("qBittorrent unreachable: " + failure.class)
 		}
 		return nil, err
 	}
 	if res.status != http.StatusOK {
-		return nil, QbitError(fmt.Sprintf("qBittorrent: %s: %d", path, res.status))
+		state := connections.Failing
+		if res.status == http.StatusUnauthorized || res.status == http.StatusForbidden {
+			state = connections.NeedsReauth
+		}
+		q.observe(ctx, state, fmt.Sprintf("qBittorrent answered %d", res.status))
+		return nil, &QbitStatusError{Path: path, Status: res.status}
 	}
 	return res.body, nil
+}
+
+func (q *Qbit) observe(ctx context.Context, state connections.State, reason string) {
+	if q.report != nil {
+		q.report(ctx, state, reason)
+	}
 }
 
 func (q *Qbit) post(ctx context.Context, path string, form []param) error {
@@ -344,7 +398,7 @@ func checkAdd(body []byte) error {
 		if text == "" {
 			text = "no reply"
 		}
-		return QbitError("qBittorrent did not accept the torrent: " + text)
+		return QbitRejected("qBittorrent did not accept the torrent: " + text)
 	}
 	return nil
 }

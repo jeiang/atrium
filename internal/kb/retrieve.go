@@ -4,14 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	actx "github.com/jeiang/atrium/internal/assistant/context"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/textsearch"
+	"github.com/jeiang/atrium/internal/tokens"
 )
 
 const (
@@ -53,15 +56,7 @@ func eligibleWhere(alias string, project int64, now float64) (string, []any) {
 }
 
 func citedIDs(ctx context.Context, q db.Querier, threadID int64) (map[int64]bool, error) {
-	rows, err := q.QueryContext(ctx, "SELECT content_json FROM thread_messages WHERE thread_id = ?", threadID)
-	if err != nil {
-		return nil, err
-	}
-	contents, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var content string
-		err := r.Scan(&content)
-		return content, err
-	})
+	contents, err := journal.ContentJSON(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -149,8 +144,8 @@ type vectorHit struct {
 }
 
 func vectorHits(ctx context.Context, q db.Querier, idx embed.Index, vector []float64, project int64, now float64) ([]vectorHit, error) {
-	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.KBTable()).Scan(&total); err != nil {
+	total, err := embed.KBCount(ctx, q, idx)
+	if err != nil {
 		return nil, err
 	}
 	if total == 0 {
@@ -158,17 +153,16 @@ func vectorHits(ctx context.Context, q db.Querier, idx embed.Index, vector []flo
 	}
 	blob := embed.Serialize(vector)
 	k := min(RetrievalTop, total, embed.KNNMax)
-	rows, err := q.QueryContext(ctx, "SELECT rowid, distance FROM "+idx.KBTable()+" WHERE embedding MATCH ? AND k = ? ORDER BY distance", blob, k)
+	found, err := embed.KBHits(ctx, q, idx, blob, k)
 	if err != nil {
 		return nil, err
 	}
-	near, err := db.Collect(rows, func(r *sql.Rows) (vectorHit, error) {
-		var h vectorHit
-		err := r.Scan(&h.id, &h.distance)
-		return h, err
-	})
-	if err != nil || len(near) == 0 {
-		return near, err
+	near := make([]vectorHit, len(found))
+	for i, h := range found {
+		near[i] = vectorHit{id: h.ID, distance: h.Distance}
+	}
+	if len(near) == 0 {
+		return near, nil
 	}
 	ids := make([]int64, len(near))
 	for i, h := range near {
@@ -180,7 +174,7 @@ func vectorHits(ctx context.Context, q db.Querier, idx embed.Index, vector []flo
 	}
 	where, args := eligibleWhere("r", project, now)
 	args = append(args, string(raw))
-	rows, err = q.QueryContext(ctx, "SELECT r.id"+fromClause()+" WHERE "+where+" AND r.id IN (SELECT value FROM json_each(?))", args...)
+	rows, err := q.QueryContext(ctx, "SELECT r.id"+fromClause()+" WHERE "+where+" AND r.id IN (SELECT value FROM json_each(?))", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -229,12 +223,12 @@ func matchedTerms(rec Record, terms []string) int {
 }
 
 func clipBody(body string, id int64) string {
-	if actx.EstimateTokens(body) <= RetrievalBody {
+	if tokens.Estimate(body) <= RetrievalBody {
 		return body
 	}
 	clipped := body
 	runes := []rune(body)
-	limit := int(RetrievalBody * actx.CharsPerToken)
+	limit := int(RetrievalBody * tokens.CharsPerToken)
 	if limit < len(runes) {
 		clipped = strings.TrimSpace(string(runes[:limit]))
 	}
@@ -271,11 +265,28 @@ func Retrieve(ctx context.Context, d *db.DB, o RetrieveOptions) (Retrieval, erro
 	var vec []int64
 	ftsOnly := true
 	if o.Embed != nil {
-		if idx, err := embed.Active(ctx, d.Read); err == nil {
+		idx, ierr := embed.Active(ctx, d.Read)
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		if ierr != nil {
+			semanticSkipped(ctx, "chat_retrieval", "no_index")
+		} else {
 			embedCtx, cancel := context.WithTimeout(ctx, RetrievalWindow)
 			vectors, verr := o.Embed(embedCtx, []string{embed.QueryText(text)})
+			expired := errors.Is(embedCtx.Err(), context.DeadlineExceeded)
 			cancel()
-			if verr == nil && len(vectors) > 0 {
+			if err := ctx.Err(); err != nil {
+				return out, err
+			}
+			switch {
+			case expired:
+				semanticSkipped(ctx, "chat_retrieval", "timeout")
+			case verr != nil:
+				semanticSkipped(ctx, "chat_retrieval", "unavailable")
+			case len(vectors) == 0 || len(vectors[0]) == 0:
+				semanticSkipped(ctx, "chat_retrieval", "no_vector")
+			default:
 				near, err := vectorHits(ctx, d.Read, idx, vectors[0], o.ProjectID, o.Now)
 				if err != nil {
 					return out, err
@@ -325,11 +336,11 @@ func Retrieve(ctx context.Context, d *db.DB, o RetrieveOptions) (Retrieval, erro
 	for _, id := range order {
 		rec := byID[id]
 		body := clipBody(rec.Body, rec.ID)
-		tokens := actx.EstimateTokens(rec.Title + "\n" + body)
-		if total+tokens > o.Budget {
+		n := tokens.Estimate(rec.Title + "\n" + body)
+		if total+n > o.Budget {
 			continue
 		}
-		total += tokens
+		total += n
 		out.Records = append(out.Records, Retrieved{
 			ID: rec.ID, Title: rec.Title, Text: body,
 			Date: time.Unix(int64(rec.UpdatedAt), 0).UTC().Format("2006-01-02"), Confirmed: rec.Confirmed(),

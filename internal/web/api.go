@@ -3,22 +3,27 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/auth/oidc"
+	"github.com/jeiang/atrium/internal/application"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
 )
 
 const (
-	APIPrefix    = "/api/v1"
-	SourceBearer = "bearer"
+	APIPrefix       = "/api/v1"
+	SourceBearer    = "bearer"
+	RequestIDHeader = "Atrium-Request-Id"
+	ProblemPrefix   = "urn:atrium:problem:"
 
 	apiPrefix = "/api/"
 	jsonType  = "application/json"
@@ -26,24 +31,24 @@ const (
 )
 
 type apiError struct {
-	Code    string       `json:"code"`
-	Message string       `json:"message"`
-	Fields  []FieldError `json:"fields,omitempty"`
+	Code         string       `json:"code"`
+	Message      string       `json:"message"`
+	Fields       []FieldError `json:"fields,omitempty"`
+	EffectIDs    []int64      `json:"effect_ids,omitempty"`
+	RetryAfter   int64        `json:"retry_after,omitempty"`
+	DiagnosticID string       `json:"diagnostic_id,omitempty"`
+	Type         string       `json:"type,omitempty"`
+	Status       int          `json:"status,omitempty"`
+	Instance     string       `json:"instance,omitempty"`
+	CommandID    string       `json:"command_id,omitempty"`
+}
+
+func newAPIError(w http.ResponseWriter, status int, code, message string) apiError {
+	return apiError{Code: code, Message: message, Type: ProblemPrefix + code, Status: status, Instance: w.Header().Get(RequestIDHeader)}
 }
 
 func isAPI(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, apiPrefix) || r.URL.Path == strings.TrimSuffix(apiPrefix, "/")
-}
-
-func withIdentity(ctx context.Context, who Identity) context.Context {
-	return context.WithValue(ctx, identityKey{}, who)
-}
-
-func me(w http.ResponseWriter, r *http.Request) {
-	who, _ := IdentityOf(r.Context())
-	JSON(w, http.StatusOK, map[string]any{
-		"subject": who.Subject, "email": who.Email, "name": who.Name, "admin": who.Admin, "api_version": 1,
-	})
 }
 
 const (
@@ -116,7 +121,21 @@ func JSON(w http.ResponseWriter, status int, v any) {
 }
 
 func APIError(w http.ResponseWriter, status int, code, message string, fields ...FieldError) {
-	JSON(w, status, map[string]apiError{"error": {Code: code, Message: message, Fields: fields}})
+	body := newAPIError(w, status, code, message)
+	body.Fields = fields
+	JSON(w, status, map[string]apiError{"error": body})
+}
+
+func CommandError(w http.ResponseWriter, status int, code, message, commandID string) {
+	body := newAPIError(w, status, code, message)
+	body.CommandID = commandID
+	JSON(w, status, map[string]apiError{"error": body})
+}
+
+func APIErrorWith(w http.ResponseWriter, status int, code, message string, extra map[string]any) {
+	body := map[string]any{"error": newAPIError(w, status, code, message)}
+	maps.Copy(body, extra)
+	JSON(w, status, body)
 }
 
 func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -155,12 +174,27 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, optional bool) bo
 	return false
 }
 
-func (d *Deps) API(method, pattern string, h http.HandlerFunc) {
+func (d *Deps) apiRoute(method, pattern string, h http.HandlerFunc) {
+	if d.commands != nil && isUnsafe(method) {
+		h = d.commands(APIPrefix+pattern, h).ServeHTTP
+	}
 	d.route(method, APIPrefix+pattern, accessDefault, h)
 }
 
-func (d *Deps) APIAdmin(method, pattern string, h http.HandlerFunc) {
-	d.route(method, APIPrefix+pattern, accessAdmin, h)
+func (d *Deps) Command(pattern string, h http.HandlerFunc) http.HandlerFunc {
+	if d.commands == nil {
+		return h
+	}
+	return d.commands(pattern, h).ServeHTTP
+}
+
+func MountAPI(d *Deps, method, pattern string, shape application.APIShape, h http.HandlerFunc) {
+	if shape.ReadOnlyPost {
+		d.route(method, APIPrefix+pattern, accessDefault, h)
+	} else {
+		d.apiRoute(method, pattern, h)
+	}
+	(*d.routes)[len(*d.routes)-1].api = &shape
 }
 
 func bearerToken(r *http.Request) (string, bool) {
@@ -173,27 +207,42 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	h := w.Header()
 	setSecurityHeaders(h)
 	h.Set("Cache-Control", "no-store")
-	if g.sessions == nil || !g.auth.OIDC() {
-		APIError(w, http.StatusNotFound, "api_unavailable", "The API needs OIDC sign-in.")
+	h.Set(RequestIDHeader, rand.Text())
+	token, ok := bearerToken(r)
+	addr, addrOK := g.clientAddr(r)
+	if !addrOK {
+		APIError(w, http.StatusBadRequest, "bad_request", "The forwarded address is not valid.")
 		return
 	}
-	token, ok := bearerToken(r)
+	charges := []limitCharge{{class: classAPIAddress, key: addr.String()}}
+	if ok && boundedToken(token) {
+		charges = append(charges, limitCharge{class: classAPIToken, key: tokenKey(token)})
+	}
+	if wait, allowed := g.limits.charge(g.limits.now(), charges...); !allowed {
+		retryAfter(w, wait)
+		APIError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests.")
+		return
+	}
 	if !ok {
 		h.Set("WWW-Authenticate", realm)
 		APIError(w, http.StatusUnauthorized, "unauthenticated", "A bearer access token is required.")
 		return
 	}
-	s, err := g.sessions.AuthenticateBearer(r.Context(), token)
+	if g.bearers == nil {
+		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
+		return
+	}
+	tok, err := g.bearers.Authenticate(r.Context(), token)
 	switch {
 	case err == nil:
-	case errors.Is(err, oidc.ErrAPIOff):
+	case errors.Is(err, authapp.ErrAPIOff):
 		APIError(w, http.StatusNotFound, "api_unavailable", "The API is not configured.")
 		return
-	case errors.Is(err, oidc.ErrToken):
+	case errors.Is(err, authapp.ErrInvalid), errors.Is(err, authapp.ErrRevoked), errors.Is(err, authapp.ErrExpired), errors.Is(err, authapp.ErrToken):
 		h.Set("WWW-Authenticate", realm+`, error="invalid_token"`)
 		APIError(w, http.StatusUnauthorized, "invalid_token", "The access token was refused.")
 		return
-	case errors.Is(err, oidc.ErrDenied):
+	case errors.Is(err, authapp.ErrDenied):
 		APIError(w, http.StatusForbidden, "forbidden", "This account has no access.")
 		return
 	default:
@@ -201,19 +250,26 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
 		return
 	}
-	who := Identity{Source: SourceBearer, Subject: s.Subject, Email: s.Email, Name: s.Name, Admin: s.Admin}
-	if !who.Admin && g.classify != nil && g.classify(r) == accessAdmin {
-		APIError(w, http.StatusForbidden, "admin_required", "Administrator access is required.")
-		return
-	}
+	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName, Expires: tok.ExpiresAt}
 	if isUnsafe(r.Method) {
 		if !sameOrigin(r) {
 			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
 			return
 		}
-		if r.ContentLength != 0 {
-			mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-			if mediaType != jsonType {
+		var shape *application.APIShape
+		if g.apiShape != nil {
+			shape = g.apiShape(r)
+		}
+		if shape != nil && shape.BeforeBody != nil {
+			if err := shape.BeforeBody(r.Context()); err != nil {
+				APIFail(w, err)
+				return
+			}
+		}
+		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		multipart := mediaType == "multipart/form-data" && shape != nil && shape.Body == application.BodyMultipart
+		if r.ContentLength != 0 && (shape == nil || !shape.IgnoreBody) {
+			if (mediaType != jsonType && !multipart) || (mediaType == jsonType && shape != nil && shape.Body == application.BodyMultipart && !shape.AllowJSON) {
 				APIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send application/json.")
 				return
 			}
@@ -226,8 +282,44 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 				return
 			}
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
+		cap := int64(limit)
+		if multipart {
+			cap = shape.BodyLimit
+		}
+		if r.ContentLength > cap && (shape == nil || !shape.IgnoreBody) {
+			APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, cap)
+	} else if g.apiShape != nil {
+		if shape := g.apiShape(r); shape != nil && shape.Body == application.BodyBinary && shape.BeforeBody != nil {
+			if err := shape.BeforeBody(r.Context()); err != nil {
+				APIFail(w, err)
+				return
+			}
+		}
 	}
-	ctx := withIdempotency(withIdentity(r.Context(), who), g.idem)
+	who.BearerID = tok.ID
+	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
+		_, err := g.bearers.Authenticate(ctx, token)
+		return err
+	})
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
+
+type originKey struct{}
+
+func Origin(r *http.Request) string {
+	scheme := "https"
+	if r.TLS == nil && strings.HasPrefix(r.Host, "127.0.0.1") {
+		scheme = "http"
+	}
+	return scheme + "://" + r.Host
+}
+
+func RequestOrigin(ctx context.Context) string {
+	origin, _ := ctx.Value(originKey{}).(string)
+	return origin
+}
+
+func (d *Deps) Owner() string { return d.owner }

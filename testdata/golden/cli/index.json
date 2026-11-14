@@ -149,9 +149,10 @@
       "--account",
       "icloud"
     ],
-    "exit_code": 0,
+    "exit_code": 2,
     "name": "watch-one-pass",
-    "stdout": "watch-one-pass.stdout"
+    "stdout": "watch-one-pass.stdout",
+    "stderr": "watch-one-pass.stderr"
   },
   {
     "argv": [
@@ -163,7 +164,7 @@
     "env": {
       "GMAIL_APP_PASSWORD": ""
     },
-    "exit_code": 1,
+    "exit_code": 2,
     "name": "watch-missing-credentials",
     "stderr": "watch-missing-credentials.stderr",
     "stdout": "watch-missing-credentials.stdout"
@@ -536,7 +537,7 @@
       "--selection",
       "{\"groups\": []}"
     ],
-    "exit_code": 1,
+    "exit_code": 2,
     "name": "proposals-approve-bad-selection",
     "stderr": "proposals-approve-bad-selection.stderr",
     "stdout": "proposals-approve-bad-selection.stdout"
@@ -550,7 +551,7 @@
       "--selection",
       "{"
     ],
-    "exit_code": 1,
+    "exit_code": 2,
     "name": "proposals-approve-bad-json",
     "stderr": "proposals-approve-bad-json.stderr",
     "stdout": "proposals-approve-bad-json.stdout"
@@ -711,8 +712,9 @@
     "env": {
       "ANTHROPIC_API_KEY": ""
     },
-    "exit_code": 0,
+    "exit_code": 1,
     "name": "agent-run-not-configured",
+    "stderr": "agent-run-not-configured.stderr",
     "stdout": "agent-run-not-configured.stdout"
   },
   {
@@ -722,7 +724,7 @@
       "--port",
       "1"
     ],
-    "exit_code": 1,
+    "exit_code": 78,
     "name": "serve-proxy-without-host",
     "stderr": "serve-proxy-without-host.stderr",
     "stdout": "serve-proxy-without-host.stdout"

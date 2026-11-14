@@ -26,7 +26,11 @@ CREATE TABLE IF NOT EXISTS threads (
     base_branch TEXT,
     agent TEXT,
     beta_set TEXT,
-    speed TEXT
+    speed TEXT,
+    tainted_at REAL,
+    taint_private INTEGER NOT NULL DEFAULT 0,
+    taint_web INTEGER NOT NULL DEFAULT 0,
+    marks INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS threads_updated ON threads (archived, updated_at);
 CREATE INDEX IF NOT EXISTS threads_parent_run ON threads (parent_run_id);
@@ -78,6 +82,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     state TEXT NOT NULL,
     error TEXT,
     result_id INTEGER,
+    result TEXT,
     started_at REAL NOT NULL,
     finished_at REAL,
     UNIQUE (run_id, tool_use_id)
@@ -94,8 +99,20 @@ CREATE TABLE IF NOT EXISTS tool_results (
 CREATE INDEX IF NOT EXISTS tool_results_run ON tool_results (run_id);
 CREATE TABLE IF NOT EXISTS usage (
     id INTEGER PRIMARY KEY,
+    attempt_key TEXT NOT NULL UNIQUE,
     ts REAL NOT NULL,
-    request_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    expires_at REAL NOT NULL,
+    settled_at REAL,
+    state TEXT NOT NULL CHECK (state IN ('reserved','settled','unknown','expired')),
+    budget_class TEXT NOT NULL CHECK (budget_class IN ('interactive','unattended','classification','subscription')),
+    reservation_nusd INTEGER NOT NULL CHECK (reservation_nusd >= 0),
+    accounted_nusd INTEGER NOT NULL DEFAULT 0 CHECK (accounted_nusd >= 0),
+    estimated_prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    max_output_tokens INTEGER NOT NULL DEFAULT 0,
+    max_searches INTEGER NOT NULL DEFAULT 0,
+    cache_ttl TEXT NOT NULL DEFAULT '5m',
+    request_id TEXT,
     source TEXT NOT NULL,
     provider TEXT NOT NULL,
     thread_id INTEGER REFERENCES threads(id),
@@ -104,42 +121,39 @@ CREATE TABLE IF NOT EXISTS usage (
     job_name TEXT,
     model TEXT NOT NULL,
     effort TEXT NOT NULL,
-    iterations TEXT NOT NULL,
-    input_tokens INTEGER NOT NULL,
-    cache_write_5m INTEGER NOT NULL,
-    cache_write_1h INTEGER NOT NULL,
-    cache_read INTEGER NOT NULL,
-    output_tokens INTEGER NOT NULL,
+    iterations TEXT NOT NULL DEFAULT '[]',
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_5m INTEGER NOT NULL DEFAULT 0,
+    cache_write_1h INTEGER NOT NULL DEFAULT 0,
+    cache_read INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
     reasoning_tokens INTEGER NOT NULL DEFAULT 0,
-    searches INTEGER NOT NULL,
+    searches INTEGER NOT NULL DEFAULT 0,
     tool_calls INTEGER NOT NULL DEFAULT 0,
     wall_ms INTEGER NOT NULL DEFAULT 0,
-    tier TEXT NOT NULL,
-    cost_usd REAL NOT NULL,
+    tier TEXT NOT NULL DEFAULT '',
+    cost_usd REAL NOT NULL DEFAULT 0,
     partial INTEGER NOT NULL DEFAULT 0,
     unpriced INTEGER NOT NULL DEFAULT 0,
     clear_edits INTEGER NOT NULL DEFAULT 0,
     cleared_tokens INTEGER NOT NULL DEFAULT 0,
     compaction INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (request_id)
-);
-CREATE INDEX IF NOT EXISTS usage_ts ON usage (ts);
-CREATE INDEX IF NOT EXISTS usage_thread ON usage (thread_id);
-CREATE INDEX IF NOT EXISTS usage_run ON usage (run_id);
-CREATE TABLE IF NOT EXISTS agent_writes (
-    id INTEGER PRIMARY KEY,
-    ts REAL NOT NULL,
-    thread_id INTEGER REFERENCES threads(id),
-    run_id INTEGER REFERENCES runs(id),
-    tool TEXT NOT NULL,
-    target TEXT NOT NULL,
-    before_json TEXT,
-    after_json TEXT,
-    undo_json TEXT,
-    undone_at REAL,
-    state TEXT NOT NULL DEFAULT 'ok',
     error TEXT,
-    resolved_at REAL
+    UNIQUE (provider, request_id),
+    CHECK ((state = 'settled' AND settled_at IS NOT NULL) OR state <> 'settled')
+);
+CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
+CREATE INDEX IF NOT EXISTS usage_thread ON usage(thread_id);
+CREATE INDEX IF NOT EXISTS usage_run ON usage(run_id);
+CREATE INDEX IF NOT EXISTS usage_month ON usage(month, budget_class);
+CREATE INDEX IF NOT EXISTS usage_pending ON usage(expires_at)
+    WHERE state IN ('reserved','unknown');
+CREATE TABLE IF NOT EXISTS inference_classification_deferrals (
+    month_start REAL PRIMARY KEY,
+    first_at REAL NOT NULL,
+    last_at REAL NOT NULL,
+    last_caller TEXT NOT NULL,
+    last_item_key TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS context_ledger (
     id INTEGER PRIMARY KEY,
@@ -157,3 +171,99 @@ CREATE TABLE IF NOT EXISTS context_ledger (
     to_seq INTEGER,
     UNIQUE (run_id, item_id)
 );
+CREATE TRIGGER IF NOT EXISTS threads_read_insert AFTER INSERT ON threads BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS threads_read_update AFTER UPDATE ON threads BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS threads_read_delete AFTER DELETE ON threads BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_messages_read_insert AFTER INSERT ON thread_messages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_messages_read_update AFTER UPDATE ON thread_messages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_messages_read_delete AFTER DELETE ON thread_messages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS runs_read_insert AFTER INSERT ON runs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS runs_read_update AFTER UPDATE OF id, thread_id, parent_run_id, kind, model, effort, state, error, steps, started_at, ended_at, limits_json, skills_json, superseded, stop_requested ON runs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS runs_read_delete AFTER DELETE ON runs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tool_calls_read_insert AFTER INSERT ON tool_calls BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tool_calls_read_update AFTER UPDATE ON tool_calls BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tool_calls_read_delete AFTER DELETE ON tool_calls BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tool_results_read_insert AFTER INSERT ON tool_results BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tool_results_read_update AFTER UPDATE ON tool_results BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tool_results_read_delete AFTER DELETE ON tool_results BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS usage_read_insert AFTER INSERT ON usage BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS usage_read_update AFTER UPDATE ON usage BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS usage_read_delete AFTER DELETE ON usage BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_insert AFTER INSERT ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_update AFTER UPDATE ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_delete AFTER DELETE ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS context_ledger_read_insert AFTER INSERT ON context_ledger BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS context_ledger_read_update AFTER UPDATE ON context_ledger BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS context_ledger_read_delete AFTER DELETE ON context_ledger BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

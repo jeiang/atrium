@@ -13,7 +13,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type settingRow struct {
@@ -82,7 +81,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		listed = append(listed, row.Key)
 	}
 	var registered []string
-	for _, def := range settings.New().Defs() {
+	for _, def := range testSettings().Defs() {
 		registered = append(registered, def.Key)
 	}
 	if !slices.Equal(listed, registered) || !slices.Contains(listed, "monthly_budget_usd") || !slices.Contains(listed, "cache_ttl_chat") {
@@ -102,10 +101,11 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 	}
 
 	t.Run("the budget reader sees the stored value", func(t *testing.T) {
+		token := localAPIToken(t, "settings-usage")
 		base := startServeIn(t, dir)
-		status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/usage", nil)
-		if status != http.StatusOK || !strings.Contains(body, "of $200 used") {
-			t.Errorf("GET /settings/usage = %d, want the $200 budget: %.600s", status, body)
+		usage := (&apiSite{t: t, base: base}).do(http.MethodGet, "/api/v1/usage", token, nil)
+		if budget, _ := usage.json["budget"].(map[string]any); usage.status != http.StatusOK || budget["budget_usd"] != float64(200) {
+			t.Errorf("GET /api/v1/usage = %d, want the $200 budget: %.600s", usage.status, usage.body)
 		}
 	})
 
@@ -114,13 +114,13 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		{"monthly_budget_usd", "0"},
 		{"cache_ttl_chat", "10m"},
 	} {
-		wantMessage := settings.New().Validate(tc.key, tc.value)
+		wantMessage := testSettings().Validate(tc.key, tc.value)
 		if wantMessage == nil {
 			t.Fatalf("registry accepts %s=%s", tc.key, tc.value)
 		}
 		bad := runSettings(t, "set", tc.key, tc.value)
-		if bad.code != cli.ExitError || bad.stdout != "" || bad.stderr != "error: "+wantMessage.Error()+"\n" {
-			t.Errorf("set %s %s: exit %d stdout %q stderr %q, want exit 1 and %q", tc.key, tc.value, bad.code, bad.stdout, bad.stderr, wantMessage)
+		if bad.code != cli.ExitUsage || bad.stdout != "" || bad.stderr != "error: "+wantMessage.Error()+"\n" {
+			t.Errorf("set %s %s: exit %d stdout %q stderr %q, want exit 2 and %q", tc.key, tc.value, bad.code, bad.stdout, bad.stderr, wantMessage)
 		}
 	}
 	if v, ok := storedSetting(t, path, "monthly_budget_usd"); !ok || v != "200" {
@@ -162,23 +162,22 @@ func TestRemovedSettingsDoNotBlockStartup(t *testing.T) {
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('agent_profile_key_chars', '99')"); err != nil {
 		t.Fatal(err)
 	}
 	_ = d.Close()
 
-	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnightly_stale_months = 3\n[notion]\nnotion_link_max_tokens = 200\n"))
 	setEnv(t, "ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS", "500")
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
-		t.Fatalf("settings list with removed pins: %d %s", ran.code, ran.stderr)
+		t.Fatalf("settings list with a removed row and a removed pin: %d %s", ran.code, ran.stderr)
 	}
-	if strings.Contains(runApp(t, "settings", "list").stdout, "nightly_stale_months") {
+	if strings.Contains(runApp(t, "settings", "list").stdout, "agent_profile_key_chars") {
 		t.Error("a removed setting is still listed")
 	}
 
-	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnot_a_setting = 1\n"))
-	if ran := runApp(t, "settings", "list"); ran.code == cli.ExitOK || !strings.Contains(ran.stderr, `unknown key "assistant.not_a_setting"`) {
-		t.Errorf("unknown key = exit %d stderr %q, want a startup error", ran.code, ran.stderr)
+	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnightly_stale_months = 3\n[notion]\nnotion_link_max_tokens = 200\n"))
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "ATRIUM_CONFIG is no longer read") {
+		t.Errorf("ATRIUM_CONFIG = exit %d stderr %q, want the removal refusal", ran.code, ran.stderr)
 	}
 }

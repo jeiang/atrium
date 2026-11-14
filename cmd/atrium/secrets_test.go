@@ -3,15 +3,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
@@ -39,7 +42,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Errorf("set with the value in argv: exit %d stdout %q stderr %q", argv.code, argv.stdout, argv.stderr)
 	}
 	status := runSecrets(t, "", "status")
-	for _, want := range []string{"action_link_key: set\n", "google_oauth_client_secret: unset\n"} {
+	for _, want := range []string{"action_link_key: set\n"} {
 		if !strings.Contains(status.stdout, want) {
 			t.Errorf("status = %q, want %q", status.stdout, want)
 		}
@@ -68,60 +71,146 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Fatalf("secrets delete: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
 	}
 
-	refused := runSecrets(t, value, "set", secrets.GoogleOAuthClientSecret)
-	want := "error: " + settings.EncryptionRequired(secrets.GoogleOAuthClientSecret).Error() + "\n"
-	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, "encrypt the database first") {
-		t.Fatalf("flagged set on plaintext: exit %d stdout %q stderr %q, want %q", refused.code, refused.stdout, refused.stderr, want)
-	}
 	var rows int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets").Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("secrets rows after refusal and delete = %d, %v; want 0", rows, err)
+		t.Errorf("secrets rows after delete = %d, %v; want 0", rows, err)
 	}
 
-	setEnv(t, "ATRIUM_ACTION_LINKS_ACTION_LINK_KEY", "pinned-value")
+}
+
+func TestSecretsRefuseAndReportAFileBackedAppKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	keyPath := filepath.Join(dir, "action-link.key")
+	const value = "file-backed-value-never-printed"
+	if err := os.WriteFile(keyPath, []byte(value+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(host, []byte("[app_keys]\naction_link_key_file = "+strconv.Quote(keyPath)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", host)
+
+	if st := runSecrets(t, "", "status"); !strings.Contains(st.stdout, "action_link_key: file\n") {
+		t.Errorf("status = %q, want action_link_key file", st.stdout)
+	}
+	set := runSecrets(t, value+"\n", "set", secrets.ActionLinkKey)
+	if set.code != cli.ExitError || !strings.Contains(set.stderr, "app_keys.action_link_key_file") || strings.Contains(set.stdout+set.stderr, value) {
+		t.Errorf("set on a file-backed app key: exit %d stdout %q stderr %q", set.code, set.stdout, set.stderr)
+	}
+
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, 'stale', 1.0, 'cli')", secrets.ActionLinkKey); err != nil {
 		t.Fatal(err)
 	}
-	pinned := runSecrets(t, value, "set", secrets.ActionLinkKey)
-	if pinned.code != cli.ExitError || !strings.Contains(pinned.stderr, "pinned by env ATRIUM_ACTION_LINKS_ACTION_LINK_KEY") || strings.Contains(pinned.stderr, value) {
-		t.Errorf("set on a pinned secret: exit %d stderr %q", pinned.code, pinned.stderr)
+	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK || del.stdout != "action_link_key: file\n" {
+		t.Errorf("delete of a stale row under an app key file: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
 	}
-	if st := runSecrets(t, "", "status"); !strings.Contains(st.stdout, "action_link_key: pinned\n") {
-		t.Errorf("status = %q, want action_link_key pinned", st.stdout)
-	}
-	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK || del.stdout != "action_link_key: pinned\n" {
-		t.Errorf("delete of a stale row under a pin: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
-	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets").Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("secrets rows after pinned delete = %d, %v; want 0", rows, err)
+	var rows int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets WHERE name = ?", secrets.ActionLinkKey).Scan(&rows); err != nil || rows != 0 {
+		t.Errorf("secrets rows after delete = %d, %v; want 0", rows, err)
 	}
 }
 
-func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
+func TestPhoneRevokeWorksWhenAnAppKeyFileSuppliesTheKey(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	keyPath := filepath.Join(dir, "action-link.key")
+	if err := os.WriteFile(keyPath, []byte("file-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigAppend(t, defaultHostConfig, dir, "host-app-key.toml",
+		"\n[app_keys]\naction_link_key_file = "+strconv.Quote(keyPath)+"\n"))
+	base, _, _ := startServeStoppable(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil); code != http.StatusOK {
+		t.Fatalf("notifications page = %d", code)
+	}
+	code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{})
+	if code != http.StatusOK {
+		t.Fatalf("rotate with an app key file: %d %q", code, body)
+	}
+}
+
+func TestEmptyAppKeyFileIsRefusedAtStartup(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_CONFIG", "")
-	setEnv(t, "ATRIUM_MEDIA_LINK_KEY", "")
 	for name, body := range map[string]string{"empty": "", "blank": " \n\t\n"} {
 		path := filepath.Join(dir, name+".key")
 		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		setEnv(t, "ATRIUM_MEDIA_LINK_KEY_FILE", path)
-		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_MEDIA_LINK_KEY_FILE") || r.stdout != "" {
-			t.Errorf("%s file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
-		}
-		toml := filepath.Join(dir, name+".toml")
-		if err := os.WriteFile(toml, []byte("[media]\nlink_key_file = \""+path+"\"\n"), 0o600); err != nil {
+		host := filepath.Join(dir, name+".toml")
+		if err := os.WriteFile(host, []byte("[app_keys]\nlink_key_file = "+strconv.Quote(path)+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		setEnv(t, "ATRIUM_MEDIA_LINK_KEY_FILE", "")
-		setEnv(t, "ATRIUM_CONFIG", toml)
-		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "media.link_key_file") || r.stdout != "" {
-			t.Errorf("%s config file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
+		setEnv(t, "ATRIUM_HOST_CONFIG", host)
+		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "link_key_file") || r.stdout != "" {
+			t.Errorf("%s file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
 		}
-		setEnv(t, "ATRIUM_CONFIG", "")
+	}
+}
+
+type unreadInput struct{ t *testing.T }
+
+func (r unreadInput) Read([]byte) (int, error) {
+	r.t.Error("standard input was read before the secret name was checked")
+	return 0, os.ErrClosed
+}
+
+func TestSettingAndSecretRefusalsComeBeforeTheDatabaseAndInput(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	if ran := runSettings(t, "get", "no_such_key_zz"); ran.code != cli.ExitUsage || !strings.Contains(ran.stderr, "no_such_key_zz") {
+		t.Errorf("settings get no_such_key_zz = exit %d, stderr %q", ran.code, ran.stderr)
+	}
+	if ran := runSettings(t, "get", secrets.ActionLinkKey); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "is a secret") {
+		t.Errorf("settings get %s = exit %d, stderr %q", secrets.ActionLinkKey, ran.code, ran.stderr)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("refused reads created the database: %v", err)
+	}
+	var out, errs bytes.Buffer
+	app := defaultApp(t)
+	app.Stdin = unreadInput{t}
+	if code := app.Run(context.Background(), []string{"secrets", "set", "no_such_secret_zz"}, &out, &errs); code != cli.ExitUsage || !strings.Contains(errs.String(), "no_such_secret_zz") {
+		t.Errorf("secrets set no_such_secret_zz = exit %d, stderr %q", code, errs.String())
+	}
+	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK {
+		t.Fatalf("secrets delete with nothing stored: exit %d stderr %q", del.code, del.stderr)
+	}
+	d := mustConnect(t, path, keyFor(t))
+	var outcomes []string
+	rows, err := d.Read.Query("SELECT operation || ' ' || outcome FROM operation_audit ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var row string
+		if err := rows.Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		outcomes = append(outcomes, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"settings.secret-set invalid", "settings.secret-delete noop"}; strings.Join(outcomes, ",") != strings.Join(want, ",") {
+		t.Errorf("operation audit = %v, want %v", outcomes, want)
 	}
 }

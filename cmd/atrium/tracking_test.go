@@ -16,19 +16,20 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
 type fakeShip24 struct {
-	mu           sync.Mutex
-	creates      int
-	results      int
-	unsubscribes int
-	requests     int
-	failCreate   int
-	milestone    string
-	refuse       bool
+	mu             sync.Mutex
+	creates        int
+	results        int
+	unsubscribes   int
+	requests       int
+	failCreate     int
+	milestone      string
+	refuse         bool
+	redirectCreate string
+	replayed       int
 }
 
 func (f *fakeShip24) handler(w http.ResponseWriter, r *http.Request) {
@@ -45,12 +46,20 @@ func (f *fakeShip24) handler(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"data":{"trackers":[]}}`))
 	case r.Method == http.MethodPost && r.URL.Path == "/public/v1/trackers":
 		f.creates++
+		if f.redirectCreate != "" {
+			http.Redirect(w, r, f.redirectCreate, http.StatusTemporaryRedirect)
+			return
+		}
 		if f.failCreate != 0 {
 			w.WriteHeader(f.failCreate)
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte(`{"data":{"tracker":{"trackerId":"trk_1","trackingNumber":"1Z999AA10123456784"}}}`))
+	case r.Method == http.MethodPost && r.URL.Path == "/public/v1/replayed":
+		f.replayed++
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"data":{"tracker":{"trackerId":"trk_2","trackingNumber":"1Z999AA10123456784"}}}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/public/v1/trackers/trk_1/results":
 		f.results++
 		event := `{"eventId":"e1","status":"In transit","description":"Package is moving","occurrenceDatetime":"2026-11-08T10:00:00","location":"Hub","statusMilestone":"in_transit"}`
@@ -96,6 +105,12 @@ func (f *fakeShip24) counts() (int, int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.creates, f.results
+}
+
+func (f *fakeShip24) replayCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.replayed
 }
 
 func (f *fakeShip24) requestCount() int {
@@ -150,33 +165,23 @@ func requestTracking(t *testing.T, api *modelLog, d *db.DB, useID string, packag
 	return id
 }
 
-func TestShip24IntegrationTestRecordsOkAndRefusesA401(t *testing.T) {
+func TestShip24ConnectionTestRecordsOkAndRefusesA401(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
-	s := &integrationSite{t: t, dir: dir}
-	s.start()
-	if code, body := s.post("/ship24/test", url.Values{"url": {srv.URL + "/public/v1"}}); code != http.StatusOK {
-		t.Fatalf("Ship24 Test: %d %s", code, body)
-	}
-	if health(t, dir, "ship24") != integrations.OK {
-		t.Fatalf("Ship24 health = %s, want ok", health(t, dir, "ship24"))
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK || connectionState(t, dir, "service/ship24") != "ok" {
+		t.Fatalf("Ship24 Test: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	fake.setRefuse(true)
-	if code, body := s.post("/ship24/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "test failed (needs_reauth)") {
-		t.Fatalf("refused Ship24 Test: %d %s", code, body)
-	}
-	if health(t, dir, "ship24") != integrations.NeedsReauth {
-		t.Fatalf("health after the refused Test = %s, want needs_reauth", health(t, dir, "ship24"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitError ||
+		!strings.Contains(ran.stdout+ran.stderr, "needs_reauth") || connectionState(t, dir, "service/ship24") != "needs_reauth" {
+		t.Fatalf("refused Ship24 Test: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	fake.setRefuse(false)
-	if code, body := s.post("/ship24/test", nil); code != http.StatusOK {
-		t.Fatalf("Ship24 Test after recovery: %d %s", code, body)
-	}
-	if health(t, dir, "ship24") != integrations.OK {
-		t.Fatalf("health after recovery = %s, want ok", health(t, dir, "ship24"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK || connectionState(t, dir, "service/ship24") != "ok" {
+		t.Fatalf("Ship24 Test after recovery: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 }
 
@@ -185,13 +190,12 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "1")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "1"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	for i, number := range []string{"1Z999AA10123456784", "1Z999AA10123456785"} {
 		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -232,7 +236,7 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 		t.Fatalf("Ship24 created %d trackers, want 1", creates)
 	}
 	var undo string
-	if err := d.Read.QueryRow("SELECT undo_json FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&undo); err != nil {
+	if err := d.Read.QueryRow("SELECT undo_json FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&undo); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(undo, "package_untrack") {
@@ -245,12 +249,11 @@ func TestPackagePollingUpdatesStatusAndNotifiesOnceOnDelivered(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	if warm := runApp(t, "settings", "list"); warm.code != cli.ExitOK {
 		t.Fatalf("warm command: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -347,13 +350,12 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
@@ -363,13 +365,9 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	if ran := runApp(t, "proposals", "approve", first); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "outcome is unknown") {
 		t.Fatalf("the unknown outcome was not reported: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
-	var action string
-	if err := d.Read.QueryRow("SELECT state FROM proposal_actions WHERE proposal_id = ? ORDER BY id DESC LIMIT 1", first).Scan(&action); err != nil || action != "unknown" {
-		t.Fatalf("proposal action = %q, %v; want unknown", action, err)
-	}
 	var state string
 	var undo sql.NullString
-	if err := d.Read.QueryRow("SELECT state, undo_json FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&state, &undo); err != nil {
+	if err := d.Read.QueryRow("SELECT state, undo_json FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&state, &undo); err != nil {
 		t.Fatal(err)
 	}
 	if state != "unknown" || undo.Valid {
@@ -383,7 +381,7 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 		t.Fatalf("the retry reached Ship24 (%d creates); want 1", creates)
 	}
 	var writes int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package'").Scan(&writes); err != nil || writes != 1 {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation = 'track_package' AND direction = 'forward'").Scan(&writes); err != nil || writes != 1 {
 		t.Fatalf("track_package writes = %d, %v; want 1 (no Discard)", writes, err)
 	}
 }
@@ -393,13 +391,12 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "1")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "1"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	for i, number := range []string{"1Z999AA10123456784", "1Z999AA10123456785"} {
 		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -412,7 +409,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
 	}
 	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
 		t.Fatal(err)
 	}
 	base := startServeIn(t, dir)
@@ -424,7 +421,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
 		t.Fatalf("activity page: %d", code)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/write/%d/undo", base, writeID), url.Values{}); code != http.StatusSeeOther && code != http.StatusOK {
+	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusSeeOther && code != http.StatusOK {
 		t.Fatalf("undo package tracker: %d %s", code, body)
 	}
 	var tracker string
@@ -447,12 +444,11 @@ func TestPackagePollWithoutAKeyDoesNothing(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", ""))
 	if warm := runApp(t, "settings", "list"); warm.code != cli.ExitOK {
 		t.Fatalf("warm command: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -477,12 +473,11 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
@@ -492,10 +487,10 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
 	}
 	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", ""))
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -505,12 +500,12 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
 		t.Fatalf("activity page: %d", code)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/write/%d/undo", base, writeID), url.Values{}); code != http.StatusConflict {
+	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusConflict {
 		t.Fatalf("undo without a key: %d %s; want 409", code, body)
 	}
-	var undone sql.NullFloat64
+	var undone sql.NullInt64
 	var tracker string
-	if err := d.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", writeID).Scan(&undone); err != nil {
+	if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", writeID).Scan(&undone); err != nil {
 		t.Fatal(err)
 	}
 	if undone.Valid {
@@ -521,5 +516,122 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	}
 	if fake.unsubscribeCount() != 0 {
 		t.Fatalf("Ship24 unsubscribes = %d, want 0", fake.unsubscribeCount())
+	}
+}
+
+func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
+	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
+	t.Cleanup(srv.Close)
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
+	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	for i := 1; i <= 2; i++ {
+		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)", i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := requestTracking(t, api, d, "i1", 1, "track one")
+	if ran := runApp(t, "proposals", "approve", first); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "outcome is unknown") {
+		t.Fatalf("the unknown outcome was not reported: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	var target string
+	if err := d.Read.QueryRow("SELECT target FROM effects WHERE operation = 'track_package' AND state = 'unknown' ORDER BY id DESC LIMIT 1").Scan(&target); err != nil {
+		t.Fatal(err)
+	}
+	if target != "tracking:ups:1Z999AA10123456784" {
+		t.Fatalf("effect target = %q, want the normalized tracking identity", target)
+	}
+	second := requestTracking(t, api, d, "i2", 2, "track two")
+	if ran := runApp(t, "proposals", "approve", second); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "unknown outcome") {
+		t.Fatalf("a second package row bypassed the blocker: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	if creates, _ := fake.counts(); creates != 1 {
+		t.Fatalf("Ship24 created %d trackers, want 1", creates)
+	}
+}
+
+func TestShip24ProbeDropsTheBearerOutsideTheBasePathOnRedirect(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	var mu sync.Mutex
+	seen := map[string]string{}
+	target := "/public/v1/moved"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.URL.Path] = r.Header.Get("Authorization")
+		next := target
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/public/v1/trackers":
+			http.Redirect(w, r, next, http.StatusTemporaryRedirect)
+		case next:
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK {
+		t.Fatalf("probe inside the base path: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	mu.Lock()
+	inside := seen["/public/v1/moved"]
+	mu.Unlock()
+	if inside != "Bearer good" {
+		t.Fatalf("a redirect inside the base path carried %q", inside)
+	}
+	mu.Lock()
+	target = "/other-service"
+	mu.Unlock()
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK {
+		t.Fatalf("probe outside the base path: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	mu.Lock()
+	outside := seen["/other-service"]
+	mu.Unlock()
+	if outside != "" {
+		t.Fatalf("a redirect outside the base path carried %q", outside)
+	}
+}
+
+func TestTrackPackageDoesNotReplayTheTrackerCreationOnARedirect(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	fake := &fakeShip24{milestone: "in_transit", redirectCreate: "/public/v1/replayed"}
+	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
+	t.Cleanup(srv.Close)
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
+	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
+		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
+		t.Fatal(err)
+	}
+	first := requestTracking(t, api, d, "r1", 1, "track redirect")
+	if ran := runApp(t, "proposals", "approve", first); ran.code == cli.ExitOK {
+		t.Fatalf("a redirected tracker creation reported success: %s", ran.stdout)
+	}
+	if creates, _ := fake.counts(); creates != 1 {
+		t.Fatalf("Ship24 tracker creations = %d, want 1", creates)
+	}
+	if replayed := fake.replayCount(); replayed != 0 {
+		t.Fatalf("the tracker creation was replayed %d times", replayed)
+	}
+	var tracker string
+	if err := d.Read.QueryRow("SELECT tracker_id FROM packages WHERE id = 1").Scan(&tracker); err != nil {
+		t.Fatal(err)
+	}
+	if tracker != "" {
+		t.Fatalf("a redirected creation stored tracker %q", tracker)
 	}
 }

@@ -1,0 +1,54 @@
+{{define "export_notion_settings"}}{{$csrf := .CSRF}}{{$s := .Section}}{{$d := $s.Data}}
+{{$enabled := ""}}{{$parent := ""}}{{$parentPinned := false}}{{$private := ""}}{{$privatePinned := false}}{{$kinds := list}}
+{{range $f := .Fields}}{{if eq $f.Key "export_notion_enabled"}}{{$enabled = $f.Value}}{{end}}{{if eq $f.Key "export_notion_parent"}}{{$parent = $f.Value}}{{$parentPinned = $f.Pinned}}{{end}}{{if eq $f.Key "export_notion_kinds"}}{{$kinds = $f.Options}}{{end}}{{if eq $f.Key "export_notion_private_to"}}{{$private = $f.Value}}{{$privatePinned = $f.Pinned}}{{end}}{{end}}
+<form method="post" action="{{.Action}}" class="set-rows" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">{{with opt . "Back" ""}}<input type="hidden" name="back" value="{{.}}">{{end}}
+  <input type="hidden" name="export_notion_enabled" value="false">
+  <div role="group" class="set-row">
+    <label for="export_notion_enabled">Enabled</label>
+    <input id="export_notion_enabled" type="checkbox" role="switch" class="input" name="export_notion_enabled" value="true"{{if eq $enabled "true"}} checked{{end}}>
+  </div>
+  <div role="group" class="set-row"{{if eq .FieldError "export_notion_parent"}} data-invalid{{end}}>
+    <label for="export_notion_parent">Parent page</label>
+    {{if $parentPinned}}<code id="export_notion_parent" class="set-pinned" data-pinned>{{icon "lock"}}{{$parent}}</code>
+    {{else}}<input id="export_notion_parent" name="export_notion_parent" type="text" class="input sm:w-80" value="{{$parent}}" placeholder="https://www.notion.so/…" autocomplete="off" spellcheck="false"{{if eq .FieldError "export_notion_parent"}} aria-invalid="true" aria-describedby="export_notion_parent-error"{{end}}>{{end}}
+    {{if eq .FieldError "export_notion_parent"}}<p id="export_notion_parent-error" class="basis-full text-xs text-destructive" role="alert">{{.Error}}</p>{{end}}
+    {{with $d}}{{with .PageURL}}<a class="basis-full text-end text-xs text-ink-3 underline underline-offset-4" href="{{.}}" target="_blank" rel="noreferrer">Open the parent page</a>{{end}}{{end}}
+  </div>
+  <div role="group" class="set-row" aria-label="Include">
+    <span>Include</span>
+    <div class="flex flex-wrap justify-end gap-3">{{range $kinds}}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="export_notion_kinds" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</div>
+  </div>
+  <div role="group" class="set-row">
+    {{if not $privatePinned}}<input type="hidden" name="export_notion_private_to" value="">{{end}}
+    <label for="export_notion_private_to">Include private records</label>
+    <input id="export_notion_private_to" type="checkbox" role="switch" class="input" name="export_notion_private_to" value="{{$parent}}" data-confirm-private="export_notion_parent" data-confirm-destination="{{$parent}}"{{if and $parent (eq $private $parent)}} checked{{end}}{{if or (not $parent) $privatePinned}} disabled{{end}}>
+    {{if $privatePinned}}<code class="set-pinned basis-full justify-end" data-pinned>{{icon "lock"}}{{$private}}</code>{{end}}
+  </div>
+  <footer>{{with $d}}{{if .Blocked}}<a class="me-auto text-xs underline underline-offset-4" href="/activity?category=knowledge#activity-write-{{.Blocked}}">Blocked by write #{{.Blocked}}</a>{{else if .Last}}<span class="me-auto text-xs text-ink-3">Last export {{ts .Last}}</span>{{end}}{{end}}<button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
+</form>
+{{end}}
+
+{{define "export_obsidian_settings"}}{{$csrf := .CSRF}}{{$s := .Section}}{{$d := $s.Data}}
+{{$dir := ""}}{{$private := ""}}{{$privatePinned := false}}{{$kinds := list}}
+{{with $d}}{{$dir = .Folder}}{{end}}
+{{range $f := .Fields}}{{if eq $f.Key "export_obsidian_kinds"}}{{$kinds = $f.Options}}{{end}}{{if eq $f.Key "export_obsidian_private_to"}}{{$private = $f.Value}}{{$privatePinned = $f.Pinned}}{{end}}{{end}}
+<form method="post" action="{{.Action}}" class="set-rows" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">{{with opt . "Back" ""}}<input type="hidden" name="back" value="{{.}}">{{end}}
+  <div role="group" class="set-row">
+    <label for="export_obsidian_dir">Folder</label>
+    <code id="export_obsidian_dir" class="set-pinned" data-pinned>{{icon "lock"}}{{$dir}}</code>
+  </div>
+  <div role="group" class="set-row" aria-label="Include">
+    <span>Include</span>
+    <div class="flex flex-wrap justify-end gap-3">{{range $kinds}}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="export_obsidian_kinds" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</div>
+  </div>
+  <div role="group" class="set-row">
+    {{if not $privatePinned}}<input type="hidden" name="export_obsidian_private_to" value="">{{end}}
+    <label for="export_obsidian_private_to">Include private records</label>
+    <input id="export_obsidian_private_to" type="checkbox" role="switch" class="input" name="export_obsidian_private_to" value="{{$dir}}" data-confirm-private="export_obsidian_dir" data-confirm-destination="{{$dir}}"{{if and $dir (eq $private $dir)}} checked{{end}}{{if or (not $dir) $privatePinned}} disabled{{end}}>
+    {{if $privatePinned}}<code class="set-pinned basis-full justify-end" data-pinned>{{icon "lock"}}{{$private}}</code>{{end}}
+  </div>
+  <footer>{{with $d}}{{if .Last}}<span class="me-auto text-xs text-ink-3">Last export {{ts .Last}}</span>{{end}}{{end}}<button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
+</form>
+{{end}}

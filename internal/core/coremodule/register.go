@@ -3,50 +3,111 @@ package coremodule
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
+
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
-	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/commands"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
-	"github.com/jeiang/atrium/internal/auth/loginlink"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
+	"github.com/jeiang/atrium/internal/auth/bearercmd"
 	"github.com/jeiang/atrium/internal/auth/oidc"
+	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
+	"github.com/jeiang/atrium/internal/connections/connectionscmd"
+	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
+	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/kb/kbcmd"
+	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	mailpages "github.com/jeiang/atrium/internal/mail/pages"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/mail/mailmodule"
+	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
-	_ "github.com/jeiang/atrium/internal/obs/opsmetrics"
+	"github.com/jeiang/atrium/internal/obs/opsmetrics"
+	"github.com/jeiang/atrium/internal/observability"
 	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/ops/collectors"
+	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
+	"github.com/jeiang/atrium/internal/runtime"
+	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
+	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/writes/writescmd"
 )
 
 type Module struct {
-	Version string
-	Guard   settingscmd.Guard
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
+	Version   string
+	Guard     settingsapp.Guard
+	Clients   func(config.Config) mail.OpenFunc
+	Now       func() float64
+	Resources module.Resources
+	Jobs      jobworker.Dependencies
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
+func (m Module) namer(env config.Env) func(context.Context, *db.DB, config.Config) (rebalance.Namer, error) {
+	return func(ctx context.Context, d *db.DB, cfg config.Config) (rebalance.Namer, error) {
+		if m.Jobs.Classifier == nil {
+			return nil, errors.New("proposal scans are not bound to a classifier")
+		}
+		svc := service.New(ctx, d, cfg, env, nil)
+		svc.Now = m.Now
+		c, err := m.Jobs.Classifier(ctx, svc)
+		if err != nil {
+			return nil, err
+		}
+		return rebalance.SuggestName(c), nil
+	}
+}
+
+func (m Module) Declare(mc module.Context) module.Declaration {
+	operations, bindings := authOperations()
+	reviewOps, reviewBindings := reviewOperations()
+	operations, bindings = append(operations, reviewOps...), append(bindings, reviewBindings...)
+	settingOps, settingBindings := m.settingsOperations()
+	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
+	connectionOps, connectionBindings := connectionsOperations()
+	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
+	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
+	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanRebalanceName, mailapp.ScanDeletionsName, mailapp.ScanGmailLabelsName}, Composite: true})
+	maintenance := maintenanceapp.New(mc.Env, m.Now)
+	openSettings := settingsapp.CLI(mc.Env, m.Guard)
+	commandOps, commandBindings := commandOperations()
+	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
+	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -54,61 +115,162 @@ func (m Module) Register(mc module.Context) module.Registration {
 		}
 		return snap.Enabled(name), nil
 	}
-	return module.Registration{
-		Name:      module.Core,
-		Core:      true,
-		Attention: []attention.Source{attentionsources.Proposals()},
+	store := func(d *db.DB, cfg config.Config) *ledger.Store {
+		s, err := mc.Catalog().Ledger(d, mc.Env, m.Clients(cfg), m.Now)
+		if err != nil {
+			panic(err)
+		}
+		return s
+	}
+	openLedger := func(ctx context.Context) (*reviewapp.Service, func(), error) {
+		cfg, err := config.Load(mc.Env)
+		if err != nil {
+			return nil, nil, err
+		}
+		d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
+		if err != nil {
+			return nil, nil, err
+		}
+		return reviewapp.New(reviewapp.Deps{DB: d, Ledger: store(d, cfg)}), func() { _ = d.Close() }, nil
+	}
+	return module.Declaration{
+		Name:     module.Core,
+		Core:     true,
+		Settings: slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
+		Host:     slices.Concat(config.HostSettings(), backup.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Jobs: []scheduler.Definition{backup.Job(mc.Env, func(ctx context.Context, dest string, forget func(context.Context, db.Querier) error) error {
+			_, err := maintenance.Backup(ctx, maintenanceapp.BackupInput{Dest: dest, Forget: forget})
+			return err
+		})},
+		Attention:         AttentionSources(),
+		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics()),
+		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
+		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
+		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
-			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
+			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
+				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
+			}},
+			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Phone: actionlink.Handler, Routes: func(d *web.Deps, svc *reviewapp.Service) {
+				reviewRoutes(d, func() *reviewapp.Service { return svc })
+			}}), Templates: reviewpages.Templates(), Public: actionlinkPublic, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
-				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
-				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
-			{Start: startOps},
-			{Module: startEmbed},
-			{Module: integrations.Module, Templates: integrations.Templates(), Nav: []web.NavItem{
-				{Label: "Connections", URL: "/settings/integrations", Page: "integrations", Settings: true, Order: 30},
-			}},
-			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
-			{Nav: []web.NavItem{
-				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 50},
+			{Module: web.CoreModule, Nav: []web.NavItem{
+				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
+			}, OIDC: oidcconn.Source()},
+			connweb.Page(connectionService),
+			{Module: func(_ chi.Router, d *web.Deps) {
+				authRoutes(d)
+				commandRoutes(d)
+				m.settingsRoutes(d)
+				connectionRoutes(d)
+				m.maintenanceRoutes(d)
 			}},
 		},
-		Settings: []settings.Group{
-			{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
-		},
+		Groups:     SettingGroups(),
+		Operations: operations,
+		Bindings:   bindings,
+		Services:   m.services(mc),
+		Recover:    recoverProposals,
 		Commands: []*cli.Command{
-			writescmd.Command(mc.Env),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled}),
-			settingscmd.Command(mc.Env, m.Guard),
-			loginlink.Command(),
-			secretscmd.Command(mc.Env),
-			dbcmd.Command(mc.Env),
-			kbcmd.Command(mc.Env),
-			backup.BackupCommand(),
-			backup.RestoreCommand(),
+			writescmd.Command(writescmd.Options{Now: m.Now, Open: openLedger}),
+			ledgercmd.Command(ledgercmd.Options{Now: m.Now, Open: openLedger}),
+			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}.session}),
+			settingscmd.Command(openSettings),
+			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
+			bearercmd.Command(authapp.CLI(mc.Env)),
+			secretscmd.Command(openSettings),
+			dbcmd.Command(maintenance),
+			dbcmd.BackupCommand(maintenance),
+			dbcmd.RestoreCommand(maintenance),
+			catalogCommand(mc),
 		},
+	}
+}
+
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Proposals(), attentionsources.ClassificationBudget()}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
+		{Name: "budget", Title: "Monthly budget", Page: usagepages.URL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
 	}
 }
 
 var log = logx.Logger("atrium.core")
 
-func startOps(ctx context.Context, d *web.Deps) error {
-	stop, err := ops.Start(ctx, d.DB, d.Env)
-	if err != nil {
-		log.Error("ops listener did not start", logx.Err, err.Error())
-		return nil
+const (
+	embedEvery       = time.Minute
+	embedStepTimeout = 20 * time.Minute
+	recoverInterval  = time.Minute
+	recoveryStall    = 5 * time.Minute
+)
+
+func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {
+	n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9)
+	if n > 0 {
+		log.Warn("recovered interrupted approved proposals", "count", n)
 	}
-	d.OnClose(stop)
-	return nil
+	if err != nil {
+		return err
+	}
+	return commands.New(d).Prune(ctx)
 }
 
-const embedEvery = time.Minute
+func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
+	return []runtime.ServiceDefinition{
+		{Name: "recovery", Critical: true, Stall: recoveryStall, Run: func(ctx context.Context, s *runtime.Services) error {
+			d, cfg, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return recoverEvery(ctx, s, d, cfg, mc.Current)
+		}},
+		{Name: "embedding-index", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return embedIndex(ctx, d)
+		}},
+		{Name: "connection-health", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return watchConnections(ctx, d)
+		}},
+	}
+}
+
+func recoverEvery(ctx context.Context, s *runtime.Services, d *db.DB, cfg config.Config, current func() *module.Snapshot) error {
+	t := time.NewTicker(recoverInterval)
+	defer t.Stop()
+	s.Heartbeat("recovery")
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+		if err := db.Ready(ctx, d); err != nil && ctx.Err() == nil {
+			log.Error("database refresh failed", logx.Err, err.Error())
+		}
+		if snap := current(); snap != nil {
+			if err := snap.Recover(ctx, d, cfg); err != nil && ctx.Err() == nil {
+				log.Error("recovery failed", logx.Err, err.Error())
+			}
+		}
+		s.Heartbeat("recovery")
+	}
+}
 
 func kbPending(ctx context.Context, d *db.DB) error {
 	embedURL, err := embed.EmbedURL(ctx, d.Read)
@@ -127,30 +289,35 @@ func kbPending(ctx context.Context, d *db.DB) error {
 	return err
 }
 
-func startEmbed(_ chi.Router, d *web.Deps) {
-	ctx, cancel := context.WithCancel(d.Ctx)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for ctx.Err() == nil {
-			more, err := mail.ReembedStep(ctx, d.DB)
-			if err != nil && ctx.Err() == nil {
-				log.Warn("embedding index rebuild failed", logx.Err, err.Error())
-			}
-			if more {
-				continue
-			}
-			if err := kbPending(ctx, d.DB); err != nil && ctx.Err() == nil {
-				log.Warn("knowledge embedding failed", logx.Err, err.Error())
-			}
-			select {
-			case <-ctx.Done():
-			case <-time.After(embedEvery):
-			}
+func embedIndex(ctx context.Context, d *db.DB) error {
+	for {
+		more, err := embedStep(ctx, d)
+		if err != nil {
+			return err
 		}
-	}()
-	d.OnClose(func() {
-		cancel()
-		<-done
-	})
+		if more {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(embedEvery):
+		}
+	}
+}
+
+func embedStep(ctx context.Context, d *db.DB) (bool, error) {
+	step, cancel := context.WithTimeout(ctx, embedStepTimeout)
+	defer cancel()
+	more, err := mail.ReembedStep(step, d)
+	if err != nil && ctx.Err() == nil {
+		return false, fmt.Errorf("embedding index rebuild failed: %w", err)
+	}
+	if more || ctx.Err() != nil {
+		return more, ctx.Err()
+	}
+	if err := kbPending(step, d); err != nil && ctx.Err() == nil {
+		return false, fmt.Errorf("knowledge embedding failed: %w", err)
+	}
+	return false, ctx.Err()
 }

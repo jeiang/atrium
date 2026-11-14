@@ -2,10 +2,10 @@
 {{define "heading"}}{{or .Data.View.Thread.Title "Thread"}}{{end}}
 {{define "header_meta"}}{{template "chat_meter" (dict "view" .Data.View)}}{{end}}
 {{define "header_actions"}}<button type="button" class="btn md:hidden" data-variant="ghost" data-size="icon-sm" id="panel-toggle" data-action="toggle-panel" aria-controls="panel" aria-expanded="false" aria-label="Work panel" title="Work panel">{{icon "panel-right"}}</button>{{end}}
-{{define "preload"}}<link rel="preload" href="/static/fonts/source-serif-4-400-normal.woff2" as="font" type="font/woff2" crossorigin>{{end}}
+{{define "preload"}}<link rel="preload" href="{{asset "fonts/source-serif-4-400-normal.woff2"}}" as="font" type="font/woff2" crossorigin>{{end}}
 {{define "content_class"}}chat-content{{end}}
 {{define "content"}}{{$d := .Data}}{{$t := $d.View.Thread}}
-<div id="workspace" class="workspace" style="--panel-w: 24rem" data-thread="{{$t.ID}}">
+<div id="workspace" class="workspace" data-thread="{{$t.ID}}">
   <div id="thread" class="reading min-h-full gap-5 pt-4">
     {{template "chat_thread" (dict "d" $d "csrf" .CSRF)}}
   </div>
@@ -14,6 +14,7 @@
   <aside id="panel" class="tabs workspace-panel" aria-label="Thread workspace">
     <nav role="tablist" aria-orientation="horizontal" class="w-full">
       <button type="button" role="tab" id="panel-tab-work" aria-controls="panel-work" aria-selected="true" tabindex="0">{{icon "list-checks" "size-3.5"}}Work</button>
+      {{if $d.History}}<button type="button" role="tab" id="panel-tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1" hx-get="/chat/{{$t.ID}}/history" hx-target="#history-body" hx-trigger="click once">{{icon "history" "size-3.5"}}History</button>{{end}}
       <button type="button" role="tab" id="panel-tab-preview" aria-controls="panel-preview" aria-selected="false" tabindex="-1">{{icon "eye" "size-3.5"}}Preview</button>
       <button type="button" class="btn ms-auto md:hidden" data-variant="ghost" data-size="icon-sm" aria-label="Close panel" data-action="toggle-panel">{{icon "x"}}</button>
     </nav>
@@ -21,7 +22,7 @@
       {{template "chat_work" $d.Work}}
     </div>
     {{if $d.History}}<div role="tabpanel" id="panel-history" aria-labelledby="panel-tab-history" tabindex="-1" aria-selected="false" hidden>
-      <div id="history-body" hx-get="/chat/{{$t.ID}}/history" hx-trigger="load" hx-swap="innerHTML"></div>
+      <div id="history-body"></div>
     </div>{{end}}
     <div role="tabpanel" id="panel-preview" aria-labelledby="panel-tab-preview" tabindex="-1" aria-selected="false" hidden>
       <div id="preview-body" data-loading="reader-loading" class="flex flex-col gap-4">

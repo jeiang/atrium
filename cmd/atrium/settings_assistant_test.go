@@ -2,7 +2,9 @@ package main
 
 import (
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -26,7 +28,7 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused := func(want string, args ...string) {
 		t.Helper()
 		r := runSettings(t, args...)
-		if r.code != cli.ExitError || r.stdout != "" || !strings.Contains(r.stderr, want) {
+		if r.code != cli.ExitUsage || r.stdout != "" || !strings.Contains(r.stderr, want) {
 			t.Errorf("%v: exit %d stdout %q stderr %q, want a refusal containing %q", args, r.code, r.stdout, r.stderr, want)
 		}
 	}
@@ -39,9 +41,10 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "set", "budget_unattended_share", "0.9")
 	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "unset", "budget_unattended_share")
 
-	setEnv(t, "ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "0.3")
+	accepted("set", "budget_unattended_share", "0.2")
+	accepted("set", "budget_chat_share", "0.3")
 	refused("budget_unattended_share must be at most budget_chat_share (0.3)", "set", "budget_unattended_share", "0.35")
-	setEnv(t, "ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "")
+	accepted("set", "budget_chat_share", "0.5")
 
 	for _, gone := range []string{"agent_clear_share", "agent_compact_share", "agent_preflight_share", "prompt_summary"} {
 		if r := runSettings(t, "set", gone, "0.9"); r.code != cli.ExitUsage || !strings.Contains(r.stderr, `unknown key "`+gone+`"`) {
@@ -50,14 +53,51 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	}
 	refused("agent_schedule_weekly_review", "set", "agent_schedule_weekly_review", "*/5 * * * *")
 
+	token := localAPIToken(t, "settings-schedules")
 	base := startServeIn(t, dir)
-	_, page, _ := fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
-	if !strings.Contains(page, "*/10 * * * *") || strings.Contains(page, "*/20 * * * *") {
-		t.Fatalf("GET /scheduled before the override should list the default media sweep schedule: %.800s", page)
+	sweep := func() string {
+		t.Helper()
+		reply := (&apiSite{t: t, base: base}).do(http.MethodGet, "/api/v1/schedules?limit=100", token, nil)
+		items, _ := reply.json["items"].([]any)
+		for _, item := range items {
+			if row := item.(map[string]any); row["name"] == "media-sweep" {
+				return row["schedule"].(string)
+			}
+		}
+		return ""
 	}
+	waitFor(t, func() bool { return sweep() == "*/10 * * * *" })
 	accepted("set", "agent_schedule_media_sweep", "*/20 * * * *")
-	_, page, _ = fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
-	if !strings.Contains(page, "*/10 * * * *") || strings.Contains(page, "*/20 * * * *") {
-		t.Errorf("GET /scheduled must not sync builtin schedules; the scheduler worker does: %.800s", page)
+	if got := sweep(); got != "*/10 * * * *" {
+		t.Errorf("a schedule read must not sync builtin schedules; the scheduler worker does: %q", got)
+	}
+}
+
+func TestOwnerScheduleSettingRoundTripsThroughTheScheduledPage(t *testing.T) {
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+
+	if r := runSettings(t, "set", "agent_schedule_package_tracking", "*/45 * * * *"); r.code != cli.ExitOK {
+		t.Fatalf("set the tracking schedule: exit %d stderr %q", r.code, r.stderr)
+	}
+	w := asstBrowse(t, startServeIn(t, dir))
+	code, page, _ := w.get("/scheduled", false)
+	w.want(code, http.StatusOK, page, "package-tracking", "*/45 * * * *", "calendar-candidates", "ops-sampler", "media-thumbnails")
+
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	var id, n int64
+	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'package-tracking' AND kind = 'builtin'").Scan(&id); err != nil {
+		t.Fatalf("the package-tracking job: %v", err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs WHERE kind IN ('builtin', 'nightly')").Scan(&n); err != nil || n != int64(len(builtinJobNames)) {
+		t.Fatalf("%d built-in jobs (%v), want %d", n, err, len(builtinJobNames))
+	}
+	code, body, _ := w.post("/scheduled/"+strconv.FormatInt(id, 10)+"/schedule", url.Values{"schedule": {"*/50 * * * *"}}, true)
+	w.want(code, http.StatusOK, body, "*/50 * * * *")
+	if row := runSettings(t, "get", "agent_schedule_package_tracking").row(t); row.Value == nil || *row.Value != "*/50 * * * *" {
+		t.Errorf("agent_schedule_package_tracking = %+v, want the schedule edited on the page", row)
 	}
 }

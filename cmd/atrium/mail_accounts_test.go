@@ -10,12 +10,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/settings"
-
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 )
 
 type mailAccount struct {
@@ -25,15 +25,30 @@ type mailAccount struct {
 
 func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 	t.Helper()
+	return accountsFileWith(t, dir, filepath.Join(testRoot, "host", "anthropic.key"), accounts...)
+}
+
+func accountsFileWith(t *testing.T, dir, anthropicKey string, accounts ...mailAccount) string {
+	t.Helper()
+	return accountsFileEmbedding(t, dir, "", anthropicKey, accounts...)
+}
+
+func accountsFileEmbedding(t *testing.T, dir, embedURL, anthropicKey string, accounts ...mailAccount) string {
+	t.Helper()
+	embedding := ""
+	if embedURL != "" {
+		embedding = embeddingTable(embedURL)
+	}
 	var b strings.Builder
+	b.WriteString(hostConfigBodyWith(embedding, defaultWebPushConnection, anthropicKey))
 	for _, a := range accounts {
 		secret := filepath.Join(dir, a.id+".password")
 		if err := os.WriteFile(secret, []byte(a.password+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		fmt.Fprintf(&b, "[[account]]\nid = %q\npreset = %q\nlogin = %q\npassword_file = %q\nenabled = %t\n\n", a.id, a.preset, a.login, secret, !a.disabled)
+		b.WriteString(mailConnection(a.id, a.preset, a.login, secret, !a.disabled))
 	}
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -43,12 +58,10 @@ func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	srv := llmstub.Server(t, nil)
+	embed := embedstub.Server(t)
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
+	seedSettings(t, map[string]string{mail.KeyMode: "shadow", module.FlagKey(module.Mail): "true"})
 
 	home := mailtest.NewFakeClient()
 	inbox := home.AddBox("INBOX", mailtest.NewBox(7))
@@ -64,32 +77,31 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	var mu sync.Mutex
 	opened := map[string]int{}
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			opened[opts.Account]++
 			if f, ok := fakes[opts.Account]; ok {
-				return mail.Gated(f, opts.Q), nil
+				return f.Open(ctx, opts)
 			}
 			return nil, fmt.Errorf("unexpected account %q", opts.Account)
 		}
 	}
 	run := func(args ...string) appRun {
-		reg := settings.New()
-		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil, quietLog)
+		app := newAppWith(testLookupFor(t), clients, nil, quietLog)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}
 	}
-	key := settingEnv(config.KeyMailAccountsFile)
-	path := accountsFile(t, dir,
+	key := "ATRIUM_HOST_CONFIG"
+	path := accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"),
 		mailAccount{"home", "icloud", "me@icloud.test", "home pass", false},
 		mailAccount{"work", "gmail", "me@work.test", "work-pass", false},
 		mailAccount{"off", "gmail", "off@gmail.test", "off-pass", true})
 	setEnv(t, key, path)
 
 	counts := func() map[string]int {
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		rows, err := d.Read.Query("SELECT m.account || ':' || a.kind, COUNT(*) FROM messages m JOIN accounts a ON a.name = m.account GROUP BY m.account")
 		if err != nil {
 			t.Fatal(err)
@@ -125,7 +137,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		}
 	}
 
-	setEnv(t, key, accountsFile(t, t.TempDir(), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
+	setEnv(t, key, accountsFileEmbedding(t, t.TempDir(), embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
 	opened = map[string]int{}
 	if got := run("sync"); got.code != 0 || opened["work"] != 0 {
 		t.Fatalf("sync after removing work: %+v, opened %v", got, opened)
@@ -135,11 +147,40 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	}
 
 	bad := filepath.Join(dir, "bad.toml")
-	if err := os.WriteFile(bad, []byte("[[account]]\nid = \"x\"\npreset = \"yahoo\"\nlogin = \"a\"\npassword_file = \""+filepath.Join(dir, "home.password")+"\"\n"), 0o600); err != nil {
+	body := hostConfigBody(defaultWebPushConnection) + "\n[connections.\"mail/x\"]\nkind = \"mail\"\nconfig = { preset = \"yahoo\", login = \"a\", auth_method = \"password\" }\ncapabilities = [\"imap\", \"smtp\"]\ncredential_files = { \"mail/x/password\" = \"" + filepath.Join(dir, "home.password") + "\" }\n"
+	if err := os.WriteFile(bad, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	setEnv(t, key, bad)
 	if got := run("sync"); got.code == 0 || !strings.Contains(got.stderr, "preset must be icloud or gmail") {
 		t.Errorf("an unknown preset: %+v", got)
 	}
+}
+
+func insertMailAccount(t *testing.T, d *db.DB, id, preset, login, method string) {
+	t.Helper()
+	cfg := fmt.Sprintf(`{"preset":%q,"login":%q,"auth_method":%q}`, preset, login, method)
+	if _, err := d.Write.Exec("INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) VALUES (?, 'mail', ?, 'operator', ?, '{}', 1, 1, 'untested', 0, 0)",
+		"mail/"+id, id, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, connection_id, capability_prefix, created_at) VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?, 0)",
+		id, id, preset, login, method, "mail/"+id, "mail/"+id); err != nil {
+		t.Fatal(err)
+	}
+	for _, capability := range []string{"imap", "smtp"} {
+		if _, err := d.Write.Exec("INSERT INTO connection_capabilities (connection_id, name, enabled, config_json) VALUES (?, ?, 1, '{}')", "mail/"+id, capability); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func embeddingTable(url string) string {
+	return fmt.Sprintf(`[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = "embeddinggemma" }
+capabilities = ["embeddings"]
+
+`, url)
 }

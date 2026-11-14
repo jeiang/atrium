@@ -2,16 +2,22 @@ package web
 
 import (
 	"context"
+
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/auth/oidc"
+	"github.com/jeiang/atrium/internal/application"
+
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
@@ -58,17 +64,19 @@ func bodyCap(ctx context.Context) int {
 type Guard struct {
 	auth     Policy
 	hosts    map[string]struct{}
+	trusted  []netip.Prefix
+	limits   *limiter
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
-	sessions *oidc.Service
+	apiShape func(*http.Request) *application.APIShape
+	sessions *authapp.Sessions
+	bearers  *authapp.Service
 	errPage  ErrorPage
-	admin    func(context.Context) (string, error)
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
-	idem     *idemCache
 }
 
-func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
+func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
@@ -83,7 +91,7 @@ func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) boo
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, public: public, classify: classify, idem: newIdemCache()}
+	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify}
 }
 
 func hostname(value string) string {
@@ -137,6 +145,15 @@ func healthProbe(r *http.Request) bool {
 	return r.Method == http.MethodGet && r.URL.EscapedPath() == healthPath
 }
 
+func loopbackPeer(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return false
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.Unmap().IsLoopback()
+}
+
 func setSecurityHeaders(h http.Header) {
 	h.Set("Content-Security-Policy", csp)
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -145,6 +162,10 @@ func setSecurityHeaders(h http.Header) {
 
 func (g *Guard) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if g.auth.Local() && !loopbackPeer(r.RemoteAddr) {
+			deny(w, http.StatusForbidden, "Forbidden")
+			return
+		}
 		if healthProbe(r) {
 			setSecurityHeaders(w.Header())
 			next.ServeHTTP(w, r)
@@ -156,6 +177,9 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		}
 		if isAPI(r) {
 			g.api(w, r, next)
+			return
+		}
+		if g.auth.OIDC() && signInRequest(r) && !g.limitSignIn(w, r) {
 			return
 		}
 		static := strings.HasPrefix(r.URL.Path, staticPrefix)
@@ -181,19 +205,8 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			token = newToken()
 		}
 		if err == nil {
-			who.NoAuth = who.Source == SourceLocal && g.auth.Open
-			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
-			if !who.Admin && class == accessAdmin {
-				setSecurityHeaders(w.Header())
-				g.issueCSRF(w, r, token, fresh)
-				r = r.WithContext(context.WithValue(context.WithValue(r.Context(), csrfKey{}, token), adminOnlyKey{}, true))
-				if g.errPage != nil {
-					g.errPage(w, r, http.StatusForbidden, "Admins only.")
-				} else {
-					deny(w, http.StatusForbidden, "Forbidden: administrator access required")
-				}
-				return
-			}
+			r = r.WithContext(withIdentity(r.Context(), who, audit.UI))
+			r = r.WithContext(g.sessionAccess(r, who, token))
 		}
 		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {
 			limit := defaultBodyCap
@@ -240,13 +253,6 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (g *Guard) adminGroup(ctx context.Context) (string, error) {
-	if g.admin == nil {
-		return oidc.DefaultAdminGroup, nil
-	}
-	return g.admin(ctx)
-}
-
 func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, fresh bool) {
 	if !fresh {
 		return
@@ -258,9 +264,10 @@ func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, 
 	w.Header().Add("Set-Cookie", cookie)
 }
 
-type adminOnlyKey struct{}
+func withIdentity(ctx context.Context, who Identity, source audit.Source) context.Context {
+	return audit.With(authapp.WithPrincipal(ctx, who), "operator", source)
+}
 
-func adminOnly(ctx context.Context) bool {
-	v, _ := ctx.Value(adminOnlyKey{}).(bool)
-	return v
+func withAPIIdentity(ctx context.Context, who Identity) context.Context {
+	return withIdentity(ctx, who, audit.API)
 }

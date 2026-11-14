@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/config"
@@ -29,6 +30,12 @@ type Response struct {
 	Status            int               `json:"-"`
 	ErrorBody         json.RawMessage   `json:"-"`
 	Header            http.Header       `json:"-"`
+
+	StartUsage          json.RawMessage `json:"-"`
+	InterruptAfterStart bool            `json:"-"`
+	Stall               bool            `json:"-"`
+	Trickle             time.Duration   `json:"-"`
+	ID                  string          `json:"-"`
 }
 
 type Request struct {
@@ -55,11 +62,15 @@ type Server struct {
 	RejectKey        string
 	FileDeleteStatus int
 	Models           []string
+	Disconnect       atomic.Bool
+	modelLists       atomic.Int64
 
-	mu       sync.Mutex
-	script   []Response
-	requests []Request
-	served   int
+	mu         sync.Mutex
+	script     []Response
+	jsonScript []Response
+	requests   []Request
+	served     int
+	jsonAnswer func(required []string, user string) (json.RawMessage, error)
 }
 
 func New(t testing.TB, script ...Response) *Server {
@@ -82,10 +93,44 @@ func (s *Server) Requests() []Request {
 	return append([]Request(nil), s.requests...)
 }
 
+func (s *Server) ModelLists() int64 {
+	return s.modelLists.Load()
+}
+
 func (s *Server) Remaining() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.script)
+}
+
+func (s *Server) PushJSON(script ...Response) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.jsonScript = append(s.jsonScript, script...)
+}
+
+func (s *Server) JSONRemaining() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.jsonScript)
+}
+
+func (s *Server) AnswerJSON(answer func(required []string, user string) (json.RawMessage, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.jsonAnswer = answer
+}
+
+func (s *Server) RequestHook() func(Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.OnRequest
+}
+
+func (s *Server) SetOnRequest(hook func(Request)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.OnRequest = hook
 }
 
 func (s *Server) Env() config.Env {
@@ -127,9 +172,12 @@ func (r *recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
+	if r.Method == http.MethodGet && r.URL.Path == "/v1/models" {
+		s.modelLists.Add(1)
+	}
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/messages":
-		s.messages(w, Request{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body})
+		s.messages(w, r, Request{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body})
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/models" && s.RejectKey != "" && r.Header.Get("X-Api-Key") == s.RejectKey:
 		fail(w, http.StatusUnauthorized, ErrorBody("authentication_error", "invalid x-api-key"))
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
@@ -157,26 +205,57 @@ func (s *Server) deleteFile(w http.ResponseWriter, id string) {
 	writeJSON(w, map[string]string{"id": id, "type": "file_deleted"})
 }
 
-func (s *Server) messages(w http.ResponseWriter, req Request) {
-	if s.OnRequest != nil {
-		s.OnRequest(req)
+func (s *Server) messages(w http.ResponseWriter, r *http.Request, req Request) {
+	if hook := s.RequestHook(); hook != nil {
+		hook(req)
 	}
-	var head struct {
-		Model  string `json:"model"`
-		Stream bool   `json:"stream"`
-	}
-	_ = json.Unmarshal(req.Body, &head)
-	s.mu.Lock()
-	if len(s.script) == 0 {
-		s.mu.Unlock()
-		s.t.Errorf("anthropictest: no scripted response left")
-		fail(w, http.StatusInternalServerError, ErrorBody("api_error", "no scripted response left"))
+	if s.Disconnect.Load() {
+		s.hijackClose(w)
 		return
 	}
-	resp := s.script[0]
-	s.script = s.script[1:]
+	var head struct {
+		Model        string `json:"model"`
+		Stream       bool   `json:"stream"`
+		OutputConfig struct {
+			Format json.RawMessage `json:"format"`
+		} `json:"output_config"`
+	}
+	_ = json.Unmarshal(req.Body, &head)
+	queue, name := &s.script, "scripted"
+	if len(head.OutputConfig.Format) > 0 {
+		if err := fixedJSONRequest(req.Body); err != nil {
+			s.t.Errorf("anthropictest: fixed JSON request: %v", err)
+			fail(w, http.StatusBadRequest, ErrorBody("invalid_request_error", err.Error()))
+			return
+		}
+		queue, name = &s.jsonScript, "scripted fixed JSON"
+	}
+	s.mu.Lock()
+	var resp Response
+	switch {
+	case len(*queue) > 0:
+		resp = (*queue)[0]
+		*queue = (*queue)[1:]
+	case queue == &s.jsonScript && s.jsonAnswer != nil:
+		raw, err := answerFixedJSON(s.jsonAnswer, req.Body)
+		if err != nil {
+			s.mu.Unlock()
+			s.t.Errorf("anthropictest: %v", err)
+			fail(w, http.StatusBadRequest, ErrorBody("invalid_request_error", err.Error()))
+			return
+		}
+		resp = Reply("end_turn", Text(string(raw)))
+	default:
+		s.mu.Unlock()
+		s.t.Errorf("anthropictest: no %s response left", name)
+		fail(w, http.StatusInternalServerError, ErrorBody("api_error", "no "+name+" response left"))
+		return
+	}
 	s.served++
-	id := fmt.Sprintf("msg_fake_%d", fakeIDs.Add(1))
+	id := resp.ID
+	if id == "" {
+		id = fmt.Sprintf("msg_fake_%d", fakeIDs.Add(1))
+	}
 	s.mu.Unlock()
 	switch {
 	case resp.Status != 0:
@@ -187,12 +266,21 @@ func (s *Server) messages(w http.ResponseWriter, req Request) {
 		}
 		fail(w, resp.Status, resp.ErrorBody)
 	case head.Stream:
-		stream(w, id, head.Model, resp)
+		s.stream(w, r, id, head.Model, resp)
 	case resp.ErrorBody != nil:
 		fail(w, http.StatusInternalServerError, resp.ErrorBody)
 	default:
 		writeJSON(w, message(id, head.Model, resp, resp.Content))
 	}
+}
+
+func (s *Server) hijackClose(w http.ResponseWriter) {
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		s.t.Errorf("anthropictest: hijack: %v", err)
+		return
+	}
+	_ = conn.Close()
 }
 
 func fail(w http.ResponseWriter, status int, body json.RawMessage) {
@@ -243,15 +331,41 @@ func (s sse) send(event string, data any) {
 	}
 }
 
-func stream(w http.ResponseWriter, id, model string, resp Response) {
+func (s *Server) trickle(r *http.Request, out sse, index int, hold time.Duration) bool {
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	end := time.NewTimer(hold)
+	defer end.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return false
+		case <-end.C:
+			return true
+		case <-tick.C:
+			out.send("content_block_delta", map[string]any{"type": "content_block_delta", "index": index, "delta": map[string]any{"type": "text_delta", "text": " "}})
+		}
+	}
+}
+
+func (s *Server) stream(w http.ResponseWriter, r *http.Request, id, model string, resp Response) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
 	out := sse{w, flusher}
+	usage := resp.Usage
+	if len(resp.StartUsage) > 0 {
+		usage = resp.StartUsage
+	}
 	start := message(id, model, resp, nil)
 	delete(start, "context_management")
 	start["stop_reason"] = nil
+	start["usage"] = orNull(usage)
 	out.send("message_start", map[string]any{"type": "message_start", "message": start})
+	if resp.InterruptAfterStart {
+		s.hijackClose(w)
+		return
+	}
 	out.send("ping", map[string]string{"type": "ping"})
 	if resp.ErrorBody != nil {
 		_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", resp.ErrorBody)
@@ -267,7 +381,14 @@ func stream(w http.ResponseWriter, id, model string, resp Response) {
 		for _, d := range deltas {
 			out.send("content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": d})
 		}
+		if i == 0 && resp.Trickle > 0 && !s.trickle(r, out, i, resp.Trickle) {
+			return
+		}
 		out.send("content_block_stop", map[string]any{"type": "content_block_stop", "index": i})
+	}
+	if resp.Stall {
+		<-r.Context().Done()
+		return
 	}
 	delta := map[string]any{
 		"type":  "message_delta",
@@ -325,4 +446,71 @@ func split(block map[string]json.RawMessage) (map[string]json.RawMessage, []map[
 		deltas = append(deltas, map[string]any{"type": "compaction_delta", "content": block["content"], "encrypted_content": block["encrypted_content"]})
 	}
 	return first, deltas
+}
+
+func fixedJSONRequest(body []byte) error {
+	var req struct {
+		Model        string            `json:"model"`
+		MaxTokens    int64             `json:"max_tokens"`
+		System       json.RawMessage   `json:"system"`
+		Messages     []json.RawMessage `json:"messages"`
+		Stream       bool              `json:"stream"`
+		OutputConfig struct {
+			Effort string                     `json:"effort"`
+			Format anthropic.JSONOutputFormat `json:"format"`
+		} `json:"output_config"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		return err
+	}
+	switch {
+	case req.Model == "":
+		return fmt.Errorf("missing model")
+	case req.MaxTokens <= 0:
+		return fmt.Errorf("max_tokens %d", req.MaxTokens)
+	case len(req.Messages) != 1:
+		return fmt.Errorf("%d messages, want 1", len(req.Messages))
+	case req.OutputConfig.Format.Type != anthropic.FormatJSONSchema:
+		return fmt.Errorf("output format type %q", req.OutputConfig.Format.Type)
+	}
+	wire, err := anthropic.JSONOutputSchema(req.OutputConfig.Format.Schema)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(wire, req.OutputConfig.Format.Schema) {
+		return fmt.Errorf("schema is not in wire form")
+	}
+	return nil
+}
+
+func answerFixedJSON(answer func(required []string, user string) (json.RawMessage, error), body []byte) (json.RawMessage, error) {
+	var req struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+		OutputConfig struct {
+			Format struct {
+				Schema struct {
+					Required []string `json:"required"`
+				} `json:"schema"`
+			} `json:"format"`
+		} `json:"output_config"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+	if len(req.Messages) != 1 || req.Messages[0].Role != "user" {
+		return nil, fmt.Errorf("fixed JSON request is not one plain user message")
+	}
+	raw, err := answer(req.OutputConfig.Format.Schema.Required, req.Messages[0].Content)
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(raw) {
+		return nil, fmt.Errorf("answer for %v is not JSON", req.OutputConfig.Format.Schema.Required)
+	}
+	return raw, nil
 }

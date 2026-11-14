@@ -1,0 +1,404 @@
+{
+  "areas": [
+    {
+      "area": "activity",
+      "operations": [
+        "commands.status",
+        "review.activity",
+        "review.effect",
+        "review.effects",
+        "review.undo",
+        "review.undoable"
+      ],
+      "required": 6,
+      "bound": 6
+    },
+    {
+      "area": "composer",
+      "operations": [
+        "assistant.configuration",
+        "assistant.thread.options"
+      ],
+      "required": 2,
+      "bound": 2
+    },
+    {
+      "area": "devices",
+      "operations": [
+        "notifications.channel-content",
+        "notifications.configuration",
+        "notifications.subscribe",
+        "notifications.test",
+        "notifications.unsubscribe"
+      ],
+      "required": 5,
+      "bound": 5
+    },
+    {
+      "area": "drafts",
+      "operations": [
+        "mail.draft",
+        "mail.draft-discard",
+        "mail.draft-resolve",
+        "mail.draft-send",
+        "mail.draft-update",
+        "mail.drafts"
+      ],
+      "required": 6,
+      "bound": 6
+    },
+    {
+      "area": "files",
+      "operations": [
+        "assistant.file.download",
+        "assistant.file.list",
+        "assistant.file.preview"
+      ],
+      "required": 3,
+      "bound": 3
+    },
+    {
+      "area": "home",
+      "operations": [
+        "assistant.about",
+        "assistant.home",
+        "assistant.today.ensure",
+        "calendar.find-slot",
+        "calendar.list"
+      ],
+      "required": 5,
+      "bound": 5
+    },
+    {
+      "area": "inbox",
+      "operations": [
+        "notifications.inbox",
+        "notifications.mark",
+        "notifications.resend"
+      ],
+      "required": 3,
+      "bound": 3
+    },
+    {
+      "area": "integrations",
+      "operations": [
+        "calendar.draft-candidates",
+        "calendar.sync",
+        "connections.disconnect",
+        "connections.list",
+        "connections.oauth-complete",
+        "connections.oauth-configure",
+        "connections.oauth-setup",
+        "connections.oauth-start",
+        "connections.save-fields",
+        "connections.test",
+        "connections.test-save",
+        "contacts.lookup",
+        "contacts.sync"
+      ],
+      "required": 13,
+      "bound": 13
+    },
+    {
+      "area": "knowledge",
+      "operations": [
+        "assistant.memory.backfill",
+        "assistant.memory.estimate",
+        "assistant.memory.tree",
+        "assistant.memory.view",
+        "assistant.memory.work",
+        "knowledge.confirm",
+        "knowledge.confirm-matching",
+        "knowledge.confirm-selected",
+        "knowledge.create",
+        "knowledge.detail",
+        "knowledge.edit",
+        "knowledge.import",
+        "knowledge.list",
+        "knowledge.profile",
+        "knowledge.purge",
+        "knowledge.restore",
+        "knowledge.retract",
+        "knowledge.retract-run"
+      ],
+      "required": 18,
+      "bound": 18
+    },
+    {
+      "area": "mail",
+      "operations": [
+        "mail.account-add",
+        "mail.account-remove",
+        "mail.account-test",
+        "mail.account-update",
+        "mail.accounts",
+        "mail.apply-deletions",
+        "mail.backlog",
+        "mail.commitment-dismiss",
+        "mail.commitment-done",
+        "mail.commitments",
+        "mail.correct",
+        "mail.live-actions",
+        "mail.live-status",
+        "mail.loop-dismiss",
+        "mail.loop-snooze",
+        "mail.loops-dismiss-matching",
+        "mail.message",
+        "mail.open-loops",
+        "mail.package-dismiss",
+        "mail.packages",
+        "mail.pause",
+        "mail.poll-trackers",
+        "mail.rebaseline",
+        "mail.refresh-loops",
+        "mail.refresh-watches",
+        "mail.reindex",
+        "mail.replay",
+        "mail.resume",
+        "mail.rule-create",
+        "mail.rule-delete",
+        "mail.rule-preview",
+        "mail.rule-reorder",
+        "mail.rule-update",
+        "mail.rules",
+        "mail.rules-export",
+        "mail.rules-import",
+        "mail.scan-deletions",
+        "mail.scan-gmail-labels",
+        "mail.scan-rebalance",
+        "mail.search",
+        "mail.shadow-report",
+        "mail.sync",
+        "mail.triage",
+        "mail.upcoming-birthdays"
+      ],
+      "required": 44,
+      "bound": 44
+    },
+    {
+      "area": "media",
+      "operations": [
+        "media.add",
+        "media.art",
+        "media.channel-add",
+        "media.channel-remove",
+        "media.channels",
+        "media.downloads",
+        "media.file",
+        "media.file-item",
+        "media.filing-inspect",
+        "media.filing-preview",
+        "media.ignore",
+        "media.library",
+        "media.library-detail",
+        "media.poll",
+        "media.release-preview",
+        "media.select-files",
+        "media.show-lookup",
+        "media.show-search",
+        "media.sweep",
+        "media.thumbnail",
+        "media.torrent-files"
+      ],
+      "required": 21,
+      "bound": 21
+    },
+    {
+      "area": "permissions",
+      "operations": [
+        "notifications.phone-policy",
+        "notifications.revoke-links",
+        "review.permissions",
+        "review.permissions-update"
+      ],
+      "required": 4,
+      "bound": 4
+    },
+    {
+      "area": "projects",
+      "operations": [
+        "assistant.project-file.delete",
+        "assistant.project-file.upload",
+        "assistant.project.archive",
+        "assistant.project.create",
+        "assistant.project.detail",
+        "assistant.project.edit",
+        "assistant.project.list"
+      ],
+      "required": 7,
+      "bound": 7
+    },
+    {
+      "area": "proposals",
+      "operations": [
+        "review.approve",
+        "review.dismiss",
+        "review.proposal",
+        "review.proposals",
+        "review.resolve"
+      ],
+      "required": 5,
+      "bound": 5
+    },
+    {
+      "area": "review",
+      "operations": [
+        "attention.read",
+        "review.pending"
+      ],
+      "required": 2,
+      "bound": 2
+    },
+    {
+      "area": "schedules",
+      "operations": [
+        "assistant.schedule.cancel",
+        "assistant.schedule.enabled",
+        "assistant.schedule.history",
+        "assistant.schedule.list",
+        "assistant.schedule.update"
+      ],
+      "required": 5,
+      "bound": 5
+    },
+    {
+      "area": "search",
+      "operations": [
+        "assistant.search"
+      ],
+      "required": 1,
+      "bound": 1
+    },
+    {
+      "area": "settings",
+      "operations": [
+        "assistant.defaults-set",
+        "assistant.subagent.delete",
+        "assistant.subagent.enabled",
+        "assistant.subagent.list",
+        "assistant.subagent.set",
+        "auth.bearer-issue",
+        "auth.bearer-list",
+        "auth.bearer-revoke",
+        "auth.configuration",
+        "auth.identity",
+        "maintenance.backup",
+        "maintenance.check",
+        "maintenance.db-backup",
+        "maintenance.verify-archive",
+        "settings.read",
+        "settings.secret-delete",
+        "settings.secret-set",
+        "settings.secret-status",
+        "settings.set",
+        "settings.unset"
+      ],
+      "required": 20,
+      "bound": 20
+    },
+    {
+      "area": "tasks",
+      "operations": [
+        "tasks.add",
+        "tasks.done",
+        "tasks.list",
+        "tasks.update"
+      ],
+      "required": 4,
+      "bound": 4
+    },
+    {
+      "area": "threads",
+      "operations": [
+        "assistant.message.edit",
+        "assistant.message.send",
+        "assistant.reply.regenerate",
+        "assistant.run.answer",
+        "assistant.run.detail",
+        "assistant.run.events",
+        "assistant.run.resume",
+        "assistant.run.stop",
+        "assistant.thread.archive",
+        "assistant.thread.branch",
+        "assistant.thread.delete",
+        "assistant.thread.history",
+        "assistant.thread.list",
+        "assistant.thread.pin",
+        "assistant.thread.project",
+        "assistant.thread.start",
+        "assistant.thread.transcript",
+        "assistant.thread.work"
+      ],
+      "required": 18,
+      "bound": 18
+    },
+    {
+      "area": "usage",
+      "operations": [
+        "assistant.usage"
+      ],
+      "required": 1,
+      "bound": 1
+    },
+    {
+      "area": "wiki",
+      "operations": [
+        "wiki.detail",
+        "wiki.list",
+        "wiki.search",
+        "wiki.sync"
+      ],
+      "required": 4,
+      "bound": 4
+    }
+  ],
+  "approval_reached": [
+    {
+      "operation": "assistant.lookup",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.memory.search",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.memory.zoom",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.research",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.result.recall",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.schedule.create",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.search-web",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.weather",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.web-fetch",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "calendar.request-delete",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "mail.propose-tracking",
+      "reached_via": "review.approve"
+    }
+  ],
+  "total_required": 208,
+  "total_bound": 208,
+  "total_approval_reached": 11
+}

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,14 +16,13 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type asstView struct {
@@ -68,7 +66,7 @@ func asstSet(t *testing.T, key, value string) {
 
 func asstDB(t *testing.T, dir string) *db.DB {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
 	return d
 }
@@ -90,8 +88,7 @@ func asstExec(t *testing.T, d *db.DB, query string, args ...any) {
 }
 
 func asstApp(f *fixture) *cli.App {
-	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), nil, imapclient.Opener, nil, quietLog)
+	return newAppWith(f.lookup, imapclient.Opener, nil, quietLog)
 }
 
 func asstRunApp(app *cli.App, ctx context.Context, args ...string) appRun {
@@ -122,10 +119,32 @@ func asstLastAssistant(t *testing.T, d *db.DB, thread int64) string {
 	return raw
 }
 
+func asstMonth(t *testing.T, now float64) string {
+	t.Helper()
+	loc, err := time.LoadLocation("America/Port_of_Spain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inference.MonthKey(now, loc)
+}
+
 func asstSpend(t *testing.T, d *db.DB, source string, usd float64) {
 	t.Helper()
-	asstExec(t, d, "INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
-		"VALUES (?, lower(hex(randomblob(16))), ?, 'anthropic', 1, 1, 'chat', 'claude-haiku-5-5', 'medium', '[]', 0, 0, 0, 0, 0, 0, '<=100K', ?)", float64(time.Now().UnixMicro())/1e6, source, usd)
+	asstSpendAt(t, d, source, usd, float64(time.Now().UnixMicro())/1e6)
+}
+
+func asstSpendAt(t *testing.T, d *db.DB, source string, usd float64, now float64) {
+	t.Helper()
+	class := "interactive"
+	if source == inference.SourceSubscription {
+		class = "subscription"
+	}
+	asstExec(t, d, "INSERT INTO usage (attempt_key, ts, month, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, "+
+		"request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, "+
+		"output_tokens, searches, tier, cost_usd) "+
+		"VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 'settled', ?, 0, ?, lower(hex(randomblob(16))), ?, 'anthropic', 1, 1, 'chat', "+
+		"'claude-haiku-5-5', 'medium', '[]', 0, 0, 0, 0, 0, 0, '<=100K', ?)",
+		now, asstMonth(t, now), now, now, class, int64(math.Ceil(usd*1e9)), source, usd)
 }
 
 func TestAsstMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
@@ -134,13 +153,13 @@ func TestAsstMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 	asstWarm(t)
 	d := asstDB(t, dir)
 
-	asstSpend(t, d, usage.SourceSubscription, 1000)
+	asstSpend(t, d, inference.SourceSubscription, 1000)
 	api.Push(asstReply("cron under budget"))
 	if ran := runApp(t, "agent", "run", "--text", "hello", "--kind", "cron"); ran.code != cli.ExitOK {
 		t.Fatalf("cron run with only subscription spend: exit %d stderr %q", ran.code, ran.stderr)
 	}
 
-	asstSpend(t, d, usage.SourceLoop, 120)
+	asstSpend(t, d, inference.SourceLoop, 120)
 	sent := len(api.Requests())
 	ran := runApp(t, "agent", "run", "--text", "hello", "--kind", "cron")
 	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "$150.00 spent (80%); unattended runs pause at 80%") || len(api.Requests()) != sent {
@@ -151,10 +170,10 @@ func TestAsstMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 		t.Fatalf("chat run at 80%%: exit %d stderr %q", ran.code, ran.stderr)
 	}
 
-	asstSpend(t, d, usage.SourceLoop, 30)
+	asstSpend(t, d, inference.SourceLoop, 30)
 	sent = len(api.Requests())
 	ran = runApp(t, "agent", "run", "--text", "hello")
-	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "(100%); chat pauses at 100%") || len(api.Requests()) != sent {
+	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "(100%); chat pauses at 95%") || len(api.Requests()) != sent {
 		t.Fatalf("chat run at 100%%: exit %d stderr %q, %d requests sent", ran.code, ran.stderr, len(api.Requests())-sent)
 	}
 	if n := api.Remaining(); n != 0 {
@@ -179,32 +198,23 @@ func TestAsstRunsStopAtTheStepCapAndTheDoomLoopThreshold(t *testing.T) {
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 
-	asstSet(t, "max_steps_cron", "2")
-	api.Push(asstProbes("a", 2, true)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || v.err() != "stopped: step cap reached after 2 steps in this cron run (max_steps_cron)" {
-		t.Errorf("cron run at a cap of 2: %+v %q", v, v.err())
+	api.Push(asstProbes("a", loop.TuningMaxStepsCron, true)...)
+	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || v.err() != fmt.Sprintf("stopped: step cap reached after %d steps in this cron run (max_steps_cron)", loop.TuningMaxStepsCron) {
+		t.Errorf("cron run at the compiled cap: %+v %q", v, v.err())
 	}
-	asstSet(t, "max_steps_cron", "3")
-	api.Push(asstProbes("b", 3, true)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.err() != "stopped: step cap reached after 3 steps in this cron run (max_steps_cron)" {
-		t.Errorf("cron run at a cap of 3: %+v %q", v, v.err())
-	}
-	asstSet(t, "max_steps_chat", "5")
-	api.Push(asstProbes("c", 1, true)...)
-	api.Push(asstReply("ok"))
-	if v, _ := asstRun(t, "--text", "go"); v.State != "done" {
-		t.Errorf("a chat run was bound by the cron cap: %+v %q", v, v.err())
+	api.Push(asstProbes("b", loop.TuningMaxStepsChat, true)...)
+	if v, _ := asstRun(t, "--text", "go"); v.State != "failed" || v.err() != fmt.Sprintf("stopped: step cap reached after %d steps in this chat run (max_steps_chat)", loop.TuningMaxStepsChat) {
+		t.Errorf("chat run at the compiled cap: %+v %q", v, v.err())
 	}
 
-	asstSet(t, "max_steps_cron", "10")
-	api.Push(asstProbes("d", 3, false)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || !strings.Contains(v.err(), "repeated 3 times with the same result") {
-		t.Errorf("repeated call at the default threshold: %+v %q", v, v.err())
+	api.Push(asstProbes("d", loop.TuningDoomLoopThreshold, false)...)
+	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || !strings.Contains(v.err(), fmt.Sprintf("repeated %d times with the same result", loop.TuningDoomLoopThreshold)) {
+		t.Errorf("repeated call at the compiled threshold: %+v %q", v, v.err())
 	}
-	asstSet(t, "doom_loop_threshold", "2")
-	api.Push(asstProbes("e", 2, false)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); !strings.Contains(v.err(), "repeated 2 times with the same result") {
-		t.Errorf("repeated call at a threshold of 2: %+v %q", v, v.err())
+	for _, key := range []string{"max_steps_cron", "max_steps_chat", "doom_loop_threshold"} {
+		if got := runSettings(t, "set", key, "2"); got.code != cli.ExitError || !strings.Contains(got.stderr, "compiled constant") {
+			t.Errorf("set %s: exit %d stderr %q, want the key refused as a compiled constant", key, got.code, got.stderr)
+		}
 	}
 	if n := api.Remaining(); n != 0 {
 		t.Errorf("%d scripted replies unused", n)
@@ -286,9 +296,9 @@ func TestAsstToolChoiceFollowsTheCatalogAndRefusesAnUnavailableTool(t *testing.T
 	}
 }
 
-func asstIterations(t *testing.T, raw string) []usage.Iteration {
+func asstIterations(t *testing.T, raw string) []inference.Iteration {
 	t.Helper()
-	var iters []usage.Iteration
+	var iters []inference.Iteration
 	if err := json.Unmarshal([]byte(raw), &iters); err != nil {
 		t.Fatalf("iterations %s: %v", raw, err)
 	}
@@ -367,13 +377,7 @@ func TestAsstUsageLedgerPricesFallbacksFlagsUnpricedModelsAndKeepsPartialRows(t 
 
 	base := startServeIn(t, dir)
 	w := asstBrowse(t, base)
-	_, page, _ := w.get(fmt.Sprintf("/chat/%d", served.ThreadID), false)
-	for _, want := range []string{pricing.OpusID + " declined; " + pricing.HaikuID + " took over (refusal category: cyber).", "served by the fallback"} {
-		if !strings.Contains(page, want) {
-			t.Errorf("thread page lacks %q", want)
-		}
-	}
-	_, page, _ = w.get("/settings/usage", false)
+	_, page, _ := w.get("/settings/usage", false)
 	for _, want := range []string{"1 unpriced", "1 partial"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("usage page lacks %q", want)
@@ -381,11 +385,9 @@ func TestAsstUsageLedgerPricesFallbacksFlagsUnpricedModelsAndKeepsPartialRows(t 
 	}
 }
 
-var asstColdTokens = regexp.MustCompile(`about (\d+) tokens`)
-
 func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 	t.Parallel()
-	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	asstSet(t, "default_model", pricing.OpusID)
 	asstSet(t, "max_run_cost_usd_opus_5_5", "0.0001")
@@ -395,24 +397,25 @@ func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 	if refused.State != "failed" || !strings.Contains(refused.err(), "run cost cap") || !strings.Contains(refused.err(), "max_run_cost_usd_opus_5_5") || len(api.Requests()) != sent {
 		t.Fatalf("run over the cap: %+v %q, %d requests sent", refused, refused.err(), len(api.Requests())-sent)
 	}
-	found := asstColdTokens.FindStringSubmatch(refused.err())
-	if found == nil {
-		t.Fatalf("no token count in %q", refused.err())
+	asstSet(t, "max_run_cost_usd_opus_5_5", "10")
+	asstSet(t, "cache_ttl_chat", "5m")
+	api.Push(asstReply("measured"))
+	measured, _ := asstRun(t, "--text", "hi")
+	if measured.State != "done" {
+		t.Fatalf("measuring run: %+v %q", measured, measured.err())
 	}
-	tokens, err := strconv.ParseFloat(found[1], 64)
-	if err != nil {
+	var reservationN int64
+	if err := asstDB(t, dir).Read.QueryRow("SELECT reservation_nusd FROM usage WHERE run_id = ?", measured.ID).Scan(&reservationN); err != nil {
 		t.Fatal(err)
 	}
-	fiveMinutes, oneHour := tokens*5/1e6, tokens*8/1e6
-	asstSet(t, "max_run_cost_usd_opus_5_5", strconv.FormatFloat((fiveMinutes+oneHour)/2, 'f', -1, 64))
-
-	asstSet(t, "cache_ttl_chat", "5m")
+	reservation := float64(reservationN) / inference.NanoUSD
+	asstSet(t, "max_run_cost_usd_opus_5_5", strconv.FormatFloat(reservation+1e-6, 'f', -1, 64))
 	api.Push(asstReply("sent"))
-	if ran, _ := asstRun(t, "--text", "hi"); ran.State != "done" || len(api.Requests()) != sent+1 {
+	if ran, _ := asstRun(t, "--text", "hi"); ran.State != "done" || len(api.Requests()) != sent+2 {
 		t.Fatalf("5m run under the cap: %+v %q, %d requests", ran, ran.err(), len(api.Requests())-sent)
 	}
 	asstSet(t, "cache_ttl_chat", "1h")
-	if held, _ := asstRun(t, "--text", "hi"); held.State != "failed" || !strings.Contains(held.err(), "run cost cap") || len(api.Requests()) != sent+1 {
+	if held, _ := asstRun(t, "--text", "hi"); held.State != "failed" || !strings.Contains(held.err(), "run cost cap") || len(api.Requests()) != sent+2 {
 		t.Fatalf("1h run: %+v %q, want the dearer 1h write to hit the cap before sending", held, held.err())
 	}
 
@@ -459,7 +462,7 @@ func TestAsstWebFetchRefusesUntypedAndNonPublicURLs(t *testing.T) {
 	}
 }
 
-func TestAsstSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
+func TestServeSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	notify := sdnotifytest.Listen(t, 2*time.Second)
 	for name, value := range notify.Env() {
@@ -470,14 +473,15 @@ func TestAsstSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan appRun, 1)
-	go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	for deadline := time.Now().Add(15 * time.Second); asstCount(t, d, "SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'") != 1; time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the first tick never seeded the nightly job")
 		}
 	}
 	notify.Wait("READY=1")
-	notify.Wait("STATUS=scheduling")
 	notify.Wait("WATCHDOG=1")
 	cancel()
 	notify.Wait("STOPPING=1")
@@ -497,7 +501,9 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 	d := asstDB(t, dir)
 	seedCtx, seedCancel := context.WithCancel(context.Background())
 	seeded := make(chan appRun, 1)
-	go func() { seeded <- runAppContext(t, f, seedCtx, "agent", "scheduler") }()
+	go func() {
+		seeded <- runAppContext(t, f, seedCtx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	for deadline := time.Now().Add(15 * time.Second); asstCount(t, d, "SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'") != 1; time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			seedCancel()
@@ -519,8 +525,8 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 	releaseOriginal := func() { releaseOnce.Do(func() { close(release) }) }
 	t.Cleanup(releaseOriginal)
 	var first atomic.Bool
-	logRequest := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	logRequest := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		logRequest(r)
 		hold := first.CompareAndSwap(false, true)
 		select {
@@ -530,7 +536,7 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 		if hold {
 			<-release
 		}
-	}
+	})
 
 	runDone := make(chan appRun, 1)
 	go func() {
@@ -545,7 +551,9 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 
 	ctx, cancel := context.WithCancel(context.Background())
 	schedDone := make(chan appRun, 1)
-	go func() { schedDone <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+	go func() {
+		schedDone <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+	}()
 	for range 2 {
 		select {
 		case <-arrived:

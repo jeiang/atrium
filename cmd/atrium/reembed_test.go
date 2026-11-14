@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
@@ -32,6 +33,7 @@ type fakeEmbedder struct {
 	allow      int
 	texts      map[string]int
 	queryModel string
+	gate       func(ctx context.Context, texts []string)
 }
 
 func newFakeEmbedder(t *testing.T) *fakeEmbedder {
@@ -61,6 +63,12 @@ func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 			}
 		}
 		f.mu.Lock()
+		gate := f.gate
+		f.mu.Unlock()
+		if gate != nil {
+			gate(r.Context(), req.Input)
+		}
+		f.mu.Lock()
 		f.texts[req.Model] += len(req.Input)
 		for _, text := range req.Input {
 			if strings.Contains(text, "task: search result") {
@@ -76,6 +84,12 @@ func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 	}))
 	t.Cleanup(f.Close)
 	return f
+}
+
+func (f *fakeEmbedder) setGate(gate func(ctx context.Context, texts []string)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gate = gate
 }
 
 func (f *fakeEmbedder) take() bool {
@@ -141,11 +155,9 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	seedNotionVectors(t, path)
+	seedNotionVectors(t, path, db.Key{})
 	seedPendingMessage(t, path)
-	setEnv(t, settingEnv(endpoint.KeyEmbedURL), fake.URL+"/v1")
-	setEnv(t, settingEnv(endpoint.KeyEmbedModel), model)
-	setEnv(t, settingEnv(endpoint.KeyEmbedBatch), "40")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", model, ""))
 	return dir, path
 }
 
@@ -156,6 +168,7 @@ func seedPendingMessage(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
 	dbtest.AddMessage(t, d, 900000, "a pending message for the re-embedding build", map[string]any{
 		"subject": "Pending re-embedding message", "from_addr": "seed@x.test",
 	})
@@ -213,7 +226,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastQueryModel())
 	}
 
-	setEnv(t, settingEnv(endpoint.KeyEmbedModel), bigModel)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", bigModel, ""))
 	fake.release(1)
 	base, _, stop = startServeStoppable(t, dir)
 	var first, total int
@@ -254,7 +267,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	if rows != total || generations != 1 || oldTables != 0 {
 		t.Fatalf("after the swap: %d vectors for %d documents, %d index rows, %d old tables", rows, total, generations, oldTables)
 	}
-	if sent := fake.embedded(bigModel); sent > total+40+8 {
+	if sent := fake.embedded(bigModel); sent > total+endpoint.TuningMailEmbedBatch+8 {
 		t.Errorf("the restart re-embedded finished rows: %d texts sent for %d documents", sent, total)
 	}
 	if after := search(); after == "" || fake.lastQueryModel() != bigModel {

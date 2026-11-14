@@ -5,17 +5,16 @@
   "baseline": 12,
   "actions": {
     "correct": {
-      "applied": 1
+      "done": 1
     },
     "file": {
-      "applied": 4,
-      "undone": 1
+      "done": 5
     },
     "flag": {
-      "applied": 3
+      "done": 3
     },
     "trash": {
-      "applied": 1
+      "done": 1
     }
   }
 }

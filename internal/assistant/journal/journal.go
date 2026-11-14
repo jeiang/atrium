@@ -11,10 +11,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
 )
@@ -25,6 +31,7 @@ const (
 	Parked      = "parked"
 	Done        = "done"
 	Failed      = "failed"
+	Accounting  = "accounting"
 )
 
 const (
@@ -46,17 +53,36 @@ const (
 
 func LeaseSeconds(ctx context.Context, q db.Querier) (float64, error) { return leaseSeconds(ctx, q) }
 
-func leaseSeconds(ctx context.Context, q db.Querier) (float64, error) {
-	r := assistant.Read(ctx, q)
-	n := r.Int(assistant.KeyJournalLeaseSeconds)
-	return float64(n), r.Err()
+func leaseSeconds(_ context.Context, _ db.Querier) (float64, error) {
+	return assistant.TuningAgentJournalLeaseSeconds, nil
 }
 
 func NewOwner() string {
-	host, _ := os.Hostname()
 	suffix := make([]byte, 4)
 	_, _ = rand.Read(suffix)
-	return fmt.Sprintf("%s:%d:%s", host, os.Getpid(), hex.EncodeToString(suffix))
+	return ProcessPrefix() + hex.EncodeToString(suffix)
+}
+
+func ProcessPrefix() string {
+	host, _ := os.Hostname()
+	return fmt.Sprintf("%s:%d:", host, os.Getpid())
+}
+
+func DeadProcess(owner string) string {
+	host, rest, ok := strings.Cut(owner, ":")
+	if !ok {
+		return ""
+	}
+	pidText, _, ok := strings.Cut(rest, ":")
+	if !ok {
+		return ""
+	}
+	pid, err := strconv.Atoi(pidText)
+	self, _ := os.Hostname()
+	if err != nil || pid <= 0 || host != self || pid == os.Getpid() || !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+		return ""
+	}
+	return host + ":" + pidText + ":"
 }
 
 type Run struct {
@@ -118,6 +144,10 @@ func StartRun(ctx context.Context, d *db.DB, threadID int64, kind, model, effort
 			return err
 		}
 		id, err = res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO run_streams(run_id) VALUES(?)", id)
 		return err
 	})
 	return id, err
@@ -132,6 +162,7 @@ type Limits struct {
 	Report           json.RawMessage
 	WebSearchMaxUses *int64
 	Sources          []int64
+	ItemKey          string
 }
 
 type limitsJSON struct {
@@ -143,10 +174,11 @@ type limitsJSON struct {
 	Report           json.RawMessage `json:"report,omitempty"`
 	WebSearchMaxUses *int64          `json:"web_search_max_uses,omitempty"`
 	Sources          *[]int64        `json:"sources,omitempty"`
+	ItemKey          string          `json:"item_key,omitempty"`
 }
 
 func (l Limits) wire() limitsJSON {
-	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice, Report: l.Report, WebSearchMaxUses: l.WebSearchMaxUses}
+	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice, Report: l.Report, WebSearchMaxUses: l.WebSearchMaxUses, ItemKey: l.ItemKey}
 	if l.AllowedTools != nil {
 		w.AllowedTools = &l.AllowedTools
 	}
@@ -178,7 +210,7 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	if err := json.Unmarshal([]byte(*raw), &stored); err != nil {
 		return Limits{}, fmt.Errorf("journal: run %d limits_json: %w", runID, err)
 	}
-	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice, Report: stored.Report, WebSearchMaxUses: stored.WebSearchMaxUses}
+	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice, Report: stored.Report, WebSearchMaxUses: stored.WebSearchMaxUses, ItemKey: stored.ItemKey}
 	if stored.AllowedTools != nil {
 		out.AllowedTools = *stored.AllowedTools
 	}
@@ -199,9 +231,125 @@ func GetRun(ctx context.Context, q db.Querier, runID int64) (*Run, error) {
 	return &r, nil
 }
 
+const (
+	classificationKind = "classification"
+	classificationText = 200
+)
+
+func StartClassification(ctx context.Context, d *db.DB, caller, itemKey string, now float64) (runID, threadID int64, err error) {
+	if err := classificationCaller(caller); err != nil {
+		return 0, 0, err
+	}
+	if itemKey == "" {
+		return 0, 0, errors.New("journal: a classification run needs an item key")
+	}
+	if err := classificationMeta("item key", itemKey); err != nil {
+		return 0, 0, err
+	}
+	limits, err := json.Marshal(Limits{ItemKey: itemKey}.wire())
+	if err != nil {
+		return 0, 0, err
+	}
+	role := classificationKind + ":" + caller
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, "SELECT id FROM threads WHERE kind = ? AND role = ? AND deleted_at IS NULL ORDER BY id LIMIT 1",
+			classificationKind, role).Scan(&threadID)
+		if errors.Is(err, sql.ErrNoRows) {
+			res, err := tx.ExecContext(ctx,
+				"INSERT INTO threads (kind, title, effort, created_at, updated_at, role, model, thinking, web_search) VALUES (?, ?, '', ?, ?, ?, ?, 'disabled', 0)",
+				classificationKind, "Classification: "+caller, now, now, role, pricing.HaikuID)
+			if err != nil {
+				return err
+			}
+			if threadID, err = res.LastInsertId(); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO runs (thread_id, kind, model, effort, state, started_at, limits_json) VALUES (?, ?, ?, '', ?, ?, ?)",
+			threadID, classificationKind, pricing.HaikuID, Accounting, now, string(limits))
+		if err != nil {
+			return err
+		}
+		runID, err = res.LastInsertId()
+		return err
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return runID, threadID, nil
+}
+
+func FinishClassification(ctx context.Context, q db.Querier, runID int64, state string, now float64, reason string) error {
+	switch {
+	case state != Done && state != Failed:
+		return fmt.Errorf("journal: classification run %d cannot finish as %q", runID, state)
+	case state == Failed && reason == "":
+		return fmt.Errorf("journal: failed classification run %d needs a reason", runID)
+	}
+	if err := classificationMeta("reason", reason); err != nil {
+		return err
+	}
+	var errText *string
+	if reason != "" {
+		errText = &reason
+	}
+	changed, err := db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ? AND state = ?",
+		state, errText, now, runID, Accounting))
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return fmt.Errorf("journal: run %d is not an open classification run", runID)
+	}
+	return nil
+}
+
+func LatestClassificationError(ctx context.Context, q db.Querier, caller string, since float64) (string, error) {
+	var reason string
+	err := q.QueryRowContext(ctx,
+		"SELECT COALESCE(r.error, '') FROM runs r JOIN threads t ON t.id = r.thread_id "+
+			"WHERE t.kind = ? AND t.role = ? AND r.kind = ? AND r.state IN (?, ?) AND r.started_at >= ? ORDER BY r.id DESC LIMIT 1",
+		classificationKind, classificationKind+":"+caller, classificationKind, Done, Failed, since).Scan(&reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return reason, err
+}
+
+func classificationCaller(caller string) error {
+	if caller == "" || len(caller) > classificationText {
+		return fmt.Errorf("journal: invalid classification caller %q", caller)
+	}
+	for _, r := range caller {
+		if (r < 'a' || r > 'z') && r != '_' {
+			return fmt.Errorf("journal: invalid classification caller %q", caller)
+		}
+	}
+	return nil
+}
+
+func classificationMeta(what, text string) error {
+	if utf8.RuneCountInString(text) > classificationText || !utf8.ValidString(text) || strings.TrimSpace(text) != text {
+		return fmt.Errorf("journal: classification %s is not sanitized", what)
+	}
+	for _, r := range text {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("journal: classification %s is not sanitized", what)
+		}
+	}
+	return nil
+}
+
 func FinishRun(ctx context.Context, q db.Querier, runID int64, state string, now float64, errText *string) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ?", state, errText, now, runID)
-	return err
+	return progress.Write(ctx, q, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ?", state, errText, now, runID); err != nil {
+			return err
+		}
+		return progress.Finish(ctx, tx, runID, progress.Terminal{State: state, Time: now, Error: errText})
+	})
 }
 
 func RequestStop(ctx context.Context, q db.Querier, runID int64) (bool, error) {
@@ -218,6 +366,9 @@ func FinishUnlessQueued(ctx context.Context, d *db.DB, runID, threadID int64, st
 		finished = true
 		return FinishRun(ctx, tx, runID, state, now, nil)
 	})
+	if err == nil {
+		progress.Notify()
+	}
 	return finished && err == nil, err
 }
 
@@ -236,13 +387,67 @@ func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, no
 }
 
 func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, error) {
+	lease, err := leaseSeconds(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := q.ExecContext(ctx,
+		"UPDATE runs SET state = ?, error = 'crashed', ended_at = ? WHERE state = ? AND kind = ? AND started_at < ?",
+		Failed, now, Accounting, classificationKind, now-lease); err != nil {
+		return 0, err
+	}
 	res, err := q.ExecContext(ctx,
 		"UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? AND (lease_until IS NULL OR lease_until < ?)",
 		Interrupted, Running, now)
 	if err != nil {
 		return 0, err
 	}
+	progress.Notify()
 	return res.RowsAffected()
+}
+
+func InterruptRuns(ctx context.Context, q db.Querier, runs []int64, now float64, dead string) error {
+	if len(runs) == 0 {
+		return nil
+	}
+	args := []any{Interrupted, Running, now, dead, dead, dead}
+	for _, id := range runs {
+		args = append(args, id)
+	}
+	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? "+
+		"AND (lease_until IS NULL OR lease_until < ? OR (? <> '' AND substr(COALESCE(owner, ''), 1, length(?)) = ?)) AND id IN (?"+
+		strings.Repeat(", ?", len(runs)-1)+")", args...)
+	if err == nil {
+		progress.Notify()
+	}
+	return err
+}
+
+func FailUnsettled(ctx context.Context, q db.Querier, runs []int64, now float64, text, self string) error {
+	if len(runs) == 0 {
+		return nil
+	}
+	args := []any{Failed, text, now, Running, Interrupted, self, self}
+	for _, id := range runs {
+		args = append(args, id)
+	}
+	return progress.Write(ctx, q, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ?, owner = NULL, lease_until = NULL WHERE state IN (?, ?) "+
+			"AND (owner IS NULL OR substr(owner, 1, length(?)) = ?) AND id IN (?"+strings.Repeat(", ?", len(runs)-1)+") RETURNING id", args...)
+		if err != nil {
+			return err
+		}
+		ids, err := db.Collect(rows, func(r *sql.Rows) (int64, error) { var id int64; err := r.Scan(&id); return id, err })
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := progress.Finish(ctx, tx, id, progress.Terminal{State: Failed, Time: now, Error: &text}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
@@ -250,8 +455,12 @@ func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, n
 	if err != nil {
 		return false, err
 	}
-	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state IN (?, ?)",
+	claimed, err := db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state IN (?, ?)",
 		Running, owner, now+lease, runID, Interrupted, Parked))
+	if claimed {
+		progress.Notify()
+	}
+	return claimed, err
 }
 
 func InterruptedRuns(ctx context.Context, q db.Querier) ([]Run, error) {
@@ -585,16 +794,17 @@ type ToolCall struct {
 	State       string   `json:"state"`
 	Error       *string  `json:"error"`
 	ResultID    *int64   `json:"result_id"`
+	Result      *string  `json:"result"`
 	StartedAt   float64  `json:"started_at"`
 	FinishedAt  *float64 `json:"finished_at"`
 }
 
-const callColumns = "id, run_id, tool_use_id, name, args_json, args_sha256, replay_class, state, error, result_id, started_at, finished_at"
+const callColumns = "id, run_id, tool_use_id, name, args_json, args_sha256, replay_class, state, error, result_id, result, started_at, finished_at"
 
 func scanCall(row interface{ Scan(...any) error }) (ToolCall, error) {
 	var c ToolCall
 	err := row.Scan(&c.ID, &c.RunID, &c.ToolUseID, &c.Name, &c.ArgsJSON, &c.ArgsSHA256, &c.ReplayClass, &c.State, &c.Error,
-		&c.ResultID, &c.StartedAt, &c.FinishedAt)
+		&c.ResultID, &c.Result, &c.StartedAt, &c.FinishedAt)
 	return c, err
 }
 
@@ -614,9 +824,9 @@ func StartToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID, na
 	return res.LastInsertId()
 }
 
-func FinishToolCall(ctx context.Context, q db.Querier, callID int64, state string, now float64, errText *string, resultID *int64) error {
-	_, err := q.ExecContext(ctx, "UPDATE tool_calls SET state = ?, error = ?, result_id = ?, finished_at = ? WHERE id = ?",
-		state, errText, resultID, now, callID)
+func FinishToolCall(ctx context.Context, q db.Querier, callID int64, state string, now float64, errText *string, resultID *int64, result *string) error {
+	_, err := q.ExecContext(ctx, "UPDATE tool_calls SET state = ?, error = ?, result_id = ?, result = ?, finished_at = ? WHERE id = ?",
+		state, errText, resultID, result, now, callID)
 	return err
 }
 
@@ -645,7 +855,7 @@ type CallKey struct {
 
 func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) ([]ToolCall, error) {
 	return calls(q.QueryContext(ctx,
-		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.started_at, c.finished_at "+
+		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.result, c.started_at, c.finished_at "+
 			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? AND r.superseded = 0 ORDER BY c.id", threadID))
 }
 
@@ -653,5 +863,8 @@ func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) ([]To
 // answers the pending question.
 func ParkRun(ctx context.Context, q db.Querier, runID int64, now float64) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL, ended_at = ? WHERE id = ?", Parked, now, runID)
+	if err == nil {
+		progress.Notify()
+	}
 	return err
 }

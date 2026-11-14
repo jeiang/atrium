@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -12,11 +9,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
 type folderFixture struct {
@@ -27,11 +23,9 @@ type folderFixture struct {
 func newFolderFixture(t *testing.T, mode string) folderFixture {
 	t.Helper()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	srv := llmstub.Server(t, nil)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, settingEnv(mail.KeyMode), mode)
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	embed := embedstub.Server(t)
+	seedSettings(t, map[string]string{mail.KeyMode: mode})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -193,7 +187,7 @@ S: {t} OK DELETE completed
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	rows, err := d.Read.Query("SELECT id, tool, state, after_json, undo_json FROM agent_writes ORDER BY id")
+	rows, err := d.Read.Query("SELECT id, operation, state, after_json, undo_json FROM effects WHERE direction = 'forward' ORDER BY id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,8 +211,18 @@ S: {t} OK DELETE completed
 		_ = d.Read.QueryRow("SELECT body FROM tool_results ORDER BY result_id DESC LIMIT 1").Scan(&body)
 		t.Fatalf("writes = %v %v; last tool result = %s; stdout=%s stderr=%s", ids, tools, body, ran.stdout, ran.stderr)
 	}
-	if states[0] != "ok" || states[1] != "ok" {
+	if states[0] != "done" || states[1] != "done" {
 		t.Fatalf("write states = %v", states)
+	}
+	for i, operation := range []string{"mail.folder-create", "mail.move"} {
+		var outcome string
+		var effectID int64
+		if err := d.Read.QueryRow("SELECT outcome, json_extract(details_json, '$.effect_ids[0]') FROM operation_audit WHERE operation = ?", operation).Scan(&outcome, &effectID); err != nil {
+			t.Fatal(err)
+		}
+		if outcome != "ok" || effectID != ids[i] {
+			t.Fatalf("%s audit = %s effect %d, want ok effect %d", operation, outcome, effectID, ids[i])
+		}
 	}
 	if !strings.Contains(undos[0], `"op":"mail_folder_delete"`) || !strings.Contains(undos[0], `"imap_name":"News"`) {
 		t.Fatalf("folder undo = %s", undos[0])
@@ -230,24 +234,14 @@ S: {t} OK DELETE completed
 		t.Fatalf("move after = %s", afters[1])
 	}
 
-	base := startServeIn(t, fx.dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK {
-		t.Fatalf("GET /activity = %d %s", status, body)
-	}
 	for _, id := range []int64{ids[1], ids[0]} {
-		status, body, _ := fetch(t, client, "POST", base+"/activity/write/"+strconv.FormatInt(id, 10)+"/undo", url.Values{})
-		if status != http.StatusSeeOther {
-			t.Fatalf("undo write %d = %d %s", id, status, body)
+		if undone := runApp(t, "writes", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
+			t.Fatalf("undo write %d = %d %s", id, undone.code, undone.stderr)
 		}
 	}
 	for _, id := range ids {
-		var undone *float64
-		if err := d.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", id).Scan(&undone); err != nil {
+		var undone *int64
+		if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", id).Scan(&undone); err != nil {
 			t.Fatal(err)
 		}
 		if undone == nil {
@@ -271,10 +265,10 @@ func TestMailFolderCreateShadowRecordsWithoutWrite(t *testing.T) {
 	}
 	defer func() { _ = d.Close() }()
 	var state, after, undo string
-	if err := d.Read.QueryRow("SELECT state, after_json, coalesce(undo_json, '') FROM agent_writes WHERE tool = 'mail_folder_create'").Scan(&state, &after, &undo); err != nil {
+	if err := d.Read.QueryRow("SELECT state, after_json, coalesce(undo_json, '') FROM effects WHERE operation = 'mail_folder_create' AND direction = 'forward'").Scan(&state, &after, &undo); err != nil {
 		t.Fatal(err)
 	}
-	if state != "ok" || !strings.Contains(after, `"shadow":true`) || undo != "" {
+	if state != "skipped" || !strings.Contains(after, `"shadow":true`) || undo != "" {
 		t.Fatalf("shadow write = %q %s %q", state, after, undo)
 	}
 }
@@ -300,7 +294,7 @@ func TestMailMoveRefusesProtectedFolder(t *testing.T) {
 		t.Fatalf("tool result = %s", body)
 	}
 	var n int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes").Scan(&n); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE direction = 'forward'").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {
@@ -366,27 +360,140 @@ S: {t} OK DELETE completed
 	}
 	defer func() { _ = d.Close() }()
 	var id int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'mail_folder_create'").Scan(&id); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'mail_folder_create' AND direction = 'forward'").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(mail.KeyMode), "shadow")
-	base := startServeIn(t, fx.dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
+	if undone := runApp(t, "writes", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
+		t.Fatalf("undo in shadow mode = %d %s", undone.code, undone.stderr)
 	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK {
-		t.Fatalf("GET /activity = %d %s", status, body)
-	}
-	if status, body, _ := fetch(t, client, "POST", base+"/activity/write/"+strconv.FormatInt(id, 10)+"/undo", url.Values{}); status != http.StatusSeeOther {
-		t.Fatalf("undo in shadow mode = %d %s", status, body)
-	}
-	var undone *float64
-	if err := d.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", id).Scan(&undone); err != nil {
+	var undone *int64
+	if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", id).Scan(&undone); err != nil {
 		t.Fatal(err)
 	}
 	if undone == nil {
 		t.Fatal("write was not marked undone")
+	}
+}
+
+func TestMailMovePartialRecordsTheCopiedMessages(t *testing.T) {
+	fx := newFolderFixture(t, "live")
+	script := folderLogin + folderList(`S: * LIST () "/" "News"
+`) +
+		`C/ ^{t} STATUS INBOX \(.*\)$
+S: * STATUS "INBOX" (MESSAGES 2 UIDVALIDITY 1544650202 UIDNEXT 303 HIGHESTMODSEQ 81250)
+S: {t} OK STATUS completed
+C: {t} EXAMINE INBOX (CONDSTORE)
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen)
+S: * 2 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1544650202] UIDs valid
+S: * OK [UIDNEXT 303] Predicted next UID
+S: * OK [HIGHESTMODSEQ 81250] Highest
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} UID SEARCH UID 301:302
+S: * SEARCH 301 302
+S: {t} OK SEARCH completed
+C/ ^{t} UID FETCH 301:302 \(.*\)$
+S: * 1 FETCH (UID 301 FLAGS () BODY[HEADER] {18}
+S: Message-ID: <m1@x>)
+S: * 2 FETCH (UID 302 FLAGS () BODY[HEADER] {18}
+S: Message-ID: <m2@x>)
+S: {t} OK FETCH completed
+C: {t} SELECT INBOX (CONDSTORE)
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \*)] Limited
+S: * 2 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1544650202] UIDs valid
+S: * OK [UIDNEXT 303] Predicted next UID
+S: * OK [HIGHESTMODSEQ 81250] Highest
+S: {t} OK [READ-WRITE] SELECT completed
+C: {t} UID COPY 301:302 "News"
+S: {t} OK [COPYUID 1544650202 301:302 900:901] COPY completed
+C: {t} UID STORE 301:302 +FLAGS.SILENT (\Deleted)
+S: {t} NO STORE refused
+` + folderClose
+	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, script))
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	fx.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "mail_move", map[string]any{"account": "icloud", "folder": "News", "message_ids": []any{1, 2}})))
+	fx.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", "file the two messages"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	d, err := db.Connect(filepath.Join(fx.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	var state, after, undo string
+	if err := d.Read.QueryRow("SELECT state, after_json, undo_json FROM effects WHERE direction = 'forward' AND operation = 'mail_move' ORDER BY id DESC LIMIT 1").
+		Scan(&state, &after, &undo); err != nil {
+		t.Fatal(err)
+	}
+	if state != "partial" {
+		t.Fatalf("move state = %q, want partial; after=%s undo=%s", state, after, undo)
+	}
+	var auditOutcome string
+	var auditedEffect int64
+	if err := d.Read.QueryRow("SELECT outcome, json_extract(details_json, '$.effect_ids[0]') FROM operation_audit WHERE operation = 'mail.move' ORDER BY id DESC LIMIT 1").Scan(&auditOutcome, &auditedEffect); err != nil {
+		t.Fatal(err)
+	}
+	var actualEffect int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'mail_move' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&actualEffect); err != nil {
+		t.Fatal(err)
+	}
+	if auditOutcome != "partial" || auditedEffect != actualEffect {
+		t.Fatalf("partial move audit = %s effect %d, want partial effect %d", auditOutcome, auditedEffect, actualEffect)
+	}
+	if !strings.Contains(undo, `"op":"mail_move_back"`) || !strings.Contains(undo, `"dest_uid":900`) || !strings.Contains(undo, `"dest_uid":901`) {
+		t.Fatalf("the partial move dropped its inverse: %s", undo)
+	}
+	if !strings.Contains(after, `"copied"`) && !strings.Contains(after, `"dest_uid":900`) {
+		t.Fatalf("the partial move dropped the copied evidence: %s", after)
+	}
+}
+
+func TestMailFolderCreateRecordsAPartialWhenSubscribeFails(t *testing.T) {
+	fx := newFolderFixture(t, "live")
+	script := folderLogin + folderList("") + folderList("") +
+		`C: {t} CREATE "News"
+S: {t} OK CREATE completed
+C: {t} SUBSCRIBE "News"
+S: {t} NO SUBSCRIBE refused
+` + folderClose
+	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, script))
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	fx.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "mail_folder_create", map[string]any{"account": "icloud", "name": "News"})))
+	fx.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", "create a news folder"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	d, err := db.Connect(filepath.Join(fx.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	var state, undo string
+	if err := d.Read.QueryRow("SELECT state, undo_json FROM effects WHERE direction = 'forward' AND operation = 'mail_folder_create' ORDER BY id DESC LIMIT 1").
+		Scan(&state, &undo); err != nil {
+		t.Fatal(err)
+	}
+	if state != "partial" {
+		t.Fatalf("folder create state = %q, want partial; undo=%s", state, undo)
+	}
+	var auditOutcome string
+	if err := d.Read.QueryRow("SELECT outcome FROM operation_audit WHERE operation = 'mail.folder-create' ORDER BY id DESC LIMIT 1").Scan(&auditOutcome); err != nil {
+		t.Fatal(err)
+	}
+	if auditOutcome != "partial" {
+		t.Fatalf("folder create audit = %s, want partial", auditOutcome)
+	}
+	if !strings.Contains(undo, `"op":"mail_folder_delete"`) || !strings.Contains(undo, `"imap_name":"News"`) {
+		t.Fatalf("the created folder has no delete inverse: %s", undo)
 	}
 }

@@ -25,10 +25,10 @@ const (
 )
 
 type Config struct {
-	AssetVersion string
-	Globals      map[string]any
-	Modules      []fs.FS
-	State        *config.State
+	Assets  map[string]string
+	Globals map[string]any
+	Modules []fs.FS
+	State   *config.State
 }
 
 type Toast struct {
@@ -63,31 +63,38 @@ type NavGroup struct {
 }
 
 type Frame struct {
-	CSRF              string
-	Mode              string
-	Paused            bool
-	PendingCount      int
-	NotifyFailing     []string
-	IntegrationAlerts []string
-	Page              string
-	Toast             *Toast
-	Auth              AuthView
-	Nav               []NavGroup
-	Settings          []NavItem
-	SettingsURL       string
-	SettingGroups     []settings.GroupView
-	SettingModule     *settings.ModuleView
-	Connections       any
-	Saved             string
-	BrandURL          string
-	Footer            []NavItem
-	Tabs              []NavItem
-	Pages             []NavItem
-	Path              string
-	Theme             string
-	Rail              bool
-	Threads           *SidebarThreads
-	Data              any
+	CSRF          string
+	Mode          string
+	Paused        bool
+	PendingCount  int
+	NotifyFailing []string
+	Page          string
+	Toast         *Toast
+	Auth          AuthView
+	Nav           []NavGroup
+	Settings      []NavItem
+	SettingsURL   string
+	SettingGroups []settings.GroupView
+	SettingModule *settings.ModuleView
+	Connections   any
+	Saved         string
+	BrandURL      string
+	Footer        []NavItem
+	Tabs          []NavItem
+	Pages         []NavItem
+	Path          string
+	Theme         string
+	Rail          bool
+	Threads       *SidebarThreads
+	Data          any
+}
+
+type Fragment struct {
+	CSRF         string
+	Mode         string
+	PendingCount int
+	Toast        *Toast
+	Data         any
 }
 
 type SidebarThreads struct {
@@ -109,37 +116,30 @@ type SidebarThread struct {
 }
 
 type AuthView struct {
-	Admin    bool
 	SignOut  bool
-	NoAuth   bool
 	Settings bool
 }
 
 type ErrorView struct {
-	Status    int    `json:"status"`
-	Problem   string `json:"problem"`
-	Path      string `json:"path"`
-	AdminOnly bool   `json:"admin_only"`
+	Status  int    `json:"status"`
+	Problem string `json:"problem"`
+	Path    string `json:"path"`
 }
 
 type Engine struct {
-	globals      map[string]any
-	assetVersion string
-	shared       *template.Template
-	pages        map[string]*template.Template
-	state        *config.State
-}
-
-func AssetURL(version, path string) string {
-	return "/static/" + path + "?v=" + version
+	globals map[string]any
+	assets  map[string]string
+	shared  *template.Template
+	pages   map[string]*template.Template
+	state   *config.State
 }
 
 func New(cfg Config) (*Engine, error) {
 	e := &Engine{
-		globals:      maps.Clone(cfg.Globals),
-		assetVersion: cfg.AssetVersion,
-		pages:        map[string]*template.Template{},
-		state:        cfg.State,
+		globals: maps.Clone(cfg.Globals),
+		assets:  cfg.Assets,
+		pages:   map[string]*template.Template{},
+		state:   cfg.State,
 	}
 	sources, err := collect(cfg)
 	if err != nil {
@@ -169,17 +169,16 @@ func (e *Engine) Page(w io.Writer, name string, f *Frame) error {
 	return execute(w, set, layout, f)
 }
 
-func (e *Engine) Fragment(w io.Writer, name string, f *Frame) error {
+func (e *Engine) Fragment(w io.Writer, name string, f Fragment) error {
 	if !strings.HasPrefix(name, "_") || e.shared.Lookup(name) == nil {
 		return fmt.Errorf("tpl: no fragment %q", name)
 	}
 	return execute(w, e.shared, name, f)
 }
 
-func execute(w io.Writer, set *template.Template, name string, f *Frame) error {
-	root := *f
+func execute(w io.Writer, set *template.Template, name string, data any) error {
 	var b bytes.Buffer
-	if err := set.ExecuteTemplate(&b, name, &root); err != nil {
+	if err := set.ExecuteTemplate(&b, name, data); err != nil {
 		return err
 	}
 	_, err := w.Write(b.Bytes())

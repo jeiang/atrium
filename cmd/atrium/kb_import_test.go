@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/notion"
 )
@@ -54,14 +55,14 @@ INSERT INTO wiki_pages (page_id, title, aliases, in_trash) VALUES
 
 func TestKnowledgeImportIsIdempotent(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	seedSettings(t, map[string]string{notion.WikiRootKey: "00000000-0000-0000-0000-000000000001", "assistant_enabled": "false"})
 	if ran := runApp(t, "settings", "list"); ran.code != 0 {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
 	if code, stdout, stderr := kbImportRun(t, importSeed, "db", "shell"); code != 0 {
 		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 
 	code, stdout, stderr := kbImportRun(t, "", "kb", "import", "--dry-run")
@@ -76,6 +77,10 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records").Scan(&rows); err != nil || rows != 0 {
 		t.Fatalf("dry run wrote %d records (%v), want none", rows, err)
 	}
+	var audits, dryAudits int
+	if err := d.Read.QueryRow("SELECT COUNT(*), COUNT(*) FILTER (WHERE outcome = 'dry_run') FROM operation_audit WHERE operation = 'knowledge.import'").Scan(&audits, &dryAudits); err != nil || audits != 1 || dryAudits != 1 {
+		t.Fatalf("dry run audit rows = %d (%d dry_run, %v), want one dry_run row", audits, dryAudits, err)
+	}
 
 	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
 	if code != 0 {
@@ -84,6 +89,9 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 	first := kbImportStats(t, stdout)
 	if first.Profile.Created != 1 || first.Observations.Created != 2 || first.Notion.Created != 2 || first.PII != 1 || first.Private != 1 {
 		t.Fatalf("import stats = %+v, want 1 profile, 2 observations, 2 notion pages, 1 pii, 1 private", first)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'knowledge.import' AND outcome = 'ok'").Scan(&audits); err != nil || audits != 1 {
+		t.Fatalf("normal import audit rows = %d (%v), want one ok row", audits, err)
 	}
 	type record struct {
 		title     string
@@ -144,6 +152,7 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 		t.Fatalf("second import left %d records (%v), want 5", rows, err)
 	}
 
+	seedSettings(t, map[string]string{"assistant_enabled": "true"})
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
 	w := asstBrowse(t, base)
@@ -190,7 +199,7 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 
 func TestKnowledgeImportTreatsUniformPrivacyAsDefault(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	seedSettings(t, map[string]string{notion.WikiRootKey: "00000000-0000-0000-0000-000000000001"})
 	if ran := runApp(t, "settings", "list"); ran.code != 0 {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
@@ -204,7 +213,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if code, stdout, stderr := kbImportRun(t, seed, "db", "shell"); code != 0 {
 		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 
 	code, stdout, stderr := kbImportRun(t, "", "kb", "import")
@@ -266,7 +275,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 
 func TestKnowledgeImportCleansNotionMarkup(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	seedSettings(t, map[string]string{notion.WikiRootKey: "00000000-0000-0000-0000-000000000001"})
 	if ran := runApp(t, "settings", "list"); ran.code != 0 {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
@@ -306,7 +315,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if code, stdout, stderr := kbImportRun(t, seed, "db", "shell"); code != 0 {
 		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 
 	code, stdout, stderr := kbImportRun(t, "", "kb", "import")
@@ -390,7 +399,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if _, err := d.Write.Exec("UPDATE kb_records SET body = ?, marks = 0, confirmed_at = 123 WHERE id = ?", alphaMarkdown, alpha.id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target) VALUES (1, 'kb_confirm', ?)", fmt.Sprintf("kb:%d", alpha.id)); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state, settled_at) VALUES (1, 1, 'kb-confirm-test', 'local', 'kb_confirm', 'kb-confirm-test', 'forward', ?, '{}', 'done', 1)", fmt.Sprintf("kb:%d", alpha.id)); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
@@ -412,7 +421,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if _, err := d.Write.Exec("UPDATE kb_records SET body = 'Edited in the tab.' WHERE id = ?", beta.id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target) VALUES (1, 'kb_edit', ?)", fmt.Sprintf("kb:%d", beta.id)); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state, settled_at) VALUES (1, 1, 'kb-edit-test', 'local', 'kb_edit', 'kb-edit-test', 'forward', ?, '{}', 'done', 1)", fmt.Sprintf("kb:%d", beta.id)); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr = kbImportRun(t, "", "kb", "import")

@@ -50,15 +50,24 @@
         ${cmd}
       done
     '';
+    inherit (pkgs.stdenv.hostPlatform) isLinux;
+    containmentTools = lib.optionals isLinux [pkgs.util-linux pkgs.iproute2];
     testTags = tags: ''
       log=$TMPDIR/go-test.log
-      if ! go test -race -timeout 30m -tags ${tags} ./... >"$log" 2>&1; then
+      ${lib.optionalString isLinux ''
+        mkdir -p $TMPDIR/e2e
+        go build -tags ${tags} -o $TMPDIR/e2e/atrium ./cmd/atrium
+        go test -race -tags ${tags} -count=1 -exec true ./... >/dev/null
+        export ATRIUM_E2E_BINARY=$TMPDIR/e2e/atrium
+      ''}
+      if ! ${lib.optionalString isLinux "bash tools/e2e-loopback "}go test -race -timeout 120m -tags ${tags} ./... >"$log" 2>&1; then
         cat "$log"
         echo "=== go-test failure summary ==="
         grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
         awk 'race && /^==================$/ { exit } race && (/^[A-Z]/ || /jeiang\/atrium/) { sub(/ \+0x[0-9a-f]+$/, ""); print } /WARNING: DATA RACE/ { race = 1 }' "$log" | head -n 22
         exit 1
       fi
+      grep '^e2e-loopback:' "$log" || true
     '';
   in {
     checks = {
@@ -85,12 +94,19 @@
 
       docsgen = goCheck "docsgen" [] ''
         go run -tags modernc ./cmd/toolsdocs check
-        go run -tags modernc ./cmd/integrationsdocs
+        go run -tags modernc ./cmd/atrium catalog openapi --check docs/api
+        go run -tags modernc ./cmd/atrium catalog operations --require-api >/dev/null
       '';
 
-      go-test = goCheck "test" [] (testTags "libsqlite3,sqlite_fts5");
+      ownership = goCheck "ownership" [] ''
+        go run ./tools/tableownership
+        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go run ./tools/registrationownership''}
+        go run ./tools/adapterboundary
+      '';
 
-      go-test-modernc = goCheck "test-modernc" [] (testTags "modernc");
+      go-test = goCheck "test" containmentTools (testTags "libsqlite3,sqlite_fts5");
+
+      go-test-modernc = goCheck "test-modernc" containmentTools (testTags "modernc");
 
       go-licenses = goCheck "licenses" [pkgs.go-licenses pkgs.diffutils] ''
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" ${goSrc.licenseCheck}''}

@@ -11,8 +11,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -29,9 +27,7 @@ const (
 )
 
 func batchFrom(ctx context.Context, q db.Querier) (int, error) {
-	r := endpoint.Read(ctx, q)
-	n := r.Int(mail.KeyMailopsBatch)
-	return n, r.Err()
+	return mail.TuningMailopsBatch, nil
 }
 
 func BatchSize(ctx context.Context, client mail.Client) (int, error) {
@@ -70,7 +66,7 @@ const UnknownPrefix = "cancelled, write outcome unknown"
 
 func OutcomeUnknown(err error) bool {
 	if partial, ok := errors.AsType[*PartialMove](err); ok {
-		return partial.Unconfirmed
+		return partial.Unconfirmed || OutcomeUnknown(partial.Err)
 	}
 	_, ok := errors.AsType[*mail.WriteInterrupted](err)
 	return ok
@@ -87,12 +83,20 @@ func (e *PartialMove) Error() string {
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 
-func (e *PartialMove) OutcomeUnknown() bool { return e.Unconfirmed }
+func (e *PartialMove) OutcomeUnknown() bool { return e.Unconfirmed || OutcomeUnknown(e.Err) }
 
 func (e *PartialMove) Partial() bool { return true }
 
 func Session(ctx context.Context, open mail.OpenFunc, q db.Querier, account string, fn func(mail.Client) error) error {
-	client, err := open(ctx, mail.OpenOptions{Account: account, Q: q})
+	return session(ctx, open, mail.OpenOptions{Account: account, Q: q}, fn)
+}
+
+func ReadSession(ctx context.Context, open mail.OpenFunc, q db.Querier, account string, fn func(mail.Client) error) error {
+	return session(ctx, open, mail.OpenOptions{Account: account, Q: q, ReadOnly: true}, fn)
+}
+
+func session(ctx context.Context, open mail.OpenFunc, opts mail.OpenOptions, fn func(mail.Client) error) error {
+	client, err := open(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -182,15 +186,18 @@ func Verify(ctx context.Context, q db.Querier, client mail.Client, account strin
 	if err != nil {
 		return nil, nil, err
 	}
+	unresolved, err := mail.UnresolvedMessages(ctx, q, account)
+	if err != nil {
+		return nil, nil, err
+	}
 	var order []boxKey
 	survivors := map[boxKey][]Snapshot{}
 	for _, snap := range snaps {
 		var gone sql.NullFloat64
 		var uid, validity int64
 		var digest, imapName string
-		var unresolved bool
-		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+ledger.MailUnresolvedSQL+" FROM messages m "+
-			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName, &unresolved)
+		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name FROM messages m "+
+			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName)
 		reason := ""
 		switch {
 		case errors.Is(err, sql.ErrNoRows) || err == nil && gone.Valid:
@@ -201,7 +208,7 @@ func Verify(ctx context.Context, q db.Querier, client mail.Client, account strin
 			reason = ReasonMoved
 		case digest != snap.Digest:
 			reason = ReasonChanged
-		case unresolved:
+		case unresolved[snap.ID]:
 			reason = ReasonUnresolved
 		}
 		if reason != "" {

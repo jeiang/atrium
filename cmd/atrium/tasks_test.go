@@ -1,20 +1,18 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
@@ -27,23 +25,23 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "add a task"); ran.code != cli.ExitOK {
 		t.Fatalf("task_add run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var taskID int64
 	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Call the dentist'").Scan(&taskID); err != nil {
 		t.Fatal(err)
 	}
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'task_add' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
+	var effectID int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'task_add' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&effectID); err != nil {
 		t.Fatal(err)
 	}
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK || !strings.Contains(body, "/activity/write/"+strconv.FormatInt(writeID, 10)+"/undo") {
-		t.Fatalf("activity page = %d, want an undo for the task_add write: %.400s", code, body)
+	if code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
+		t.Fatalf("activity page = %d: %.400s", code, body)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/activity/write/"+strconv.FormatInt(writeID, 10)+"/undo", url.Values{}); code != http.StatusOK {
+	if code, body, _ := fetch(t, client, http.MethodPost, base+"/activity/effect/"+strconv.FormatInt(effectID, 10)+"/undo", url.Values{}); code != http.StatusOK {
 		t.Fatalf("undo = %d %s", code, body)
 	}
 	var n int
@@ -102,8 +100,8 @@ func TestReminderProposalCreatesATaskAndUndoRemovesIt(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	ctx := settings.With(context.Background(), settings.New())
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	ctx := testProposalContext()
 	now := float64(time.Now().Unix())
 	payload := map[string]any{"text": "Pay the rent", "remind_at": now + 3600, "tz": "UTC", "message_id": 1}
 	id, _, err := proposals.Create(ctx, d, "reminder", nil, "Pay the rent", payload, payload, "fp-reminder", now)
@@ -133,5 +131,52 @@ func TestReminderProposalCreatesATaskAndUndoRemovesIt(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatal("reminder undo did not delete the task")
+	}
+}
+
+func TestTaskUpdateAbsentFieldsKeepValues(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t1", "task_add", map[string]any{"title": "Renew passport", "due": "2026-12-01", "remind_at": 1795000000, "notes": "photos first"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("added")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "add a task"); ran.code != cli.ExitOK {
+		t.Fatalf("task_add run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var id int64
+	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Renew passport'").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t2", "task_update", map[string]any{"id": id, "title": "Renew both passports"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("updated")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "rename it"); ran.code != cli.ExitOK {
+		t.Fatalf("task_update run: %d %s", ran.code, ran.stderr)
+	}
+	var title, notes, due string
+	var remindAt float64
+	if err := d.Read.QueryRow("SELECT title, notes, due, remind_at FROM tasks WHERE id = ?", id).Scan(&title, &notes, &due, &remindAt); err != nil {
+		t.Fatal(err)
+	}
+	if title != "Renew both passports" || notes != "photos first" || due != "2026-12-01" || remindAt != 1795000000 {
+		t.Fatalf("task after a title-only update = %q %q %q %v", title, notes, due, remindAt)
+	}
+	for _, op := range []string{"tasks.add", "tasks.update"} {
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND target = ? AND outcome = 'ok' AND source = 'tool'",
+			op, strconv.FormatInt(id, 10)).Scan(&n); err != nil || n != 1 {
+			t.Errorf("%s ok audit rows = %d (%v), want 1", op, n, err)
+		}
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("missing", "task_done", map[string]any{"id": 999999})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("not found")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "finish the missing task"); ran.code != cli.ExitOK {
+		t.Fatalf("missing task run: %d %s", ran.code, ran.stderr)
+	}
+	var n int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit a JOIN runs r ON r.id = a.run_id WHERE a.operation = 'tasks.done' AND a.target = '999999' AND a.outcome = 'not_found' AND a.thread_id = 1 AND r.thread_id = a.thread_id AND a.run_id = (SELECT MAX(id) FROM runs)").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("missing task audit with trusted invocation = %d (%v), want 1", n, err)
 	}
 }

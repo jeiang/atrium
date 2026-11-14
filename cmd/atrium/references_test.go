@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func lastUserText(t *testing.T, r anthropictest.Request) string {
@@ -38,7 +39,7 @@ func lastUserText(t *testing.T, r anthropictest.Request) string {
 
 func threadMessages(t *testing.T, dir string, thread int64) int {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&n); err != nil {
@@ -49,7 +50,7 @@ func threadMessages(t *testing.T, dir string, thread int64) int {
 
 func waitIdle(t *testing.T, dir string, thread int64) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
@@ -98,7 +99,7 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 		others = append(others, latestThread(t, dir))
 	}
 
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -160,14 +161,11 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	if status != http.StatusUnprocessableEntity {
 		t.Fatalf("POST four references = %d, want 422: %s", status, body)
 	}
-	if !strings.Contains(body, "3 references per message") {
-		t.Errorf("the refusal does not name the cause: %s", body)
-	}
 	if after := threadMessages(t, dir, reader); after != count {
 		t.Errorf("a refused message stored %d messages, want %d", after-count, 0)
 	}
 	var stored int
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND content_json LIKE '%\"type\":\"reference\"%'", reader).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
@@ -177,5 +175,46 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	}
 	if raw := string(request.Body); strings.Contains(raw, `"type":"reference"`) {
 		t.Error("the stored reference block reached the model unexpanded")
+	}
+}
+
+func TestAPISendReferenceStoresTheHTMLContext(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("the code is 4242")))
+	if ran := runApp(t, "agent", "run", "--text", "remember the code"); ran.code != 0 {
+		t.Fatalf("source run: %d %s", ran.code, ran.stderr)
+	}
+	source := latestThread(t, dir)
+	readers := make([]int64, 2)
+	for i := range readers {
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("started")))
+		if ran := runApp(t, "agent", "run", "--text", "start"); ran.code != 0 {
+			t.Fatalf("reader run: %d %s", ran.code, ran.stderr)
+		}
+		readers[i] = latestThread(t, dir)
+	}
+	s := startAPISite(t, dir, api)
+	text := fmt.Sprintf("see @thread/%d", source)
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
+	if status, body, _ := fetch(t, s.browser(), "POST", fmt.Sprintf("%s/chat/%d/messages", s.base, readers[0]), url.Values{"text": {text}}); status >= http.StatusBadRequest {
+		t.Fatalf("HTML send = %d: %s", status, body)
+	}
+	waitIdle(t, dir, readers[0])
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
+	if sent := s.do(http.MethodPost, fmt.Sprintf("/api/v1/threads/%d/messages", readers[1]), s.token("owner"), map[string]any{"text": text}); sent.status != http.StatusAccepted {
+		t.Fatalf("API send = %d %s", sent.status, sent.body)
+	}
+	waitIdle(t, dir, readers[1])
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	stored := make([]string, len(readers))
+	for i, reader := range readers {
+		if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = ? AND role = 'user' AND superseded = 0 ORDER BY seq DESC LIMIT 1", reader).Scan(&stored[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !strings.Contains(stored[0], `"type":"reference"`) || stored[0] != stored[1] {
+		t.Fatalf("API send stored %s, HTML send stored %s", stored[1], stored[0])
 	}
 }

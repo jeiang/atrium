@@ -16,12 +16,17 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/observability"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
-	ExitOK         = 0
-	ExitError      = 1
-	ExitUsage      = 2
+	ExitOK       = 0
+	ExitError    = 1
+	ExitUsage    = 2
+	ExitTempFail = 75
+	// ExitConfig (EX_CONFIG) is a permanent refusal: retrying with the same configuration,
+	// database key and schema fails the same way, so a supervisor should not restart it.
+	ExitConfig     = 78
 	ExitHangup     = 129
 	ExitInterrupt  = 130
 	ExitTerminated = 143
@@ -30,11 +35,12 @@ const (
 type Handler func(env *Env) int
 
 type Command struct {
-	Name     string
-	Help     string
-	Dest     string
-	Setup    func(a *Args) Handler
-	Commands []*Command
+	Name          string
+	Help          string
+	Dest          string
+	Setup         func(a *Args) Handler
+	Commands      []*Command
+	BootstrapExit int
 }
 
 func (c *Command) Add(cmds ...*Command) {
@@ -89,6 +95,12 @@ type Args struct {
 }
 
 func (a *Args) RejectExtras(message string) { a.extrasText = message }
+
+type ConfigRefusal struct{ Err error }
+
+func (e *ConfigRefusal) Error() string { return e.Err.Error() }
+
+func (e *ConfigRefusal) Unwrap() error { return e.Err }
 
 func (a *Args) option(name string, k kind, o Opt) *action {
 	act := &action{Opt: o, kind: k, name: name, dest: strings.ReplaceAll(name, "-", "_"), opts: []string{"--" + name}}
@@ -219,6 +231,9 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if a.Bootstrap != nil {
 		if err := a.Bootstrap(ctx, stderr); err != nil {
 			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
+			if s.bootstrapExit != 0 && errors.As(err, new(*ConfigRefusal)) {
+				return s.bootstrapExit
+			}
 			return ExitError
 		}
 	}
@@ -237,6 +252,9 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	stdin := a.Stdin
 	if stdin == nil {
 		stdin = os.Stdin
+	}
+	if !audit.HasActor(ctx) {
+		ctx = audit.With(ctx, "operator", audit.CLI)
 	}
 	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, Env: env, Settings: a.Settings, p: s.leaf, width: s.width})
 }
@@ -309,6 +327,7 @@ type session struct {
 	width          int
 	leaf           *parser
 	handler        Handler
+	bootstrapExit  int
 }
 
 func (s *session) fail(p *parser, msg string) error {
@@ -443,9 +462,10 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 			if err := s.checkChoice(p, a, name); err != nil {
 				return err
 			}
-			sub, h := newParser(p.prog+" "+name, a.cmd.find(name), false)
+			cmd := a.cmd.find(name)
+			sub, h := newParser(p.prog+" "+name, cmd, false)
 			if h != nil {
-				s.leaf, s.handler = sub, h
+				s.leaf, s.handler, s.bootstrapExit = sub, h, cmd.BootstrapExit
 			}
 			rest, err := s.parse(sub, strs[1:])
 			subExtras = append(subExtras, rest...)

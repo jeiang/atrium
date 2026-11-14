@@ -6,6 +6,6 @@
   {{range $d.Categories}}<a class="btn" data-size="sm" data-variant="{{if eq $d.Category .}}secondary{{else}}outline{{end}}" href="/activity?category={{.}}">{{capitalize .}}</a>{{end}}
 </nav>
 <ul id="activity" class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list" aria-label="Activity">
-  {{template "activity_rows" (dict "entries" $d.Entries "category" $d.Category "offset" $d.Offset "next_offset" $d.NextOffset "toast" .Toast)}}
+  {{template "activity_rows" (dict "entries" $d.Entries "category" $d.Category "after" $d.After "next" $d.Next "toast" .Toast)}}
 </ul>
 {{end}}

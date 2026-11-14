@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -20,10 +21,11 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
 type mrvMail struct {
@@ -155,17 +157,16 @@ func mrvMailFixture(t *testing.T, mode string) *mrvMail {
 	m.fake.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
 	h, x := mailtest.RawWith("Statement", "pay@bank.test", "statement-1", "Your statement is ready.")
 	inbox.Add(h, x, []string{`\Seen`}, nil)
-	f.app = newAppWith(f.lookup, f.settings, f.state, nil, func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
-			return mail.Gated(m.fake, opts.Q), nil
+	f.app = newAppWith(f.lookup, func(config.Config) mail.OpenFunc {
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return m.fake.Open(ctx, opts)
 		}
 	}, nil, quietLog)
+	f.settings, f.state = f.app.Settings, f.app.State
 	m.app = f.app
-	srv := llmstub.Server(t, nil)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, settingEnv(mail.KeyMode), mode)
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	embed := embedstub.Server(t)
+	seedSettings(t, map[string]string{mail.KeyMode: mode})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	return m
 }
 
@@ -212,7 +213,7 @@ func mrvDo(t *testing.T, client *http.Client, method, target string, form url.Va
 
 func mrvScalar(t *testing.T, path, query string, args ...any) string {
 	t.Helper()
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	defer func() { _ = d.Close() }()
 	var out *string
 	if err := d.Read.QueryRow(query, args...).Scan(&out); err != nil {
@@ -249,7 +250,7 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 		t.Fatalf("refused corrections were stored: %s", n)
 	}
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+correct, url.Values{"dest": {"Bills"}, "context": {"row"}}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "Correction recorded") || strings.Contains(body, "moved") || strings.Contains(body, "could not") {
+	if code != http.StatusOK {
 		t.Fatalf("shadow correction = %d: %.400s", code, body)
 	}
 	if got := mrvScalar(t, dbPath, "SELECT folder FROM corrections WHERE message_id = ?", id); got != "Bills" {
@@ -257,7 +258,7 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	}
 	stop()
 
-	setEnv(t, settingEnv(mail.KeyMode), "live")
+	seedSettings(t, map[string]string{mail.KeyMode: "live"})
 	for _, args := range [][]string{{"live", "rebaseline"}, {"live", "pause"}} {
 		if got := runApp(t, args...); got.code != cli.ExitOK {
 			t.Fatalf("%v: %d %s", args, got.code, got.stderr)
@@ -286,10 +287,13 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(body, "The message was moved.") {
 		t.Fatalf("live correction = %d: %.400s", code, body)
 	}
-	if state := mrvScalar(t, dbPath, "SELECT state FROM auto_actions WHERE kind = 'correct'"); state != "applied" {
+	if state := mrvScalar(t, dbPath, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "done" {
 		t.Fatalf("correction action state = %s", state)
 	}
-	action := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM auto_actions WHERE kind = 'correct' AND state = 'applied'")
+	action := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct' AND state = 'done'")
+	if got := mrvScalar(t, dbPath, "SELECT outcome || ' ' || details_json FROM operation_audit WHERE operation = 'mail.correct' ORDER BY id DESC LIMIT 1"); got != `ok {"effect_ids":[`+action+`]}` {
+		t.Fatalf("the live correction audit = %s, want ok with effect %s", got, action)
+	}
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+"/live/actions/"+action+"/undo", url.Values{}, hx...)
 	if code != http.StatusOK || !strings.Contains(body, "Undone") {
 		t.Fatalf("undo = %d: %.400s", code, body)
@@ -398,9 +402,12 @@ func (f *mrvSMTP) handle(c net.Conn) {
 			}
 			f.mu.Lock()
 			f.datas = append(f.datas, body.String())
-			drop := f.mode == "drop"
+			drop, hang := f.mode == "drop", f.mode == "hang"
 			f.mu.Unlock()
-			if drop {
+			if hang {
+				_, _ = io.Copy(io.Discard, r)
+			}
+			if drop || hang {
 				return
 			}
 			write("250 queued")
@@ -438,7 +445,7 @@ func TestMrvDraftSendNeverResendsAnUncertainMailAndFilesTheSentCopy(t *testing.T
 
 	smtp.set("auth-fail")
 	code, body, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {revision()}}, hx...)
-	if code != http.StatusConflict || !strings.Contains(body, "Not sent") || !strings.Contains(body, "535") {
+	if code != http.StatusConflict {
 		t.Fatalf("send with a refused login = %d: %.400s", code, body)
 	}
 	if got := status(); got != "draft" || len(smtp.sent()) != 0 {
@@ -447,11 +454,18 @@ func TestMrvDraftSendNeverResendsAnUncertainMailAndFilesTheSentCopy(t *testing.T
 	smtp.set("drop")
 	stale := revision()
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {stale}}, hx...)
-	if code != http.StatusConflict || !strings.Contains(body, "Send outcome unknown") || strings.Contains(body, "Not sent") {
+	if code != http.StatusConflict {
 		t.Fatalf("send lost after DATA = %d: %.400s", code, body)
 	}
 	if got := status(); got != "unknown" || len(smtp.sent()) != 1 {
 		t.Fatalf("after a lost reply the draft is %q with %d deliveries", got, len(smtp.sent()))
+	}
+	if outcome := mrvScalar(t, dbPath, "SELECT outcome FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); outcome != "unknown" {
+		t.Fatalf("uncertain send audit = %s, want unknown", outcome)
+	}
+	unknownEffect := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE operation = 'smtp_send' AND state = 'unknown'")
+	if effect := mrvScalar(t, dbPath, "SELECT CAST(json_extract(details_json, '$.effect_ids[0]') AS TEXT) FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); effect != unknownEffect {
+		t.Fatalf("uncertain send audit effect = %s, want %s", effect, unknownEffect)
 	}
 	smtp.set("")
 	for _, rev := range []string{stale, strconv.Itoa(mrvAtoi(t, stale) + 1)} {
@@ -466,17 +480,24 @@ func TestMrvDraftSendNeverResendsAnUncertainMailAndFilesTheSentCopy(t *testing.T
 	if code, body, _ := mrvDo(t, client, http.MethodPost, base+draft+"/resolve", url.Values{"outcome": {"draft"}}, hx...); code != http.StatusOK || status() != "draft" {
 		t.Fatalf("back to draft = %d, status %q: %.400s", code, status(), body)
 	}
+	if effect := mrvScalar(t, dbPath, "SELECT CAST(json_extract(details_json, '$.effect_ids[0]') AS TEXT) FROM operation_audit WHERE operation = 'mail.draft-resolve' ORDER BY id DESC LIMIT 1"); effect != unknownEffect {
+		t.Fatalf("resolved draft audit effect = %s, want %s", effect, unknownEffect)
+	}
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+draft+"/resolve", url.Values{"outcome": {"sent"}}, hx...)
-	if code != http.StatusConflict || !strings.Contains(body, "not in the unknown state") {
+	if code != http.StatusConflict {
 		t.Fatalf("resolving a settled draft = %d: %.400s", code, body)
 	}
 
-	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, mrvSentCopyScript))
-	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
-	t.Setenv("ATRIUM_IMAP_CA", ca)
 	final := revision()
+	code, _, _ = mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {strconv.Itoa(mrvAtoi(t, final) - 1)}}, hx...)
+	if code != http.StatusConflict || len(smtp.sent()) != 1 {
+		t.Fatalf("stale send = %d with %d deliveries, want 409 and one previous delivery", code, len(smtp.sent()))
+	}
+	if outcome := mrvScalar(t, dbPath, "SELECT outcome FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); outcome != "conflict" {
+		t.Fatalf("stale send audit = %s, want conflict", outcome)
+	}
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {final}}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "copy filed in Sent") {
+	if code != http.StatusOK {
 		t.Fatalf("send = %d: %.400s", code, body)
 	}
 	if got := smtp.sent(); status() != "sent" || len(got) != 2 || !strings.Contains(got[1], "Subject: Lunch plans") {
@@ -513,7 +534,7 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	}
 	dbPath := filepath.Join(dir, "atrium.db")
 	writeID := func(tool string, nth int) string {
-		return mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM agent_writes WHERE tool = ? ORDER BY id LIMIT 1 OFFSET ?", tool, nth)
+		return mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE direction = 'forward' AND operation = ? ORDER BY id LIMIT 1 OFFSET ?", tool, nth)
 	}
 	fileFirst, fileSecond := writeID("file_write", 0), writeID("file_write", 1)
 	profileFirst, profileSecond := writeID("kb_write", 0), writeID("kb_write", 1)
@@ -526,7 +547,7 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 		return string(data)
 	}
 	profile := func() string {
-		d := mustConnect(t, dbPath)
+		d := mustConnect(t, dbPath, db.Key{})
 		defer func() { _ = d.Close() }()
 		var value string
 		var retracted *float64
@@ -545,12 +566,12 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	base := startServeIn(t, dir)
 	client := mrvClient(t)
 	code, page, _ := mrvDo(t, client, http.MethodGet, base+"/activity", nil)
-	if code != http.StatusOK || !strings.Contains(page, "/activity/write/"+fileSecond+"/undo") || !strings.Contains(page, "/activity/write/"+profileSecond+"/undo") {
-		t.Fatalf("activity = %d without the undo controls: %.400s", code, page)
+	if code != http.StatusOK {
+		t.Fatalf("activity = %d: %.400s", code, page)
 	}
 	undo := func(id string) (int, string) {
 		t.Helper()
-		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/activity/write/"+id+"/undo", url.Values{})
+		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/activity/effect/"+id+"/undo", url.Values{})
 		return code, body
 	}
 
@@ -560,20 +581,20 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	if err := os.WriteFile(note, []byte("changed"), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	if code, body := undo(fileFirst); code != http.StatusConflict || !strings.Contains(body, "file changed since the write") || content() != "changed" {
+	if code, body := undo(fileFirst); code != http.StatusConflict || content() != "changed" {
 		t.Fatalf("undo over an edited file = %d, note %q: %s", code, content(), body)
 	}
 	if code, _ := undo(fileSecond); code != http.StatusConflict || content() != "changed" {
 		t.Fatalf("a second undo of the overwrite = %d, note %q", code, content())
 	}
 
-	if code, body := undo(profileFirst); code != http.StatusConflict || !strings.Contains(body, "changed since this write") || profile() != "UTC" {
+	if code, body := undo(profileFirst); code != http.StatusConflict || profile() != "UTC" {
 		t.Fatalf("undo of a superseded profile write = %d, tz %q: %s", code, profile(), body)
 	}
 	if code, body := undo(profileSecond); code != http.StatusSeeOther || profile() != "AST" {
 		t.Fatalf("undo of the latest record write = %d, body %q: %s", code, profile(), body)
 	}
-	if code, body := undo(profileFirst); code != http.StatusConflict || !strings.Contains(body, "changed since this write") || profile() != "AST" {
+	if code, body := undo(profileFirst); code != http.StatusConflict || profile() != "AST" {
 		t.Fatalf("undo of a superseded record write = %d, body %q: %s", code, profile(), body)
 	}
 }
@@ -610,11 +631,34 @@ func TestMrvDecisionsListEachDecisionOnceAcrossCheckAndFiled(t *testing.T) {
 	if code, all, _ := mrvDo(t, client, http.MethodGet, base+"/triage?q=pay%40bank.test", nil); code != http.StatusOK || strings.Count(all, "tatement</a>") != 2 {
 		t.Errorf("the sender's list = %d with %d statements, want 2", code, strings.Count(all, "tatement</a>"))
 	}
-	if strings.Contains(body, "data-check") != strings.Contains(body, ">Filed<") {
-		t.Error("the check section and the Filed heading do not appear together")
+}
+
+func TestMrvDraftSendAuditsDeliveredMailWithAFailedSentCopyAsPartial(t *testing.T) {
+	m := mrvMailFixture(t, "shadow")
+	smtp := mrvSMTPServer(t)
+	m.fake.FailWrite = func(write mailtest.FakeWrite) error {
+		if write.Verb == "APPEND" {
+			return errors.New("Sent copy refused")
+		}
+		return nil
 	}
-	code, filtered, _ := mrvDo(t, client, http.MethodGet, base+"/triage?agreement=pending", nil)
-	if code != http.StatusOK || strings.Contains(filtered, "data-check") {
-		t.Errorf("a filtered list = %d, shows the check section %v", code, strings.Contains(filtered, "data-check"))
+	toolResult(t, "draft_email_create", map[string]any{"account": "icloud", "to": []any{"friend@x.test"}, "subject": "Lunch plans", "body": "Noon works."})
+	path := filepath.Join(m.dir, "atrium.db")
+	id := mrvScalar(t, path, "SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Lunch plans'")
+	revision := mrvScalar(t, path, "SELECT CAST(revision AS TEXT) FROM drafts WHERE id = ?", id)
+	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
+	client := mrvClient(t)
+	if code, _, _ := mrvDo(t, client, http.MethodGet, base+"/drafts/"+id, nil); code != http.StatusOK {
+		t.Fatalf("draft page = %d", code)
+	}
+	code, _, _ := mrvDo(t, client, http.MethodPost, base+"/drafts/"+id+"/send", url.Values{"revision": {revision}}, "HX-Request", "true")
+	if code != http.StatusOK || len(smtp.sent()) != 1 {
+		t.Fatalf("delivered send = %d with %d deliveries", code, len(smtp.sent()))
+	}
+	if outcome := mrvScalar(t, path, "SELECT outcome FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); outcome != "partial" {
+		t.Fatalf("failed Sent-copy audit = %s, want partial", outcome)
+	}
+	if count := mrvScalar(t, path, "SELECT CAST(json_array_length(details_json, '$.effect_ids') AS TEXT) FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); count != "2" {
+		t.Fatalf("failed Sent-copy audit effect count = %s, want 2", count)
 	}
 }

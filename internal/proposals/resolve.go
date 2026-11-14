@@ -2,11 +2,10 @@ package proposals
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 )
 
@@ -15,35 +14,16 @@ const (
 	OutcomeNotUndone  = "not-undone"
 	OutcomeApplied    = "applied"
 	OutcomeNotApplied = "not-applied"
-	OutcomeSettled    = "settled"
-
-	ResolveProposalAction = "proposal_action"
-	ResolveAutoUndo       = "auto_undo"
-	ResolveAutoAction     = "auto_action"
-
-	SettledText    = "settled by operator after checking the mailbox"
-	NotAppliedText = "the operator checked: the write did not happen"
+	OutcomePartial    = "partial"
 
 	UnknownOutcomeText = "Outcome unknown"
 )
 
+var Outcomes = []string{OutcomeApplied, OutcomeNotApplied, OutcomePartial, OutcomeUndone, OutcomeNotUndone}
+
 type Resolver struct {
 	Actor  string
 	Source string
-}
-
-func RecordResolution(ctx context.Context, x Execer, who Resolver, ts float64, kind string, rowID int64, proposalID *int64, outcome, prior string) error {
-	var proposal any
-	if prior == "" {
-		prior = UnknownOutcomeText
-	}
-	if proposalID != nil {
-		proposal = *proposalID
-	}
-	_, err := x.ExecContext(ctx,
-		"INSERT INTO write_resolutions (ts, actor, source, kind, row_id, proposal_id, outcome, prior_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		ts, who.Actor, who.Source, kind, rowID, proposal, outcome, prior)
-	return err
 }
 
 const ErrSettledMeanwhile = ProposalError("the write was settled by the operator while it ran; the recorded outcome stands")
@@ -53,75 +33,78 @@ type Resolved struct {
 	Settled []int64
 }
 
-func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Resolver) (Resolved, error) {
-	if outcome != "" && outcome != OutcomeUndone && outcome != OutcomeNotUndone {
-		return Resolved{}, ProposalError("outcome must be " + OutcomeUndone + " or " + OutcomeNotUndone)
+func refusal(err error) error {
+	var refused ledger.Refused
+	var settled *ledger.SettledMeanwhile
+	var missing *ledger.NotFound
+	if errors.As(err, &refused) || errors.As(err, &settled) || errors.As(err, &missing) {
+		return ProposalError(err.Error())
 	}
+	return err
+}
+
+func outcomeFits(direction, outcome string) bool {
+	if direction == "undo" {
+		return outcome == OutcomeUndone || outcome == OutcomeNotUndone || outcome == OutcomePartial
+	}
+	return outcome == OutcomeApplied || outcome == OutcomeNotApplied || outcome == OutcomePartial
+}
+
+func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Resolver) (Resolved, error) {
+	if outcome != "" && !slices.Contains(Outcomes, outcome) {
+		return Resolved{}, ProposalError("outcome must be one of applied, not-applied, partial, undone, not-undone")
+	}
+	ctx = context.WithoutCancel(ctx)
 	out := Resolved{ID: id, Settled: []int64{}}
-	err := p.DB.WithTx(context.WithoutCancel(ctx), func(tx *sql.Tx) error {
-		var status string
-		err := tx.QueryRowContext(ctx, "SELECT status FROM proposals WHERE id = ?", id).Scan(&status)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ProposalError(fmt.Sprintf("unknown proposal %d", id))
-		}
+	prop, err := Get(ctx, p.DB.Write, id)
+	if err != nil {
+		return Resolved{}, err
+	}
+	if prop == nil {
+		return Resolved{}, ProposalError(fmt.Sprintf("unknown proposal %d", id))
+	}
+	if prop.Status == Approved {
+		return Resolved{}, ProposalError(fmt.Sprintf("proposal %d is still being applied", id))
+	}
+	if p.Registry != nil && p.Registry.Bind != nil {
+		ctx, err = p.Registry.Bind(ctx, prop.Kind)
 		if err != nil {
-			return err
+			return Resolved{}, err
 		}
-		if status == Approved {
-			return ProposalError(fmt.Sprintf("proposal %d is still being applied", id))
+	}
+	effects, err := p.Ledger.ProposalEffects(ctx, id)
+	if err != nil {
+		return Resolved{}, err
+	}
+	var blocked []ledger.Effect
+	for _, e := range effects {
+		if e.Blocked {
+			blocked = append(blocked, e)
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id, lease, kind, undo_of, state, error FROM proposal_actions "+
-			"WHERE proposal_id = ? AND state IN ('held', 'unknown', 'partial', 'undo_held', 'undo_unknown', 'undo_partial') ORDER BY id", id)
-		if err != nil {
-			return err
+	}
+	for _, e := range blocked {
+		if e.State == ledger.Intent {
+			return Resolved{}, ProposalError(fmt.Sprintf("effect %d may still be running; wait until atrium is idle and try again", e.ID))
 		}
-		type held struct {
-			id     int64
-			lease  float64
-			kind   string
-			undoOf *int64
-			state  ledger.State
-			error  sql.NullString
-		}
-		blocked, err := db.Collect(rows, func(r *sql.Rows) (held, error) {
-			var h held
-			return h, r.Scan(&h.id, &h.lease, &h.kind, &h.undoOf, &h.state, &h.error)
-		})
-		if err != nil {
-			return err
-		}
-		if len(blocked) == 0 {
-			return ProposalError(fmt.Sprintf("proposal %d has no blocked write", id))
-		}
-		now := p.now()
-		for _, h := range blocked {
-			isUndo := h.kind == "undo"
-			switch {
-			case (h.state == ledger.Held || h.state == ledger.UndoHeld) && now-h.lease < StuckSeconds:
-				return ProposalError(fmt.Sprintf("action %d may still be running; wait until atrium is idle and try again", h.id))
-			case isUndo && outcome == "":
-				return ProposalError(fmt.Sprintf("action %d is a blocked undo; check the mailbox and say whether the message is %s or %s", h.id, OutcomeUndone, OutcomeNotUndone))
+		if outcome == "" {
+			if e.Direction == "undo" {
+				return Resolved{}, ProposalError(fmt.Sprintf("effect %d is a blocked undo; check the mailbox and say whether it was %s or %s", e.ID, OutcomeUndone, OutcomeNotUndone))
 			}
+			return Resolved{}, ProposalError(fmt.Sprintf("effect %d is blocked; say whether it was %s, %s or %s", e.ID, OutcomeApplied, OutcomeNotApplied, OutcomePartial))
 		}
-		for _, h := range blocked {
-			recorded := OutcomeSettled
-			state := ledger.Settled
-			if h.kind == "undo" {
-				recorded = outcome
-				if outcome == OutcomeUndone {
-					state = ledger.OK
-				}
-			}
-			if _, err := tx.ExecContext(ctx, "UPDATE proposal_actions SET state = ?, error = CASE WHEN ? = 'ok' THEN NULL ELSE ? END WHERE id = ?",
-				state, state, SettledText, h.id); err != nil {
-				return err
-			}
-			if err := RecordResolution(ctx, tx, who, now, ResolveProposalAction, h.id, &id, recorded, h.error.String); err != nil {
-				return err
-			}
-			out.Settled = append(out.Settled, h.id)
+		if !outcomeFits(e.Direction, outcome) {
+			return Resolved{}, ProposalError(fmt.Sprintf("effect %d is a blocked %s; %q does not apply to it, so nothing was resolved", e.ID, e.Direction, outcome))
 		}
-		return nil
-	})
-	return out, err
+	}
+	for _, e := range blocked {
+		if _, err := p.Ledger.Resolve(ctx, e.ID, ledger.Resolution{Outcome: outcome},
+			ledger.Resolver{Actor: who.Actor, Source: who.Source}, nil); err != nil {
+			return out, refusal(err)
+		}
+		out.Settled = append(out.Settled, e.ID)
+	}
+	if len(out.Settled) == 0 {
+		return out, ProposalError(fmt.Sprintf("proposal %d has no blocked write", id))
+	}
+	return out, nil
 }

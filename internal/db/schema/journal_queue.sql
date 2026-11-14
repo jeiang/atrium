@@ -8,3 +8,15 @@ CREATE TABLE IF NOT EXISTS thread_queue (
     files_json TEXT
 );
 CREATE INDEX IF NOT EXISTS thread_queue_open ON thread_queue (thread_id, consumed_at);
+CREATE TRIGGER IF NOT EXISTS thread_queue_read_insert AFTER INSERT ON thread_queue BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_queue_read_update AFTER UPDATE ON thread_queue BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS thread_queue_read_delete AFTER DELETE ON thread_queue BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

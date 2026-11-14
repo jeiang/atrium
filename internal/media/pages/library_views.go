@@ -10,9 +10,11 @@ type LibraryEntry struct {
 }
 
 type LibraryPage struct {
-	Error  string         `json:"error"`
-	Movies []LibraryEntry `json:"movies"`
-	Shows  []LibraryEntry `json:"shows"`
+	Error     string         `json:"error"`
+	Catalogue string         `json:"catalogue"`
+	Stale     string         `json:"stale"`
+	Movies    []LibraryEntry `json:"movies"`
+	Shows     []LibraryEntry `json:"shows"`
 }
 
 type FileLink struct {
@@ -56,11 +58,13 @@ type MovieView struct {
 type MoviePage struct {
 	Movie MovieView `json:"movie"`
 	TTL   string    `json:"ttl"`
+	Stale string    `json:"stale"`
 }
 
 type ShowPage struct {
-	Show ShowView `json:"show"`
-	TTL  string   `json:"ttl"`
+	Show  ShowView `json:"show"`
+	TTL   string   `json:"ttl"`
+	Stale string   `json:"stale"`
 }
 
 func linkSpan(seconds int64) string {

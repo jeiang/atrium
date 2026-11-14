@@ -6,13 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 type Writer struct {
@@ -80,8 +82,7 @@ func stateMap(r Record) map[string]any {
 }
 
 func threadProject(ctx context.Context, q db.Querier, threadID int64) (*int64, error) {
-	var project *int64
-	err := q.QueryRowContext(ctx, "SELECT project_id FROM threads WHERE id = ? AND deleted_at IS NULL", threadID).Scan(&project)
+	project, err := threads.ProjectOf(ctx, q, threadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tool.Error("this thread is gone")
 	}
@@ -89,12 +90,11 @@ func threadProject(ctx context.Context, q db.Querier, threadID int64) (*int64, e
 }
 
 func threadMarks(ctx context.Context, q db.Querier, threadID int64) (tool.Marks, error) {
-	var marks int64
-	err := q.QueryRowContext(ctx, "SELECT marks FROM threads WHERE id = ?", threadID).Scan(&marks)
+	marks, err := threads.MarksOfID(ctx, q, threadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, tool.Error("this thread is gone")
 	}
-	return tool.Marks(marks), err
+	return marks, err
 }
 
 func sourceOf(ctx context.Context, q db.Querier, w Writer, in WriteInput, project *int64) (threadID int64, seq, runID *int64, err error) {
@@ -113,14 +113,11 @@ func sourceOf(ctx context.Context, q db.Querier, w Writer, in WriteInput, projec
 		run := w.RunID
 		return in.Source.ThreadID, in.Source.Seq, &run, nil
 	}
-	var first sql.NullInt64
-	if err := q.QueryRowContext(ctx, "SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND run_id = ?",
-		w.ThreadID, w.RunID).Scan(&first); err != nil {
+	first, err := journal.MinSeq(ctx, q, w.ThreadID, w.RunID)
+	if err != nil {
 		return 0, nil, nil, err
 	}
-	if first.Valid {
-		seq = &first.Int64
-	}
+	seq = first
 	run := w.RunID
 	return w.ThreadID, seq, &run, nil
 }
@@ -129,12 +126,7 @@ func projectPrivate(ctx context.Context, q db.Querier, project *int64) (bool, er
 	if project == nil {
 		return false, nil
 	}
-	var private int64
-	err := q.QueryRowContext(ctx, "SELECT private FROM projects WHERE id = ?", *project).Scan(&private)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	return private != 0, err
+	return projects.Private(ctx, q, *project)
 }
 
 func existing(ctx context.Context, q db.Querier, scope string, project int64, now float64) ([]exactRow, error) {
@@ -185,162 +177,142 @@ func refused(r Record, verb string) error {
 	return nil
 }
 
-func Write(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, in WriteInput) (Record, int64, error) {
-	writer, err := w.name()
-	if err != nil {
-		return Record{}, 0, err
+func (w Writer) Effect(operation string, id int64) ledger.New {
+	target := "kb:new"
+	if id != 0 {
+		target = "kb:" + fmt.Sprint(id)
 	}
-	var out Record
-	var writeID int64
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		project, err := threadProject(ctx, tx, w.ThreadID)
-		if err != nil {
-			return err
-		}
-		marks, err := threadMarks(ctx, tx, w.ThreadID)
-		if err != nil {
-			return err
-		}
-		if in.ID != 0 {
-			rec, err := Get(ctx, tx, in.ID)
-			if err != nil {
-				return err
-			}
-			if rec == nil {
-				return tool.Error(fmt.Sprintf("%s is unknown", Cite(in.ID)))
-			}
-			if err := refused(*rec, "edited"); err != nil {
-				return err
-			}
-			if projectOf(rec.ProjectID) != projectOf(project) {
-				return tool.Error(fmt.Sprintf("%s belongs to another project", Cite(in.ID)))
-			}
-			next := *rec
-			if in.Title != "" {
-				next.Title = in.Title
-			}
-			if in.Body != "" {
-				next.Body = in.Body
-			}
-			if in.Aliases != nil {
-				next.Aliases = normalizeAliases(in.Aliases)
-			}
-			if in.Scope != "" {
-				next.Scope = in.Scope
-			}
-			next.Marks = rec.Marks | marks
-			next.UpdatedAt = w.Now
-			if next.Title != rec.Title || next.Body != rec.Body || strings.Join(next.Aliases, "\x00") != strings.Join(rec.Aliases, "\x00") {
-				next.Embedded = false
-			}
-			aliases, err := aliasesJSON(next.Aliases)
-			if err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx,
-				"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, embedded = ?, updated_at = ? WHERE id = ?",
-				next.Title, aliases, next.Body, next.Scope, int64(next.Marks), b2i(next.Embedded), next.UpdatedAt, next.ID); err != nil {
-				return err
-			}
-			next.Embedded = b2i(next.Embedded) != 0
-			out = next
-			writeID, err = writes.Record(ctx, tx, reg, writes.New{
-				TS: w.Now, ThreadID: &w.ThreadID, RunID: &w.RunID, Tool: "kb_write", Target: "kb:" + fmt.Sprint(next.ID),
-				Before: stateMap(*rec), After: stateMap(next),
-				Undo: undoPayload{Op: UndoOp, ID: next.ID, Before: beforeOf(*rec), Applied: next.UpdatedAt},
-			})
-			return err
-		}
-		if in.Title == "" || in.Body == "" {
-			return tool.Error("title and body are required to create a record")
-		}
-		scope := in.Scope
-		if scope == "" {
-			scope = ScopePersonal
-		}
-		if scope != ScopeWork && scope != ScopePersonal {
-			return tool.Error("scope must be work or personal")
-		}
-		found, err := duplicate(ctx, tx, scope, projectOf(project), w.Now, in.Title, in.Aliases)
-		if err != nil {
-			return err
-		}
-		if found != 0 {
-			return tool.Error(fmt.Sprintf("%s exists; pass id to edit", Cite(found)))
-		}
-		sourceThread, sourceSeq, sourceRun, err := sourceOf(ctx, tx, w, in, project)
-		if err != nil {
-			return err
-		}
-		aliases, err := aliasesJSON(in.Aliases)
-		if err != nil {
-			return err
-		}
-		res, err := tx.ExecContext(ctx,
-			"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, source_thread_id, source_seq, "+
-				"source_run_id, pinned, embedded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
-			in.Title, aliases, in.Body, scope, project, int64(marks), writer, sourceThread, sourceSeq, sourceRun, w.Now, w.Now)
-		if err != nil {
-			return err
-		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		rec, err := Get(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		out = *rec
-		writeID, err = writes.Record(ctx, tx, reg, writes.New{
-			TS: w.Now, ThreadID: &w.ThreadID, RunID: &w.RunID, Tool: "kb_write", Target: "kb:" + fmt.Sprint(id),
-			After: stateMap(*rec),
-			Undo:  undoPayload{Op: UndoOp, ID: id, Applied: rec.UpdatedAt},
-		})
-		return err
-	})
-	if err != nil {
-		return Record{}, 0, err
-	}
-	return out, writeID, nil
+	return ledger.New{Origin: "agent", Operation: operation, OperationKey: operation + ":" + ledger.NewKey(),
+		Target: target, ThreadID: &w.ThreadID, RunID: &w.RunID}
 }
 
-func Retract(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, id int64, reason string) (Record, int64, error) {
-	var out Record
-	var writeID int64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		rec, err := Get(ctx, tx, id)
+func AgentWriteTx(ctx context.Context, tx *sql.Tx, w Writer, in WriteInput) (Record, ledger.Result, error) {
+	writer, err := w.name()
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	project, err := threadProject(ctx, tx, w.ThreadID)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	marks, err := threadMarks(ctx, tx, w.ThreadID)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if in.ID != 0 {
+		rec, err := Get(ctx, tx, in.ID)
 		if err != nil {
-			return err
+			return Record{}, ledger.Result{}, err
 		}
 		if rec == nil {
-			return tool.Error(fmt.Sprintf("%s is unknown", Cite(id)))
+			return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(in.ID)))
 		}
-		if err := refused(*rec, "retracted"); err != nil {
-			return err
+		if err := refused(*rec, "edited"); err != nil {
+			return Record{}, ledger.Result{}, err
 		}
-		now := w.Now
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
-			now, now, id); err != nil {
-			return err
-		}
-		if err := embed.DeleteKB(ctx, tx, id); err != nil {
-			return err
+		if projectOf(rec.ProjectID) != projectOf(project) {
+			return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(in.ID)))
 		}
 		next := *rec
-		next.RetractedAt, next.Embedded, next.UpdatedAt = &now, false, now
-		out = next
-		writeID, err = writes.Record(ctx, tx, reg, writes.New{
-			TS: now, ThreadID: &w.ThreadID, RunID: &w.RunID, Tool: "kb_retract", Target: "kb:" + fmt.Sprint(id),
-			Before: stateMap(*rec), After: map[string]any{"retracted_at": now, "reason": reason},
-			Undo: undoPayload{Op: UndoOp, ID: id, Before: beforeOf(*rec), Applied: now},
-		})
-		return err
-	})
-	if err != nil {
-		return Record{}, 0, err
+		if in.Title != "" {
+			next.Title = in.Title
+		}
+		if in.Body != "" {
+			next.Body = in.Body
+		}
+		if in.Aliases != nil {
+			next.Aliases = normalizeAliases(in.Aliases)
+		}
+		if in.Scope != "" {
+			next.Scope = in.Scope
+		}
+		next.Marks = rec.Marks | marks
+		next.UpdatedAt = w.Now
+		aliases, err := aliasesJSON(next.Aliases)
+		if err != nil {
+			return Record{}, ledger.Result{}, err
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, updated_at = ? WHERE id = ?",
+			next.Title, aliases, next.Body, next.Scope, int64(next.Marks), next.UpdatedAt, next.ID); err != nil {
+			return Record{}, ledger.Result{}, err
+		}
+		return next, writeResult(next, beforeOf(*rec)), nil
 	}
-	return out, writeID, nil
+	if in.Title == "" || in.Body == "" {
+		return Record{}, ledger.Result{}, tool.Error("title and body are required to create a record")
+	}
+	scope := in.Scope
+	if scope == "" {
+		scope = ScopePersonal
+	}
+	if scope != ScopeWork && scope != ScopePersonal {
+		return Record{}, ledger.Result{}, tool.Error("scope must be work or personal")
+	}
+	found, err := duplicate(ctx, tx, scope, projectOf(project), w.Now, in.Title, in.Aliases)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if found != 0 {
+		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s exists; pass id to edit", Cite(found)))
+	}
+	sourceThread, sourceSeq, sourceRun, err := sourceOf(ctx, tx, w, in, project)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	aliases, err := aliasesJSON(in.Aliases)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, source_thread_id, source_seq, "+
+			"source_run_id, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?, ?)",
+		in.Title, aliases, in.Body, scope, project, int64(marks), writer, sourceThread, sourceSeq, sourceRun, w.Now, w.Now)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	rec, err := Get(ctx, tx, id)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	return *rec, writeResult(*rec, nil), nil
+}
+
+func AgentRetractTx(ctx context.Context, tx *sql.Tx, w Writer, id int64, reason string) (Record, ledger.Result, error) {
+	rec, err := Get(ctx, tx, id)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if rec == nil {
+		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(id)))
+	}
+	if err := refused(*rec, "retracted"); err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	project, err := threadProject(ctx, tx, w.ThreadID)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if projectOf(rec.ProjectID) != projectOf(project) {
+		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(id)))
+	}
+	now := w.Now
+	if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
+		now, now, id); err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if err := embed.DeleteKB(ctx, tx, id); err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	next := *rec
+	next.RetractedAt, next.UpdatedAt = &now, now
+	r := writeResult(next, beforeOf(*rec))
+	r.After = jsonOf(map[string]any{"retracted_at": now, "reason": reason})
+	return next, r, nil
 }
 
 func b2i(b bool) int64 {
@@ -353,21 +325,21 @@ func b2i(b bool) int64 {
 func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
 	var u undoPayload
 	if err := json.Unmarshal(payload, &u); err != nil {
-		return nil, writes.UndoError("knowledge undo payload is invalid")
+		return nil, ledger.Refused("knowledge undo payload is invalid")
 	}
 	rec, err := Get(ctx, q, u.ID)
 	if err != nil {
 		return nil, err
 	}
 	if rec == nil {
-		return nil, writes.UndoError(fmt.Sprintf("%s is gone", Cite(u.ID)))
+		return nil, ledger.Refused(fmt.Sprintf("%s is gone", Cite(u.ID)))
 	}
 	if rec.UpdatedAt != u.Applied {
-		return nil, writes.UndoError(fmt.Sprintf("%s changed since this write", Cite(u.ID)))
+		return nil, ledger.Refused(fmt.Sprintf("%s changed since this write", Cite(u.ID)))
 	}
 	now := float64(time.Now().UnixNano()) / 1e9
 	if u.Before == nil {
-		if _, err := q.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?", now, now, u.ID); err != nil {
+		if _, err := q.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?", now, now, u.ID); err != nil {
 			return nil, err
 		}
 		if err := embed.DeleteKB(ctx, q, u.ID); err != nil {
@@ -381,7 +353,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	}
 	if _, err := q.ExecContext(ctx,
 		"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, pinned = ?, confirmed_at = ?, "+
-			"retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
+			"retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
 		u.Before.Title, aliases, u.Before.Body, u.Before.Scope, u.Before.Marks, b2i(u.Before.Pinned), u.Before.ConfirmedAt,
 		u.Before.RetractedAt, now, u.ID); err != nil {
 		return nil, err
@@ -389,4 +361,24 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	return map[string]any{"id": u.ID, "restored": true}, nil
 }
 
-func RegisterUndoer(r *writes.Registry) { r.Register(UndoOp, undo) }
+func Undo() []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: UndoOp, Undoer: ledger.Undoer{
+		Validate: func(payload json.RawMessage) error {
+			var u undoPayload
+			if err := json.Unmarshal(payload, &u); err != nil {
+				return ledger.Refused("knowledge undo payload is invalid")
+			}
+			if u.Op != UndoOp || u.ID == 0 {
+				return ledger.Refused("knowledge undo payload names " + u.Op)
+			}
+			return nil
+		},
+		Local: func(ctx context.Context, tx *sql.Tx, payload json.RawMessage) (ledger.Result, error) {
+			value, err := undo(ctx, tx, payload)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+		},
+	}}}
+}

@@ -12,13 +12,16 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -58,7 +61,8 @@ type signal struct {
 	marks  tool.Marks
 }
 
-func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, jobRunID int64) ([]int64, error) {
+func Run(ctx context.Context, svc *service.Service, now func() float64, claim scheduler.Claim) ([]int64, error) {
+	jobID := claim.Job.ID
 	stamp := now()
 	loc, err := config.From(ctx).Location(svc.Env)
 	if err != nil {
@@ -74,7 +78,7 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 		return nil, err
 	}
 	if spent >= monthlyCap {
-		return nil, budget.BudgetExceeded(fmt.Sprintf("dreaming: monthly cap reached ($%.2f of $%.2f)", spent, monthlyCap))
+		return nil, inference.BudgetExceeded{Text: fmt.Sprintf("dreaming: monthly cap reached ($%.2f of $%.2f)", spent, monthlyCap), Reason: inference.ReasonMonthly, Class: inference.Unattended}
 	}
 	tonight, err := nightlySpend(ctx, svc.DB.Read, stamp, loc)
 	if err != nil {
@@ -82,7 +86,7 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 	}
 	left := nightlyCap - tonight
 	if left <= 0 {
-		return nil, budget.BudgetExceeded(fmt.Sprintf("dreaming: nightly cap reached ($%.2f of $%.2f)", tonight, nightlyCap))
+		return nil, inference.BudgetExceeded{Text: fmt.Sprintf("dreaming: nightly cap reached ($%.2f of $%.2f)", tonight, nightlyCap), Reason: inference.ReasonMonthly, Class: inference.Unattended}
 	}
 	data, err := gather(ctx, svc.DB.Read, stamp, loc)
 	if err != nil {
@@ -91,54 +95,136 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 	if len(data.threads) == 0 {
 		return nil, nil
 	}
-	var runIDs []int64
-	first := true
-	for _, group := range split(data) {
-		tonight, err := nightlySpend(ctx, svc.DB.Read, stamp, loc)
+	groups := split(data)
+	for i := range groups {
+		if groups[i].records, err = recordIndex(ctx, svc.DB.Read, stamp, groups[i].marks); err != nil {
+			return nil, err
+		}
+	}
+	ids := make([]int64, len(groups))
+	if err := svc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		for i, group := range groups {
+			title := "dreaming " + localDate(stamp, loc)
+			if group.marks != 0 {
+				title += " (marked)"
+			}
+			id, err := threads.Create(ctx, tx, stamp, threads.Spec{
+				Kind: threads.Nightly, Title: &title, JobID: &jobID, ContextLimit: int64(90_000),
+				Marks: threads.Marks{At: markAt(group.marks, stamp), Set: group.marks},
+			})
+			if err != nil {
+				return err
+			}
+			if err := scheduler.AttachThread(ctx, tx, claim, id); err != nil {
+				return err
+			}
+			ids[i] = id
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	zero := 0.0
+	runIDs := make([]int64, 0, len(groups))
+	for i, group := range groups {
+		limits := journal.Limits{AllowedTools: allowedTools, MaxCostUSD: &zero, SystemExtra: new(systemExtra), Sources: sourcesOf(group)}
+		runID, err := svc.Prepare(ctx, ids[i], prompt(group, stamp, loc), stamp, service.Start{Kind: threads.Nightly, Limits: limits})
+		if err != nil {
+			for _, prepared := range runIDs {
+				if ferr := journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, prepared, journal.Failed, now(), new(err.Error())); ferr != nil {
+					return runIDs, errors.Join(err, ferr)
+				}
+			}
+			return runIDs, err
+		}
+		runIDs = append(runIDs, runID)
+	}
+	for i, runID := range runIDs {
+		ok, err := admit(ctx, svc, stamp, now(), runID)
 		if err != nil {
 			return runIDs, err
 		}
-		left := nightlyCap - tonight
-		if left <= 0 {
-			break
+		if !ok {
+			continue
 		}
-		title := "dreaming " + localDate(stamp, loc)
-		if group.marks != 0 {
-			title += " (marked)"
-		}
-		id, err := threads.Create(ctx, svc.DB.Write, stamp, threads.Spec{
-			Kind: threads.Nightly, Title: &title, JobID: &jobID, ContextLimit: int64(90_000),
-			Marks: threads.Marks{At: markAt(group.marks, stamp), Set: group.marks},
-		})
-		if err != nil {
+		if run, err := journal.GetRun(ctx, svc.DB.Read, runID); err != nil {
 			return runIDs, err
-		}
-		if first {
-			if _, err := svc.DB.Write.ExecContext(ctx, "UPDATE job_runs SET thread_id = ? WHERE id = ?", id, jobRunID); err != nil {
+		} else if run != nil && run.State == journal.Interrupted {
+			if _, err := journal.ClaimResume(ctx, svc.DB.Write, runID, journal.NewOwner(), now()); err != nil {
 				return runIDs, err
 			}
-			first = false
 		}
-		records, err := recordIndex(ctx, svc.DB.Read, stamp, group.marks)
-		if err != nil {
+		if _, err := svc.Execute(ctx, runID); err != nil {
+			if ctx.Err() == nil {
+				for _, rest := range runIDs[i:] {
+					child, gerr := journal.GetRun(context.WithoutCancel(ctx), svc.DB.Read, rest)
+					if gerr != nil {
+						return runIDs, errors.Join(err, gerr)
+					}
+					if child == nil || child.State == journal.Done || child.State == journal.Failed {
+						continue
+					}
+					if ferr := journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, rest, journal.Failed, now(), new(err.Error())); ferr != nil {
+						return runIDs, errors.Join(err, ferr)
+					}
+				}
+			}
 			return runIDs, err
-		}
-		group.records = records
-		limits := journal.Limits{
-			AllowedTools: allowedTools,
-			MaxCostUSD:   &left,
-			SystemExtra:  new(systemExtra),
-			Sources:      sourcesOf(group),
-		}
-		runID, err := svc.RunOnce(ctx, id, prompt(group, stamp, loc), service.Start{Kind: threads.Nightly, Limits: limits})
-		if err != nil && runID == 0 {
-			return runIDs, err
-		}
-		if runID != 0 {
-			runIDs = append(runIDs, runID)
 		}
 	}
 	return runIDs, nil
+}
+
+func Admit(ctx context.Context, svc *service.Service, run journal.Run) (bool, error) {
+	stamp := float64(time.Now().UnixMicro()) / 1e6
+	if svc.Now != nil {
+		stamp = svc.Now()
+	}
+	return admit(ctx, svc, run.StartedAt, stamp, run.ID)
+}
+
+func admit(ctx context.Context, svc *service.Service, night, stamp float64, runID int64) (bool, error) {
+	loc, err := config.From(ctx).Location(svc.Env)
+	if err != nil {
+		return false, err
+	}
+	q := svc.DB.Read
+	r := assistant.Read(ctx, q)
+	nightlyCap, monthlyCap := r.Float(assistant.KeyDreamingMaxCost), r.Float(assistant.KeyDreamingMonthly)
+	if err := r.Err(); err != nil {
+		return false, err
+	}
+	tonight, err := nightlySpend(ctx, q, night, loc)
+	if err != nil {
+		return false, err
+	}
+	month, err := monthlySpend(ctx, q, night, loc)
+	if err != nil {
+		return false, err
+	}
+	left := min(nightlyCap-tonight, monthlyCap-month)
+	if left <= 0 {
+		text := fmt.Sprintf("run cost ceiling reached: dreaming caps (tonight $%.2f of $%.2f, this month $%.2f of $%.2f)", tonight, nightlyCap, month, monthlyCap)
+		return false, journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, runID, journal.Failed, stamp, &text)
+	}
+	tree, err := journal.RunDescendants(ctx, q, runID)
+	if err != nil {
+		return false, err
+	}
+	allowance := left
+	for _, id := range tree {
+		cost, err := inference.RunCost(ctx, q, id)
+		if err != nil {
+			return false, err
+		}
+		allowance += cost
+	}
+	limits, err := journal.LimitsOf(ctx, q, runID)
+	if err != nil {
+		return false, err
+	}
+	limits.MaxCostUSD = &allowance
+	return true, journal.SetLimits(ctx, svc.DB.Write, runID, limits)
 }
 
 func split(data gathered) []gathered {
@@ -208,19 +294,19 @@ func dayStart(ts float64, loc *time.Location) float64 {
 }
 
 func nightlySpend(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
-	var cost float64
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(u.cost_usd), 0) FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? AND t.kind = ?",
-		dayStart(now, loc), threads.Nightly).Scan(&cost)
-	return cost, err
+	ids, err := threads.ByKind(ctx, q, threads.Nightly)
+	if err != nil {
+		return 0, err
+	}
+	return inference.SpendOnThreads(ctx, q, ids, dayStart(now, loc))
 }
 
 func monthlySpend(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
-	var cost float64
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(u.cost_usd), 0) FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? AND t.kind = ?",
-		monthStart(now, loc), threads.Nightly).Scan(&cost)
-	return cost, err
+	ids, err := threads.ByKind(ctx, q, threads.Nightly)
+	if err != nil {
+		return 0, err
+	}
+	return inference.SpendOnThreads(ctx, q, ids, monthStart(now, loc))
 }
 
 func monthStart(ts float64, loc *time.Location) float64 {
@@ -231,11 +317,7 @@ func monthStart(ts float64, loc *time.Location) float64 {
 }
 
 func gather(ctx context.Context, q db.Querier, now float64, loc *time.Location) (gathered, error) {
-	r := assistant.Read(ctx, q)
-	maxThreads, threadChars, totalChars := r.Int(assistant.KeyNightlyMaxThreads), r.Int(assistant.KeyNightlyThreadChars), r.Int(assistant.KeyNightlyTotalChars)
-	if err := r.Err(); err != nil {
-		return gathered{}, err
-	}
+	maxThreads, threadChars, totalChars := assistant.TuningAgentNightlyMaxThreads, assistant.TuningAgentNightlyThreadChars, assistant.TuningAgentNightlyTotalChars
 	from, to := now-daySeconds, now
 	out := gathered{from: from, to: to}
 	rows, err := q.QueryContext(ctx,
@@ -310,7 +392,7 @@ func signals(ctx context.Context, q db.Querier, from float64) ([]signal, error) 
 	rows, err := q.QueryContext(ctx,
 		"SELECT r.thread_id, r.kind, COALESCE(r.error, '') FROM runs r "+
 			"LEFT JOIN threads t ON t.id = r.thread_id LEFT JOIN projects p ON p.id = t.project_id "+
-			"WHERE r.state = 'failed' AND r.started_at >= ? AND (t.project_id IS NULL OR p.private = 0) ORDER BY r.id DESC LIMIT 10", from)
+			"WHERE r.state = 'failed' AND r.kind <> 'classification' AND r.started_at >= ? AND (t.project_id IS NULL OR p.private = 0) ORDER BY r.id DESC LIMIT 10", from)
 	if err != nil {
 		return nil, err
 	}
@@ -337,77 +419,47 @@ func signals(ctx context.Context, q db.Querier, from float64) ([]signal, error) 
 			out = append(out, sig)
 		}
 	}
-	rows, err = q.QueryContext(ctx,
-		"SELECT w.tool, w.target, COALESCE(w.thread_id, 0) FROM agent_writes w "+
-			"LEFT JOIN threads t ON t.id = w.thread_id LEFT JOIN projects p ON p.id = t.project_id "+
-			"WHERE w.undone_at >= ? AND (w.thread_id IS NULL OR t.project_id IS NULL OR p.private = 0) ORDER BY w.id DESC LIMIT 10", from)
+	undone, err := ledger.UndoneSince(ctx, q, from, 10)
 	if err != nil {
 		return nil, err
 	}
-	undone, err := db.Collect(rows, func(r *sql.Rows) (signal, error) {
-		var toolName, target string
-		var thread int64
-		if err := r.Scan(&toolName, &target, &thread); err != nil {
-			return signal{}, err
-		}
+	for _, u := range undone {
 		marks := tool.Untrusted
-		if thread != 0 {
-			foundMarks, private, found, err := threadOrigin(ctx, q, thread)
+		if u.ThreadID != 0 {
+			foundMarks, private, found, err := threadOrigin(ctx, q, u.ThreadID)
 			if err != nil || private {
-				return signal{}, err
+				return nil, err
 			}
 			if found {
 				marks = foundMarks
 			}
 		}
-		return signal{text: fmt.Sprintf("operator undid %s on %s (thread %d)", toolName, target, thread), thread: thread, marks: marks}, nil
-	})
+		out = append(out, signal{text: fmt.Sprintf("operator undid %s on %s (thread %d)", u.Operation, u.Target, u.ThreadID), thread: u.ThreadID, marks: marks})
+	}
+	dismissed, err := proposals.DismissedSince(ctx, q, from, 10)
 	if err != nil {
 		return nil, err
 	}
-	for _, sig := range undone {
-		if sig.text != "" {
-			out = append(out, sig)
-		}
-	}
-	rows, err = q.QueryContext(ctx,
-		"SELECT id, kind, title FROM proposals WHERE status = 'dismissed' AND decided_ts >= ? ORDER BY id DESC LIMIT 10", from)
-	if err != nil {
-		return nil, err
-	}
-	dismissed, err := db.Collect(rows, func(r *sql.Rows) (signal, error) {
-		var id int64
-		var kind, title string
-		if err := r.Scan(&id, &kind, &title); err != nil {
-			return signal{}, err
-		}
+	for _, d := range dismissed {
 		marks := tool.Untrusted
-		thread, found, err := proposalThread(ctx, q, id)
+		thread, found, err := proposalThread(ctx, q, d.ID)
 		if err != nil {
-			return signal{}, err
+			return nil, err
 		}
 		if found {
 			foundMarks, private, ok, err := threadOrigin(ctx, q, thread)
 			if err != nil || private {
-				return signal{}, err
+				return nil, err
 			}
 			if ok {
 				marks = foundMarks
 			}
 		}
-		text := fmt.Sprintf("operator dismissed %s proposal %d: %s", kind, id, title)
+		text := fmt.Sprintf("operator dismissed %s proposal %d: %s", d.Kind, d.ID, d.Title)
 		if thread != 0 {
 			text += fmt.Sprintf(" (thread %d)", thread)
 		}
-		return signal{text: text, thread: thread, marks: marks}, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, sig := range dismissed {
-		if sig.text != "" {
-			out = append(out, sig)
-		}
+		out = append(out, signal{text: text, thread: thread, marks: marks})
 	}
 	return out, nil
 }
@@ -417,15 +469,7 @@ func proposalThread(ctx context.Context, q db.Querier, id int64) (int64, bool, e
 	if err != nil || found {
 		return thread, found, err
 	}
-	var payloadThread int64
-	err = q.QueryRowContext(ctx, "SELECT COALESCE(json_extract(payload, '$.thread_id'), 0) FROM proposals WHERE id = ? AND kind = 'permission'", id).Scan(&payloadThread)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, nil
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	return payloadThread, payloadThread != 0, nil
+	return proposals.PayloadThread(ctx, q, id)
 }
 
 func threadOrigin(ctx context.Context, q db.Querier, threadID int64) (tool.Marks, bool, bool, error) {
@@ -448,28 +492,19 @@ func firstLine(text string) string {
 }
 
 func recordIndex(ctx context.Context, q db.Querier, now float64, allowed tool.Marks) ([]string, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT r.id, r.title, r.scope, r.writer, r.confirmed_at IS NOT NULL, r.marks FROM kb_records r LEFT JOIN projects p ON p.id = r.project_id "+
-			"WHERE r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?) "+
-			"AND NOT ((r.private = 1 OR COALESCE(p.private, 0) = 1) AND (r.project_id IS NULL OR r.project_id != 0)) "+
-			"AND (r.marks & ?) = 0 ORDER BY r.updated_at DESC LIMIT 200", now, ^int64(allowed))
+	entries, err := kb.RecordIndex(ctx, q, now, allowed)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var id int64
-		var title, scope, writer string
-		var confirmed bool
-		var marks int64
-		if err := r.Scan(&id, &title, &scope, &writer, &confirmed, &marks); err != nil {
-			return "", err
-		}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
 		state := "unconfirmed"
-		if confirmed {
+		if e.Confirmed {
 			state = "confirmed"
 		}
-		return fmt.Sprintf("K%d · %s · %s · %s · marks %s · %s", id, scope, writer, state, markNames(tool.Marks(marks)), title), nil
-	})
+		out = append(out, fmt.Sprintf("K%d · %s · %s · %s · marks %s · %s", e.ID, e.Scope, e.Writer, state, markNames(e.Marks), e.Title))
+	}
+	return out, nil
 }
 func markNames(m tool.Marks) string {
 	if m == 0 {

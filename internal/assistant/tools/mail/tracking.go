@@ -4,34 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/approval"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/tracking"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 var trackPackageSchema = json.RawMessage(`{"type":"object","properties":{"package_id":{"type":"integer"},"tracking_number":{"type":"string"},"carrier":{"type":"string"},"destination_country":{"type":"string"},"destination_postcode":{"type":"string"}},"additionalProperties":false}`)
 
-func trackingTools() []tool.Tool {
-	return []tool.Tool{approval.Gate(tool.Tool{
+func trackingTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
+	return []tool.Tool{asstapp.ApprovalGate(tool.Tool{
 		Name: "track_package",
 		Description: "Ask the operator to approve registering a package's tracking number with Ship24 (a paid lookup); nothing is sent until they approve the card. " +
 			"Use the id from the packages tool, or give a tracking_number. Undoable.",
 		InputSchema: trackPackageSchema,
-		Effect:      tool.Propose, Undo: tracking.UndoUntrack,
+		Effect:      tool.Propose, Undo: mailapp.UndoUntrack,
 		Annotated: true,
 		Channel:   tool.ChannelOwn,
 		Contexts:  tool.Kinds{tool.Chat},
-		Approval:  &tool.Approval{Apply: trackPackage, Label: "Track package", Icon: "package", Module: module.Mail, Detail: "tracking_number"},
+		Approval: &tool.Approval{Apply: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+			return trackPackage(ctx, tc, args, svc)
+		}, Label: "Track package", Icon: "package", Module: module.Mail, Detail: "tracking_number"},
 	})}
 }
 
-func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
 	id, _, err := tool.IntArg(args, "package_id", false)
 	if err != nil {
 		return nil, err
@@ -55,59 +54,26 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if id == 0 && number == "" {
 		return nil, tool.Error("give package_id or tracking_number")
 	}
-	target, settings, err := tracking.Resolve(ctx, tc.DB, tc.Env, tc.Now(), id, number, carrier)
+	done, err := svc(tc).ProposeTracking(ctx, mailapp.ProposeTrackingInput{ProposalID: tc.ProposalID, PackageID: id, Number: number, Carrier: carrier, Country: country, Postcode: postcode})
 	if err != nil {
-		return nil, trackingFailed(err)
-	}
-	if country != "" {
-		settings.Country = country
-	}
-	if postcode != "" {
-		settings.Postcode = postcode
-	}
-	if target.TrackerID != "" {
-		result, _, err := tracking.Refresh(ctx, tc.DB, tc.Now(), target, settings, tc.Env)
-		if err != nil {
-			return nil, trackingFailed(err)
+		if failure, ok := errors.AsType[*mailapp.TrackingFailure](err); ok {
+			return nil, trackingFailed(failure.Err)
 		}
-		return result, nil
-	}
-	writeID, err := writes.Begin(ctx, tc.DB.Write, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "track_package",
-		Target: fmt.Sprintf("package:%d", target.ID),
-	})
-	if err != nil {
+		if e, ok := errors.AsType[*application.Error](err); ok {
+			return nil, tool.Error(e.Message)
+		}
 		return nil, err
 	}
-	result, err := tracking.Register(ctx, tc.DB, tc.Now(), target, settings)
-	if err != nil {
-		ledger := context.WithoutCancel(ctx)
-		if tracking.OutcomeUnknown(err) {
-			_ = writes.SettleUnknown(ledger, tc.DB.Write, writeID, writes.New{Target: fmt.Sprintf("package:%d", target.ID)}, err.Error())
-			return nil, tool.Error("the Ship24 registration outcome is unknown: " + err.Error() +
-				"; the write is blocked until the operator resolves it with 'atrium writes resolve <id>'")
-		}
-		_ = writes.Discard(ledger, tc.DB.Write, writeID)
-		return nil, trackingFailed(err)
-	}
-	if err := writes.Settle(context.WithoutCancel(ctx), tc.DB.Write, tc.Undoers, writeID, writes.New{
-		Target: fmt.Sprintf("package:%d", target.ID),
-		After:  map[string]any{"tracker_id": result.TrackerID, "status": result.Status},
-		Undo:   tracking.Undo{Op: tracking.UndoUntrack, PackageID: target.ID, TrackerID: result.TrackerID, Before: target},
-	}); err != nil {
-		return nil, err
-	}
-	result.WriteID = writeID
-	return result, nil
+	return done.Data.Tracking, nil
 }
 
 func trackingFailed(err error) error {
-	var quota tracking.QuotaError
-	var failure tracking.Error
-	var missing config.NotConfigured
-	var status *tracking.StatusError
-	var limited *tracking.RateLimitError
-	var transport *tracking.TransportError
+	var quota mailapp.TrackingQuotaError
+	var failure mailapp.TrackingError
+	var missing mailapp.NotConfigured
+	var status *mailapp.TrackingStatusError
+	var limited *mailapp.TrackingRateLimitError
+	var transport *mailapp.TrackingTransportError
 	switch {
 	case errors.As(err, &quota):
 		return tool.Error(quota.Error())
@@ -123,20 +89,4 @@ func trackingFailed(err error) error {
 		return tool.Error(transport.Error())
 	}
 	return err
-}
-
-func undoPackageUntrack(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-	var u tracking.Undo
-	if err := json.Unmarshal(raw, &u); err != nil || u.Op != tracking.UndoUntrack || u.PackageID == 0 {
-		return nil, writes.UndoError("package undo payload is invalid")
-	}
-	result, err := tracking.Untrack(ctx, q, u)
-	if err != nil {
-		var missing config.NotConfigured
-		if errors.As(err, &missing) {
-			return nil, writes.UndoError(missing.Error())
-		}
-		return nil, writes.UndoError(err.Error())
-	}
-	return result, nil
 }

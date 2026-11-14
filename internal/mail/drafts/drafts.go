@@ -20,7 +20,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -83,11 +83,29 @@ type Row struct {
 }
 
 type Store struct {
-	DB    *db.DB
-	Cfg   config.Config
-	Open  mail.OpenFunc
-	MsgID func(domain string) string
-	Now   func() float64
+	DB     *db.DB
+	Cfg    config.Config
+	Ledger *ledger.Store
+	Open   mail.OpenFunc
+	MsgID  func(domain string) string
+	Tx     db.Querier
+	Now    func() float64
+}
+
+const (
+	SendOperation   = "smtp_send"
+	AppendOperation = "sent_append"
+)
+
+func SendTarget(account string, id int64) string {
+	return fmt.Sprintf("mail:%s:draft:%d", account, id)
+}
+
+func (s *Store) ledgerStore() *ledger.Store {
+	if s.Ledger == nil {
+		panic("drafts: the effect ledger store is not configured")
+	}
+	return s.Ledger
 }
 
 func (s *Store) now() float64 {
@@ -95,6 +113,20 @@ func (s *Store) now() float64 {
 		return s.Now()
 	}
 	return float64(time.Now().UnixNano()) / 1e9
+}
+
+func (s *Store) read() db.Querier {
+	if s.Tx != nil {
+		return s.Tx
+	}
+	return s.DB.Read
+}
+
+func (s *Store) write() db.Querier {
+	if s.Tx != nil {
+		return s.Tx
+	}
+	return s.DB.Write
 }
 
 const columns = "id, thread_id, account, to_addrs, cc_addrs, subject, body, in_reply_to_message_id, in_reply_to, refs, " +
@@ -136,7 +168,7 @@ func scanRow(sc scanner) (Row, error) {
 }
 
 func (s *Store) queryRows(ctx context.Context, query string, args ...any) ([]Row, error) {
-	rows, err := s.DB.Read.QueryContext(ctx, query, args...)
+	rows, err := s.read().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +185,7 @@ func (s *Store) queryRows(ctx context.Context, query string, args ...any) ([]Row
 }
 
 func (s *Store) Get(ctx context.Context, id int64) (*Row, error) {
-	r, err := scanRow(s.DB.Read.QueryRowContext(ctx, "SELECT "+columns+" FROM drafts WHERE id = ?", id))
+	r, err := scanRow(s.read().QueryRowContext(ctx, "SELECT "+columns+" FROM drafts WHERE id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -164,7 +196,7 @@ func (s *Store) Get(ctx context.Context, id int64) (*Row, error) {
 }
 
 func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
-	r, err := scanRow(s.DB.Read.QueryRowContext(ctx,
+	r, err := scanRow(s.read().QueryRowContext(ctx,
 		"SELECT d.id, d.thread_id, d.account, d.to_addrs, d.cc_addrs, d.subject, d.body, d.in_reply_to_message_id, "+
 			"d.in_reply_to, d.refs, d.status, d.revision, d.created_at, d.updated_at, d.sent_at, d.smtp_result, d.sent_msgid "+
 			"FROM drafts d JOIN messages m ON m.msgid = d.sent_msgid AND m.account = d.account WHERE m.id = ? AND d.sent_msgid != '' AND d.thread_id IS NOT NULL",
@@ -179,10 +211,14 @@ func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
 }
 
 func (s *Store) List(ctx context.Context, status Status, limit int) ([]Row, error) {
+	return s.ListPage(ctx, status, 0, limit)
+}
+
+func (s *Store) ListPage(ctx context.Context, status Status, offset, limit int) ([]Row, error) {
 	if status != "" {
-		return s.queryRows(ctx, "SELECT "+columns+" FROM drafts WHERE status = ? ORDER BY updated_at DESC LIMIT ?", string(status), limit)
+		return s.queryRows(ctx, "SELECT "+columns+" FROM drafts WHERE status = ? ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?", string(status), limit, offset)
 	}
-	return s.queryRows(ctx, "SELECT "+columns+" FROM drafts ORDER BY updated_at DESC LIMIT ?", limit)
+	return s.queryRows(ctx, "SELECT "+columns+" FROM drafts ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?", limit, offset)
 }
 
 var lineBreakRE = regexp.MustCompile(`[\r\n]`)
@@ -303,7 +339,7 @@ func rawFile(cacheDir, rawPath string) string {
 func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error) {
 	var account, fromAddr, fromName string
 	var msgid, toAddrs, rawPath sql.NullString
-	err := s.DB.Read.QueryRowContext(ctx,
+	err := s.read().QueryRowContext(ctx,
 		"SELECT account, from_addr, from_name, msgid, to_addrs, raw_path FROM messages WHERE id = ?", messageID,
 	).Scan(&account, &fromAddr, &fromName, &msgid, &toAddrs, &rawPath)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -364,10 +400,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 }
 
 func (s *Store) limits(ctx context.Context) (maxBody, maxSubject int, err error) {
-	r := endpoint.Read(ctx, s.DB.Read)
-	maxBody = r.Int(mail.KeyDraftsMaxBody)
-	maxSubject = r.Int(mail.KeyDraftsMaxSubject)
-	return maxBody, maxSubject, r.Err()
+	return mail.TuningDraftsMaxBody, mail.TuningDraftsMaxSubject, nil
 }
 
 func (s *Store) Create(ctx context.Context, threadID *int64, account string, to, cc any, subject string, body any, replyTo any) (int64, error) {
@@ -407,7 +440,7 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 		replyID = id
 	}
 	ts := s.now()
-	res, err := s.DB.Write.ExecContext(ctx,
+	res, err := s.write().ExecContext(ctx,
 		"INSERT INTO drafts (thread_id, account, to_addrs, cc_addrs, subject, body, in_reply_to_message_id, "+
 			"in_reply_to, refs, status, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		threadID, account, toAddrs, ccAddrs, subject, text, replyID, r.inReplyTo, r.refs, string(Draft), 1, ts, ts)
@@ -541,7 +574,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	set("updated_at", s.now())
 	sets = append(sets, "revision = revision + 1")
 	args = append(args, id, string(Draft))
-	res, err := s.DB.Write.ExecContext(ctx, "UPDATE drafts SET "+strings.Join(sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	res, err := s.write().ExecContext(ctx, "UPDATE drafts SET "+strings.Join(sets, ", ")+" WHERE id = ? AND status = ?", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -564,15 +597,23 @@ func (u *updateSet) set(col string, v any) {
 }
 
 func (s *Store) transition(ctx context.Context, id int64, from, to Status, apply func(*updateSet)) error {
+	return transitionTx(ctx, s.write(), s.now(), id, from, to, apply)
+}
+
+func transitionTx(ctx context.Context, x db.Querier, now float64, id int64, from, to Status, apply func(*updateSet)) error {
 	u := &updateSet{}
 	u.set("status", string(to))
-	u.set("updated_at", s.now())
+	u.set("updated_at", now)
 	u.sets = append(u.sets, "revision = revision + 1")
 	if apply != nil {
 		apply(u)
 	}
 	args := append(u.args, id, string(from))
-	n, err := s.exec(ctx, "UPDATE drafts SET "+strings.Join(u.sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	res, err := x.ExecContext(ctx, "UPDATE drafts SET "+strings.Join(u.sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}
@@ -583,7 +624,7 @@ func (s *Store) transition(ctx context.Context, id int64, from, to Status, apply
 }
 
 func (s *Store) exec(ctx context.Context, query string, args ...any) (int64, error) {
-	res, err := s.DB.Write.ExecContext(ctx, query, args...)
+	res, err := s.write().ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -606,18 +647,50 @@ func (s *Store) RecoverStuck(ctx context.Context) (int64, error) {
 		string(Unknown), "send interrupted; outcome unknown", s.now(), string(Sending), s.now()-SendingStaleSeconds)
 }
 
-func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status) error {
+func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status, who ledger.Resolver) (int64, error) {
 	if status != Sent && status != Draft {
-		return Error("an unknown draft can only be marked sent or returned to draft")
+		return 0, Error("an unknown draft can only be marked sent or returned to draft")
 	}
 	note := "returned to draft by operator"
+	outcome := "not-applied"
 	if status == Sent {
 		note = "marked sent by operator"
+		outcome = "applied"
 	}
-	n, err := s.exec(ctx,
+	row, err := s.Get(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, Error("draft is not in the unknown state")
+	}
+	store := s.ledgerStore()
+	if _, err := store.Recover(ctx, s.now()-ledger.StuckSeconds); err != nil {
+		return 0, err
+	}
+	effect, err := ledger.BlockedEffectID(ctx, s.read(), SendOperation, SendTarget(row.Account, id))
+	if err != nil {
+		return 0, err
+	}
+	apply := func(ctx context.Context, tx *sql.Tx) error {
+		return resolveDraftTx(ctx, tx, s.now(), id, status, note)
+	}
+	if effect == 0 {
+		return 0, s.DB.WithTx(ctx, func(tx *sql.Tx) error { return apply(ctx, tx) })
+	}
+	_, err = store.Resolve(ctx, effect, ledger.Resolution{Outcome: outcome}, who, apply)
+	return effect, err
+}
+
+func resolveDraftTx(ctx context.Context, x db.Querier, now float64, id int64, status Status, note string) error {
+	res, err := x.ExecContext(ctx,
 		"UPDATE drafts SET status = ?, sent_at = CASE WHEN ? = ? THEN ? ELSE sent_at END, smtp_result = ?, updated_at = ?, revision = revision + 1 "+
 			"WHERE id = ? AND status = ?",
-		string(status), string(status), string(Sent), s.now(), note, s.now(), id, string(Unknown))
+		string(status), string(status), string(Sent), now, note, now, id, string(Unknown))
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}

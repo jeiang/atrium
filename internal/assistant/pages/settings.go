@@ -1,20 +1,15 @@
 package pages
 
 import (
-	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/usage"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/settings/audit"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -22,73 +17,55 @@ import (
 const settingsFrame = "settings"
 
 type AssistantData struct {
-	Models        []pricing.Model `json:"models"`
-	Defaults      threads.Options `json:"defaults"`
-	Efforts       []string        `json:"efforts"`
-	ContextLimits []int64         `json:"context_limits"`
-	Saved         string          `json:"saved"`
-	Error         string          `json:"error"`
-	Channels      []string        `json:"channels"`
-	Rows          []PermissionRow `json:"rows"`
-	Refused       string          `json:"refused"`
-}
-
-type UsageData struct {
-	Budget       budget.Status     `json:"budget"`
-	Summary      usage.Summary     `json:"summary"`
-	Memory       usage.Summary     `json:"memory"`
-	Subscription usage.Summary     `json:"subscription"`
-	ByKind       []usage.KindRow   `json:"by_kind"`
-	ByThread     []usage.ThreadRow `json:"by_thread"`
+	asstapp.ModelConfiguration
+	Saved    string          `json:"saved"`
+	Error    string          `json:"error"`
+	Channels []string        `json:"channels"`
+	Rows     []PermissionRow `json:"rows"`
+	Refused  string          `json:"refused"`
 }
 
 type PermissionRow struct {
-	Label string               `json:"label"`
-	Cells []settings.FieldView `json:"cells"`
-}
-
-func permissionFields(reg *settings.Registry) []settings.Field {
-	out := make([]settings.Field, 0, len(registry.PermissionChannelLabels)*len(registry.PermissionSituationLabels))
-	for s := range registry.PermissionSituationLabels {
-		for c := range registry.PermissionChannelLabels {
-			key := registry.PermissionKey(c, s)
-			def, _ := reg.Lookup(key)
-			out = append(out, settings.Field{Key: key, Label: registry.PermissionChannelLabels[c], Choices: def.Choices})
-		}
-	}
-	return out
+	Label string                  `json:"label"`
+	Cells []settingsapp.FieldView `json:"cells"`
 }
 
 func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	fields := permissionFields(settings.From(r.Context()))
+	fields := asstapp.PermissionFields(r.Context())
 	values := make(map[string]string, len(fields))
 	for _, f := range fields {
 		if value, ok := web.Value(form, f.Key); ok {
 			values[f.Key] = value
 		}
 	}
-	err := settings.SaveFields(audit.With(detached(r), "operator", audit.UI), p.deps.DB, fields, values)
-	var invalid settings.Invalid
-	var pinned *settings.PinnedError
-	if errors.As(err, &invalid) || errors.As(err, &pinned) {
-		p.assistantPage(w, r, http.StatusUnprocessableEntity, AssistantData{Refused: err.Error()}, toasted(notice("error", "Not saved", err.Error())))
+	changes := make([]settingsapp.Value, 0, len(fields))
+	for _, f := range fields {
+		if value, ok := values[f.Key]; ok {
+			value = strings.TrimSpace(value)
+			changes = append(changes, settingsapp.Value{Key: f.Key, Value: value, Unset: value == ""})
+		}
+	}
+	if _, err := p.settingsSvc().Set(detached(r), settingsapp.SetInput{Values: changes}); err != nil {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
+			message := web.Message(failure)
+			p.assistantPage(w, r, status, AssistantData{Refused: message}, toasted(notice("error", "Not saved", message)))
+		})
 		return
 	}
-	check(err)
 	settingsRedirect(w, "/settings/assistant?saved=permissions")
 }
 
 func (p *pages) settingsRoutes(r chi.Router) {
-	p.deps.Admin(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
-	p.deps.Admin(http.MethodGet, "/settings/assistant", p.assistantSettings)
-	p.deps.Admin(http.MethodPost, "/settings/assistant", p.assistantSave)
-	p.deps.Admin(http.MethodGet, "/settings/permissions", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
+	p.deps.Authenticated(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
+	p.deps.Authenticated(http.MethodGet, "/settings/assistant", p.assistantSettings)
+	p.deps.Authenticated(http.MethodPost, "/settings/assistant", p.assistantSave)
+	p.deps.Authenticated(http.MethodGet, "/settings/permissions", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
 	p.deps.SettingsAt("/settings/assistant", func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
 		p.assistantPage(w, r, status, AssistantData{}, mutate)
 	})
-	p.deps.Admin(http.MethodPost, "/settings/permissions", p.permissionsSave)
-	p.deps.Admin(http.MethodGet, "/settings/usage", p.usagePage)
+	p.deps.Authenticated(http.MethodPost, "/settings/permissions", p.permissionsSave)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
@@ -100,15 +77,14 @@ func toasted(toast *tpl.Toast) func(*tpl.Frame) {
 }
 
 func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, data AssistantData, mutate func(*tpl.Frame)) {
-	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
+	read, err := p.settingsSvc().Read(r.Context(), settingsapp.ReadInput{Fields: asstapp.PermissionFields(r.Context())})
 	check(err)
-	views, err := settings.LoadFields(r.Context(), p.deps.DB.Read, permissionFields(settings.From(r.Context())))
-	check(err)
+	views := read.Data.Fields
 	channels := len(registry.PermissionChannelLabels)
 	for s, label := range registry.PermissionSituationLabels {
 		data.Rows = append(data.Rows, PermissionRow{Label: label, Cells: views[s*channels : (s+1)*channels]})
 	}
-	data.Models, data.Defaults, data.Efforts, data.ContextLimits, data.Channels = pricing.Models(), defaults, pricing.Efforts, assistant.ContextLimits, registry.PermissionChannelLabels[:]
+	data.ModelConfiguration, data.Channels = p.configuration(r), registry.PermissionChannelLabels[:]
 	f, err := p.deps.Render.Frame(r, settingsFrame, data)
 	check(err)
 	mutate(f)
@@ -126,9 +102,8 @@ func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	err := threads.SetDefaults(audit.With(detached(r), "operator", audit.UI), p.deps.DB, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
-	var refused threads.OptionError
-	if errors.As(err, &refused) {
+	_, err := p.assistant().DefaultsSet(asstapp.OperatorUI(detached(r)), asstapp.DefaultsSetInput{Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: web.FormString(form, "context_limit", "")})
+	if err != nil && application.Classify(err).Code == application.Invalid {
 		p.assistantPage(w, r, http.StatusUnprocessableEntity, AssistantData{Error: err.Error()}, toasted(notice("error", "Not saved", err.Error())))
 		return
 	}
@@ -139,24 +114,4 @@ func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 func settingsRedirect(w http.ResponseWriter, location string) {
 	w.Header().Set("Location", location)
 	w.WriteHeader(http.StatusSeeOther)
-}
-
-func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	loc, err := config.From(ctx).Location(p.deps.Env)
-	check(err)
-	now := p.now()
-	statusAt, err := budget.StatusAt(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	summary, err := usage.MonthSummary(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	byKind, err := usage.ByKind(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	byThread, err := usage.ByThread(ctx, p.deps.DB.Read, now, loc, usage.DefaultThreadLimit)
-	check(err)
-	memory, err := usage.MemorySummary(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	subscription, err := usage.SubscriptionSummary(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	p.settings(w, r, http.StatusOK, "usage.gohtml", UsageData{Budget: statusAt, Summary: summary, Memory: memory, Subscription: subscription, ByKind: byKind, ByThread: byThread}, nil)
 }

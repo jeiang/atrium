@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/textx"
@@ -31,11 +32,12 @@ import (
 type Kind string
 
 const (
-	Chat     Kind = "chat"
-	Cron     Kind = "cron"
-	Nightly  Kind = "nightly"
-	Subagent Kind = "subagent"
-	Worker   Kind = "worker"
+	Chat           Kind = "chat"
+	Cron           Kind = "cron"
+	Nightly        Kind = "nightly"
+	Subagent       Kind = "subagent"
+	Worker         Kind = "worker"
+	Classification Kind = "classification"
 )
 
 func ParseKind(value string) (Kind, bool) {
@@ -174,6 +176,9 @@ type Options struct {
 }
 
 func (o Options) Validate() (Options, error) {
+	if o.CostCapUSD != nil && (math.IsNaN(*o.CostCapUSD) || math.IsInf(*o.CostCapUSD, 0) || *o.CostCapUSD < 0) {
+		return Options{}, OptionError("The cost cap must be finite and nonnegative.")
+	}
 	m, err := CleanModel(o.Model)
 	if err != nil {
 		return Options{}, err
@@ -222,32 +227,30 @@ func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	return out, nil
 }
 
-func SetDefaults(ctx context.Context, d *db.DB, model, effort string, contextLimit any) error {
+func CleanDefaults(ctx context.Context, q db.Querier, model, effort string, contextLimit any) (Options, error) {
 	chosen := model
 	if chosen == "" {
-		current, err := Defaults(ctx, d.Read)
+		current, err := Defaults(ctx, q)
 		if err != nil {
-			return err
+			return Options{}, err
 		}
 		chosen = current.Model
 	}
 	limit, err := CleanContextLimit(contextLimit)
 	if err != nil {
+		return Options{}, err
+	}
+	return (Options{Model: chosen, Effort: effort, ContextLimit: limit}).Validate()
+}
+
+func WriteDefaults(ctx context.Context, tx *sql.Tx, o Options) error {
+	if err := setPinSafe(ctx, tx, assistant.KeyDefaultModel, o.Model); err != nil {
 		return err
 	}
-	o, err := (Options{Model: chosen, Effort: effort, ContextLimit: limit}).Validate()
-	if err != nil {
+	if err := setPinSafe(ctx, tx, assistant.KeyDefaultEffort, o.Effort); err != nil {
 		return err
 	}
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := setPinSafe(ctx, tx, assistant.KeyDefaultModel, o.Model); err != nil {
-			return err
-		}
-		if err := setPinSafe(ctx, tx, assistant.KeyDefaultEffort, o.Effort); err != nil {
-			return err
-		}
-		return setPinSafe(ctx, tx, assistant.KeyDefaultContextLimit, strconv.FormatInt(o.ContextLimit, 10))
-	})
+	return setPinSafe(ctx, tx, assistant.KeyDefaultContextLimit, strconv.FormatInt(o.ContextLimit, 10))
 }
 
 func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {
@@ -386,12 +389,16 @@ func Create(ctx context.Context, q db.Querier, now float64, s Spec) (int64, erro
 	if s.WebSearch != nil {
 		web = *s.WebSearch
 	}
+	tainted := s.Marks.At
+	if tainted == nil && s.Marks.Set != 0 {
+		tainted = &now
+	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at, thinking, web_search, cost_cap_usd, environment, repo, base_branch, agent, beta_set, speed, tainted_at, marks) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		s.Kind, s.Title, s.JobID, s.ParentID, o.Model, o.Effort, o.ContextLimit, s.ProjectID, jsonx.Dumps(urls), s.Role, s.ParentRunID,
 		s.BranchedFromThreadID, s.BranchedFromSeq, now, now, o.Thinking, b2i(web), o.CostCapUSD, s.Environment, s.Repo, s.BaseBranch, s.Agent, s.BetaSet, s.Speed,
-		s.Marks.At, int64(s.Marks.Set))
+		tainted, int64(s.Marks.Set))
 	if err != nil {
 		return 0, err
 	}
@@ -431,24 +438,30 @@ func MarksOf(ctx context.Context, q db.Querier, targets []string) (tool.Marks, e
 	if len(targets) == 0 {
 		return 0, nil
 	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(targets)), ",")
-	args := make([]any, len(targets))
-	for i, target := range targets {
-		args[i] = target
-	}
-	rows, err := q.QueryContext(ctx,
-		"SELECT DISTINCT t.marks FROM agent_writes w JOIN threads t ON t.id = w.thread_id "+
-			"WHERE w.target IN ("+placeholders+") AND w.state = 'ok' AND w.undone_at IS NULL", args...)
+	effectThreads, err := ledger.ThreadsForTargets(ctx, q, targets)
 	if err != nil {
 		return 0, err
 	}
-	sets, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
-		var set int64
-		err := r.Scan(&set)
-		return set, err
-	})
-	if err != nil {
-		return 0, err
+	var sets []int64
+	if len(effectThreads) > 0 {
+		effectArgs := make([]any, len(effectThreads))
+		for i, id := range effectThreads {
+			effectArgs[i] = id
+		}
+		effectRows, err := q.QueryContext(ctx,
+			"SELECT marks FROM threads WHERE id IN ("+strings.TrimSuffix(strings.Repeat("?,", len(effectThreads)), ",")+")", effectArgs...)
+		if err != nil {
+			return 0, err
+		}
+		effectSets, err := db.Collect(effectRows, func(r *sql.Rows) (int64, error) {
+			var set int64
+			err := r.Scan(&set)
+			return set, err
+		})
+		if err != nil {
+			return 0, err
+		}
+		sets = append(sets, effectSets...)
 	}
 	var marks tool.Marks
 	for _, set := range sets {
@@ -468,14 +481,61 @@ func ReadMarks(ctx context.Context, q db.Querier, threadID int64) (Marks, error)
 	return m, err
 }
 
+type Authority struct {
+	ThreadID  int64
+	ProjectID *int64
+	Kind      Kind
+	Role      *string
+	WebSearch bool
+	Marks     Marks
+	Ancestors tool.Marks
+}
+
+func (a Authority) Effective() Marks {
+	return Marks{At: a.Marks.At, Set: a.Marks.Set | a.Ancestors}
+}
+
+func ReadAuthority(ctx context.Context, q db.Querier, threadID int64) (Authority, error) {
+	var a Authority
+	var web store.Flag
+	var set int64
+	var parent *int64
+	err := q.QueryRowContext(ctx,
+		"SELECT kind, project_id, role, web_search, tainted_at, marks, parent_thread_id FROM threads WHERE id = ?", threadID).
+		Scan(&a.Kind, &a.ProjectID, &a.Role, &web, &a.Marks.At, &set, &parent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Authority{}, nil
+	}
+	if err != nil {
+		return Authority{}, err
+	}
+	a.ThreadID = threadID
+	a.WebSearch = bool(web)
+	a.Marks.Set = tool.Marks(set)
+	seen := map[int64]bool{threadID: true}
+	for parent != nil && !seen[*parent] {
+		seen[*parent] = true
+		var ancestorSet int64
+		var next *int64
+		err := q.QueryRowContext(ctx, "SELECT marks, parent_thread_id FROM threads WHERE id = ?", *parent).Scan(&ancestorSet, &next)
+		if errors.Is(err, sql.ErrNoRows) {
+			break
+		}
+		if err != nil {
+			return Authority{}, err
+		}
+		a.Ancestors |= tool.Marks(ancestorSet)
+		parent = next
+	}
+	return a, nil
+}
+
 func EffortFixed(thinking string) bool { return thinking == "between_tools" || thinking == "disabled" }
 
 type Switch struct {
 	Changed          bool
 	ThinkingAdjusted bool
 	ThinkingDropped  bool
-	Warm             bool
-	CostUSD          float64
 }
 
 func SwitchModel(ctx context.Context, q db.Querier, threadID int64, model, effort string, contextLimit any, now float64) (Switch, error) {
@@ -536,19 +596,6 @@ func SwitchModel(ctx context.Context, q db.Querier, threadID int64, model, effor
 		if err := stripThinking(ctx, q, threadID); err != nil {
 			return sw, err
 		}
-	}
-	var ts float64
-	var prompt int64
-	err = q.QueryRowContext(ctx, "SELECT ts, input_tokens + cache_write_5m + cache_write_1h + cache_read FROM usage WHERE thread_id = ? ORDER BY ts DESC LIMIT 1", threadID).Scan(&ts, &prompt)
-	switch {
-	case err == nil && now-ts <= 300:
-		sw.Warm = true
-		sw.CostUSD, err = pricing.CostUSD(model, pricing.Tokens{Input: prompt}, 0)
-		if err != nil {
-			return sw, err
-		}
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		return sw, err
 	}
 	if !sw.Changed {
 		return sw, nil
@@ -666,6 +713,38 @@ func Get(ctx context.Context, q db.Querier, threadID int64) (*Thread, error) {
 		return nil, err
 	}
 	return &t, nil
+}
+
+func KindOf(ctx context.Context, q db.Querier, threadID int64) (Kind, error) {
+	var kind string
+	err := q.QueryRowContext(ctx, "SELECT kind FROM threads WHERE id = ?", threadID).Scan(&kind)
+	return Kind(kind), err
+}
+
+func KindsOf(ctx context.Context, q db.Querier, threadIDs []int64) (map[int64]Kind, error) {
+	if len(threadIDs) == 0 {
+		return nil, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(threadIDs)), ",")
+	args := make([]any, len(threadIDs))
+	for i, id := range threadIDs {
+		args[i] = id
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id, kind FROM threads WHERE id IN ("+marks+")", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[int64]Kind, len(threadIDs))
+	for rows.Next() {
+		var id int64
+		var kind string
+		if err := rows.Scan(&id, &kind); err != nil {
+			return nil, err
+		}
+		out[id] = Kind(kind)
+	}
+	return out, rows.Err()
 }
 
 func ContextLimitOf(t Thread) int64 {
@@ -797,8 +876,7 @@ func (l Listed) Key() ListKey {
 
 const listSQL = "SELECT t.id, t.kind, t.title, t.pinned, t.archived, t.created_at, t.updated_at, t.project_id, " +
 	"(SELECT name FROM projects p WHERE p.id = t.project_id) AS project_name, " +
-	"(SELECT state FROM runs r WHERE r.thread_id = t.id ORDER BY r.id DESC LIMIT 1) AS run_state, " +
-	"(SELECT COALESCE(SUM(cost_usd), 0) FROM usage u WHERE u.thread_id = t.id) AS cost " +
+	"(SELECT state FROM runs r WHERE r.thread_id = t.id ORDER BY r.id DESC LIMIT 1) AS run_state " +
 	"FROM threads t WHERE t.kind = ? AND t.archived = ? AND t.deleted_at IS NULL"
 
 func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error) {
@@ -826,7 +904,7 @@ func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error
 	return db.Collect(rows, func(r *sql.Rows) (Listed, error) {
 		var l Listed
 		return l, r.Scan(&l.ID, &l.Kind, &l.Title, &l.Pinned, &l.Archived, &l.CreatedAt, &l.UpdatedAt, &l.ProjectID,
-			&l.ProjectName, &l.RunState, &l.Cost)
+			&l.ProjectName, &l.RunState)
 	})
 }
 
@@ -840,10 +918,32 @@ func SetArchived(ctx context.Context, q db.Querier, threadID int64, value bool) 
 		"UPDATE threads SET archived = ? WHERE id = ? AND kind = ? AND deleted_at IS NULL", store.Bit(value), threadID, Chat))
 }
 
+func Unused(ctx context.Context, q db.Querier, threadID int64) (bool, error) {
+	var used int
+	err := q.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM runs WHERE thread_id = ?1) + (SELECT COUNT(*) FROM thread_messages WHERE thread_id = ?1) + "+
+		"(SELECT COUNT(*) FROM thread_queue WHERE thread_id = ?1) + (SELECT COUNT(*) FROM threads WHERE parent_thread_id = ?1)", threadID).Scan(&used)
+	return used == 0, err
+}
+
+func Remove(ctx context.Context, q db.Querier, threadID int64) error {
+	for _, stmt := range []string{
+		"DELETE FROM context_projections WHERE thread_id = ?",
+		"DELETE FROM thread_plans WHERE thread_id = ?",
+		"DELETE FROM thread_fts WHERE thread_id = ?",
+		"DELETE FROM threads WHERE id = ?",
+	} {
+		if _, err := q.ExecContext(ctx, stmt, threadID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error {
 	const runs = "SELECT id FROM runs WHERE thread_id = ?"
 	for _, stmt := range []string{
 		"DELETE FROM run_events WHERE run_id IN (" + runs + ")",
+		"DELETE FROM run_streams WHERE run_id IN (" + runs + ")",
 		"DELETE FROM context_ledger WHERE run_id IN (" + runs + ")",
 		"DELETE FROM tool_results WHERE run_id IN (" + runs + ")",
 		"DELETE FROM tool_calls WHERE run_id IN (" + runs + ")",

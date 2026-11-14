@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
 )
@@ -295,17 +296,18 @@ func (r PollResult) Dict() pollView {
 	return pollView{Added: added, Errors: errors}
 }
 
-func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
+func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
 	now := opts.Now
 	if now == nil {
 		now = Now
 	}
 	stamp := now()
 	result := PollResult{Added: []Added{}, Errors: []string{}}
-	qb, err := settings.Qbit()
-	if err != nil {
+	request := ledger.NewKey()
+	if _, err := settings.Qbit(); err != nil {
 		return result, err
 	}
+	q := d.Write
 	channels, err := ListChannels(ctx, q)
 	if err != nil {
 		return result, err
@@ -340,15 +342,27 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 				continue
 			}
 			if rule.Primed || opts.Force {
-				if err := qb.AddMagnet(ctx, t.MagnetURL, TagMedia); err != nil {
-					var qbitErr QbitError
-					if !errors.As(err, &qbitErr) {
+				_, err := settings.Add(ctx, store, settings, AddRequest{
+					Magnet: t.MagnetURL, Tags: TagMedia,
+					OperationKey: "media:channel:" + strconv.FormatInt(rule.ID, 10) + ":" + t.Hash + ":" + request,
+					Done: func(ctx context.Context, tx *sql.Tx) error {
+						return markSeen(ctx, tx, t.Hash, stamp)
+					},
+				})
+				if err != nil {
+					var conflict *ledger.Conflict
+					if errors.As(err, &conflict) {
+						result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: an earlier add is unresolved", rule.Name, t.Title))
+						continue
+					}
+					if !IsQbit(err) {
 						return result, err
 					}
 					result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: %v", rule.Name, t.Title, err))
 					continue
 				}
 				result.Added = append(result.Added, Added{Channel: rule.Name, Title: t.Title, Hash: t.Hash, SizeBytes: t.SizeBytes})
+				continue
 			}
 			if err := markSeen(ctx, q, t.Hash, stamp); err != nil {
 				return result, err
@@ -371,18 +385,23 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 			title = fmt.Sprintf("Added %d releases", len(result.Added))
 		}
 		if notify.Enabled(ctx) {
-			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media}
+			hashes := make([]string, len(result.Added))
+			for i, a := range result.Added {
+				hashes[i] = a.Hash
+			}
+			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media,
+				Occurrence: "media-added:" + strings.Join(hashes, ",")}
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage
 			}
-			sent, err := notify.Send(ctx, q, message)
+			sent, err := notify.Send(ctx, d, message)
 			if err != nil {
 				result.Errors = append(result.Errors, "notify: "+err.Error())
-			} else if !sent.Delivered && sent.Error != notify.NoDevices {
+			} else if !sent.Duplicate && !sent.Delivered && sent.Error != notify.NoDevices {
 				result.Errors = append(result.Errors, "notify: "+sent.Error)
 			}
 		}
-		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, store, settings, Scope{}, nil); err != nil {
 			return result, err
 		}
 	}

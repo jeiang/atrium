@@ -7,7 +7,9 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -16,7 +18,9 @@ import (
 
 const driverName = "modernc"
 
-func openDriver() driver.Driver { return &sqlite.Driver{} }
+func busyWaitSQL(d time.Duration) string {
+	return fmt.Sprintf("SELECT atrium_busy_timeout(%d)", d.Milliseconds())
+}
 
 func dsn(path string, immediate bool, key Key) (string, error) {
 	if !key.IsZero() {

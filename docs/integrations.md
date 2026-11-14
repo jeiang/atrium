@@ -1,9 +1,14 @@
 # Integrations
 
-Every connection is configured on the Integrations settings page and tested
-there. A secret is stored write-only in an encrypted database; the host may
-pin it instead through `secretFiles`. The matrix is the support summary; the
-sections below cover the console work atrium cannot do for you.
+Every connection is configured on the Integrations settings page or the
+Connections page (`/settings/connections`) and tested there. A provider
+credential is stored write-only in an encrypted database or supplied by the
+connection's `credential_files` entry in the host configuration; there is no
+environment pin for a secret. The only environment secret inputs left are the
+database key (`ATRIUM_DB_KEY`/`ATRIUM_DB_KEY_FILE`) and the two app key files
+(`app_keys.action_link_key_file` and `app_keys.link_key_file`), which the
+NixOS module's `secretFiles` option renders. The matrix is the support
+summary; the sections below cover the console work atrium cannot do for you.
 
 ## Support matrix
 
@@ -11,23 +16,22 @@ sections below cover the console work atrium cannot do for you.
 |---|---|---|---|---|
 | Anthropic | `anthropic` | Console API key | Assistant model calls | Key is workspace-bound; use one workspace per instance with a monthly spend limit |
 | Grafana | `grafana` | Service account token | Read-only dashboard and datasource queries | Viewer role is enough; optional token expiry |
-| Mail chat endpoint | `mail_chat` | Optional Bearer key | Chat and routing calls to an OpenAI-compatible endpoint | A hosted endpoint sends mail content off this host |
-| Mail embed endpoint | `mail_embed` | Optional Bearer key | Embeddings for mail search and routing | Same as the chat endpoint |
-| Notion | `notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | Share the pages with the integration; a personal token acts as the user and lasts at most a year |
-| qBittorrent | `qbittorrent` | API key | Media torrent and library operations | API keys need qBittorrent 5.2 or newer |
-| TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
+| Embedding endpoint | `service/embedding` | Optional host-file bearer | Embeddings for mail search and routing | A hosted endpoint sends mail content off this host |
+| Notion | `service/notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | A connection on `/settings/connections`; share the pages with the integration; a personal token acts as the user and lasts at most a year |
+| qBittorrent | `service/qbittorrent` | API key | Media torrent and library operations | A connection on `/settings/connections`; API keys need qBittorrent 5.2 or newer |
+| TMDB | `service/tmdb` | API read access token | Media metadata | A connection on `/settings/connections`; read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
 | Ship24 | `ship24` | Bearer API key | Live package tracking | Free plan registers 10 shipments a month; polling, no webhooks |
 | Google Calendar and Gmail | — | OAuth web client | Calendar events and Gmail over IMAP and SMTP | See [Google](#google) |
 | iCloud | — | App-specific password | IMAP, SMTP, CalDAV and CardDAV | See [iCloud](#icloud) |
-| EZTV | — | None | Media channel episode lists | Public API; only torrents tagged media are written |
+| EZTV | `service/eztv` | None | Media channel episode lists | A connection on `/settings/connections`; public API; only torrents tagged media are written |
 
 ## Google
 
 Google Calendar and Gmail use a Web-application OAuth client that each
-instance registers itself. The wizard on the Integrations page stores the
+instance registers itself. The wizard on the Connections page stores the
 client ID and secret, performs one consent per capability, and keeps the
-refresh token as a secret that can be pinned with its `*_file` variable.
+refresh token as a write-only secret in the database.
 
 | Account | Gmail IMAP and SMTP | Calendar | Notes |
 |---|---|---|---|
@@ -49,7 +53,7 @@ XOAUTH2; a personal account may use an app password instead.
   Gmail over IMAP and SMTP uses the `https://mail.google.com/` scope and
   needs no Gmail API.
 4. Create credentials of type **Web application** and add the redirect URI
-  `https://<atrium-host>/settings/integrations/google/callback`.
+  `https://<atrium-host>/settings/connections/google/callback`.
 5. Paste the client ID and secret into the Google wizard, then connect
   Calendar and Gmail separately.
 
@@ -83,7 +87,7 @@ SMTP, CalDAV and CardDAV is an app-specific password:
 
 Mail accounts come from `mailAccounts`; calendar and contacts reuse an iCloud
 mail account for their CalDAV and CardDAV login. The Calendar section on the
-Integrations page edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
+Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
 `default_event_minutes`, `work_hours` and `work_days`.
 
 ## Notion
@@ -100,13 +104,17 @@ Atrium uses read, update and insert content, and no comments or users.
 
 Create the internal integration at
 [notion.so/my-integrations](https://www.notion.so/my-integrations), share the
-wiki pages with it, then paste its token. The Notion record on the
-Integrations page edits `wiki_root`, `sensitivity_property`,
-`notion_private_value` and `wiki_log_title`.
+wiki pages with it, then paste its token on the Notion connection on
+`/settings/connections`. The connection is `service/notion`: the host declares
+it under `connections."service/notion"` with `config.api` (default
+`https://api.notion.com`), optional `transport.ca_file` and `transport.proxy`,
+and the `token` credential slot, which may be a host credential file. The
+Notion settings page (`/settings/notion`) edits `wiki_root`,
+`sensitivity_property`, `notion_private_value` and `wiki_log_title`.
 
 The knowledge base is projected into Notion by the `knowledge-export` job; the
-wiki pages above are not touched. The **Export knowledge to Notion** group in
-the Notion record on the Integrations page sets the export: paste the parent
+wiki pages above are not touched. The **Export knowledge to Notion** section on
+the Export settings page (`/settings/export`) sets the export: paste the parent
 page's URL or id (`export_notion_parent`, stored as the normalized page id),
 choose what to include (`export_notion_kinds`) and turn on Include private
 records to store the same destination in `export_notion_private_to`. The
@@ -114,7 +122,7 @@ export overwrites its own pages on every run and trashes the page of a record
 that is retracted or leaves the export set; edits made in Notion are lost. A
 write with an unknown outcome blocks the export until it is resolved. The
 **Obsidian export** section writes a vault folder instead (`export_obsidian_dir`,
-normally pinned by the host); its private switch stores the folder path in
+normally declared by the host); its private switch stores the folder path in
 `export_obsidian_private_to`.
 
 ## Grafana
@@ -134,8 +142,9 @@ may carry an expiry.
 
 - Rotate the key in the Console and paste the new one on the Integrations
   page; the old key stops working.
-- The key is stored encrypted and can be pinned with `secretFiles`; a pinned
-  key cannot be changed from the UI.
+- The key is stored encrypted in the `service/anthropic` connection, or the
+  host supplies it through `credential_files.api_key`; a key from the host
+  file cannot be changed from the UI.
 - An Admin API key can list members, workspaces and usage cost, but cannot
   mint keys. Atrium does not use one yet.
 - Subscription OAuth is not allowed for third-party products; only the
@@ -143,10 +152,11 @@ may carry an expiry.
 
 ## Mail endpoints
 
-The chat and embed endpoints are OpenAI-compatible base URLs ending in `/v1`,
-with an optional Bearer key. The probe lists models and, for embeddings, the
-dimension. A hosted endpoint warns that mail content leaves this host. The
-chat endpoint record edits `mail_chat_model`.
+The embedding endpoint is the `service/embedding` connection: an
+OpenAI-compatible base URL ending in `/v1`, with an optional host-file bearer.
+Its Test lists models and measures the dimension. A hosted endpoint warns that
+mail content leaves this host. Mail classification has no chat endpoint; it
+uses fixed-schema Haiku requests through the `service/anthropic` connection.
 
 ## qBittorrent
 
@@ -156,19 +166,24 @@ no API keys.
 
 ## TMDB
 
-Create an API read access token in your TMDB account settings and paste it.
-Every request carries it as a Bearer token, never as a query parameter.
-Media pages that show TMDB data carry the attribution. The Media libraries
-section on the Integrations page edits `media_movies_url` and `media_tv_url`.
+Create an API read access token in your TMDB account settings and save it on
+the `/settings/connections` TMDB record. Every request carries it as a Bearer
+token, never as a query parameter, and it is never sent to the image host.
+Test reads `/configuration` and then checks the image host without the token.
+The API and image URLs come from `connections."service/tmdb".config` in the
+host configuration. Media pages that show TMDB data carry the attribution.
+VPN library links use one base, `host.media.media_vpn_base_url`, served by the
+media agent's `[vpn]` listener; the retired `media_movies_url` and
+`media_tv_url` host keys are refused.
 
 ## Open-Meteo
 
 Weather forecasts and place lookup need no credential. Set the location
 (`weather_latitude`, `weather_longitude` and optionally
-`weather_location_name`) on the Open-Meteo record on the Integrations page;
+`weather_location_name`) on the Open-Meteo record on the Connections page;
 the `weather` tool reads it, or geocodes a place named in the call. Latitude
 must be between -90 and 90 and longitude between -180 and 180, and a value
-pinned from the host is shown read-only. The tool fetches only
+the host file declares is shown read-only. The tool fetches only
 the configured Open-Meteo hosts, and the request carries no operator data
 beyond the coordinates.
 
@@ -176,8 +191,8 @@ beyond the coordinates.
 
 Ship24 supplies live package tracking for packages the operator registers
 with the `track_package` tool. Create an API key in the Ship24 dashboard and
-paste it on the Integrations page, or pin `mail_ship24_api_key` from the
-host. The free plan registers 10 shipments a month; the
+paste it on the Connections page, or declare `credential_files.api_key` on
+the `service/ship24` connection in the host configuration. The free plan registers 10 shipments a month; the
 `mail_ship24_monthly_quota` setting (default 10) refuses further
 registrations once the month's count is exhausted. Atrium polls the active
 trackers hourly and stops polling delivered packages. There is no webhook
@@ -186,7 +201,9 @@ route.
 ## EZTV
 
 EZTV's public API supplies the media channel episode lists. It needs no
-credential. Media writes touch only torrents tagged media.
+credential. Test fetches one bounded indexer response (`limit=1`) and checks
+its shape without adding a torrent. Media writes touch only torrents tagged
+media.
 
 ## OIDC presets
 

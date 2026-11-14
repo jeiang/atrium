@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/passrun"
 )
@@ -21,18 +23,17 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	old := float64(time.Now().Add(-48 * time.Hour).Unix())
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	old := float64(time.Now().Add(-91 * 24 * time.Hour).Unix())
 	if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome) VALUES ('scan', ?, ?, 'ok')", old, old); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(passrun.RetentionKey), "1")
 
 	if got := runApp(t, "proposals", "scan-all"); got.code != cli.ExitOK {
 		t.Fatalf("scan-all: %d %s", got.code, got.stderr)
 	}
 	if ok, failed, _ := passRows(t, dir, passrun.Scan); ok != 1 || failed != 0 {
-		t.Errorf("scan rows ok=%d failed=%d, want the new success only (old row pruned)", ok, failed)
+		t.Errorf("scan rows ok=%d failed=%d, want the new success only (old row pruned by the 90-day constant)", ok, failed)
 	}
 
 	missing := filepath.Join(dir, "no-such-dir", "out.backup")
@@ -58,7 +59,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
-	browser.store(t, mustConnect(t, filepath.Join(dir, "atrium.db")))
+	browser.store(t, mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{}))
 	if got := runApp(t, "backup", filepath.Join(dir, "missing", "x.backup")); got.code == cli.ExitOK {
 		t.Fatal("failing backup succeeded")
 	}
@@ -113,4 +114,47 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 			t.Errorf("notices %d after recovery, want still 1", count())
 		}
 	})
+}
+
+func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
+	push, browser := pushRig(t, dir)
+	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
+		t.Fatalf("settings list: %d %s", got.code, got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	browser.store(t, d)
+	if got := runApp(t, "backup", filepath.Join(dir, "missing", "x.backup")); got.code == cli.ExitOK {
+		t.Fatal("failing backup succeeded")
+	}
+	rows := func(table string) int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	opsAddr(t)
+	startServeIn(t, dir)
+	time.Sleep(time.Second)
+	if n := rows("pass_run_alerts"); n != 0 {
+		t.Errorf("%d stale alerts recorded while notifications are off", n)
+	}
+	if n := rows("notifications"); n != 0 {
+		t.Errorf("%d notifications recorded while notifications are off", n)
+	}
+	if n := push.count(); n != 0 {
+		t.Fatalf("%d pushes sent while notifications are off", n)
+	}
+	if got := runApp(t, "settings", "set", module.FlagKey(module.Notifications), "true"); got.code != cli.ExitOK {
+		t.Fatalf("notifications_enabled true: exit %d stderr %q", got.code, got.stderr)
+	}
+	if notice := browser.decrypt(t, push.wait(t, 1).body); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
+		t.Fatalf("notice %v after enabling notifications, want the backup stale notice", notice)
+	}
+	if n := rows("pass_run_alerts"); n != 1 {
+		t.Errorf("%d stale alerts after enabling notifications, want 1", n)
+	}
 }

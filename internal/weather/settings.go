@@ -2,10 +2,15 @@ package weather
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -28,31 +33,15 @@ const (
 	DefaultGeocodingURL = "https://geocoding-api.open-meteo.com/v1/search"
 )
 
-func init() {
+func SettingsDefs() []settings.Def {
 	ui := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
 		return settings.Value(settings.UI, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
 	}
-	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
-	}
-	settings.MustRegister(
+	return []settings.Def{
 		ui(KeyLocationName, settings.String, "", nil),
 		ui(KeyLatitude, settings.Float, "", settings.Between(-90, 90)),
 		ui(KeyLongitude, settings.Float, "", settings.Between(-180, 180)),
-		adv(KeyForecastDays, settings.Int, "7", settings.Between(1, 16)),
-		adv(KeyHourlyHours, settings.Int, "24", settings.Between(1, 48)),
-		adv(KeyTimeout, settings.Int, "15", settings.Between(1, 300)),
-		adv(KeyForecastURL, settings.String, DefaultForecastURL, httpURL),
-		adv(KeyGeocodingURL, settings.String, DefaultGeocodingURL, httpURL),
-	)
-}
-
-func httpURL(value string) error {
-	u, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return settings.Invalid("must be an http or https URL")
 	}
-	return nil
 }
 
 type Settings struct {
@@ -60,11 +49,21 @@ type Settings struct {
 	Latitude     float64
 	Longitude    float64
 	HasLocation  bool
-	ForecastDays int
-	HourlyHours  int
-	Timeout      int
 	ForecastURL  string
 	GeocodingURL string
+	HTTP         *http.Client
+}
+
+func httpURL(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return settings.Invalid("must be an http or https URL")
+	}
+	return nil
 }
 
 func Load(ctx context.Context, q db.Querier) (Settings, error) {
@@ -94,31 +93,23 @@ func Load(ctx context.Context, q db.Querier) (Settings, error) {
 		}
 		s.HasLocation = true
 	}
-	days, err := read(KeyForecastDays)
+	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.ID(KindWeather))
 	if err != nil {
+		var unknown connections.UnknownID
+		if errors.As(err, &unknown) {
+			return Settings{}, config.NotConfigured("the weather connection is not configured")
+		}
 		return Settings{}, err
 	}
-	if s.ForecastDays, err = strconv.Atoi(days); err != nil {
+	if s.ForecastURL, err = lease.Endpoint("url"); err != nil {
 		return Settings{}, err
 	}
-	hours, err := read(KeyHourlyHours)
-	if err != nil {
+	var cfg connectionConfig
+	if err := json.Unmarshal(lease.Config(), &cfg); err != nil {
 		return Settings{}, err
 	}
-	if s.HourlyHours, err = strconv.Atoi(hours); err != nil {
-		return Settings{}, err
-	}
-	timeout, err := read(KeyTimeout)
-	if err != nil {
-		return Settings{}, err
-	}
-	if s.Timeout, err = strconv.Atoi(timeout); err != nil {
-		return Settings{}, err
-	}
-	if s.ForecastURL, err = read(KeyForecastURL); err != nil {
-		return Settings{}, err
-	}
-	if s.GeocodingURL, err = read(KeyGeocodingURL); err != nil {
+	s.GeocodingURL = strings.TrimSpace(cfg.GeocodingURL)
+	if s.HTTP, err = lease.HTTPRead("url"); err != nil {
 		return Settings{}, err
 	}
 	return s, nil

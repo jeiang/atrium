@@ -6,6 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
 type packages struct{}
@@ -15,29 +16,20 @@ func Packages() attention.Source { return packages{} }
 func (packages) Name() string { return "packages" }
 
 func (packages) Items(ctx context.Context, q db.Querier, _ float64) ([]attention.Item, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT id, merchant, COALESCE(NULLIF(last_event, ''), status_text), tracking_number, first_seen FROM packages "+
-			"WHERE dismissed = 0 AND status NOT IN ('delivered', 'returned') ORDER BY first_seen")
+	found, err := tracking.AttentionPackages(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	var items []attention.Item
-	for rows.Next() {
-		var id int64
-		var merchant, status, tracking string
-		var seen float64
-		if err := rows.Scan(&id, &merchant, &status, &tracking, &seen); err != nil {
-			return nil, err
-		}
-		title := merchant
+	items := make([]attention.Item, 0, len(found))
+	for _, p := range found {
+		title := p.Merchant
 		if title == "" {
 			title = "Package"
 		}
 		items = append(items, attention.Item{
-			Kind: "package", SourceID: strconv.FormatInt(id, 10), Title: title, Detail: status + " " + tracking,
-			Created: seen, Group: attention.Upcoming,
+			Kind: "package", SourceID: strconv.FormatInt(p.ID, 10), Title: title, Detail: p.Status + " " + p.TrackingNumber,
+			Created: p.FirstSeen, Group: attention.Upcoming,
 		})
 	}
-	return items, rows.Err()
+	return items, nil
 }

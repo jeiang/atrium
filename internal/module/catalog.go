@@ -1,0 +1,306 @@
+package module
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"slices"
+	"strings"
+
+	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/runtime"
+	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
+	"github.com/jeiang/atrium/internal/tool"
+)
+
+type Catalog struct {
+	decls      []Declaration
+	optional   []string
+	settings   *settings.Registry
+	sections   settingspage.Sections
+	conns      *connections.Registry
+	hooks      proposals.Hooks
+	credential config.AccountCredentialFunc
+	metrics    []ops.Metric
+	checks     []ops.Check
+	jobs       []scheduler.Definition
+	services   []runtime.ServiceDefinition
+	operations []Operation
+	bindings   []Binding
+}
+
+func (c *Catalog) Declarations() []Declaration { return c.decls }
+
+func (c *Catalog) Optional() []string { return c.optional }
+
+func (c *Catalog) Settings() *settings.Registry { return c.settings.Clone() }
+
+func (c *Catalog) Sections() settingspage.Sections { return slices.Clone(c.sections) }
+
+func (c *Catalog) SectionModules() map[string]bool { return c.sections.Modules() }
+
+func (c *Catalog) Metrics() []ops.Metric { return slices.Clone(c.metrics) }
+
+func (c *Catalog) Checks() []ops.Check { return slices.Clone(c.checks) }
+
+func (c *Catalog) Jobs() []scheduler.Definition { return scheduler.Clone(c.jobs) }
+
+func (c *Catalog) Services() []runtime.ServiceDefinition { return slices.Clone(c.services) }
+
+func (c *Catalog) Operations() []Operation { return slices.Clone(c.operations) }
+
+func (c *Catalog) Bindings() []Binding { return slices.Clone(c.bindings) }
+
+func (c *Catalog) WebBindings() map[string][]application.Binding {
+	out := map[string][]application.Binding{}
+	for _, b := range c.bindings {
+		if b.Kind == application.HTML || b.Kind == application.API || (b.Kind == application.ProtocolOnly && strings.Contains(b.Target, " /")) {
+			out[b.Module] = append(out[b.Module], b.Binding)
+		}
+	}
+	return out
+}
+
+func (c *Catalog) Unbound() []Binding {
+	type key struct {
+		module string
+		kind   application.BindingKind
+		target string
+	}
+	bound := map[key]bool{}
+	for _, b := range c.bindings {
+		bound[key{b.Module, b.Kind, b.Target}] = true
+	}
+	var out []Binding
+	add := func(module string, kind application.BindingKind, target string) {
+		if !bound[key{module, kind, target}] && !bound[key{module, application.ProtocolOnly, target}] {
+			out = append(out, Binding{Module: module, Binding: application.Binding{Kind: kind, Target: target}})
+		}
+	}
+	for _, d := range c.decls {
+		for _, path := range leafPaths(d.Commands, "") {
+			add(d.Name, application.CLI, path)
+		}
+		for _, t := range d.Tools {
+			add(d.Name, application.Tool, t.Tool.Name)
+		}
+		for _, j := range d.Jobs {
+			add(d.Name, application.Job, j.Key)
+		}
+		for _, s := range d.Services {
+			add(d.Name, application.Service, s.Name)
+		}
+		if d.ServiceSets != nil && d.ServiceSetName != "" {
+			add(d.Name, application.Service, d.ServiceSetName)
+		}
+	}
+	return out
+}
+
+func leafPaths(cmds []*cli.Command, prefix string) []string {
+	var out []string
+	for _, c := range cmds {
+		path := strings.TrimSpace(prefix + " " + c.Name)
+		if len(c.Commands) == 0 {
+			out = append(out, path)
+			continue
+		}
+		out = append(out, leafPaths(c.Commands, path)...)
+	}
+	return out
+}
+
+func (c *Catalog) Connections() *connections.Registry { return c.conns }
+
+func (c *Catalog) Hooks() proposals.Hooks { return c.hooks }
+
+func (c *Catalog) AccountCredential() config.AccountCredentialFunc { return c.credential }
+
+func (c *Catalog) HostAccounts() config.HostAccountsFunc {
+	for _, d := range c.decls {
+		if d.AccountSync != nil {
+			return d.AccountSync.Accounts
+		}
+	}
+	return nil
+}
+
+func (c *Catalog) ToolDocs() []tool.Tool {
+	var out []tool.Tool
+	for _, d := range c.decls {
+		for _, def := range d.Tools {
+			out = append(out, def.Tool)
+		}
+	}
+	slices.SortFunc(out, func(a, b tool.Tool) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+func (c *Catalog) Approvals() []tool.Tool {
+	var out []tool.Tool
+	for _, decl := range c.decls {
+		for _, def := range decl.Tools {
+			if def.Tool.Approval != nil {
+				out = append(out, def.Tool)
+			}
+		}
+	}
+	return out
+}
+
+func (c *Catalog) ProposeKinds() []proposals.Definition {
+	var out []proposals.Definition
+	for _, decl := range c.decls {
+		out = append(out, decl.ProposeKinds...)
+	}
+	return out
+}
+
+func (c *Catalog) Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func() float64) (*ledger.Store, error) {
+	return ledger.NewStoreWith(d, now, func(s *ledger.Store) ([]ledger.UndoDefinition, []ledger.ResolveDefinition, error) {
+		operations := map[string]string{}
+		kinds := map[string]string{}
+		s.BindEffect = func(ctx context.Context, q db.Querier, effect ledger.Effect) (context.Context, error) {
+			owner := operations[effect.Operation]
+			if owner == "" && effect.ProposalID != nil {
+				kind, err := proposals.KindOf(ctx, q, *effect.ProposalID)
+				if err != nil {
+					return ctx, err
+				}
+				owner = kinds[kind]
+			}
+			if owner == "" && len(effect.Undo) > 0 {
+				var undo struct {
+					Op string `json:"op"`
+				}
+				if err := json.Unmarshal(effect.Undo, &undo); err != nil {
+					return ctx, err
+				}
+				owner = operations[undo.Op]
+			}
+			if owner == "" {
+				switch effect.Origin {
+				case "mail_auto", "operator_send":
+					owner = Mail
+				case "calendar":
+					owner = Calendar
+				case "media":
+					owner = Media
+				case "notify":
+					owner = Notifications
+				case "export", "agent", "local":
+					owner = Assistant
+				}
+			}
+			if owner == "" {
+				return ctx, ledger.Refused("the effect has no registered owner")
+			}
+			return bindOwner(ctx, owner, q)
+		}
+		var undo []ledger.UndoDefinition
+		var resolve []ledger.ResolveDefinition
+		for _, decl := range c.decls {
+			for _, def := range decl.Tools {
+				operations[def.Tool.Name] = decl.Name
+			}
+			if decl.Effects != nil {
+				effects := decl.Effects(EffectDeps{DB: d, Ledger: s, Env: env, Open: open, Now: now})
+				for _, def := range effects.Proposals {
+					kinds[def.Kind.Name] = decl.Name
+				}
+				for _, def := range effects.Undo {
+					operations[def.Operation] = decl.Name
+					def.Undoer.Bind = func(ctx context.Context) (context.Context, error) {
+						return bindOwner(ctx, decl.Name, d.Read)
+					}
+					undo = append(undo, def)
+				}
+				for _, def := range effects.Resolve {
+					operations[def.Operation] = decl.Name
+					hook := def.Hook
+					def.Hook = func(ctx context.Context, tx *sql.Tx, effect ledger.Effect, resolution ledger.Resolution) error {
+						ctx, err := bindOwner(ctx, decl.Name, tx)
+						if err != nil {
+							return err
+						}
+						if err := ledger.CheckAdmission(ctx); err != nil {
+							return err
+						}
+						return hook(ctx, tx, effect, resolution)
+					}
+					resolve = append(resolve, def)
+				}
+			}
+		}
+		return undo, resolve, nil
+	})
+}
+
+type UnknownProposalKind struct{ Kind string }
+
+func (e *UnknownProposalKind) Error() string { return "unknown proposal kind " + e.Kind }
+
+func (c *Catalog) Proposals(deps EffectDeps) (*proposals.Registry, error) {
+	var defs []proposals.Definition
+	var sync proposals.SyncHook
+	var syncModule string
+	for _, decl := range c.decls {
+		if decl.Effects == nil {
+			continue
+		}
+		effects := decl.Effects(deps)
+		for _, def := range effects.Proposals {
+			execute := def.Execute
+			if execute != nil {
+				def.Execute = func(ctx context.Context, prop *proposals.Proposal, selection any) (any, error) {
+					ctx, err := bindOwner(ctx, decl.Name, deps.DB.Read)
+					if err != nil {
+						return nil, err
+					}
+					return execute(ctx, prop, selection)
+				}
+			}
+			defs = append(defs, def)
+		}
+		if effects.Sync != nil {
+			if sync != nil {
+				return nil, &DuplicateHook{Hook: "Sync", Modules: []string{syncModule, decl.Name}}
+			}
+			sync, syncModule = effects.Sync, decl.Name
+		}
+	}
+	r, err := proposals.NewRegistryFrom(defs, sync)
+	if err != nil {
+		return nil, err
+	}
+	r.Bind = func(ctx context.Context, kind string) (context.Context, error) {
+		def, ok := r.Kind(kind)
+		if !ok {
+			return ctx, &UnknownProposalKind{Kind: kind}
+		}
+		return bindOwner(ctx, def.Module, deps.DB.Read)
+	}
+	for _, decl := range c.decls {
+		for _, kind := range decl.ProposeKinds {
+			if r.Executors[kind.Kind.Name] == nil {
+				return nil, &UnknownProposalKind{Kind: kind.Kind.Name}
+			}
+		}
+	}
+	return r, nil
+}
+
+func (c *Catalog) Context(ctx context.Context) context.Context {
+	ctx = connections.With(ctx, c.conns)
+	return proposals.WithHooks(ctx, c.hooks)
+}

@@ -2,23 +2,18 @@ package calendar
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/timex"
 	"golang.org/x/oauth2"
+	gcal "google.golang.org/api/calendar/v3"
+	"google.golang.org/api/option"
 )
-
-type refresher struct {
-	ctx      context.Context
-	creds    config.GoogleCredentials
-	tokenURL string
-}
 
 func formBody(pairs [][2]string) string {
 	parts := make([]string, len(pairs))
@@ -28,41 +23,42 @@ func formBody(pairs [][2]string) string {
 	return strings.Join(parts, "&")
 }
 
-func (r *refresher) Token() (*oauth2.Token, error) {
-	body := formBody([][2]string{
-		{"grant_type", "refresh_token"}, {"client_id", r.creds.ID}, {"client_secret", r.creds.Secret},
-		{"refresh_token", r.creds.RefreshToken}, {"scope", Scope},
-	})
-	req, err := http.NewRequestWithContext(r.ctx, http.MethodPost, r.tokenURL, strings.NewReader(body))
+type leaseToken struct {
+	ctx        context.Context
+	lease      *connections.Lease
+	capability string
+}
+
+func (l leaseToken) Token() (*oauth2.Token, error) {
+	value, err := l.lease.Token(l.ctx, l.capability)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := (&http.Client{Timeout: remoteTimeout}).Do(req)
+	return &oauth2.Token{AccessToken: value, TokenType: "Bearer"}, nil
+}
+
+func googleService(ctx context.Context, env config.Env, set Settings) (*gcal.Service, error) {
+	if set.Google == nil {
+		return nil, NotConfigured("google/default is not configured")
+	}
+	base, err := set.Google.Transport()
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
+	round := base.Transport
+	if round == nil {
+		round = http.DefaultTransport
 	}
-	var reply struct {
-		AccessToken string  `json:"access_token"`
-		TokenType   string  `json:"token_type"`
-		ExpiresIn   float64 `json:"expires_in"`
-		Error       string  `json:"error"`
-		Description string  `json:"error_description"`
+	source := oauth2.ReuseTokenSource(nil, leaseToken{ctx: ctx, lease: set.Google, capability: connections.GoogleCalendar})
+	client := &http.Client{
+		Timeout:   remoteTimeout,
+		Transport: &oauth2.Transport{Source: source, Base: acceptJSON{round}},
 	}
-	_ = json.Unmarshal(data, &reply)
-	if resp.StatusCode != http.StatusOK || reply.AccessToken == "" {
-		return nil, &oauth2.RetrieveError{Response: resp, Body: data, ErrorCode: reply.Error, ErrorDescription: reply.Description}
+	opts := []option.ClientOption{option.WithHTTPClient(client)}
+	if api := EndpointsFrom(env).GoogleAPI; api != "" {
+		opts = append(opts, option.WithEndpoint(api))
 	}
-	token := &oauth2.Token{AccessToken: reply.AccessToken, TokenType: reply.TokenType}
-	if reply.ExpiresIn > 0 {
-		token.Expiry = time.Now().Add(time.Duration(reply.ExpiresIn) * time.Second)
-	}
-	return token, nil
+	return gcal.NewService(ctx, opts...)
 }
 
 func googleEvents(ctx context.Context, env config.Env, set Settings, ws, we time.Time, tz *time.Location) ([]Row, error) {

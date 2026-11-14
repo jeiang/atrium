@@ -1,204 +1,450 @@
 # Operator-visible behavior and boundaries
 
-This page states what atrium does and refuses to do today. It describes current behavior only. Setting names, types and defaults live in the generated [setting reference](../config/reference.md) and are not repeated here.
+This page describes current behavior. The [configuration reference](../config/reference.md)
+lists settings, types, and defaults. [NixOS options](nixos.md) describes deployment.
+
+## Start, stop, and restart
+
+`atrium serve` runs the web listeners, scheduler, mail watches, and background
+services together. The CLI defaults to a loopback host and proxy authentication;
+it requires `--port`. Authentication modes are repeatable `--auth proxy` and
+`--auth oidc`, or `--auth local` alone. The NixOS module instead defaults to OIDC
+and also starts an emergency listener on `127.0.0.1:8481` in the same process.
+
+All configured public, emergency, and ops sockets must bind before readiness.
+A failed bind closes the sockets already opened. A listener failure while
+running stops the other listeners and produces a failed exit. A second serve
+on the same database is refused by its serve lock. `serve` runs scheduled work
+and mail watches; `agent tick` is a one-shot pass over due work. It exits 0
+when it finished work or nothing was due, 75 when every due job was locked by
+another invocation and nothing started, and 1 on an error.
+
+SIGTERM starts a bounded drain. New work and streams stop, running work has a
+105-second window, and effect/interrupted-run settlement has another 15 seconds.
+The database is checkpointed and closed before the serve lock is released.
+A stop that cannot finish cleanly is a failure, not a successful restart point.
+
+| Serve exit | Meaning | NixOS service behavior |
+| --- | --- | --- |
+| `0` | Clean stop, including a signal before readiness | No automatic restart |
+| `1` | Transient start failure or unclean stop | Restart after 5 seconds |
+| `2` | Usage error | Do not restart |
+| `78` | Permanent configuration, key, or schema refusal | Do not restart |
+
+The service has no start-limit window. The reason for a refusal is written to
+stderr and therefore the journal. Missing or unreadable key/secret files and
+malformed key-file contents can be transient. A readable, well-formed wrong
+database key, an encrypted database with no configured key, invalid host
+configuration, and an unknown future schema are permanent refusals.
 
 ## Access
 
-- `atrium serve` binds `127.0.0.1` unless told otherwise. `--auth` selects how a listener authenticates and can be repeated: `proxy` (the default), `oidc`, and `local`. `proxy` and `oidc` can be combined; `local` cannot be combined with another mode. A listener in proxy or oidc mode refuses to start without an accepted Host (`--allowed-host`, or the public host setting).
-- `atrium serve` refuses to start, exits non-zero and warns that authentication is recommended because the instance holds API keys and mailbox access, when no authentication is in force: local mode on an address that is not loopback, or proxy mode without an accepted Host. `--force-disable-auth` starts it anyway on any interface, logs a warning at start, and shows a persistent "Authentication is disabled" banner on every page. With `--force-disable-auth` on a non-loopback address, `--allowed-host` (or the public host setting) is required, and without it `atrium serve` exits non-zero. The flag has no effect when proxy authentication is configured or local mode listens on loopback; the banner then does not appear.
-- Every request except `GET /healthz` must carry an accepted Host header; any other Host receives `400`.
-- In proxy mode the request must carry a `Remote-Groups` header that lists `atrium_access`, otherwise it receives `403`. Static assets under `/static/` and valid signed media links are exempt from the group check. The Host check still applies to them. A proxy request is an administrator only when `Remote-Groups` also lists the admin group (`oidc_admin_group`, default `atrium_admin`); otherwise it is access-only, so the identity provider behind the proxy must send `atrium_admin` for administrator features. In a listener that does not select proxy mode, `Remote-Groups` and every other proxy header grant nothing. A listener that combines proxy and oidc mode trusts `Remote-Groups` from whoever can reach it, so the reverse proxy must strip or overwrite every `Remote-*` header on every request; run OIDC alone (`web.auth = "oidc"`) when the listener is reachable without such a proxy.
-- In oidc mode a request needs a valid session, otherwise a page navigation is redirected to `/login` (with `next` for the page asked for), an htmx request receives `401` with `HX-Redirect`, and any other request is redirected to `/login`. Only `GET /healthz`, static assets, valid signed media links, `/login` and `/auth/callback` answer without a session. In a listener without oidc mode `/login`, `/auth/callback` and `/logout` answer `404`.
-- Sign-in is the authorization code flow with PKCE (`S256` always; a provider that does not advertise `S256` is refused), a state value bound to the browser by a cookie, a nonce, and ID token verification (signature against the provider's JWKS with rotation, issuer, audience, expiry, nonce). Group names come from the configured claim in the ID token, with the userinfo endpoint as fallback. A member of the admin group (default `atrium_admin`) is an administrator; a member of the access group (default `atrium_access`) can use atrium; an administrator needs no second group. Providers without a group claim, such as Google, grant access through verified email or domain allowlists per role (`oidc_access_emails`, `oidc_admin_emails`, `oidc_access_domains`, `oidc_admin_domains`); for Google the domain is the hosted-domain (`hd`) claim. The hourly re-check runs for every provider and ends or demotes a session whose address, domain, group or provider account no longer qualifies. Refresh and access tokens are stored sealed with a key derived from the client secret; a group-based setup needs a client secret or an encrypted database, and the client secret itself can only be stored in an encrypted database (otherwise pin it with `ATRIUM_AUTH_OIDC_CLIENT_SECRET_FILE`). On https the session cookie is read only under its `__Host-` name. The `oidc_preset` setting picks defaults for Pocket ID, Authelia, Authentik, Keycloak, Google and Microsoft Entra; `generic` takes the claim and scopes from settings. Microsoft Entra reports group object IDs, so the group settings take those IDs.
-- A session is stored in the database and referenced by an opaque cookie (`HttpOnly`, `SameSite=Lax`, `Secure` and the `__Host-` prefix on https). It ends after 7 idle days (sliding, `oidc_session_idle_days`), after 30 days in all (`oidc_session_max_days`), on sign-out (`POST /logout`), or when the hourly group re-check (`oidc_recheck_minutes`) finds the account without access or the provider rejects the refresh token. An unreachable provider keeps a session for up to one more hour. The OIDC client secret is the write-only `oidc_client_secret` secret.
-- `atrium login-link` prints a single-use administrator sign-in link: `<public URL>/login/link#<token>`, valid for 15 minutes unless `--minutes` says otherwise (1 to 60). It needs only the host's database access and the public URL, so it works with no OIDC configured and when OIDC is misconfigured, in a listener with oidc mode. The token is in the URL fragment and is never sent to the server by the browser until `Continue` posts it; opening the link only shows the landing page. The token is an HMAC-signed nonce (keyed by the generated `action_link_key` secret) and only its hash is stored. A link works once: a used or expired link, and any tampered or unknown token, creates no session. Issuing a link and every redemption attempt are recorded in the settings audit under the key `login_link`, without the token. A link session is an administrator session that ends after 8 hours, is not re-checked against the identity provider, and opens `/settings/auth` when sign-in is not set up, otherwise `/chat`.
-- In a listener with oidc mode (including `proxy+oidc`), `/settings/auth` (the Sign-in tab) sets up OIDC: pick a provider (Pocket ID, Authelia, Authentik, Keycloak, Google, Microsoft Entra or generic OIDC), follow its identity-provider steps with the redirect URI and group names to copy, and enter the client details. Fields pinned by deployment configuration show read-only. Test sign-in opens the provider in a new tab with a separate test state; it never creates or replaces a session. The test passes only when the tested account gets both access and administrator rights under the tested settings. Activate saves exactly the tested settings (and the client secret, which needs an encrypted database unless pinned) in one transaction and only for a test that passed within 15 minutes; editing the form or testing again withdraws the pass. A failed test changes nothing. The pending test lives in the running process and is lost on restart. `atrium settings set` and `atrium secrets set` still change the same settings without the test.
-- Administrator-only routes answer `403` to a session without the admin group: everything under `/settings` and `POST /live/resume`. Pause stays open to everyone with access.
-- In local mode there is no group check and every request is an administrator. Without an explicit allowed Host, the accepted Hosts are `localhost`, `127.0.0.1` and `[::1]`.
-- The NixOS module runs the public listener in proxy mode, optionally with oidc added, and, by default, a second listener bound to `127.0.0.1` in local mode.
-- `POST`, `PUT`, `PATCH` and `DELETE` requests need the CSRF token that atrium issues in a cookie and a request whose `Origin`, when present, matches the Host. Responses carry a Content-Security-Policy.
-- `/api/v1` is a JSON API for a native client. It exists only in a listener with oidc mode (including `proxy+oidc`) and only when `oidc_api_client_id` names the client; otherwise every `/api/v1` request answers `404` with code `api_unavailable`, local mode included. The client is a separate public client at the same provider (for Pocket ID: PKCE, scopes `openid profile email groups offline_access`) and sends `Authorization: Bearer <access token>`. atrium accepts only an RFC 9068 access token (`typ: at+jwt`) signed by a key in the issuer's JWKS, from the configured issuer, whose `aud` contains and whose `client_id` equals `oidc_api_client_id`, and that is not expired (60 seconds of clock skew); ID tokens are refused. Groups come from the configured claim, with the userinfo endpoint as fallback, and map to access and administrator as for web sign-in. A verified token is cached in memory until it expires or `oidc_recheck_minutes` passes. Session cookies, the CSRF cookie and `Remote-*` headers grant nothing under `/api/v1`, so in `proxy+oidc` the reverse proxy must pass `/api/v1` through without forward authentication. Refusals use one JSON envelope, `{"error":{"code","message","fields"}}`: `401` `unauthenticated` (no bearer) or `invalid_token`, with `WWW-Authenticate: Bearer`; `403` `forbidden` (no access group), `admin_required` (`/api/v1/inbox`) or `cross_origin` (a write whose `Origin` is not the Host); `415` for a write body that is not `application/json`; `503` `auth_unavailable` when the provider cannot be reached. The Host check applies first. Lists return `{"items","next_cursor"}`. `POST /api/v1/threads`, `POST /api/v1/threads/{id}/messages`, `POST /api/v1/approvals/{id}/approve` and `POST /api/v1/drafts/{id}/send` replay the first response for a repeated `Idempotency-Key` from the same account for ten minutes; the key with a different request answers `422` `idempotency_mismatch`. Run progress streams as server-sent events from `/api/v1/threads/{id}/runs/{run}/events`, resumable with `Last-Event-ID`. `GET /api/v1/pending` lists what Review's Needs you lists: pending approvals, blocked approvals and open or unknown drafts. Approve, deny and resolve under `/api/v1/approvals/{id}/` run the same approval pipeline as the Review cards, so an approval still runs its write once and only on approval; a second approve answers `409` `not_approved` and writes nothing. `GET /api/v1/undo` lists direct agent writes that carry an undo and undoable applied approvals, newest first, filterable by `thread_id` and `run_id`; `POST /api/v1/undo/{write:N|proposal:N}` undoes one through the same writes registry and pipeline as Activity. Drafts are read, edited, sent, discarded and resolved under `/api/v1/drafts/{id}`; send requires the reviewed `revision` (a changed draft answers `409` `stale`) and goes through the same send gate as the web. Resolutions made through the API are recorded with source `ui`, as from the web.
-- A signed media link grants one file under `/apps/media/file/`. It carries an expiry and an HMAC-SHA256 signature, and is valid for 12 hours from issue. A missing, altered or expired signature is not accepted and the request falls back to the normal group check. The signing key is the `link_key` secret in the media module. A deployment pin (`ATRIUM_MEDIA_LINK_KEY`, `ATRIUM_MEDIA_LINK_KEY_FILE` or `media.link_key_file`) wins over the stored value; otherwise the key is stored in the database, generated on first use. An existing `media-link.key` beside the database is moved into the stored secret on first use and the file is removed, so links issued before the upgrade stay valid. Changing the key invalidates every issued link. Links issued under the old `/media/file/` path redirect without login, and the signature is checked at the new path.
+Every admitted identity is the one operator with full authority. There is no
+administrator role or remote emergency bypass.
 
-## Web interface
+- Proxy mode requires a `Remote-Groups` header that lists `atrium_access`;
+  otherwise the request gets 403. Only use proxy mode behind a proxy that
+  strips or overwrites incoming `Remote-*` headers. OIDC-only listeners do not
+  accept those headers as identity.
+- OIDC uses the host-declared `service/oidc` connection. `access_groups`,
+  `access_emails`, and `access_domains` select admitted identities. Until the
+  connection is configured, public sign-in stays closed; the emergency listener
+  can still reach settings on the same database.
+- Local and emergency listeners require a numeric loopback bind address and
+  loopback socket peers; a non-loopback peer gets 403. A forwarded header never
+  makes a remote peer local. Without an explicit allowed Host, a local listener
+  accepts `localhost`, `127.0.0.1` and `[::1]`. Do not expose that listener
+  through a public reverse proxy.
+- Requests still enforce accepted Host, CSRF, same-origin, and CSP rules. A
+  Host outside the accepted list gets 400 `Bad Host header`; `GET /healthz` is
+  the only exception (HEAD is not exempt). CSRF and same-origin failures get
+  403. Signed media and phone action links have narrowly scoped credentials,
+  not general operator sessions.
+- Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
+  Such a peer must send exactly one valid value; otherwise the request is 400.
+  Other forwarded-address headers do not choose a rate-limit identity.
 
-- The light, dark or system theme chosen in the sidebar is stored in the `atrium_theme` cookie and applied by the server on the next page, so pages render in that theme without a flash. System follows the browser's colour-scheme preference. Any other cookie value renders the system theme.
-- The sidebar holds Today (`/chat`), then Review, Library and Apps, then the threads (pinned, recent by day, then grouped by project; archived projects are left out) with New project and All threads (`/chat?view=all`), and Settings at the foot. Each of Review, Library and Apps opens on its first page and shows a tab strip of its pages. Collapsing the sidebar to a rail is stored in the `atrium_rail` cookie. Below 768px the sidebar opens as a sheet from the menu button, and a tab bar at the bottom holds Today, Threads, Review and Library; the tab bar is hidden inside a thread.
-- `/chat` is home and shows the day. While the instance has no chat thread it shows a welcome screen with three starter prompts that fill the ask bar. Once a thread exists it shows the date in the configured time zone and a headline built from the Review count (it adds the next timed calendar event, "before Standup at 14:00", once the agenda loads), the lines of the day's morning digest when one was posted, then Needs you, with the ask bar docked at the bottom; a message sent from it starts a new thread. Needs you (`/review/strip`) shows at most three cards in `/review` order (pending proposals, blocked proposals, then open or unknown drafts), each acting in place as on Review, with the Review count and a View all link when more are waiting; it renders nothing when there is nothing to review. A side panel (stacked into the page below 1024px) shows Today, the day's calendar events from `/chat/agenda` when the calendar module is on, and Done for you (`/activity/recent`), the six most recent direct writes and automatic mail actions with Undo, each as a plain sentence such as "Added a task" or "Filed" and the subject; the tool name and target are the row's tooltip. The thread list with search and the Active and Archived views is at `/chat?view=all`.
-- The ask bar holds attach, one chip that opens the model, effort, context, thinking, web search and cost cap, and send. On a phone the ask bar on home is one row until it is tapped, has text or has a file. A mail message, a knowledge record, a tracked package, a project file and an event on the home agenda each have Ask about this, which opens home with that item as a chip on the ask bar (`/chat?about=mail:<id>`, `knowledge:<id>`, `package:<id>`, `file:<id>` or `event:<date>:<uid>`). A thread about a project file starts in that project. An event whose uid, or a file whose name, has characters outside a plain set gets no link, because that text would enter the message; the message then starts with a line that names the item by id, and the assistant reads it through its own tools, so mail text never enters the operator's message. On a phone the thread's Work panel opens as a sheet from the bottom. In a thread, pin, archive, delete, move to project and the settings and cost summary are in the thread menu.
-- `GET /today` redirects to the day's Today thread, creating it on the first visit of the calendar day in the configured time zone. It is a chat thread with role `today` titled `Today · 2 Jan 2006`; lookup and creation run in one write transaction, so concurrent first visits get the same thread. Earlier days' Today threads stay as ordinary threads. The daily digest posts a card into the day's Today thread (10 lines at most) and, with `digest_notify` on (default), pushes the same lines to the assistant channel. Titles appear only for attention sources and records that carry no marks; mail-derived items and marked records appear as counts that link to the review page or the unconfirmed Knowledge filter. Nothing is posted or pushed when there is nothing to act on.
-- ⌘K or Ctrl+K, or the search button in the top bar, opens the command palette. It fuzzy-filters the pages (sections, their tabs, and settings tabs for admins) and actions (New thread, light, dark or system theme, toggle sidebar), and searches thread titles and messages through `GET /chat/palette`. Arrow keys, Home and End move, Enter opens and Esc closes.
-- Pages carry no tutorial or helper paragraphs. Explanations of a control are its `title` tooltip; errors, health, counts and deployment pins stay visible.
-- Review: Needs you (`/review`: pending proposals, proposals with a blocked write or undo, then drafts that are open or whose send outcome is unknown, each acting in place), Loops, Packages (`/watches`, packages in transit), Mail decisions (`/triage`; with no filter set it lists first, under Check these, up to 20 decisions that differ from where the mail went or that fell to the fallback stage, one row per sender (the newest, with a link to that sender's other decisions when there are more), then the rest under Filed, each decision once; a search, stage or outcome filter shows one list; the per-account statistics sit in a side panel), Inbox (`/inbox`, the 100 most recent notifications with Resend for stored but unpushed ones; admin only) and Done (`/activity`). The Review badge counts pending proposals, blocked proposals and open or unknown drafts, and updates after every card action. There is no proposals list: `GET /proposals` answers 404, and `GET /proposals/{id}` redirects (303) to the proposal's card in the thread that made it (`/chat/{thread}#proposal-{id}`) or, when no thread made it, to `/review#proposal-{id}`; notification and Notion links use it. `/drafts` still answers but is not in the navigation. Birthdays and anniversaries are not shown in the web interface; the agent keeps access to them.
-- Library: Knowledge (`/library/knowledge`, the operator's durable records with search, scope and state filters; unconfirmed rows carry a checkbox, and Confirm selected (`POST /library/knowledge/confirm`) confirms the ticked records; a record page shows body, marks, writer, source, same-run siblings, history and the confirm, edit, retract, restore and purge actions; `/library/knowledge/profile` shows the profile block the model receives and why a pinned record is not in it), Wiki (`/library/wiki`, synced Notion pages not in the trash, newest edit first, with full-text search), Files (`/library/files`, every thread and project file, newest first, with download), Mail rules (`/rules`) and Scheduled (`/scheduled`, a list with pause, resume and delete; jobs are created and changed from chat).
-- Apps: Media at `/apps/media/` (Downloads, Channels, Library). Old `/media/...` URLs answer 301 for GET and HEAD and 308 for other methods, keeping the path and query string.
-- Projects are thread groups with no index or hub page. A project is created at `/projects/new` and edited at `/projects/{id}/edit`, which holds the form, the project files and archive or restore; the sidebar links both. A project can be marked Private: knowledge written in its threads stays readable only inside that project, and a chat outside it cannot reference its threads with `@thread/`.
-- Pages load scripts only from `/static/`; there are no inline scripts or inline event handlers. Fonts are self-hosted under `/static/fonts/` with their OFL license files.
-- A draft the assistant writes and a proposal it creates appear as cards in the thread where they were made. The draft card edits, sends and discards through the Drafts page endpoints, so sending still goes through the operator send gate; it shows Sending… while the request runs and Sent only after the server confirms. The proposal card approves, dismisses and undoes through the `/proposals/{id}/…` endpoints. An approval card shows the tool's arguments as labelled rows and offers Approve and Deny. A pending card checks its status every 20 seconds and replaces itself once the proposal is resolved elsewhere; a resolved card stops checking. The thread's Work panel lists the thread's pending approvals under Needs you, each with Approve, Deny and a link to its card; the section is hidden when nothing is pending. A refused action leaves the card in place with the error and its buttons for a retry. Resolved cards shrink to their title and outcome, keeping Undo where the proposal supports it. With focus inside a card, A approves or sends, D denies, dismisses or discards, and Esc closes it. A question from the assistant is a card whose answer field submits with Enter.
-- **What acts directly and what asks.** Each assistant tool declares an effect and a channel: none, own accounts, notify, other people, or the internet. Own-account and notify actions act at once and appear on Done with Undo: tasks, knowledge records (`kb_write`, `kb_retract`), mail folders and moves, drafts, files, scheduled jobs, and the calendar, media and tracking proposals that carry their own approval card. The permission table decides the other channels by what the thread holds. People always asks. Internet allows in a clean thread, asks after `messages` or `personal`, denies after `pii`, and asks or denies once untrusted text is present. An ask on a tool without a card creates a permission request and parks the run: Approve resumes it and performs the call once, Deny resumes it with a refusal, and the tool does not run while the request is pending. Scheduled, nightly and subagent runs never park, so an ask there is a deny. Mail send stays an operator action through the send gate.
-- **Notion pages are read-only.** The page view no longer has Edit or Link buttons, and the agent has no Notion tools. Sync and the Wiki tab remain. Older `notion_link` and `notion_edit` proposals stay readable on their cards and can be dismissed, but no longer apply.
+Public requests are limited in process by token buckets owned by each listener:
+10 sign-in requests a minute per client address, 120 `/api/v1` requests a minute
+per address and 60 a minute per bearer token. A refused request returns 429 with
+`Retry-After` and `no-store` and changes nothing. The limits are code constants,
+not settings, and a restart clears them. The emergency listener has its own
+limiter, not a separate database or token store.
 
-## Phone actions
+## Ops listener, tracing, and logs
 
-- Phone actions are off by default. `phone_actions_enabled` turns them on and `phone_actions_kinds` lists the proposal kinds that may be approved or dismissed from a notification; the web-only kinds (Gmail label merge, inbox backlog, rebalance split and merge, deletion rule) cannot be enabled.
-- When an allowed proposal is created, its notification on the assistant channel carries Approve and Dismiss actions. Each action is an HMAC-signed link valid for 12 hours and one use; at most 20 links are minted per hour. The link is the credential: `POST /actions/<token>` needs no session, but the Host check still applies and CSRF is skipped for that route.
-- Redeeming a link approves or dismisses the proposal and records the resolution with source `phone`; the Activity page shows "approved via phone". A used, expired, tampered or unknown link changes nothing.
-- The phone action section of the Notifications settings tab turns phone actions on, picks the allowed kinds, shows the outstanding link count and rotates the generated `action_link_key`; rotating invalidates every outstanding link. The section is shown while the notifications module is on.
+The ops listener (`ops_listen`, default `127.0.0.1:9180`, `off` disables) is
+separate from the operator routes and serves `/metrics`, `/readyz`, `/livez`,
+`/healthz` and, with `ops_pprof`, profiling. `/readyz` reports `ready`,
+`degraded`, or `not_ready` with 503. `/livez` answers 503 when serve is stalled.
+`/healthz` reports the runtime state. Public operator routes do not expose these.
 
-## Mail safety
+Every command can export OTLP/HTTP traces when the host sets
+`otel_traces_endpoint`. Span attributes are an allowlist of ids, counts,
+durations and bounded names; string values are scrubbed of known secrets and
+clipped, and span events and links are dropped. Prompts, completions, mail
+content, addresses, tool arguments and results are not exported. Log messages
+and attributes are scrubbed of known secret values. Logs go to journald.
 
-Every mailbox write goes through one safety gate.
+## Database keys and backups
 
-- **Accounts.** Mail accounts come from the TOML file named by `mail_accounts_file` (a deploy-time setting): one `[[account]]` table per account with `id` (up to 32 lowercase letters, digits and single underscores, starting with a letter; it keys the account's cached mail, so keep it stable), `preset` (`icloud` or `gmail`, which supplies the IMAP and SMTP hosts and the provider's folder behavior), `login`, `password_file` (`${NAME}` expands an environment variable, for example `${CREDENTIALS_DIRECTORY}`), and optional `label` and `enabled` (default true). Every command reads the file at start and refuses to run, naming the entry, when it has an unknown key, a duplicate id, an invalid id, an unknown preset, or a missing or empty password file. A disabled account is listed but never opened or synced. Removing an account from the file stops its sync and keeps its cached mail and history. `ICLOUD_MAIL_USERNAME`, `ICLOUD_APP_PASSWORD`, `GMAIL_ADDRESS` and `GMAIL_APP_PASSWORD` are no longer read.
-- **Gmail sign-in.** A Gmail account can use an app password or XOAUTH2. XOAUTH2 uses the Google OAuth wizard's Gmail refresh token: the access token is refreshed once for concurrent callers, a rejected token reconnects or retries AUTH once with a fresh token, and a refresh failure marks the credential needs-reauth. A token inside the 14-day expiry window shows as expiring.
-- **Accounts page.** The Mail settings tab lists every account with its health and edits the mail behavior settings `uncertain_dest` and `openloops_remind_hour`. Accounts from the file show read-only as set by deployment. Test signs in over IMAP and lists the folders, records the result as the account's health (`mail_<id>`, shown in the admin banner while not ok), and changes nothing else. Add account takes an id, label, iCloud or Gmail preset, login, an auth method (app password, or XOAUTH2 for Gmail) and the credential; it runs the same check first and stores nothing when it fails. The app password is stored only in an encrypted database (as the secret `mail_password_<id>`) and is never shown again. A Gmail account may instead use XOAUTH2, which stores no password and uses the Google OAuth wizard's Gmail refresh token. Editing a stored account tests again when the login or password changes. Removing a stored account deletes its record and password and keeps its cached mail. The page has no live or shadow control. The atrium units pick up added, changed or removed accounts when they restart.
-- **Modes.** The mail mode (`mail_mode`) is `shadow` (the default) or `live`; any other value is refused. It is a deploy-time setting of class `bootstrap`: only an environment variable or the configuration file sets it, and `atrium settings set` cannot change it. In `shadow`, atrium records what it would do and makes no automatic mailbox writes: the automatic pass returns without acting.
-- **Automatic writes** happen only in `live` mode and only while atrium is not paused (a `pause` file beside the database). They are limited to: filing or trashing read, unflagged inbox mail according to recorded decisions; flagging unread inbox mail from known contacts; applying the operator's folder corrections made after go-live; and rule-based deletions, which run at most once a day per account. Mail that was already read and in the inbox when live mode first started is never touched by the inbox pass.
-- **Approval-required writes** are every other mailbox change, such as the proposals from rebalance, deletion and label scans. They are applied only when the operator approves the proposal. Approval is consent: it is the only scope in which a write passes the gate in `shadow` mode, and pause does not hold it back, because pause stops automatic writes only.
-- **Assistant folder and move writes.** `mail_folder_create` and `mail_move` are direct, undoable assistant writes. Each records a held `agent_writes` intent before the IMAP call, verifies the folder or messages first, and settles the intent after it; an unknown outcome stays blocked until the operator resolves it. In `shadow` mode they record the intent and change nothing, and while mail writes are paused they are refused. Moves use COPY, STORE `\Deleted` and UID EXPUNGE, never IMAP MOVE, and one call moves at most the write cap of messages. Protected folders are refused. Undo runs under its own approval scope, so it still works after switching to `shadow`, and moves the messages back or deletes a folder only if it is still empty.
-- **Operator send.** The assistant can save and edit drafts but has no tool to send them. Sending is an operator action from the Drafts page. A send that fails before the SMTP attempt returns the draft to Draft with the error recorded. In `shadow` mode the only append the gate allows outside an approved proposal is the copy of a sent message into the account's Sent mailbox.
-- **Write caps.** A pass makes at most the write cap of automatic writes per account (setting `write_cap`, default 100, range 1 to 1000); the remainder is deferred to a later pass and logged.
-- **Verification.** Before each write atrium re-reads the message on the server. If the message changed (for example it was read, flagged or moved in the meantime), the write is skipped and recorded as skipped with its reason.
-- **Protected folders.** Trash, Sent, Drafts and Junk (identified by their special-use flags or well-known names such as Bin, Deleted Items, Sent Items and Spam) are never a source or a destination of automatic filing. Destinations must be existing, safely named folders; Gmail labels beginning with `\` or `[Gmail]` and system labels are refused.
-- **Retries.** A message whose automatic action failed or was skipped is attempted again until the configured number of such outcomes (setting `write_attempts`, default 3) is recorded for it. A message already acted on is not acted on again.
-- **Outcome unknown stays blocked.** atrium records the intent before it writes. If the connection is lost or the process is interrupted so that the result is unknown, the action is marked interrupted and is never retried automatically until the operator resolves it: the Activity page offers It happened (`applied`) and It did not happen (`not-applied`), and `atrium live resolve ID --outcome applied|not-applied` does the same. An undo that copied the message back but did not expunge the original, or whose outcome is unknown, is likewise recorded as blocking; further undo of that action is refused until the operator resolves the mailbox by hand.
-- **Resolving a blocked write.** After the operator has checked the mailbox, `atrium proposals resolve ID` settles every blocked ledger row of a proposal, and `atrium live resolve ID --outcome undone|not-undone` settles a blocked automatic-action undo, and `--outcome applied|not-applied` settles a blocked forward automatic action. Needs you (`/review`) offers the same for a proposal with a blocked write, and the Activity page for a blocked automatic action, as operator-only buttons under the usual CSRF and same-origin checks. A blocked proposal card shows the blocking row's recorded error text, or Outcome unknown when none was recorded. On a blocked proposal card a blocked forward write has one button, Mark checked; on the Activity page it has It happened and It did not happen. A blocked undo has two, Messages are back (`undone`: the undo counts as done, and resolving a corrected message this way also clears its correction) and Not moved back (`not-undone`: the undo may be attempted again); `atrium proposals resolve` needs `--outcome` only when one of its blocked rows is an undo. Resolving only rewrites the blocking row to a settled marker and appends who, when, the outcome and the previous error text (Outcome unknown when the row recorded none) to the append-only `write_resolutions` table; it never opens the mailbox, never performs and never retries a write, and it does not decide whether the original write took effect. A proposal can then be approved or undone again, and a message held back by the blocked row is no longer skipped as unresolved. A row still marked in flight is refused while its write or undo runs: the running process renews the row every 30 seconds, and the row becomes resolvable 2 minutes after its last renewal (once the process stopped or hung). An in-flight automatic-action undo recorded before migration 6 has no start time and is resolvable at once. A proposal that is still being applied is refused. A write or undo that finishes after its row was resolved does not overwrite the recorded outcome, and a second undo of an action cannot start while its first is in flight or unresolved.
-- **Undo.** Every applied automatic action that has an undo plan can be undone by the operator, which moves the message back, restores labels, restores the trash state or removes the flag. Undo runs under its own approval scope and also records its outcome.
-- **Message handling.** Moves use COPY, STORE `\Deleted` and UID EXPUNGE, not IMAP MOVE.
+A database key is 64 hexadecimal digits, supplied by `ATRIUM_DB_KEY`,
+`ATRIUM_DB_KEY_FILE`, or the `db-key` systemd credential. With a key, atrium uses
+SQLCipher and refuses plaintext files rather than silently opening them as
+plaintext. Without a key, a newly created database is plaintext. An unreadable
+configured key file fails before creating a database.
 
-## Assistant limits
+The NixOS service receives `ATRIUM_DB_KEY_FILE=%d/db-key`. `atrium-run` receives
+the same `db-key` credential and looks it up inside its transient unit. Neither
+needs key bytes in a command argument or the Nix store. Keep the key separately
+from the state directory and keep an offline copy. Changing a secret-manager
+file does not rekey an existing database; `atrium db rekey` owns that operation.
+Archives made before rekeying still require the earlier key.
 
-- **Editing a schedule.** Each row on Library › Scheduled has an edit control that takes the schedule text (`daily 02:30`, `weekly sun 18:00` or a five-field cron line) and saves it through `POST /scheduled/{id}/schedule`. For a built-in job it also stores the job's `agent_schedule_*` setting, so the change survives a restart; a schedule pinned by the deployment is refused. An invalid schedule answers 422 and keeps the old one.
-- **Scheduled runs** (cron) can read, add tasks with `task_add` (undoable on Done), notify and use their own-account writes; they cannot use the internet or reach other people. A scheduled run starts with the marks of the thread that created its schedule unless the operator wrote the prompt.
-- **Lessons.** Dreaming also receives code-built signals: failed runs, writes the operator undid, dismissed proposals and denied permission requests in the last day. It may write a `Lesson: …` record with the tool names as aliases and the thread where it happened as its source. Lessons are ordinary unconfirmed knowledge records, so retrieval can surface them and the operator can retract them.
-- **Nightly dreaming.** The nightly job gathers the last 24 hours in code: chat and scheduled threads (skipping threads of private projects) and a compact index of live records. It then runs one Haiku write step with `kb_search`, `kb_get`, `kb_write`, `kb_retract`, `task_add` and `task_list`. Records carry `source.thread_id` from the gathered set; the write thread takes the union of the gathered marks, so records from clean threads are unmarked and records from marked sources stay unconfirmed until the operator confirms them. Dreaming is capped at `dreaming_max_cost_usd` (default $0.30) per night and `dreaming_monthly_usd` (default $3) per calendar month; at the monthly cap it does not run and raises an attention item.
-- **Memory.** The knowledge store is the agent's memory: `kb_search` and `kb_get` read records, `kb_write` creates or edits one and `kb_retract` retracts one, each write undoable on Done. A record written by `kb_write` takes its thread's marks and project; an edit can only add marks. A record confirmed by the operator, or written by the operator or the import, cannot be edited or retracted by the agent. Pinned, confirmed, unmarked records form the profile block the model receives. The nightly dreaming run writes records with `source.thread_id` set; they take the gathered marks, so records from marked sources stay out of the prompt until confirmed. The Notion wiki is no longer read or written by the agent.
-- **Chat** is the only run kind that can update or complete tasks, edit drafts, or change schedule records.
-- **Server-ops worker.** The `ops-sampler` built-in job (default `*/15 * * * *`, `agent_schedule_ops_sampler`) samples the hosts named in `ops_hosts` through the Grafana metrics datasource and alerts endpoint every 15 minutes, with no model call: `up`, `cpu_pct`, `mem_pct`, `disk_root_pct`, `failed_units` and `alerts_firing` go into `ops_samples` (kept 14 days). `ops_hosts` holds address-shaped host ids (letters, digits, dots, dashes and underscores; the address part of the scrape target, without the port). The label selector and the five queries are settings: `ops_label_selector` (default `job="node"`) and `ops_query_up`, `ops_query_cpu`, `ops_query_mem`, `ops_query_disk`, `ops_query_failed_units`. Each query is a single-line PromQL template with the `{{host}}` placeholder and optionally `{{selector}}`; the selector is a comma-separated matcher list. Both are validated on save, so a stored value is one read query and cannot break out of its braces or add a second statement. When a fact changes state, crosses the 90% memory or disk threshold, or its firing alert set changes, and the change set differs from the last worker run's, one worker run starts in the persistent `Ops` thread (kind worker, role ops) with the typed change and any quoted alert names. The worker can only read `ops_samples`, its own recent findings in `ops_findings` and the Grafana reads, and file `ops_finding` rows in `ops_findings`; it cannot notify, reach people, use the internet, restart or change a host. Findings of severity warning or critical appear under Needs decision in the attention view, on Needs you, and in the daily digest, and the sampler resolves a finding once its fact is back to normal; resolved findings are pruned after 30 days. `ops_condenser` (default `haiku`) chooses how findings are produced: `haiku` starts the worker run; `local` makes one JSON-schema chat call to the `mail_chat_url` endpoint with `ops_condenser_model` (empty uses `mail_chat_model`) and `ops_condenser_max_tokens` (default 2,000), writes the validated findings, and records no Anthropic usage. A local failure ends the sampler run with an error and retries on the next pass without falling back to Haiku; the worker's monthly cap and its attention item apply only in `haiku` mode. Each worker run is capped at `max_steps_worker` (default 8) steps and `ops_worker_max_run_usd` (default $0.10), and the worker's month-to-date spend is capped at `ops_worker_monthly_usd` (default $5); when the cap is spent no run starts and the attention view says so.
-- **References.** Typing `@` in the composer lists the chat threads; choosing one inserts `@thread/12`, and a message's Reference action copies `@thread/12/m34`. Sending stores the referenced text as a verbatim block appended to the message, labelled as data, not instructions. A thread reference carries the thread's operator and assistant text, newest exchanges first when it is over `agent_ref_tokens` (default 8,000, range 1,000-32,000); a message reference carries that one message. A message carries at most three references. An unknown or deleted thread, the thread itself, a message without text and an over-limit message are refused with nothing stored. The referenced text counts toward the context limit, and the reading thread takes the source thread's marks.
-- **Research subagents** are limited to read-only tools, by default at most 12 steps and $0.25 of spend per run, with at most two running at once (`agent_subagent_max_steps`, `agent_subagent_max_cost_usd`, `agent_subagent_max_concurrent`). They cannot write, notify, schedule or start other agents. Their system prompt carries neither the operator profile nor project instructions. Their spend counts toward the parent: before each subagent request, the subagent's own cap, the cost cap of every parent run (counting the spend of that run and all its subagents) and the thread cost cap are checked, and a request that would pass any of them is refused.
-- **Web search.** `search_web` searches the public web in a child subagent and returns a cited answer. It is offered in chat and cron runs when the thread's Web search option is on, and the permission table can ask with the exact query and question on the card. The child has the server `web_search` (at most `search_web_max_searches`, default 5), `web_fetch`, `recall` and `report`; its allowlist starts with URLs typed in the query and question, never the parent's. Its caps are `search_web_max_cost_usd` (default $0.15, search fees included) and `search_web_max_steps` (default 8), and it runs on `search_web_model` (default Haiku 5.5) at medium effort. A citation is kept only when its URL appeared in a search result or a successful fetch; a fetched page's quote must occur in the stored text to count as fetched, and a citation outside the verified set is dropped with its `[n]` marker. Only surviving URLs join the parent's allowlist. Chat no longer sends the server `web_search` directly, and the seeded `web` research role is retired.
-- **Lookup readers.** `lookup` reads one source (mail, contacts, documents or knowledge) in a child subagent and returns typed fields. The child has only that source's read tools, `recall` and `report`; it cannot write, notify, reach people or use the internet. The fields are number, date, boolean, enum, id (mail message, file, knowledge record or thread) or text, at most 12. Text values are untrusted data. Boolean and enum fields carry no marks; numbers, dates and ids carry the child's kind marks; text adds `untrusted`. A name-and-organisation contacts lookup marks nothing, so the internet stays open; a mail lookup marks `pii` and `messages`.
-- **Marked threads.** Tools mark a thread with what their result contains: `pii` (contact identifiers such as email addresses, phone numbers, birthdays, tracking and order numbers), `messages` (mail, calendar events, files, other threads' history), `personal` (knowledge records) and `untrusted` (text someone else wrote: web pages, mail bodies, Grafana telemetry). The permission table then decides each channel: own-account and notify tools keep working, other-people tools ask through their card, and internet tools ask or are refused by situation. A tool that leaves the allowed set is withdrawn for the rest of the run and later runs; the request keeps its tools array so thinking stays valid, and a call to a withdrawn tool returns an error and does nothing. A tool without a card that asks creates a permission request in the thread and parks the run. `task_list` and `schedule_list` return the marks of the threads that wrote the rows they list, a scheduled run inherits its schedule writer's marks, and `profile_set` and `nightly_observe` are refused on any marked thread. Phone action links never decide a permission request.
-- **Models.** Chat threads run on Haiku 5.5, Sonnet 5.5 or Opus 5.5. A new thread takes the `default_model` setting (default `claude-haiku-5-5`) unless the new-thread form names a model; the thread's model, effort and context size can be changed later. Scheduled, nightly and subagent runs use Haiku 5.5; the `search_web` child uses `search_web_model` (default Haiku 5.5). Each run sends its thread's model and each usage row is priced at that model's rates; a model outside the built-in catalog is refused before a request is sent. The context size cannot exceed the model's context window. Haiku 5.5 bills prompts over 100K tokens at the higher rates; Sonnet 5.5 and Opus 5.5 have flat rates.
-- **Per-run limits.** Each run stops after the maximum number of steps for its kind (`max_steps_chat`, `max_steps_cron`, `max_steps_nightly`, default 24 each, and `max_steps_worker`, default 8; research subagents use `agent_subagent_max_steps`) and the run cost cap of its model (`max_run_cost_usd_haiku_5_5` default $2, `max_run_cost_usd_sonnet_5_5` default $6, `max_run_cost_usd_opus_5_5` default $10; each covers writing a full 1M-token request at the 1-hour rate); all are settings. The old `max_run_cost_usd` setting no longer exists: a stored row or `ATRIUM_ASSISTANT_MAX_RUN_COST_USD` is ignored, and each logs a warning at command start naming the new settings (the stored row's warning also shows its value). Remove the orphaned row with `atrium settings unset max_run_cost_usd`, which is audited; values are not carried over to the new settings. The same check holds every request to the thread cost cap `thread_cost_cap_usd` (default $10): the thread's recorded spend across all its runs and its subagents' threads plus the next request's cold cost may not exceed it. A cost cap chosen in the new-thread form (or `cost_cap_usd` when creating a thread through `/api/v1`) lowers that cap for the thread; it cannot be changed later, so a thread stopped at its own cap needs a new thread. A thread has at most one running run of its own; its research subagents spend against the same cap. A run also stops when the same tool call returns the same result `doom_loop_threshold` times in a row (default 3). The stop reason is the run's error.
-  The cap is checked before every request: the run stops when what it has spent plus the cost of writing the next request to the cache cold, at the thread's cache lifetime (`cache_ttl_chat`: 1-hour writes cost more than 5-minute writes), would pass the cap, and the refusal names the setting to raise, or says to start a new thread when the thread's own cap stopped it. A cold 400K-token Opus request costs $3.20 to write with a 1-hour cache.
-- **Model stops.** A refusal, a reply cut off at the output or context limit, and an empty paused or ended turn each end the run with a message in the thread; a refusal names the policy category and any model the server recommends instead. When the server falls back to another model after a refusal, the thread notes the switch and the fallback's tokens are recorded as their own usage row at that model's rates.
-- **Forced tool calls.** A forced `tool_choice` (`atrium agent run --tool-choice any|<tool>`) applies to the first request only and is sent only to models the catalog allows (Haiku 5.5); Sonnet 5.5 and Opus 5.5 receive the request without it. `search_web` can be forced in a chat or cron run; the server `web_search` exists only in the `search_web` child.
-- **History and the prompt cache.** Each request carries the run's own messages and, newest first, earlier whole exchanges within `memory_verbatim_tokens` (default 16,000 tokens, at most a quarter of the context left after the tools and system prompt) unchanged, tool calls and results included; a tool result over `agent_stub_tokens` is still stored and paged with `recall`. Every operator message ends with the date and time its run started in the configured time zone. Older messages come first as memory-tree lines (summaries of older ranges, each with a zoom id). The tools, the system prompt with the profile and project block, and the older-history lines stay fixed for the whole run and carry the cache breakpoints, so each later step reads them from the prompt cache and writes only the new messages. A chat or cron message also gets a knowledge block: records that are not retracted, expired, ops, pinned or marked untrusted/pii/messages, and whose private project (if any) is the thread's, are matched by exact title or alias, full-text search and one embedding of the message text (2 s), gated by `kb_retrieval_distance` (default 0.35; full-text-only matches need two query terms), at most five records within `kb_retrieval_tokens` (default 1,500; 0 disables). The block is stored in the operator message and expanded in place, so later steps replay the same bytes; it adds no marks and nothing is added to the tools, system prompt or history prefix, so the cache breakpoints stay byte-identical.
-- **Monthly budget.** Spend for the calendar month in the operator's time zone is compared with the monthly budget (`monthly_budget_usd`, default $150; edited on the Usage tab). Chat stops starting new work at the chat share of the budget (`budget_chat_share`, default and ceiling 100%). Scheduled, nightly and server-ops worker runs stop at the unattended share (`budget_unattended_share`, default 80%), which cannot exceed the chat share. The server-ops worker also has its own monthly cap (`ops_worker_monthly_usd`, default $5) and per-run cap (`ops_worker_max_run_usd`, default $0.10). Dreaming also has its own caps: `dreaming_max_cost_usd` (default $0.30 per night) and `dreaming_monthly_usd` (default $3 per calendar month). A research subagent does not start once a budget limit has been reached.
-- **Anthropic spend limit.** When the Anthropic organization's own spend cap refuses a request (HTTP 429 without a `retry-after` header), the run ends as a budget stop with a budget message and is not retried; scheduled jobs are recorded as skipped for budget.
-- **Prompts.** The system prompt (`prompt_system`) and the shared subagent rules (`prompt_subagent`) are set with `atrium settings set`; an unset key uses the built-in text, and `atrium settings unset` restores it exactly. Edits are audited and apply to the next request of every thread. The untrusted-data preamble is fixed in code, is not a setting, and is always placed before the system prompt.
-- **Sending mail** is an operator action only; see [Mail safety](#mail-safety).
-- Tool permissions, run-kind restrictions and spending limits are enforced in code, not in prompts. Mail, files, pages and tool results are treated as untrusted data and cannot grant URL access or widen tool permissions. Arbitrary web fetches use an allowlist and SSRF protection on every redirect.
-- Code execution is unavailable.
+`atrium db encrypt` converts a stopped plaintext database to the configured key
+through a verified fresh copy. `atrium db rekey` re-encrypts an encrypted
+database to a key read from a file or standard input, also through a verified
+copy, and records the retired key id. Both, like restore, need exclusive
+access: stop the atrium units first. They share the serve lock, which resolves
+the canonical database path and refuses a hard-linked database. `db rekey`, like
+`db check`, fails on a missing database path without creating a file.
 
-## Attention and tasks
+`atrium backup` writes a consistent database-and-upload archive while serve
+runs. The scheduled backup is a job inside serve, not a unit or timer. With
+`backup.enable`, it writes timestamped `atrium-*.backup` archives and prunes
+regular files with that pattern directly in the backup directory after success.
+The default keeps the newest five regardless of age, plus any modified within
+14 days. It is not a maximum of five archives. Other names are left alone;
+failed backup creation does not prune archives. v2 archives named
+`atrium-*.backup` are subject to the same pruning, so a retained pre-import
+archive needs another name or location. Off-host copying belongs to the host.
 
-- The attention query covers the enabled queues: proposals, drafts, open loops, commitments, event candidates, thread plans, packages, tasks, unanswered `ask_operator` questions and live server-ops findings of severity warning or critical, each listed until the operator answers it. Items are grouped as overdue, due soon, needs decision, waiting on them and upcoming. The cron-only `attention` tool and the daily digest read it. The attention page is not part of this build.
-- Open loops come from mail the operator actually needs to answer: the latest message must not be bulk or automated (List-Id, List-Unsubscribe, Precedence bulk/list/junk, Auto-Submitted, a bulk Gmail category, an email service provider, a Reply-To that differs from From, or an automated sender address) and must not be addressed to the operator only in Cc; a message that lists the operator in To, or in neither To nor Cc (BCC, mail merge or a missing To header), still counts, as does a message whose cached raw headers are unavailable. Commitments follow the same rule and include only items addressed to or requested of the operator; items meant for other recipients of a group message are ignored. Birthdays are read from contacts for the calendar and are not an open-loop source.
-- Tasks are a core store with open, done and dismissed status, a due date, reminder time, priority and an optional source. The assistant tools list, add, update and complete tasks directly, each undoable from Done; the reminder job inserts a task when a scheduled reminder is due. The assistant reads the attention view with the `attention` tool, and the morning digest posts it to Today and the assistant channel.
-- Packages from shipping emails show the latest Ship24 event when the operator registers one with `track_package`. The hourly `package-tracking` job refreshes active trackers, stops polling delivered packages, and sends one notification on a delivered or exception transition. The monthly registration quota (`mail_ship24_monthly_quota`, default 10) refuses further registrations with a clear message.
+Restore replaces database and uploaded state and requires resident users of the
+database to be stopped. `atrium restore --verify ARCHIVE` checks an archive
+without installing it. Restore stages the archive, refuses a newer schema,
+checks it for tampering, and verifies and migrates the staged copy before it
+replaces anything. `--key-file PATH` opens an archive made under an earlier
+key. If the existing database cannot be opened with the configured key or the
+archive's key, restore refuses, because a running instance cannot be ruled out;
+`--replace-unopenable` replaces it and keeps the old database aside.
+Downgrading a binary does not reverse migrations and can require restoring a
+pre-upgrade database, losing later writes.
 
-## Weather
+## Settings, connections, and modules
 
-- The `weather` tool returns current conditions and an hourly/daily forecast for `weather_latitude` and `weather_longitude`, or for `weather_location_name` when coordinates are unset, and for a place named in the call. It reads Open-Meteo, needs no key, and sends only the coordinates or the place name. The location settings are unset by default; without a location the tool reports that it is not configured. The Open-Meteo connection record on the Integrations page has a Test but no URL or credential, and carries the latitude, longitude and location-name fields: latitude must be between -90 and 90 and longitude between -180 and 180, a value pinned by env, configuration or Nix is shown read-only, and clearing a field unsets it.
+Host requirements and credentials are distinct from editable operator settings.
+Host-declared values are read-only in the UI and CLI. Retired host keys,
+connection-owned settings, raw `ANTHROPIC_API_KEY`, and the old `ATRIUM_CONFIG`
+input are refused with the destination to use. Connection credentials belong
+in connection credential slots, not raw environment settings.
 
-## Settings and secrets
+The Connections page shows configuration, credential presence, and observed
+health. Credentials are write-only. Database credentials require encryption;
+host file credentials stay files. Host-declared connections cannot be edited as
+operator-owned rows. Mail accounts have stable ids; account creation tests
+before saving, and deployment-pinned accounts cannot be removed.
 
-- **Precedence.** For a setting: an environment variable, then the configuration file, then a value stored in the database, then the default. An environment variable or configuration file value pins the setting.
-- **Pins are read-only.** A pinned setting cannot be changed or unset through the settings registry; `atrium settings set` and `unset` refuse it and name the source of the pin.
-- **Naming.** The environment variable for a setting is `ATRIUM_<MODULE>_<KEY>`, where `<KEY>` is the whole registry key. When the key already begins with the module name, the module appears twice: `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY` for the key `anthropic_api_key`. For the database key (module `db`, key `key`) the variable is `ATRIUM_DB_KEY`. The [environment variable list](../config/environment.md) is authoritative. A secret setting's environment variable also has a `_FILE` form naming a file whose trimmed contents are the value, for example `ATRIUM_DB_KEY_FILE`; setting both forms is refused. In the configuration file a secret accepts only its `<key>_file` form.
-- **Renamed variables.** The earlier unprefixed names (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIUM_PUBLIC_URL`, `ATRIUM_CHAT_URL`, `ATRIUM_EMBED_URL`, `ATRIUM_CALENDAR_DIR`, `ATRIUM_ICLOUD_CALENDAR`, `ICLOUD_APPLE_ID`, `GOOGLE_OAUTH_CLIENT_ID`, `ATRIUM_CONTACTS_DIR`, `ATRIUM_MEDIA_ROOT`, `QBITTORRENT_URL`, `ATRIUM_MEDIA_MOVIES_URL`, `ATRIUM_MEDIA_TV_URL`, `ATRIUM_CODEMODE_SOCKET`, `ATRIUM_ASSISTANT_MAX_RUN_COST_USD`) are not read and do not pin anything. The command does not warn about them; remove them from the host environment.
-- **Time zone and public URL.** The `tz`, `public_url` and `http_timeout_seconds` settings are read from the database after migration by every command that opens it, so a value set through the registry applies to the web server, the scheduler, the nightly run, the mail watcher and the CLI alike. A pin always wins.
-- **Settings CLI.** `atrium settings list`, `get`, `set` and `unset` show or change instance-level values; each shows the effective value, its source (`pin`, `db`, `default`) and its class. Secret settings are neither shown nor changed here.
-- **Settings pages.** Settings shows a list of pages in place of a tab strip: Assistant (where `/settings` lands), Mail (`/settings/mail`), Connections (`/settings/integrations`; connection records, the weather location on the Open-Meteo record, the Calendar section and the Media libraries section), Notifications, a page for each other module that has connections or sections (Calendar, Notion, Media, Grafana, shown whether the module is on or off), Sign-in (only when OIDC is configured) and, under Instance, Usage. A mark beside a module in the list shows that it is off or needs settings. A page holds its own controls and then the setting groups its module declares; each group is one card with one Save, posted to `/settings/groups/{module}/{group}`. A saved group shows Saved beside its button; a refused value answers 422 with the reason on the group and stores nothing. A value pinned by the deployment shows read-only with a lock. The declared groups are: on Assistant, Spending (`monthly_budget_usd`, `budget_chat_share`, `budget_unattended_share`, `thread_cost_cap_usd`, the per-model `max_run_cost_usd_*`, `agent_subagent_max_cost_usd`, `search_web_max_cost_usd`, `dreaming_max_cost_usd`, `dreaming_monthly_usd`, `ops_worker_max_run_usd`, `ops_worker_monthly_usd`) and Background work (`agent_effort_cron`, `agent_effort_nightly`, `agent_effort_subagent`, `search_web_model`, the memory `model` and `effort`, `ops_condenser`); on Mail, Safety (`write_cap`), Open loops (`openloops_waiting_after_days`, `openloops_remind_ahead_days`, `openloops_snooze_default_days`, `snooze_choices`) and Packages (`mail_ship24_destination_country`, `mail_ship24_destination_postcode`); on Notifications, Volume (`notify_per_run_cap`, `notify_nightly_cap`); on Sign-in, Sessions (`oidc_session_idle_days`, `oidc_session_max_days`). Assistant also keeps the new-thread defaults (model, effort, context limit) and the Permissions group (the 24 permission-table cells for own accounts, notify, other people and the internet across the six situations, saved through `POST /settings/permissions`; `GET /settings/permissions` redirects to the Assistant page). Mail also keeps the accounts and `uncertain_dest` and `openloops_remind_hour`; Notifications keeps the channels, the push subject, Web Push devices and the phone action controls; Usage is a report only; the monthly budget is in Spending. A module with declared groups and no page of its own gets one at `/settings/{module}`. The Assistant, Mail and Notifications pages and every such module page open with the module's state (On, Off or Needs settings with the unmet reasons); a flag pinned by the deployment shows a lock. The page does not switch a module: that stays with `atrium settings set <name>_enabled`, env or Nix. A module page also shows the connection records and sections whose module is that page (Anthropic and Open-Meteo on Assistant; the mail chat and embed endpoints and Ship24 on Mail; the Calendar section on Calendar; the Media libraries section, qBittorrent and TMDB on Media; Notion and its export on Notion; Grafana on Grafana); Test and Save from there return to the module page with Saved on the card. A refused test or value answers 422 on the module page it was sent from. Connections still lists every record and section. Every other setting, including the Advanced ones, prompt overrides (`prompt_system`, `prompt_subagent`) and module flags, is set through `atrium settings set|unset`, Nix or env. Settings changes are still recorded in `settings_audit` and appear on the Done page with actor and source.
-- **Modules.** Module flags are set through `atrium settings set <name>_enabled`, env or Nix, with the requirement refusal. Saving a working integration on the Integrations tab (a changed URL or credential whose test passes) turns its module on, audited as operator/ui, effective after the atrium units restart; Google Calendar consent enables calendar and Gmail consent enables mail. A module with unmet requirements, or pinned off by env or configuration, stays off and the page names the reason.
-- Refused saves on Integrations settings and section forms, Mail behavior, notification push subject and Usage budget forms retain the submitted non-secret values for correction; deployment-pinned values remain read-only. A missing Notion export parent is reported beside the Parent page field.
-- **Modules.** Module flags are set through `atrium settings set <name>_enabled`, env or Nix, with the requirement refusal. Saving a working integration on the Integrations tab (a changed URL or credential whose test passes) turns its module on, audited as operator/ui, effective after the atrium units restart; Google Calendar consent enables calendar and Gmail consent enables mail. A module with unmet requirements, or pinned off by env or configuration, stays off and the page names the reason.
-- **Subagents CLI.** Subagent definitions are managed with `atrium agent subagents list|set|enable|disable|delete`. `set` creates or updates an agent; omitted flags keep their stored values, and the prompt can come from `--prompt-file`. Tools are limited to the read-only tools open to subagents. Built-in agents can be disabled but not deleted.
-- **Knowledge CLI.** `atrium kb import [--dry-run]` copies the operator profile, the nightly observations and the Notion wiki pages into the knowledge store, idempotent by origin: a record never edited or retracted in atrium is updated to the current source, one edited there is kept and reported, and a record whose source is gone is left and reported. A confirmation is not a content edit: a confirmed record is still updated and stays confirmed. Notion pages are converted to plain Markdown first: HTML tables become pipe tables, page and database mentions and links become `[K<id>]` citations when the target page is imported and plain text otherwise. A bare Notion URL becomes a citation, the synced page title when known, or nothing; fenced and inline code are untouched. Callouts become blockquotes, toggles a bold summary, wrapper tags are stripped, `<br>` becomes a newline, and HTML entities are decoded. Imported pages and observations arrive unconfirmed with `untrusted` (plus `pii` when the body carries an email address or a phone number of nine or more digits); profile rows arrive pinned and confirmed with no marks. A Notion page imports private only when its `private` flag is an explicit operator choice: sync marks a page private when its sensitivity property is absent, so when every page under the wiki root is private the importer treats the flag as that default, imports the records as not private and reports the limitation in `notes`. `--dry-run` writes nothing. A body over 100,000 characters fails that item.
-- **Knowledge export.** The `knowledge-export` built-in job (default `daily 03:30`, `agent_schedule_knowledge_export`) renders the knowledge base into Notion with no model call. Its controls are the **Export knowledge to Notion** group inside the Notion record on the Integrations page: an Enabled switch, a Parent page, the Include marks and the Include private records switch. The Parent page accepts a pasted Notion page URL or id and stores the normalized page id; turning the export on without one is refused, and a target with no destination is skipped. The job overwrites the pages it created on every run; it never touches the imported wiki or a page it did not create. Only live, non-expired records outside the `ops` scope are exported, filtered by `export_notion_kinds` (default `pii,messages,personal`; the page labels them Contact details, Mail and messages, and Personal). Private records (the record's private flag or a private project) are exported only when `export_notion_private_to` equals the destination; the Include private records switch asks for confirmation naming the destination, changing the destination turns it off, and the change is in the settings audit. Records carrying `untrusted` render as plain text with links defanged and images neutralized until the operator confirms them. Each page ends with a provenance footnote: source thread, writer, run, date, and unconfirmed when it is. A write whose outcome is unknown blocks the target: the job reports the write number and makes no further request until `atrium writes resolve <id>`; the export group links that write in the Activity log. The same job writes an Obsidian vault when `export_obsidian_dir` names a folder (normally pinned by `services.atrium.knowledgeExport.obsidianDirectory`): `<scope>/<slug>-K12.md` with YAML front matter and `<dir>/index.md`, each written atomically through a temporary file renamed into place. The **Obsidian export** section on the Integrations page edits that folder, read-only when pinned, with the same Include marks and private-records confirmation. It deletes only files it recorded in `export_pages`; every other file in the folder is left alone. Private records need `export_obsidian_private_to` to equal the folder, with the same confirmation and audit as the Notion switch.
-- **Secrets CLI.** `atrium secrets set <name>` reads the value from standard input (the command line never carries it), `delete` removes it, and `status` reports each secret as `set`, `unset` or `pinned`. Secrets are write-only: no command returns a stored secret. Setting a secret that the deployment pins is refused. A pin-only secret, such as the database key, can be neither stored nor deleted through the CLI.
-- **Encrypted database required for stored API keys.** The Anthropic API key, the OIDC client secret and the Google OAuth secret and tokens are refused by `atrium secrets set` unless the database is encrypted.
-- **Anthropic API key.** `anthropic_api_key` is a write-only secret setting. `ANTHROPIC_API_KEY` (and `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY`, with a `_FILE` form of either) pins it; a pinned key cannot be stored or changed. At web start atrium lists the models the key can use and logs a warning for each catalog model the Models API does not offer, or when the list cannot be fetched; startup continues either way.
-- **Audit log.** Every settings write and every secret change appends a row to the append-only `settings_audit` table with the key, the actor, the source (`cli`, `ui` or `migration`), and the old and new values. For a secret the row records only `changed`. The table rejects updates and deletes, and the rows are listed read-only on the Activity page.
-- **Redaction.** Secret values of at least eight characters are scrubbed from log output, including their URL- and JSON-escaped forms, from audit values and from the recorded `agent_writes` snapshots.
-- **Integrations.** The Integrations settings page lists each connection record (qBittorrent, TMDB, Open-Meteo, Ship24, Notion, Grafana, Anthropic and the mail chat and embed endpoints) with its URL, credential state (set, unset or set by deployment) and health: untested, ok, failing, expiring (a known credential expiry within 14 days) or needs re-auth (the service refused the credential). A pinned or deployment-only value is shown read-only, and Test still runs against it. The Open-Meteo record also edits the weather location (`weather_latitude`, `weather_longitude` and `weather_location_name`), with the same read-only treatment for pinned keys. The Notion record edits `wiki_root`, `sensitivity_property`, `notion_private_value` and `wiki_log_title`; the Grafana record edits `grafana_metrics_uid`, `grafana_logs_uid` and `grafana_logs_type`; the mail chat endpoint record edits `mail_chat_model`; and the Calendar and Media libraries sections edit the calendar and media library settings, all with the same validation and read-only pins. Test checks the values typed in the form first and saves them only when the check passes, so a failed Test leaves the working record as it was; testing unchanged values records the result. `atrium serve` checks every configured integration at start and every 24 hours. Every result is recorded and an admin banner shows while a record is not ok; a change from a previously recorded state also sends one high-priority message on the system channel (the first result for a record sends none). Disconnect clears the URL and credential (refused while either is pinned); the owning module then needs settings and its data stays. The Google connection has its own wizard linked from the same page: Cloud console steps, a Web-application client, one consent per capability with a paste-back fallback, and a Testing-mode warning about 7-day refresh tokens; a refused refresh marks it needs re-auth.
-- **Google OAuth wizard.** The Integrations page sets up Google Calendar and Gmail access: the Cloud console steps, a Web-application client ID and secret, one consent per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and a warning that a Testing-mode client's refresh token expires after 7 days. The state and verifier live in `oauth_states` for ten minutes; the refresh token is stored as `google_calendar_refresh_token` or `google_gmail_refresh_token` (secrets, pinnable with their `*_file` variables). Test exchanges the refresh token; a 400 or 401 marks the integration needs-reauth.
-- **Credential checks.** The Notion Test signs in as the integration and fails with "no pages shared with the integration" until a page is shared; when it passes it shows the number of shared pages (`100+` past the first page of results). The Grafana Test signs in with the service account token and searches dashboards: a refused token needs re-auth, and a token that may not search fails with a request to give it the Viewer role. The Anthropic Test lists the models with the key; the form asks for a key from a Console workspace with a monthly spend limit. The Ship24 Test calls `GET /trackers?limit=1` with the key; a 401 or 403 marks it needs re-auth. The Notion token (`notion_token`), Grafana URL (`grafana_url`) and Grafana token (`grafana_viewer_token`) are settings; `NOTION_TOKEN`, `GRAFANA_URL` and `GRAFANA_VIEWER_TOKEN` are no longer read, and a command that sees one logs a warning naming the replacement.
-- **Media credentials.** `media_qbittorrent_api_key` and `media_tmdb_token` are secrets (pinnable; stored only in an encrypted database). With the qBittorrent key set, every qBittorrent request carries `Authorization: Bearer <key>`, and Test fails on a server older than 5.2, which has no API keys; without it requests go unauthenticated as before. Every TMDB request carries the read token as `Authorization: Bearer <token>` and never as a query parameter; `TMDB_API_KEY` is no longer read, and a refused token shows as a TMDB error. Media pages that show TMDB data carry the TMDB attribution. The Media libraries section on the Integrations tab edits `media_movies_url` and `media_tv_url`.
-- **Outbound TLS and proxies.** Each integration has `<name>_ca_file` (a PEM bundle added to the system roots) and `<name>_proxy` (an `http`, `https` or `socks5` URL; otherwise the proxy environment variables apply). An unreadable or empty CA bundle and an unknown or invalid certificate fail the request; certificate verification cannot be turned off, and the lint check rejects code that sets `InsecureSkipVerify`. Notion, Grafana, qBittorrent, TMDB, Open-Meteo, Ship24 and the mail chat and embed endpoints use this transport for every request and Test; Anthropic uses it for Test only.
-- **Check on failure.** When a request from `atrium serve` to Notion, Grafana, qBittorrent, TMDB or Ship24 fails to connect or answers 401, 403 or a 5xx status while the integration is recorded as working, its check runs at once instead of waiting for the daily check. After a check that passes, further failures wait 5 minutes before the next one.
+A stored credential never follows a connection to a different endpoint. A
+URL/host change must replace every retained credential in that request, or the
+operator must disconnect first. The guard runs before a test contacts the new
+endpoint and applies to preferred and fallback slots. A blank known credential
+field retains the old value; it does not authorize an endpoint change. Unknown
+credential slots are refused. Boot also refuses a host takeover of a stored
+operator connection with a changed endpoint and unreplaced database credential.
+An `issuer` or provider `preset` change is an endpoint identity change too.
 
-## Modules
+Endpoint URLs cannot carry userinfo (`user:password@`). Such a URL is refused
+at save, at Test, at v2 import, and at boot host reconciliation; the refusal
+names the connection and field, never the URL. Host fields (`host`, `*_host`
+such as `imap_host`) take a host name, IPv4 address, or IPv6 literal (bare or
+bracketed) with an optional port; `@`, `/`, `\`, whitespace, and control
+characters are refused. A host-declared connection refused at boot stops
+`serve` with exit 78. The background health check sends no request for a
+stored row that fails these rules; it records the connection as failing with
+the field named.
 
-- **Toggles.** Mail, calendar, contacts, Notion, media, assistant, notifications and Grafana are modules with a `<name>_enabled` setting; core is always on. Change one with `atrium settings set <name>_enabled true` or `false` and restart the atrium units, or pin it with `ATRIUM_CORE_<NAME>_ENABLED`. A pinned flag cannot be changed through the CLI. The money module is removed: its tables and rows stay in the database, its stored settings are ignored, and its `fx-rates` scheduled job is cancelled on the next scheduler start.
-- **Contacts.** The contacts module needs `contacts_dir` and owns `contacts_lookup` and `atrium contacts sync`. Mail uses it as an optional source: with contacts off or no directory, the mail flag rule flags no sender as a contact and the triage flags view says no contact source is configured. On a database adopted from Phase A, the first start of this build enables contacts when `contacts_dir` is set.
-- **Mail model endpoints.** The chat endpoint (`mail_chat_url`, `mail_chat_model`) and the embed endpoint (`mail_embed_url`, `mail_embed_model`) are any OpenAI-compatible servers. The chat endpoint record on the Integrations page edits `mail_chat_model`. Each can take a Bearer key, `mail_chat_key` and `mail_embed_key` (secrets, pinnable; stored only in an encrypted database), sent only to its own endpoint. `atrium endpoints probe` (available while mail is off) lists the models from `/models`, sends one strict JSON-schema chat request and one embedding, records the result and the measured embedding dimension, warns on stderr when an endpoint is on a public host, and exits 1 if either probe fails. While the recorded probe for the current URL, model and key is failing, mail is in the needs-settings state and enabling it is refused with the reason; a changed endpoint is not held to an old result, and an endpoint never probed is not blocked. The probe reports the embedding dimension; a dimension that differs from the current index does not fail it. The two endpoints are also the `mail_chat` and `mail_embed` integration records: their Test runs the same probe on the typed URL and key before saving them, and a passing Test or daily check records a passing probe, which releases the hold. A passing Test on a public host says that mail content leaves this host.
-- **Embedding index.** Searches and new mail and Notion embeddings use the embedder that built the current index, and its stored dimension. Notion documents and knowledge records are clipped to `mail_embed_body_chars`, the same limit as mail messages. An upgraded database keeps its 768-dimension index: the first `atrium serve` adopts the configured embedder when it returns 768 dimensions, and otherwise builds a new index as below. When `mail_embed_url` or `mail_embed_model` changes, `atrium serve` measures the new dimension and re-embeds every mail message and Notion page into a new index in batches of `mail_embed_batch`, while searches keep using the old index and embedder. The Mail settings page shows the index and the progress (done of total, and the last error); a failed batch leaves the old index in place and is retried a minute later. A restart resumes without re-embedding finished rows. When every row is embedded the new index replaces the old one in one transaction and the old index is dropped. Changing the embedder back before the swap discards the partial index. A key, CA bundle or proxy set for a new URL is not used for the old URL while the new index builds.
-- **iCloud mirrors.** `atrium calendar sync` and `atrium contacts sync` read every iCloud calendar (events only) and address book over CalDAV and CardDAV, and make `calendar_dir` and `contacts_dir` hold exactly one file per server object (`<collection>/<name>.ics` or `.vcf`). Nothing is written to the server. An unchanged object is not rewritten, files are replaced atomically, objects deleted on the server are removed, and a sync that fails to fetch (bad login, unreachable server) changes nothing. Each run records a `caldav` or `carddav` pass.
-- **iCloud login.** Calendar and contacts sign in with the app password of an enabled iCloud-preset mail account: the one named by `calendar_account`, or the only one when `calendar_account` is empty. The user name is `icloud_apple_id`, or the account's login when that is empty. With no such account, several and no `calendar_account`, or a `calendar_account` that names no enabled iCloud account, the iCloud login is missing and the reason names the problem. The Calendar section on the Integrations tab edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`, `default_event_minutes`, `work_hours` and `work_days`.
-- **Scheduling.** `find_slot` lists free windows of a requested length inside `work_hours` (default `09:00-17:00`) on `work_days` (default Monday to Friday) in the configured time zone, against the iCloud mirror and Google Calendar; timed events block time, all-day events do not. `calendar_list` and `find_slot` read every iCloud mirror collection when the calendar is `icloud` (or empty) and Google Calendar when it is `google`; any other name selects that mirror collection. `calendar_update` and `calendar_rsvp` only create proposals. On approval an update changes the title and times of the existing event, and its location and notes when given, and keeps everything else (recurrence, exceptions, alarms, organizer, attendees and other properties); on iCloud it also increments `SEQUENCE`. An RSVP changes only the operator's own response (iCloud: the attendee matching `icloud_apple_id`; Google: the attendee marked as self). Google writes send no notifications. Undo restores the previous event.
-- **Calendar writes.** `calendar_create`, `calendar_update`, `calendar_rsvp`, `calendar_delete` and `event_propose` only create proposals; nothing reaches the calendar until the operator approves. On approval the write records an intent before the external call; a write whose outcome is unknown blocks its proposal, which is listed on Needs you until the operator resolves it with `atrium proposals resolve <id>` or Mark checked.
-- **Needs settings.** A module is on only when its flag is true and its required settings are met: mail needs `mail_chat_url` and `mail_embed_url`; calendar needs an iCloud CalDAV login or Google Calendar credentials; Notion needs `notion_token`; media needs `media_root` and `media_qbittorrent_url`; the assistant needs `anthropic_api_key`; notifications need `webpush_subject`; Grafana needs `grafana_url`, `grafana_viewer_token` and the assistant. `atrium settings set <name>_enabled true` is refused, naming what is missing, while a requirement is unmet; a pinned flag whose requirements fail leaves the module in the needs-settings state, which behaves as off.
-- **What disabling does.** A disabled module serves no pages (404) and offers no assistant tools, and its entries leave the navigation and the settings tabs. Its commands exit 0 without output or work, so its units and timers finish cleanly. The scheduler skips its built-in jobs (media channels, sweep and thumbnails, calendar candidates; the knowledge export needs the assistant, and its Notion target the Notion module), the mail pass skips its calendar event-candidate stage, and notification sends (media additions, skipped-budget notices) are dropped while notifications are off. Its tables and data stay. The mail pause kill switch (`atrium live pause`, `resume`, `status` and the web pause and resume buttons) stays available while mail is off. The scheduled calendar-candidates job needs both calendar and mail. With the wiki root unset, the Notion write tools (`notion_create_page`, `notion_update_page`, `notion_move_page`, `notion_archive_page`, `notion_add_alias`) are hidden from the assistant. `atrium calendar google-auth` stays available while calendar is off.
-- **Adoption on first start.** The first start of a database that already holds operator data (any row in settings, secrets, accounts, threads or usage) enables every module whose requirements are met and records the migration in `settings_audit`; a module whose requirements are not met stays off and is logged. A database with no operator data starts with core only. A pinned flag is never rewritten.
-- **Units.** `atrium-watch` and `atrium-agent-scheduler` restart only on failure, so a disabled module's clean exit does not restart in a loop. The scheduler runs from the assistant: with the assistant off it exits, and the media and calendar jobs it hosts do not run. The Scheduled page is read-only: built-in jobs are seeded when the web server starts, and the scheduler worker syncs their schedules at startup and on each tick, so a changed schedule setting appears on the page after the next tick.
+Module flags are restart-only. Change `<name>_enabled` through `atrium settings
+set` or host configuration, then restart serve. Settings pages show module
+state and a restart notice when the stored flag differs; they do not toggle
+flags. The settings API returns 409 for a flag because it is not an offered
+setting. Saving a working connection or completing OAuth consent does not turn
+its module flag on.
 
-## Database
+A settings save in the running serve re-checks module requirements after
+commit. That can change route/service availability without a restart if
+requirements changed. Connection saves themselves do not publish a new module
+snapshot. A failed settings transaction changes no running module state.
+Ordinary disabled module pages return 404. Owned API commands and binary relays
+return 409 `module_disabled` before starting their work. Review and Activity keep
+historical proposals and effects visible; owning-module checks still apply to
+approval, undo, and other mutations.
 
-- **Encryption at rest.** With a database key, every command opens the database encrypted with SQLCipher, and a database created under that key is encrypted. The key is 64 hexadecimal digits, supplied by `db.key_file` in the configuration file, by `ATRIUM_DB_KEY` or `ATRIUM_DB_KEY_FILE`, or by the `db_key` systemd credential. Without a key the database stays plaintext.
-- **Refusals.** atrium refuses to start or run a command, and changes nothing, when:
-  - a key is configured but the file is plaintext;
-  - the file is encrypted but no key is configured;
-  - the key does not open the file;
-  - a key is configured but the binary has no SQLCipher engine (the `modernc` build refuses any key).
-- **`atrium db` commands.**
-  - `check` reports the database path and encryption state, runs `PRAGMA integrity_check`, and prints row counts of FTS5 and vec0 tables; it fails if the integrity check does not return `ok`.
-  - `backup <dest>` writes a consistent copy encrypted like the source, verifies it, and refuses a destination that already exists.
-  - `encrypt` converts a plaintext database to the configured key. It copies the database into a fresh encrypted file with `sqlcipher_export`, checks that the copy has an encrypted header, passes `PRAGMA integrity_check`, has the row count of every table, and returns the same nearest rows for a sample vector in each vec0 table, and only then replaces the file. It refuses when no key is configured, when the database is already encrypted, when another process holds it (the atrium units and timers must be stopped), and when it records an unknown newer schema. A refusal or failed check leaves the database unchanged. Snapshots and backups made before the conversion stay plaintext.
-  - `rekey` re-encrypts an encrypted database under a new 64-hex-digit key read from `--new-key-file` or standard input, never from the command line. It refuses when no key is configured, when the new key equals the current key, when another process holds the database (the atrium units and timers must be stopped), and when the database records an unknown newer schema. It writes and verifies a re-encrypted copy before replacing the file, so a failed rekey leaves the database unchanged, and it records the retired key's id in `db_key_history`.
-  - `shell` runs SQL statements read from standard input against the database.
-  - `import-v1 <path>` copies the learned-rule data from a v1 database into a fresh v2 database: the rules table, corrections, routing decisions, the unsent message history their derivation reads, and the accounts and mailboxes those rows reference. It opens the source read-only (plaintext or encrypted with the configured key), refuses a target that already holds any of those rows, and validates every stored rule pattern under RE2; a pattern that does not compile refuses the whole import with a report naming the rule, field, pattern and error, and nothing is written. It prints the imported row count per table. The import is transactional.
-- **Migrations.** Pending schema migrations are applied under an exclusive lock when the web service or a command such as `atrium settings` or `atrium secrets` opens the database. atrium does not make a backup first. The v2 schema is the baseline (migration 1, frozen since v2 shipped on 2026-11-08) plus additive migrations; migration 2 adds the thread taint column, and migration 5 splits taint into private and web kinds (a thread tainted before it keeps both, so it behaves as before). A binary that knows migration 2 upgrades a version 1 database on first open.
-- **Upgrading a v1 database.** Stop the atrium units and timers, take a backup with the v1 binary, create a fresh v2 database with the same database key, and run `atrium db import-v1 <path-to-v1-db>` against it. The import carries only the learned-rule data; mail re-syncs from IMAP and the other records are re-entered or rebuilt. Start atrium after the import. v2 refuses a v1 backup archive with a message pointing at `atrium db import-v1`; decrypt or extract it with the v1 binary first.
-- **Newer database, older binary.** A binary refuses a database that records a migration it does not know, before writing anything. Going back to an older release therefore needs a database backup taken before the upgrade, and loses every write made since; changing the binary alone does not reverse a migration.
-- **What the database is not.** The database holds records, stored settings and assistant history. Uploaded files under `files/` beside it, the Notion wiki and the rebuildable message and media caches are separate, so the database alone is not a complete backup; `atrium backup` covers the database and `files/`.
-- **Connection tuning.** Semantic search and mail routing run on one dedicated read connection with a 192 MiB page cache, so a process that searches can hold up to that much memory for the cache; every other connection caches 2 MiB. All connections keep temporary tables and indexes in memory and cap the WAL journal at 64 MiB.
-- **`atrium backup <dest>`.** Writes one new archive (a tar file; it refuses an existing destination) holding a consistent copy of the database taken through the SQLite backup API, so it is safe while atrium runs, and every regular file and directory under `files/`. The mail and media caches, mirrors, `pause` and the media link key are not included and re-sync or regenerate after a restore. With a database key the files are sealed with a subkey derived from the key and a random per-archive salt kept in the header (file names stay visible), and the archive records a key verifier, the key id and the retired key ids, never the key; a keyed tag covers the header and the entry list. Without a key the archive is plaintext and carries checksums only. The header also declares the file and directory counts and the total stored size, and readers refuse entries beyond them. Archives are format 2; a format-1 archive is refused with a message pointing at `atrium db import-v1`. The archive is staged beside the destination, read back and checked, and only then published; a destination that is the database or lives under `files/` is refused.
-- **Scheduled backups.** With `services.atrium.backup.enable` the host runs `atrium backup` on a timer into a directory, one new archive per run. After each successful run it deletes `*.backup` files in that directory beyond the newest `backup.keep` (default 5) that are older than `backup.keepDays` (default 14) days; the newest archive is never deleted.
-- **`atrium restore <archive>`.** Replaces the database and `files/` with the archive contents. It first reads the whole archive without writing anything and checks its tag, entry sizes and sealed contents, then unpacks it into a temporary directory beside the database, runs the database checks and migrates an older schema. It refuses unless it holds the database lock and exclusive access (the atrium units and timers must be stopped), when the archive records a newer schema than the binary knows, when the archive is corrupt, modified or holds anything but regular files and directories, when it is a v1 archive (the message points at `atrium db import-v1`), and when the key does not match: an encrypted archive needs the key it was made under, which after a rekey is the old key and is passed with `--key-file`; a plaintext archive is refused while a key is configured, and passing `--key-file` for a plaintext archive is an error. It also refuses when an existing database cannot be opened and locked with the configured key or the archive's key, because a running instance cannot then be ruled out (this includes replacing an encrypted database with a plaintext archive); `--replace-unopenable` overrides that refusal. Restore never deletes the state it replaces: the previous database (with any `-wal`, `-shm` and `-journal` files) and `files/` are renamed to `*.pre-restore-<UTC timestamp>` beside the originals and their paths are printed, and the operator removes them. Staged files are synced before the swap, and a failure during the swap puts the original layout back. The restored database keeps the key it was archived under; configure that key before starting atrium, or rekey.
-- **`atrium restore --verify <archive>`.** Does the same read-only archive pass, unpacking, key checks and database checks (`integrity_check`, FTS5 and vec0 counts, a nearest-neighbour check on each non-empty vec0 table, a migration of the temporary copy), then discards the temporary copy and writes nothing else. When the state directory does not exist yet, the temporary copy is staged beside the archive instead.
+## Mail modes and safety
 
-## Operations
+Mail sync and routing are application workflows, not decisions to run made by
+the assistant. `mail_mode` is `shadow` by default or `live`. The operator changes
+it through `atrium settings set mail_mode shadow|live`; the change is audited.
+An import resets it to shadow. Pause/resume does not change the mode or grant
+go-live eligibility.
 
-- **Ops listener.** `atrium serve` also listens on `ops_listen` (`ATRIUM_CORE_OPS_LISTEN`, default `127.0.0.1:9180`; `off` turns it off, and the NixOS module sets `off` for `atrium-web-local`). The setting is deployment-only. The public listener never serves `/metrics`, `/readyz` or `/debug/pprof/`; `/healthz` stays on the public listener.
-- **`GET /metrics`.** Prometheus text format, recomputed at most every 15 seconds. Existing gauges and counters: `atrium_budget_monthly_usd`, `atrium_budget_spent_usd`, `atrium_budget_spent_ratio`, `atrium_scheduler_jobs{state}`, `atrium_scheduler_job_next_due_timestamp_seconds{scheduled_job}`, `atrium_scheduler_job_last_started_timestamp_seconds{scheduled_job,status}`, `atrium_job_last_success_timestamp_seconds{pass}`, `atrium_job_stale{pass}`, `atrium_readiness_check_ok{check}`, `atrium_db_exclusive_waits_total`, `atrium_db_exclusive_timeouts_total`. In-process metrics: `atrium_http_requests_total{route,method,status}`, `atrium_http_request_duration_seconds{route,method,status}`, `atrium_llm_requests_total{model,kind,partial}`, `atrium_llm_request_duration_seconds{model,kind}`, `atrium_llm_tokens_total{model,kind,type}`, `atrium_llm_cost_usd_total{model,kind}`, `atrium_runs_total{kind,state}`, `atrium_run_steps{kind}`, `atrium_run_duration_seconds{kind}`, `atrium_tool_calls_total{tool,ok}`, `atrium_tool_duration_seconds{tool,ok}`, `atrium_mail_sync_new_total{account}`, `atrium_mail_sync_gone_total{account}`, `atrium_mail_sync_flag_changes_total{account}`, `atrium_mail_sync_duration_seconds{account}`, `atrium_embed_requests_total{model,ok}`, `atrium_embed_duration_seconds{model}`, `atrium_notification_delivery_total{channel,backend,ok}`, `atrium_db_transactions_total{ok}`, `atrium_db_transaction_duration_seconds`. Database-backed gauges: `atrium_queue_depth{queue}`, `atrium_integration_state{integration,state}`, `atrium_action_links_outstanding`, `atrium_action_links_minted_last_hour`, `atrium_action_links_used_total`, `atrium_endpoint_probe_ok{kind}`, `atrium_endpoint_probe_timestamp_seconds{kind}`, `atrium_endpoint_probe_dimension{kind}`, `atrium_notifications_undelivered`, `atrium_notification_push_failing_devices`, `atrium_mail_sync_last_success_timestamp_seconds{account}`. Labels avoid `job`, `instance`, thread, message, run and mail ids, which the scraper sets or which are unbounded. The alert rules and Grafana dashboard for these metrics are `nix/monitoring/atrium.rules.yml` and `nix/monitoring/atrium-dashboard.json`.
-- **Tracing.** With `observability.tracesEndpoint` set (or the `otel_traces_endpoint` setting pinned), atrium exports OTLP/HTTP spans to that full URL; empty disables tracing. Spans cover HTTP requests, agent runs and steps, Anthropic requests, tool calls, mail sync, embedding calls, integration checks, notification delivery and database transactions. Attributes are an allowlist of opaque ids, counts, durations, model/tool/route names and status codes; prompts, completions, mail content, subjects, addresses, tool arguments and results, and secrets are never recorded. `OTEL_SDK_DISABLED=true` turns export off. Log records carry `TRACE_ID` and `SPAN_ID` when a span is active.
-- **`GET /readyz`.** JSON `{"status", "checks"}`. `not_ready` (503) when the database cannot be read or records a newer schema, or the configuration does not load. `degraded` (200) when a pass is stale. Otherwise `ready` (200).
-- **Pass runs.** `atrium sync`, `atrium notion sync`, `atrium proposals scan-all` and `atrium backup` each record one `pass_runs` row (job `sync`, `notion-sync`, `scan` or `backup`, start and finish time, `ok` or `failed` with the error) whichever process runs them. Rows older than `pass_run_retention_days` (default 90) are pruned when a run is recorded. A job is stale when its newest run failed, or when its last success is older than its limit: 1 hour for `sync` and `notion-sync`, 35 days for `scan`, 8 days for `backup`. A job that has never run is not stale.
-- **Stale notices.** While notifications are on, `atrium serve` checks for stale jobs at start and every 5 minutes and sends one notification on the system channel per stale job; it sends again only after the job recovers and goes stale again.
-- **Notification channels.** Notifications go to one of three channels: `assistant` (the `notify` tool), `media` (new releases) and `system` (stale passes, skipped scheduled runs, 80% and 100% of the monthly budget once per month, mail pause and resume, and integration health). Each channel has a content setting on the Notifications page: `auto` and `full` push the title and text, `title` pushes only the title `atrium` and a pointer to the app.
-- **Delivery and health.** Every notification is recorded in the inbox before delivery; delivery is best effort with no retry queue. A notification counts as delivered when at least one Web Push device accepts it; with no devices it stays in the inbox only. A failed delivery can be resent from the inbox; a delivered one is not sent again. A device with three consecutive failures shows in a banner for administrators on every page until a delivery to it succeeds.
-- **Web Push.** The Notifications page enables or disables push on the current browser, lists the subscribed devices with Remove, and sends a test push to every device. iOS needs the site added to the Home Screen first and shows no action buttons. Pushes need `webpush_subject` (a `mailto:` or `https:` URL), edited on the Notifications page. The VAPID key is generated on first use as the secret `webpush_vapid_private_key` and can be pinned (64 hex digits or the 43-character base64url private key). After a key change every device must enable push again. A push carries the title, at most 240 characters of the body, the thread or page path that opens on tap and, for phone actions, the Approve and Dismiss links; the channel content setting applies. Pushes are encrypted (RFC 8291, aes128gcm) and signed (VAPID, RFC 8292), go only to `https` endpoints at public addresses without a proxy, and take `webpush_ca_file` as an extra CA bundle. Priority 4 and 5 send urgency `high`. A push service answering 404 or 410 deletes the subscription; other failures are counted per device. The web app manifest is `/static/manifest.json`, and the service worker `/static/sw.js` is registered for scope `/`; the CSP allows `worker-src 'self'`.
-- **Profiling.** `/debug/pprof/` is served on the ops listener only with `ops_pprof` (`ATRIUM_CORE_OPS_PPROF=true`).
+- Shadow records what automatic actions would do and makes no automatic
+  mailbox writes. A due snooze stays pending when shadow skips its return.
+- Live automatic writes also require no pause, go-live eligibility, verified
+  current message state, safe folders, and the per-account write cap. Read,
+  unflagged inbox filing, contact flagging, corrections, and deletion rules
+  retain their separate eligibility checks. Reaching a cap defers the rest.
+- Going live takes a baseline: mail that is read, unflagged and in the inbox at
+  that moment is never touched by the automatic inbox pass. A failed automatic
+  write is retried at most three times. Rule-based deletion runs at most once a
+  day per account. An automatic action the operator has undone is not applied
+  again.
+- Trash, Sent, Drafts, Junk, and provider system folders are protected from
+  automatic filing. Destinations must be existing safe folders. A changed
+  server message is skipped rather than overwritten from stale cached state.
+- Approved proposals are explicit consent. Approval and undo have their own
+  scopes and can work in shadow; pause blocks automatic work, not consent.
+- Direct assistant folder creation and moves are undoable. They respect shadow
+  and pause, record intent before IMAP, and refuse protected folders. Moves
+  use COPY, STORE Deleted, and UID EXPUNGE, never IMAP MOVE.
+- The assistant can save/edit drafts but cannot send them. Sending is an
+  operator action. The sent-message copy has a narrowly scoped Sent APPEND
+  authorization. A send with an unknown SMTP result cannot be sent again until
+  resolved. A stale draft edit returns 409 without replacing the stored draft.
 
-## Test overrides
+### Long passes and busy work
 
-These variables point the production binary at local fakes for the test entry point. They are not settings, are not read from the configuration file, and must not be set on a host.
+The mail scan job holds the shared `mail-pass` resource for up to two hours;
+mail sync has a 20-minute bound. Approvals, assistant moves, and undo wait five
+seconds before returning busy. They have not thereby approved, moved, or undone
+the item and can be retried after the pass. A busy phone Approve returns 503,
+leaves the proposal pending, and leaves the link usable.
 
-| Variable | Effect |
-| --- | --- |
-| `ATRIUM_SERVE_ADDR_FILE` | Writes the bound public listener address to this file. |
-| `ATRIUM_IMAP_ADDR` | Replaces the IMAP dial address. |
-| `ATRIUM_IMAP_CA` | PEM bundle used as the IMAP TLS root. |
-| `ATRIUM_SMTP_ADDR` | Replaces the SMTP dial address. |
-| `ATRIUM_SMTP_CA` | PEM bundle used as the SMTP TLS root. |
-| `ATRIUM_CALENDAR_CALDAV_URL` | Replaces the CalDAV base URL. |
-| `ATRIUM_CALENDAR_CARDDAV_URL` | Replaces the CardDAV base URL. |
-| `ATRIUM_CALENDAR_GOOGLE_TOKEN_URL` | Replaces the Google token endpoint for calendar. |
-| `ATRIUM_CALENDAR_GOOGLE_API_URL` | Replaces the Google Calendar API base URL. |
-| `ATRIUM_GOOGLE_AUTH_URL` | Replaces the Google OAuth authorization endpoint. |
-| `ATRIUM_GOOGLE_TOKEN_URL` | Replaces the Google OAuth token endpoint. |
-| `ATRIUM_NOTION_BASE_URL` | Replaces the Notion API base URL. |
+API sync and scans use their declared job claims. API apply-deletions,
+rebaseline, and loops/watches refresh instead take the resource lock alone,
+have a 20-minute bound, and stop at serve shutdown. They do not insert sync job
+history. A refused or invalid-account API sync may record its job as `ok`
+because the job completed with a classified domain outcome; the HTTP refusal
+or 422 is still returned. A quiet watch pass writes no operation audit row;
+explicit sync and reindex are audited.
+
+Database write admission has its own locks, `<db>.write-queue.lock` and
+`<db>.write.lock`. Admission and SQLite busy handling each have a 30-second
+budget. The resulting wait can be about 60 seconds, not an indefinite hang.
+A write-gate timeout names the exclusive lock. Cancellation interrupts these
+waits, including on SIGTERM. These locks are separate from `mail-pass`.
+
+## Approvals, undo, and unknown effects
+
+An external write has a durable intent before its external call. A lost reply
+or interruption can leave the result unknown. atrium never treats that as
+permission to repeat the write. Review shows pending and blocked proposals;
+Activity shows recorded effects and available undo. Undo is a new guarded
+effect, not deletion of history, and can itself fail or become unknown.
+
+Check the external mailbox, calendar, or media state before resolving an
+unknown or partial result. The effect detail and `atrium effects` commands
+expose its evidence. `atrium effects resolve ID --outcome
+applied|not-applied|partial|undone|not-undone` records the checked outcome.
+Proposal and live-mail resolution commands/pages provide their corresponding
+operator controls. `atrium media inspect-filing EFFECT-ID` adds the agent's
+receipt and current file evidence for a filing.
+
+Resolution appends to `effect_resolutions`. The original effect can remain
+`unknown` because that is the raw attempt outcome. The effective resolution
+releases the block and governs later undo. Resolving a draft as sent updates
+the draft but leaves its original SMTP attempt unknown; it does not resend.
+A partial undo must be checked and resolved rather than repeatedly invoked.
+
+Phone action links are off by default. `phone_actions_enabled` turns them on
+and `phone_actions_kinds` lists the proposal kinds that may be approved or
+dismissed from a notification; web-only kinds cannot be enabled, and phone
+links never decide a permission request. One stored nonce mints an Approve and
+a Dismiss link. A link is valid for 12 hours and one use, and at most 20 links
+are minted per hour. `POST /actions/<token>` needs no session but still checks
+Host. A phone approval that meets a busy lock answers 503, leaves the proposal
+pending and keeps the link usable. Revoke removes unused links and stamps used
+rows, including expired ones. Link minting limits do not drop the proposal's
+inbox notification or prevent a push without action links.
+
+## Assistant and daily work
+
+Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
+response. A new home message starts a thread. Review keeps decisions and
+history; Library holds knowledge, wiki, files, rules, and schedules. Projects
+group threads. Draft and proposal cards in chat call the same send/approval
+services as their dedicated views. `/chat/agenda` returns 404 when the calendar
+module is off and 503 when the calendar cannot be listed, for example when none
+is configured. Full page navigations are not conditional fragment responses.
+
+Assistant runs use the Anthropic connection and a static supported-model
+catalog. A missing key or refused budget prevents a paid start before a new
+thread exists. Unknown models fail closed. Model-free jobs do not require a
+paid run. Scheduled prompts do not expand chat `@` references. Content sent to
+the hosted model leaves the host.
+
+Spending is reserved before dispatch: the full cold prompt, the maximum output,
+8,000 input tokens per allowed web search, and the search fees. The monthly
+budget defaults to $150. Scheduled work stops at 80% of it, chat at its own
+share capped at 95%, and the last 5% is kept for classification. Each model has
+a per-run cap that also covers subagent runs, and every subagent request must
+fit each ancestor run's cap. A thread cap (default $10, lower if the composer
+set one) covers a thread and its subagent threads. An attempt with an unknown
+outcome stays reserved and expires to an estimated charge after 24 hours. A
+stream stopped mid-generation is charged for what it delivered, never below the
+usage the provider reported. Reservations keep their calendar month, so a time
+zone change does not move spend, and earlier-month reservations count until
+they settle or expire. A memory job refused by the monthly budget waits for the
+next month, a run-cap refusal fails it, and other refusals back off. A provider
+spend-cap reply stops the run as a budget stop.
+
+Tool permissions, run-kind limits, and approval are enforced in code. A fixed
+untrusted-data preamble comes before the editable system prompt. Each tool has
+a channel: none, own accounts, notify, other people, or internet. Own-account
+and notify actions act at once and appear on Done with Undo. Other people
+always asks. Internet allows, asks or denies depending on what the thread
+holds; once untrusted text is present, other people and internet can only ask
+or deny, and editing the table cannot loosen that. An ask creates a permission
+request and parks the run without calling the tool; Deny resumes with a
+refusal. Approval re-checks the current table, tool settings and thread marks
+before the call. Scheduled, nightly and subagent runs never park, so an ask
+there is a deny. `web_fetch` reaches only URLs the operator typed or a verified
+`search_web` citation added; it uses no proxy and connects only to public
+addresses, checked on every redirect.
+
+Knowledge is the durable memory store. Records have scope, marks, and source
+provenance; an edit can only add marks. Confirmed and operator/import-written
+records are protected from agent edits and retraction. Confirmation clears
+`untrusted` but keeps `pii` and `messages`, so such records stay out of the
+profile. Eligible pinned, confirmed, unmarked records form the assistant
+profile. Private projects restrict their content to that project, and nightly
+dreaming skips their threads. Nightly dreaming can write unconfirmed records
+within its spending limits. Notion wiki pages are read-only mirrors; the
+assistant has no Notion editing tools. There is no skills feature.
+
+The knowledge export is one-way. It overwrites only the Notion pages it
+created and the Obsidian files it tracks, and never touches other pages or
+files; edits made at the destination are overwritten on the next run. Private
+records are exported only with consent recorded for that exact destination,
+and changing the destination clears the consent.
+
+Notifications enter the in-app inbox before best-effort Web Push. A push failure
+does not roll back the inbox occurrence. Registration is limited to 16 devices,
+and each notification has one 15-second delivery budget across all devices. A
+push goes only to public HTTPS addresses, with no proxy and no redirects; a
+redirect is a failed delivery. A 404 or 410 deletes the device; other failures
+count against it. The body is at most 240 characters. Revoking a bearer token
+removes devices registered with that token.
+
+## API
+
+`/api/v1` is bearer-only on every listener. Session cookies and proxy headers
+never authorize API requests. Locally issued `atr_` tokens and configured OIDC
+access tokens use a persisted hash, revocation, and usage gate. Token issue
+shows its secret once. API responses evolve additively within v1; generated
+[OpenAPI](../api/openapi.json) is the route and type reference. Every operation
+an operator can call directly (`operator` or `operator_send` authority) has its
+own typed route, and no other operation does. Operations that run only after
+approval are reached through the approval route
+(`POST /api/v1/approvals/{id}/approve`).
+
+Commands use typed outcomes and durable command receipts. Supply an
+`Idempotency-Key` to replay a matching completed request instead of executing
+it again. Keys are principal-scoped and limited to 255 characters. A changed
+request under the same key is refused; running and interrupted requests are
+not silently re-executed. Some sensitive results are shown once and cannot be
+replayed. A command receipt is not proof that an external effect succeeded.
+
+Mail commands with unknown, partial, or failed effects return 409 and effect
+ids. Busy no-effect refusals return 503 with `Retry-After` and release the key
+so the same request can be tried later. A disabled owner at admission returns
+409 `module_disabled` without admitting a command. Backlog is POST because it
+creates proposals. Rule preview and unpaid replay are read-only POST routes
+without command/idempotency admission; paid replay is not offered by the API.
+
+Reads expose ETags where supported. The nine mail resource projections for
+message, rules, rules export, accounts, loops, commitments, packages, birthdays,
+and single draft track the actual served payload. Draft PATCH and send accept
+that draft's ETag in `If-Match`; revision compare-and-swap still protects the
+write. Knowledge PATCH does not support `If-Match`.
+
+Paged resources use opaque cursors, normally 50 rows by default and at most
+100. Cursors bind the operation, filters, and path parameters and are at most
+2048 characters. Do not reuse a cursor for another resource or filter. Some
+legacy thread/transcript/inbox cursors are supported; old cursors missing a
+path scope are refused as `bad_cursor`.
+
+The assistant event stream is durable and reconnectable with `Last-Event-ID`.
+It is not a separate run. It sends a heartbeat every 15 seconds. At most 4
+streams per credential and 16 per server are open at once; more get 429.
+Finished streams are kept for 30 days. Multipart file requests share four upload slots;
+excess requests get 429 with `Retry-After: 1`. A bounded 1 MiB scan determines
+whether a multipart request has files; malformed or incomplete bodies count
+as file-bearing. Multipart reads have a 30-second idle deadline. Uploads also
+reserve a 256 MiB free-space floor plus a bounded envelope; insufficient space
+returns 503. Keyed multipart requests fingerprint parsed fields and bytes,
+not the MIME boundary.
+
+## Media and the standalone agent
+
+Media is at `/apps/media`. The application reads the library and files media
+only through `service/media-agent`. With the local NixOS agent, the main
+application and `atrium-run` cannot access the media parent. Only the agent has
+that filesystem access, the library group, and ffmpeg/ffprobe.
+
+The agent control listener checks bearer and Host. The module binds control to
+loopback. Its optional TLS VPN listener instead checks peer CIDRs at accept
+and exact Host, has no bearer, and serves only GET/HEAD under
+`/library/movies/` and `/library/tv/`. VPN URLs come from
+`media.media_vpn_base_url`; `media_root`, `media_movies_url`, and `media_tv_url`
+are refused inputs.
+
+- Only media-tagged torrents are changed. Adds take one magnet or one torrent
+  file, not both. A v1 info hash is required; v2-only torrents are refused, and
+  hybrid torrents with v1 pieces are accepted.
+- Filing prepares without writing. Durable receipt-keyed steps then hardlink
+  downloads or rename imports without overwriting destinations or copying
+  across devices. A repeated receipt returns its prior result, including
+  partial, failed, or unknown outcomes. Crash recovery inspects; it never
+  resumes unfinished steps.
+- Keep agent state permanently as recovery evidence, not cache. Receipts have
+  no retention bound, so disk use and startup memory grow with filings. Invalid or
+  inconsistent receipts are quarantined and answer unknown. Undo derives
+  guarded inverse steps from the forward receipt. Import cleanup is
+  non-undoable.
+- qBittorrent content paths must fit `media_download_path_prefix`. Only a
+  confirmed successful filing tags the torrent filed. A lost agent answer
+  leaves an unknown effect, blocks repetition, and requires inspection.
+- Sources must already belong to the configured library group and be
+  group-readable, with directories group-writable; otherwise the agent refuses
+  them and does not change download inodes.
+- A failed catalog refresh retains the old snapshot marked stale. Until one
+  exists, library reads return 503 rather than an empty library. Thumbnails
+  are generated and cached by the agent. A video ffmpeg cannot read is
+  remembered for seven days and answers 404; an agent-side failure answers 503
+  and is retried on the next request.
+- Signed public file links expire and still check Host. Content supports
+  GET/HEAD and ranges. Relays do not recompress media; a broken stream aborts
+  the connection instead of presenting truncated content as complete. API
+  artwork requires `season` only for season art and validates it as nonnegative.
+
+The agent exits 78 for permanent configuration errors and 1 for transient start
+failures. SIGTERM/SIGINT drain it. SIGHUP drains and exits nonzero; it is not a
+reload. The NixOS agent unit restarts failures after 5 seconds except exit 78.
+
+## Importing an existing database
+
+v2 to v3 is an explicit `atrium db import-v2 SOURCE` into a fresh destination,
+not an in-place schema upgrade. It accepts v2 schema 11 and refuses a non-empty
+destination, the same source/destination, an embedding rebuild, and in-flight
+writes. `--source-config` and `--source-env` account for source pins. The source
+is not modified.
+
+Mail and learned state, durable operator records, threads/messages/files,
+proposals and converted write evidence, active message vectors, jobs without
+leases, media state, and eligible settings/secrets carry. Usage carries only
+from the calendar month of the import; keep the v2 database for older usage
+history. Run/tool/job history, sessions, phone links, notification delivery
+history, mirrors, old memory projections, and transient health/ops data do not.
+Full-text and memory indexes rebuild, Notion re-syncs, built-in subagents are
+reseeded, and mail starts in shadow. The importer reports host requirements
+separately and records one import operation audit row.

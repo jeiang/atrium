@@ -54,15 +54,24 @@ type discoveryDoc struct {
 	ScopesSupported       []string `json:"scopes_supported"`
 }
 
-func (s *Service) client() *http.Client {
-	return &http.Client{
-		Timeout:       httpTimeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+func (s *Service) httpClient(ctx context.Context) (*http.Client, error) {
+	lease, err := s.lease(ctx)
+	if err != nil {
+		return nil, err
 	}
+	defer lease.Close()
+	hc, err := lease.HTTP(cfgIssuer)
+	if err != nil {
+		return nil, err
+	}
+	hc.CheckRedirect = noRedirect
+	return hc, nil
 }
 
-func (s *Service) fetch(ctx context.Context, req *http.Request) (int, []byte, error) {
-	resp, err := s.hc.Do(req.WithContext(ctx))
+func fetch(ctx context.Context, hc *http.Client, req *http.Request) (int, []byte, error) {
+	resp, err := hc.Do(req.WithContext(ctx))
 	if err != nil {
 		return 0, nil, fmt.Errorf("%w: %v", ErrProvider, unwrapURL(err))
 	}
@@ -72,6 +81,14 @@ func (s *Service) fetch(ctx context.Context, req *http.Request) (int, []byte, er
 		return resp.StatusCode, nil, fmt.Errorf("%w: unreadable or oversized reply", ErrProvider)
 	}
 	return resp.StatusCode, body, nil
+}
+
+func (s *Service) fetch(ctx context.Context, req *http.Request) (int, []byte, error) {
+	hc, err := s.httpClient(ctx)
+	if err != nil {
+		return 0, nil, fmt.Errorf("%w: %v", ErrProvider, err)
+	}
+	return fetch(ctx, hc, req)
 }
 
 func unwrapURL(err error) error {
@@ -108,12 +125,20 @@ func (p *provider) sameEndpoints(o *provider) bool {
 }
 
 func (s *Service) discover(ctx context.Context, issuer string) (*provider, error) {
+	hc, err := s.httpClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrProvider, err)
+	}
+	return discoverDoc(ctx, hc, issuer, s.now())
+}
+
+func discoverDoc(ctx context.Context, hc *http.Client, issuer string, now time.Time) (*provider, error) {
 	req, err := http.NewRequest(http.MethodGet, strings.TrimSuffix(issuer, "/")+"/.well-known/openid-configuration", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrProvider, err)
 	}
 	req.Header.Set("Accept", "application/json")
-	status, body, err := s.fetch(ctx, req)
+	status, body, err := fetch(ctx, hc, req)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +170,7 @@ func (s *Service) discover(ctx context.Context, issuer string) (*provider, error
 	return &provider{
 		issuer: issuer, authURL: doc.AuthorizationEndpoint, tokenURL: doc.TokenEndpoint, jwksURI: doc.JWKSURI,
 		userinfoURL: doc.UserinfoEndpoint, basicAuth: basic, offline: slices.Contains(doc.ScopesSupported, "offline_access"),
-		fetched: s.now(),
+		fetched: now,
 	}, nil
 }
 
@@ -164,31 +189,42 @@ func (s *Service) keysFor(ctx context.Context, p *provider, t rawToken) ([]named
 	if !stale && !missing {
 		return p.keys, nil
 	}
-	req, err := http.NewRequest(http.MethodGet, p.jwksURI, nil)
+	hc, err := s.httpClient(ctx)
+	if err != nil {
+		err = fmt.Errorf("%w: %v", ErrProvider, err)
+	} else {
+		var keys []namedKey
+		keys, err = fetchJWKS(ctx, hc, p.jwksURI)
+		if err == nil {
+			p.keys, p.keysFetched = keys, s.now()
+			return p.keys, nil
+		}
+	}
+	if p.keys != nil && !stale {
+		p.keysFetched = s.now()
+		return p.keys, nil
+	}
+	return nil, err
+}
+
+func fetchJWKS(ctx context.Context, hc *http.Client, uri string) ([]namedKey, error) {
+	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrProvider, err)
 	}
 	req.Header.Set("Accept", "application/json")
-	status, body, err := s.fetch(ctx, req)
-	if err == nil && status != http.StatusOK {
-		err = fmt.Errorf("%w: jwks answered %d", ErrProvider, status)
-	}
-	var keys []namedKey
-	if err == nil {
-		keys, err = parseJWKS(body)
-		if err != nil {
-			err = fmt.Errorf("%w: %w", ErrProvider, err)
-		}
-	}
+	status, body, err := fetch(ctx, hc, req)
 	if err != nil {
-		if p.keys != nil && !stale {
-			p.keysFetched = s.now()
-			return p.keys, nil
-		}
 		return nil, err
 	}
-	p.keys, p.keysFetched = keys, s.now()
-	return p.keys, nil
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("%w: jwks answered %d", ErrProvider, status)
+	}
+	keys, err := parseJWKS(body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrProvider, err)
+	}
+	return keys, nil
 }
 
 func (s *Service) verifyIDToken(ctx context.Context, p *provider, cfg Config, raw string, rules claimRules) (map[string]any, error) {

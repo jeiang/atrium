@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -26,10 +27,11 @@ const (
 )
 
 var (
-	ErrInvalid = errors.New("action link is not valid")
-	ErrExpired = errors.New("action link expired")
-	ErrUsed    = errors.New("action link was already used")
-	ErrRate    = errors.New("too many action links in the last hour")
+	ErrUnavailable = errors.New("action link unavailable")
+	ErrInvalid     = errors.New("action link is not valid")
+	ErrExpired     = errors.New("action link expired")
+	ErrUsed        = errors.New("action link was already used")
+	ErrRate        = errors.New("too many action links in the last hour")
 )
 
 type Claims struct {
@@ -40,7 +42,12 @@ type Claims struct {
 	Expires    float64 `json:"e"`
 }
 
-func Key(ctx context.Context, q db.Querier) ([]byte, error) {
+func Material(ctx context.Context, q db.Querier) ([]byte, error) {
+	if raw, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
+		return nil, err
+	} else if ok {
+		return raw, nil
+	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	raw, err := store.Value(ctx, secrets.ActionLinkKey)
 	if err != nil {
@@ -52,10 +59,23 @@ func Key(ctx context.Context, q db.Querier) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return hex.DecodeString(raw)
+	return []byte(raw), nil
+}
+
+func Key(ctx context.Context, q db.Querier) ([]byte, error) {
+	raw, err := Material(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return hex.DecodeString(string(raw))
 }
 
 func Rotate(ctx context.Context, q db.Querier) error {
+	if _, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
+		return err
+	} else if ok {
+		return revoke(ctx, q)
+	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	var buf [32]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -63,6 +83,14 @@ func Rotate(ctx context.Context, q db.Querier) error {
 	}
 	ctx = audit.With(ctx, "phone", audit.UI)
 	if err := store.Set(ctx, secrets.ActionLinkKey, hex.EncodeToString(buf[:]), "phone"); err != nil {
+		return err
+	}
+	return revoke(ctx, q)
+}
+
+func revoke(ctx context.Context, q db.Querier) error {
+	now := float64(time.Now().UnixMicro()) / 1e6
+	if _, err := q.ExecContext(ctx, "UPDATE action_links SET used_ts = ? WHERE used_ts IS NOT NULL", now); err != nil {
 		return err
 	}
 	_, err := q.ExecContext(ctx, "DELETE FROM action_links WHERE used_ts IS NULL")
@@ -157,6 +185,22 @@ func Redeem(ctx context.Context, q db.Querier, token string, now float64, apply 
 		return ErrUsed
 	}
 	return apply(ctx, claims)
+}
+
+func Release(ctx context.Context, q db.Querier, nonce string, used float64) error {
+	_, err := q.ExecContext(ctx, "UPDATE action_links SET used_ts = NULL WHERE nonce = ? AND used_ts = ?", nonce, used)
+	return err
+}
+
+func CheckRedemption(ctx context.Context, q db.Querier, nonce string, used float64) error {
+	var current bool
+	if err := q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM action_links WHERE nonce = ? AND used_ts = ?)", nonce, used).Scan(&current); err != nil {
+		return err
+	}
+	if !current {
+		return ErrUsed
+	}
+	return nil
 }
 
 func sign(key []byte, claims Claims) (string, error) {

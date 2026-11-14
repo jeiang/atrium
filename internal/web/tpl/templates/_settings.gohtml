@@ -5,7 +5,11 @@
 {{end}}
 
 {{define "settings_groups"}}{{$csrf := .CSRF}}{{range .SettingGroups}}
-<form method="post" action="/settings/groups/{{.Module}}/{{.Name}}" class="set-group" data-group="{{.Module}}.{{.Name}}">
+{{template "settings_group" (dict "Group" . "CSRF" $csrf)}}
+{{end}}{{end}}
+
+{{define "settings_group"}}{{$csrf := .CSRF}}{{with .Group}}
+<form method="post" action="/settings/groups/{{.Module}}/{{.Name}}" hx-post="/settings/groups/{{.Module}}/{{.Name}}" hx-target="this" hx-swap="outerHTML" class="set-group" data-group="{{.Module}}.{{.Name}}">
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   <h2>{{.Title}}</h2>
   {{with .Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
@@ -17,9 +21,10 @@
 {{define "settings_module_head"}}{{with .SettingModule}}
 <header class="set-head" data-module="{{.Name}}" data-enabled="{{.On}}">
   <h2>{{.Title}}</h2>
-  <span class="badge" data-variant="outline"><span class="size-1.5 rounded-full {{if .Reason}}bg-warning{{else if .On}}bg-success{{else}}bg-ink-3{{end}}"></span>{{if .Reason}}Needs settings{{else if .On}}On{{else}}Off{{end}}</span>
-  {{if ne .On .Running}}<span class="text-xs text-ink-3" data-restart>Restart atrium to apply</span>{{end}}
+  <span class="badge" data-variant="outline"><span class="size-1.5 rounded-full {{if or .Error .Reason}}bg-warning{{else if .On}}bg-success{{else}}bg-ink-3{{end}}"></span>{{if .Error}}Unavailable{{else if .Reason}}Needs settings{{else if .On}}On{{else}}Off{{end}}</span>
+  {{if and (ne .On .Running) (not .Error)}}<span class="text-xs text-ink-3" data-restart>Restart atrium to apply</span>{{end}}
   {{with .Pinned}}<span class="set-pinned ms-auto" data-pinned>{{icon "lock"}}{{.}}</span>{{end}}
+  {{with .Error}}<p class="basis-full text-sm text-ink-2" data-unavailable>{{.}}</p>{{end}}
   {{with .Reason}}<p class="basis-full text-sm text-ink-2">{{.}}</p>{{end}}
 </header>
 {{end}}{{end}}

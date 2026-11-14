@@ -19,10 +19,7 @@ func (p *pages) render(w http.ResponseWriter, r *http.Request, status int, frame
 }
 
 func (p *pages) renderFragment(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
-	f, err := p.deps.Render.Frame(r, "", data)
-	check(err)
-	f.Toast = toast
-	check(p.deps.Render.Fragment(w, r, status, name, f))
+	check(p.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: toast}))
 }
 
 func navigate(w http.ResponseWriter, r *http.Request, to string) {

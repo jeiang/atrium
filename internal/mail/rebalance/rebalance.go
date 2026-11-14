@@ -3,6 +3,7 @@ package rebalance
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
 	"encoding/json"
@@ -10,16 +11,15 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -47,25 +47,21 @@ type params struct {
 }
 
 func readParams(ctx context.Context, q db.Querier) (params, error) {
-	r := endpoint.Read(ctx, q)
 	p := params{
-		minFolder:          r.Int(mail.KeyRebalanceMinFolder),
-		minGroup:           r.Int(mail.KeyRebalanceMinGroup),
-		minShare:           r.Float(mail.KeyRebalanceMinShare),
-		mergeMinGroup:      r.Int(mail.KeyRebalanceMergeMinGroup),
-		mergeMinOthers:     r.Int(mail.KeyRebalanceMergeMinOther),
-		mergeMinShare:      r.Float(mail.KeyRebalanceMergeMinShare),
-		runsRequired:       r.Int(mail.KeyRebalanceRunsRequired),
-		runGapSeconds:      r.Int(mail.KeyRebalanceRunGapSeconds),
-		clusterKs:          r.Ints(mail.KeyRebalanceClusterKs),
-		clusterIterations:  r.Int(mail.KeyRebalanceClusterIters),
-		clusterMargin:      r.Float(mail.KeyRebalanceClusterMargin),
-		clusterMinEmbedded: r.Float(mail.KeyRebalanceClusterMinEmb),
-		topTerms:           r.Int(mail.KeyRebalanceTopTerms),
-		nameMax:            r.Int(mail.KeyRebalanceNameMaxChars),
-	}
-	if err := r.Err(); err != nil {
-		return params{}, err
+		minFolder:          mail.TuningRebalanceMinFolder,
+		minGroup:           mail.TuningRebalanceMinGroup,
+		minShare:           mail.TuningRebalanceMinShare,
+		mergeMinGroup:      mail.TuningRebalanceMergeMinGroup,
+		mergeMinOthers:     mail.TuningRebalanceMergeMinOthers,
+		mergeMinShare:      mail.TuningRebalanceMergeMinShare,
+		runsRequired:       mail.TuningRebalanceRunsRequired,
+		runGapSeconds:      mail.TuningRebalanceRunGapSeconds,
+		clusterKs:          mail.RebalanceClusterKs(),
+		clusterIterations:  mail.TuningRebalanceClusterIterations,
+		clusterMargin:      mail.TuningRebalanceClusterMargin,
+		clusterMinEmbedded: mail.TuningRebalanceClusterMinEmbedded,
+		topTerms:           mail.TuningRebalanceTopTerms,
+		nameMax:            mail.TuningRebalanceNameMaxChars,
 	}
 	var err error
 	p.limits, err = scanutil.ReadLimits(ctx, q)
@@ -250,32 +246,16 @@ func unitVectors(ctx context.Context, q proposals.Querier, ids []int64) (map[int
 	}
 	found := map[int64][]float32{}
 	for _, chunk := range mailops.Chunks(ids, 500) {
-		args := make([]any, len(chunk))
-		for i, id := range chunk {
-			args[i] = id
-		}
-		rows, err := q.QueryContext(ctx, "SELECT rowid, embedding FROM "+idx.MessageTable()+" WHERE rowid IN (?"+strings.Repeat(",?", len(chunk)-1)+")", args...)
+		vectors, err := embed.MessageVectors(ctx, q, idx, chunk)
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var id int64
-			var blob []byte
-			if err := rows.Scan(&id, &blob); err != nil {
-				_ = rows.Close()
-				return nil, err
-			}
+		for id, blob := range vectors {
 			v := make([]float32, len(blob)/4)
 			for i := range v {
 				v[i] = math.Float32frombits(binary.LittleEndian.Uint32(blob[4*i:]))
 			}
 			found[id] = v
-		}
-		if err := rows.Close(); err != nil {
-			return nil, err
-		}
-		if err := rows.Err(); err != nil {
-			return nil, err
 		}
 	}
 	return found, nil
@@ -602,18 +582,39 @@ func cleanName(value string, maxChars int) string {
 	return strings.TrimSpace(textx.Clip(strings.TrimSpace(name), maxChars))
 }
 
-type Namer func(ctx context.Context, folder string, domains, terms []string, maxChars int) (string, error)
+type Namer func(ctx context.Context, item classifier.Item, folder string, domains, terms []string, maxChars int) (string, error)
 
-func SuggestName(chatURL string) Namer {
-	return func(ctx context.Context, folder string, domains, terms []string, maxChars int) (string, error) {
+func clusterItem(account, folder string, ids []int64) classifier.Item {
+	sorted := slices.Sorted(slices.Values(ids))
+	parts := make([]string, len(sorted))
+	for i, id := range sorted {
+		parts[i] = strconv.FormatInt(id, 10)
+	}
+	return classifier.Item{Key: fmt.Sprintf("%s:%s:%x", account, folder, sha256.Sum256([]byte(strings.Join(parts, ","))))}
+}
+
+func budgetDeferred(err error) bool {
+	var deferred *classifier.Deferred
+	return errors.As(err, &deferred) && deferred.Reason == classifier.ReasonBudget
+}
+
+func SuggestName(c *classifier.Service) Namer {
+	return func(ctx context.Context, item classifier.Item, folder string, domains, terms []string, maxChars int) (string, error) {
 		prompt := fmt.Sprintf("Parent folder: %s\nTop sender domains: %s\nCommon subject words: %s", folder,
 			strings.Join(domains, ", "), strings.Join(terms, ", "))
+		schema, err := json.Marshal(nameSchema(maxChars))
+		if err != nil {
+			return "", err
+		}
 		name := ""
-		raw, err := llm.ChatJSON(ctx, chatURL, NameSystem, prompt, nameSchema(maxChars), 0)
-		var down *httpx.ServiceUnavailable
+		raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.FolderName, Item: item, System: NameSystem, User: prompt, Schema: schema})
+		var deferred *classifier.Deferred
+		var unanswered *classifier.Unanswered
 		switch {
-		case errors.As(err, &down) || errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) ||
-			errors.Is(err, httpx.ErrRange) || errors.Is(err, httpx.ErrShape):
+		case budgetDeferred(err):
+			return "", err
+		case errors.As(err, &deferred) || errors.As(err, &unanswered):
+			log.Warn(fmt.Sprintf("rebalance: no model name for %s, using the fallback name: %v", item.Key, err))
 		case err != nil:
 			return "", err
 		default:
@@ -702,7 +703,7 @@ func (p params) build(ctx context.Context, q proposals.Querier, byID map[int64]*
 	for _, g := range cand.Groups {
 		rows := groupRows(byID, g.IDs)
 		info := p.preview(rows, "")
-		short, err := namer(ctx, cand.Folder, info.Domains, info.Terms, p.nameMax)
+		short, err := namer(ctx, clusterItem(cand.Account, cand.Folder, g.IDs), cand.Folder, info.Domains, info.Terms, p.nameMax)
 		if err != nil {
 			return nil, err
 		}
@@ -832,6 +833,10 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 		_, ok, err := scanutil.Publish(ctx, d, ts, cand.Kind, &account, fp, func() (*scanutil.Draft, error) {
 			return p.build(ctx, d.Read, byID, cand, namer)
 		})
+		if budgetDeferred(err) {
+			log.Info(fmt.Sprintf("rebalance: naming deferred for %s %s: %v", cand.Account, cand.Folder, err))
+			continue
+		}
 		if err != nil {
 			return scanutil.Result{}, err
 		}

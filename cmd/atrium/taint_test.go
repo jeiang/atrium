@@ -16,14 +16,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -67,7 +63,7 @@ func assertOwn(t *testing.T, label string, names []string, offered bool) {
 func seedMail(t *testing.T, dir string) int64 {
 	t.Helper()
 	path := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	t.Cleanup(func() { _ = d.Close() })
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
@@ -91,7 +87,7 @@ func seedMail(t *testing.T, dir string) int64 {
 
 func latestThread(t *testing.T, dir string) int64 {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var id int64
 	if err := d.Read.QueryRow("SELECT MAX(id) FROM threads").Scan(&id); err != nil {
@@ -100,9 +96,8 @@ func latestThread(t *testing.T, dir string) int64 {
 	return id
 }
 
-func freshApp(f *fixture, mods []module.Module) *cli.App {
-	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), mods, imapclient.Opener, nil, quietLog)
+func freshApp(f *fixture) *cli.App {
+	return newAppWith(f.lookup, imapclient.Opener, nil, quietLog)
 }
 
 func warm(t *testing.T, api *modelLog) int {
@@ -137,14 +132,14 @@ func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
 	var out, errs lockedBuffer
-	if code := freshApp(f, nil).Run(context.Background(), []string{"agent", "run", "--thread", fmt.Sprint(thread), "--text", "and again"}, &out, &errs); code != cli.ExitOK {
+	if code := freshApp(f).Run(context.Background(), []string{"agent", "run", "--thread", fmt.Sprint(thread), "--text", "and again"}, &out, &errs); code != cli.ExitOK {
 		t.Fatalf("second process: %d %s", code, errs.String())
 	}
 	requests = api.Requests()
 	assertInternet(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), false)
 	assertOwn(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), true)
 
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -171,7 +166,7 @@ func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 
 func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	fakeOpenMeteo(t)
+	fakeOpenMeteo(t, dir)
 	start := warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "weather", map[string]any{})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
@@ -205,7 +200,7 @@ func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
 
 func threadMarkSet(t *testing.T, dir string, thread int64) int64 {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var marks int64
 	if err := d.Read.QueryRow("SELECT marks FROM threads WHERE id = ?", thread).Scan(&marks); err != nil {
@@ -216,7 +211,7 @@ func threadMarkSet(t *testing.T, dir string, thread int64) int64 {
 
 func threadTainted(t *testing.T, dir string, thread int64) bool {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var tainted bool
 	if err := d.Read.QueryRow("SELECT tainted_at IS NOT NULL FROM threads WHERE id = ?", thread).Scan(&tainted); err != nil {
@@ -251,7 +246,7 @@ func TestGrafanaResultTaintsTheThread(t *testing.T) {
 	}))
 	t.Cleanup(grafana.Close)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, grafana.URL))
 	start := warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("g1", "grafana_search_dashboards", map[string]any{"query": "atrium"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("listed")))
@@ -295,7 +290,7 @@ func replayedSignatures(t *testing.T, r anthropictest.Request) []string {
 
 func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	fakeOpenMeteo(t)
+	fakeOpenMeteo(t, dir)
 	start := warm(t, api)
 	message := seedMail(t, dir)
 	api.Push(
@@ -351,7 +346,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 		t.Fatal("thread not marked after the mail read")
 	}
 
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -360,7 +355,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
 		t.Fatalf("GET /chat = %d", status)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var seq int64
 	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
 		t.Fatalf("first message of thread %d: %v", thread, err)
@@ -391,7 +386,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 func TestEmptyMailSearchLeavesTheThreadUnmarked(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	path := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
 	}

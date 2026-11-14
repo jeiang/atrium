@@ -2,61 +2,39 @@ package run
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"net"
 	"os"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/runtime"
 )
 
 var watchLog = logx.Logger("atrium.watch")
 
 const (
-	idleWait       = config.IdleSeconds * time.Second
-	noIdleWait     = config.IdleSeconds * time.Second / 30
-	shutdownWindow = 30 * time.Second
+	idleWait   = config.IdleSeconds * time.Second
+	noIdleWait = config.IdleSeconds * time.Second / 30
+	watchBeat  = "watch"
 )
 
-type retryBackoff struct {
-	current, start, ceiling int
-}
-
-func newBackoff() *retryBackoff {
-	return &retryBackoff{start: config.BackoffStart, ceiling: config.BackoffMax}
-}
-
-func (b *retryBackoff) refresh(ctx context.Context, q db.Querier) error {
-	r := endpoint.Read(ctx, q)
-	start, ceiling := r.Int(mail.KeyBackoffStartSeconds), r.Int(mail.KeyBackoffMaxSeconds)
-	if err := r.Err(); err != nil {
-		return err
-	}
-	b.start, b.ceiling = start, ceiling
-	return nil
-}
-
-func (b *retryBackoff) next() int {
-	if b.current == 0 {
-		b.current = b.start
-	} else {
-		b.current = min(b.current*2, b.ceiling)
-	}
-	return b.current
+var watchBackoff = runtime.Backoff{
+	Initial: mail.TuningMailBackoffStartSeconds * time.Second,
+	Maximum: mail.TuningMailBackoffMaxSeconds * time.Second,
 }
 
 func ConnectionLost(err error) bool {
@@ -84,44 +62,44 @@ func ConnectionLost(err error) bool {
 }
 
 type Watcher struct {
-	Env   config.Env
-	Cfg   config.Config
-	Open  mail.OpenFunc
-	Pass  func(d *db.DB) *Pass
-	Sleep func(ctx context.Context, d time.Duration)
-
-	Notify *sdnotify.Notifier
-
-	mu    sync.Mutex
-	beats map[string]*sdnotify.Heartbeat
+	Env         config.Env
+	Cfg         config.Config
+	DB          *db.DB
+	Open        mail.OpenFunc
+	Classifiers Classifier
+	Sync        func(waitCtx, workCtx context.Context, pass *Pass, accounts []string) error
 }
 
-func (w *Watcher) heartbeat(account string) *sdnotify.Heartbeat {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.beats == nil {
-		w.beats = map[string]*sdnotify.Heartbeat{}
-	}
-	h := w.beats[account]
-	if h == nil {
-		h = sdnotify.NewHeartbeat()
-		w.beats[account] = h
-	}
-	return h
+func WatchServiceName(account string) string { return "mail-watch/" + account }
+
+func AccountRevision(ctx context.Context, account string) string {
+	spec, _ := config.From(ctx).Account(account)
+	user, password, _ := config.Credential(ctx, account)
+	sum := sha256.Sum256(fmt.Appendf(nil, "%+v\x00%s\x00%s", spec, user, password))
+	return hex.EncodeToString(sum[:])
 }
 
-func (w *Watcher) alive(maxAge time.Duration) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	for _, h := range w.beats {
-		if !h.Fresh(maxAge) {
-			return false
-		}
+func (w *Watcher) AccountService(account string) runtime.ServiceDefinition {
+	return runtime.ServiceDefinition{
+		Name:    WatchServiceName(account),
+		Backoff: watchBackoff,
+		Stall:   2 * idleWait,
+		Run: func(ctx context.Context, s *runtime.Services) error {
+			err := w.run(ctx, s, account)
+			if err == nil || ctx.Err() != nil {
+				return err
+			}
+			if ConnectionLost(err) {
+				watchLog.Warn(fmt.Sprintf("%s connection lost (%s), reconnecting", account, err))
+			} else {
+				watchLog.Error(account+" watch failed, retrying", logx.Err, err.Error())
+			}
+			return err
+		},
 	}
-	return true
 }
 
-func waiting(h *sdnotify.Heartbeat, fn func()) {
+func waiting(beat func(), fn func()) {
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -133,28 +111,18 @@ func waiting(h *sdnotify.Heartbeat, fn func()) {
 			case <-stop:
 				return
 			case <-t.C:
-				h.Beat()
+				beat()
 			}
 		}
 	}()
 	fn()
 	close(stop)
 	<-done
-	h.Beat()
-}
-
-func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
-	return Open(ctx, w.Env, w.Cfg, w.Open, nil)
+	beat()
 }
 
 func settleFor(ctx context.Context, q db.Querier) (time.Duration, error) {
-	r := endpoint.Read(ctx, q)
-	seconds := r.Int(mail.KeyIdleSettleSeconds)
-	return time.Duration(seconds) * time.Second, r.Err()
-}
-
-func (w *Watcher) sleep(ctx context.Context, d time.Duration) {
-	sleepCtx(ctx, d)
+	return time.Duration(mail.TuningMailIdleSettleSeconds) * time.Second, nil
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) {
@@ -166,9 +134,9 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 	}
 }
 
-func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, error) {
+func waitForChange(ctx context.Context, client mail.Client) (bool, error) {
 	if !client.HasCapability("IDLE") {
-		w.sleep(ctx, noIdleWait)
+		sleepCtx(ctx, noIdleWait)
 		return true, client.Noop(ctx)
 	}
 	if err := client.Select(ctx, config.Inbox); err != nil {
@@ -177,55 +145,32 @@ func (w *Watcher) waitForChange(ctx context.Context, client mail.Client) (bool, 
 	return client.IdleChanges(ctx, idleWait)
 }
 
-func (w *Watcher) Account(ctx context.Context, account string) {
-	wait := newBackoff()
-	h := w.heartbeat(account)
-	for ctx.Err() == nil {
-		h.Beat()
-		err := w.cycle(ctx, account, wait)
-		if err == nil || ctx.Err() != nil {
-			continue
-		}
-		backoff := wait.next()
-		reason := "watch failed"
-		if ConnectionLost(err) {
-			reason = "connection lost"
-			watchLog.Warn(fmt.Sprintf("%s connection lost (%s), reconnecting in %ds", account, err, backoff))
-		} else {
-			watchLog.Error(fmt.Sprintf("%s watch failed, retrying in %ds", account, backoff), logx.Err, err.Error())
-		}
-		w.Notify.Status(fmt.Sprintf("%s: reconnecting in %ds (%s)", account, backoff, reason))
-		waiting(h, func() { w.sleep(ctx, time.Duration(backoff)*time.Second) })
-	}
-}
-
-func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v", r)
-		}
-	}()
-	pass, closeDB, err := w.connect(ctx)
+func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) error {
+	beat := func() { s.Heartbeat(watchBeat) }
+	beat()
+	pass, err := Prepare(ctx, w.Env, w.DB, w.Cfg, w.Open, nil, w.Classifiers)
 	if err != nil {
 		return err
 	}
-	defer closeDB()
-	if err := wait.refresh(ctx, pass.DB.Read); err != nil {
+	locked := func() error {
+		work, release, err := s.Work(ctx)
+		if err != nil {
+			return err
+		}
+		defer release()
+		waiting(beat, func() { err = w.Sync(ctx, work, pass, []string{account}) })
 		return err
 	}
-	workCtx := context.WithoutCancel(ctx)
-	if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
+	if err := locked(); err != nil {
 		return err
 	}
-	w.Notify.Status("watching")
-	h := w.heartbeat(account)
-	return mailops.Session(ctx, pass.Open, pass.DB.Read, account, func(client mail.Client) error {
-		wait.current = 0
+	return mailops.ReadSession(ctx, pass.Open, pass.DB.Read, account, func(client mail.Client) error {
+		s.Healthy()
 		for ctx.Err() == nil {
-			h.Beat()
+			beat()
 			var changed bool
 			var err error
-			waiting(h, func() { changed, err = w.waitForChange(ctx, client) })
+			waiting(beat, func() { changed, err = waitForChange(ctx, client) })
 			if ctx.Err() != nil {
 				break
 			}
@@ -237,54 +182,15 @@ func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff)
 				if err != nil {
 					return err
 				}
-				waiting(h, func() { w.sleep(ctx, settle) })
+				waiting(beat, func() { sleepCtx(ctx, settle) })
 				if ctx.Err() != nil {
 					break
 				}
 			}
-			if err := pass.Locked(ctx, workCtx, []string{account}); err != nil {
+			if err := locked(); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
-}
-
-func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error {
-	accounts, err := SelectAccounts(ctx, requested)
-	if err != nil {
-		return err
-	}
-	notifier := sdnotify.New(func(name string) string { v, _ := env(name); return v })
-	w := &Watcher{Env: env, Cfg: cfg, Open: open, Notify: notifier}
-	_, release, err := w.connect(ctx)
-	if err != nil {
-		return err
-	}
-	release()
-	notifier.Ready()
-	notifier.Status("watching")
-	for _, account := range accounts {
-		w.heartbeat(account)
-	}
-	go notifier.RunWatchdog(ctx, func() bool { return w.alive(notifier.Interval() * 2) })
-	var wg sync.WaitGroup
-	for _, account := range accounts {
-		wg.Go(func() { w.Account(ctx, account) })
-	}
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-ctx.Done():
-		notifier.Stopping()
-		select {
-		case <-done:
-		case <-time.After(shutdownWindow):
-		}
-	}
-	return nil
 }

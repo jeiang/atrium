@@ -4,22 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"time"
 
-	"github.com/jeiang/atrium/internal/integrations/transport"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/weather"
 )
 
 var inputSchema = json.RawMessage(`{"type":"object","properties":{"place":{"type":"string"},"days":{"type":"integer"},"hours":{"type":"integer"}},"additionalProperties":false}`)
 
-func Tools() []tool.Tool {
+type Service func(*tool.Context) *asstapp.Service
+
+func Tools(svc Service) []tool.Tool {
 	return []tool.Tool{{
 		Name: "weather",
 		Description: "Current conditions and hourly/daily forecast for the configured location, or for a named place. " +
 			"Open-Meteo data; temperatures are Celsius, wind km/h and precipitation mm.",
 		InputSchema: inputSchema,
-		Handler:     handle,
+		Handler:     handle(svc),
 		Effect:      tool.Read,
 		Annotated:   true,
 		Channel:     tool.ChannelNone,
@@ -37,56 +37,24 @@ func channelOf(args tool.Args) tool.Channel {
 	return tool.ChannelNone
 }
 
-func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	found, err := weather.Load(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	place, _, err := tool.TextArg(args, "place", false)
-	if err != nil {
-		return nil, err
-	}
-	days, err := tool.BoundedInt(args, "days", int64(found.ForecastDays), 16, 1)
-	if err != nil {
-		return nil, err
-	}
-	hours, err := tool.BoundedInt(args, "hours", int64(found.HourlyHours), 48, 1)
-	if err != nil {
-		return nil, err
-	}
-	client, err := transport.For(ctx, tc.DB.Read, "open_meteo", time.Duration(found.Timeout)*time.Second)
-	if err != nil {
-		return nil, tool.Error("weather is unreachable: " + err.Error())
-	}
-	defer client.CloseIdleConnections()
-	provider := weather.NewOpenMeteo(client, found.ForecastURL, found.GeocodingURL)
-	location := weather.Location{Name: found.LocationName, Latitude: found.Latitude, Longitude: found.Longitude}
-	switch {
-	case place != "":
-		matches, err := provider.Geocode(ctx, place)
+func handle(svc Service) tool.Handler {
+	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+		place, _, err := tool.TextArg(args, "place", false)
 		if err != nil {
-			return nil, tool.Error(err.Error())
+			return nil, err
 		}
-		if len(matches) == 0 {
-			return nil, tool.Error("no place matches " + place)
-		}
-		location = matches[0]
-	case !found.HasLocation:
-		if found.LocationName == "" {
-			return nil, tool.NotConfigured("weather_latitude and weather_longitude are not set")
-		}
-		matches, err := provider.Geocode(ctx, found.LocationName)
+		days, err := tool.BoundedInt(args, "days", asstapp.WeatherForecastDays, 16, 1)
 		if err != nil {
-			return nil, tool.Error(err.Error())
+			return nil, err
 		}
-		if len(matches) == 0 {
-			return nil, tool.Error("no place matches " + found.LocationName)
+		hours, err := tool.BoundedInt(args, "hours", asstapp.WeatherHourlyHours, 48, 1)
+		if err != nil {
+			return nil, err
 		}
-		location = matches[0]
+		forecast, err := svc(tc).Weather(ctx, asstapp.WeatherInput{Place: place, Days: int(days), Hours: int(hours)})
+		if err != nil {
+			return nil, asstapp.ToolError(err)
+		}
+		return forecast.Data, nil
 	}
-	forecast, err := provider.Forecast(ctx, location, int(days), int(hours))
-	if err != nil {
-		return nil, tool.Error(err.Error())
-	}
-	return forecast, nil
 }

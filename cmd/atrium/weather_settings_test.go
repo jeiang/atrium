@@ -2,94 +2,70 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/weather"
 )
 
-func TestWeatherLocationSettingsSaveFromTheIntegrationsTab(t *testing.T) {
+func TestWeatherLocationSettingsSaveAndRefuseOutOfRangeValues(t *testing.T) {
 	t.Parallel()
-	base := startServe(t)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/integrations = %d", status)
-	}
-	for _, want := range []string{
-		`action="/settings/integrations/open_meteo/settings"`,
-		`name="weather_latitude"`,
-		`name="weather_longitude"`,
-		`name="weather_location_name"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("the integrations page lacks %q", want)
-		}
-	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/integrations/open_meteo/settings", url.Values{
-		"weather_latitude":      {"10.65"},
-		"weather_longitude":     {"-61.5"},
-		"weather_location_name": {"Port of Spain"},
-	})
-	if status != http.StatusOK {
-		t.Fatalf("POST the weather location = %d: %.300s", status, body)
-	}
-	for _, want := range []string{`value="10.65"`, `value="-61.5"`, `value="Port of Spain"`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the saved page lacks %q", want)
-		}
-	}
-	for key, want := range map[string]string{
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+
+	for key, value := range map[string]string{
 		weather.KeyLatitude:     "10.65",
 		weather.KeyLongitude:    "-61.5",
 		weather.KeyLocationName: "Port of Spain",
 	} {
+		if got := runSettings(t, "set", key, value); got.code != cli.ExitOK {
+			t.Fatalf("set %s: exit %d stderr %q", key, got.code, got.stderr)
+		}
 		row := runSettings(t, "get", key).row(t)
-		if row.Value == nil || *row.Value != want || row.Source == nil || *row.Source != "db" {
-			t.Errorf("%s = %+v, want %q from the database", key, row, want)
+		if row.Value == nil || *row.Value != value || row.Source == nil || *row.Source != "db" {
+			t.Errorf("%s = %+v, want %q from the database", key, row, value)
 		}
 	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/integrations/open_meteo/settings", url.Values{
-		"weather_latitude":  {"91"},
-		"weather_longitude": {"-61.5"},
-	})
-	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "weather_latitude must be between -90 and 90") {
-		t.Fatalf("out-of-range latitude = %d: %.300s", status, body)
+	if got := runSettings(t, "set", weather.KeyLatitude, "91"); got.code != cli.ExitUsage || !strings.Contains(got.stderr, "weather_latitude must be between -90 and 90") {
+		t.Fatalf("out-of-range latitude: exit %d stderr %q", got.code, got.stderr)
 	}
 	if row := runSettings(t, "get", weather.KeyLatitude).row(t); row.Value == nil || *row.Value != "10.65" {
 		t.Errorf("a refused latitude changed the stored value: %+v", row)
 	}
 }
 
-func TestPinnedWeatherLocationShowsReadOnly(t *testing.T) {
+func TestWeatherConnectionTestCoversForecastAndGeocoding(t *testing.T) {
 	t.Parallel()
-	setEnv(t, settingEnv(weather.KeyLatitude), "10.65")
-	base := startServe(t)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	fakeOpenMeteo(t, dir)
+	tested := runApp(t, "connections", "test", "service/weather")
+	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "ok") {
+		t.Fatalf("connections test service/weather: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
 	}
-	client := &http.Client{Jar: jar}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/integrations = %d", status)
+	if got := connectionState(t, dir, "service/weather"); got != "ok" {
+		t.Fatalf("weather connection state = %q", got)
 	}
-	if !strings.Contains(body, `id="weather_latitude" class="set-pinned" data-pinned`) {
-		t.Fatalf("the pinned latitude is not read-only: %.500s", body)
+}
+
+func TestWeatherConnectionTestReportsAFailedRequest(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, srv.URL+"/v1/forecast", srv.URL+"/v1/search"))
+	tested := runApp(t, "connections", "test", "service/weather")
+	if tested.code == cli.ExitOK || !strings.Contains(tested.stdout+tested.stderr, "failing") {
+		t.Fatalf("a failing weather endpoint reported success: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
 	}
-	if strings.Contains(body, `name="weather_latitude"`) {
-		t.Fatal("the pinned latitude is still editable")
-	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/integrations/open_meteo/settings", url.Values{
-		"weather_latitude": {"1"},
-	})
-	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "weather_latitude is pinned by") {
-		t.Fatalf("writing a pinned latitude = %d: %.300s", status, body)
+	if got := connectionState(t, dir, "service/weather"); got != "failing" {
+		t.Fatalf("weather connection state = %q, want failing", got)
 	}
 }

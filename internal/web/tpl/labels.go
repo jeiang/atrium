@@ -79,6 +79,9 @@ var labelSets = map[string][]pair{
 	},
 	"job_run_hint": {
 		{"skipped_budget", "The monthly budget was reached, so this run did not start."},
+		{"skipped_budget_partial", "A spending cap was reached after part of this run finished; the rest did not run."},
+		{"skipped_unconfigured", "A connection this job needs is not configured, so this run did not start."},
+		{"skipped_unconfigured_partial", "A connection this job needs is not configured; part of this run finished before it stopped."},
 		{"skipped_pause", "Live mode was paused, so this run did not start."},
 		{"skipped_module", "The module that owns this job is disabled, so this run did not start."},
 		{"missed_coalesced", "The run was due while atrium was down; missed runs were merged into one."},
@@ -104,6 +107,8 @@ var labelSets = map[string][]pair{
 
 var badgeSets = map[string]map[string]Badge{
 	"action": {
+		"intent":       {"outline", "Running"},
+		"done":         {"secondary", "Applied"},
 		"held":         {"outline", "Held"},
 		"applied":      {"secondary", "Applied"},
 		"failed":       {"destructive", "Failed"},
@@ -125,13 +130,14 @@ var badgeSets = map[string]map[string]Badge{
 		"failed":      {"destructive", "Failed"},
 	},
 	"job_run": {
-		"running":          {"outline", "Running"},
-		"ok":               {"secondary", "Completed"},
-		"error":            {"destructive", "Failed"},
-		"skipped_budget":   {"outline", "Skipped (budget)"},
-		"skipped_pause":    {"outline", "Skipped (paused)"},
-		"skipped_module":   {"outline", "Skipped (module off)"},
-		"missed_coalesced": {"secondary", "Ran late"},
+		"running":              {"outline", "Running"},
+		"ok":                   {"secondary", "Completed"},
+		"error":                {"destructive", "Failed"},
+		"skipped_budget":       {"outline", "Skipped (budget)"},
+		"skipped_unconfigured": {"outline", "Skipped (not configured)"},
+		"skipped_pause":        {"outline", "Skipped (paused)"},
+		"skipped_module":       {"outline", "Skipped (module off)"},
+		"missed_coalesced":     {"secondary", "Ran late"},
 	},
 	"subagent_status": {
 		"queued":      {"outline", "Queued"},

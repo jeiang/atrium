@@ -19,6 +19,10 @@ const (
 
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, staticPrefix) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		g := &gzipWriter{ResponseWriter: w, accept: strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")}
 		defer g.finish()
 		next.ServeHTTP(g, r)
@@ -61,7 +65,22 @@ func (g *gzipWriter) sendHeader() {
 
 func (g *gzipWriter) skip() bool {
 	h := g.Header()
-	return h.Get("Content-Encoding") != "" || h.Get("Content-Range") != "" || strings.HasPrefix(h.Get("Content-Type"), "text/event-stream")
+	if h.Get("Content-Encoding") != "" || h.Get("Content-Range") != "" || h.Get("Accept-Ranges") != "" {
+		return true
+	}
+	kind := h.Get("Content-Type")
+	if kind == "" {
+		return false
+	}
+	kind, _, _ = strings.Cut(kind, ";")
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	switch kind {
+	case "text/event-stream":
+		return true
+	case "application/json", "application/problem+json", "application/javascript", "application/manifest+json", "application/xml", "image/svg+xml":
+		return false
+	}
+	return !strings.HasPrefix(kind, "text/")
 }
 
 func (g *gzipWriter) startGzip() {

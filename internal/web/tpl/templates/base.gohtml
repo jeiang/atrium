@@ -9,9 +9,7 @@
   <div id="sidebar-backdrop" class="sb-backdrop" data-action="close-sidebar"></div>
   <main class="app-main">
     <div class="sticky top-0 z-30 bg-background">
-    {{if .Auth.NoAuth}}<div class="flex items-start gap-2 border-b border-warning/30 bg-warning/10 px-3 py-1.5 text-sm text-warning md:px-6">{{icon "circle-alert"}}<span>Authentication is disabled</span></div>{{end}}
     {{with .NotifyFailing}}<div class="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive md:px-6" data-notify-failing>{{icon "circle-alert"}}<span>Push failing: {{join ", " .}}. <a class="underline underline-offset-4" href="/settings/notifications">Check devices</a></span></div>{{end}}
-    {{with .IntegrationAlerts}}<div class="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive md:px-6" data-integration-alerts>{{icon "circle-alert"}}<span>Integrations: {{join ", " .}}. <a class="underline underline-offset-4" href="/settings/integrations">Check integrations</a></span></div>{{end}}
     <header class="topbar">
       <button id="nav-toggle" type="button" class="btn md:hidden" data-variant="ghost" data-size="icon-sm" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false" data-action="open-sidebar">{{icon "menu"}}</button>
       <h1>{{block "heading" .}}{{end}}</h1>
@@ -20,7 +18,7 @@
         <button id="palette-open" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Open command palette" aria-haspopup="dialog" aria-controls="palette" title="Search and commands (⌘K)" data-action="open-palette">{{icon "search"}}</button>
         {{block "header_actions" .}}{{end}}
         {{template "mode_badge" (dict "mode" .Mode "paused" .Paused)}}
-        {{if and (eq .Mode "live") (or .Auth.Admin (not .Paused))}}
+        {{if eq .Mode "live"}}
         <form method="post" action="/live/{{if .Paused}}resume{{else}}pause{{end}}">
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">
           <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon (ternary .Paused "zap" "lock")}}{{if .Paused}}Resume{{else}}Pause{{end}}</button>
@@ -101,7 +99,7 @@
   </nav>
   <div class="sb-foot">
     {{range .Footer}}<a href="{{.URL}}" class="sb-item" title="{{.Label}}"{{if .Current}} aria-current="page"{{end}}>{{icon .Icon}}<span class="sb-label">{{.Label}}</span></a>{{end}}
-    {{if .Auth.Admin}}{{with .SettingsURL}}<a href="{{.}}" class="sb-item" title="Settings"{{if eq $.Page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}<span class="sb-label">Settings</span></a>{{end}}{{end}}
+    {{with .SettingsURL}}<a href="{{.}}" class="sb-item" title="Settings"{{if eq $.Page "settings"}} aria-current="page"{{end}}>{{icon "settings"}}<span class="sb-label">Settings</span></a>{{end}}
     {{if .Auth.SignOut}}<form method="post" action="/logout">
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <button type="submit" class="sb-item w-full" title="Sign out" aria-label="Sign out">{{icon "log-out"}}<span class="sb-label text-start">Sign out</span></button>
@@ -143,8 +141,8 @@
         <div id="palette-h-pages" role="presentation" class="palette-head">Pages</div>
         {{range $i, $p := .Pages}}<div id="palette-page-{{$i}}" role="option" aria-selected="false" class="palette-option" data-palette-href="{{$p.URL}}">{{icon (or $p.Icon "arrow-right")}}<span class="truncate">{{$p.Label}}</span>{{with $p.Group}}<span class="palette-hint">{{.}}</span>{{end}}</div>
         {{end}}
-        {{if .Auth.Admin}}{{range $i, $p := .Settings}}<div id="palette-settings-{{$i}}" role="option" aria-selected="false" class="palette-option" data-palette-href="{{$p.URL}}">{{icon "settings"}}<span class="truncate">{{$p.Label}}</span><span class="palette-hint">Settings</span></div>
-        {{end}}{{end}}
+        {{range $i, $p := .Settings}}<div id="palette-settings-{{$i}}" role="option" aria-selected="false" class="palette-option" data-palette-href="{{$p.URL}}">{{icon "settings"}}<span class="truncate">{{$p.Label}}</span><span class="palette-hint">Settings</span></div>
+        {{end}}
       </div>
     </div>
     <p class="palette-empty" hidden data-palette-empty>No matches</p>
@@ -164,10 +162,10 @@
   <meta name="color-scheme" content="{{if eq .Theme "light"}}light{{else if eq .Theme "dark"}}dark{{else}}light dark{{end}}">
   <title>{{block "title" .}}{{end}} · atrium</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cstyle%3Erect%7Bfill:%231e1a16%7Dtext%7Bfill:%23fbfaf7%7D@media (prefers-color-scheme:dark)%7Brect%7Bfill:%23edebe7%7Dtext%7Bfill:%2313110f%7D%7D%3C/style%3E%3Crect width='32' height='32' rx='7'/%3E%3Ctext x='16' y='22.5' font-family='ui-monospace,monospace' font-size='19' font-weight='600' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
-  <link rel="manifest" href="/static/manifest.json" crossorigin="use-credentials">
+  <link rel="manifest" href="{{asset "manifest.json"}}" crossorigin="use-credentials">
   <meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
-  <link rel="preload" href="/static/fonts/inter-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/static/fonts/inter-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{asset "fonts/inter-400-normal.woff2"}}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{asset "fonts/inter-500-normal.woff2"}}" as="font" type="font/woff2" crossorigin>
   {{block "preload" .}}{{end}}
   <link rel="stylesheet" href="{{asset "app.css"}}">
   <script src="{{asset "htmx.min.js"}}" defer></script>

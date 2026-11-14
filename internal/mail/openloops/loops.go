@@ -419,11 +419,11 @@ func SnoozeDefault(ctx context.Context, q db.Querier) (int, error) {
 func Compute(ctx context.Context, d *db.DB, cacheDir string, now float64) (Counts, error) {
 	var counts Counts
 	r := endpoint.Read(ctx, d.Read)
-	window := r.Int(mail.KeyLoopsWindowDays)
+	window := mail.TuningOpenloopsWindowDays
 	limits := thresholds{
-		oweMaxAge:     r.Int(mail.KeyLoopsOweMaxAgeDays),
+		oweMaxAge:     mail.TuningOpenloopsOweMaxAgeDays,
 		waitingAfter:  r.Int(mail.KeyLoopsWaitingAfterDays),
-		waitingMaxAge: r.Int(mail.KeyLoopsWaitingMaxAgeDays),
+		waitingMaxAge: mail.TuningOpenloopsWaitingMaxAgeDays,
 	}
 	if err := r.Err(); err != nil {
 		return counts, err

@@ -1,13 +1,11 @@
 package pages
 
 import (
-	"encoding/base64"
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 
-	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 )
 
 const (
@@ -140,64 +138,46 @@ func dlSpeedText(n *int64) string {
 	return dlHumanSize(n) + "/s"
 }
 
-func torrentView(t media.Torrent) TorrentView {
+func torrentView(t mediaapp.QBitTorrent) TorrentView {
 	state := t.State
 	if state == "" {
 		state = "unknown"
 	}
-	label, ok := media.StateLabels[state]
+	label, ok := mediaapp.StateLabels[state]
 	if !ok {
 		label = state
 	}
 	kind := dlModePlain
-	if t.HasTag(media.TagMedia) {
+	if t.HasTag(mediaapp.TagMedia) {
 		kind = dlModeMedia
 	}
 	return TorrentView{
 		Hash: t.Hash, Name: t.Name, Kind: kind, Label: label, Size: dlHumanSize(t.Size),
 		Down: dlSpeedText(t.DLSpeed), Up: dlSpeedText(t.UpSpeed), ETA: dlHumanETA(t.ETA),
 		Percent: int64(math.Round(t.Progress * 100)),
-		Filed:   t.HasTag(media.TagFiled), Ignored: t.HasTag(media.TagIgnored),
+		Filed:   t.HasTag(mediaapp.TagFiled), Ignored: t.HasTag(mediaapp.TagIgnored),
 		Active: t.Active(),
 	}
 }
 
-func fileView(f media.TorrentFile) FileView {
+func fileView(f mediaapp.QBitTorrentFile) FileView {
 	return FileView{
-		Index: f.Index, Wanted: f.Priority != media.PrioritySkip, Name: f.Name,
+		Index: f.Index, Wanted: f.Priority != mediaapp.PrioritySkip, Name: f.Name,
 		SizeText: dlHumanSize(f.Size), Percent: int64(math.Round(f.Progress * 100)),
 	}
 }
 
-func queueView(v media.View) QueueView {
+func queueView(v mediaapp.View) QueueView {
 	files := make([]QueueFile, len(v.Files))
 	for i, f := range v.Files {
 		files[i] = QueueFile{Rel: f.Rel, Season: f.Season, Episode: f.Episode, Dest: f.Dest}
 	}
+	problem := v.Error
+	if problem == "" {
+		problem = v.Item.Error
+	}
 	return QueueView{
 		Item: QueueItem{ID: v.Item.ID, Name: v.Item.Name, Torrent: v.Item.Torrent}, Kind: v.Kind, Title: v.Title,
-		Year: v.Year, Files: files, MovieFile: v.MovieFile, MovieDest: v.MovieDest, Error: v.Error,
+		Year: v.Year, Files: files, MovieFile: v.MovieFile, MovieDest: v.MovieDest, Error: problem,
 	}
 }
-
-func dlDecodeTorrent(b64 string, limit int) (data []byte, present bool, err error) {
-	b64 = strings.Join(strings.Fields(b64), "")
-	if b64 == "" {
-		return nil, false, nil
-	}
-	n := len(b64)
-	if n > limit {
-		return nil, false, dlTorrentError("the torrent file is too large")
-	}
-	b64 = strings.NewReplacer("-", "+", "_", "/").Replace(b64)
-	b64 += strings.Repeat("=", (4-n%4)%4)
-	data, err = base64.StdEncoding.DecodeString(b64)
-	if err != nil {
-		return nil, false, dlTorrentError("the torrent data is not base64")
-	}
-	return data, true, nil
-}
-
-type dlTorrentError string
-
-func (e dlTorrentError) Error() string { return string(e) }

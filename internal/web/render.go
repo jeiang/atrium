@@ -33,7 +33,7 @@ func (rd *Renderer) OnFrame(fn FrameFunc) {
 
 func NewRenderer(extra tpl.Config, nav ...tpl.NavItem) (*Renderer, error) {
 	rd := &Renderer{nav: nav}
-	extra.AssetVersion = AssetVersion
+	extra.Assets = Assets
 	if extra.Globals == nil {
 		extra.Globals = map[string]any{}
 	}
@@ -63,7 +63,7 @@ func NewRenderer(extra tpl.Config, nav ...tpl.NavItem) (*Renderer, error) {
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {
 	auth := tpl.AuthView{Settings: rd.oidcOn.Load()}
 	if who, ok := IdentityOf(r.Context()); ok {
-		auth.Admin, auth.SignOut, auth.NoAuth = who.Admin, who.Source == SourceOIDC, who.NoAuth
+		auth.SignOut = who.Source == SourceOIDC
 	}
 	nav := rd.navFor(page)
 	f := &tpl.Frame{
@@ -217,7 +217,12 @@ func (rd *Renderer) Page(w http.ResponseWriter, r *http.Request, status int, nam
 	return write(w, status, &b)
 }
 
-func (rd *Renderer) Fragment(w http.ResponseWriter, r *http.Request, status int, name string, f *tpl.Frame) error {
+func (rd *Renderer) Fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any) error {
+	f := tpl.Fragment{Data: data}
+	if supplied, ok := data.(tpl.Fragment); ok {
+		f = supplied
+	}
+	f.CSRF = CSRFToken(r.Context())
 	var b bytes.Buffer
 	if err := rd.engine.Fragment(&b, name, f); err != nil {
 		return err
@@ -233,18 +238,20 @@ func write(w http.ResponseWriter, status int, b *bytes.Buffer) error {
 }
 
 func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
-	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path, AdminOnly: adminOnly(r.Context())}
-	f, err := rd.Frame(r, "", view)
-	if err == nil && !IsPartial(r) {
-		err = rd.Page(w, r, status, "error.gohtml", f)
-	} else if err == nil {
-		switch {
-		case status == http.StatusUnprocessableEntity:
+	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path}
+	var err error
+	if IsPartial(r) {
+		f := tpl.Fragment{Data: view}
+		if status == http.StatusUnprocessableEntity {
 			f.Toast = &tpl.Toast{Category: "error", Title: "Filter not understood", Description: problem}
-		case view.AdminOnly:
-			f.Toast = &tpl.Toast{Category: "error", Title: "Admins only"}
 		}
 		err = rd.Fragment(w, r, status, "_error.gohtml", f)
+	} else {
+		var f *tpl.Frame
+		f, err = rd.Frame(r, "", view)
+		if err == nil {
+			err = rd.Page(w, r, status, "error.gohtml", f)
+		}
 	}
 	if err != nil {
 		log.Error("render error page failed", "err", err.Error())

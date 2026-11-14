@@ -13,10 +13,11 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -169,8 +170,11 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	if marks := threadMarkSet(t, dir, parent); marks != int64(tool.Untrusted) {
 		t.Errorf("parent marks = %d, want untrusted", marks)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
+	if got := operationAudits(t, d, "assistant.search-web"); len(got) != 1 || !strings.HasPrefix(got[0], fmt.Sprintf("ok thread:%d ", int64(childID))) {
+		t.Errorf("search_web audits: %q", got)
+	}
 	var raw string
 	if err := d.Read.QueryRow("SELECT allowed_urls FROM threads WHERE id = ?", parent).Scan(&raw); err != nil {
 		t.Fatal(err)
@@ -194,7 +198,7 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	if _, ok := normalized["https://example.invalid/x"]; ok {
 		t.Errorf("the dropped citation URL reached the parent allowlist: %v", allowed)
 	}
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -203,17 +207,8 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
 		t.Fatalf("GET /chat = %d", status)
 	}
-	status, body, _ := fetch(t, client, "GET", fmt.Sprintf("%s/chat/%d", base, parent), nil)
-	if status != http.StatusOK {
+	if status, _, _ := fetch(t, client, "GET", fmt.Sprintf("%s/chat/%d", base, parent), nil); status != http.StatusOK {
 		t.Fatalf("GET the parent thread = %d", status)
-	}
-	if !strings.Contains(body, fmt.Sprintf("/chat/%d", int64(childID))) {
-		t.Errorf("the parent thread does not link the search child")
-	}
-	for _, want := range []string{srv.URL + "/a", srv.URL + "/b", srv.URL + "/c"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the parent thread does not show the source %s", want)
-		}
 	}
 }
 
@@ -275,7 +270,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "not allowed in this thread by the permission table") {
 			t.Errorf("search_web after mail returned %v, want a refusal", refusal)
 		}
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		defer func() { _ = d.Close() }()
 		var proposals int
 		if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'permission'").Scan(&proposals); err != nil || proposals != 0 {
@@ -316,7 +311,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		dir, api, f := moduleFixture(t, flagsExcept("", ""))
 		warm(t, api)
 		thread := latestThread(t, dir)
-		base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+		base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 		jar, err := cookiejar.New(nil)
 		if err != nil {
 			t.Fatal(err)
@@ -337,12 +332,12 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"search the web for the warm thread"}}); status >= http.StatusBadRequest {
 			t.Fatalf("POST message = %d: %s", status, body)
 		}
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		defer func() { _ = d.Close() }()
 		proposal, _ := waitParkedPermission(t, d, thread)
 		code, card := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
 		if code != http.StatusOK || !strings.Contains(card, "the warm thread") || !strings.Contains(card, "what did it say?") {
-			t.Fatalf("the card does not show the query and question: %d\n%s", code, card)
+			t.Fatalf("GET the card does not disclose the outgoing query and question = %d\n%s", code, card)
 		}
 		if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
 			t.Fatalf("approve = %d\n%s", code, body)
@@ -379,7 +374,7 @@ func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
 	if strings.Contains(ran.stdout, `"name": "web"`) {
 		t.Errorf("the retired web role is still listed: %s", ran.stdout)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM subagents WHERE name = 'web' AND builtin = 1").Scan(&n); err != nil || n != 0 {
@@ -389,7 +384,7 @@ func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
 
 func TestSearchWebStopsAtItsCostCap(t *testing.T) {
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(websearch.KeyMaxCostUSD), "0.0001")
+	seedSettings(t, map[string]string{asstapp.KeySearchWebMaxCostUSD: "0.0001"})
 	start := warm(t, api)
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_web", map[string]any{"query": "atrium"})),

@@ -15,7 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
+	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -27,11 +27,14 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -54,34 +57,60 @@ type NotInterrupted int64
 func (e NotInterrupted) Error() string { return fmt.Sprintf("run %d is not interrupted", int64(e)) }
 
 type Service struct {
-	DB     *db.DB
-	Cfg    config.Config
-	Env    config.Env
-	Runner *loop.Runner
-	Client *anthropic.Client
-	Now    func() float64
+	DB        *db.DB
+	Cfg       config.Config
+	Env       config.Env
+	Runner    *loop.Runner
+	Client    *anthropic.Client
+	Now       func() float64
+	Inference *inference.Service
 
-	base   context.Context
-	mu     *sync.Mutex
-	wg     *sync.WaitGroup
-	closed bool
+	base     context.Context
+	cancel   context.CancelFunc
+	mu       *sync.Mutex
+	wg       *sync.WaitGroup
+	stop     chan struct{}
+	stopOnce *sync.Once
+	closed   bool
 }
 
 var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
-	return &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
+	base, cancel := context.WithCancel(ctx)
+	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: base, cancel: cancel, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}, stop: make(chan struct{}), stopOnce: &sync.Once{}}
+	s.Inference = inference.New(d, func() float64 { return s.now() }, scopes{})
+	return s
 }
+
+func NewInference(d *db.DB, now func() float64) *inference.Service {
+	return inference.New(d, now, scopes{})
+}
+
+var ErrTransport = errors.New("the Anthropic connection transport cannot be built")
 
 func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) {
 	if s.Client != nil {
 		return s.Client, nil
 	}
-	key, err := secrets.Credential(ctx, s.DB.Read, secrets.AnthropicAPIKey)
+	lease, err := connections.OpenRead(ctx, s.DB.Read, config.From(ctx).Host(), connections.ID(anthropicconn.Kind))
+	var unknown connections.UnknownID
+	if errors.As(err, &unknown) {
+		return nil, config.NotConfigured("the Anthropic connection is not configured")
+	}
 	if err != nil {
 		return nil, err
 	}
-	return anthropic.New(strings.TrimSpace(key), s.Env)
+	defer lease.Close()
+	key, err := lease.Credential("api_key")
+	if err != nil {
+		return nil, config.NotConfigured("the Anthropic connection has no API key")
+	}
+	client, err := lease.Stream("url", anthropic.ConnectTimeout, anthropic.ResponseHeaderTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrTransport, err)
+	}
+	return anthropic.New(strings.TrimSpace(key), anthropicconn.Env(s.Env, lease), anthropic.HTTPClient(client))
 }
 
 const catalogCheckTimeout = 30 * time.Second
@@ -107,11 +136,39 @@ func (s *Service) CheckCatalog(ctx context.Context) {
 	}
 }
 
-func (s *Service) Close() {
+func (s *Service) StopAdmission() {
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
+}
+
+func (s *Service) Interrupt() {
+	s.StopAdmission()
+	s.stopOnce.Do(func() { close(s.stop) })
+}
+
+func (s *Service) Close() {
+	s.StopAdmission()
 	s.wg.Wait()
+}
+
+func (s *Service) Drain(ctx context.Context) error {
+	s.StopAdmission()
+	joined := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(joined)
+	}()
+	select {
+	case <-joined:
+		return nil
+	case <-ctx.Done():
+	}
+	if s.cancel != nil {
+		s.cancel()
+	}
+	<-joined
+	return fmt.Errorf("service: canceled running work at the drain deadline: %w", context.Cause(ctx))
 }
 
 func (s *Service) now() float64 {
@@ -167,17 +224,26 @@ func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now
 	if err != nil {
 		return nil, err
 	}
-	loc, err := config.From(ctx).Location(env)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := budget.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly || root == threads.Worker); err != nil {
+	if err := Admit(ctx, q, env, root, now); err != nil {
 		return nil, err
 	}
 	return thread, nil
 }
 
+func Admit(ctx context.Context, q db.Querier, env config.Env, root threads.Kind, now float64) error {
+	loc, err := config.From(ctx).Location(env)
+	if err != nil {
+		return err
+	}
+	_, err = inference.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly || root == threads.Worker)
+	return err
+}
+
 func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now float64, o Start) (int64, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return 0, err
+	}
 	thread, err := Load(ctx, s.DB.Read, s.Env, threadID, now)
 	if err != nil {
 		return 0, err
@@ -200,11 +266,6 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 	}
 	if o.Operator {
 		if err := threads.AddAllowedURLs(ctx, s.DB, threadID, threads.URLsIn(text)); err != nil {
-			return fail(err)
-		}
-	}
-	if o.ParentRunID == nil {
-		if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
 			return fail(err)
 		}
 	}
@@ -237,12 +298,8 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 }
 
 func (s *Service) knowledge(ctx context.Context, thread *threads.Thread, text string, now float64) (json.RawMessage, error) {
-	r := assistant.Read(ctx, s.DB.Read)
-	budget := int64(r.Int(assistant.KeyKBRetrievalTokens))
-	distance := r.Float(assistant.KeyKBRetrievalDistance)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	budget := int64(assistant.TuningAgentKbRetrievalTokens)
+	distance := assistant.TuningAgentKbRetrievalDistance
 	if budget == 0 {
 		return nil, nil
 	}
@@ -268,9 +325,6 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 	if err != nil {
 		return 0, err
 	}
-	if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
-		return 0, err
-	}
 	runID, err := journal.StartRun(ctx, s.DB, threadID, string(tool.Chat), thread.Model, thread.Effort, now, nil, new(journal.NewOwner()))
 	if errors.Is(err, journal.ErrRunActive) {
 		return 0, RunActive(fmt.Sprintf("thread %d already has a run in progress", threadID))
@@ -279,13 +333,21 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 }
 
 func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return nil, err
+	}
 	client, err := s.ResolveClient(ctx)
 	var nc config.NotConfigured
 	if errors.As(err, &nc) {
 		if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
 			return nil, err
 		}
-		return journal.GetRun(ctx, s.DB.Read, runID)
+		run, err := journal.GetRun(ctx, s.DB.Read, runID)
+		if err != nil {
+			return nil, err
+		}
+		return run, nc
 	}
 	if err != nil {
 		return nil, err
@@ -294,7 +356,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	if err != nil {
 		return nil, err
 	}
-	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored})
+	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference, Stop: s.stop})
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
@@ -310,35 +372,53 @@ func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error
 }
 
 func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return 0, err
+	}
 	runID, err := s.Prepare(ctx, threadID, text, s.now(), o)
 	if err != nil {
 		return 0, err
 	}
 	if _, err := s.Execute(ctx, runID); err != nil {
-		return 0, err
+		return runID, err
 	}
 	return runID, nil
 }
 
 func (s *Service) inBackground(runID int64) error {
+	done, err := s.reserve()
+	if err != nil {
+		return err
+	}
+	s.background(runID, done)
+	return nil
+}
+
+func (s *Service) reserve() (func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return ErrClosed
+		return nil, ErrClosed
 	}
-	s.wg.Go(func() {
+	s.wg.Add(1)
+	return s.wg.Done, nil
+}
+
+func (s *Service) background(runID int64, done func()) {
+	go func() {
+		defer done()
 		defer func() {
 			if p := recover(); p != nil {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
 			}
 		}()
-		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) {
-			log.Info(fmt.Sprintf("background run %d cancelled", runID), logx.RunID, runID)
+		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) || errors.Is(err, progress.ErrShutdown) {
+			log.Info(fmt.Sprintf("background run %d interrupted", runID), logx.RunID, runID)
 		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
 		}
-	})
-	return nil
+	}()
 }
 
 func (s *Service) launch(ctx context.Context, runID int64) error {
@@ -358,36 +438,6 @@ func (s *Service) StartRun(ctx context.Context, threadID int64, text string, o S
 		return 0, err
 	}
 	return runID, s.launch(ctx, runID)
-}
-
-type Sent struct {
-	Queued bool
-	ID     int64
-}
-
-func (s *Service) Send(ctx context.Context, threadID int64, text string, attachments []json.RawMessage) (Sent, error) {
-	ctx = context.WithoutCancel(ctx)
-	thread, err := threads.Get(ctx, s.DB.Read, threadID)
-	if err != nil {
-		return Sent{}, err
-	}
-	if thread == nil {
-		return Sent{}, UnknownThread(threadID)
-	}
-	refs, err := references.Resolve(ctx, s.DB.Read, threadID, text)
-	if err != nil {
-		return Sent{}, err
-	}
-	attachments = append(attachments, refs...)
-	id, queued, err := journal.QueueMessage(ctx, s.DB, threadID, text, s.now(), attachments)
-	if err != nil {
-		return Sent{}, err
-	}
-	if queued {
-		return Sent{Queued: true, ID: id}, nil
-	}
-	runID, err := s.StartRun(ctx, threadID, text, Start{Kind: threads.Chat, Operator: true, Files: attachments})
-	return Sent{ID: runID}, err
 }
 
 func (s *Service) lastOperator(ctx context.Context, threadID int64, refusal string) (*journal.Message, error) {
@@ -475,14 +525,40 @@ func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 		}
 	}
 	for _, row := range append(children, *thread) {
-		if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), files.ThreadOwner(row.ID)); err != nil {
-			return err
-		}
-		if err := threads.Purge(ctx, s.DB.Write, row.ID, s.now()); err != nil {
+		if err := s.Discard(ctx, row.ID); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Service) Discard(ctx context.Context, threadID int64) error {
+	if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), files.ThreadOwner(threadID)); err != nil {
+		return err
+	}
+	return threads.Purge(ctx, s.DB.Write, threadID, s.now())
+}
+
+func (s *Service) DiscardUnused(ctx context.Context, threadID int64) (bool, error) {
+	discarded := false
+	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		unused, err := threads.Unused(ctx, tx, threadID)
+		if err != nil || !unused {
+			return err
+		}
+		if _, err := files.DeleteOwnedRows(ctx, tx, files.ThreadOwner(threadID)); err != nil {
+			return err
+		}
+		discarded = true
+		return threads.Remove(ctx, tx, threadID)
+	})
+	if err != nil || !discarded {
+		return false, err
+	}
+	if err := files.RemoveOwned(s.Cfg.FilesDir(), files.ThreadOwner(threadID)); err != nil {
+		log.Warn("could not remove the files of a discarded thread", logx.ThreadID, threadID, logx.Err, err.Error())
+	}
+	return true, nil
 }
 
 func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, error) {
@@ -507,6 +583,9 @@ func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, er
 }
 
 func (s *Service) claim(ctx context.Context, runID int64) error {
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
+	}
 	ok, err := journal.ClaimResume(ctx, s.DB.Write, runID, journal.NewOwner(), s.now())
 	if err != nil {
 		return err
@@ -518,13 +597,30 @@ func (s *Service) claim(ctx context.Context, runID int64) error {
 }
 
 func (s *Service) StartResume(ctx context.Context, runID int64) error {
-	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
 		return err
 	}
-	return s.inBackground(runID)
+	done, err := s.reserve()
+	if err != nil {
+		return err
+	}
+	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
+		done()
+		return err
+	}
+	s.background(runID, done)
+	return nil
 }
 
-func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, error) {
+func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claimed map[int64]bool) (int, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return 0, err
+	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return 0, err
+	}
 	if _, err := journal.MarkInterrupted(ctx, s.DB.Write, s.now()); err != nil {
 		return 0, err
 	}
@@ -532,6 +628,31 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, 
 	if err != nil {
 		return 0, err
 	}
+	found = slices.DeleteFunc(found, func(r journal.Run) bool { return claimed[r.ThreadID] })
+	return s.resume(ctx, found, background, nil)
+}
+
+func (s *Service) ResumeRuns(ctx context.Context, runs []int64, dead string, admit func(context.Context, journal.Run) (bool, error)) error {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return err
+	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
+	}
+	if err := journal.InterruptRuns(ctx, s.DB.Write, runs, s.now(), dead); err != nil {
+		return err
+	}
+	found, err := journal.InterruptedRuns(ctx, s.DB.Read)
+	if err != nil {
+		return err
+	}
+	found = slices.DeleteFunc(found, func(r journal.Run) bool { return !slices.Contains(runs, r.ID) })
+	_, err = s.resume(ctx, found, false, admit)
+	return err
+}
+
+func (s *Service) resume(ctx context.Context, found []journal.Run, background bool, admit func(context.Context, journal.Run) (bool, error)) (int, error) {
 	resumed := 0
 	for _, run := range found {
 		waiting, err := NeedsOperator(ctx, s.DB.Read, run)
@@ -540,6 +661,18 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, 
 		}
 		if waiting {
 			continue
+		}
+		if err := ledger.CheckAdmission(ctx); err != nil {
+			return resumed, err
+		}
+		if admit != nil {
+			ok, err := admit(ctx, run)
+			if err != nil {
+				return resumed, err
+			}
+			if !ok {
+				continue
+			}
 		}
 		ok, err := journal.ClaimResume(ctx, s.DB.Write, run.ID, journal.NewOwner(), s.now())
 		if err != nil {

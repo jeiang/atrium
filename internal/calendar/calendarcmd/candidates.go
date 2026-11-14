@@ -1,98 +1,31 @@
 package calendarcmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/runner"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
-	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/calendar/candidates"
+	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/module"
 )
 
-func Callables() map[string]worker.Callable {
-	return map[string]worker.Callable{
-		scheduler.CalendarCandidatesName: {
-			Modules: []string{module.Calendar, module.Mail},
-			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-				_, limit, err := calendar.CandidateLimits(ctx, e.Service.DB.Read)
-				if err != nil {
-					return worker.Result{}, err
-				}
-				out, err := candidates.DraftEventProposals(ctx, e.Service.DB, assistantRun(e.Service), limit, e.Now)
-				return worker.Result{RunID: out.RunID}, err
-			},
-		},
-	}
-}
-
-func assistantRun(svc *service.Service) candidates.Run {
-	return func(ctx context.Context, prompt string, now float64) (int64, bool, error) {
-		title := "Event candidates"
-		threadID, err := threads.Create(ctx, svc.DB.Write, now, threads.Spec{Kind: threads.Cron, Title: &title})
-		if err != nil {
-			return 0, false, err
-		}
-		runID, err := svc.RunOnce(ctx, threadID, prompt, service.Start{Kind: threads.Cron})
-		if err != nil {
-			return 0, false, err
-		}
-		run, err := journal.GetRun(ctx, svc.DB.Read, runID)
-		if err != nil {
-			return 0, false, err
-		}
-		return runID, run != nil && run.State == journal.Done, nil
-	}
-}
-
-func candidatesCommand(env config.Env, tools registry.Source, now func() float64) *cli.Command {
-	return &cli.Command{
-		Name: "candidates",
-		Setup: func(*cli.Args) cli.Handler {
-			return func(e *cli.Env) int {
-				cfg, err := config.Load(env)
-				if err != nil {
-					return cli.Fail(e, err)
-				}
-				d, err := db.Connect(cfg.DBPath)
-				if err != nil {
-					return cli.Fail(e, err)
-				}
-				defer func() { _ = d.Close() }()
-				if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
-					return cli.Fail(e, err)
-				}
-				r, err := runner.New(tools)
-				if err != nil {
-					return cli.Fail(e, err)
-				}
-				svc := service.New(e.Ctx, d, cfg, env, r)
-				defer svc.Close()
-				_, limit, err := calendar.CandidateLimits(e.Ctx, d.Read)
-				if err != nil {
-					return cli.Fail(e, err)
-				}
-				out, err := candidates.DraftEventProposals(e.Ctx, d, assistantRun(svc), limit, now)
-				if err != nil {
-					return cli.Fail(e, err)
-				}
-				encoded, err := json.MarshalIndent(out.Dict(), "", "  ")
-				if err != nil {
-					return cli.Fail(e, err)
-				}
-				_, _ = fmt.Fprintln(e.Stdout, string(encoded))
-				return cli.ExitOK
+func candidatesCommand(open Open) *cli.Command {
+	return &cli.Command{Name: "candidates", Setup: func(*cli.Args) cli.Handler {
+		return func(e *cli.Env) int {
+			svc, _, done, err := open(e.Ctx)
+			if err != nil {
+				return cli.Fail(e, err)
 			}
-		},
-	}
+			defer done()
+			out, err := svc.DraftCandidates(e.Ctx, calapp.DraftCandidatesInput{})
+			if err != nil {
+				return cli.Fail(e, err)
+			}
+			encoded, err := json.MarshalIndent(out.Data.Dict(), "", "  ")
+			if err != nil {
+				return cli.Fail(e, err)
+			}
+			_, _ = fmt.Fprintln(e.Stdout, string(encoded))
+			return cli.ExitOK
+		}
+	}}
 }

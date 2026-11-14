@@ -11,8 +11,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 )
 
 type dsQuery struct {
@@ -68,21 +68,18 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 		{grafanatools.VictoriaLogs, `_stream:{unit=~"atrium.*"} (error OR warn)`},
 	} {
 		t.Run(tc.dialect, func(t *testing.T) {
-			moduleFixture(t, flagsExcept("", ""))
+			dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 			grafana, seen := fakeGrafana(t)
-			setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
-			setEnv(t, settingEnv(grafanatools.KeyMetricsUID), "vm-uid")
-			setEnv(t, settingEnv(grafanatools.KeyLogsUID), "logs-uid")
-			setEnv(t, settingEnv(grafanatools.KeyLogsType), tc.dialect)
+			setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHostWith(t, dir, grafana.URL, "vm-uid", "logs-uid", tc.dialect))
 			api := &modelLog{Server: anthropictest.New(t,
 				anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "atrium_self_diagnose", map[string]any{"scope": "both", "minutes": 30})),
 				anthropictest.Reply("end_turn", anthropictest.Text("healthy")),
 			)}
-			api.OnRequest = func(r anthropictest.Request) {
+			api.SetOnRequest(func(r anthropictest.Request) {
 				api.mu.Lock()
 				defer api.mu.Unlock()
 				api.seen = append(api.seen, r)
-			}
+			})
 			setEnv(t, anthropic.BaseURLEnv, api.URL)
 
 			ran := runApp(t, "agent", "run", "--text", "how are you doing?", "--kind", "chat")

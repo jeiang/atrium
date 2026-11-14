@@ -119,7 +119,7 @@ func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDic
 	return out, nil
 }
 
-func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
+func CreateRuleTx(ctx context.Context, tx *sql.Tx, raw any) (rules.Rule, error) {
 	id := "r-" + randomHex()
 	if v := get(raw, "id"); v != nil && v != "" {
 		s, ok := v.(string)
@@ -132,23 +132,20 @@ func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 	if err != nil {
 		return rules.Rule{}, err
 	}
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		var one int
-		switch err := tx.QueryRowContext(ctx, "SELECT 1 FROM rules WHERE id = ?", rule.ID).Scan(&one); {
-		case err == nil:
-			return ruleErrorf("rule " + strconv.Quote(rule.ID) + " already exists")
-		case !errors.Is(err, sql.ErrNoRows):
-			return err
-		}
-		var position int
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position) + 1, 0) FROM rules").Scan(&position); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx,
-			"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
-			slices.Concat([]any{position, rule.ID}, store(rule))...)
-		return err
-	})
+	var one int
+	switch err := tx.QueryRowContext(ctx, "SELECT 1 FROM rules WHERE id = ?", rule.ID).Scan(&one); {
+	case err == nil:
+		return rules.Rule{}, ruleErrorf("rule " + strconv.Quote(rule.ID) + " already exists")
+	case !errors.Is(err, sql.ErrNoRows):
+		return rules.Rule{}, err
+	}
+	var position int
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position) + 1, 0) FROM rules").Scan(&position); err != nil {
+		return rules.Rule{}, err
+	}
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
+		slices.Concat([]any{position, rule.ID}, store(rule))...)
 	return rule, err
 }
 
@@ -158,12 +155,12 @@ func randomHex() string {
 	return hex.EncodeToString(b[:])
 }
 
-func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, error) {
+func UpdateRuleTx(ctx context.Context, x db.Querier, id string, raw any) (rules.Rule, error) {
 	rule, err := checked(ctx, raw, id)
 	if err != nil {
 		return rules.Rule{}, err
 	}
-	res, err := d.Write.ExecContext(ctx,
+	res, err := x.ExecContext(ctx,
 		"UPDATE rules SET account = ?, action = ?, dest = ?, conditions = ? WHERE id = ?", append(store(rule), id)...)
 	if err != nil {
 		return rules.Rule{}, err
@@ -174,8 +171,8 @@ func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, 
 	return rule, nil
 }
 
-func DeleteRule(ctx context.Context, d *db.DB, id string) (bool, error) {
-	res, err := d.Write.ExecContext(ctx, "DELETE FROM rules WHERE id = ?", id)
+func DeleteRuleTx(ctx context.Context, x db.Querier, id string) (bool, error) {
+	res, err := x.ExecContext(ctx, "DELETE FROM rules WHERE id = ?", id)
 	if err != nil {
 		return false, err
 	}
@@ -185,7 +182,7 @@ func DeleteRule(ctx context.Context, d *db.DB, id string) (bool, error) {
 
 func marks(n int) string { return strings.TrimSuffix(strings.Repeat("?,", n), ",") }
 
-func ReorderRules(ctx context.Context, d *db.DB, ordered []string) error {
+func ReorderRulesTx(ctx context.Context, tx *sql.Tx, ordered []string) error {
 	seen := map[string]bool{}
 	for _, id := range ordered {
 		seen[id] = true
@@ -197,30 +194,28 @@ func ReorderRules(ctx context.Context, d *db.DB, ordered []string) error {
 	for i, id := range ordered {
 		args[i] = id
 	}
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "SELECT position FROM rules WHERE id IN ("+marks(len(ordered))+")", args...)
-		if err != nil {
-			return err
-		}
-		slots, err := db.Collect(rows, func(r *sql.Rows) (int, error) {
-			var p int
-			err := r.Scan(&p)
-			return p, err
-		})
-		if err != nil {
-			return err
-		}
-		if len(slots) != len(ordered) {
-			return ruleErrorf("unknown rule id in order")
-		}
-		slices.Sort(slots)
-		for i, id := range ordered {
-			if _, err := tx.ExecContext(ctx, "UPDATE rules SET position = ? WHERE id = ?", slots[i], id); err != nil {
-				return err
-			}
-		}
-		return nil
+	rows, err := tx.QueryContext(ctx, "SELECT position FROM rules WHERE id IN ("+marks(len(ordered))+")", args...)
+	if err != nil {
+		return err
+	}
+	slots, err := db.Collect(rows, func(r *sql.Rows) (int, error) {
+		var p int
+		err := r.Scan(&p)
+		return p, err
 	})
+	if err != nil {
+		return err
+	}
+	if len(slots) != len(ordered) {
+		return ruleErrorf("unknown rule id in order")
+	}
+	slices.Sort(slots)
+	for i, id := range ordered {
+		if _, err := tx.ExecContext(ctx, "UPDATE rules SET position = ? WHERE id = ?", slots[i], id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type PreviewSample struct {

@@ -3,11 +3,9 @@ package mailtools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
-	"github.com/jeiang/atrium/internal/mail/drafts"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const notSent = "Draft saved only. Nothing is sent: the operator reviews and sends it from the Drafts page."
@@ -20,11 +18,11 @@ var draftCreateSchema = json.RawMessage(`{"type":"object","properties":{` + draf
 	`"in_reply_to_message_id":{"type":"integer"}},` +
 	`"required":["account","to","subject","body"],"additionalProperties":false}`)
 
-var draftUpdateSchema = json.RawMessage(`{"type":"object","properties":{"draft_id":{"type":"integer"},` + draftSchemaProperties +
+var draftUpdateSchema = json.RawMessage(`{"type":"object","properties":{"draft_id":{"type":"integer"},"revision":{"type":"integer"},` + draftSchemaProperties +
 	`"subject":{"type":"string"},"body":{"type":"string"},"in_reply_to_message_id":{"type":"integer"}},` +
 	`"required":["draft_id"],"additionalProperties":false}`)
 
-func draftTools() []tool.Tool {
+func draftTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	return []tool.Tool{
 		{
 			Name: "draft_email_create",
@@ -32,8 +30,10 @@ func draftTools() []tool.Tool {
 				"from the Drafts page. For a reply pass in_reply_to_message_id (a message_id from mail_search) so threading " +
 				"headers are set; recipients that were not on the original message are flagged to the operator.",
 			InputSchema: draftCreateSchema,
-			Handler:     draftEmailCreate,
-			Effect:      tool.WriteUndo, Undo: "draft_delete",
+			Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+				return draftEmailCreate(ctx, tc, args, svc)
+			},
+			Effect: tool.WriteUndo, Undo: "draft_delete",
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
@@ -43,8 +43,10 @@ func draftTools() []tool.Tool {
 			Description: "Edit an unsent draft: any of account, to, cc, subject, body, in_reply_to_message_id. Sent or " +
 				"discarded drafts cannot be edited. Never sends.",
 			InputSchema: draftUpdateSchema,
-			Handler:     draftEmailUpdate,
-			Effect:      tool.WriteUndo, Undo: "draft_restore",
+			Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+				return draftEmailUpdate(ctx, tc, args, svc)
+			},
+			Effect: tool.WriteUndo, Undo: "draft_restore",
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
@@ -52,15 +54,7 @@ func draftTools() []tool.Tool {
 	}
 }
 
-func store(tc *tool.Context) *drafts.Store {
-	return &drafts.Store{DB: tc.DB, Cfg: tc.Cfg, Now: tc.Now}
-}
-
-func draftFailed(err error) error {
-	return tool.Domain[drafts.Error, tool.Error](err)
-}
-
-func replyID(args tool.Args) (any, error) {
+func replyID(args tool.Args) (*int64, error) {
 	value, ok := args.Get("in_reply_to_message_id")
 	if !ok || value == nil {
 		return nil, nil
@@ -69,82 +63,118 @@ func replyID(args tool.Args) (any, error) {
 	if err != nil {
 		return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
 	}
-	return id, nil
+	return &id, nil
 }
 
-func draftEmailCreate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func draftRecipients(args tool.Args, name string) (*mailapp.Recipients, error) {
+	v, ok := args.Get(name)
+	if !ok {
+		return nil, nil
+	}
+	out := &mailapp.Recipients{}
+	switch v := v.(type) {
+	case nil:
+	case string:
+		out.Text = v
+	case []string:
+		out.Addresses = v
+	case []any:
+		out.Addresses = make([]string, len(v))
+		for i, item := range v {
+			value, ok := item.(string)
+			if !ok {
+				return nil, tool.Error(name + " must be a list of addresses")
+			}
+			out.Addresses[i] = value
+		}
+	default:
+		return nil, tool.Error(name + " must be a list of addresses")
+	}
+	return out, nil
+}
+func draftEmailCreate(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
 	account, _, err := tool.TextArg(args, "account", true)
 	if err != nil {
 		return nil, err
 	}
-	to, _ := args.Get("to")
-	cc, _ := args.Get("cc")
 	subject, _, err := tool.TextArg(args, "subject", true)
 	if err != nil {
 		return nil, err
 	}
-	body, _ := args.Get("body")
+	body, ok := args.Get("body")
+	text, isText := body.(string)
+	if !ok || !isText {
+		return nil, tool.Error("body must be text")
+	}
+	to, err := draftRecipients(args, "to")
+	if err != nil {
+		return nil, err
+	}
+	if to == nil {
+		to = &mailapp.Recipients{}
+	}
+	cc, err := draftRecipients(args, "cc")
+	if err != nil {
+		return nil, err
+	}
+	if cc == nil {
+		cc = &mailapp.Recipients{}
+	}
 	reply, err := replyID(args)
 	if err != nil {
 		return nil, err
 	}
-	id, err := store(tc).Create(ctx, &tc.ThreadID, account, to, cc, subject, body, reply)
+	done, err := svc(tc).DraftCreate(ctx, mailapp.DraftCreateInput{Account: account, To: *to, Cc: *cc, Subject: subject, Body: text, ReplyID: reply, ProposalID: tc.ProposalID})
 	if err != nil {
-		return nil, draftFailed(err)
+		return nil, tool.Fail(err)
 	}
-	if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_create", Target: fmt.Sprintf("draft:%d", id),
-		After: map[string]any{"draft_id": id, "status": drafts.Draft},
-		Undo:  draftDeleteUndo{Op: "draft_delete", ID: id},
-	}); err != nil {
-		return nil, err
-	}
-	return map[string]any{"draft_id": id, "status": drafts.Draft, "note": notSent}, nil
+	return map[string]any{"draft_id": done.Data.Row.ID, "status": done.Data.Row.Status, "effect_id": done.EffectIDs[0], "note": notSent}, nil
 }
-
-func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
 	raw, _ := args.Get("draft_id")
 	id, err := intArg(raw, "draft_id must be an integer")
 	if err != nil {
 		return nil, err
 	}
-	changes := map[string]any{}
-	for _, key := range [...]string{"account", "to", "cc", "subject", "body", "in_reply_to_message_id"} {
-		v, ok := args.Get(key)
+	in := mailapp.DraftUpdateInput{ID: id, ProposalID: tc.ProposalID}
+	for name, target := range map[string]**string{"account": &in.Fields.Account, "subject": &in.Fields.Subject, "body": &in.Fields.Body} {
+		v, ok := args.Get(name)
 		if !ok {
 			continue
 		}
-		if key == "in_reply_to_message_id" && v != nil {
-			id, _, err := tool.IntArg(args, key, true)
-			if err != nil {
-				return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
+		text, isText := v.(string)
+		if !isText {
+			if name == "subject" && v == nil {
+				text = ""
+			} else {
+				return nil, tool.Error(name + " must be text")
 			}
-			v = id
 		}
-		changes[key] = v
+		*target = &text
 	}
-	store := store(tc)
-	previous, err := store.Get(ctx, id)
-	if err != nil {
-		return nil, draftFailed(err)
+	if in.Fields.To, err = draftRecipients(args, "to"); err != nil {
+		return nil, err
 	}
-	row, err := store.Update(ctx, id, changes)
-	if err != nil {
-		return nil, draftFailed(err)
+	if in.Fields.Cc, err = draftRecipients(args, "cc"); err != nil {
+		return nil, err
 	}
-	if previous != nil {
-		if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_update", Target: fmt.Sprintf("draft:%d", row.ID),
-			Before: map[string]any{"subject": previous.Subject, "body": previous.Body},
-			After:  map[string]any{"subject": row.Subject, "body": row.Body},
-			Undo: draftRestoreUndo{
-				Op: "draft_restore", ID: row.ID, Account: previous.Account, To: previous.ToAddrs, Cc: previous.CcAddrs,
-				Subject: previous.Subject, Body: previous.Body, InReplyToMessageID: previous.InReplyToMessageID,
-				InReplyTo: previous.InReplyTo, Refs: previous.Refs,
-			},
-		}); err != nil {
+	if v, ok := args.Get("in_reply_to_message_id"); ok {
+		in.Fields.ClearReply = v == nil
+		in.Fields.ReplyID, err = replyID(args)
+		if err != nil {
 			return nil, err
 		}
 	}
-	return map[string]any{"draft_id": row.ID, "status": row.Status, "note": notSent}, nil
+	if _, ok := args.Get("revision"); ok {
+		revision, _, err := tool.IntArg(args, "revision", true)
+		if err != nil {
+			return nil, err
+		}
+		in.Revision = &revision
+	}
+	done, err := svc(tc).DraftUpdate(ctx, in)
+	if err != nil {
+		return nil, tool.Fail(err)
+	}
+	return map[string]any{"draft_id": done.Data.Row.ID, "status": done.Data.Row.Status, "effect_id": done.EffectIDs[0], "note": notSent}, nil
 }

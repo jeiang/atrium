@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const bearerCacheMax = 1024
@@ -25,11 +23,12 @@ func accessTokenType(typ string) bool {
 }
 
 func (s *Service) APIClientID(ctx context.Context) (string, error) {
-	found, err := settings.From(ctx).Resolve(ctx, s.d.Read, KeyAPIClientID)
+	lease, err := s.lease(ctx)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
-	return strings.TrimSpace(found.Value), nil
+	defer lease.Close()
+	return strings.TrimSpace(configValues(lease)[cfgAPIClientID]), nil
 }
 
 func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, error) {
@@ -48,7 +47,7 @@ func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, 
 	if err != nil {
 		return Session{}, err
 	}
-	if raw == "" || len(raw) > maxTokenBytes {
+	if raw == "" || len(raw) > MaxTokenBytes {
 		return Session{}, tokenError("malformed bearer token")
 	}
 	key := digest(audience + "\x00" + cfg.Issuer + "\x00" + raw)
@@ -84,8 +83,7 @@ func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, 
 	if err != nil {
 		return Session{}, err
 	}
-	access, admin := cfg.decide(id)
-	if !access {
+	if !cfg.decide(id) {
 		return Session{}, ErrDenied
 	}
 	timings, err := s.timing(ctx)
@@ -97,9 +95,21 @@ func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, 
 	if limit := now.Add(timings.recheck); limit.Before(until) {
 		until = limit
 	}
-	session := Session{Subject: id.Subject, Email: id.Email, Name: id.Name, Admin: admin}
+	session := Session{Subject: id.Subject, Email: id.Email, Name: id.Name}
 	s.storeBearer(key, bearerEntry{session: session, until: until}, now)
 	return session, nil
+}
+
+func EffectiveExpiry(raw string) (time.Time, bool) {
+	t, err := splitToken(raw)
+	if err != nil {
+		return time.Time{}, false
+	}
+	exp, ok := numeric(t.claims["exp"])
+	if !ok {
+		return time.Time{}, false
+	}
+	return exp.Add(clockLeeway), true
 }
 
 func (s *Service) cachedBearer(key string, now time.Time) (Session, bool) {

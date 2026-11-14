@@ -1,5 +1,0 @@
-<div id="oidc-state" class="flex flex-wrap items-center gap-2"{{if .Data.OOB}} hx-swap-oob="true"{{end}}>
-  <span class="font-medium">{{.Data.State.Name}}</span>
-  {{if .Data.State.Active}}<span class="badge border-success/30 bg-success/10 text-success">{{icon "check"}}Active</span>{{else}}<span class="badge" data-variant="outline">Not set up</span>{{end}}
-  {{range .Data.State.Modes}}<span class="badge" data-variant="secondary">{{.}}</span>{{end}}
-</div>

@@ -11,12 +11,12 @@
 {{end}}
 
 {{define "receipt"}}{{$e := .e}}{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
-<li id="receipt-{{$e.Source}}-{{$e.ID}}" class="receipt"{{with $e.Write}}{{if .UndoneAt}} data-state="undone"{{end}}{{end}}{{with $e.Mail}}{{if eq .State "undone"}} data-state="undone"{{end}}{{end}}>
+<li id="receipt-{{$e.Source}}-{{$e.ID}}" class="receipt"{{with $e.Write}}{{if .UndoneAt}} data-state="undone"{{end}}{{end}}{{with $e.Mail}}{{if .Undone}} data-state="undone"{{end}}{{end}}>
   {{icon "check"}}
   {{with $e.Write}}
   <span class="receipt-body"><span class="receipt-text" title="{{.Tool}} {{.Target}}">{{$e.Summary}}</span>{{template "when" (dict "epoch" $e.TS "style" "datetime")}}</span>
   {{if and .Undoable (not .UndoneAt) (ne .State "unknown") (ne .State "resolved")}}
-  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/activity/write/{{$e.ID}}/undo" hx-vals='{"view":"receipt"}' hx-target="#receipt-{{$e.Source}}-{{$e.ID}}" hx-swap="outerHTML" hx-disabled-elt="this" hx-confirm="Undo this change?">{{icon "undo-2"}}Undo</button>
+  <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/activity/{{$e.Source}}/{{$e.ID}}/undo" hx-vals='{"view":"receipt"}' hx-target="#receipt-{{$e.Source}}-{{$e.ID}}" hx-swap="outerHTML" hx-disabled-elt="this" hx-confirm="Undo this change?">{{icon "undo-2"}}Undo</button>
   {{end}}
   {{end}}
   {{with $e.Mail}}

@@ -17,10 +17,11 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 )
 
 const draftCreate = "draft_email_create"
@@ -458,7 +459,7 @@ type Meter struct {
 
 func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, error) {
 	limit := threads.ContextLimitOf(thread)
-	tokens, err := usage.PromptTokens(ctx, q, thread.ID)
+	tokens, err := inference.PromptTokens(ctx, q, thread.ID)
 	if err != nil {
 		return Meter{}, err
 	}
@@ -470,15 +471,15 @@ func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, e
 }
 
 func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, error) {
-	var cost float64
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE thread_id = ? OR thread_id IN (SELECT id FROM threads WHERE parent_thread_id = ?)",
-		threadID, threadID).Scan(&cost)
-	return cost, err
+	children, err := threads.Children(ctx, q, threadID)
+	if err != nil {
+		return 0, err
+	}
+	return inference.SpendOnThreads(ctx, q, append([]int64{threadID}, children...), 0)
 }
 
 func DraftsOf(ctx context.Context, q db.Querier, threadID int64) ([]map[string]any, error) {
-	return rowDicts(ctx, q, "SELECT * FROM drafts WHERE thread_id = ? ORDER BY id", threadID)
+	return drafts.DictsForThread(ctx, q, threadID)
 }
 
 func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]map[string]any, error) {
@@ -604,8 +605,8 @@ func RunDict(ctx context.Context, q db.Querier, runID int64) (map[string]any, er
 	for i, c := range calls {
 		list[i] = c
 	}
-	var cost any
-	if err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id = ?", runID).Scan(&cost); err != nil {
+	cost, err := inference.RunCost(ctx, q, runID)
+	if err != nil {
 		return nil, err
 	}
 	delete(run[0], "skills_json")
@@ -648,24 +649,27 @@ func PendingQuestion(ctx context.Context, q db.Querier, threadID int64) (*Questi
 
 // Answer stores the operator's answer as the parked tool's result and resumes
 // the run through the normal resume path.
+var ErrAnswerRequired = errors.New("answer is required")
+var ErrNoPendingQuestion = errors.New("no pending question")
+
 func (s *Service) Answer(ctx context.Context, threadID int64, text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return fmt.Errorf("answer is required")
+		return ErrAnswerRequired
 	}
 	q, err := PendingQuestion(ctx, s.DB.Read, threadID)
 	if err != nil {
 		return err
 	}
 	if q == nil {
-		return fmt.Errorf("no pending question")
+		return ErrNoPendingQuestion
 	}
 	result := map[string]any{"type": block.ToolResult, "tool_use_id": q.ToolUseID, "content": text}
 	raw := json.RawMessage(jsonx.Dumps(result, jsonx.Opts{Compact: true, NoEnsureASCII: true}))
 	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &q.RunID, journal.User, []json.RawMessage{raw}, s.now(), nil); err != nil {
 		return err
 	}
-	if err := journal.FinishToolCall(ctx, s.DB.Write, q.CallID, journal.OK, s.now(), nil, nil); err != nil {
+	if err := journal.FinishToolCall(ctx, s.DB.Write, q.CallID, journal.OK, s.now(), nil, nil, &text); err != nil {
 		return err
 	}
 	return s.StartResume(ctx, q.RunID)

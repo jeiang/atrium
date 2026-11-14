@@ -9,15 +9,65 @@ import (
 )
 
 type State struct {
-	mu        sync.RWMutex
-	core      core
-	accounts  []AccountSpec
-	passwords map[string]string
-	settings  *settings.Registry
+	mu           sync.RWMutex
+	core         core
+	accounts     []AccountSpec
+	passwords    map[string]string
+	settings     *settings.Registry
+	host         Host
+	reconcile    func(context.Context, *db.DB, Host) error
+	credential   AccountCredentialFunc
+	hostAccounts HostAccountsFunc
+	dbKey        db.Key
+	dbPath       string
+	hooks        map[*func()]struct{}
 }
 
 func NewState(reg *settings.Registry) *State {
 	return &State{settings: reg}
+}
+
+func (s *State) Detached() *State {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return &State{core: s.core, accounts: s.accounts, passwords: s.passwords, settings: s.settings, host: s.host, reconcile: s.reconcile,
+		credential: s.credential, hostAccounts: s.hostAccounts, dbKey: s.dbKey, dbPath: s.dbPath}
+}
+
+func (s *State) SetDBKey(k db.Key) {
+	s.mu.Lock()
+	s.dbKey = k
+	s.mu.Unlock()
+}
+
+func (s *State) DBKey() db.Key {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dbKey
+}
+
+func (s *State) DBPath() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dbPath
+}
+
+func (s *State) SetConnectionReconciler(f func(context.Context, *db.DB, Host) error) {
+	s.mu.Lock()
+	s.reconcile = f
+	s.mu.Unlock()
+}
+
+func (s *State) Host() Host {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.host
+}
+
+func (s *State) HostValue(key string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.host.Values[key]
 }
 
 type stateKey struct{}
@@ -40,6 +90,21 @@ func With(ctx context.Context, s *State) context.Context {
 	return context.WithValue(ctx, stateKey{}, s)
 }
 
+func SetHostFrom(ctx context.Context, h Host) {
+	if s, ok := ctx.Value(stateKey{}).(*State); ok && s != nil {
+		s.mu.Lock()
+		s.host = h
+		s.mu.Unlock()
+	}
+}
+
+func HostValueFrom(ctx context.Context, key string) string {
+	if s, ok := ctx.Value(stateKey{}).(*State); ok && s != nil {
+		return s.HostValue(key)
+	}
+	return ""
+}
+
 func From(ctx context.Context) *State {
 	s, _ := ctx.Value(stateKey{}).(*State)
 	if s == nil {
@@ -53,7 +118,7 @@ func OpenStore(ctx context.Context, env Env) (*db.DB, *settings.Store, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -70,26 +135,52 @@ func Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 
 func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	reg := s.settings
+	host, err := LoadHost(env, reg, HostFile(env))
+	if err != nil {
+		return err
+	}
 	if reg.PinSource() == nil {
 		pins, err := LoadPins(env, reg)
 		if err != nil {
 			return err
 		}
-		reg.SetPins(pins)
+		reg.SetPins(CombinePins(host, pins))
 	}
+	s.mu.Lock()
+	s.host = host
+	s.dbPath = cfg.DBPath
+	s.mu.Unlock()
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return err
 	}
 	if err := settings.NewStore(reg, d, d).Load(ctx); err != nil {
 		return err
 	}
+	s.mu.RLock()
+	reconcile, hostAccounts := s.reconcile, s.hostAccounts
+	s.mu.RUnlock()
+	if reconcile != nil {
+		if err := reconcile(ctx, d, host); err != nil {
+			return err
+		}
+	}
+	if initial := stripped(env, InitialTZEnv); initial != "" {
+		if _, err := reg.Seed(ctx, d.Write, KeyTZ, initial); err != nil {
+			return err
+		}
+	}
 	c, err := loadCore(ctx, d.Read)
 	if err != nil {
 		return err
 	}
-	files, filePasswords, err := loadAccounts(env, reg)
-	if err != nil {
-		return err
+	var (
+		files         []AccountSpec
+		filePasswords map[string]string
+	)
+	if hostAccounts != nil {
+		if files, filePasswords, err = hostAccounts(host); err != nil {
+			return err
+		}
 	}
 	if err := reconcileAccounts(ctx, d, files); err != nil {
 		return err
@@ -101,5 +192,6 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	s.mu.Lock()
 	s.core, s.accounts, s.passwords = c, accounts, passwords
 	s.mu.Unlock()
+	s.accountsChanged()
 	return nil
 }

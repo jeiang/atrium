@@ -7,37 +7,29 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"slices"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	runpkg "github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/proposals"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 )
 
-var operator = proposals.Resolver{Actor: "operator", Source: "cli"}
-
 type Options struct {
-	Env     config.Env
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
-}
-
-func (o Options) env() config.Env {
-	if o.Env != nil {
-		return o.Env
-	}
-	return config.OS
+	Load        func() (mailapp.Config, error)
+	Clients     func(mailapp.Config) mailapp.OpenFunc
+	Now         func() float64
+	Open        func(context.Context) (*mailapp.Pass, func(), error)
+	Standalone  func(mailapp.Config, func() float64) *mailapp.Service
+	Application func(*mailapp.Pass) *mailapp.Service
 }
 
 func (o Options) now() float64 {
 	if o.Now != nil {
 		return o.Now()
 	}
-	return mail.WallClock()
+	return mailapp.WallClock()
 }
 
 type exitError struct {
@@ -50,7 +42,7 @@ func (e *exitError) Error() string { return e.text }
 func failure(code int, err error) error { return &exitError{code: code, text: err.Error()} }
 
 type exec struct {
-	*runpkg.Pass
+	*mailapp.Pass
 	Ctx    context.Context
 	Stdin  io.Reader
 	Stdout io.Writer
@@ -73,11 +65,23 @@ func (x *exec) JSON(value any) {
 }
 
 func (x *exec) Exclusive(fn func() error) error {
-	lock, err := db.Exclusive(x.Ctx, x.Cfg.DBPath, db.ShortLockWait)
+	lock, err := mailapp.Exclusive(x.Ctx, x.Cfg.DBPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = lock.Close() }()
+	return fn()
+}
+
+func (x *exec) PassLocked(fn func() error) error {
+	held, locks, err := mailapp.PassLocks(x.Ctx, x.Cfg.DBPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = locks.Close() }()
+	outer := x.Ctx
+	x.Ctx = held
+	defer func() { x.Ctx = outer }()
 	return fn()
 }
 
@@ -111,15 +115,7 @@ func (o Options) execute(env *cli.Env, run body) int {
 }
 
 func (o Options) run(env *cli.Env, run body) error {
-	cfg, err := config.Load(o.env())
-	if err != nil {
-		return err
-	}
-	clients := o.Clients
-	if clients == nil {
-		clients = imapclient.Opener
-	}
-	pass, release, err := runpkg.Open(env.Ctx, o.env(), cfg, clients(cfg), o.Now)
+	pass, release, err := o.Open(env.Ctx)
 	if err != nil {
 		return err
 	}
@@ -137,4 +133,36 @@ func openError(path string, err error) error {
 		return fmt.Errorf("%s: is a directory", path)
 	}
 	return err
+}
+
+func (o Options) SyncCommand() *cli.Command {
+	return &cli.Command{Name: "sync", Setup: func(a *cli.Args) cli.Handler {
+		account := a.String("account", "", cli.Opt{})
+		return func(env *cli.Env) int {
+			cfg, err := o.Load()
+			if err == nil {
+				_, err = o.Standalone(cfg, o.now).WithOpen(o.Clients(cfg)).Sync(env.Ctx, mailapp.SyncInput{Account: *account})
+			}
+			if code, ok := unknownAccount(env, *account, err); ok {
+				return code
+			}
+			if err != nil {
+				return cli.Fail(env, err)
+			}
+			return cli.ExitOK
+		}
+	}}
+}
+
+func unknownAccount(env *cli.Env, requested string, err error) (int, bool) {
+	var unknown mailapp.UnknownAccount
+	if !errors.As(err, &unknown) {
+		return 0, false
+	}
+	var names []string
+	for _, name := range mailapp.AccountNames(env.Ctx) {
+		names = append(names, strconv.Quote(name))
+	}
+	slices.Sort(names)
+	return env.UsageError("argument --account: invalid choice %q (choose from %s)", requested, strings.Join(names, ", ")), true
 }

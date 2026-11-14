@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/textproto"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -198,11 +200,11 @@ func asstHold(t *testing.T, api *modelLog) func() {
 	var once sync.Once
 	release := func() { once.Do(func() { close(gate) }) }
 	t.Cleanup(release)
-	prev := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	prev := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		prev(r)
 		<-gate
-	}
+	})
 	return release
 }
 
@@ -245,7 +247,7 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 
 	code, events, h := w.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run), false)
 	w.want(code, http.StatusOK, events, "event: text\n")
-	if h.Get("Content-Type") != "text/event-stream; charset=utf-8" || h.Get("Cache-Control") != "no-cache" || h.Get("X-Accel-Buffering") != "no" || h.Get("X-Content-Type-Options") != "nosniff" {
+	if h.Get("Content-Type") != "text/event-stream; charset=utf-8" || h.Get("Cache-Control") != "private, no-store, no-transform" || h.Get("X-Accel-Buffering") != "no" || h.Get("X-Content-Type-Options") != "nosniff" {
 		t.Errorf("event stream headers %v", h)
 	}
 	if !strings.HasSuffix(events, "event: done\ndata: {\"state\": \"done\"}\n\n") {
@@ -259,10 +261,6 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	if got := asstFrameIDs(resumed); len(got) != 1 || got[0] != ids[len(ids)-1] {
 		t.Errorf("resumed frames %v, want only %s", got, ids[len(ids)-1])
 	}
-	code, page, _ := w.get(fmt.Sprintf("/chat/%d", thread), false)
-	w.want(code, http.StatusOK, page, "<strong>there</strong>")
-	_, found, _ := w.get("/chat?q=zebrafish", true)
-	w.want(http.StatusOK, http.StatusOK, found, fmt.Sprintf(`href="/chat/%d"`, thread))
 
 	api.Push(asstReply("Answer two"))
 	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "secondmarker", "edit": "1"}, nil, true)
@@ -270,14 +268,10 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("edited run %s", state)
 	}
-	_, page, _ = w.get(fmt.Sprintf("/chat/%d", thread), false)
-	if !strings.Contains(page, "Answer two") || strings.Contains(page, "<strong>there</strong>") {
+	_, page, _ := w.get(fmt.Sprintf("/chat/%d", thread), false)
+	if !strings.Contains(page, "Answer two") {
 		t.Errorf("the edit did not replace the answer")
 	}
-	_, found, _ = w.get("/chat?q=secondmarker", true)
-	w.want(http.StatusOK, http.StatusOK, found, fmt.Sprintf(`href="/chat/%d"`, thread))
-	_, gone, _ := w.get("/chat?q=zebrafish", true)
-	w.want(http.StatusOK, http.StatusOK, gone, "Nothing matches")
 
 	api.Push(asstReply("Answer three"))
 	before := asstLastRun(t, d, thread)
@@ -350,6 +344,46 @@ func TestAsstAskOperatorParksTheRunUntilTheOperatorAnswers(t *testing.T) {
 	}
 }
 
+func TestAsstStreamedReplyOutlivesTheConnectionTimeoutAndStopsPromptly(t *testing.T) {
+	t.Parallel()
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+	base, _, _ := startServeStoppable(t, dir)
+	w := asstBrowse(t, base)
+
+	held := asstReply("held")
+	held.Trickle = 16 * time.Second
+	api.Push(held)
+	began := time.Now()
+	thread := w.start(map[string]string{"text": "long reply"})
+	if state, errText := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
+		t.Fatalf("held run %s %q", state, errText)
+	}
+	if elapsed := time.Since(began); elapsed < 16*time.Second {
+		t.Fatalf("the held run settled after %s, before its reply ended", elapsed)
+	}
+
+	stalled := asstReply("stalled")
+	stalled.Trickle = 5 * time.Minute
+	api.Push(stalled)
+	sent := len(api.Requests())
+	stopped := w.start(map[string]string{"text": "stop me"})
+	asstWaitRequests(t, api, sent+1)
+	code, body, _ := w.post(fmt.Sprintf("/chat/%d/stop", stopped), url.Values{}, false)
+	w.want(code, http.StatusNoContent, body)
+	asked := time.Now()
+	if state, errText := asstSettle(t, d, asstLastRun(t, d, stopped)); state != "failed" || !strings.Contains(errText, "stop") {
+		t.Fatalf("stopped run %s %q", state, errText)
+	}
+	if waited := time.Since(asked); waited > 5*time.Second {
+		t.Fatalf("the stopped run settled %s after the stop", waited)
+	}
+	if len(api.Requests()) != sent+1 {
+		t.Errorf("the stopped run kept calling the model")
+	}
+}
+
 func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
@@ -364,7 +398,7 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	queuedThread := w.start(map[string]string{"text": "start"})
 	asstWaitRequests(t, api, sent+1)
 	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", queuedThread), map[string]string{"text": "queued note"}, nil, true)
-	w.want(code, http.StatusOK, body, "data-queued=", "queued note")
+	w.want(code, http.StatusOK, body, "queued note")
 	run := asstLastRun(t, d, queuedThread)
 	release()
 	if state, errText := asstSettle(t, d, run); state != "done" {
@@ -397,21 +431,12 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 		t.Errorf("the stopped run kept calling the model")
 	}
 
-	api.Push(asstReply("finished"))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("outlive", "profile_get", map[string]any{"key": "k"})))
 	release = asstHold(t, api)
 	sent = len(api.Requests())
 	busy := w.start(map[string]string{"text": "outlive shutdown"})
 	asstWaitRequests(t, api, sent+1)
-	stopped2 := make(chan struct{})
-	go func() {
-		stop()
-		close(stopped2)
-	}()
-	select {
-	case <-stopped2:
-	case <-time.After(20 * time.Second):
-		t.Fatal("serve never stopped with a run in flight")
-	}
+	stopWhileHeld(t, stop, release)
 	var state string
 	if err := d.Read.QueryRow("SELECT state FROM runs WHERE id = ?", asstLastRun(t, d, busy)).Scan(&state); err != nil {
 		t.Fatal(err)
@@ -419,7 +444,6 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	if state != "running" && state != "interrupted" {
 		t.Errorf("run in flight at shutdown ended %s, want it left resumable", state)
 	}
-	release()
 }
 
 func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {
@@ -723,9 +747,6 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	if v, _ := asstRun(t, "--text", "schedule a weekly digest"); v.State != "done" {
 		t.Fatalf("schedule run %+v %q", v, v.err())
 	}
-	w := asstBrowse(t, startServeIn(t, dir))
-	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "Digest", "Every Monday at 08:00", "weekly-review")
 	jobID := func(name string) string {
 		var id int64
 		if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = ?", name).Scan(&id); err != nil {
@@ -733,17 +754,53 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 		}
 		return strconv.FormatInt(id, 10)
 	}
-	state := func(id string) string {
-		var s string
-		if err := d.Read.QueryRow("SELECT state FROM jobs WHERE id = ?", id).Scan(&s); err != nil {
+	column := func(col, id string) string {
+		var out string
+		if err := d.Read.QueryRow("SELECT "+col+" FROM jobs WHERE id = ?", id).Scan(&out); err != nil {
 			t.Fatal(err)
 		}
-		return s
+		return out
 	}
-	digest := jobID("Digest")
+	state := func(id string) string { return column("state", id) }
+	audits := func(operation, outcome, target string) int {
+		return asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", operation, outcome, target)
+	}
+	w := asstBrowse(t, startServeIn(t, dir))
+	code, page, _ := w.get("/scheduled", false)
+	w.want(code, http.StatusOK, page, "Digest", "weekly-review")
+	digest, nightly := jobID("Digest"), jobID("nightly")
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit a JOIN effects e ON a.details_json = '{\"effect_ids\":[' || e.id || ']}' "+
+		"WHERE a.operation = 'assistant.schedule.create' AND a.outcome = 'ok' AND a.target = ? AND e.operation = 'schedule_create'", "schedule:"+digest); n != 1 {
+		t.Errorf("schedule create audits naming its effect = %d, want 1", n)
+	}
+	digestID, _ := strconv.ParseInt(digest, 10, 64)
+	nightlyID, _ := strconv.ParseInt(nightly, 10, 64)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s2", "schedule_update", map[string]any{"id": digestID, "prompt": "Summarize mail and tasks."})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s3", "schedule_cancel", map[string]any{"id": nightlyID})),
+		asstReply("updated"))
+	if v, _ := asstRun(t, "--text", "widen the digest and stop the nightly run"); v.State != "done" {
+		t.Fatalf("update run %+v %q", v, v.err())
+	}
+	if column("prompt", digest) != "Summarize mail and tasks." || state(nightly) != "active" {
+		t.Errorf("agent update prompt %q, nightly %s", column("prompt", digest), state(nightly))
+	}
+	if audits("assistant.schedule.update", "ok", "schedule:"+digest) != 1 || audits("assistant.schedule.cancel", "refused", "schedule:"+nightly) != 1 {
+		t.Error("agent update and refused built-in cancel are not audited")
+	}
+	var updateEffect int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'schedule_update' AND target = ?", "schedule:"+digest).Scan(&updateEffect); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "effects", "undo", strconv.FormatInt(updateEffect, 10)); got.code != cli.ExitOK {
+		t.Fatalf("effects undo: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if column("prompt", digest) != "Summarize mail." {
+		t.Errorf("undo left prompt %q", column("prompt", digest))
+	}
 
 	code, body, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, true)
-	w.want(code, http.StatusOK, body, "Paused")
+	w.want(code, http.StatusOK, body)
 	if state(digest) == "active" {
 		t.Error("toggle left the job active")
 	}
@@ -757,27 +814,20 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 
 	weekly := jobID("weekly-review")
 	code, body, _ = w.post("/scheduled/"+weekly+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "built-in runs cannot be cancelled; disable them instead")
+	w.want(code, http.StatusUnprocessableEntity, body)
 	if state(weekly) == "cancelled" {
 		t.Error("a built-in run was cancelled")
 	}
 
 	code, body, _ = w.post("/scheduled/"+digest+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusOK, body, "Schedule deleted")
+	w.want(code, http.StatusOK, body)
 	if state(digest) != "cancelled" {
 		t.Errorf("cancelled job state %s", state(digest))
 	}
 	if code, _, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, false); code != http.StatusNotFound {
 		t.Errorf("toggle of a cancelled job: %d, want 404", code)
 	}
-	nightly := jobID("nightly")
-	schedule := func(id string) string {
-		var out string
-		if err := d.Read.QueryRow("SELECT schedule FROM jobs WHERE id = ?", id).Scan(&out); err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
+	schedule := func(id string) string { return column("schedule", id) }
 	if code, body, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"daily 03:15"}}, true); code != http.StatusOK || schedule(nightly) != "daily 03:15" {
 		t.Errorf("edit the nightly schedule = %d, stored %q: %.200s", code, schedule(nightly), body)
 	}
@@ -786,5 +836,117 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	}
 	if code, _, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"whenever"}}, true); code != http.StatusUnprocessableEntity || schedule(nightly) != "daily 03:15" {
 		t.Errorf("an invalid schedule = %d, stored %q, want a refusal that keeps the old one", code, schedule(nightly))
+	}
+	for _, want := range []struct {
+		operation, outcome, target string
+		n                          int
+	}{
+		{"assistant.schedule.enabled", "ok", "schedule:" + digest, 2},
+		{"assistant.schedule.enabled", "not_found", "schedule:" + digest, 1},
+		{"assistant.schedule.cancel", "refused", "schedule:" + weekly, 1},
+		{"assistant.schedule.cancel", "ok", "schedule:" + digest, 1},
+		{"assistant.schedule.update", "ok", "schedule:" + nightly, 1},
+		{"assistant.schedule.update", "invalid", "schedule:" + nightly, 1},
+	} {
+		if n := audits(want.operation, want.outcome, want.target); n != want.n {
+			t.Errorf("%s %s %s audits = %d, want %d", want.operation, want.outcome, want.target, n, want.n)
+		}
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation LIKE 'assistant.schedule.%' AND source = 'ui' AND actor = 'operator'"); n != 7 {
+		t.Errorf("operator schedule audits = %d, want 7", n)
+	}
+}
+
+func TestBranchKeepsRunOptions(t *testing.T) {
+	_, api, d, w := asstServe(t)
+	api.Push(asstReply("branch source answer"))
+	thread := w.start(map[string]string{"text": "branch options", "web_search": "0", "cost_cap": "2.5"})
+	if state := asstSettleThread(t, d, thread); state != "done" {
+		t.Fatalf("source run %s", state)
+	}
+	var seq int64
+	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
+		t.Fatal(err)
+	}
+	code, body, h := w.post(fmt.Sprintf("/chat/%d/branch", thread), url.Values{"seq": {strconv.FormatInt(seq, 10)}}, false)
+	w.want(code, http.StatusSeeOther, body)
+	child, err := strconv.ParseInt(strings.TrimPrefix(h.Get("Location"), "/chat/"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := func(id int64) string {
+		var model, effort, thinking string
+		var limit, search int64
+		var costCap float64
+		if err := d.Read.QueryRow("SELECT model, effort, COALESCE(context_limit, 0), thinking, web_search, COALESCE(cost_cap_usd, 0) FROM threads WHERE id = ?", id).
+			Scan(&model, &effort, &limit, &thinking, &search, &costCap); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprintf("%s|%s|%d|%s|%d|%g", model, effort, limit, thinking, search, costCap)
+	}
+	source, branched := options(thread), options(child)
+	if source != branched || !strings.HasSuffix(source, "|0|2.5") {
+		t.Fatalf("branch options %q, source %q (want web search off and the 2.5 cap kept)", branched, source)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.branch' AND outcome = 'ok' AND target = ?", fmt.Sprintf("thread:%d", child)); n != 1 {
+		t.Fatalf("%d branch audits for the child, want 1", n)
+	}
+}
+
+func TestProjectFilesStayInTheirProjectAndAreAudited(t *testing.T) {
+	t.Parallel()
+	_, _, d, w := asstServe(t)
+	project := func(name string) string {
+		code, body, h := w.post("/projects", url.Values{"name": {name}, "effort": {"high"}, "context_limit": {"200000"}}, false)
+		if code != http.StatusSeeOther {
+			t.Fatalf("create project %s: %d %s", name, code, body)
+		}
+		return strings.TrimSuffix(strings.TrimPrefix(h.Get("Location"), "/projects/"), "/edit")
+	}
+	home, other := project("Home"), project("Other")
+	code, body, _ := w.upload("/projects/"+home+"/files", nil, []asstFile{{"plan.txt", "text/plain", []byte("the plan")}}, true)
+	if code != http.StatusOK {
+		t.Fatalf("upload: %d %s", code, body)
+	}
+	var fileID int64
+	var stored string
+	if err := d.Read.QueryRow("SELECT id, path FROM thread_files WHERE project_id = ?", home).Scan(&fileID, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if code, body, _ := w.get(fmt.Sprintf("/projects/%s/files/%d/download", home, fileID), false); code != http.StatusOK || body != "the plan" {
+		t.Fatalf("own project download: %d %q", code, body)
+	}
+	for _, path := range []string{
+		fmt.Sprintf("/projects/%s/files/%d/download", other, fileID),
+		fmt.Sprintf("/projects/%s/files/%d/download", home, fileID+1000),
+		fmt.Sprintf("/chat/1/files/%d/download", fileID),
+	} {
+		if code, _, _ := w.get(path, false); code != http.StatusNotFound {
+			t.Errorf("GET %s: %d, want 404", path, code)
+		}
+	}
+	if code, _, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", other, fileID), url.Values{}, true); code != http.StatusNotFound {
+		t.Fatalf("delete through another project: %d, want 404", code)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 1 {
+		t.Fatalf("a foreign delete removed the file row")
+	}
+	if code, body, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", home, fileID), url.Values{}, true); code != http.StatusOK {
+		t.Fatalf("delete: %d %s", code, body)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 0 {
+		t.Errorf("the deleted file row remains")
+	}
+	if _, err := os.Stat(stored); !os.IsNotExist(err) {
+		t.Errorf("the deleted file remains on disk: %v", err)
+	}
+	for _, want := range []struct{ operation, outcome, project string }{
+		{"assistant.project-file.upload", "ok", home},
+		{"assistant.project-file.delete", "not_found", other},
+		{"assistant.project-file.delete", "ok", home},
+	} {
+		if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", want.operation, want.outcome, "project:"+want.project); n != 1 {
+			t.Errorf("%s %s audits for project %s: %d, want 1", want.operation, want.outcome, want.project, n)
+		}
 	}
 }

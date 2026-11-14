@@ -10,12 +10,13 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/weather"
 )
 
 func TestWeatherToolReturnsAForecast(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	fakeOpenMeteo(t)
+	fakeOpenMeteo(t, dir)
 
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "weather", map[string]any{})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
@@ -26,7 +27,7 @@ func TestWeatherToolReturnsAForecast(t *testing.T) {
 	if ran.code != cli.ExitOK {
 		t.Fatalf("weather run: exit %d stderr %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var content string
 	if err := d.Read.QueryRow(
@@ -59,15 +60,12 @@ func TestWeatherToolReturnsAForecast(t *testing.T) {
 	}
 }
 
-func fakeOpenMeteo(t *testing.T) {
+func fakeOpenMeteo(t *testing.T, dir string) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/forecast":
-			if got := r.URL.Query().Get("latitude"); got != "10.65" {
-				t.Errorf("forecast latitude = %q, want 10.65", got)
-			}
 			if got := r.URL.Query().Get("timezone"); got != "auto" {
 				t.Errorf("forecast timezone = %q, want auto", got)
 			}
@@ -90,9 +88,6 @@ func fakeOpenMeteo(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(weather.KeyForecastURL), srv.URL+"/v1/forecast")
-	setEnv(t, settingEnv(weather.KeyGeocodingURL), srv.URL+"/v1/search")
-	setEnv(t, settingEnv(weather.KeyLatitude), "10.65")
-	setEnv(t, settingEnv(weather.KeyLongitude), "-61.5")
-	setEnv(t, settingEnv(weather.KeyLocationName), "Port of Spain")
+	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, srv.URL+"/v1/forecast", srv.URL+"/v1/search"))
+	seedSettings(t, map[string]string{weather.KeyLatitude: "10.65", weather.KeyLongitude: "-61.5", weather.KeyLocationName: "Port of Spain"})
 }

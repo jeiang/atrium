@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,13 +9,13 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/serverops"
@@ -25,11 +26,22 @@ type opsGrafanaRequest struct {
 	Path   string
 }
 
+func runIn(t *testing.T, dir string, args ...string) (int, string, string) {
+	t.Helper()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	cmd := cliExitProcessArgs(t, args)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	return exitCode(cmd.Run()), stdout.String(), stderr.String()
+}
+
 type fakeOpsGrafana struct {
 	mu       sync.Mutex
 	requests []opsGrafanaRequest
 	alerts   []map[string]any
 	up       float64
+	failHost string
 }
 
 func (f *fakeOpsGrafana) setUp(value float64) {
@@ -66,6 +78,10 @@ func (f *fakeOpsGrafana) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		expr := ""
 		if len(body.Queries) > 0 {
 			expr = body.Queries[0].Expr
+		}
+		if f.failHost != "" && strings.Contains(expr, `"`+f.failHost+`(`) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": map[string]any{"A": map[string]any{"error": "bad series"}}})
+			return
 		}
 		value := 0.0
 		switch {
@@ -107,7 +123,9 @@ func runOpsSampler(t *testing.T, f *fixture, d *db.DB, wait func() bool) {
 	start := func() (context.CancelFunc, chan appRun) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan appRun, 1)
-		go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+		go func() {
+			done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+		}()
 		return cancel, done
 	}
 	cancel, done := start()
@@ -150,47 +168,6 @@ func samplesExist(t *testing.T, d *db.DB) func() bool {
 
 const serveropsJobName = "ops-sampler"
 
-func TestSchemaVersionEightMigratesToOpsSamples(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "atrium.db")
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list: exit %d %s", code, stderr)
-	}
-	d := mustConnect(t, path)
-	if _, err := d.Write.Exec("DROP TABLE ops_samples"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("DELETE FROM schema_migrations WHERE version = 9"); err != nil {
-		t.Fatal(err)
-	}
-	_ = d.Close()
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list after removing migration 9: exit %d %s", code, stderr)
-	}
-	d = mustConnect(t, path)
-	var n int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ops_samples'").Scan(&n); err != nil || n != 1 {
-		t.Errorf("ops_samples after migration = %d, %v, want one table", n, err)
-	}
-	var version int
-	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 11 {
-		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
-	}
-	_ = d.Close()
-	fresh := t.TempDir()
-	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
-	}
-	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
-	if !slices.Equal(migrated, created) {
-		for _, line := range migrated {
-			if !slices.Contains(created, line) {
-				t.Errorf("only in the migrated schema: %s", line)
-			}
-		}
-	}
-}
-
 func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 	fake := &fakeOpsGrafana{alerts: []map[string]any{
 		{"state": "firing", "labels": map[string]any{"alertname": "HighCPU", "instance": "node-a:9100"}},
@@ -199,12 +176,11 @@ func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
-	setEnv(t, settingEnv(grafanatools.KeyMetricsUID), "metrics")
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
 	requests := len(api.Requests())
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	runOpsSampler(t, f, d, samplesExist(t, d))
 	if len(api.Requests()) != requests {
@@ -241,6 +217,18 @@ func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 		}
 		return old == 0
 	})
+	audits := operationAudits(t, d, "ops.sample")
+	if len(audits) < 2 || slices.ContainsFunc(audits, func(a string) bool { return !strings.HasPrefix(a, "ok ops_samples ") }) {
+		t.Errorf("ops.sample audits = %q, want an ok row per pass that sampled", audits)
+	}
+	setEnv(t, settingEnv(serverops.KeyHosts), "")
+	runs := asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.status = 'ok'", serveropsJobName)
+	runOpsSampler(t, f, d, func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.status = 'ok'", serveropsJobName) > runs
+	})
+	if again := operationAudits(t, d, "ops.sample"); len(again) != len(audits) {
+		t.Errorf("a sampler pass with no hosts wrote audits %q", again[len(audits):])
+	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "kb_search", map[string]any{"query": "node-a"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
 	if ran := runApp(t, "agent", "run", "--text", "what is the host doing"); ran.code != cli.ExitOK {
@@ -269,8 +257,11 @@ func TestOpsQuerySettingsRefuseNonQueryValues(t *testing.T) {
 		{"ops_hosts", `node"}`},
 	}
 	for _, c := range bad {
-		if code, _, _ := runIn(t, dir, "settings", "set", c.key, c.value); code == cli.ExitOK {
-			t.Errorf("settings set %s %q was accepted", c.key, c.value)
+		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bad.toml", "[grafana]\n"+c.key+" = "+strconv.Quote(c.value)+"\n"))
+		if code, _, stderr := runIn(t, dir, "settings", "list"); code == cli.ExitOK {
+			t.Errorf("host %s %q was accepted", c.key, c.value)
+		} else if !strings.Contains(stderr, c.key) {
+			t.Errorf("refusal for %s does not name it: %s", c.key, stderr)
 		}
 	}
 	good := []struct{ key, value string }{
@@ -279,10 +270,12 @@ func TestOpsQuerySettingsRefuseNonQueryValues(t *testing.T) {
 		{"ops_hosts", "node-a"},
 	}
 	for _, c := range good {
-		if code, _, stderr := runIn(t, dir, "settings", "set", c.key, c.value); code != cli.ExitOK {
-			t.Errorf("settings set %s %q: exit %d %s", c.key, c.value, code, stderr)
+		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "good.toml", "[grafana]\n"+c.key+" = "+strconv.Quote(c.value)+"\n"))
+		if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
+			t.Errorf("host %s %q: exit %d %s", c.key, c.value, code, stderr)
 		}
 	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", "")
 }
 
 func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
@@ -290,11 +283,10 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
-	setEnv(t, settingEnv(grafanatools.KeyMetricsUID), "metrics")
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	runOpsSampler(t, f, d, samplesExist(t, d))
 	for _, request := range fake.seen() {
@@ -308,102 +300,40 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 	}
 }
 
-func TestSchemaVersionNineDatabaseDropsOpsRecords(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "atrium.db")
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list: exit %d %s", code, stderr)
-	}
-	d := mustConnect(t, path)
-	if _, err := d.Write.Exec("DROP TABLE ops_findings"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("DELETE FROM schema_migrations WHERE version = 10"); err != nil {
-		t.Fatal(err)
-	}
-	now := float64(time.Now().Unix())
-	res, err := d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, created_at, updated_at) "+
-		"VALUES ('Host node-a is down', '[]', 'up is down', 'ops', NULL, 0, 1, 'worker', 'finding:node-a:up', 0, 0, ?, ?)", now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	findingID, _ := res.LastInsertId()
-	res, err = d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, created_at, updated_at) "+
-		"VALUES ('node-a up', '[]', 'up at 10:00', 'ops', NULL, 0, 0, 'worker', 'ops:node-a:up', 0, 0, ?, ?)", now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	factID, _ := res.LastInsertId()
-	res, err = d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, pinned, embedded, created_at, updated_at) "+
-		"VALUES ('Boiler code', '[]', '4417', 'work', NULL, 0, 0, 'operator', 0, 0, ?, ?)", now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keepID, _ := res.LastInsertId()
-	blob := make([]byte, 768*4)
-	for _, id := range []int64{findingID, factID, keepID} {
-		if _, err := d.Write.Exec("INSERT INTO embed_kb_0 (rowid, embedding) VALUES (?, ?)", id, blob); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := d.Write.Exec("INSERT INTO export_pages (target, record_id, remote_id, hash, updated_at) VALUES ('notion', ?, 'page', 'hash', ?)", findingID, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target, after_json, undo_json) VALUES (?, 'ops_finding', ?, '{}', '{}')", now, "kb:"+fmt.Sprint(findingID)); err != nil {
-		t.Fatal(err)
-	}
-	_ = d.Close()
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list after migration: exit %d %s", code, stderr)
-	}
-	d = mustConnect(t, path)
+func TestOpsSamplerKeepsHealthyHostsWhenOneHostFails(t *testing.T) {
+	fake := &fakeOpsGrafana{up: 1, failHost: "node-b"}
+	srv := httptest.NewServer(fake)
+	t.Cleanup(srv.Close)
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
+	setEnv(t, settingEnv(serverops.KeyHosts), "node-a,node-b")
+	warm(t, api)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	var opsRows int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops'").Scan(&opsRows); err != nil || opsRows != 0 {
-		t.Errorf("ops knowledge rows = %d, %v, want none", opsRows, err)
+	now := float64(time.Now().Unix())
+	asstExec(t, d, "INSERT INTO ops_samples (ts, host, metric, value) VALUES (?, 'node-a', 'cpu_pct', 1)", now-15*24*3600)
+	asstExec(t, d, "INSERT INTO ops_findings (fact, severity, title, body, created_at, resolved_at, resolved_reason) VALUES ('node-a/up', 'info', 'old', 'old', ?, ?, 'cleared')", now-40*24*3600, now-31*24*3600)
+	runOpsSampler(t, f, d, func() bool {
+		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.ended_at IS NOT NULL", serveropsJobName) > 0 &&
+			asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE ts < ?", now-14*24*3600) == 0
+	})
+	if status, text := schedulerStatus(t, d, serveropsJobName); status != "ok" {
+		t.Errorf("sampler job with one failing host = %s %q, want ok", status, text)
 	}
-	var kept int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE id = ?", keepID).Scan(&kept); err != nil || kept != 1 {
-		t.Errorf("work record after migration = %d, %v, want one", kept, err)
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE host = 'node-a' AND ts >= ?", now-60); n < 6 || n%6 != 0 {
+		t.Errorf("node-a samples = %d, want six per pass", n)
 	}
-	for _, id := range []int64{findingID, factID} {
-		var fts, emb, pages int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_fts WHERE rowid = ?", id).Scan(&fts); err != nil || fts != 0 {
-			t.Errorf("fts rows for %d = %d, %v", id, fts, err)
-		}
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM embed_kb_0 WHERE rowid = ?", id).Scan(&emb); err != nil || emb != 0 {
-			t.Errorf("embedding rows for %d = %d, %v", id, emb, err)
-		}
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages WHERE record_id = ?", id).Scan(&pages); err != nil || pages != 0 {
-			t.Errorf("export pages for %d = %d, %v", id, pages, err)
-		}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE host = 'node-b'"); n != 0 {
+		t.Errorf("node-b samples = %d from a host whose reads fail, want none", n)
 	}
-	var purged int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes WHERE target = ? AND undo_json = '{\"purged\":true}'", "kb:"+fmt.Sprint(findingID)).Scan(&purged); err != nil || purged != 1 {
-		t.Errorf("agent writes purged = %d, %v, want one", purged, err)
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_findings WHERE title = 'old'"); n != 0 {
+		t.Errorf("the supervisor did not prune the old resolved finding after a partial pass")
 	}
-	var findings int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ops_findings'").Scan(&findings); err != nil || findings != 1 {
-		t.Errorf("ops_findings after migration = %d, %v, want one table", findings, err)
+	audits := operationAudits(t, d, "ops.sample")
+	if len(audits) == 0 || slices.ContainsFunc(audits, func(a string) bool { return !strings.HasPrefix(a, "partial ops_samples ") }) {
+		t.Errorf("ops.sample audits = %q, want a partial row per pass", audits)
 	}
-	var version int
-	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 11 {
-		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
-	}
-	_ = d.Close()
-	if code, stdout, stderr := runIn(t, dir, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
-		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
-	}
-	fresh := t.TempDir()
-	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
-	}
-	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
-	if !slices.Equal(migrated, created) {
-		for _, line := range migrated {
-			if !slices.Contains(created, line) {
-				t.Errorf("only in the migrated schema: %s", line)
-			}
-		}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'ops.sample' AND details_json <> '{\"failed_hosts\":1}'"); n != 0 {
+		t.Errorf("%d ops.sample audits without the failing host count alone", n)
 	}
 }

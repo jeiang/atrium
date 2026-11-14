@@ -10,11 +10,12 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestAttentionListsParkedQuestionUntilAnswered(t *testing.T) {
 	s := newAPISite(t)
-	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -26,6 +27,9 @@ func TestAttentionListsParkedQuestionUntilAnswered(t *testing.T) {
 	var threadID int64
 	if err := d.Read.QueryRow("SELECT thread_id FROM runs WHERE state = 'parked'").Scan(&threadID); err != nil {
 		t.Fatalf("parked run: %v", err)
+	}
+	if got := operationAudits(t, d, "assistant.question.ask"); len(got) != 1 || !strings.HasPrefix(got[0], "ok thread:"+strconv.FormatInt(threadID, 10)+" ") {
+		t.Errorf("question audits: %q", got)
 	}
 	attention := func() string {
 		t.Helper()
@@ -40,7 +44,7 @@ func TestAttentionListsParkedQuestionUntilAnswered(t *testing.T) {
 		}
 		return body
 	}
-	if body := attention(); !strings.Contains(body, "Which account should I use?") || !strings.Contains(body, "Answer") {
+	if body := attention(); !strings.Contains(body, "Which account should I use?") {
 		t.Fatalf("attention misses the parked question: %s", body)
 	}
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("thanks")))

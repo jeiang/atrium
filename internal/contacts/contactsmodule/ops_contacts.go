@@ -1,0 +1,14 @@
+package contactsmodule
+
+import (
+	"github.com/jeiang/atrium/internal/application"
+	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
+)
+
+func contactsOperations() ([]application.Definition, []application.Binding) {
+	return contactsapp.Describe(), append(contactRoutes(nil), []application.Binding{
+		{Kind: application.Tool, Target: "contacts_lookup", Uses: []application.Name{contactsapp.LookupName}},
+		{Kind: application.Job, Target: "contacts/carddav", Uses: []application.Name{contactsapp.SyncName}},
+		{Kind: application.CLI, Target: "contacts sync", Uses: []application.Name{contactsapp.SyncName}},
+	}...)
+}

@@ -12,75 +12,40 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
-	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
-func BackupCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "backup",
-		Help:  "write one archive holding a consistent copy of the database and the uploaded files; safe while atrium runs",
-		Setup: backupSetup,
-	}
-}
+type Refusal struct{ Err error }
 
-func refuseDestination(cfg config.Config, dest string) error {
+func (r *Refusal) Error() string { return r.Err.Error() }
+
+func (r *Refusal) Unwrap() error { return r.Err }
+
+func RefuseDestination(cfg config.Config, dest string) error {
 	if filepath.Clean(dest) == filepath.Clean(cfg.DBPath) {
-		return fmt.Errorf("backup destination %s is the database itself", dest)
+		return &Refusal{fmt.Errorf("backup destination %s is the database itself", dest)}
 	}
 	rel, err := filepath.Rel(filepath.Clean(cfg.FilesDir()), filepath.Clean(dest))
 	if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("backup destination %s is inside %s; choose a path outside the uploaded files", dest, cfg.FilesDir())
+		return &Refusal{fmt.Errorf("backup destination %s is inside %s; choose a path outside the uploaded files", dest, cfg.FilesDir())}
 	}
 	return nil
 }
 
-func backupSetup(a *cli.Args) cli.Handler {
-	dest := a.Arg("dest", cli.Opt{Help: "path of the new archive; must not exist"})
-	return func(e *cli.Env) int {
-		cfg, err := config.Load(e.Env)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		if _, err := os.Stat(cfg.DBPath); err != nil {
-			return cli.Fail(e, fmt.Errorf("database %s: %w", cfg.DBPath, err))
-		}
-		key, err := dbkey.Load(e.Env, settings.From(e.Ctx))
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		if _, err := os.Lstat(*dest); err == nil {
-			return cli.Fail(e, fmt.Errorf("backup destination %s already exists", *dest))
-		}
-		count, err := writeBackup(e.Ctx, cfg, key, *dest)
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		_, _ = fmt.Fprintf(e.Stdout, "backup written to %s (%s, %d files)\n", *dest, describe(key), count)
-		return cli.ExitOK
+func Write(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest string, forget func(context.Context, db.Querier) error) (int, error) {
+	if _, err := os.Lstat(dest); err == nil {
+		return 0, &Refusal{fmt.Errorf("backup destination %s already exists", dest)}
 	}
+	if forget != nil {
+		return writeBackup(ctx, d, cfg, key, dest, forget)
+	}
+	return manual(ctx, d, cfg, key, dest)
 }
 
-func describe(key db.Key) string {
-	if key.IsZero() {
-		return "plaintext"
-	}
-	return "encrypted, key id " + dbkey.ID(key)
-}
-
-func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string) (count int, err error) {
-	d, err := db.Connect(cfg.DBPath, db.WithKey(key))
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = d.Close() }()
-	started := float64(time.Now().UnixNano()) / 1e9
-	defer func() { passrun.Record(context.WithoutCancel(ctx), d, passrun.Backup, started, err) }()
-	if err := refuseDestination(cfg, dest); err != nil {
+func writeBackup(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest string, forget func(context.Context, db.Querier) error) (int, error) {
+	if err := RefuseDestination(cfg, dest); err != nil {
 		return 0, err
 	}
 	staged, err := db.Stage(dest, 0o600)
@@ -96,11 +61,11 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 	if err := d.BackupTo(ctx, snapshot.Path(), key); err != nil {
 		return 0, err
 	}
-	header, err := snapshotHeader(ctx, snapshot.Path(), key)
+	header, err := snapshotHeader(ctx, snapshot.Path(), key, forget)
 	if err != nil {
 		return 0, err
 	}
-	files, err := listFiles(cfg.FilesDir())
+	files, err := listFiles(ctx, cfg.FilesDir())
 	if err != nil {
 		return 0, err
 	}
@@ -121,7 +86,7 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 	if err != nil {
 		return 0, err
 	}
-	err = writeArchive(out, header, key, snapshot.Path(), files)
+	err = writeArchive(ctx, out, header, key, snapshot.Path(), files)
 	if err == nil {
 		err = out.Sync()
 	}
@@ -137,12 +102,15 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 	return header.Files, nil
 }
 
-func snapshotHeader(ctx context.Context, snapshot string, key db.Key) (Header, error) {
+func snapshotHeader(ctx context.Context, snapshot string, key db.Key, forget func(context.Context, db.Querier) error) (Header, error) {
 	c, err := db.OpenFile(snapshot, key)
 	if err != nil {
 		return Header{}, err
 	}
 	defer func() { _ = c.Close() }()
+	if err := forget(ctx, c); err != nil {
+		return Header{}, err
+	}
 	if err := db.IntegrityCheck(ctx, c); err != nil {
 		return Header{}, fmt.Errorf("backup verification: %w", err)
 	}

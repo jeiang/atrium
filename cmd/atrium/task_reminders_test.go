@@ -27,7 +27,7 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", keyFor(t))
 	base, _, stopServe := startServeStoppable(t, dir)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
@@ -65,7 +65,7 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	start := func() (context.CancelFunc, chan appRun) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan appRun, 1)
-		go func() { done <- runAppContext(ctx, "agent", "scheduler") }()
+		go func() { done <- runAppContext(ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local") }()
 		return cancel, done
 	}
 	cancel, done := start()
@@ -120,6 +120,10 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	due()
 	if p := runOnce(); !strings.Contains(fmt.Sprint(p["title"]), "Pay the rent") {
 		t.Fatalf("reminder payload = %v", p)
+	}
+	var auditRuns int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit a JOIN job_runs r ON r.id = a.job_run_id JOIN jobs j ON j.id = r.job_id WHERE a.operation = 'tasks.remind' AND a.outcome = 'ok' AND j.name = 'task-reminders'").Scan(&auditRuns); err != nil || auditRuns != 1 {
+		t.Fatalf("reminder audit with trusted job run = %d (%v), want 1", auditRuns, err)
 	}
 	due()
 	runNone()

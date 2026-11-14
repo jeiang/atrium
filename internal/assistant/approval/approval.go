@@ -9,12 +9,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 type Payload struct {
@@ -48,6 +52,11 @@ func Title(a *tool.Approval, args tool.Args) string {
 }
 
 func request(ctx context.Context, tc *tool.Context, name string, a *tool.Approval, args tool.Args) (any, error) {
+	if a.Check != nil {
+		if err := a.Check(ctx, tc, args); err != nil {
+			return nil, err
+		}
+	}
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil, err
@@ -65,21 +74,27 @@ func request(ctx context.Context, tc *tool.Context, name string, a *tool.Approva
 }
 
 type Executor struct {
-	DB      *db.DB
-	Env     config.Env
-	Now     func() float64
-	Undoers *writes.Registry
-	Tools   []tool.Tool
+	DB       *db.DB
+	Env      config.Env
+	Now      func() float64
+	Ledger   *ledger.Store
+	MailOpen mail.OpenFunc
+	Tools    []tool.Tool
+	Registry registry.Source
 }
 
-func (e *Executor) Register(r *proposals.Registry) {
+func (e *Executor) Proposals() []proposals.Definition {
+	var out []proposals.Definition
 	for _, t := range e.Tools {
 		if t.Approval == nil {
 			continue
 		}
-		r.Executors[t.Name] = e.execute(t)
-		r.AddKind(proposals.Kind{Name: t.Name, Module: t.Approval.Module, Label: t.Approval.Label, Icon: t.Approval.Icon, Approval: true})
+		out = append(out, proposals.Definition{
+			Kind:    proposals.Kind{Name: t.Name, Module: t.Approval.Module, Label: t.Approval.Label, Icon: t.Approval.Icon, Approval: true},
+			Execute: e.execute(t),
+		})
 	}
+	return out
 }
 
 func (e *Executor) now() float64 {
@@ -101,39 +116,39 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 		if err := dec.Decode(&args); err != nil {
 			return nil, err
 		}
-		action := map[string]any{"tool": t.Name}
-		start := e.now()
-		held, err := proposals.BeginAction(ctx, e.DB.Write, p.ID, action, start)
+		proposalID := p.ID
+		tc := &tool.Context{
+			DB: e.DB, Env: e.Env, Kind: payload.RunKind, ThreadID: payload.ThreadID, RunID: payload.RunID,
+			ProposalID: &proposalID, AllowedURLs: map[string]struct{}{}, Now: e.now, Ledger: e.Ledger, MailOpen: e.MailOpen,
+		}
+		if e.Registry == nil {
+			return nil, proposals.ProposalError("no tool registry is available to re-authorize " + t.Name)
+		}
+		r, err := e.Registry()
 		if err != nil {
 			return nil, err
 		}
-		tc := &tool.Context{
-			DB: e.DB, Env: e.Env, Kind: payload.RunKind, ThreadID: payload.ThreadID, RunID: payload.RunID,
-			AllowedURLs: map[string]struct{}{}, Now: e.now, Undoers: e.Undoers,
+		auth, err := threads.ReadAuthority(ctx, e.DB.Read, payload.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		_, decision, err := r.Authorize(ctx, e.DB.Read, payload.RunKind, auth.Role, auth.WebSearch, auth.Effective(), registry.All(), t.Name, args)
+		if err != nil {
+			return nil, err
+		}
+		if decision != registry.Allowed {
+			return nil, proposals.ProposalError(t.Name + " is not allowed in this thread by the permission table")
+		}
+		ctx = application.WithInvocation(ctx, application.Invocation{ThreadID: payload.ThreadID, RunID: payload.RunID, Fingerprint: p.Fingerprint})
+		if !audit.HasActor(ctx) {
+			ctx = audit.With(ctx, "assistant", audit.Tool)
 		}
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {
-			text := err.Error()
-			var unknown bool
-			if qerr := e.DB.Write.QueryRowContext(context.WithoutCancel(ctx),
-				"SELECT EXISTS (SELECT 1 FROM agent_writes WHERE run_id = ? AND tool = ? AND state = 'unknown' AND ts >= ?)",
-				payload.RunID, t.Name, start).Scan(&unknown); qerr != nil {
-				return nil, qerr
-			}
 			message, refused := tool.Message(err)
-			state := ledger.Failed
-			if unknown || !refused {
-				state = ledger.Unknown
-			}
-			if settleErr := proposals.SettleAction(ctx, e.DB.Write, held, action, nil, state, &text, e.now()); settleErr != nil {
-				return nil, settleErr
-			}
 			if refused {
 				return nil, proposals.ProposalError(message)
 			}
-			return nil, err
-		}
-		if err := proposals.SettleAction(ctx, e.DB.Write, held, action, nil, ledger.OK, nil, e.now()); err != nil {
 			return nil, err
 		}
 		return map[string]any{"summary": t.Approval.Label + ": done", "result": value}, nil

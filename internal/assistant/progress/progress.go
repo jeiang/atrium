@@ -35,7 +35,10 @@ const (
 	PreviewChars = 240
 )
 
-var ErrStopped = errors.New("stopped by the operator")
+var (
+	ErrStopped  = errors.New("stopped by the operator")
+	ErrShutdown = errors.New("serve is shutting down; the run resumes on restart")
+)
 
 var dataOpts = jsonx.Opts{NoEnsureASCII: true}
 
@@ -61,41 +64,11 @@ func PreviewOf(content any) string {
 	return textx.Clip(text, PreviewChars-1) + "…"
 }
 
-func Emit(ctx context.Context, q db.Querier, runID int64, kind string, data any, now float64) error {
-	_, err := q.ExecContext(ctx, "INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", runID, now, kind, jsonx.Dumps(data, dataOpts))
-	return err
-}
-
 type Event struct {
 	ID    int64           `json:"id"`
 	RunID int64           `json:"run_id"`
 	Kind  string          `json:"kind"`
 	Data  json.RawMessage `json:"data"`
-}
-
-func Since(ctx context.Context, q db.Querier, runID, afterID int64) ([]Event, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT e.id, e.run_id, e.kind, e.data_json FROM run_events e WHERE e.id > ? "+
-			"AND (e.run_id = ? OR e.run_id IN (SELECT id FROM runs WHERE parent_run_id = ?)) ORDER BY e.id", afterID, runID, runID)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (Event, error) {
-		var e Event
-		var data string
-		if err := r.Scan(&e.ID, &e.RunID, &e.Kind, &data); err != nil {
-			return Event{}, err
-		}
-		e.Data = json.RawMessage(data)
-		return e, nil
-	})
-}
-
-func ClearThread(ctx context.Context, q db.Querier, threadID int64) error {
-	_, err := q.ExecContext(ctx,
-		"DELETE FROM run_events WHERE run_id IN (SELECT id FROM runs WHERE thread_id = ? OR parent_run_id IN (SELECT id FROM runs WHERE thread_id = ?))",
-		threadID, threadID)
-	return err
 }
 
 type Writer struct {
@@ -106,17 +79,20 @@ type Writer struct {
 	buffer    []string
 	flushedAt float64
 	checkedAt float64
+	stop      <-chan struct{}
 }
 
-func NewWriter(q db.Querier, runID int64, now func() float64) *Writer {
-	return &Writer{q: q, runID: runID, now: now}
+func NewWriter(q db.Querier, runID int64, now func() float64, stop <-chan struct{}) *Writer {
+	return &Writer{q: q, runID: runID, now: now, stop: stop}
 }
 
 func (w *Writer) Event(ctx context.Context, kind string, data map[string]any) error {
 	if err := w.Flush(ctx); err != nil {
 		return err
 	}
-	return Emit(ctx, w.q, w.runID, kind, data, w.now())
+	return Write(ctx, w.q, func(tx *sql.Tx) error {
+		return Append(ctx, tx, w.runID, Payload{Kind: kind, Data: data, Time: w.now()})
+	})
 }
 
 func (w *Writer) Delta(ctx context.Context, kind, text string) error {
@@ -140,11 +116,19 @@ func (w *Writer) Flush(ctx context.Context) error {
 	if text == "" {
 		return nil
 	}
-	return Emit(ctx, w.q, w.runID, w.kind, map[string]any{"text": text}, w.flushedAt)
+	return Write(ctx, w.q, func(tx *sql.Tx) error {
+		return Append(ctx, tx, w.runID, Payload{Kind: w.kind, Data: map[string]any{"text": text}, Time: w.flushedAt})
+	})
 }
 
 func (w *Writer) CheckStop(ctx context.Context, force bool) error {
-	if !force && w.now()-w.checkedAt < CheckSeconds {
+	if force {
+		select {
+		case <-w.stop:
+			return ErrShutdown
+		default:
+		}
+	} else if w.now()-w.checkedAt < CheckSeconds {
 		return nil
 	}
 	w.checkedAt = w.now()

@@ -10,11 +10,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/block"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/usage"
+	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -43,11 +42,12 @@ type Job struct {
 }
 
 type WorkOptions struct {
-	Now    float64
-	Limit  int
-	Client *anthropic.Client
-	Model  string
-	Effort string
+	Now       float64
+	Limit     int
+	Client    *anthropic.Client
+	Inference *inference.Service
+	Model     string
+	Effort    string
 }
 
 func Queue(ctx context.Context, q db.Querier, threadID int64, now float64) error {
@@ -87,34 +87,18 @@ func Effort(ctx context.Context, q db.Querier) (string, error) {
 	return value, nil
 }
 
-func Concurrency(ctx context.Context, q db.Querier) (int, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, ConcurrencyKey)
-	if err != nil {
-		return 0, err
-	}
-	n, err := found.Int()
-	if err != nil {
-		return 0, err
-	}
-	if n < 1 {
-		n = 4
-	}
-	return int(n), nil
-}
-
 // Work drains one batch of queued summarizer jobs for a thread. It returns
 // the number of nodes that reached summary or fallback.
 func Work(ctx context.Context, d *db.DB, threadID int64, o WorkOptions) (int, error) {
 	if o.Client == nil {
 		return 0, errors.New("memory: no anthropic client")
 	}
+	if o.Inference == nil {
+		return 0, errors.New("memory: no inference service")
+	}
 	limit := o.Limit
 	if limit <= 0 {
-		n, err := Concurrency(ctx, d.Read)
-		if err != nil {
-			return 0, err
-		}
-		limit = n
+		limit = TuningMemoryConcurrency
 	}
 	jobs, err := claim(ctx, d, threadID, o.Now, limit)
 	if err != nil {
@@ -169,38 +153,64 @@ func claim(ctx context.Context, d *db.DB, threadID int64, now float64, limit int
 
 func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOptions) (bool, error) {
 	var text, state string
-	err := d.Read.QueryRowContext(ctx, "SELECT text, state FROM memory_nodes WHERE id = ?", job.NodeID).Scan(&text, &state)
+	var from, to int64
+	err := d.Read.QueryRowContext(ctx,
+		"SELECT text, state, src_from_seq, src_to_seq FROM memory_nodes WHERE id = ?", job.NodeID).Scan(&text, &state, &from, &to)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && state != Pending) {
 		return false, finishJob(ctx, d, job.ID, JobDone, nil)
 	}
 	if err != nil {
 		return false, err
 	}
-	limit, err := NodeBytes(ctx, d.Read)
+	source, err := sourceText(ctx, d.Read, threadID, from, to)
 	if err != nil {
 		return false, err
 	}
+	if source == "" {
+		source = text
+	}
+	limit := TuningMemoryNodeBytes
 	root, err := rootLine(ctx, d.Read, threadID)
 	if err != nil {
 		return false, err
 	}
-	if cerr := capCheck(ctx, d.Read, o.Model, len(text)+len(root)); cerr != nil {
-		msg := cerr.Error()
-		return false, finishJob(ctx, d, job.ID, JobFail, &msg)
+	runID, err := startRun(ctx, d, threadID, o)
+	if err != nil {
+		return false, err
 	}
-	answer, resp, retry, err := summarize(ctx, o.Client, o.Model, o.Effort, text, root, limit)
+	answer, retry, err := summarize(ctx, o, runID, threadID, source, root, limit)
+	if err != nil {
+		var exceeded inference.BudgetExceeded
+		if errors.As(err, &exceeded) {
+			msg := exceeded.Error()
+			if ferr := finishRun(ctx, d, runID, &msg); ferr != nil {
+				return false, ferr
+			}
+			if exceeded.Reason == inference.ReasonRun {
+				return false, finishJob(ctx, d, job.ID, JobFail, &msg)
+			}
+			if exceeded.Reason == inference.ReasonMonthly {
+				_, uerr := d.Write.ExecContext(ctx,
+					"UPDATE memory_jobs SET state = ?, next_at = ?, lease_until = NULL, error = ? WHERE id = ?",
+					Queued, exceeded.NextMonth, msg, job.ID)
+				return false, uerr
+			}
+			_, uerr := d.Write.ExecContext(ctx,
+				"UPDATE memory_jobs SET state = ?, attempts = attempts + 1, next_at = ?, lease_until = NULL, error = ? WHERE id = ?",
+				Queued, o.Now+backoffSeconds, msg, job.ID)
+			return false, uerr
+		}
+		return false, err
+	}
 	if retry {
 		_, uerr := d.Write.ExecContext(ctx,
 			"UPDATE memory_jobs SET state = ?, attempts = attempts + 1, next_at = ?, lease_until = NULL WHERE id = ?",
 			Queued, o.Now+backoffSeconds, job.ID)
 		return false, uerr
 	}
-	if err != nil {
-		return false, err
-	}
 	nodeState := Summary
 	if answer == "" {
-		answer, nodeState = flatten(text, limit), Fallback
+		answer, nodeState = flatten(source, limit), Fallback
 	}
 	answer = clip(answer, limit)
 	if _, err := d.Write.ExecContext(ctx,
@@ -208,17 +218,46 @@ func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOption
 		answer, len(answer), nodeState, job.NodeID); err != nil {
 		return false, err
 	}
-	if resp != nil {
-		if err := recordUsage(ctx, d, threadID, o, *resp); err != nil {
-			return false, err
-		}
-	}
 	return true, finishJob(ctx, d, job.ID, JobDone, nil)
 }
 
-func summarize(ctx context.Context, client *anthropic.Client, model, effort, source, root string, limit int) (string, *anthropic.Message, bool, error) {
+func startRun(ctx context.Context, d *db.DB, threadID int64, o WorkOptions) (int64, error) {
+	res, err := d.Write.ExecContext(ctx,
+		"INSERT INTO runs (thread_id, kind, model, effort, state, started_at, ended_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		threadID, inference.KindMemory, o.Model, o.Effort, journal.Done, o.Now, o.Now)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func finishRun(ctx context.Context, d *db.DB, runID int64, errText *string) error {
+	_, err := d.Write.ExecContext(ctx, "UPDATE runs SET state = ?, error = ? WHERE id = ?", journal.Failed, errText, runID)
+	return err
+}
+
+func sourceText(ctx context.Context, q db.Querier, threadID, from, to int64) (string, error) {
+	messages, err := journal.MessagesOf(ctx, q, threadID)
+	if err != nil {
+		return "", err
+	}
+	parts := make([]string, 0, len(messages))
+	for _, m := range messages {
+		if m.Seq < from || m.Seq > to {
+			continue
+		}
+		text, _, err := render(m)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, "\n"), nil
+}
+
+func summarize(ctx context.Context, o WorkOptions, runID, threadID int64, source, root string, limit int) (string, bool, error) {
 	best := ""
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := range 3 {
 		prompt := "Node source:\n" + source
 		if root != "" {
 			prompt += "\n\nThread root:\n" + root
@@ -227,33 +266,50 @@ func summarize(ctx context.Context, client *anthropic.Client, model, effort, sou
 			prompt += fmt.Sprintf("\n\nThe previous answer was too long; answer in at most %d bytes.", limit)
 		}
 		params := anthropic.Params{
-			Model:     model,
+			Model:     o.Model,
 			MaxTokens: 1024,
 			System:    json.RawMessage(jsonx.Dumps(systemPrompt)),
 			Messages:  []json.RawMessage{json.RawMessage(jsonx.Dumps(map[string]any{"role": "user", "content": prompt}))},
 		}
-		resp, err := client.Stream(ctx, params, nil)
+		attempted, err := o.Inference.Reserve(ctx, inference.Request{
+			AttemptKey: inference.NewAttemptKey(fmt.Sprintf("memory:%d", runID)),
+			RunID:      runID,
+			ThreadID:   threadID,
+			Kind:       inference.KindMemory,
+			Class:      inference.Unattended,
+			Effort:     o.Effort,
+			CacheTTL:   prompts.TTL5m,
+			Params:     params,
+		})
 		if err != nil {
-			if retryable(err) {
-				return "", nil, true, nil
-			}
-			return "", nil, false, nil
+			return "", false, err
 		}
+		outcome := attempted.Stream(ctx, o.Client, nil)
+		if _, err := o.Inference.Settle(context.WithoutCancel(ctx), attempted, inference.Settlement{Outcome: outcome}); err != nil {
+			return "", false, err
+		}
+		if outcome.Err != nil {
+			if retryable(outcome.Err) {
+				return "", true, nil
+			}
+			return "", false, nil
+		}
+		resp := outcome.Message
 		text, err := answerText(resp.Content)
 		if err != nil {
-			return "", resp, false, err
+			return "", false, err
 		}
 		if resp.StopReason == "refusal" || strings.TrimSpace(text) == "" {
-			return "", resp, false, nil
+			return "", false, nil
 		}
 		if best == "" || len(text) < len(best) {
 			best = text
 		}
 		if len(text) <= limit {
-			return text, resp, false, nil
+			return text, false, nil
 		}
 	}
-	return best, nil, false, nil
+	return best, false, nil
 }
 
 func answerText(content []json.RawMessage) (string, error) {
@@ -299,23 +355,6 @@ func finishJob(ctx context.Context, d *db.DB, id int64, state string, errText *s
 	return err
 }
 
-func recordUsage(ctx context.Context, d *db.DB, threadID int64, o WorkOptions, resp anthropic.Message) error {
-	res, err := d.Write.ExecContext(ctx,
-		"INSERT INTO runs (thread_id, kind, model, effort, state, started_at, ended_at) VALUES (?, 'memory', ?, ?, ?, ?, ?)",
-		threadID, o.Model, o.Effort, journal.Done, o.Now, o.Now)
-	if err != nil {
-		return err
-	}
-	runID, err := res.LastInsertId()
-	if err != nil {
-		return err
-	}
-	_, err = usage.Record(ctx, d, usage.Entry{
-		TS: o.Now, RequestID: resp.ID, ThreadID: threadID, RunID: runID, Kind: usage.KindMemory, Model: o.Model, Effort: o.Effort,
-	}, resp.Usage)
-	return err
-}
-
 // QueuedThreads lists threads with a job that is ready to run.
 func QueuedThreads(ctx context.Context, q db.Querier, now float64) ([]int64, error) {
 	rows, err := q.QueryContext(ctx,
@@ -327,26 +366,4 @@ func QueuedThreads(ctx context.Context, q db.Querier, now float64) ([]int64, err
 		var id int64
 		return id, r.Scan(&id)
 	})
-}
-
-// capCheck refuses a summary request that would exceed the model's run cost
-// cap, before anything is sent.
-func capCheck(ctx context.Context, q db.Querier, model string, promptBytes int) error {
-	cap, err := budget.RunCap(ctx, q, model)
-	if err != nil || cap <= 0 {
-		return err
-	}
-	tokens := int64(promptBytes/4) + 1
-	cold, err := budget.ColdRequestUSD(model, tokens, "5m")
-	if err != nil {
-		return err
-	}
-	out, err := pricing.CostUSD(model, pricing.Tokens{Output: 1024}, 0)
-	if err != nil {
-		return err
-	}
-	if cold+out > cap {
-		return fmt.Errorf("memory: the summary request would cost $%.2f, over the $%.2f run cap", cold+out, cap)
-	}
-	return nil
 }

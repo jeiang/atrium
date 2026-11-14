@@ -14,14 +14,21 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/mail"
 )
 
-const lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
+const (
+	lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
+	execMainEnv   = "ATRIUM_TEST_EXEC_MAIN"
+)
 
 func TestMain(m *testing.M) {
+	guardExternalHosts()
+	if os.Getenv(execMainEnv) == "1" {
+		os.Exit(run(os.Args[1:]))
+	}
 	if path := os.Getenv(lockHolderEnv); path != "" {
-		lock, err := db.Exclusive(context.Background(), path, 0)
+		lock, err := db.ResourceLocks(context.Background(), path, []string{mail.PassResource}, 0)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -31,13 +38,11 @@ func TestMain(m *testing.M) {
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 		os.Exit(0)
 	}
-	extModules()
-	reg := settings.New()
-	newApp(config.OS, reg, config.NewState(reg), nil)
+	newApp(config.OS)
 	os.Exit(m.Run())
 }
 
-func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
+func TestRefreshReportsMailPassLockTimeout(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
@@ -54,6 +59,7 @@ func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
 	}
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	seedAllFlagsIn(t, dir)
 
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
 	cmd.Env = append(os.Environ(), lockHolderEnv+"="+path)
@@ -79,7 +85,7 @@ func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
 
 	var out, stderr bytes.Buffer
 	code := defaultApp(t).Run(context.Background(), []string{"loops", "refresh"}, &out, &stderr)
-	if code == cli.ExitOK || !strings.Contains(stderr.String(), "timed out after") || !strings.Contains(stderr.String(), path+".lock") {
-		t.Fatalf("loops refresh = (%d, stdout %q, stderr %q), want non-zero and a clear lock timeout", code, out.String(), stderr.String())
+	if code == cli.ExitOK || !strings.Contains(stderr.String(), mail.PassResource+" is held by another invocation") {
+		t.Fatalf("loops refresh = (%d, stdout %q, stderr %q), want non-zero and a clear mail-pass lock timeout", code, out.String(), stderr.String())
 	}
 }

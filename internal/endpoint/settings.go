@@ -10,35 +10,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
-	KeyChatURL        = "mail_chat_url"
-	KeyEmbedURL       = "mail_embed_url"
-	KeyChatModel      = "mail_chat_model"
-	KeyEmbedModel     = "mail_embed_model"
-	KeyLLMBodyChars   = "llm_body_chars"
-	KeyEmbedBodyChars = "mail_embed_body_chars"
-	KeyEmbedBatch     = "mail_embed_batch"
-	KeyChatMaxTokens  = "mail_chat_max_tokens"
-	KeyLLMTopSenders  = "llm_top_senders"
-	KeyChatKey        = "mail_chat_key"
-	KeyEmbedKey       = "mail_embed_key"
+	KeyLLMBodyChars  = "llm_body_chars"
+	KeyLLMTopSenders = "llm_top_senders"
 
-	EndpointChat  = "chat"
 	EndpointEmbed = "embed"
 )
-
-func init() {
-	for _, key := range []string{KeyChatKey, KeyEmbedKey} {
-		settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: key, Module: "mail", Type: settings.String}))
-	}
-}
 
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -144,70 +124,24 @@ func New(kind, url, model, key string) Endpoint {
 	return Endpoint{Kind: kind, URL: url, Model: model, key: key}
 }
 
-func Endpoints(ctx context.Context, q Querier) ([]Endpoint, error) {
-	r := Read(ctx, q)
-	chat, embed := r.Text(KeyChatModel), r.Text(KeyEmbedModel)
-	if r.Err() != nil {
-		return nil, r.Err()
-	}
-	store := secrets.NewIn(settings.From(ctx), nil, readOnly{q}, nil)
-	out := []Endpoint{New(EndpointChat, "", chat, ""), New(EndpointEmbed, "", embed, "")}
-	for i, pair := range [][2]string{{KeyChatURL, KeyChatKey}, {KeyEmbedURL, KeyEmbedKey}} {
-		u, err := urlOf(ctx, q, pair[0])
-		if err != nil {
-			return nil, err
-		}
-		key, err := store.Value(ctx, pair[1])
-		if err != nil {
-			return nil, err
-		}
-		out[i].URL, out[i].key = u, key
-	}
-	return out, nil
-}
-
 func (e Endpoint) Fingerprint() string {
 	sum := sha256.Sum256([]byte(e.URL + "\x00" + e.Model + "\x00" + e.key))
 	return hex.EncodeToString(sum[:8])
-}
-
-func Of(endpoints []Endpoint, kind string) (Endpoint, bool) {
-	for _, e := range endpoints {
-		if e.Kind == kind {
-			return e, true
-		}
-	}
-	return Endpoint{}, false
-}
-
-func Integration(kind string) string { return "mail_" + kind }
-
-func WithEndpoints(ctx context.Context, q Querier, endpoints []Endpoint) (context.Context, error) {
-	out := ctx
-	for _, e := range endpoints {
-		client, err := transport.For(ctx, readOnly{q}, Integration(e.Kind), config.From(ctx).HTTPTimeout(config.OS))
-		if err != nil {
-			return ctx, err
-		}
-		out = httpx.WithEndpoint(out, e.URL, e.key, client)
-	}
-	return out, nil
-}
-
-func ChatURL(ctx context.Context, q Querier) (string, error) {
-	return urlOf(ctx, q, KeyChatURL)
 }
 
 func EmbedURL(ctx context.Context, q Querier, activeURL string) (string, error) {
 	if activeURL != "" {
 		return activeURL, nil
 	}
-	return urlOf(ctx, q, KeyEmbedURL)
-}
-
-func urlOf(ctx context.Context, q Querier, key string) (string, error) {
-	found, err := settings.From(ctx).Resolve(ctx, readOnly{q}, key)
-	return strings.TrimRight(found.Value, "/"), err
+	e, err := OpenEmbedding(ctx, q)
+	if err != nil {
+		if IsUnconfigured(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	defer e.Close()
+	return e.Base, nil
 }
 
 type Active struct {
@@ -216,26 +150,22 @@ type Active struct {
 }
 
 func WithModels(ctx context.Context, q Querier, active Active) (context.Context, error) {
-	r := Read(ctx, q)
 	s := Settings{
-		ChatModel:      r.Text(KeyChatModel),
-		EmbedModel:     r.Text(KeyEmbedModel),
-		LLMBodyChars:   r.Int(KeyLLMBodyChars),
-		EmbedBodyChars: r.Int(KeyEmbedBodyChars),
-		Batch:          r.Int(KeyEmbedBatch),
-		MaxTokens:      r.Int(KeyChatMaxTokens),
-		TopSenders:     r.Int(KeyLLMTopSenders),
-	}
-	if r.Err() != nil {
-		return ctx, r.Err()
+		EmbedModel:     EmbedModel,
+		LLMBodyChars:   TuningLlmBodyChars,
+		EmbedBodyChars: TuningMailEmbedBodyChars,
+		Batch:          TuningMailEmbedBatch,
+		TopSenders:     TuningLlmTopSenders,
 	}
 	s.Dim = active.Dim
+	if e, err := OpenEmbedding(ctx, q); err == nil {
+		s.EmbedModel = e.Model
+		ctx = WithEmbedding(ctx, e)
+	} else if !IsUnconfigured(err) {
+		return ctx, err
+	}
 	if active.URL != "" {
 		s.EmbedModel = active.Model
 	}
-	endpoints, err := Endpoints(ctx, q)
-	if err != nil {
-		return ctx, err
-	}
-	return WithEndpoints(With(ctx, s), q, endpoints)
+	return With(ctx, s), nil
 }

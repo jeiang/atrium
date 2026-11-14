@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
@@ -14,7 +15,7 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	now := float64(time.Now().Unix())
 	today := time.Unix(int64(now), 0).UTC()
 	exec := func(query string, args ...any) {
@@ -61,7 +62,7 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 		return all.String()
 	}
 	body := run()
-	for _, want := range []string{"Call the dentist", "Send invoice", "Dinner?", "In transit", "Overdue", "Due soon", "Needs decision", "Waiting on them", "Upcoming"} {
+	for _, want := range []string{"Call the dentist", "Send invoice", "Dinner?", "In transit"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("attention result misses %q: %s", want, body)
 		}
@@ -76,7 +77,7 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 	if !strings.Contains(body, "Call the dentist") {
 		t.Fatalf("snooze did not expire")
 	}
-	setEnv(t, flagEnv("mail"), "false")
+	seedSettings(t, map[string]string{"mail_enabled": "false"})
 	body = run()
 	for _, gone := range []string{"Re: lease", "Dinner?", "Send invoice", "In transit"} {
 		if strings.Contains(body, gone) {

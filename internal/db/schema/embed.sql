@@ -17,3 +17,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS embed_notion_0 USING vec0(
     embedding FLOAT[768] DISTANCE_METRIC=cosine
 );
 INSERT OR IGNORE INTO embed_index (generation, state, dimension) VALUES (0, 'active', 768);
+CREATE VIRTUAL TABLE IF NOT EXISTS embed_kb_0 USING vec0(
+    embedding FLOAT[768] DISTANCE_METRIC=cosine
+);

@@ -1,13 +1,13 @@
 package pages
 
 import (
+	"io"
 	"net/http"
-	"os"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/application"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -15,77 +15,124 @@ const (
 	artPlaceholderSVG   = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 3"><rect width="2" height="3" fill="#80808033"/></svg>`
 	artImageCache       = "private, max-age=86400"
 	artPlaceholderCache = "private, max-age=600"
-	artImageType        = "image/jpeg"
+	thumbPendingCache   = "private, max-age=60"
+	placeholderNoStore  = "no-store"
 )
 
 func (s *service) registerFiles(r chi.Router) {
 	r.Get("/apps/media/art/season/{name}/{number}", s.serveSeasonArt)
 	r.Get("/apps/media/art/{kind}/{name}", s.serveArt)
 	r.Get("/apps/media/thumb/*", s.serveThumb)
-	r.Get(media.FilePrefix+"*", s.serveFile)
+	r.Get(mediaapp.FilePrefix+"*", s.serveFile)
+	r.Head(mediaapp.FilePrefix+"*", s.serveFile)
 }
 
-func writeArtPlaceholder(w http.ResponseWriter) {
+func writeArtPlaceholder(w http.ResponseWriter, cache string) {
 	h := w.Header()
 	h.Set("Content-Type", "image/svg+xml")
-	h.Set("Cache-Control", artPlaceholderCache)
+	h.Set("Cache-Control", cache)
 	_, _ = w.Write([]byte(artPlaceholderSVG))
 }
 
-func serveArtImage(w http.ResponseWriter, r *http.Request, path string, ok bool) {
-	if !ok {
-		writeArtPlaceholder(w)
-		return
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		writeArtPlaceholder(w)
-		return
-	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		writeArtPlaceholder(w)
-		return
-	}
-	h := w.Header()
-	h.Set("Content-Type", artImageType)
-	h.Set("Cache-Control", artImageCache)
-	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
+func serveStream(w http.ResponseWriter, r *http.Request, stream *mediaapp.FileStream) {
+	defer func() { _ = stream.Close() }()
+	w.Header().Set("Content-Type", stream.ContentType)
+	http.ServeContent(w, r, stream.Name, stream.ModTime, stream)
 }
 
-func (s *service) serveArt(w http.ResponseWriter, r *http.Request) {
-	kind, name := web.PathParam(r, "kind"), web.PathParam(r, "name")
-	if (kind != media.KindMovie && kind != media.KindShow) || strings.Contains(name, "/") {
+func (s *service) serveArtOf(w http.ResponseWriter, r *http.Request, in mediaapp.ArtInput) {
+	stream, err := s.app.Art(r.Context(), in)
+	if err != nil {
+		if application.Classify(err).Code != application.NotFound {
+			panic(err)
+		}
 		s.deps.Error(w, r, http.StatusNotFound, "not found")
 		return
 	}
-	path, ok := s.artwork(s.settings(r.Context())).Poster(r.Context(), kind, name, 0)
-	serveArtImage(w, r, path, ok)
+	if stream == nil {
+		writeArtPlaceholder(w, artPlaceholderCache)
+		return
+	}
+	w.Header().Set("Cache-Control", artImageCache)
+	serveStream(w, r, stream)
+}
+
+func (s *service) serveArt(w http.ResponseWriter, r *http.Request) {
+	kind := web.PathParam(r, "kind")
+	if kind != mediaapp.KindMovie && kind != mediaapp.KindShow {
+		s.deps.Error(w, r, http.StatusNotFound, "not found")
+		return
+	}
+	s.serveArtOf(w, r, mediaapp.ArtInput{Kind: kind, Name: web.PathParam(r, "name")})
 }
 
 func (s *service) serveSeasonArt(w http.ResponseWriter, r *http.Request) {
-	name, raw := web.PathParam(r, "name"), web.PathParam(r, "number")
+	raw := web.PathParam(r, "number")
 	number, valid := laxInt64(raw)
 	if !valid {
 		web.Unprocessable(w, web.BadInt("path", "number", raw))
 		return
 	}
-	if strings.Contains(name, "/") {
-		s.deps.Error(w, r, http.StatusNotFound, "not found")
-		return
-	}
-	path, ok := s.artwork(s.settings(r.Context())).Poster(r.Context(), media.KindSeason, name, number)
-	serveArtImage(w, r, path, ok)
+	s.serveArtOf(w, r, mediaapp.ArtInput{Kind: mediaapp.KindSeason, Name: web.PathParam(r, "name"), Season: number})
 }
 
 func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
-	set := s.settings(r.Context())
-	root, err := set.NeedRoot()
+	stream, err := s.app.Thumbnail(r.Context(), mediaapp.ThumbnailInput{
+		Rel: web.PathParam(r, "*"), Method: r.Method, IfNoneMatch: r.Header.Get("If-None-Match"), IfModifiedSince: r.Header.Get("If-Modified-Since"),
+	})
 	if err != nil {
-		writeArtPlaceholder(w)
+		switch application.Classify(err).Code {
+		case application.NotFound:
+			writeArtPlaceholder(w, thumbPendingCache)
+			return
+		case application.Unavailable, application.NotConfigured:
+			writeArtPlaceholder(w, placeholderNoStore)
+			return
+		}
+		panic(err)
+	}
+	defer func() { _ = stream.Body.Close() }()
+	for name, values := range stream.Header {
+		w.Header()[name] = values
+	}
+	w.Header().Set("Cache-Control", artImageCache)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(stream.Status)
+	if r.Method != http.MethodHead {
+		_, _ = io.Copy(w, stream.Body)
+	}
+}
+
+func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	stream, err := s.app.File(r.Context(), mediaapp.FileInput{
+		Rel: web.PathParam(r, "*"), Exp: mediaapp.QueryValue(query["exp"]), Sig: mediaapp.QueryValue(query["sig"]), Method: r.Method,
+		Range: r.Header.Get("Range"), IfRange: r.Header.Get("If-Range"), IfNoneMatch: r.Header.Get("If-None-Match"), IfModifiedSince: r.Header.Get("If-Modified-Since"),
+	})
+	if err != nil {
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
 		return
 	}
-	path, ok := s.artwork(set).Thumbnail(r.Context(), root, web.PathParam(r, "*"))
-	serveArtImage(w, r, path, ok)
+	defer func() { _ = stream.Body.Close() }()
+	for name, values := range stream.Header {
+		w.Header()[name] = values
+	}
+	w.Header().Del("Set-Cookie")
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.WriteHeader(stream.Status)
+	if r.Method != http.MethodHead {
+		if _, err := io.CopyBuffer(flushingWriter{w}, stream.Body, make([]byte, 32*1024)); err != nil {
+			panic(http.ErrAbortHandler)
+		}
+	}
+}
+
+type flushingWriter struct{ http.ResponseWriter }
+
+func (w flushingWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	if err == nil {
+		err = http.NewResponseController(w.ResponseWriter).Flush()
+	}
+	return n, err
 }

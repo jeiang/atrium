@@ -3,119 +3,179 @@ package mailmodule
 import (
 	"context"
 	"errors"
-	"fmt"
+	"slices"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/go-chi/chi/v5"
+
+	"github.com/jeiang/atrium/internal/assistant/classifier"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
-	"github.com/jeiang/atrium/internal/mail/mailcmd"
+	"github.com/jeiang/atrium/internal/mail/executors"
+	"github.com/jeiang/atrium/internal/mail/live"
+	"github.com/jeiang/atrium/internal/mail/mailconn"
+	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
-	"github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
-func init() {
-	for _, e := range []struct {
-		kind, label, url, key string
-		fields                []integrations.Field
-	}{
-		{endpoint.EndpointChat, "Mail chat endpoint", endpoint.KeyChatURL, endpoint.KeyChatKey,
-			[]integrations.Field{{Key: endpoint.KeyChatModel, Label: "Model"}}},
-		{endpoint.EndpointEmbed, "Mail embed endpoint", endpoint.KeyEmbedURL, endpoint.KeyEmbedKey, nil},
-	} {
-		integrations.Register(integrations.Integration{
-			Name: endpoint.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
-			Help:   "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
-			Fields: e.fields,
-			Test:   probeTest(e.kind),
-		})
-	}
-}
-
-func probeTest(kind string) func(context.Context, integrations.Conn) (string, error) {
-	return func(ctx context.Context, c integrations.Conn) (string, error) {
-		res, err := mail.ProbeCandidate(ctx, c.DB, kind, c.URL, c.Secret, c.HTTP, mail.WallClock())
-		if err != nil {
-			return "", err
-		}
-		if !res.OK {
-			return "", errors.New(res.Reason)
-		}
-		detail := fmt.Sprintf("%d models listed", len(res.Models))
-		if res.Dimension > 0 {
-			detail += fmt.Sprintf(", %d dimensions", res.Dimension)
-		}
-		if res.Hosted {
-			detail += "; hosted endpoint: mail content leaves this host"
-		}
-		return detail, nil
-	}
-}
-
 type Module struct {
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
+	Clients   func(config.Config) mail.OpenFunc
+	Now       func() float64
+	Jobs      jobworker.Dependencies
+	Resources module.Resources
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
-	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}
+func (m Module) classifiers(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, now func() float64) (*classifier.Service, error) {
+	if m.Jobs.Classifier == nil {
+		return nil, errors.New("the mail pass is not bound to a classifier")
+	}
+	svc := service.New(ctx, d, cfg, env, nil)
+	svc.Now = now
+	return m.Jobs.Classifier(ctx, svc)
+}
+
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{
+		{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
+			return endpoint.EmbeddingConfigured(ctx, p.Q)
+		}},
+		{Name: "service/embedding test", Check: func(ctx context.Context, p module.Probe) (string, error) {
+			return mail.EmbeddingTestFailure(ctx, p.Q)
+		}},
+	}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
+		{Name: "loops", Title: "Open loops", Keys: []string{
+			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+		}},
+		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
+	}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return mailtools.Definitions(mailToolService)
+}
+
+func ProposeKinds() []proposals.Definition {
+	return mailtools.Proposals(mailToolService)
+}
+
+func (m Module) Declare(mc module.Context) module.Declaration {
+	mailCmds := m.mailCommands(mc.Env)
 	cmds := []*cli.Command{
-		run.SyncCommand(mc.Env, m.Clients),
-		run.WatchCommand(mc.Env, m.Clients),
+		mailCmds.SyncCommand(),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
 		mailCmds.LiveCommand(),
-		mailCmds.EndpointsCommand(),
+		mailCmds.ReplayCommand(),
 	}
 	cmds = append(cmds, mailCmds.ScanCommands()...)
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
-	return module.Registration{
-		Name:      module.Mail,
-		Attention: []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()},
-		Requires: []module.Requirement{
-			module.Setting(endpoint.KeyChatURL),
-			module.Setting(endpoint.KeyEmbedURL),
-			{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
-				return mail.ProbeFailures(ctx, p.Q)
-			}},
-		},
+	operations, bindings := mailReadOperations()
+	accountOps, accountBindings := mailAccountOperations()
+	operations = append(operations, accountOps...)
+	bindings = append(bindings, accountBindings...)
+	ruleOps, ruleBindings := mailRuleOperations()
+	operations = append(operations, ruleOps...)
+	bindings = append(bindings, ruleBindings...)
+	draftOps, draftBindings := mailDraftOperations()
+	operations = append(operations, draftOps...)
+	bindings = append(bindings, draftBindings...)
+	mailboxOps, mailboxBindings := mailMailboxOperations()
+	operations = append(operations, mailboxOps...)
+	bindings = append(bindings, mailboxBindings...)
+	loopOps, loopBindings := mailLoopOperations()
+	operations = append(operations, loopOps...)
+	bindings = append(bindings, loopBindings...)
+	scanOps, scanBindings := mailScanOperations()
+	operations = append(operations, scanOps...)
+	bindings = append(bindings, scanBindings...)
+	passOps, passBindings := mailPassOperations()
+	operations = append(operations, passOps...)
+	bindings = append(bindings, passBindings...)
+	bindings = append(bindings, mailAPIRoutes(nil)...)
+	bindings = append(bindings, mailWorkRoutes(nil, m)...)
+	bindings = append(bindings, mailPassRoutes(nil, m)...)
+	bindings = append(bindings, mailDraftRoutes(nil, m)...)
+	return module.Declaration{
+		Name:           module.Mail,
+		Operations:     operations,
+		Bindings:       append(bindings, finalBindings()...),
+		Recover:        recoverDrafts,
+		Settings:       slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Host:           mail.HostSettings(),
+		Attention:      AttentionSources(),
+		Jobs:           []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		ServiceSets:    m.watchServices(mc.Env),
+		ServiceSetName: "mail/watch",
+		Requires:       Requirements(),
 		Pages: []web.Page{
-			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+			{Module: func(_ chi.Router, d *web.Deps) {
+				mailAPIRoutes(d)
+				mailWorkRoutes(d, m)
+				mailPassRoutes(d, m)
+				mailDraftRoutes(d, m)
+			}},
+			{Module: pages.Module(mailPageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
-			{Module: accountpages.Module, Templates: accountpages.Templates()},
-		},
-		Settings: []settings.Group{
-			{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
-			{Name: "loops", Title: "Open loops", Keys: []string{
-				mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+			{Module: pages.PauseModule(mailPageService)},
+			{Module: reviewpages.MailModule(reviewpages.Options{Compose: ReviewServices(ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Application: mailPageService})}), Nav: []web.NavItem{
+				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
+				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},
-			{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
+			{Module: accountpages.Module(mailPageService, mailSettingsService), Templates: accountpages.Templates()},
 		},
+		Groups:   SettingGroups(),
 		Commands: cmds,
 		Leaves: map[string]module.Leaf{
-			"live pause":      {Always: true},
-			"live resume":     {Always: true},
-			"live status":     {Always: true},
-			"endpoints probe": {Always: true},
+			"live pause":  {Always: true},
+			"live resume": {Always: true},
+			"live status": {Always: true},
+			"replay":      {Always: true},
 		},
-		Tools: func(r *registry.Registry) error {
-			mailtools.RegisterProposalKinds()
-			return r.Add(mailtools.Tools()...)
+		Tools:        ToolDefinitions(),
+		ProposeKinds: ProposeKinds(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: d.Open, Now: d.Now}
+			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
+			effects := module.Effects{
+				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, d.Open), live.Undo(d.Open, d.DB), openloops.Undo()),
+				Resolve:   live.Resolve(),
+			}
+			if d.Syncer != nil {
+				effects.Sync = executors.SyncAfter(d.Syncer, d.Open)
+			}
+			return effects
 		},
+		Connections: slices.Concat(Connections(), tracking.Connections()),
+		AccountSync: mailconn.AccountSync(),
 	}
 }

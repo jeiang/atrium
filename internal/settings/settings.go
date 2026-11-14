@@ -115,29 +115,47 @@ type PinSource interface {
 type Registry struct {
 	mu   sync.RWMutex
 	defs map[string]Def
+	host []HostDef
 	pins PinSource
 }
 
-var definitions []Def
-
-func New() *Registry {
-	r := &Registry{defs: make(map[string]Def, len(definitions))}
-	for _, d := range definitions {
+func NewFrom(defs []Def) *Registry {
+	r := &Registry{defs: make(map[string]Def, len(defs))}
+	for _, d := range defs {
 		r.defs[d.Key] = d
 	}
 	return r
 }
 
-func MustRegister(defs ...Def) {
+func Compile(defs []Def, host []HostDef) (*Registry, error) {
+	r := &Registry{defs: make(map[string]Def, len(defs)), host: slices.Clone(host)}
 	for _, d := range defs {
-		if slices.ContainsFunc(definitions, func(e Def) bool { return e.Key == d.Key }) {
-			panic(DuplicateKey(d.Key))
+		if _, dup := r.defs[d.Key]; dup {
+			return nil, DuplicateKey(d.Key)
 		}
 		if err := d.valid(); err != nil {
-			panic(err)
+			return nil, err
 		}
-		definitions = append(definitions, d)
+		r.defs[d.Key] = d
 	}
+	seen := make(map[string]bool, len(host))
+	for _, d := range host {
+		if seen[d.Key] {
+			return nil, DuplicateKey(d.Key)
+		}
+		seen[d.Key] = true
+	}
+	return r, nil
+}
+
+func (r *Registry) Clone() *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := &Registry{defs: make(map[string]Def, len(r.defs)), host: slices.Clone(r.host)}
+	for key, d := range r.defs {
+		out.defs[key] = d.clone()
+	}
+	return out
 }
 
 func (r *Registry) Register(defs ...Def) error {
@@ -204,27 +222,6 @@ func (r *Registry) Lookup(key string) (Def, bool) {
 	return d.clone(), ok
 }
 
-func LookupOf(key string) (Def, bool) {
-	for _, d := range definitions {
-		if d.Key == key {
-			return d.clone(), true
-		}
-	}
-	return Def{}, false
-}
-
-func RangeOf(key string) (int64, int64, bool) {
-	for _, d := range definitions {
-		if d.Key == key {
-			if d.Max <= 0 {
-				return 0, 0, false
-			}
-			return d.Min, d.Max, true
-		}
-	}
-	return 0, 0, false
-}
-
 func (d Def) clone() Def {
 	d.Choices = slices.Clone(d.Choices)
 	return d
@@ -281,7 +278,11 @@ func snakeCase(s string) bool {
 }
 
 func (d Def) validate(value string) error {
-	switch d.Type {
+	return validateTyped(d.Type, d.Choices, d.Check, value)
+}
+
+func validateTyped(t Type, choices []string, check func(string) error, value string) error {
+	switch t {
 	case Int:
 		if _, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err != nil {
 			return Invalid("must be a whole number")
@@ -295,12 +296,12 @@ func (d Def) validate(value string) error {
 			return Invalid("must be true or false")
 		}
 	case Enum:
-		if !slices.Contains(d.Choices, value) {
-			return Invalid("must be one of " + strings.Join(d.Choices, ", "))
+		if !slices.Contains(choices, value) {
+			return Invalid("must be one of " + strings.Join(choices, ", "))
 		}
 	}
-	if d.Check != nil {
-		return d.Check(value)
+	if check != nil {
+		return check(value)
 	}
 	return nil
 }
@@ -344,6 +345,27 @@ func (e UnknownKey) Error() string { return "settings: unknown key " + strconv.Q
 type NotEditable struct{ Key string }
 
 func (e *NotEditable) Error() string { return "settings: " + e.Key + " is not editable" }
+
+type HostOwned struct {
+	Key         string
+	Destination string
+}
+
+func (e HostOwned) Error() string {
+	if e.Destination == "" {
+		return "settings: " + e.Key + " is host configuration and is not editable here"
+	}
+	return "settings: " + e.Key + " is host configuration and is not editable here; set " + e.Destination + " in the host file"
+}
+
+type AppKeyFile struct {
+	Key  string
+	File string
+}
+
+func (e AppKeyFile) Error() string {
+	return "settings: " + e.Key + " is supplied by " + e.File + "; set or rotate that file instead"
+}
 
 type PinnedError struct {
 	Key    string

@@ -5,16 +5,21 @@ default:
   @just --list
 
 verify:
-  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs check && go run ./cmd/integrationsdocs'
+  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs check && go run ./tools/registrationownership && go run ./tools/adapterboundary && go run ./cmd/atrium catalog openapi --check docs/api && go run ./cmd/atrium catalog operations --require-api >/dev/null'
 
 tools-docs:
   {{dev}} go run ./cmd/toolsdocs
 
-world-fixture:
-  {{dev}} go run ./tools/worldgen testdata/golden/atrium.db testdata/golden
-
+# Compile first, then run the tests with only loopback reachable (tools/e2e-loopback)
 e2e pattern pkg="./cmd/atrium":
-  {{dev}} go test -count=1 -run "{{pattern}}" {{pkg}}
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
+  bin=$(mktemp -d)
+  trap 'rm -rf "$bin"' EXIT
+  go build -o "$bin/atrium" ./cmd/atrium
+  go test -count=1 -exec true {{pkg}} >/dev/null
+  ATRIUM_E2E_BINARY="$bin/atrium" bash tools/e2e-loopback go test -count=1 -timeout 30m -run "{{pattern}}" {{pkg}}
 
 test-pkg pkg run=".":
   {{dev}} go test -count=1 -run "{{run}}" {{pkg}}
@@ -55,6 +60,9 @@ check-quick:
     echo "$unformatted" >&2
     exit 1
   fi
+  go run ./tools/tableownership
+  go run ./tools/registrationownership
+  go run ./tools/adapterboundary
   nix eval --raw ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).module.drvPath" >/dev/null
 
 # Build one x86_64-linux check on artemis; flake sources are git-tracked files only, so git add new files first
@@ -90,14 +98,54 @@ assets:
   cp -R "${ATRIUM_STATIC_ASSETS:?set by the dev shell}" internal/web/static
   chmod -R u+w internal/web/static
 
-css:
+css mode="watch":
   #!/usr/bin/env bash
   set -euo pipefail
-  [ -e internal/web/static/app.js ] || just assets
+  [ -e internal/web/static/assets.json ] || just assets
   mkdir -p internal/web/assets/node_modules/basecoat-css
   tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C internal/web/assets/node_modules/basecoat-css
+  root=$PWD
+  work=$(mktemp -d)
+  trap 'kill $(jobs -p) 2>/dev/null || true; rm -rf "$work"' EXIT
   cd internal/web/assets
-  exec tailwindcss --input input.css --output ../static/app.css --watch
+  tokens() {
+    jq -r -f ../../../nix/webassets/tokens.jq tokens.json > tokens.generated.css.tmp
+    mv tokens.generated.css.tmp tokens.generated.css
+  }
+  repack() {
+    rm -rf "$work/out"
+    mkdir -p "$work/out"
+    jq -r 'to_entries[] | select(.key != "app.css" and .key != "app.js" and .key != "manifest.json") | "\(.key)\t\(.value | ltrimstr("/static/"))"' ../static/assets.json |
+      while IFS=$'\t' read -r name path; do install -Dm644 "../static/$path" "$work/out/$name"; done
+    cp app.js manifest.json sw.js "$work/out/"
+    cp "$work/app.css" "$work/out/app.css"
+    (cd "$work" && out="$work/out" bash "$root/nix/webassets/pack.sh")
+    rm -rf ../static.next
+    cp -R "$work/out" ../static.next
+    rm -rf ../static
+    mv ../static.next ../static
+    echo "packed $(jq -r '."app.css"' ../static/assets.json)"
+  }
+  tokens
+  if [ "{{mode}}" = once ]; then
+    tailwindcss --input input.css --output "$work/app.css" --minify
+    repack
+    exit
+  fi
+  tailwindcss --input input.css --output "$work/app.css" --minify --watch=always &
+  tokensum=$(cksum < tokens.json)
+  csssum=
+  while sleep 1; do
+    if [ "$(cksum < tokens.json)" != "$tokensum" ]; then
+      tokens
+      tokensum=$(cksum < tokens.json)
+    fi
+    [ -s "$work/app.css" ] || continue
+    if [ "$(cksum < "$work/app.css")" != "$csssum" ]; then
+      csssum=$(cksum < "$work/app.css")
+      repack
+    fi
+  done
 
 settingsgen:
   go run -tags modernc ./tools/settingsgen docs/config

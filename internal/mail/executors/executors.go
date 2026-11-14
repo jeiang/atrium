@@ -10,12 +10,14 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -23,6 +25,8 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
 )
+
+var log = logx.Logger("atrium.mail.executors")
 
 const (
 	RebalanceSplit  = "rebalance_split"
@@ -193,9 +197,10 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 }
 
 type Executors struct {
-	DB   *db.DB
-	Open mail.OpenFunc
-	Now  func() float64
+	DB     *db.DB
+	Ledger *ledger.Store
+	Open   mail.OpenFunc
+	Now    func() float64
 }
 
 func (e *Executors) now() float64 {
@@ -205,58 +210,132 @@ func (e *Executors) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func (e *Executors) record(ctx context.Context, pid int64, action, undo map[string]any) error {
-	var plan any
-	if undo != nil {
-		plan = undo
+func (e *Executors) store() *ledger.Store {
+	if e.Ledger == nil {
+		panic("executors: the effect ledger store is not configured")
 	}
-	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, "write", nil, action, plan, ledger.OK, nil, e.now())
+	return e.Ledger
+}
+
+func jsonOf(v any) json.RawMessage {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil || string(b) == "null" {
+		return nil
+	}
+	return b
+}
+
+func (e *Executors) effect(pid int64, action map[string]any) ledger.New {
+	op, _ := action["op"].(string)
+	account, _ := action["account"].(string)
+	src, _ := action["src_imap"].(string)
+	dest, _ := action["dest_imap"].(string)
+	return ledger.New{
+		Origin: "proposal", Operation: op, OperationKey: operationKey(pid, action),
+		Target: fmt.Sprintf("proposal:%d", pid), ProposalID: &pid,
+		Account: account, Src: src, Dest: dest, Action: jsonOf(action),
+	}
+}
+
+func operationKey(pid int64, action map[string]any) string {
+	op, _ := action["op"].(string)
+	key := fmt.Sprintf("proposal:%d:%s", pid, op)
+	for _, field := range []string{"imap_name", "src_imap"} {
+		if value, ok := action[field].(string); ok && value != "" {
+			key += ":" + value
+		}
+	}
+	if uids, ok := action["uids"].([]any); ok && len(uids) > 0 {
+		parts := make([]string, len(uids))
+		for i, uid := range uids {
+			parts[i] = fmt.Sprint(uid)
+		}
+		key += ":" + strings.Join(parts, ",")
+	}
+	for _, field := range []string{"id", "snooze_id"} {
+		if value, ok := action[field]; ok {
+			key += ":" + fmt.Sprint(value)
+		}
+	}
+	return key
+}
+
+func (e *Executors) record(ctx context.Context, pid int64, action, undo map[string]any) error {
+	_, err := e.store().ApplyLocal(ctx, e.effect(pid, action), func(context.Context, *sql.Tx) (ledger.Result, error) {
+		return ledger.Result{State: ledger.Done, After: jsonOf(action), Undo: jsonOf(undo)}, nil
+	})
 	return err
 }
 
 func (e *Executors) recordFailed(ctx context.Context, pid int64, action map[string]any, text string) error {
-	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, "write", nil, action, nil, ledger.Failed, &text, e.now())
+	_, err := e.store().ApplyLocal(ctx, e.effect(pid, action), func(context.Context, *sql.Tx) (ledger.Result, error) {
+		return ledger.Result{State: ledger.Failed, After: jsonOf(action), Error: text}, nil
+	})
 	return err
 }
 
 type slot struct {
-	e    *Executors
-	pid  int64
-	id   int64
-	uids []uint32
-	stop func()
+	e      *Executors
+	pid    int64
+	ticket ledger.Ticket
+	uids   []uint32
+	stop   func()
 }
 
-func (e *Executors) hold(ctx context.Context, pid int64, action map[string]any, uids []uint32) (*slot, error) {
+func (e *Executors) hold(ctx context.Context, pid int64, action map[string]any, uids []uint32, resources []ledger.Resource) (*slot, error) {
 	logged := withPairs(action, "uids", uidList(uids))
-	id, err := proposals.BeginAction(ctx, e.DB.Write, pid, logged, e.now())
+	n := e.effect(pid, logged)
+	n.Resources = resources
+	ticket, err := e.store().Begin(ctx, n, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &slot{e: e, pid: pid, id: id, uids: uids, stop: proposals.KeepActionAlive(e.DB.Write, e.now, id)}, nil
+	return &slot{e: e, pid: pid, ticket: ticket, uids: uids, stop: keepAlive(e.store(), ticket)}, nil
+}
+
+func keepAlive(s *ledger.Store, t ledger.Ticket) func() {
+	done := make(chan struct{})
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		ticker := time.NewTicker(ledger.RenewSeconds * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				if err := s.Heartbeat(context.Background(), t); err != nil {
+					log.Warn("in-flight effect lease not renewed", logx.Err, err.Error())
+				}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-finished
+	}
 }
 
 func (s *slot) settle(ctx context.Context, action, undo map[string]any, state ledger.State, text *string) error {
-	var plan any
-	if undo != nil {
-		plan = undo
+	if s.ticket.ID == 0 {
+		return nil
 	}
-	if s.id == 0 {
-		_, err := proposals.RecordAction(ctx, s.e.DB.Write, s.pid, "write", nil, action, plan, state, text, s.e.now())
-		return err
-	}
-	id := s.id
-	s.id = 0
+	ticket := s.ticket
+	s.ticket = ledger.Ticket{}
 	s.stop()
-	return proposals.SettleAction(ctx, s.e.DB.Write, id, action, plan, state, text, s.e.now())
+	result := ledger.Result{State: state, After: jsonOf(action), Undo: jsonOf(undo)}
+	if text != nil {
+		result.Error = *text
+	}
+	return s.e.store().Settle(ctx, ticket, result, nil)
 }
 
 func (s *slot) record(ctx context.Context, action, undo map[string]any) error {
-	return s.settle(ctx, action, undo, ledger.OK, nil)
-}
-
-func (s *slot) recordFailed(ctx context.Context, action map[string]any, text string) error {
-	return s.settle(ctx, action, nil, ledger.Failed, &text)
+	return s.settle(ctx, action, undo, ledger.Done, nil)
 }
 
 func (s *slot) partial(ctx context.Context, action, undo map[string]any, text string) error {
@@ -264,36 +343,23 @@ func (s *slot) partial(ctx context.Context, action, undo map[string]any, text st
 }
 
 func (s *slot) release(ctx context.Context) error {
-	if s.id == 0 {
-		return nil
-	}
-	id := s.id
-	s.id = 0
-	s.stop()
-	return proposals.DropAction(ctx, s.e.DB.Write, id)
+	return s.settle(ctx, nil, nil, ledger.Skipped, new("the write did not start"))
 }
 
 func (s *slot) fail(ctx context.Context, action map[string]any, err error) error {
-	out := s.cancelled(ctx, action, err)
-	if rerr := s.release(ctx); rerr != nil && out == nil {
-		return rerr
-	}
-	return out
-}
-
-func (s *slot) cancelled(ctx context.Context, action map[string]any, err error) error {
 	if err == nil {
-		return nil
+		return s.release(ctx)
 	}
-	if !mailops.OutcomeUnknown(err) {
-		return err
-	}
+	state := ledger.Failed
 	text := err.Error()
-	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
-		text = partial.Err.Error()
+	if mailops.OutcomeUnknown(err) {
+		state = ledger.Unknown
+		if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
+			text = partial.Err.Error()
+		}
 	}
 	logged := withPairs(action, "uids", uidList(s.uids))
-	if rerr := s.settle(ctx, logged, nil, ledger.Unknown, &text); rerr != nil {
+	if rerr := s.settle(ctx, logged, nil, state, &text); rerr != nil {
 		return rerr
 	}
 	return err
@@ -364,8 +430,15 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 		return 0, err
 	}
 	chunks := mailops.Chunks(uids, size)
+	resources := func(batch []uint32) []ledger.Resource {
+		out := make([]ledger.Resource, len(batch))
+		for i, uid := range batch {
+			out[i] = ledger.Resource{Key: ledger.MailResource(account, g.IMAPName, g.UIDValidity, uid)}
+		}
+		return out
+	}
 	next := 0
-	s, err := e.hold(ctx, pid, action, chunks[next])
+	s, err := e.hold(ctx, pid, action, chunks[next], resources(chunks[next]))
 	if err != nil {
 		return 0, err
 	}
@@ -386,7 +459,7 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 		}
 		moved += len(batch)
 		if next++; next < len(chunks) {
-			held, err := e.hold(ctx, pid, action, chunks[next])
+			held, err := e.hold(ctx, pid, action, chunks[next], resources(chunks[next]))
 			if err != nil {
 				return err
 			}
@@ -413,7 +486,7 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 		return moved, err
 	}
 	if err != nil {
-		return moved, s.cancelled(ctx, action, err)
+		return moved, s.fail(ctx, action, err)
 	}
 	return moved, nil
 }
@@ -478,7 +551,11 @@ func (e *Executors) relabelChunk(ctx context.Context, client mail.Client, pid in
 		ids[i] = item.ID
 	}
 	attempt := map[string]any{"op": live.OpGmailLabels, "imap_name": g.IMAPName, "uidvalidity": g.UIDValidity, "add": stringList(r.Add), "remove": stringList(r.Remove)}
-	s, err := e.hold(ctx, pid, attempt, uids)
+	resources := make([]ledger.Resource, len(uids))
+	for i, uid := range uids {
+		resources[i] = ledger.Resource{Key: ledger.MailResource(account, g.IMAPName, g.UIDValidity, uid)}
+	}
+	s, err := e.hold(ctx, pid, attempt, uids, resources)
 	if err != nil {
 		return 0, err
 	}
@@ -514,7 +591,11 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 		}
 		for _, batch := range mailops.Chunks(uids, size) {
 			attempt := map[string]any{"op": "trash", "imap_name": g.IMAPName, "uidvalidity": g.UIDValidity, "dest_imap": trash}
-			s, err := e.hold(ctx, pid, attempt, batch)
+			resources := make([]ledger.Resource, len(batch))
+			for i, uid := range batch {
+				resources[i] = ledger.Resource{Key: ledger.MailResource(account, g.IMAPName, g.UIDValidity, uid)}
+			}
+			s, err := e.hold(ctx, pid, attempt, batch, resources)
 			if err != nil {
 				return trashed, err
 			}
@@ -654,8 +735,8 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 				n, err = e.relabelItems(ctx, client, p.ID, account, items, []string{step.name}, []string{payload.Folder})
 			} else {
 				dest := mail.UTF7Encode(step.name)
-				create := map[string]any{"op": "create_folder", "imap_name": dest}
-				s, herr := e.hold(ctx, p.ID, create, nil)
+				create := map[string]any{"op": "create_folder", "account": account, "imap_name": dest}
+				s, herr := e.hold(ctx, p.ID, create, nil, []ledger.Resource{{Key: "mail_folder:" + account + ":" + dest}})
 				if herr != nil {
 					return herr
 				}
@@ -730,14 +811,17 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	}
 	created := false
 	if one == 0 {
-		if _, err := ruleedit.CreateRule(ctx, e.DB, ruleDict); err != nil {
+		if _, err := e.store().ApplyLocal(ctx, e.effect(p.ID, map[string]any{"op": "rule_create", "id": id}),
+			func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+				if _, err := ruleedit.CreateRuleTx(ctx, tx, ruleDict); err != nil {
+					return ledger.Result{}, err
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"op": "rule_create", "id": id}),
+					Undo: jsonOf(map[string]any{"op": OpRuleDelete, "id": id})}, nil
+			}); err != nil {
 			return nil, err
 		}
 		created = true
-		if err := e.record(ctx, p.ID, map[string]any{"op": "rule_create", "id": id},
-			map[string]any{"op": OpRuleDelete, "id": id}); err != nil {
-			return nil, err
-		}
 	}
 	trashed, skipped := 0, []mailops.Skip{}
 	if len(snaps) > 0 {
@@ -810,8 +894,8 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 			keptReason = fmt.Sprintf("%d messages still carry the label", st.Messages)
 			return nil
 		}
-		drop := map[string]any{"op": "delete_label", "imap_name": label}
-		s, err := e.hold(ctx, p.ID, drop, nil)
+		drop := map[string]any{"op": "delete_label", "account": account, "imap_name": label}
+		s, err := e.hold(ctx, p.ID, drop, nil, []ledger.Resource{{Key: "mail_folder:" + account + ":" + label}})
 		if err != nil {
 			return err
 		}
@@ -861,46 +945,86 @@ func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (
 	return map[string]any{"deleted": deleted}, nil
 }
 
-func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (any, error) {
+func (e *Executors) UndoRuleDelete(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
 	var plan RuleDelete
 	if err := json.Unmarshal(raw, &plan); err != nil {
-		return nil, err
+		return ledger.Result{}, err
 	}
-	deleted, err := ruleedit.DeleteRule(ctx, e.DB, plan.ID)
+	deleted, err := ruleedit.DeleteRuleTx(ctx, tx, plan.ID)
 	if err != nil {
-		return nil, err
+		return ledger.Result{}, err
 	}
-	return map[string]any{"deleted": deleted}, nil
+	return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"deleted": deleted})}, nil
+}
+
+func validatePlan(name string) func(json.RawMessage) error {
+	return func(raw json.RawMessage) error {
+		var head struct {
+			Op string `json:"op"`
+		}
+		if err := json.Unmarshal(raw, &head); err != nil {
+			return ledger.Refused("proposal undo payload is invalid")
+		}
+		if head.Op != name {
+			return ledger.Refused("proposal undo payload names " + head.Op)
+		}
+		return nil
+	}
+}
+
+func (e *Executors) Undo() []ledger.UndoDefinition {
+	external := []struct {
+		name string
+		fn   func(context.Context, json.RawMessage) (any, error)
+	}{
+		{OpDeleteFolder, e.UndoDeleteFolder},
+	}
+	var out []ledger.UndoDefinition
+	for _, u := range external {
+		u := u
+		out = append(out, ledger.UndoDefinition{Operation: u.name, Undoer: ledger.Undoer{
+			Validate: validatePlan(u.name),
+			Deferred: true,
+			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+				value, err := u.fn(ctx, raw)
+				if err != nil {
+					state := ledger.Failed
+					if mailops.OutcomeUnknown(err) {
+						state = ledger.Unknown
+					}
+					return ledger.Result{State: state, Error: err.Error()}, nil
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+			},
+		}})
+	}
+	return append(out,
+		ledger.UndoDefinition{Operation: OpRuleDelete, Undoer: ledger.Undoer{Validate: validatePlan(OpRuleDelete), Local: e.UndoRuleDelete}},
+		ledger.UndoDefinition{Operation: OpCancelSnooze, Undoer: ledger.Undoer{Validate: validatePlan(OpCancelSnooze), Local: e.UndoCancelSnooze}},
+	)
 }
 
 func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
-		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
+		lock, err := db.ResourceLocks(ctx, syncer.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = lock.Close() }()
-		_, err = syncer.One(ctx, account, open)
+		_, err = syncer.One(db.WithHeld(ctx, lock), account, open)
 		return err
 	}
 }
 
-func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer, owner string) {
-	r.Executors[RebalanceSplit] = e.ExecuteMoves
-	r.Executors[RebalanceMerge] = e.ExecuteMoves
-	r.Executors[DeletionRule] = e.ExecuteDeletion
-	r.Executors[GmailLabelMerge] = e.ExecuteLabelMerge
-	r.Executors[InboxBacklog] = e.ExecuteMoves
-	r.Executors[MailTriage] = e.ExecuteTriage
-	r.AddKind(proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true})
-	r.AddKind(proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true})
-	r.AddKind(proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"})
-	r.AddKind(proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"})
-	r.AddKind(proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true})
-	r.AddKind(proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count"})
-	live.RegisterUndoers(r, e.Open, e.DB.Read)
-	r.Undoers[OpDeleteFolder] = e.UndoDeleteFolder
-	r.Undoers[OpRuleDelete] = e.UndoRuleDelete
-	r.Undoers[OpCancelSnooze] = e.UndoCancelSnooze
-	r.Sync = SyncAfter(syncer, e.Open)
+var passLock = []string{mail.PassResource}
+
+func (e *Executors) Proposals(owner string) []proposals.Definition {
+	return []proposals.Definition{
+		{Kind: proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true, Locks: passLock}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true, Locks: passLock}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog", Locks: passLock}, Execute: e.ExecuteDeletion},
+		{Kind: proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count", Locks: passLock}, Execute: e.ExecuteLabelMerge},
+		{Kind: proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true, Locks: passLock}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count", Locks: passLock}, Execute: e.ExecuteTriage},
+	}
 }

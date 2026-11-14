@@ -1,11 +1,14 @@
 package serverops
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -17,16 +20,8 @@ const (
 	KeyQueryMemory      = "ops_query_mem"
 	KeyQueryDisk        = "ops_query_disk"
 	KeyQueryFailedUnit  = "ops_query_failed_units"
-	KeyWorkerMonthlyUSD = "ops_worker_monthly_usd"
-	KeyWorkerMaxRunUSD  = "ops_worker_max_run_usd"
-	KeyCondenser        = "ops_condenser"
-	KeyCondenserModel   = "ops_condenser_model"
-	KeyCondenserTokens  = "ops_condenser_max_tokens"
-)
-
-const (
-	CondenserHaiku = "haiku"
-	CondenserLocal = "local"
+	KeyWorkerMonthlyUSD = classifier.OpsMonthlyCapKey
+	KeyWorkerMaxRunUSD  = classifier.OpsRunCapKey
 )
 
 const (
@@ -54,6 +49,27 @@ var (
 	selectorRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\s*(?:=|!=|=~|!~)\s*"(?:[^"\\{}\n\r]|\\.)*"` +
 		`(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:=|!=|=~|!~)\s*"(?:[^"\\{}\n\r]|\\.)*")*$`)
 )
+
+type HostSettings struct {
+	Hosts    []string
+	Selector string
+	Queries  map[string]string
+}
+
+func HostValues(ctx context.Context) HostSettings {
+	value := config.From(ctx).HostValue
+	return HostSettings{
+		Hosts:    SplitHosts(value(KeyHosts)),
+		Selector: value(KeyLabelSelector),
+		Queries: map[string]string{
+			MetricUp:          value(KeyQueryUp),
+			MetricCPU:         value(KeyQueryCPU),
+			MetricMemory:      value(KeyQueryMemory),
+			MetricDisk:        value(KeyQueryDisk),
+			MetricFailedUnits: value(KeyQueryFailedUnit),
+		},
+	}
+}
 
 func checkHosts(value string) error {
 	for _, host := range SplitHosts(value) {
@@ -147,29 +163,20 @@ func balanced(expr string) bool {
 	return !quote && braces == 0 && parens == 0 && brackets == 0
 }
 
-func init() {
-	settings.MustRegister(
-		settings.Value(settings.UI, settings.Def{
-			Key: KeyHosts, Module: "grafana", Type: settings.String, Check: checkHosts,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyLabelSelector, Module: "grafana", Type: settings.String, Default: defaultLabelSelector, Check: checkSelector,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryUp, Module: "grafana", Type: settings.String, Default: defaultQueryUp, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryCPU, Module: "grafana", Type: settings.String, Default: defaultQueryCPU, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryMemory, Module: "grafana", Type: settings.String, Default: defaultQueryMemory, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryDisk, Module: "grafana", Type: settings.String, Default: defaultQueryDisk, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryFailedUnit, Module: "grafana", Type: settings.String, Default: defaultQueryFailedUnit, Check: checkQuery,
-		}),
+func HostSettingDefs() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: KeyHosts, Module: "grafana", Type: settings.String, Check: checkHosts},
+		{Key: KeyLabelSelector, Module: "grafana", Type: settings.String, Default: defaultLabelSelector, Check: checkSelector},
+		{Key: KeyQueryUp, Module: "grafana", Type: settings.String, Default: defaultQueryUp, Check: checkQuery},
+		{Key: KeyQueryCPU, Module: "grafana", Type: settings.String, Default: defaultQueryCPU, Check: checkQuery},
+		{Key: KeyQueryMemory, Module: "grafana", Type: settings.String, Default: defaultQueryMemory, Check: checkQuery},
+		{Key: KeyQueryDisk, Module: "grafana", Type: settings.String, Default: defaultQueryDisk, Check: checkQuery},
+		{Key: KeyQueryFailedUnit, Module: "grafana", Type: settings.String, Default: defaultQueryFailedUnit, Check: checkQuery},
+	}
+}
+
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyWorkerMonthlyUSD, Label: "Server-ops monthly cap (USD)", Module: "assistant", Type: settings.Float, Default: "5",
 			Check: settings.Between(0, 10000),
@@ -178,16 +185,5 @@ func init() {
 			Key: KeyWorkerMaxRunUSD, Label: "Server-ops run cost cap (USD)", Module: "assistant", Type: settings.Float, Default: "0.10",
 			Check: settings.Between(0, 10000),
 		}),
-		settings.Value(settings.UI, settings.Def{
-			Key: KeyCondenser, Label: "Server-ops findings written by", Module: "assistant", Type: settings.Enum,
-			Choices: []string{CondenserHaiku, CondenserLocal}, Default: CondenserHaiku,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyCondenserModel, Module: "assistant", Type: settings.String,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyCondenserTokens, Module: "assistant", Type: settings.Int, Default: "2000",
-			Check: settings.Between(64, 8192),
-		}),
-	)
+	}
 }

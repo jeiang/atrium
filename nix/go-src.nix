@@ -7,9 +7,13 @@
       (lib.fileset.maybeMissing (root + "/go.sum"))
       (root + "/cmd")
       (root + "/internal")
-      (root + "/sdk")
       (root + "/tools/settingsgen")
+      (root + "/tools/tableownership")
+      (root + "/tools/registrationownership")
+      (root + "/tools/adapterboundary")
+      (root + "/tools/e2e-loopback")
       (root + "/docs/config")
+      (root + "/docs/api")
       (root + "/docs/tools.md")
       (root + "/docs/integrations.md")
       (root + "/nix/monitoring")
@@ -31,6 +35,6 @@ in {
   vendorHash = "sha256-eDY1pDAdIMjbYdB9DSvIngBwp//7pML5OmGlF10XABc=";
   licenseCheck = ''GOOS=linux GOARCH=amd64 go-licenses check ./... --disallowed_types=forbidden,unknown'';
   licenseReport = file: ''
-    GOOS=linux GOARCH=amd64 go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --ignore github.com/jeiang/atrium/sdk --template ${noticesTemplate} >${file}
+    GOOS=linux GOARCH=amd64 go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${noticesTemplate} >${file}
   '';
 }

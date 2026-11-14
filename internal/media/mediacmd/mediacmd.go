@@ -3,66 +3,41 @@ package mediacmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/module"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 )
 
-type job func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error)
+type Job func(ctx context.Context, svc *mediaapp.Service) (any, error)
 
-func skippable(run job) job {
-	return func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
-		out, err := run(ctx, d, env, now)
-		var missing config.NotConfigured
-		if errors.As(err, &missing) {
-			return map[string]any{"skipped": missing.Error()}, nil
-		}
-		return out, err
-	}
+type Runner func(ctx context.Context, job string, run Job) (any, error)
+
+type Options struct {
+	Run      Runner
+	Inspect  func(ctx context.Context, id int64) (any, error)
+	PollJob  string
+	SweepJob string
 }
 
-var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
-	found, err := media.ListChannels(ctx, d.Write)
-	if err != nil || len(found) == 0 {
-		return map[string]any{}, err
-	}
-	settings, err := media.Load(ctx, d.Read, env)
+func Poll(ctx context.Context, svc *mediaapp.Service) (any, error) {
+	polled, err := svc.Poll(ctx, mediaapp.PollInput{SkipWithoutChannels: true})
 	if err != nil {
-		return nil, err
+		return polled.Data.Result.Dict(), err
 	}
-	result, err := media.Poll(ctx, d.Write, env, settings, media.PollOptions{Now: now})
-	if err != nil {
-		return nil, err
+	if !polled.Data.Ran {
+		return map[string]any{}, nil
 	}
-	return result.Dict(), nil
-})
+	return polled.Data.Result.Dict(), nil
+}
 
-var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
-	settings, err := media.Load(ctx, d.Read, env)
+func Sweep(ctx context.Context, svc *mediaapp.Service) (any, error) {
+	swept, err := svc.Sweep(ctx, mediaapp.SweepInput{})
 	if err != nil {
-		return nil, err
+		return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "errors": anys(swept.Data.Errors)}, err
 	}
-	qb, err := settings.Qbit()
-	if err != nil {
-		return nil, err
-	}
-	selected, err := settings.SelectFiles(ctx, qb, nil)
-	if err != nil {
-		return nil, err
-	}
-	swept, err := media.Sweep(ctx, qb)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"selected": anys(selected), "removed": anys(swept.Removed), "errors": anys(swept.Errors)}, nil
-})
+	return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "errors": anys(swept.Data.Errors)}, nil
+}
 
 func anys(items []string) []any {
 	out := make([]any, len(items))
@@ -72,71 +47,40 @@ func anys(items []string) []any {
 	return out
 }
 
-func callable(run job) worker.Callable {
-	return worker.Callable{
-		Modules: []string{module.Media},
-		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-			_, err := run(ctx, e.Service.DB, e.Service.Env, e.Now)
-			return worker.Result{}, err
-		},
-	}
-}
-
-func thumbnails(cfg config.Config) job {
-	return skippable(func(ctx context.Context, d *db.DB, env config.Env, _ func() float64) (any, error) {
-		settings, err := media.Load(ctx, d.Read, env)
-		if err != nil {
-			return nil, err
-		}
-		root, err := settings.NeedRoot()
-		if err != nil {
-			return nil, err
-		}
-		generated, remaining := media.NewArtwork(cfg.MediaCacheDir(), nil, settings.Tuning).ThumbnailPass(ctx, root, settings.ThumbPassLimit)
-		return map[string]any{"generated": int64(generated), "remaining": int64(remaining)}, nil
-	})
-}
-
-func Callables() map[string]worker.Callable {
-	return map[string]worker.Callable{
-		scheduler.MediaChannelsName: callable(channels),
-		scheduler.MediaSweepName:    callable(sweep),
-		scheduler.MediaThumbnailsName: {
-			Modules: []string{module.Media},
-			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-				_, err := thumbnails(e.Service.Cfg)(ctx, e.Service.DB, e.Service.Env, e.Now)
-				return worker.Result{}, err
-			},
-		},
-	}
-}
-
-func Command(cfgEnv config.Env, clock func() float64) *cli.Command {
+func Command(o Options) *cli.Command {
 	return &cli.Command{
 		Name: "media",
 		Commands: []*cli.Command{
-			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(cfgEnv, channels, clock)},
-			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(cfgEnv, sweep, clock)},
+			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(o.Run, o.PollJob, Poll)},
+			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(o.Run, o.SweepJob, Sweep)},
+			{Name: "inspect-filing", Help: "show the media agent receipt and current file evidence for a filing effect", Setup: inspectFiling(o.Inspect)},
 		},
 	}
 }
 
-func handler(cfgEnv config.Env, run job, clock func() float64) func(*cli.Args) cli.Handler {
+func handler(run Runner, name string, fn Job) func(*cli.Args) cli.Handler {
 	return func(*cli.Args) cli.Handler {
 		return func(env *cli.Env) int {
-			cfg, err := config.Load(cfgEnv)
+			out, err := run(env.Ctx, name, fn)
 			if err != nil {
+				if out != nil {
+					body, _ := json.MarshalIndent(out, "", "  ")
+					_, _ = fmt.Fprintln(env.Stdout, string(body))
+				}
 				return cli.Fail(env, err)
 			}
-			d, err := db.Connect(cfg.DBPath)
-			if err != nil {
-				return cli.Fail(env, err)
-			}
-			defer func() { _ = d.Close() }()
-			if err := config.Boot(env.Ctx, cfgEnv, d, cfg); err != nil {
-				return cli.Fail(env, err)
-			}
-			out, err := run(env.Ctx, d, cfgEnv, clock)
+			body, _ := json.MarshalIndent(out, "", "  ")
+			_, _ = fmt.Fprintln(env.Stdout, string(body))
+			return cli.ExitOK
+		}
+	}
+}
+
+func inspectFiling(inspect func(ctx context.Context, id int64) (any, error)) func(*cli.Args) cli.Handler {
+	return func(a *cli.Args) cli.Handler {
+		id := a.IntArg("effect-id", cli.Opt{Help: "the filing effect to inspect"})
+		return func(env *cli.Env) int {
+			out, err := inspect(env.Ctx, int64(*id))
 			if err != nil {
 				return cli.Fail(env, err)
 			}

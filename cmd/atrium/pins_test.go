@@ -28,79 +28,136 @@ func pinRowOf(t *testing.T, r settingsRun) pinRow {
 	return row
 }
 
-func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
-	t.Parallel()
+func writeFile(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func hostSettings(t *testing.T) (string, string) {
+	t.Helper()
 	dir := t.TempDir()
 	db := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", db)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_CONFIG", "")
-	const key = "monthly_budget_usd"
+	setEnv(t, "ATRIUM_HOST_CONFIG", "")
+	setEnv(t, "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL", "")
+	setEnv(t, "ATRIUM_MEDIA_MEDIA_DOWNLOAD_PATH_PREFIX", "")
+	return dir, db
+}
 
-	if r := runSettings(t, "set", key, "90"); r.code != cli.ExitOK {
-		t.Fatalf("set without config: %d %q", r.code, r.stderr)
-	}
+func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
+	t.Parallel()
+	dir, db := hostSettings(t)
+	const key = "public_url"
 
-	write := func(name, body string) string {
-		t.Helper()
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-	config := write("atrium.toml", "[assistant]\nmonthly_budget_usd = 120\nmax_steps_chat = \"${PIN_TEST_STEPS}\"\n")
-	setEnv(t, "ATRIUM_CONFIG", config)
-	setEnv(t, "PIN_TEST_STEPS", "30")
+	host := writeFile(t, dir, "host.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n[media]\nmedia_download_path_prefix = \"/srv/downloads\"\n")
+	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 
 	got := pinRowOf(t, runSettings(t, "get", key))
-	if got.Value != "120" || got.Source != "pin" || got.PinSource != "config "+config+" assistant."+key {
-		t.Errorf("config pin: %+v", got)
+	if got.Value != "https://atrium.host.example" || got.Source != "host" {
+		t.Errorf("host value: %+v", got)
 	}
-	if got := pinRowOf(t, runSettings(t, "get", "max_steps_chat")); got.Value != "30" || got.Source != "pin" {
-		t.Errorf("interpolated pin: %+v", got)
-	}
-
-	for _, verb := range [][]string{{"set", key, "50"}, {"unset", key}} {
-		r := runSettings(t, verb...)
-		if r.code != cli.ExitError || !strings.Contains(r.stderr, config) || !strings.Contains(r.stderr, "assistant."+key) {
-			t.Errorf("%s: exit %d stderr %q", verb[0], r.code, r.stderr)
-		}
-	}
-	if value, ok := storedSetting(t, db, key); !ok || value != "90" {
-		t.Errorf("stored value = %q, %v; want 90 untouched", value, ok)
-	}
-
-	setEnv(t, "ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "200")
-	got = pinRowOf(t, runSettings(t, "get", key))
-	if got.Value != "200" || got.PinSource != "env ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD" {
-		t.Errorf("env pin over config: %+v", got)
-	}
-	setEnv(t, "ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "")
-
-	secret := write("budget", " 130\n")
-	setEnv(t, "ATRIUM_CONFIG", write("file.toml", "[assistant]\nmonthly_budget_usd_file = "+`"`+secret+`"`+"\n"))
-	if got := pinRowOf(t, runSettings(t, "get", key)); got.Value != "130" || got.Source != "pin" {
-		t.Errorf("file pin: %+v", got)
-	}
-
-	for name, c := range map[string]struct{ body, names string }{
-		"unknown key":     {"[assistant]\nnope = 1\n", "assistant.nope"},
-		"unknown module":  {"[nowhere]\nx = 1\n", "nowhere"},
-		"undefined env":   {"[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n", "assistant.max_steps_chat"},
-		"missing file":    {"[assistant]\nmonthly_budget_usd_file = \"" + filepath.Join(dir, "absent") + "\"\n", "assistant.monthly_budget_usd_file"},
-		"invalid value":   {"[assistant]\nmonthly_budget_usd = -1\n", "assistant.monthly_budget_usd"},
-		"both file+value": {"[assistant]\nmonthly_budget_usd = 1\nmonthly_budget_usd_file = \"" + secret + "\"\n", "assistant.monthly_budget_usd"},
+	for _, verb := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"set", key, "https://other.example"}, "core.public_url"},
+		{[]string{"set", "media_download_path_prefix", "/other"}, "media.media_download_path_prefix"},
+		{[]string{"unset", key}, "core.public_url"},
 	} {
-		setEnv(t, "ATRIUM_CONFIG", write("bad.toml", c.body))
-		r := runSettings(t, "get", key)
-		if r.code != cli.ExitError || !strings.Contains(r.stderr, c.names) || r.stdout != "" {
-			t.Errorf("%s: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
+		r := runSettings(t, verb.args...)
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, "host configuration and is not editable here") || !strings.Contains(r.stderr, verb.want) {
+			t.Errorf("%s: exit %d stderr %q, want %s", verb.args[0], r.code, r.stderr, verb.want)
 		}
 	}
-	setEnv(t, "ATRIUM_CONFIG", write("bad.toml", "[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n"))
-	if r := runSettings(t, "get", key); !strings.Contains(r.stderr, "PIN_TEST_UNDEFINED") {
-		t.Errorf("stderr %q does not name the variable", r.stderr)
+	if r := runSettings(t, "set", "calendar_dir", "/srv/calendar"); r.code != cli.ExitError || !strings.Contains(r.stderr, "calendar.calendar_dir") {
+		t.Errorf("set a host path: exit %d stderr %q", r.code, r.stderr)
+	}
+	if _, ok := storedSetting(t, db, key); ok {
+		t.Error("a refused host write stored the value")
+	}
+
+	secret := writeFile(t, dir, "oidc-secret", "client-secret-value\n")
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "secret.toml", "[connections.\"service/oidc\"]\nkind = \"service/oidc\"\nconfig = { issuer = \"https://idp.example.org\" }\ncapabilities = [\"discovery\"]\ncredential_files = { client_secret = \""+secret+"\" }\n"))
+	if r := runApp(t, "connections", "list", "--json"); r.code != cli.ExitOK || !strings.Contains(r.stdout, `"slot": "client_secret"`) || !strings.Contains(r.stdout, `"source": "host_file"`) {
+		t.Errorf("host connection credential: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
+	}
+
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "env.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n"))
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "https://atrium.env.example")
+	got = pinRowOf(t, runSettings(t, "get", key))
+	if got.Value != "https://atrium.env.example" || got.Source != "host" {
+		t.Errorf("env override: %+v", got)
+	}
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "")
+
+	urlFile := writeFile(t, dir, "public-url", "https://atrium.file.example\n")
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "file.toml", "[core]\npublic_url_file = \""+urlFile+"\"\n"))
+	if got := pinRowOf(t, runSettings(t, "get", key)); got.Value != "https://atrium.file.example" || got.Source != "host" {
+		t.Errorf("host file value: %+v", got)
+	}
+
+	for name, c := range map[string]struct{ body, want string }{
+		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", `connections."service/oidc".credential_files.client_secret`},
+		"operator key":  {"[assistant]\nmonthly_budget_usd = 1\n", "atrium settings set monthly_budget_usd"},
+		"tuning key":    {"[assistant]\nmax_steps_chat = 10\n", "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat"},
+		"database key":  {"[db]\nkey = \"00\"\n", "use ATRIUM_DB_KEY_FILE"},
+		"unknown key":   {"[core]\nnot_a_key = 1\n", "unknown host key \"core.not_a_key\""},
+	} {
+		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bad.toml", c.body))
+		r := runSettings(t, "get", key)
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, c.want) {
+			t.Errorf("%s: exit %d stderr %q, want %q", name, r.code, r.stderr, c.want)
+		}
+	}
+
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "connection.toml", "[connections.\"service/qbittorrent\"]\nkind = \"service/qbittorrent\"\nconfig = { url = \"http://127.0.0.1:8081\" }\ncapabilities = [\"api\"]\n"))
+	if r := runApp(t, "connections", "list", "--json"); r.code != cli.ExitOK || !strings.Contains(r.stdout, "service/qbittorrent") {
+		t.Errorf("host connection: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
+	}
+}
+
+func TestRemovedEnvironmentAndFilePinsAreRefused(t *testing.T) {
+	t.Parallel()
+	dir, _ := hostSettings(t)
+
+	for name, c := range map[string]struct {
+		env  map[string]string
+		want string
+	}{
+		"credential env": {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_API_KEY": "qbt"}, want: `connections."service/qbittorrent".credential_files.api_key`},
+		"credential file env": {env: map[string]string{"ATRIUM_AUTH_OIDC_CLIENT_SECRET_FILE": writeFile(t, dir, "oidc-client-secret", "client-secret-value\n")},
+			want: `connections."service/oidc".credential_files.client_secret`},
+		"tuning env":    {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS": "30"}, want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
+		"operator env":  {env: map[string]string{"ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD": "120"}, want: "atrium settings set monthly_budget_usd"},
+		"host env":      {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": "http://q.invalid"}, want: `connections."service/qbittorrent".config.url`},
+		"anthropic env": {env: map[string]string{"ANTHROPIC_API_KEY": "sk-test"}, want: `connections."service/anthropic".credential_files.api_key`},
+	} {
+		for key, value := range c.env {
+			setEnv(t, key, value)
+		}
+		r := runSettings(t, "get", "tz")
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, "no longer read") || !strings.Contains(r.stderr, c.want) {
+			t.Errorf("%s: exit %d stderr %q, want %q", name, r.code, r.stderr, c.want)
+		}
+		for key := range c.env {
+			setEnv(t, key, "")
+		}
+	}
+
+	setEnv(t, "ATRIUM_CONFIG", writeFile(t, dir, "staged.toml", "[assistant]\nmonthly_budget_usd = 120\n"))
+	if r := runSettings(t, "get", "tz"); r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_CONFIG is no longer read") {
+		t.Errorf("legacy pin file: exit %d stderr %q", r.code, r.stderr)
+	}
+	setEnv(t, "ATRIUM_CONFIG", "")
+	def, _ := testSettings().Lookup("monthly_budget_usd")
+	if got := pinRowOf(t, runSettings(t, "get", "monthly_budget_usd")); got.Value != def.Default || got.Source != "default" {
+		t.Errorf("operator default after removing the pin file: %+v, want %s", got, def.Default)
 	}
 }

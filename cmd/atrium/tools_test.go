@@ -10,6 +10,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 func TestDisabledToolIsNotOffered(t *testing.T) {
@@ -18,7 +20,7 @@ func TestDisabledToolIsNotOffered(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('tool_kb_search_enabled', 'false')"); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +81,7 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 		t.Fatalf("%d model requests, want 5", len(requests))
 	}
 	assertServerCallers(t, requests[1], "direct")
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('search_web_dynamic_filtering', 'true')"); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +95,34 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 	if len(requests) != 5 {
 		t.Fatalf("%d model requests, want 5", len(requests))
 	}
-	assertServerCallers(t, requests[1], "")
+	assertServerCallers(t, requests[1], "direct")
+	if got := runSettings(t, "set", "search_web_dynamic_filtering", "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "compiled constant") {
+		t.Errorf("set search_web_dynamic_filtering: exit %d stderr %q, want the key refused as a compiled constant", got.code, got.stderr)
+	}
+}
+
+func TestWebSearchIsRegisteredOnlyWithAssistant(t *testing.T) {
+	t.Parallel()
+	moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "hi"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	if got := runSettings(t, "get", "tool_web_search_enabled"); got.code != cli.ExitOK {
+		t.Fatalf("tool_web_search_enabled with assistant on: exit %d stderr %q", got.code, got.stderr)
+	}
+	moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	if ran := runApp(t, "calendar", "candidates"); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "assistant module, which is off") {
+		t.Fatalf("calendar candidates with assistant off: %d %s, want the job's module refusal", ran.code, ran.stderr)
+	}
+	if got := runSettings(t, "get", "tool_calendar_list_enabled"); got.code != cli.ExitOK {
+		t.Fatalf("tool_calendar_list_enabled with assistant off: exit %d stderr %q", got.code, got.stderr)
+	}
+	if got := runSettings(t, "get", "tool_web_search_enabled"); got.code == cli.ExitOK {
+		t.Errorf("tool_web_search_enabled is registered while assistant is off: %q", got.stdout)
+	}
+	if got := runSettings(t, "get", "tool_research_enabled"); got.code == cli.ExitOK {
+		t.Errorf("tool_research_enabled is registered while assistant is off: %q", got.stdout)
+	}
 }
 
 func assertServerCallers(t *testing.T, r anthropictest.Request, want string) {
@@ -136,7 +165,7 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 	if err != nil || string(data) != "hello world" {
 		t.Fatalf("note.txt = %q, %v; run: %s", data, err, ran.stdout)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	rows, err := d.Read.Query("SELECT content_json FROM thread_messages WHERE thread_id = 1 AND role = 'user' ORDER BY seq")
 	if err != nil {
 		t.Fatal(err)
@@ -157,12 +186,12 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 	}
 }
 
-func TestMemorySpendDoesNotPauseChat(t *testing.T) {
+func TestMemorySpendCountsTowardTheMonthlyBudget(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("DELETE FROM usage"); err != nil {
 		t.Fatal(err)
 	}
@@ -170,26 +199,36 @@ func TestMemorySpendDoesNotPauseChat(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := float64(time.Now().Unix())
-	insert := "INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', 1, 1, ?, 'm', 'low', '[]', 0, 0, 0, 0, 0, 0, 'low', ?)"
-	if _, err := d.Write.Exec(insert, now, "chat", 1.0); err != nil {
-		t.Fatal(err)
+	month := asstMonth(t, now)
+	insert := "INSERT INTO usage (attempt_key, ts, month, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 'settled', ?, 0, ?, lower(hex(randomblob(16))), 'loop', 'anthropic', 1, 1, ?, 'm', 'low', '[]', 0, 0, 0, 0, 0, 0, 'low', ?)"
+	seed := func(kind, class string, usd float64) {
+		t.Helper()
+		if _, err := d.Write.Exec(insert, now, month, now, now, class, int64(usd*1e9), kind, usd); err != nil {
+			t.Fatal(err)
+		}
 	}
+	seed("chat", "interactive", 1.0)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
 		t.Fatalf("chat did not pause at the threshold: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
 	}
-	if _, err := d.Write.Exec(insert, now, "memory", 100.0); err != nil {
-		t.Fatal(err)
-	}
+	seed("memory", "unattended", 100.0)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
 		t.Fatalf("a memory row changed the pause decision: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
 	}
-	if _, err := d.Write.Exec("UPDATE usage SET cost_usd = 0.5 WHERE kind = 'chat'"); err != nil {
+	if _, err := d.Write.Exec("UPDATE usage SET cost_usd = 0.5, accounted_nusd = 500000000 WHERE kind = 'chat'"); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+		t.Fatalf("memory spend did not count toward the budget: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
+	}
+	if _, err := d.Write.Exec("DELETE FROM usage WHERE kind = 'memory'"); err != nil {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); ran.code != cli.ExitOK {
-		t.Fatalf("chat stayed paused with a large memory row: %d %s", ran.code, ran.stderr)
+		t.Fatalf("chat stayed paused without the memory row: %d %s", ran.code, ran.stderr)
 	}
 }

@@ -7,12 +7,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -39,8 +40,14 @@ var kindLabels = map[string]string{
 	"personal": "Personal",
 }
 
-func init() {
-	settings.MustRegister(
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath},
+	}
+}
+
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: NotionEnabledKey, Module: "export", Type: settings.Bool, Default: "false"}),
 		settings.Value(settings.UI, settings.Def{
@@ -50,34 +57,35 @@ func init() {
 		settings.Value(settings.UI, settings.Def{
 			Key: NotionPrivateKey, Module: "export", Type: settings.String, Check: pageID}),
 		settings.Value(settings.UI, settings.Def{
-			Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath}),
-		settings.Value(settings.UI, settings.Def{
 			Key: ObsidianKindsKey, Module: "export", Type: settings.String, Default: strings.Join(kindNames, ","), Check: kinds}),
 		settings.Value(settings.UI, settings.Def{
 			Key: ObsidianPrivateKey, Module: "export", Type: settings.String, Check: dirPath}),
-	)
-	integrations.RegisterSection(integrations.Section{
-		Name: NotionSection, Title: "Export knowledge to Notion", Module: "export", Template: "export_notion_settings",
-		Integration: "notion",
-		Fields: []integrations.Field{
-			{Key: NotionEnabledKey, Label: "Enabled", Bool: true},
-			{Key: NotionParentKey, Label: "Parent page"},
-			{Key: NotionKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
-			{Key: NotionPrivateKey, Label: "Include private records"},
+	}
+}
+
+func Sections() []settingspage.Section {
+	return []settingspage.Section{
+		{
+			Name: NotionSection, Title: "Export knowledge to Notion", Module: "export", Template: "export_notion_settings",
+			Fields: []settingspage.Field{
+				{Key: NotionEnabledKey, Label: "Enabled", Bool: true},
+				{Key: NotionParentKey, Label: "Parent page"},
+				{Key: NotionKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
+				{Key: NotionPrivateKey, Label: "Include private records"},
+			},
+			Validate: validateNotion,
+			Data:     notionData,
 		},
-		Validate: validateNotion,
-		Data:     notionData,
-	})
-	integrations.RegisterSection(integrations.Section{
-		Name: ObsidianSection, Title: "Obsidian export", Module: "export", Template: "export_obsidian_settings",
-		Fields: []integrations.Field{
-			{Key: ObsidianDirKey, Label: "Folder"},
-			{Key: ObsidianKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
-			{Key: ObsidianPrivateKey, Label: "Include private records"},
+		{
+			Name: ObsidianSection, Title: "Obsidian export", Module: "export", Template: "export_obsidian_settings",
+			Fields: []settingspage.Field{
+				{Key: ObsidianKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
+				{Key: ObsidianPrivateKey, Label: "Include private records"},
+			},
+			Validate: validateObsidian,
+			Data:     obsidianData,
 		},
-		Validate: validateObsidian,
-		Data:     obsidianData,
-	})
+	}
 }
 
 type notionStatus struct {
@@ -87,7 +95,8 @@ type notionStatus struct {
 }
 
 type obsidianStatus struct {
-	Last float64
+	Last   float64
+	Folder string
 }
 
 func notionData(ctx context.Context, q db.Querier) (any, error) {
@@ -95,7 +104,7 @@ func notionData(ctx context.Context, q db.Querier) (any, error) {
 	if err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(updated_at), 0) FROM export_pages WHERE target = ?", TargetNotion).Scan(&last); err != nil {
 		return nil, err
 	}
-	blocked, err := writes.UnknownTarget(ctx, q, targetPrefix)
+	blocked, err := ledger.BlockedTarget(ctx, q, targetPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +121,7 @@ func obsidianData(ctx context.Context, q db.Querier) (any, error) {
 	if err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(updated_at), 0) FROM export_pages WHERE target = ?", TargetObsidian).Scan(&last); err != nil {
 		return nil, err
 	}
-	return obsidianStatus{Last: last}, nil
+	return obsidianStatus{Last: last, Folder: strings.TrimSpace(config.From(ctx).HostValue(ObsidianDirKey))}, nil
 }
 
 func notionURL(id string) string {
@@ -190,6 +199,9 @@ func validateObsidian(ctx context.Context, q db.Querier, values map[string]strin
 func effective(ctx context.Context, q db.Querier, values map[string]string, key string) (string, bool, error) {
 	if value, ok := values[key]; ok {
 		return value, false, nil
+	}
+	if _, hosted := settings.From(ctx).HostDefOf(key); hosted {
+		return strings.TrimSpace(config.From(ctx).HostValue(key)), true, nil
 	}
 	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {

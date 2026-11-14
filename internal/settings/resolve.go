@@ -50,7 +50,7 @@ func (r *Registry) Resolve(ctx context.Context, q db.Querier, key string) (Resol
 		}
 	}
 	out := Resolved{Key: key, Value: d.Default, Origin: FromDefault}
-	if d.IsSecret() || q == nil {
+	if d.IsSecret() || q == nil || !DBBacked(key) {
 		return out, nil
 	}
 	value, ok, err := instanceValue(ctx, q, key)
@@ -85,6 +85,9 @@ func (r *Registry) writable(key string) (Def, error) {
 	d, pins, err := r.lookup(key)
 	if err != nil {
 		return Def{}, err
+	}
+	if HostOwnedKey(key) {
+		return Def{}, hostOwned(key)
 	}
 	if pins != nil {
 		if _, source, ok := pins.Pin(key); ok {
@@ -175,4 +178,33 @@ func (r *Registry) checkPeers(ctx context.Context, q db.Querier, d Def, value st
 		return err
 	}
 	return nil
+}
+
+func (r *Registry) Seed(ctx context.Context, q db.Querier, key, value string) (bool, error) {
+	d, _, err := r.lookup(key)
+	if err != nil {
+		return false, err
+	}
+	if HostOwnedKey(key) {
+		return false, hostOwned(key)
+	}
+	if !d.Editable() {
+		return false, &NotEditable{Key: key}
+	}
+	if err := d.validate(value); err != nil {
+		return false, Invalid(key + " " + err.Error())
+	}
+	if _, pinned, err := r.Pinned(key); err != nil || pinned {
+		return false, err
+	}
+	res, err := q.ExecContext(ctx, "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", key, value)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return false, err
+	}
+	ctx = audit.With(ctx, "bootstrap", audit.Migration)
+	return true, r.record(ctx, q, key, nil, &value)
 }

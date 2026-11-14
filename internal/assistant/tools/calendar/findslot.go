@@ -2,9 +2,8 @@ package calendartools
 
 import (
 	"context"
-	"time"
 
-	"github.com/jeiang/atrium/internal/calendar"
+	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -21,31 +20,19 @@ func findSlot(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
-	target, _, err := tool.TextArg(args, "calendar", false)
+	filter, _, err := tool.TextArg(args, "calendar", false)
 	if err != nil {
 		return nil, err
 	}
-	filter, err := calendar.ParseFilter(target)
+	read, err := service(tc).FindSlot(ctx, calapp.FindSlotInput{Start: start, End: end, Minutes: minutes, Calendar: filter})
 	if err != nil {
-		return nil, wrap(err)
+		return nil, tool.Fail(err)
 	}
-	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
+	var marks tool.Marks
+	if read.Data.Messages {
+		marks = tool.Messages
 	}
-	found, err := calendar.FindSlots(ctx, tc.DB.Read, tc.Env, set, start, end, time.Duration(minutes)*time.Minute, filter)
-	if err != nil {
-		return nil, wrap(err)
-	}
-	windows := make([]any, len(found.Windows))
-	for i, w := range found.Windows {
-		windows[i] = map[string]any{"start": w.Start.Format(time.RFC3339), "end": w.End.Format(time.RFC3339)}
-	}
-	notes := make([]any, len(found.Notes))
-	for i, n := range found.Notes {
-		notes[i] = n
-	}
-	return tool.Marked{Value: map[string]any{"windows": windows, "notes": notes}, Marks: tool.Messages}, nil
+	return tool.Marked{Value: read.Data.Value, Marks: marks}, nil
 }
 
 var durationBound = tool.NewCeiling(30, 5, 1440)

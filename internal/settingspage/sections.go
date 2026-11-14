@@ -1,0 +1,83 @@
+package settingspage
+
+import (
+	"context"
+	"slices"
+	"strconv"
+
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
+)
+
+type Field = settingsapp.Field
+
+type Section struct {
+	Name, Title, Module string
+	Template            string
+	Fields              []settingsapp.Field
+	Validate            func(ctx context.Context, q settingsapp.Querier, values map[string]string) error
+	Data                func(ctx context.Context, q settingsapp.Querier) (any, error)
+}
+
+type SectionView struct {
+	Module   string                  `json:"module"`
+	Name     string                  `json:"name"`
+	Title    string                  `json:"title"`
+	Template string                  `json:"template"`
+	Fields   []settingsapp.FieldView `json:"fields"`
+	Data     any                     `json:"data,omitempty"`
+}
+
+type Sections []Section
+
+func (s Sections) Named(name string) (Section, bool) {
+	for _, section := range s {
+		if section.Name == name {
+			return section, true
+		}
+	}
+	return Section{}, false
+}
+
+func (s Sections) Load(ctx context.Context, q settingsapp.Querier) ([]SectionView, error) {
+	var out []SectionView
+	for _, section := range s {
+		fields, err := settingsapp.LoadFields(ctx, q, section.Fields)
+		if err != nil {
+			return nil, err
+		}
+		var data any
+		if section.Data != nil {
+			if data, err = section.Data(ctx, q); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, SectionView{Module: section.Module, Name: section.Name, Title: section.Title, Template: section.Template, Fields: fields, Data: data})
+	}
+	return out, nil
+}
+
+func (s Sections) Modules() map[string]bool {
+	out := make(map[string]bool, len(s))
+	for _, section := range s {
+		out[section.Module] = true
+	}
+	return out
+}
+
+type DuplicateSection string
+
+func (e DuplicateSection) Error() string { return "duplicate section " + strconv.Quote(string(e)) }
+
+func Offered(groups []Group, sections Sections, key string) (Section, bool) {
+	for _, g := range groups {
+		if slices.Contains(g.Keys, key) {
+			return Section{}, true
+		}
+	}
+	for _, s := range sections {
+		if slices.ContainsFunc(s.Fields, func(f Field) bool { return f.Key == key }) {
+			return s, true
+		}
+	}
+	return Section{}, false
+}

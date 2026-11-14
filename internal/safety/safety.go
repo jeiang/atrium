@@ -37,6 +37,12 @@ func OperatorSend(ctx context.Context, sentMailbox string) context.Context {
 	return context.WithValue(ctx, operatorSendKey{}, sentMailbox)
 }
 
+// OperatorSendTarget returns the Sent mailbox an operator send may APPEND its copy to.
+func OperatorSendTarget(ctx context.Context) (string, bool) {
+	sent, ok := ctx.Value(operatorSendKey{}).(string)
+	return sent, ok
+}
+
 func AutomaticWrites(ctx context.Context, pausePath string) context.Context {
 	return context.WithValue(ctx, automaticKey{}, pausePath)
 }

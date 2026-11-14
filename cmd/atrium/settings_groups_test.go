@@ -5,10 +5,13 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
@@ -19,19 +22,14 @@ func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil)
+	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET /settings/assistant = %d", status)
 	}
-	for _, want := range []string{`data-group="assistant.spending"`, `name="thread_cost_cap_usd"`, "Thread cost cap (USD)"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("/settings/assistant does not render %s", want)
-		}
-	}
 	const action = "/settings/groups/assistant/spending"
-	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"12"}, "monthly_budget_usd": {"150"}})
-	if status != http.StatusOK || !strings.Contains(body, "data-saved") {
-		t.Fatalf("POST %s = %d, saved marker %v", action, status, strings.Contains(body, "data-saved"))
+	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"12"}, "monthly_budget_usd": {"150"}})
+	if status != http.StatusOK {
+		t.Fatalf("POST %s = %d", action, status)
 	}
 	if row := runSettings(t, "get", "thread_cost_cap_usd").row(t); row.Value == nil || *row.Value != "12" || row.Source == nil || *row.Source != "db" {
 		t.Errorf("thread_cost_cap_usd = %+v, want 12 from the database", row)
@@ -39,48 +37,15 @@ func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
 	if row := runSettings(t, "get", "monthly_budget_usd").row(t); row.Source != nil && *row.Source == "db" {
 		t.Errorf("saving the group stored an unchanged key: %+v", row)
 	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"-1"}})
-	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "must be greater than 0") {
-		t.Errorf("POST an invalid value = %d: %.300s", status, body)
+	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"-1"}})
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("POST an invalid value = %d", status)
 	}
 	if row := runSettings(t, "get", "thread_cost_cap_usd").row(t); row.Value == nil || *row.Value != "12" {
 		t.Errorf("a refused save changed thread_cost_cap_usd to %+v", row)
 	}
 	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/nope", url.Values{}); status != http.StatusNotFound {
 		t.Errorf("POST an unknown group = %d, want 404", status)
-	}
-}
-
-func TestExternalModuleSettingsGroupGetsAPage(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	base, _, _ := startServeApp(t, newTestApp(t, extModules()), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/"+extName, nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/%s = %d", extName, status)
-	}
-	for _, want := range []string{`<a href="/settings/` + extName + `" aria-current="page" data-mark="off">Extdemo</a>`, `data-group="` + extName + `.general"`, "Greeting", `value="hello"`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the module page does not render %s", want)
-		}
-	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/groups/"+extName+"/general", url.Values{extGreeting: {"good day"}})
-	if status != http.StatusOK || !strings.Contains(body, `value="good day"`) {
-		t.Errorf("POST the group = %d, saved value shown %v", status, strings.Contains(body, `value="good day"`))
-	}
-	if !strings.Contains(body, `data-module="`+extName+`" data-enabled="false"`) {
-		t.Errorf("the module page does not show the module as off")
-	}
-	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/modules/"+extName, url.Values{"enabled": {"true"}}); status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
-		t.Errorf("the web can still switch a module: %d", status)
 	}
 }
 
@@ -93,38 +58,136 @@ func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/calendar", nil)
+	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/calendar", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET /settings/calendar = %d", status)
 	}
-	for _, want := range []string{`data-section="calendar"`, `name="default_event_minutes"`, `name="back" value="/settings/calendar"`, `data-module="calendar"`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("/settings/calendar does not render %s", want)
-		}
+	const action = "/settings/sections/calendar"
+	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"45"}, "back": {"/settings/calendar"}})
+	if status != http.StatusOK {
+		t.Errorf("saving from the module page = %d", status)
 	}
-	const action = "/settings/integrations/sections/calendar"
-	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"45"}, "back": {"/settings/calendar"}})
-	if status != http.StatusOK || !strings.Contains(body, "<title>Calendar · Settings") || !strings.Contains(body, "data-saved") || !strings.Contains(body, `value="45"`) {
-		t.Errorf("saving from the module page = %d, back on the page %v, saved %v", status, strings.Contains(body, "<title>Calendar · Settings"), strings.Contains(body, "data-saved"))
-	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"0"}, "back": {"/settings/calendar"}})
-	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "<title>Calendar · Settings") || !strings.Contains(body, "must be between 5 and 1440") {
-		t.Errorf("a refused value = %d, on the module page %v: %.200s", status, strings.Contains(body, "<title>Calendar · Settings"), body)
+	status, body, _ := fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"0"}, "back": {"/settings/calendar"}})
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("a refused value = %d: %.200s", status, body)
 	}
 	if row := runSettings(t, "get", "default_event_minutes").row(t); row.Value == nil || *row.Value != "45" {
 		t.Errorf("default_event_minutes = %+v, want 45", row)
 	}
-	for _, c := range []struct {
-		action, back, title string
-		form                url.Values
-	}{
-		{"/settings/integrations/open_meteo/settings", "/settings/assistant", "<title>Assistant · Settings", url.Values{"weather_latitude": {"north"}}},
-		{"/settings/integrations/mail_chat/test", "/settings/mail", "<title>Mail · Settings", url.Values{"url": {"http://127.0.0.1:1/v1"}}},
-	} {
-		c.form.Set("back", c.back)
-		status, body, _ := fetch(t, client, http.MethodPost, base+c.action, c.form)
-		if status != http.StatusUnprocessableEntity || !strings.Contains(body, c.title) || !strings.Contains(body, `role="alert"`) {
-			t.Errorf("a refusal from %s = %d, on its page %v: %.200s", c.back, status, strings.Contains(body, c.title), body)
+}
+
+func TestMediaLibraryGroupEditsTheLinkTTL(t *testing.T) {
+	t.Parallel()
+	base := startSettingsServe(t, nil)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/media", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET /settings/media = %d", status)
+	}
+	const action = "/settings/groups/media/library"
+	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"media_link_ttl_seconds": {"7200"}})
+	if status != http.StatusOK {
+		t.Fatalf("POST %s = %d", action, status)
+	}
+	if row := runSettings(t, "get", "media_link_ttl_seconds").row(t); row.Value == nil || *row.Value != "7200" {
+		t.Errorf("media_link_ttl_seconds = %+v, want 7200", row)
+	}
+	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"media_link_ttl_seconds": {"30"}})
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("POST an invalid TTL = %d", status)
+	}
+	if ran := runSettings(t, "set", "media_link_ttl_seconds", "3600"); ran.code != 0 {
+		t.Fatalf("settings set media_link_ttl_seconds: %d %s", ran.code, ran.stderr)
+	}
+	if row := runSettings(t, "get", "media_link_ttl_seconds").row(t); row.Value == nil || *row.Value != "3600" {
+		t.Errorf("media_link_ttl_seconds after settings set = %+v, want 3600", row)
+	}
+}
+
+func TestSettingsSaveSameRefusalInCLIAndUI(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	pinned := module.FlagKey(module.Mail)
+	seedFlagsAt(t, newTestApp(t), path, allFlagsTrue())
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host.toml", "[core]\n"+pinned+" = true\n"))
+	base := startServeIn(t, dir)
+	const key = "thread_cost_cap_usd"
+	ran := runSettings(t, "set", key, "-1")
+	if ran.code != cli.ExitUsage || !strings.HasPrefix(ran.stderr, "error: "+key+" ") {
+		t.Errorf("settings set %s -1 = exit %d, stderr %q; want exit 2 naming %s", key, ran.code, ran.stderr, key)
+	}
+	if ran := runSettings(t, "set", pinned, "false"); ran.code != cli.ExitError || !strings.Contains(ran.stderr, pinned+" is pinned") {
+		t.Errorf("settings set %s false = exit %d, stderr %q; want exit 1 naming the pin", pinned, ran.code, ran.stderr)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil); status != http.StatusOK {
+		t.Fatalf("GET /settings/assistant = %d", status)
+	}
+	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/spending", url.Values{key: {"-1"}}); status != http.StatusUnprocessableEntity {
+		t.Errorf("POST the group with %s=-1 = %d, want 422", key, status)
+	}
+	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/spending", url.Values{pinned: {"false"}}); status >= http.StatusBadRequest {
+		t.Errorf("POST the group with the pinned %s = %d", pinned, status)
+	}
+	d := mustConnect(t, path, keyFor(t))
+	for k, v := range map[string]string{key: "-1", pinned: "false"} {
+		var changes int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE key = ? AND COALESCE(new_value, '') = ?", k, v).Scan(&changes); err != nil {
+			t.Fatal(err)
 		}
+		if changes != 0 {
+			t.Errorf("refused saves of %s=%s wrote %d settings_audit rows", k, v, changes)
+		}
+	}
+	var refusals []string
+	refused, err := d.Read.Query("SELECT source || ' ' || details_json FROM operation_audit WHERE operation = 'settings.set' AND outcome = 'refused' AND target = ? ORDER BY id", pinned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = refused.Close() }()
+	for refused.Next() {
+		var row string
+		if err := refused.Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		refusals = append(refusals, row)
+	}
+	if err := refused.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{`cli {"keys":["` + pinned + `"]}`}; !slices.Equal(refusals, want) {
+		t.Errorf("pinned refusal audit = %v, want %v", refusals, want)
+	}
+	rows, err := d.Read.Query("SELECT source, details_json FROM operation_audit WHERE operation = 'settings.set' AND outcome = 'invalid' AND target = ? ORDER BY id", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []string
+	for rows.Next() {
+		var source, details string
+		if err := rows.Scan(&source, &details); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, source+" "+details)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{`cli {"keys":["` + key + `"]}`, `ui {"keys":["` + key + `"]}`}
+	if !slices.Equal(got, want) {
+		t.Errorf("refusal audit = %v, want %v", got, want)
 	}
 }

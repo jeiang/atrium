@@ -32,11 +32,7 @@ const (
 var log = logx.Logger("atrium.db")
 
 func connPragmas() []string {
-	return []string{busyPragma(busyTimeout), "PRAGMA foreign_keys = ON", "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864", "PRAGMA temp_store = MEMORY"}
-}
-
-func busyPragma(d time.Duration) string {
-	return fmt.Sprintf("PRAGMA busy_timeout = %d", d.Milliseconds())
+	return []string{busyWaitSQL(busyTimeout), "PRAGMA foreign_keys = ON", "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864", "PRAGMA temp_store = MEMORY"}
 }
 
 type Checkpoint struct {
@@ -51,14 +47,19 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 		return Checkpoint{}, err
 	}
 	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(ctx, busyPragma(wait)); err != nil {
+	release, err := holdGate(ctx, conn, wait)
+	if err != nil {
+		return Checkpoint{}, err
+	}
+	defer release()
+	if _, err := conn.ExecContext(ctx, busyWaitSQL(wait)); err != nil {
 		return Checkpoint{}, err
 	}
 	var c Checkpoint
 	var busy int64
 	err = conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &c.Frames, &c.Done)
 	c.Busy = busy != 0
-	if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), busyPragma(busyTimeout)); rerr != nil {
+	if _, rerr := conn.ExecContext(context.WithoutCancel(ctx), busyWaitSQL(busyTimeout)); rerr != nil {
 		_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 	}
 	return c, err
@@ -79,7 +80,8 @@ func connect(path string, opts []Option) (*DB, error) {
 	if strings.ContainsAny(path, "?#") {
 		return nil, fmt.Errorf("db: path %q contains '?' or '#'", path)
 	}
-	key := applyOptions(opts).key
+	o := applyOptions(opts)
+	key := o.key
 	writeDSN, err := dsn(path, true, key)
 	if err != nil {
 		return nil, err
@@ -95,7 +97,8 @@ func connect(path string, opts []Option) (*DB, error) {
 		return nil, err
 	}
 	pragmas := connPragmas()
-	w := Open(writeDSN, append(append([]string{}, pragmas...), cachePragma(smallCacheKiB))...)
+	gate := &writeGate{}
+	w := sql.OpenDB(connector{drv: openDriver(), dsn: writeDSN, pragmas: append(append([]string{}, pragmas...), cachePragma(smallCacheKiB)), gate: gate})
 	w.SetMaxOpenConns(1)
 	if err := guardEngine(w, key); err != nil {
 		_ = w.Close()
@@ -104,6 +107,10 @@ func connect(path string, opts []Option) (*DB, error) {
 	if err := setWAL(w); err != nil {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
+	}
+	if gate.path, err = CanonicalPath(path); err != nil {
+		_ = w.Close()
+		return nil, err
 	}
 	r := newReader(readDSN, pragmas, smallCacheKiB)
 	k := newKNN(readDSN, pragmas)
@@ -173,6 +180,30 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 	if err != nil {
 		return nil, err
 	}
+	if err := hold(ctx, f, lock, wait); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return &Lock{f: f}, nil
+}
+
+func tryFlock(f *os.File) (bool, error) {
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		switch {
+		case err == nil:
+			return true, nil
+		case errors.Is(err, syscall.EINTR):
+			continue
+		case errors.Is(err, syscall.EWOULDBLOCK), errors.Is(err, syscall.EAGAIN):
+			return false, nil
+		default:
+			return false, fmt.Errorf("db: flock %s: %w", f.Name(), err)
+		}
+	}
+}
+
+func hold(ctx context.Context, f *os.File, lock string, wait time.Duration) error {
 	ticker := time.NewTicker(lockPollInterval)
 	defer ticker.Stop()
 	started := time.Now()
@@ -185,30 +216,21 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 	}
 	for {
 		if err := ctx.Err(); err != nil {
-			_ = f.Close()
-			return nil, err
+			return err
 		}
 		if wait == 0 && !logged && time.Since(started) >= lockLogAfter {
 			log.InfoContext(ctx, "waiting for "+lock)
 			logged = true
 		}
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		ok, err := tryFlock(f)
 		switch {
-		case err == nil:
-			if err := ctx.Err(); err != nil {
-				_ = f.Close()
-				return nil, err
-			}
-			return &Lock{f: f}, nil
-		case errors.Is(err, syscall.EINTR):
-			continue
-		case !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN):
-			_ = f.Close()
-			return nil, fmt.Errorf("db: flock %s: %w", lock, err)
+		case err != nil:
+			return err
+		case ok:
+			return ctx.Err()
 		case wait > 0 && timeout == nil:
-			_ = f.Close()
 			ExclusiveTimeouts.Add(1)
-			return nil, &LockTimeout{Path: lock, Timeout: wait}
+			return &LockTimeout{Path: lock, Timeout: wait}
 		default:
 			if !waited {
 				waited = true
@@ -216,8 +238,7 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 			}
 			select {
 			case <-ctx.Done():
-				_ = f.Close()
-				return nil, ctx.Err()
+				return ctx.Err()
 			case <-timeout:
 				timeout = nil
 			case <-ticker.C:
@@ -236,6 +257,7 @@ type connector struct {
 	drv     driver.Driver
 	dsn     string
 	pragmas []string
+	gate    *writeGate
 }
 
 func (c connector) Driver() driver.Driver { return c.drv }
@@ -259,7 +281,15 @@ func (c connector) Connect(ctx context.Context) (driver.Conn, error) {
 			return nil, fmt.Errorf("db: %s: %w", p, err)
 		}
 	}
-	return conn, nil
+	if c.gate == nil {
+		return conn, nil
+	}
+	g, ok := conn.(gateableConn)
+	if !ok {
+		_ = conn.Close()
+		return nil, fmt.Errorf("db: %T cannot take the write gate", conn)
+	}
+	return &gatedConn{gateableConn: g, gate: c.gate}, nil
 }
 
 func SerializeFloat32(v []float32) []byte {

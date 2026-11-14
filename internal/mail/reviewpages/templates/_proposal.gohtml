@@ -252,7 +252,7 @@
 <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
   <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
   <p class="break-words" data-blocked-error>{{.BlockedError}}</p>
-  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .ID) "target" (printf "#proposal-%v" .ID) "undo" .BlockedUndo "forward" false)}}
+  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .ID) "target" (printf "#proposal-%v" .ID) "undo" .BlockedUndo "forward" .BlockedEffect)}}
 </div>
 {{end}}{{end}}
 

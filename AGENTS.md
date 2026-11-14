@@ -12,7 +12,7 @@ settings the operator edits in the UI or pins from the host.
   direction, and open decisions.
 - Keep development rules in this file, product goals in `docs/vision.md`,
   and application context in `context.md`. Do not duplicate their contents.
-- v2 is not a port of the Python application and has no parity target; do
+- atrium is not a port of the Python application and has no parity target; do
   not add parity tests or parity notes.
 - Update `context.md` when a change alters the behavior, boundaries, or
   decisions it records. Distinguish implemented behavior from planned
@@ -51,6 +51,11 @@ settings the operator edits in the UI or pins from the host.
   uses a real temporary database when persistence is involved.
 - External services may use local fakes. Do not replace the internal behavior
   under test with mocks or stubs.
+- `just e2e` and the Linux `go-test` checks run the tests through
+  `tools/e2e-loopback`: a fresh network namespace on Linux, `sandbox-exec`
+  on macOS. Only loopback and local sockets are reachable, so a test that
+  needs any other address fails. A plain `go test` skips the `TestEgress`
+  containment tests.
 - Direct helper, parser, query, repository, or component tests do not qualify.
   Checking source text or internal call wiring does not qualify.
 - Test observable results, state transitions, refusals, and failure outcomes.
@@ -104,27 +109,38 @@ settings the operator edits in the UI or pins from the host.
   boundary unless a task explicitly redesigns its authorization.
 - Enforce tool permissions, run-kind restrictions, and spending limits in
   code, not prompts.
-- Models outside the static catalog fail closed, and every Anthropic request
-  is checked against the run cost cap before it is sent.
+- Every paid model call is admitted through `internal/inference` before
+  dispatch; models outside the static catalog fail closed.
 - Treat mail, files, pages, and tool results as untrusted data. They must not
   grant URL access or widen tool permissions. Arbitrary web fetches use the
   shared allowlist and SSRF protections on every redirect.
 - Preserve proxy authentication, Host validation, CSRF, same-origin checks,
   CSP, and loopback listener defaults.
+- Every admitted proxy, OIDC or local identity is the one principal with full
+  authority; do not add an administrator role, login links, or a remote
+  emergency bypass.
 - `/api/v1` is bearer-only: never read session cookies or proxy headers
-  there. Within v1, responses change only additively.
+  there. Bearer tokens are persisted by hash and pass one revocation and usage
+  gate. Within v1, responses change only additively.
+- Public request limits are in-process code constants owned by each server
+  instance. Do not move them into settings, a shared process, or a dependency,
+  and never trust a forwarded client address from an untrusted peer.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
-- The v2 baseline schema files in `internal/db/schema/` are frozen: v2
-  shipped to artemis on 2026-11-08, and they are migration 1 exactly as
-  artemis applied it. Never edit them. Every schema change is a new additive
-  migration in `internal/db/migrate.go` with an e2e that migrates a database
-  from the previous version and compares it with a fresh one. Row
-  rewrites require explicit approval and validation on a database copy.
-  Refuse unknown future schema versions before writes. `atrium db import-v1`
-  is the only path from v1 data: it copies the learned-rule data into a
-  fresh v2 database; everything else is rebuilt.
+- The `*.sql` files in `internal/db/schema/` are the v3 baseline
+  (migration 1) and `testdata/schema/baseline.v3.txt` is its canonical dump;
+  both are frozen: never edit them. `seeds.json` is seed data applied at
+  start and is not frozen. From the v3 cutover, every schema change is a new
+  additive migration in `internal/db/migrate.go`, with an e2e that migrates
+  a database from the previous version and compares its schema with a fresh
+  one. Row rewrites require explicit approval and validation on a database
+  copy. Refuse unknown future schema versions before writes.
+  `atrium db import-v2` is the only path from v2 data into a fresh v3
+  database, carrying the rows its table plan selects (mail state, rules,
+  threads, knowledge records, proposals, usage, settings, the settings audit,
+  secrets and connection credentials) and dropping run, memory, Notion and
+  operation history.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
-- Unit names, environment variable names, and `atrium-run` are host-facing
-  contracts. Coordinate breaking changes with the consumer.
+- Unit names (`atrium.service`), environment variable names, and
+  `atrium-run` are host-facing contracts. Coordinate breaking changes with the consumer.

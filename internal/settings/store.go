@@ -72,11 +72,17 @@ func NewStoreIn(reg *Registry, d *db.DB, q db.Querier, cipher Cipher) *Store {
 }
 
 func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
-	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+	return WithTx(ctx, s.d, func(tx *sql.Tx) error {
 		scoped := *s
 		scoped.q = tx
 		return fn(&scoped)
 	})
+}
+
+func (s *Store) Using(q db.Querier) *Store {
+	scoped := *s
+	scoped.q = q
+	return &scoped
 }
 
 func (s *Store) Reading() *Store {
@@ -108,6 +114,9 @@ func (s *Store) writable(name string) (Def, error) {
 	d, err := s.def(name)
 	if err != nil {
 		return d, err
+	}
+	if HostOwnedKey(name) {
+		return d, hostOwned(name)
 	}
 	if d.PinnedOnly() {
 		return d, PinOnly(name)
@@ -164,25 +173,28 @@ func (s *Store) Load(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) Delete(ctx context.Context, name string) error {
+func (s *Store) Delete(ctx context.Context, name string) (bool, error) {
 	if !audit.HasActor(ctx) {
-		return audit.ErrNoActor
+		return false, audit.ErrNoActor
 	}
 	d, err := s.def(name)
 	if err != nil {
-		return err
+		return false, err
+	}
+	if HostOwnedKey(name) {
+		return false, hostOwned(name)
 	}
 	if d.PinnedOnly() {
-		return PinOnly(name)
+		return false, PinOnly(name)
 	}
 	res, err := s.q.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
-		return err
+		return false, err
 	}
-	return audit.Record(ctx, s.q, audit.Entry{Key: name, Secret: true})
+	return true, audit.Record(ctx, s.q, audit.Entry{Key: name, Secret: true})
 }
 
 func (s *Store) Status(ctx context.Context, name string) (Status, error) {
@@ -194,6 +206,9 @@ func (s *Store) Status(ctx context.Context, name string) (Status, error) {
 			return Pinned, nil
 		}
 		return "", err
+	}
+	if !DBBacked(name) {
+		return Unset, nil
 	}
 	var one int
 	err := s.q.QueryRowContext(ctx, "SELECT 1 FROM secrets WHERE name = ?", name).Scan(&one)
@@ -213,6 +228,9 @@ func (s *Store) Generate(ctx context.Context, name string) (string, error) {
 	}
 	if !d.IsGenerated() {
 		return "", NotGenerated(name)
+	}
+	if !DBBacked(name) {
+		return "", hostOwned(name)
 	}
 	if _, pinned, err := s.reg.Pinned(name); err != nil {
 		return "", err
@@ -263,6 +281,9 @@ func (s *Store) Value(ctx context.Context, name string) (string, error) {
 		logx.AddSecret(found.Value)
 		return found.Value, nil
 	}
+	if !DBBacked(name) {
+		return "", nil
+	}
 	var value string
 	err := s.q.QueryRowContext(ctx, "SELECT value FROM secrets WHERE name = ?", name).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -292,6 +313,9 @@ func (s *Store) Adopt(ctx context.Context, name, value string) (bool, error) {
 	}
 	if !d.IsGenerated() {
 		return false, NotGenerated(name)
+	}
+	if !DBBacked(name) {
+		return false, hostOwned(name)
 	}
 	if value == "" {
 		return false, EmptyValue(name)
@@ -342,6 +366,9 @@ func (s *Store) Snapshot(ctx context.Context) (*Snapshot, error) {
 			return nil, err
 		}
 		for _, pair := range pairs {
+			if !DBBacked(pair.key) {
+				continue
+			}
 			table.into[pair.key] = pair.value
 		}
 	}
@@ -359,6 +386,9 @@ func (s *Store) Resolve(ctx context.Context, snap *Snapshot, key string) (Resolv
 		}
 	}
 	out := Resolved{Key: key, Value: d.Default, Origin: FromDefault}
+	if !DBBacked(key) {
+		return out, nil
+	}
 	if d.IsSecret() {
 		if value, ok := snap.secrets[key]; ok {
 			out.Value, out.Origin = value, FromInstance

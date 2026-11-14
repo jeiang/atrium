@@ -14,8 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/tool"
@@ -31,7 +31,7 @@ const (
 
 func passRows(t *testing.T, dir, job string) (ok, failed int, message string) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE outcome = 'ok'), COUNT(*) FILTER (WHERE outcome = 'failed'), "+
 		"COALESCE((SELECT message FROM pass_runs WHERE job = ? ORDER BY id DESC LIMIT 1), '') FROM pass_runs WHERE job = ?", job, job).Scan(&ok, &failed, &message); err != nil {
 		t.Fatal(err)
@@ -47,6 +47,7 @@ func davFixture(t *testing.T) (dir string, srv *caldavtest.Server) {
 	setEnv(t, calendar.CardDAVEnv, srv.URL+"/")
 	setEnv(t, settingEnv(contacts.DirKey), filepath.Join(dir, "contacts"))
 	setEnv(t, settingEnv(calendar.CalendarDirKey), filepath.Join(dir, "calendars"))
+	seedSettings(t, map[string]string{calendar.AppleIDKey: "operator@icloud.invalid"})
 	return dir, srv
 }
 
@@ -56,11 +57,11 @@ func lookup(t *testing.T, query string) string {
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "contacts_lookup", map[string]any{"query": query, "include": []any{"emails"}})),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)}
-	api.OnRequest = func(r anthropictest.Request) {
+	api.SetOnRequest(func(r anthropictest.Request) {
 		api.mu.Lock()
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
-	}
+	})
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
 	if ran := runApp(t, "agent", "run", "--text", "who is "+query, "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
@@ -108,6 +109,46 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 	if ok, _, _ := passRows(t, dir, passrun.CardDAV); ok != 4 {
 		t.Errorf("carddav pass rows ok=%d, want 4", ok)
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'contacts.sync' AND outcome = 'ok' AND actor = 'operator' AND source = 'cli'").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits != 4 {
+		t.Fatalf("contacts sync wrote %d operator/cli success audits, want 4", audits)
+	}
+}
+
+func TestContactsSyncSkipsOffAndUnconfiguredWithoutAuditing(t *testing.T) {
+	for _, tc := range []struct {
+		name, enabled string
+	}{
+		{"off", "false"},
+		{"unconfigured", "true"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, _, _ := moduleFixture(t, flagsExcept("contacts", tc.enabled))
+			contactsDir := ""
+			if tc.name == "off" {
+				contactsDir = filepath.Join(dir, "contacts")
+			}
+			setEnv(t, settingEnv(contacts.DirKey), contactsDir)
+			got := runApp(t, "contacts", "sync")
+			if got.code != cli.ExitOK || got.stdout != "" {
+				t.Fatalf("contacts sync = %d: %s", got.code, got.stderr)
+			}
+			d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+			defer func() { _ = d.Close() }()
+			var audits int
+			if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'contacts.sync'").Scan(&audits); err != nil {
+				t.Fatal(err)
+			}
+			if audits != 0 {
+				t.Fatalf("skipped contacts sync wrote %d audits", audits)
+			}
+		})
+	}
 }
 
 func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothing(t *testing.T) {
@@ -121,10 +162,21 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	if err != nil || !strings.Contains(string(data), "SUMMARY:Dentist") {
 		t.Fatalf("mirrored event %q, %v", data, err)
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	if audits := operationAudits(t, d, "calendar.sync"); len(audits) != 1 || !strings.HasPrefix(audits[0], "ok ") {
+		t.Fatalf("calendar.sync audits after a sync that wrote an event = %q, want one ok row", audits)
+	}
+	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
+		t.Fatalf("unchanged calendar sync: %d %q", got.code, got.stderr)
+	}
+	if audits := operationAudits(t, d, "calendar.sync"); len(audits) != 1 {
+		t.Fatalf("calendar.sync audits after a sync that changed nothing = %q, want no new row", audits)
+	}
 
 	srv.RemoveObject(caldavtest.CalendarPath(0) + "dentist.ics")
 	setEnv(t, "ICLOUD_APP_PASSWORD", davPassword)
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
 	if got := runApp(t, "calendar", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "401") {
 		t.Fatalf("sync with a bad password: %d %q", got.code, got.stderr)
 	}
@@ -134,15 +186,18 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	if _, failed, _ := passRows(t, dir, passrun.CalDAV); failed != 1 {
 		t.Errorf("caldav failed rows = %d, want 1", failed)
 	}
+	if audits := operationAudits(t, d, "calendar.sync"); len(audits) != 2 || strings.HasPrefix(audits[1], "ok ") {
+		t.Errorf("calendar.sync audits after a failed sync = %q, want one more non-ok row", audits)
+	}
 
-	setEnv(t, settingEnv(calendar.AppleIDKey), "")
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir,
+	seedSettings(t, map[string]string{calendar.AppleIDKey: ""})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir,
 		mailAccount{"work", "icloud", "work@icloud.invalid", "wrong", false},
 		mailAccount{"home", "icloud", "operator@icloud.invalid", davPassword, false}))
 	if got := runAppLogged(t, "calendar", "sync"); !strings.Contains(got.stderr, "needs-settings") || !strings.Contains(got.stderr, "several iCloud mail accounts; set calendar_account") {
 		t.Fatalf("sync with two iCloud accounts and no calendar_account was not held for settings: %d %q", got.code, got.stderr)
 	}
-	setEnv(t, settingEnv(calendar.AccountKey), "home")
+	seedSettings(t, map[string]string{calendar.AccountKey: "home"})
 	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("calendar sync: %d %q", got.code, got.stderr)
 	}

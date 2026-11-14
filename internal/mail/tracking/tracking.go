@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations/transport"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -30,12 +30,7 @@ var log = logx.Logger("atrium.tracking")
 const Module = "mail"
 
 const (
-	KeyShip24URL           = "mail_ship24_url"
-	KeyShip24APIKey        = "mail_ship24_api_key"
 	KeyMonthlyQuota        = "mail_ship24_monthly_quota"
-	KeyTimeout             = "mail_ship24_timeout_seconds"
-	KeyPollLimit           = "mail_ship24_poll_limit"
-	KeyPollDays            = "mail_ship24_poll_days"
 	KeyDestinationCountry  = "mail_ship24_destination_country"
 	KeyDestinationPostcode = "mail_ship24_destination_postcode"
 	DefaultURL             = "https://api.ship24.com/public/v1"
@@ -48,28 +43,15 @@ const (
 	UndoUntrack            = "package_untrack"
 )
 
-func init() {
+func SettingsDefs() []settings.Def {
 	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
 		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
 	}
-	settings.MustRegister(
-		adv(KeyShip24URL, settings.String, DefaultURL, httpURL),
-		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyShip24APIKey, Module: Module, Type: settings.String}),
+	return []settings.Def{
 		adv(KeyMonthlyQuota, settings.Int, "10", settings.Between(1, 1000)),
-		adv(KeyTimeout, settings.Int, "15", settings.Between(1, 300)),
-		adv(KeyPollLimit, settings.Int, "40", settings.Between(1, 200)),
-		adv(KeyPollDays, settings.Int, "30", settings.Between(1, 365)),
 		settings.Shown("Destination country", adv(KeyDestinationCountry, settings.String, "", countryCheck)),
 		settings.Shown("Destination postcode", adv(KeyDestinationPostcode, settings.String, "", nil)),
-	)
-}
-
-func httpURL(value string) error {
-	u, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return settings.Invalid("must be an http or https URL")
 	}
-	return nil
 }
 
 func countryCheck(value string) error {
@@ -147,6 +129,13 @@ type Settings struct {
 	Quota, Timeout      int
 	PollLimit, PollDays int
 	Country, Postcode   string
+	lease               *connections.Lease
+}
+
+func (s Settings) Close() {
+	if s.lease != nil {
+		s.lease.Close()
+	}
 }
 
 func Load(ctx context.Context, q db.Querier) (Settings, error) {
@@ -156,30 +145,48 @@ func Load(ctx context.Context, q db.Querier) (Settings, error) {
 	}
 	var s Settings
 	var err error
-	if s.URL, err = read(KeyShip24URL); err != nil {
+	s.Timeout, s.PollLimit, s.PollDays = TuningMailShip24TimeoutSeconds, TuningMailShip24PollLimit, TuningMailShip24PollDays
+	var lease *connections.Lease
+	if store := connections.DefaultFor(q); store != nil {
+		lease, err = store.Open(ctx, ConnectionID)
+	} else {
+		lease, err = connections.OpenRead(ctx, q, config.From(ctx).Host(), ConnectionID)
+	}
+	if err != nil {
+		var unknown connections.UnknownID
+		if errors.As(err, &unknown) {
+			return Settings{}, config.NotConfigured("the Ship24 connection is not configured")
+		}
 		return Settings{}, err
 	}
-	if s.Key, err = secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, KeyShip24APIKey); err != nil {
+	s.lease = lease
+	if s.URL, err = lease.Endpoint("url"); err != nil {
+		lease.Close()
+		return Settings{}, config.NotConfigured("the Ship24 connection has no URL")
+	}
+	if s.Key, err = lease.Credential("api_key"); err != nil {
+		var missing connections.MissingCredential
+		if !errors.As(err, &missing) {
+			lease.Close()
+			return Settings{}, err
+		}
+		s.Key = ""
+	}
+	quota, err := read(KeyMonthlyQuota)
+	if err != nil {
+		lease.Close()
 		return Settings{}, err
 	}
-	for _, item := range []struct {
-		key  string
-		into *int
-	}{
-		{KeyMonthlyQuota, &s.Quota}, {KeyTimeout, &s.Timeout}, {KeyPollLimit, &s.PollLimit}, {KeyPollDays, &s.PollDays},
-	} {
-		value, err := read(item.key)
-		if err != nil {
-			return Settings{}, err
-		}
-		if *item.into, err = strconv.Atoi(value); err != nil {
-			return Settings{}, err
-		}
+	if s.Quota, err = strconv.Atoi(quota); err != nil {
+		lease.Close()
+		return Settings{}, err
 	}
 	if s.Country, err = read(KeyDestinationCountry); err != nil {
+		lease.Close()
 		return Settings{}, err
 	}
 	if s.Postcode, err = read(KeyDestinationPostcode); err != nil {
+		lease.Close()
 		return Settings{}, err
 	}
 	return s, nil
@@ -354,12 +361,17 @@ type Target struct {
 }
 
 type Result struct {
-	PackageID  int64   `json:"package_id"`
-	TrackerID  string  `json:"tracker_id"`
-	Status     string  `json:"status"`
-	StatusText string  `json:"status_text"`
-	Events     []Event `json:"events"`
-	WriteID    int64   `json:"write_id,omitempty"`
+	PackageID  int64     `json:"package_id"`
+	TrackerID  string    `json:"tracker_id"`
+	Status     string    `json:"status"`
+	StatusText string    `json:"status_text"`
+	Events     []Event   `json:"events"`
+	WriteID    int64     `json:"write_id,omitempty"`
+	Tracking   *Tracking `json:"-"`
+}
+
+func Identity(carrier, number string) string {
+	return "tracking:" + courierCode(carrier) + ":" + strings.ToUpper(strings.TrimSpace(number))
 }
 
 func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, packageID int64, number, carrier string) (Target, Settings, error) {
@@ -385,18 +397,7 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 			Scan(&t.ID, &t.TrackingNumber, &t.Carrier, &t.Status, &t.StatusText, &t.Aggregator, &t.TrackerID, &t.LastEvent,
 				&t.LastEventHash, &t.NotifiedStatus, &t.LastEventTS, &t.LastSyncTS, &t.TrackerRegisteredTS)
 		if errors.Is(err, sql.ErrNoRows) {
-			res, ierr := d.Write.ExecContext(ctx,
-				"INSERT INTO packages (carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
-					"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, ?, '', '', '', ?, '', 0, 0, ?, ?)",
-				carrier, number, ordered, now, now)
-			if ierr != nil {
-				return Target{}, Settings{}, ierr
-			}
-			id, ierr := res.LastInsertId()
-			if ierr != nil {
-				return Target{}, Settings{}, ierr
-			}
-			t = Target{ID: id, TrackingNumber: number, Carrier: carrier, Status: ordered}
+			t = Target{TrackingNumber: number, Carrier: carrier, Status: ordered}
 			err = nil
 		}
 	default:
@@ -413,16 +414,16 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 		return Target{}, Settings{}, err
 	}
 	var blocked int
-	if err := d.Read.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package' AND target = ? AND state IN ('held', 'unknown')",
-		fmt.Sprintf("package:%d", t.ID)).Scan(&blocked); err != nil {
+	blocked, err = ledger.BlockedCount(ctx, d.Read, "track_package", Identity(t.Carrier, t.TrackingNumber))
+	if err != nil {
 		return Target{}, Settings{}, err
 	}
 	if blocked > 0 {
-		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with 'atrium writes resolve <id>' before retrying")
+		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with `atrium effects list --blocked` before retrying")
 	}
 	var used int
-	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package' AND ts >= ?", monthStart).Scan(&used); err != nil {
+	used, err = ledger.CountSince(ctx, d.Read, "track_package", monthStart)
+	if err != nil {
 		return Target{}, Settings{}, err
 	}
 	if used >= s.Quota {
@@ -431,6 +432,20 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 			used, s.Quota, KeyMonthlyQuota))
 	}
 	return t, s, nil
+}
+
+func Admit(ctx context.Context, tx *sql.Tx, t Target, now float64) (int64, error) {
+	if t.ID != 0 {
+		return t.ID, nil
+	}
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO packages (carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, ?, '', '', '', ?, '', 0, 0, ?, ?)",
+		t.Carrier, t.TrackingNumber, ordered, now, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func monthStart(ctx context.Context, q db.Querier, env config.Env, now float64) (float64, error) {
@@ -444,9 +459,12 @@ func monthStart(ctx context.Context, q db.Querier, env config.Env, now float64) 
 
 func clientFor(ctx context.Context, q db.Querier, s Settings) (*Client, error) {
 	if s.Key == "" {
-		return nil, config.NotConfigured(KeyShip24APIKey + " is not set")
+		return nil, config.NotConfigured("the Ship24 connection has no API key")
 	}
-	hc, err := transport.For(ctx, q, "ship24", time.Duration(s.Timeout)*time.Second)
+	if s.lease == nil {
+		return nil, config.NotConfigured("the Ship24 connection is not configured")
+	}
+	hc, err := s.lease.Client("url", time.Duration(s.Timeout)*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -463,17 +481,39 @@ func Register(ctx context.Context, d *db.DB, now float64, t Target, s Settings) 
 	if err != nil {
 		return Result{}, err
 	}
+	out := Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: t.Status, StatusText: t.StatusText}
 	tracking, terr := client.Results(ctx, tracker.TrackerID)
 	if terr != nil {
-		if err := saveRegistration(ctx, d, now, t.ID, tracker.TrackerID); err != nil {
-			return Result{}, err
+		return out, nil
+	}
+	out.Status = advance(t.Status, statusOf(tracking))
+	out.StatusText = textOf(tracking)
+	out.Events = tracking.Events
+	out.Tracking = &tracking
+	return out, nil
+}
+
+func SaveRegistration(ctx context.Context, tx *sql.Tx, now float64, id int64, trackerID string, tracking *Tracking) error {
+	if tracking != nil {
+		for _, e := range tracking.Events {
+			if _, err := tx.ExecContext(ctx,
+				"INSERT OR IGNORE INTO package_events (package_id, tracker_id, event_key, event_ts, status, status_code, status_milestone, description, location, created_ts) "+
+					"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				id, trackerID, eventKey(e), eventTime(e, now), e.Status, e.StatusCode, e.StatusMilestone, descriptionOf(e), e.Location, now); err != nil {
+				return err
+			}
 		}
-		return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: t.Status, StatusText: t.StatusText}, nil
 	}
-	if _, err := save(ctx, d, now, t.ID, tracker.TrackerID, tracking, false, nil); err != nil {
-		return Result{}, err
+	sets := []string{"aggregator = 'ship24'", "tracker_id = ?", "last_sync_ts = ?",
+		"tracker_registered_ts = CASE WHEN tracker_registered_ts = 0 THEN ? ELSE tracker_registered_ts END"}
+	args := []any{trackerID, now, now}
+	if tracking != nil && (statusOf(*tracking) != "" || len(tracking.Events) > 0) {
+		latest := latestEvent(*tracking)
+		sets = append(sets, "status = ?", "status_text = ?", "last_event = ?", "last_event_ts = ?", "last_event_hash = ?")
+		args = append(args, statusOf(*tracking), textOf(*tracking), textOf(*tracking), eventTime(latest, now), eventKey(latest))
 	}
-	return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: advance(t.Status, statusOf(tracking)), StatusText: textOf(tracking), Events: tracking.Events}, nil
+	_, err := tx.ExecContext(ctx, "UPDATE packages SET "+strings.Join(sets, ", ")+" WHERE id = ?", append(args, id)...)
+	return err
 }
 
 func Refresh(ctx context.Context, d *db.DB, now float64, t Target, s Settings, env config.Env) (Result, bool, error) {
@@ -507,6 +547,7 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 	if err != nil {
 		return PollResult{}, err
 	}
+	defer s.Close()
 	cutoff := now - float64(s.PollDays)*86400
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT id, tracking_number, carrier, status, status_text, aggregator, tracker_id, last_event, last_event_hash, "+
@@ -584,6 +625,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 	key := eventKey(latest)
 	hasData := next != "" || len(tracking.Events) > 0
 	notified := false
+	enabled := notify.Enabled(ctx)
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, e := range tracking.Events {
 			if _, err := tx.ExecContext(ctx,
@@ -609,7 +651,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 			nextNotified = advanced
 			notified = true
 		}
-		if nextNotified != notifiedStatus {
+		if nextNotified != notifiedStatus && (!notify || !enabled) {
 			sets = append(sets, "notified_status = ?")
 			args = append(args, nextNotified)
 		}
@@ -619,7 +661,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 	if err != nil {
 		return false, err
 	}
-	if notified && notify.Enabled(ctx) {
+	if notified && enabled {
 		title := "Package delivered"
 		if advanced == exception {
 			title = "Package exception"
@@ -628,21 +670,18 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 		if body == "" {
 			body = "Status " + advanced
 		}
-		if _, err := notify.Send(ctx, d.Write, notify.Message{
+		if _, err := notify.Send(ctx, d, notify.Message{
 			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
+			Occurrence: fmt.Sprintf("package:%d:%s:%g", id, advanced, now),
+			Mark: func(ctx context.Context, tx *sql.Tx) error {
+				_, err := tx.ExecContext(ctx, "UPDATE packages SET notified_status = ? WHERE id = ?", advanced, id)
+				return err
+			},
 		}); err != nil {
 			log.Warn("package notification failed", logx.Err, err.Error())
 		}
 	}
 	return notified, nil
-}
-
-func saveRegistration(ctx context.Context, d *db.DB, now float64, id int64, trackerID string) error {
-	_, err := d.Write.ExecContext(ctx,
-		"UPDATE packages SET aggregator = 'ship24', tracker_id = ?, last_sync_ts = ?, "+
-			"tracker_registered_ts = CASE WHEN tracker_registered_ts = 0 THEN ? ELSE tracker_registered_ts END WHERE id = ?",
-		trackerID, now, now, id)
-	return err
 }
 
 func advance(previous, next string) string {
@@ -756,13 +795,14 @@ type Undo struct {
 	Before    Target `json:"before"`
 }
 
-func Untrack(ctx context.Context, q db.Querier, u Undo) (any, error) {
+func Unsubscribe(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	s, err := Load(ctx, q)
 	if err != nil {
 		return nil, err
 	}
+	defer s.Close()
 	if s.Key == "" {
-		return nil, config.NotConfigured(KeyShip24APIKey + " is not set; the Ship24 tracker is still subscribed")
+		return nil, config.NotConfigured("the Ship24 connection has no API key; the Ship24 tracker is still subscribed")
 	}
 	if u.TrackerID == "" {
 		return nil, Error("the tracker id is missing; the Ship24 tracker is still subscribed")
@@ -775,17 +815,19 @@ func Untrack(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	if err := client.Unsubscribe(ctx, u.TrackerID); err != nil {
 		return nil, err
 	}
+	return map[string]any{"untracked": u.TrackerID}, nil
+}
+
+func Restore(ctx context.Context, q db.Querier, u Undo) error {
 	if _, err := q.ExecContext(ctx, "DELETE FROM package_events WHERE package_id = ?", u.PackageID); err != nil {
-		return nil, err
+		return err
 	}
-	if _, err := q.ExecContext(ctx,
+	_, err := q.ExecContext(ctx,
 		"UPDATE packages SET status = ?, status_text = ?, aggregator = ?, tracker_id = ?, last_event = ?, last_event_ts = ?, "+
 			"last_event_hash = ?, last_sync_ts = ?, notified_status = ? WHERE id = ?",
 		u.Before.Status, u.Before.StatusText, u.Before.Aggregator, u.Before.TrackerID, u.Before.LastEvent, u.Before.LastEventTS,
-		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.PackageID); err != nil {
-		return nil, err
-	}
-	return map[string]any{"untracked": u.TrackerID}, nil
+		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.PackageID)
+	return err
 }
 
 func Events(ctx context.Context, q db.Querier, packageID int64) ([]Event, error) {

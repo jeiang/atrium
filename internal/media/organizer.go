@@ -4,20 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/media/agentclient"
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 	"github.com/jeiang/atrium/internal/textutil"
 )
 
 const (
 	Skipped    = "(skipped)"
 	importPref = Import + "/"
-	dirMode    = 0o775
 )
 
 type PlanError string
@@ -28,9 +28,11 @@ type Item struct {
 	ID      string
 	Name    string
 	Torrent bool
-	Root    string
+	Source  protocol.Path
 	Files   []string
 	Subs    []string
+	Sizes   map[string]int64
+	Error   string
 }
 
 type FileView struct {
@@ -55,91 +57,96 @@ func (v View) ID() string { return v.Item.ID }
 
 type Op struct{ Src, Dst string }
 
-func (t Tuning) VideosUnder(root string) []string {
-	if info, err := os.Stat(root); err == nil && info.Mode().IsRegular() {
-		if link, err := os.Lstat(root); err == nil && link.Mode()&fs.ModeSymlink == 0 && t.IsVideo(filepath.Base(root)) {
-			return []string{root}
-		}
-		return []string{}
+func DownloadRel(prefix, content string) (string, bool) {
+	prefix = strings.TrimRight(prefix, "/")
+	if !strings.HasPrefix(prefix, "/") {
+		return "", false
 	}
-	walkRoot := root
-	if link, err := os.Lstat(root); err == nil && link.Mode()&fs.ModeSymlink != 0 {
-		walkRoot = root + "/"
+	rel, ok := strings.CutPrefix(content, prefix+"/")
+	rel = strings.TrimRight(rel, "/")
+	if !ok || rel == "" {
+		return "", false
 	}
-	out := []string{}
-	_ = filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if d != nil && d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
+	for part := range strings.SplitSeq(rel, "/") {
+		if part == "" || part == "." || part == ".." || strings.ContainsAny(part, "\\\x00") {
+			return "", false
 		}
-		if d.Type().IsRegular() && t.IsVideo(d.Name()) {
-			out = append(out, path)
-		}
-		return nil
-	})
-	slices.Sort(out)
-	return out
+	}
+	return rel, true
 }
 
-func (t Tuning) SubtitlesUnder(root string) []string {
-	out := []string{}
-	walkRoot := root
-	if link, err := os.Lstat(root); err == nil && link.Mode()&fs.ModeSymlink != 0 {
-		walkRoot = root + "/"
+func (t Tuning) fill(ctx context.Context, agent *agentclient.Client, item *Item) error {
+	src, err := agent.Source(ctx, item.Source)
+	if err != nil {
+		return err
 	}
-	_ = filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if d != nil && d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
+	item.Files, item.Subs, item.Sizes = []string{}, []string{}, map[string]int64{}
+	for _, f := range src.Files {
+		switch {
+		case t.IsVideo(f.Path.Rel, f.Identity.Size):
+			item.Files = append(item.Files, f.Path.Rel)
+		case t.IsSubtitle(path.Base(f.Path.Rel)):
+			item.Subs = append(item.Subs, f.Path.Rel)
 		}
-		if d.Type().IsRegular() && t.IsSubtitle(d.Name()) {
-			out = append(out, path)
-		}
-		return nil
-	})
-	slices.Sort(out)
-	return out
+		item.Sizes[f.Path.Rel] = f.Identity.Size
+	}
+	slices.Sort(item.Files)
+	slices.Sort(item.Subs)
+	return nil
 }
 
-func (t Tuning) Items(ctx context.Context, qb *Qbit, root string) ([]Item, string, error) {
+func agentText(err error) string {
+	var e *agentclient.Error
+	if errors.As(err, &e) {
+		return "the media agent refused the source (" + e.Code + ")"
+	}
+	return "the media agent is unavailable"
+}
+
+func (t Tuning) Items(ctx context.Context, qb *Qbit, agent *agentclient.Client, prefix string) ([]Item, string, error) {
 	found := []Item{}
-	errText := ""
+	var problems []string
 	torrents, err := qb.Completed(ctx)
 	if err != nil {
-		var qbitErr QbitError
-		if !errors.As(err, &qbitErr) {
+		if !IsQbit(err) {
 			return nil, "", err
 		}
-		torrents, errText = nil, err.Error()
+		torrents, problems = nil, append(problems, err.Error())
 	}
 	for _, torrent := range torrents {
 		if !torrent.HasTag(TagMedia) || torrent.HasTag(TagFiled) || torrent.HasTag(TagIgnored) {
 			continue
 		}
-		found = append(found, Item{ID: torrent.Hash, Name: torrent.Name, Torrent: true, Root: torrent.ContentPath, Files: t.VideosUnder(torrent.ContentPath), Subs: t.SubtitlesUnder(torrent.ContentPath)})
-	}
-	importDir := filepath.Join(root, Import)
-	if info, err := os.Stat(importDir); err == nil && info.IsDir() {
-		entries, err := os.ReadDir(importDir)
-		if err != nil {
-			return nil, "", err
-		}
-		for _, entry := range entries {
-			entryRoot := filepath.Join(importDir, entry.Name())
-			if files := t.VideosUnder(entryRoot); len(files) > 0 {
-				found = append(found, Item{ID: importPref + entry.Name(), Name: entry.Name(), Root: entryRoot, Files: files, Subs: t.SubtitlesUnder(entryRoot)})
+		item := Item{ID: torrent.Hash, Name: torrent.Name, Torrent: true}
+		rel, ok := DownloadRel(prefix, torrent.ContentPath)
+		if !ok {
+			item.Error = "the download is outside " + KeyDownloadPrefix
+		} else {
+			item.Source = protocol.Path{Root: protocol.RootDownloads, Rel: rel}
+			if err := t.fill(ctx, agent, &item); err != nil {
+				item.Error = agentText(err)
 			}
 		}
+		found = append(found, item)
 	}
-	return found, errText, nil
+	imports, err := agent.Imports(ctx)
+	if err != nil {
+		return found, strings.Join(append(problems, agentText(err)), "; "), nil
+	}
+	for _, entry := range imports {
+		item := Item{ID: importPref + path.Base(entry.Rel), Name: path.Base(entry.Rel), Source: entry}
+		if err := t.fill(ctx, agent, &item); err != nil {
+			item.Error = agentText(err)
+		}
+		if item.Error != "" || len(item.Files) > 0 {
+			found = append(found, item)
+		}
+	}
+	return found, strings.Join(problems, "; "), nil
 }
 
-func (t Tuning) Find(ctx context.Context, qb *Qbit, root, itemID string) (Item, error) {
-	found, errText, err := t.Items(ctx, qb, root)
+func (t Tuning) Find(ctx context.Context, qb *Qbit, agent *agentclient.Client, prefix, itemID string) (Item, error) {
+	found, errText, err := t.Items(ctx, qb, agent, prefix)
 	if err != nil {
 		return Item{}, err
 	}
@@ -151,58 +158,55 @@ func (t Tuning) Find(ctx context.Context, qb *Qbit, root, itemID string) (Item, 
 	if errText != "" {
 		return Item{}, PlanError(errText)
 	}
-	return Item{}, PlanError(itemID + " is no longer waiting")
+	return Item{}, NotFound(itemID + " is no longer waiting")
 }
 
-func (t Tuning) showYear(root, title string) string {
-	tv := filepath.Join(root, TV)
-	entries, err := os.ReadDir(tv)
+func Shows(ctx context.Context, agent *agentclient.Client) []string {
+	listing, err := agent.Entries(ctx, protocol.Path{Root: protocol.RootTV})
 	if err != nil {
-		return ""
+		return nil
 	}
-	for _, entry := range entries {
-		r := t.ParseRelease(entry.Name())
-		info, err := os.Stat(filepath.Join(tv, entry.Name()))
-		if err == nil && info.IsDir() && r.Year != "" && textutil.Casefold(r.Title) == textutil.Casefold(title) {
+	out := []string{}
+	for _, e := range listing.Entries {
+		if e.Dir {
+			out = append(out, e.Name)
+		}
+	}
+	return out
+}
+
+func (t Tuning) showYear(shows []string, title string) string {
+	for _, name := range shows {
+		r := t.ParseRelease(name)
+		if r.Year != "" && textutil.Casefold(r.Title) == textutil.Casefold(title) {
 			return r.Year
 		}
 	}
 	return ""
 }
 
-func largest(files []string) string {
+func largest(item Item, files []string) string {
 	best, size := "", int64(-1)
 	for _, f := range files {
-		info, err := os.Stat(f)
-		if err != nil {
-			continue
-		}
-		if info.Size() > size {
-			best, size = f, info.Size()
+		if s, ok := item.Sizes[f]; ok && s > size {
+			best, size = f, s
 		}
 	}
 	return best
 }
 
-func relTo(item Item, path string) string {
-	root, err := filepath.Abs(item.Root)
-	if err == nil {
-		var target string
-		if target, err = filepath.Abs(path); err == nil {
-			var r string
-			if r, err = filepath.Rel(root, target); err == nil && r != "." && !strings.HasPrefix(r, "..") {
-				return r
-			}
-		}
+func relTo(item Item, p string) string {
+	if r, ok := strings.CutPrefix(p, item.Source.Rel+"/"); ok {
+		return r
 	}
-	return filepath.Base(path)
+	return path.Base(p)
 }
 
-func (t Tuning) Defaults(item Item, root string) View {
+func (t Tuning) Defaults(item Item, shows []string) View {
 	r := t.ParseRelease(item.Name)
 	view := View{Item: item, Kind: KindMovie, Title: r.Title, Year: r.Year}
 	for _, f := range item.Files {
-		fr := t.ParseRelease(filepath.Base(f))
+		fr := t.ParseRelease(path.Base(f))
 		fv := FileView{Rel: relTo(item, f)}
 		if fr.Episode > 0 {
 			if view.Kind == KindMovie && fr.Title != "" {
@@ -214,7 +218,7 @@ func (t Tuning) Defaults(item Item, root string) View {
 		view.Files = append(view.Files, fv)
 	}
 	if view.Kind == KindTV && view.Year == "" {
-		view.Year = t.showYear(root, view.Title)
+		view.Year = t.showYear(shows, view.Title)
 	}
 	return view
 }
@@ -226,25 +230,28 @@ type PlanResult struct {
 }
 
 func subtitleOps(item Item, videoSrc, videoDst string) []Op {
-	stem := strings.TrimSuffix(filepath.Base(videoSrc), filepath.Ext(videoSrc))
+	stem := strings.TrimSuffix(path.Base(videoSrc), path.Ext(videoSrc))
 	var out []Op
 	for _, sub := range item.Subs {
-		base := filepath.Base(sub)
+		base := path.Base(sub)
 		if !strings.HasPrefix(base, stem) {
 			continue
 		}
-		suffix := strings.TrimPrefix(strings.TrimSuffix(base, filepath.Ext(base)), stem)
-		dst := strings.TrimSuffix(videoDst, filepath.Ext(videoDst)) + suffix + filepath.Ext(base)
+		suffix := strings.TrimPrefix(strings.TrimSuffix(base, path.Ext(base)), stem)
+		dst := strings.TrimSuffix(videoDst, path.Ext(videoDst)) + suffix + path.Ext(base)
 		out = append(out, Op{sub, dst})
 	}
 	return out
 }
 
-func (t Tuning) Plan(view View, root string) PlanResult {
+func (t Tuning) Plan(view View) PlanResult {
 	out := PlanResult{View: view}
 	fail := func(text string) PlanResult {
 		out.Error = text
 		return out
+	}
+	if view.Item.Error != "" {
+		return fail(view.Item.Error)
 	}
 	if len(view.Item.Files) == 0 {
 		return fail("no video files found")
@@ -253,7 +260,7 @@ func (t Tuning) Plan(view View, root string) PlanResult {
 		return fail("unknown kind " + view.Kind)
 	}
 	if view.Kind == KindMovie {
-		src := largest(view.Item.Files)
+		src := largest(view.Item, view.Item.Files)
 		dst, err := MoviePath(view.Title, view.Year, Ext(src))
 		if err != nil {
 			return fail(err.Error())
@@ -292,58 +299,35 @@ func (t Tuning) Plan(view View, root string) PlanResult {
 			return fail(op.Dst + " is the destination of two files")
 		}
 		seen[op.Dst] = true
-		if _, err := os.Lstat(filepath.Join(root, op.Dst)); err == nil {
-			return fail(op.Dst + " already exists")
-		}
 	}
 	return out
 }
 
-func (t Tuning) Planned(view View, root string) View { return t.Plan(view, root).View }
+func (t Tuning) Planned(view View) View { return t.Plan(view).View }
 
-func (t Tuning) Apply(ctx context.Context, qb *Qbit, item Item, ops []Op, root string) (err error) {
-	var undo []func()
-	defer func() {
-		if err == nil {
-			return
-		}
-		for i := len(undo) - 1; i >= 0; i-- {
-			undo[i]()
-		}
-	}()
+func Placements(item Item, ops []Op) []protocol.Placement {
+	out := make([]protocol.Placement, 0, len(ops))
 	for _, op := range ops {
-		full := filepath.Join(root, op.Dst)
-		if err := os.MkdirAll(filepath.Dir(full), dirMode); err != nil {
-			return err
-		}
-		if item.Torrent {
-			if err := os.Link(op.Src, full); err != nil {
-				return err
-			}
-			placed := full
-			undo = append(undo, func() { _ = os.Remove(placed) })
-		} else {
-			if err := os.Rename(op.Src, full); err != nil {
-				return err
-			}
-			src, dst := op.Src, full
-			undo = append(undo, func() { _ = os.Rename(dst, src) })
-		}
+		root, rel, _ := strings.Cut(op.Dst, "/")
+		out = append(out, protocol.Placement{
+			Source:      protocol.Path{Root: item.Source.Root, Rel: op.Src},
+			Destination: protocol.Path{Root: strings.ToLower(root), Rel: rel},
+		})
 	}
-	if item.Torrent {
-		if err := qb.RemoveTags(ctx, item.ID, TagIgnored); err != nil {
-			return err
-		}
-		return qb.AddTags(ctx, item.ID, TagFiled)
-	}
-	if len(t.VideosUnder(item.Root)) == 0 {
-		return os.RemoveAll(item.Root)
-	}
-	return nil
+	return out
 }
 
-func (t Tuning) Edited(item Item, root string, form map[string]string) View {
-	view := t.Defaults(item, root)
+type PartialError struct {
+	Cause  error
+	Placed []string
+}
+
+func (e *PartialError) Error() string { return e.Cause.Error() }
+
+func (e *PartialError) Unwrap() error { return e.Cause }
+
+func (t Tuning) Edited(item Item, shows []string, form map[string]string) View {
+	view := t.Defaults(item, shows)
 	view.Kind = KindMovie
 	if k := form["kind"]; slices.Contains(Kinds, k) {
 		view.Kind = k
@@ -358,14 +342,17 @@ func (t Tuning) Edited(item Item, root string, form map[string]string) View {
 	return view
 }
 
-func Ignore(ctx context.Context, qb *Qbit, item Item) error {
+func Ignore(ctx context.Context, store *ledger.Store, set Settings, item Item) error {
 	if !item.Torrent {
 		return PlanError("Only torrents can be ignored; delete the import entry instead.")
 	}
-	if err := qb.RemoveTags(ctx, item.ID, TagFiled); err != nil {
+	if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagFiled, false); err != nil {
 		return err
 	}
-	return qb.AddTags(ctx, item.ID, TagIgnored)
+	if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagIgnored, true); err != nil {
+		return &PartialError{Cause: err}
+	}
+	return nil
 }
 
 type SweepResult struct {
@@ -373,12 +360,15 @@ type SweepResult struct {
 	Errors  []string
 }
 
-func Sweep(ctx context.Context, qb *Qbit) (SweepResult, error) {
+func Sweep(ctx context.Context, store *ledger.Store, set Settings) (SweepResult, error) {
 	out := SweepResult{Removed: []string{}, Errors: []string{}}
+	qb, err := set.Qbit()
+	if err != nil {
+		return out, err
+	}
 	torrents, err := qb.Completed(ctx)
 	if err != nil {
-		var qbitErr QbitError
-		if !errors.As(err, &qbitErr) {
+		if !IsQbit(err) {
 			return out, err
 		}
 		out.Errors = append(out.Errors, err.Error())
@@ -388,9 +378,9 @@ func Sweep(ctx context.Context, qb *Qbit) (SweepResult, error) {
 		if !t.HasTag(TagMedia) || !t.HasTag(TagFiled) || t.State != StoppedUP {
 			continue
 		}
-		if err := qb.Delete(ctx, t.Hash, true); err != nil {
-			var qbitErr QbitError
-			if !errors.As(err, &qbitErr) {
+		if err := set.Delete(ctx, store, set, Scope{}, t.Hash, true); err != nil {
+			var conflict *ledger.Conflict
+			if !IsQbit(err) && !errors.As(err, &conflict) {
 				return out, err
 			}
 			out.Errors = append(out.Errors, t.Name+": "+err.Error())
@@ -404,16 +394,24 @@ func Sweep(ctx context.Context, qb *Qbit) (SweepResult, error) {
 	return out, nil
 }
 
-func (t Tuning) wanted(name string) bool { return t.IsVideo(name) || t.IsSubtitle(name) }
+func (t Tuning) wanted(f TorrentFile) bool {
+	size := int64(-1)
+	if f.Size != nil {
+		size = *f.Size
+	}
+	return t.IsVideo(f.Name, size) || t.IsSubtitle(path.Base(f.Name))
+}
 
-func (t Tuning) SelectFiles(ctx context.Context, qb *Qbit, torrents []Torrent) ([]string, error) {
+func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settings, scope Scope, torrents []Torrent) ([]string, error) {
 	done := []string{}
+	qb, err := set.Qbit()
+	if err != nil {
+		return done, err
+	}
 	if torrents == nil {
-		var err error
 		torrents, err = qb.Torrents(ctx, "", TagMedia, "")
 		if err != nil {
-			var qbitErr QbitError
-			if errors.As(err, &qbitErr) {
+			if IsQbit(err) {
 				return done, nil
 			}
 			return done, err
@@ -423,10 +421,10 @@ func (t Tuning) SelectFiles(ctx context.Context, qb *Qbit, torrents []Torrent) (
 		if !torrent.HasTag(TagMedia) || torrent.HasTag(TagSelected) {
 			continue
 		}
-		selected, err := t.selectOne(ctx, qb, torrent)
+		selected, err := t.selectOne(ctx, store, set, scope, qb, torrent)
 		if err != nil {
-			var qbitErr QbitError
-			if !errors.As(err, &qbitErr) {
+			var conflict *ledger.Conflict
+			if !IsQbit(err) && !errors.As(err, &conflict) {
 				return done, err
 			}
 			log.Warn(fmt.Sprintf("select %s: %v", torrent.Name, err))
@@ -439,33 +437,37 @@ func (t Tuning) SelectFiles(ctx context.Context, qb *Qbit, torrents []Torrent) (
 	return done, nil
 }
 
-func (t Tuning) selectOne(ctx context.Context, qb *Qbit, torrent Torrent) (bool, error) {
+func (t Tuning) selectOne(ctx context.Context, store *ledger.Store, set Settings, scope Scope, qb *Qbit, torrent Torrent) (bool, error) {
 	files, err := qb.Files(ctx, torrent.Hash)
 	if err != nil || len(files) == 0 {
 		return false, err
 	}
-	if slices.ContainsFunc(files, func(f TorrentFile) bool { return t.wanted(f.Name) }) {
+	if slices.ContainsFunc(files, func(f TorrentFile) bool { return t.wanted(f) }) {
 		var keep, skip []int
 		for _, f := range files {
 			switch {
-			case t.wanted(f.Name) && f.Priority == PrioritySkip:
+			case t.wanted(f) && f.Priority == PrioritySkip:
 				keep = append(keep, f.Index)
-			case !t.wanted(f.Name) && f.Priority != PrioritySkip:
+			case !t.wanted(f) && f.Priority != PrioritySkip:
 				skip = append(skip, f.Index)
 			}
 		}
-		if err := qb.SetPriority(ctx, torrent.Hash, keep, PriorityNormal); err != nil {
-			return false, err
+		if len(keep) > 0 {
+			if err := t.SetPriority(ctx, store, set, scope, torrent.Hash, keep, PriorityNormal); err != nil {
+				return false, err
+			}
 		}
-		if err := qb.SetPriority(ctx, torrent.Hash, skip, PrioritySkip); err != nil {
-			return false, err
+		if len(skip) > 0 {
+			if err := t.SetPriority(ctx, store, set, scope, torrent.Hash, skip, PrioritySkip); err != nil {
+				return false, err
+			}
 		}
 	}
-	if err := qb.AddTags(ctx, torrent.Hash, TagSelected); err != nil {
+	if err := t.Tag(ctx, store, set, scope, torrent.Hash, TagSelected, true); err != nil {
 		return false, err
 	}
 	if torrent.State == StoppedDL || torrent.State == "pausedDL" {
-		if err := qb.Start(ctx, torrent.Hash); err != nil {
+		if err := t.Start(ctx, store, set, scope, torrent.Hash); err != nil {
 			return false, err
 		}
 	}

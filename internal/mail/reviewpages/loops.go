@@ -1,13 +1,13 @@
 package reviewpages
 
 import (
-	"math/big"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 
-	"github.com/jeiang/atrium/internal/mail/openloops"
+	"github.com/jeiang/atrium/internal/application"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -26,67 +26,42 @@ func snoozeChoicesFor(def int) []int {
 const loopLimit = 100
 
 type loopsPage struct {
-	Owe           []openloops.Loop       `json:"owe"`
-	Waiting       []openloops.Loop       `json:"waiting"`
-	Commitments   []openloops.Commitment `json:"commitments"`
-	SnoozeChoices []int                  `json:"snooze_choices"`
-	SnoozeDefault int                    `json:"snooze_default"`
+	Owe           []mailapp.Loop       `json:"owe"`
+	Waiting       []mailapp.Loop       `json:"waiting"`
+	Commitments   []mailapp.Commitment `json:"commitments"`
+	SnoozeChoices []int                `json:"snooze_choices"`
+	SnoozeDefault int                  `json:"snooze_default"`
 }
 
 func (s *service) showLoops(w http.ResponseWriter, r *http.Request, notice *tpl.Toast) {
 	ctx := r.Context()
-	now := s.now()
-	owe, err := openloops.ListLoops(ctx, s.deps.DB.Read, now, openloops.OweReply, loopLimit, false)
+	owe, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: mailapp.LoopOweReply, Limit: loopLimit, Snooze: true})
 	check(err)
-	waiting, err := openloops.ListLoops(ctx, s.deps.DB.Read, now, openloops.Waiting, loopLimit, false)
+	waiting, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: mailapp.LoopWaiting, Limit: loopLimit})
 	check(err)
-	commitments, err := openloops.ListCommitments(ctx, s.deps.DB.Read, openloops.Open, loopLimit)
+	commitments, err := s.mail.Commitments(ctx, mailapp.CommitmentsInput{Status: mailapp.CommitmentOpen, Limit: loopLimit})
 	check(err)
-	snoozeDefault, err := openloops.SnoozeDefault(ctx, s.deps.DB.Read)
-	check(err)
+	snoozeDefault := owe.Data.SnoozeDefault
 	choices := snoozeChoicesFor(snoozeDefault)
-	s.page(w, r, http.StatusOK, "loops", "openloops.gohtml", loopsPage{Owe: owe, Waiting: waiting, Commitments: commitments, SnoozeChoices: choices, SnoozeDefault: snoozeDefault}, notice)
+	s.page(w, r, http.StatusOK, "loops", "openloops.gohtml", loopsPage{Owe: owe.Data.Loops, Waiting: waiting.Data.Loops, Commitments: commitments.Data.Commitments, SnoozeChoices: choices, SnoozeDefault: snoozeDefault}, notice)
 }
 
-func (s *service) notFound(w http.ResponseWriter, r *http.Request, found bool, what string) bool {
-	if !found {
-		s.fail(w, r, http.StatusNotFound, "unknown "+what)
+func (s *service) changed(w http.ResponseWriter, r *http.Request, err error) bool {
+	if e, ok := errors.AsType[*application.Error](err); ok {
+		switch e.Code {
+		case application.NotFound:
+			s.fail(w, r, http.StatusNotFound, e.Message)
+			return false
+		case application.Invalid:
+			s.fail(w, r, http.StatusBadRequest, e.Message)
+			return false
+		}
 	}
-	return found
+	check(err)
+	return true
 }
 
 func (s *service) loopsPage(w http.ResponseWriter, r *http.Request) { s.showLoops(w, r, nil) }
-
-func clampDays(raw string) (int64, bool) {
-	body := strings.TrimSpace(raw)
-	neg := false
-	if rest, ok := strings.CutPrefix(body, "-"); ok {
-		body, neg = rest, true
-	} else if rest, ok := strings.CutPrefix(body, "+"); ok {
-		body = rest
-	}
-	whole, fraction, hasFraction := strings.Cut(body, ".")
-	if hasFraction && (fraction == "" || strings.Trim(fraction, "0") != "") {
-		return 0, false
-	}
-	if whole == "" {
-		return 0, false
-	}
-	n, ok := new(big.Int).SetString(strings.ReplaceAll(whole, "_", ""), 10)
-	if !ok {
-		return 0, false
-	}
-	if neg {
-		n.Neg(n)
-	}
-	switch {
-	case n.Cmp(big.NewInt(1)) < 0:
-		return 1, true
-	case n.Cmp(big.NewInt(60)) > 0:
-		return 60, true
-	}
-	return n.Int64(), true
-}
 
 func plural(n int64, noun string) string {
 	if n == 1 {
@@ -97,27 +72,24 @@ func plural(n int64, noun string) string {
 
 func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "loop_id")
-	snooze, err := openloops.SnoozeDefault(r.Context(), s.deps.DB.Read)
-	check(err)
-	days := int64(snooze)
+	var days *int64
 	if raw, given := web.Value(web.FormValues(r), "days"); given && raw != "" {
-		n, valid := clampDays(raw)
+		n, valid := mailapp.ClampDays(raw)
 		if !valid {
 			errs = append(errs, web.BadInt("body", "days", raw))
 		} else {
-			days = n
+			days = &n
 		}
 	}
 	if len(errs) > 0 {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	found, err := openloops.Snooze(r.Context(), s.deps.DB.Write, id, s.now()+float64(days)*openloops.Day, s.now())
-	check(err)
-	if !s.notFound(w, r, found, "loop") {
+	done, err := s.mail.LoopSnooze(r.Context(), mailapp.LoopSnoozeInput{ID: id, Days: days})
+	if !s.changed(w, r, err) {
 		return
 	}
-	s.showLoops(w, r, toast("success", "Snoozed", "Hidden for "+plural(days, "day")+"."))
+	s.showLoops(w, r, toast("success", "Snoozed", "Hidden for "+plural(done.Data.Days, "day")+"."))
 }
 
 func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
@@ -125,9 +97,8 @@ func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	found, err := openloops.Dismiss(r.Context(), s.deps.DB.Write, id, s.now())
-	check(err)
-	if !s.notFound(w, r, found, "loop") {
+	_, err := s.mail.LoopDismiss(r.Context(), mailapp.LoopInput{ID: id})
+	if !s.changed(w, r, err) {
 		return
 	}
 	s.showLoops(w, r, toast("success", "Dismissed"))
@@ -139,13 +110,11 @@ func (s *service) loopDismissAll(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.Missing("body", "state"))
 		return
 	}
-	if state != openloops.OweReply && state != openloops.Waiting {
-		s.fail(w, r, http.StatusBadRequest, "unknown state")
+	done, err := s.mail.LoopsDismissMatching(r.Context(), mailapp.LoopsDismissMatchingInput{State: state})
+	if !s.changed(w, r, err) {
 		return
 	}
-	count, err := openloops.DismissAll(r.Context(), s.deps.DB.Write, state, s.now())
-	check(err)
-	s.showLoops(w, r, toast("success", "Dismissed", plural(count, "loop")+" cleared."))
+	s.showLoops(w, r, toast("success", "Dismissed", plural(done.Data.Count, "loop")+" cleared."))
 }
 
 func (s *service) commitmentUpdate(w http.ResponseWriter, r *http.Request) {
@@ -153,19 +122,20 @@ func (s *service) commitmentUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var status, title string
+	var err error
+	var title string
 	switch web.PathParam(r, "outcome") {
 	case "done":
-		status, title = openloops.Done, "Marked done"
+		title = "Marked done"
+		_, err = s.mail.CommitmentDone(r.Context(), mailapp.CommitmentInput{ID: id})
 	case "dismiss":
-		status, title = openloops.Dismissed, "Dismissed"
+		title = "Dismissed"
+		_, err = s.mail.CommitmentDismiss(r.Context(), mailapp.CommitmentInput{ID: id})
 	default:
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return
 	}
-	found, err := openloops.SetCommitmentStatus(r.Context(), s.deps.DB.Write, id, status)
-	check(err)
-	if !s.notFound(w, r, found, "commitment") {
+	if !s.changed(w, r, err) {
 		return
 	}
 	s.showLoops(w, r, toast("success", title))

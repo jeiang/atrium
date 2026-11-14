@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
 )
@@ -190,11 +191,7 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 	if !name.MatchString(agent) {
 		return nil, Error("name must be lowercase letters, digits, - or _ (max 32 characters)")
 	}
-	r := assistant.Read(ctx, q)
-	maxDescription, maxPrompt := r.Int(assistant.KeySubagentDescChars), r.Int(assistant.KeySubagentPromptChars)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	maxDescription, maxPrompt := assistant.TuningAgentSubagentDescriptionChars, assistant.TuningAgentSubagentPromptChars
 	if n := utf8.RuneCountInString(description); n == 0 || n > maxDescription {
 		return nil, Error(fmt.Sprintf("description is required, one line, at most %d characters", maxDescription))
 	}
@@ -247,10 +244,11 @@ func SystemAddendum(ctx context.Context, q db.Querier, a Agent) (string, error) 
 	return rules + "\n\nAgent `" + a.Name + "`: " + a.Prompt, nil
 }
 
-func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, now float64) (int64, error) {
+func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, project *int64, marks threads.Marks, now float64) (int64, error) {
 	return threads.Create(ctx, q, now, threads.Spec{
 		Kind: threads.Subagent, Title: &title, ParentID: &parentThread,
 		Effort: a.Effort, Role: &a.Name, ParentRunID: &parentRun,
+		ProjectID: project, Marks: marks,
 	})
 }
 
@@ -269,12 +267,7 @@ func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error)
 			return "", fmt.Errorf("subagents: thread %d message %d: %w", threadID, messages[i].ID, err)
 		}
 		if text := strings.TrimSpace(strings.Join(texts, "\n")); text != "" {
-			r := assistant.Read(ctx, q)
-			limit := r.Int(assistant.KeySubagentDigestChars)
-			if err := r.Err(); err != nil {
-				return "", err
-			}
-			return textx.Clip(text, limit), nil
+			return textx.Clip(text, assistant.TuningAgentSubagentDigestChars), nil
 		}
 	}
 	return "", nil
@@ -337,11 +330,12 @@ func runCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.R
 			card.Current = &current
 		}
 	}
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(cache_read),0), "+
-			"COALESCE(SUM(cache_write_5m + cache_write_1h),0), COALESCE(SUM(cost_usd),0) FROM usage WHERE run_id = ?", run.ID,
-	).Scan(&card.Input, &card.Output, &card.CacheRead, &card.CacheWrite, &card.Cost)
-	return card, err
+	totals, err := inference.TotalsOfRun(ctx, q, run.ID)
+	if err != nil {
+		return card, err
+	}
+	card.Input, card.Output, card.CacheRead, card.CacheWrite, card.Cost = totals.Input, totals.Output, totals.CacheRead, totals.CacheWrite, totals.Cost
+	return card, nil
 }
 
 func ChildCard(ctx context.Context, q db.Querier, t threads.Thread, now float64) (Card, error) {

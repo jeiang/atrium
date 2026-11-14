@@ -84,18 +84,15 @@ type SummaryResult struct {
 	Summary string `json:"summary"`
 }
 
-type UndoResult struct {
-	Deleted string `json:"deleted"`
-}
-
 type RestoreResult struct {
 	Restored string `json:"restored"`
 }
 
 type Proposals struct {
-	DB  *db.DB
-	Now func() float64
-	Env config.Env
+	DB     *db.DB
+	Ledger *ledger.Store
+	Now    func() float64
+	Env    config.Env
 }
 
 func (p *Proposals) now() float64 {
@@ -206,48 +203,71 @@ func payloadOf(prop *proposals.Proposal) (target Target, spec Spec, err error) {
 	return target, spec, err
 }
 
-func (p *Proposals) guard(ctx context.Context, target Target) error {
-	var id int64
-	prefix := string(target) + ":"
-	err := p.DB.Read.QueryRowContext(ctx,
-		"SELECT id FROM agent_writes WHERE state = 'unknown' AND substr(target, 1, length(?)) = ? ORDER BY id LIMIT 1",
-		prefix, prefix).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
+func (p *Proposals) guard(ctx context.Context, target Target, uid string) error {
+	id, err := ledger.BlockedTarget(ctx, p.DB.Read, string(target)+":"+uid)
 	if err != nil {
 		return err
 	}
-	return Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium writes resolve %d` before writing to the %s calendar again", id, id, target))
-}
-
-func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, action any) (int64, error) {
-	return proposals.BeginAction(ctx, p.DB.Write, prop.ID, action, p.now())
-}
-
-func (p *Proposals) settle(ctx context.Context, id int64, action any, undo *undoPlan, state ledger.State, text *string) error {
-	var plan any
-	if undo != nil {
-		plan = undo
+	if id == 0 {
+		return nil
 	}
-	return proposals.SettleAction(ctx, p.DB.Write, id, action, plan, state, text, p.now())
+	return Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium effects resolve %d --outcome applied` before writing to the %s calendar again", id, id, target))
 }
 
-func (p *Proposals) fail(ctx context.Context, id int64, action any, err error) error {
-	text := err.Error()
+func encode(v any) (json.RawMessage, error) {
+	if v == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, operation string, target Target, uid string,
+	action, before, undo any) (ledger.Ticket, error) {
+	key := string(target) + ":" + uid
+	body, err := encode(action)
+	if err != nil {
+		return ledger.Ticket{}, err
+	}
+	prior, err := encode(before)
+	if err != nil {
+		return ledger.Ticket{}, err
+	}
+	plan, err := encode(undo)
+	if err != nil {
+		return ledger.Ticket{}, err
+	}
+	return p.Ledger.Begin(ctx, ledger.New{
+		Origin: "calendar", Operation: operation, OperationKey: operation + ":" + ledger.NewKey(),
+		Target: key, ProposalID: &prop.ID, Action: body, Before: prior, Undo: plan,
+		Resources: []ledger.Resource{{Key: "calendar:" + key}},
+	}, nil)
+}
+
+func (p *Proposals) fail(ctx context.Context, ticket ledger.Ticket, err error) error {
 	state := ledger.Failed
 	if OutcomeUnknown(err) {
 		state = ledger.Unknown
 	}
-	if settleErr := p.settle(ctx, id, action, nil, state, &text); settleErr != nil {
+	if settleErr := p.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Error: err.Error()}, nil); settleErr != nil {
 		return settleErr
 	}
 	return err
 }
 
-func (p *Proposals) settleRecord(ctx context.Context, id int64, kind string, undo undoPlan, summary string) (SummaryResult, error) {
-	action := actionPayload{Type: kind, Calendar: undo.Calendar, UID: undo.UID}
-	if err := p.settle(ctx, id, action, &undo, ledger.OK, nil); err != nil {
+func (p *Proposals) settleRecord(ctx context.Context, ticket ledger.Ticket, action any, undo undoPlan, summary string) (SummaryResult, error) {
+	after, err := encode(action)
+	if err != nil {
+		return SummaryResult{}, err
+	}
+	plan, err := encode(undo)
+	if err != nil {
+		return SummaryResult{}, err
+	}
+	if err := p.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Done, After: after, Undo: plan}, nil); err != nil {
 		return SummaryResult{}, err
 	}
 	return SummaryResult{Summary: summary}, nil
@@ -267,61 +287,72 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	if err != nil {
 		return nil, err
 	}
-	if err := p.guard(ctx, target); err != nil {
+	if err := p.guard(ctx, target, spec.UID); err != nil {
 		return nil, err
 	}
 	action := actionPayload{Type: Kind, Calendar: string(target), UID: spec.UID}
-	intent, err := p.begin(ctx, prop, action)
+	undo := undoPlan{Op: UndoOp, Calendar: string(target), UID: spec.UID}
+	ticket, err := p.begin(ctx, prop, Kind, target, spec.UID, action, nil, undo)
 	if err != nil {
 		return nil, err
 	}
 	ref, err := CreateEvent(ctx, env, set, target, spec, tz)
 	if err != nil {
-		return nil, p.fail(ctx, intent, action, err)
+		return nil, p.fail(ctx, ticket, err)
 	}
-	if err := Track(ctx, p.DB.Write, spec, target, &prop.ID, p.now()); err != nil {
-		return nil, p.fail(ctx, intent, action, &Partial{Err: err})
-	}
-	undo := undoPlan{Op: UndoOp, Calendar: string(target), UID: spec.UID}
 	settled := actionPayload{Type: Kind, Calendar: ref.Calendar, UID: ref.UID}
-	if err := p.settle(ctx, intent, settled, &undo, ledger.OK, nil); err != nil {
+	after, err := encode(settled)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := encode(undo)
+	if err != nil {
+		return nil, err
+	}
+	err = p.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Done, After: after, Undo: plan},
+		func(ctx context.Context, tx *sql.Tx) error {
+			return Track(ctx, tx, spec, target, &prop.ID, p.now())
+		})
+	if err != nil {
 		return nil, err
 	}
 	return ExecuteResult{Summary: fmt.Sprintf("Added to the %s calendar", target), Calendar: ref.Calendar, UID: ref.UID}, nil
 }
 
-func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
-	var info undoPlan
-	if err := json.Unmarshal(plan, &info); err != nil {
-		return nil, err
+func (p *Proposals) Proposals(owner string) []proposals.Definition {
+	return []proposals.Definition{
+		{Kind: proposals.Kind{Name: Kind, Module: owner, Label: "Calendar event", Icon: "calendar"}, Execute: p.Execute},
+		{Kind: proposals.Kind{Name: UpdateKind, Module: owner, Label: "Event change", Icon: "calendar"}, Execute: p.ExecuteUpdate},
+		{Kind: proposals.Kind{Name: RSVPKind, Module: owner, Label: "Event reply", Icon: "calendar"}, Execute: p.ExecuteRSVP},
 	}
-	target, err := ParseTarget(info.Calendar)
-	if err != nil {
-		return nil, err
-	}
-	set, err := LoadSettings(ctx, p.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.guard(ctx, target); err != nil {
-		return nil, err
-	}
-	if err := DeleteEvent(ctx, p.env(), set, target, info.UID); err != nil {
-		return nil, err
-	}
-	if err := Untrack(ctx, p.DB.Write, info.UID, p.now()); err != nil {
-		return nil, &Partial{Err: err}
-	}
-	return UndoResult{Deleted: info.UID}, nil
 }
 
-func Register(reg *proposals.Registry, p *Proposals, owner string) {
-	reg.Executors[Kind] = p.Execute
-	reg.Undoers[UndoOp] = p.Undo
-	reg.Executors[UpdateKind] = p.ExecuteUpdate
-	reg.Executors[RSVPKind] = p.ExecuteRSVP
-	reg.Undoers[RestoreOp] = p.Restore
-	reg.AddKind(proposals.Kind{Name: Kind, Module: owner, Label: "Calendar event", Icon: "calendar"})
-	reg.AddKind(proposals.Kind{Name: UpdateKind, Module: owner, Label: "Event change", Icon: "calendar"})
-	reg.AddKind(proposals.Kind{Name: RSVPKind, Module: owner, Label: "Event reply", Icon: "calendar"})
+func (p *Proposals) Undo() []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: RestoreOp, Undoer: ledger.Undoer{
+		Validate: func(raw json.RawMessage) error {
+			var info undoPlan
+			if err := json.Unmarshal(raw, &info); err != nil || info.Calendar == "" || info.UID == "" {
+				return ledger.Refused("calendar undo payload is invalid")
+			}
+			return nil
+		},
+		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			value, err := p.Restore(ctx, raw)
+			if err != nil {
+				var failed Error
+				switch {
+				case OutcomeUnknown(err):
+					return ledger.Result{State: ledger.Unknown, Error: err.Error()}, nil
+				case errors.As(err, &failed):
+					return ledger.Result{State: ledger.Failed, Error: err.Error()}, nil
+				}
+				return ledger.Result{}, err
+			}
+			after, err := encode(value)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: after}, nil
+		},
+	}}}
 }

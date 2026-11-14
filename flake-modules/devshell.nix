@@ -24,24 +24,27 @@
     formatter = config.treefmt.build.wrapper;
 
     devShells.default = pkgs.mkShell {
-      packages = [
-        config.treefmt.build.wrapper
-        go
-        pkgs.git
-        pkgs.just
-        pkgs.statix
-        pkgs.golangci-lint
-        pkgs.govulncheck
-        pkgs.go-licenses
-        pkgs.pkg-config
-        pkgs.tailwindcss_4
-        # Editor language servers
-        pkgs.gopls
-        pkgs.nixd
-        pkgs.typescript-language-server
-        pkgs.tailwindcss-language-server
-        pkgs.bash-language-server
-      ];
+      packages =
+        [
+          config.treefmt.build.wrapper
+          go
+          pkgs.git
+          pkgs.jq
+          pkgs.just
+          pkgs.statix
+          pkgs.golangci-lint
+          pkgs.govulncheck
+          pkgs.go-licenses
+          pkgs.pkg-config
+          pkgs.tailwindcss_4
+          pkgs.brotli
+          pkgs.gopls
+          pkgs.nixd
+          pkgs.typescript-language-server
+          pkgs.tailwindcss-language-server
+          pkgs.bash-language-server
+        ]
+        ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
       env =
         {
           ATRIUM_DEV_SHELL = "1";
@@ -60,7 +63,7 @@
       shellHook = ''
         unset GOROOT GOPATH
         root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
-        [ -e "$root/internal/web/static/app.css" ] || just --justfile "$root/justfile" assets
+        [ -e "$root/internal/web/static/assets.json" ] || just --justfile "$root/justfile" assets
       '';
     };
   };

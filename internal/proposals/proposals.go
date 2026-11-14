@@ -3,11 +3,11 @@ package proposals
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
@@ -18,8 +18,6 @@ const (
 	Failed     = "failed"
 	Suppressed = "suppressed"
 )
-
-type Undoer func(ctx context.Context, plan json.RawMessage) (any, error)
 
 type SyncHook func(ctx context.Context, account string) error
 
@@ -34,29 +32,59 @@ type Kind struct {
 	Messages bool
 	CountKey string
 	Approval bool
+	// Locks are resources an approval holds before its executor writes anything, so a busy
+	// lock refuses the approval while the proposal is still open and can be approved again.
+	Locks []string
 }
 
 type DismissHook func(ctx context.Context, p *Proposal) error
 
+type Builder struct {
+	Description string
+	Build       func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error)
+}
+
+type Definition struct {
+	Kind    Kind
+	Execute Executor
+	Dismiss DismissHook
+	Build   *Builder
+}
+
 type Registry struct {
+	Bind       func(context.Context, string) (context.Context, error)
 	Executors  map[string]Executor
-	Undoers    map[string]Undoer
 	Dismissers map[string]DismissHook
 	kinds      []Kind
 	byName     map[string]Kind
 	Sync       SyncHook
 }
 
-func NewRegistry() *Registry {
-	return &Registry{Executors: map[string]Executor{}, Undoers: map[string]Undoer{}, Dismissers: map[string]DismissHook{}, byName: map[string]Kind{}}
+func newRegistry() *Registry {
+	return &Registry{Executors: map[string]Executor{}, Dismissers: map[string]DismissHook{}, byName: map[string]Kind{}}
 }
 
-func (r *Registry) AddKind(k Kind) {
-	if _, found := r.byName[k.Name]; found {
-		panic("proposals: duplicate kind " + k.Name)
+type DuplicateKind string
+
+func (e DuplicateKind) Error() string { return "proposals: duplicate kind " + string(e) }
+
+func NewRegistryFrom(defs []Definition, sync SyncHook) (*Registry, error) {
+	r := newRegistry()
+	r.Sync = sync
+	for _, def := range defs {
+		if _, ok := r.byName[def.Kind.Name]; ok {
+			return nil, DuplicateKind(def.Kind.Name)
+		}
+		if def.Execute != nil {
+			r.Executors[def.Kind.Name] = def.Execute
+		}
+		if def.Dismiss != nil {
+			r.Dismissers[def.Kind.Name] = def.Dismiss
+		}
+		r.byName[def.Kind.Name] = def.Kind
+		r.kinds = append(r.kinds, def.Kind)
 	}
-	r.byName[k.Name] = k
-	r.kinds = append(r.kinds, k)
+	return r, nil
 }
 
 func (r *Registry) Kinds() []Kind { return r.kinds }
@@ -79,19 +107,53 @@ func (r *Registry) Known(name string) bool {
 type Querier = db.Querier
 
 func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
+	var id int64
 	var status string
-	var unresolved bool
-	err := q.QueryRowContext(ctx, "SELECT status, "+ledger.UnresolvedSQL("a")+" FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&status, &unresolved)
+	err := q.QueryRowContext(ctx, "SELECT id, status FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&id, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil && (status != Failed || unresolved), err
+	if err != nil {
+		return false, err
+	}
+	if status != Failed {
+		return true, nil
+	}
+	blocked, err := ledger.ProposalBlocked(ctx, q, id)
+	if err != nil {
+		return false, err
+	}
+	if blocked {
+		return true, nil
+	}
+	return ledger.ProposalBlocked(ctx, q, id)
 }
 
-var OnCreate func(ctx context.Context, d *db.DB, p *Proposal)
+type CreatedHook = func(ctx context.Context, d *db.DB, p *Proposal)
+
+type Hooks struct{ Created CreatedHook }
+
+type ErrNoHooks struct{}
+
+func (ErrNoHooks) Error() string { return "proposals: no hooks in context" }
+
+type hooksKey struct{}
+
+func WithHooks(ctx context.Context, h Hooks) context.Context {
+	return context.WithValue(ctx, hooksKey{}, h)
+}
+
+func HooksFrom(ctx context.Context) (Hooks, bool) {
+	h, ok := ctx.Value(hooksKey{}).(Hooks)
+	return h, ok
+}
 
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,
 	fingerprint string, ts float64) (id int64, created bool, err error) {
+	hooks, ok := HooksFrom(ctx)
+	if !ok {
+		return 0, false, ErrNoHooks{}
+	}
 	body, err := marshalJSON(payload)
 	if err != nil {
 		return 0, false, err
@@ -114,18 +176,25 @@ func Create(ctx context.Context, d *db.DB, kind string, account *string, title s
 			created = true
 			return err
 		}
+		if err := tx.QueryRowContext(ctx, "SELECT id FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&id); err != nil {
+			return err
+		}
+		blocked, err := ledger.ProposalBlocked(ctx, tx, id)
+		if err != nil || blocked {
+			return err
+		}
 		err = tx.QueryRowContext(ctx, "UPDATE proposals SET kind = ?, account = ?, title = ?, payload = ?, preview = ?, "+
 			"created_ts = ?, status = 'pending', decided_ts = NULL, applied_ts = NULL, undone_ts = NULL, recovered = 0, result = NULL "+
-			"WHERE fingerprint = ? AND status = 'failed' AND NOT "+ledger.UnresolvedSQL("a")+" RETURNING id",
-			kind, account, title, body, view, ts, fingerprint).Scan(&id)
+			"WHERE id = ? AND status = 'failed' RETURNING id",
+			kind, account, title, body, view, ts, id).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
-			err = tx.QueryRowContext(ctx, "SELECT id FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&id)
+			err = nil
 		}
 		return err
 	})
-	if err == nil && created && OnCreate != nil {
+	if err == nil && created && hooks.Created != nil {
 		if p, getErr := Get(ctx, d.Read, id); getErr == nil && p != nil {
-			OnCreate(ctx, d, p)
+			hooks.Created(ctx, d, p)
 		}
 	}
 	return id, created, err

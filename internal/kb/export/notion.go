@@ -2,14 +2,17 @@ package export
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb/render"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -66,32 +69,73 @@ func deletePage(ctx context.Context, q db.Querier, target string, recordID int64
 	return err
 }
 
-func intent(now float64, target string, after map[string]any) writes.New {
-	return writes.New{TS: now, Tool: "kb_export", Target: target, After: after}
+const (
+	opCreate  = "kb_export_create"
+	opTitle   = "kb_export_title"
+	opContent = "kb_export_content"
+	opTrash   = "kb_export_trash"
+)
+
+func step(target, operation, key string, payload map[string]any) ledger.New {
+	return ledger.New{Origin: "export", Operation: operation, OperationKey: key, Target: target,
+		Action: jsonOf(payload), Resources: []ledger.Resource{{Key: target}}}
 }
 
-func settleFailure(ctx context.Context, d *db.DB, id int64, target string, hash string, err error) error {
+func settleFailure(ctx context.Context, store *ledger.Store, ticket ledger.Ticket, target string, hash string, err error) error {
 	var refused *notion.Error
 	if errors.As(err, &refused) && refused.Status >= 400 && refused.Status < 500 {
-		if derr := writes.Discard(ctx, d.Write, id); derr != nil {
-			return derr
+		if serr := store.Settle(ctx, ticket, ledger.Result{State: ledger.Failed, Target: target, Error: err.Error()}, nil); serr != nil {
+			return serr
 		}
 		return err
 	}
-	unknown := intent(0, target, map[string]any{"hash": hash})
-	if serr := writes.SettleUnknown(ctx, d.Write, id, unknown, err.Error()); serr != nil {
+	unknown := ledger.Result{State: ledger.Unknown, Target: target, After: jsonOf(map[string]any{"hash": hash}), Error: err.Error()}
+	if serr := store.Settle(ctx, ticket, unknown, nil); serr != nil {
 		return serr
 	}
 	return err
 }
 
-func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Client, parent string, entries []pageEntry) (Result, error) {
+func runStep(ctx context.Context, store *ledger.Store, n ledger.New, hash string, call func() (map[string]any, error), done ledger.Mutation) error {
+	ticket, err := store.Begin(ctx, n, nil)
+	if err != nil {
+		return err
+	}
+	after, err := call()
+	if err != nil {
+		return settleFailure(ctx, store, ticket, n.Target, hash, err)
+	}
+	return store.Settle(ctx, ticket, ledger.Result{State: ledger.Done, Target: n.Target, After: jsonOf(after)}, done)
+}
+
+func stepAppliedQ(ctx context.Context, q db.Querier, operation, target, field, hash string) (bool, error) {
+	found, err := ledger.ListEffects(ctx, q, ledger.Filter{Operation: operation, Target: target, Limit: 1}, 0)
+	if err != nil || len(found) == 0 {
+		return false, err
+	}
+	e := found[0]
+	if !e.Succeeded() {
+		return false, nil
+	}
+	var action map[string]any
+	if json.Unmarshal(e.Action, &action) != nil {
+		return false, nil
+	}
+	value, _ := action[field].(string)
+	return value == hash, nil
+}
+
+func stepApplied(ctx context.Context, store *ledger.Store, operation, target, field, hash string) (bool, error) {
+	return stepAppliedQ(ctx, store.DB.Read, operation, target, field, hash)
+}
+
+func syncNotion(ctx context.Context, store *ledger.Store, now float64, client *notion.Client, parent string, entries []pageEntry) (Result, error) {
 	var out Result
+	d := store.DB
 	stored, err := loadPages(ctx, d.Read, TargetNotion)
 	if err != nil {
 		return out, err
 	}
-	ledger := context.WithoutCancel(ctx)
 	current := make(map[int64]bool, len(entries))
 	for _, entry := range entries {
 		current[entry.recordID] = true
@@ -101,42 +145,59 @@ func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Clien
 			out.Skipped++
 			continue
 		}
+		prefix := "export:notion:" + cite(entry.recordID)
+		generation, err := ledger.CountEffectiveDone(ctx, d.Read, target)
+		if err != nil {
+			return out, err
+		}
 		if found {
-			id, err := writes.Begin(ledger, d.Write, intent(now, target, map[string]any{"hash": entry.page.Hash}))
+			titleHash := hashOf([]byte(entry.page.Title))
+			titleKey := prefix + ":title:" + strconv.Itoa(generation) + ":" + titleHash
+			titleDone, err := stepApplied(ctx, store, opTitle, target, "title_hash", titleHash)
 			if err != nil {
 				return out, err
 			}
-			if err := client.SetTitle(ctx, prior.remoteID, entry.page.Title); err != nil {
-				return out, settleFailure(ledger, d, id, target, entry.page.Hash, err)
+			if !titleDone {
+				action := map[string]any{"hash": entry.page.Hash, "title_hash": titleHash, "page_id": prior.remoteID}
+				if err := runStep(ctx, store, step(target, opTitle, titleKey, action), entry.page.Hash, func() (map[string]any, error) {
+					return action, client.SetTitle(ctx, prior.remoteID, entry.page.Title)
+				}, nil); err != nil {
+					return out, err
+				}
 			}
-			if err := client.UpdateMarkdown(ctx, prior.remoteID, notion.ReplaceContent(entry.page.Markdown)); err != nil {
-				return out, settleFailure(ledger, d, id, target, entry.page.Hash, err)
-			}
-			if err := writes.Settle(ledger, d.Write, nil, id, intent(now, target, map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID})); err != nil {
+			contentKey := prefix + ":content:" + strconv.Itoa(generation) + ":" + entry.page.Hash
+			contentDone, err := stepApplied(ctx, store, opContent, target, "hash", entry.page.Hash)
+			if err != nil {
 				return out, err
 			}
-			if err := savePage(ledger, d.Write, TargetNotion, entry.recordID, prior.remoteID, entry.page.Hash, now); err != nil {
-				return out, err
+			if !contentDone {
+				if err := runStep(ctx, store, step(target, opContent, contentKey, map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
+					return map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}, client.UpdateMarkdown(ctx, prior.remoteID, notion.ReplaceContent(entry.page.Markdown))
+				}, func(ctx context.Context, tx *sql.Tx) error {
+					return savePage(ctx, tx, TargetNotion, entry.recordID, prior.remoteID, entry.page.Hash, now)
+				}); err != nil {
+					return out, err
+				}
 			}
 			out.Updated++
 			continue
 		}
-		id, err := writes.Begin(ledger, d.Write, intent(now, target, map[string]any{"hash": entry.page.Hash}))
-		if err != nil {
-			return out, err
-		}
-		page, err := client.CreatePage(ctx, map[string]any{
-			"parent":     map[string]any{"page_id": parent},
-			"properties": map[string]any{"title": map[string]any{"title": richText(entry.page.Title)}},
-			"markdown":   entry.page.Markdown,
-		})
-		if err != nil {
-			return out, settleFailure(ledger, d, id, target, entry.page.Hash, err)
-		}
-		if err := writes.Settle(ledger, d.Write, nil, id, intent(now, target, map[string]any{"hash": entry.page.Hash, "page_id": page.ID})); err != nil {
-			return out, err
-		}
-		if err := savePage(ledger, d.Write, TargetNotion, entry.recordID, page.ID, entry.page.Hash, now); err != nil {
+		createKey := prefix + ":create:" + strconv.Itoa(generation)
+		var pageID string
+		if err := runStep(ctx, store, step(target, opCreate, createKey, map[string]any{"hash": entry.page.Hash}), entry.page.Hash, func() (map[string]any, error) {
+			page, err := client.CreatePage(ctx, map[string]any{
+				"parent":     map[string]any{"page_id": parent},
+				"properties": map[string]any{"title": map[string]any{"title": richText(entry.page.Title)}},
+				"markdown":   entry.page.Markdown,
+			})
+			if err != nil {
+				return nil, err
+			}
+			pageID = page.ID
+			return map[string]any{"hash": entry.page.Hash, "page_id": page.ID}, nil
+		}, func(ctx context.Context, tx *sql.Tx) error {
+			return savePage(ctx, tx, TargetNotion, entry.recordID, pageID, entry.page.Hash, now)
+		}); err != nil {
 			return out, err
 		}
 		out.Created++
@@ -146,17 +207,12 @@ func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Clien
 			continue
 		}
 		target := targetPrefix + cite(recordID)
-		id, err := writes.Begin(ledger, d.Write, intent(now, target, map[string]any{"trash": true}))
-		if err != nil {
-			return out, err
-		}
-		if err := client.SetTrash(ctx, prior.remoteID, true); err != nil {
-			return out, settleFailure(ledger, d, id, target, prior.hash, err)
-		}
-		if err := writes.Settle(ledger, d.Write, nil, id, intent(now, target, map[string]any{"trash": true, "page_id": prior.remoteID})); err != nil {
-			return out, err
-		}
-		if err := deletePage(ledger, d.Write, TargetNotion, recordID); err != nil {
+		key := "export:notion:" + cite(recordID) + ":trash:" + prior.remoteID
+		if err := runStep(ctx, store, step(target, opTrash, key, map[string]any{"trash": true, "page_id": prior.remoteID}), prior.hash, func() (map[string]any, error) {
+			return map[string]any{"trash": true, "page_id": prior.remoteID}, client.SetTrash(ctx, prior.remoteID, true)
+		}, func(ctx context.Context, tx *sql.Tx) error {
+			return deletePage(ctx, tx, TargetNotion, recordID)
+		}); err != nil {
 			return out, err
 		}
 		out.Removed++
@@ -168,8 +224,20 @@ func richText(text string) []any {
 	return []any{map[string]any{"type": "text", "text": map[string]any{"content": text}}}
 }
 
+func jsonOf(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
 func blocked(ctx context.Context, q db.Querier) error {
-	id, err := writes.UnknownTarget(ctx, q, targetPrefix)
+	return blockedPrefix(ctx, q, targetPrefix)
+}
+
+func blockedPrefix(ctx context.Context, q db.Querier, prefix string) error {
+	id, err := ledger.BlockedTarget(ctx, q, prefix)
 	if err != nil {
 		return err
 	}
@@ -177,4 +245,163 @@ func blocked(ctx context.Context, q db.Querier) error {
 		return fmt.Errorf("export blocked by write #%d", id)
 	}
 	return nil
+}
+
+const UndoNotionTrash = "notion_trash"
+
+type trashUndo struct {
+	Op     string `json:"op"`
+	PageID string `json:"page_id"`
+}
+
+func recordOf(target string) (int64, bool) {
+	rest, ok := strings.CutPrefix(target, targetPrefix)
+	if !ok {
+		return 0, false
+	}
+	if rest == "index" {
+		return 0, true
+	}
+	if !strings.HasPrefix(rest, "K") {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(rest[1:], 10, 64)
+	return id, err == nil
+}
+
+func notionResolves(s *ledger.Store) []ledger.ResolveDefinition {
+	return []ledger.ResolveDefinition{
+		{Operation: opCreate, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var ev struct {
+				PageID string `json:"page_id"`
+				Hash   string `json:"hash"`
+			}
+			if len(r.Evidence) == 0 || json.Unmarshal(r.Evidence, &ev) != nil || ev.PageID == "" || ev.Hash == "" {
+				return ledger.Refused("resolving an export create needs evidence with page_id and hash")
+			}
+			var action struct {
+				Hash string `json:"hash"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if action.Hash != ev.Hash {
+				return ledger.Refused("the evidence hash does not match the attempted export")
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			if err := savePage(ctx, tx, TargetNotion, recordID, ev.PageID, ev.Hash, s.Now()); err != nil {
+				return err
+			}
+			return s.SetUndo(ctx, tx, e.ID, jsonOf(trashUndo{Op: UndoNotionTrash, PageID: ev.PageID}))
+		}},
+		{Operation: opContent, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var action struct {
+				Hash   string `json:"hash"`
+				PageID string `json:"page_id"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if action.Hash == "" || action.PageID == "" {
+				return ledger.Refused("resolving an export content step needs the attempted page and hash")
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			return savePage(ctx, tx, TargetNotion, recordID, action.PageID, action.Hash, s.Now())
+		}},
+		{Operation: opTitle, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var action struct {
+				Hash   string `json:"hash"`
+				PageID string `json:"page_id"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if action.Hash == "" || action.PageID == "" {
+				return ledger.Refused("resolving an export title step needs the attempted page and hash")
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			done, err := stepAppliedQ(ctx, tx, opContent, e.Target, "hash", action.Hash)
+			if err != nil || !done {
+				return err
+			}
+			return savePage(ctx, tx, TargetNotion, recordID, action.PageID, action.Hash, s.Now())
+		}},
+		{Operation: opTrash, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			return deletePage(ctx, tx, TargetNotion, recordID)
+		}},
+	}
+}
+
+func notionUndo(s *ledger.Store) []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: UndoNotionTrash, Undoer: ledger.Undoer{
+		Validate: func(raw json.RawMessage) error {
+			var u trashUndo
+			if err := json.Unmarshal(raw, &u); err != nil || u.PageID == "" {
+				return ledger.Refused("notion_trash without a page id")
+			}
+			return nil
+		},
+		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			var u trashUndo
+			if err := json.Unmarshal(raw, &u); err != nil || u.PageID == "" {
+				return ledger.Result{}, ledger.Refused("notion_trash without a page id")
+			}
+			client, err := notion.NewClient(ctx, s.DB.Read)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			defer client.Close()
+			if err := client.SetTrash(ctx, u.PageID, true); err != nil {
+				var refused *notion.Error
+				if errors.As(err, &refused) && refused.Status >= 400 && refused.Status < 500 {
+					return ledger.Result{State: ledger.Failed, Error: err.Error()}, nil
+				}
+				return ledger.Result{State: ledger.Unknown, Error: err.Error()}, nil
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"trashed": u.PageID})}, nil
+		},
+		After: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, result ledger.Result) error {
+			if result.State != ledger.Done {
+				return nil
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return nil
+			}
+			return deletePage(ctx, tx, TargetNotion, recordID)
+		},
+	}}}
+}
+
+func Resolve(s *ledger.Store) []ledger.ResolveDefinition {
+	return append(notionResolves(s), obsidianResolves(s)...)
+}
+
+func Undo(s *ledger.Store) []ledger.UndoDefinition {
+	return append(notionUndo(s), obsidianUndo(s)...)
 }

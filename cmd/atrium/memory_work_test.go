@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestMemoryWorkSummarizesTheTree(t *testing.T) {
@@ -22,7 +24,7 @@ func TestMemoryWorkSummarizesTheTree(t *testing.T) {
 			t.Fatalf("chat run %d: %d %s", i, ran.code, ran.stderr)
 		}
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var before float64
 	if err := d.Read.QueryRow("SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE kind <> 'memory'").Scan(&before); err != nil {
 		t.Fatal(err)
@@ -41,6 +43,16 @@ func TestMemoryWorkSummarizesTheTree(t *testing.T) {
 		if strings.Contains(ran.stdout, ": 0 nodes") {
 			break
 		}
+	}
+	audits := operationAudits(t, d, "assistant.memory.work")
+	if len(audits) == 0 || slices.ContainsFunc(audits, func(a string) bool { return !strings.HasPrefix(a, "ok thread:1 ") }) {
+		t.Errorf("memory work audits = %q, want only ok rows for the passes that summarized", audits)
+	}
+	if ran := runApp(t, "memory", "work", "1"); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, ": 0 nodes") {
+		t.Fatalf("memory work with nothing pending: %d %q %s", ran.code, ran.stdout, ran.stderr)
+	}
+	if again := operationAudits(t, d, "assistant.memory.work"); len(again) != len(audits) {
+		t.Errorf("a memory work pass that summarized nothing wrote audits %q", again[len(audits):])
 	}
 	var pending, summarized, memoryRows int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_nodes WHERE thread_id = 1 AND state = 'pending'").Scan(&pending); err != nil {
@@ -97,7 +109,7 @@ func TestMemoryWorkRetriesLongAnswersAndFallsBack(t *testing.T) {
 			t.Fatalf("memory work: %d %s", ran.code, ran.stderr)
 		}
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var short, fallback int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_nodes WHERE thread_id = 1 AND state = 'summary' AND text = 'short'").Scan(&short); err != nil {
 		t.Fatal(err)
@@ -118,7 +130,7 @@ func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('max_run_cost_usd_haiku_5_5', '0.0001')"); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +152,45 @@ func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT state, COALESCE(error, '') FROM memory_jobs WHERE thread_id = 1 ORDER BY id DESC LIMIT 1").Scan(&state, &errText); err != nil {
 		t.Fatal(err)
 	}
-	if state != "failed" || !strings.Contains(errText, "run cap") {
+	if state != "failed" || !strings.Contains(errText, "run cost cap") {
 		t.Errorf("job state %q error %q, want failed with a run cap error", state, errText)
+	}
+}
+
+func TestMemoryWorkSummarizesPastTheClipPoint(t *testing.T) {
+	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	needle := "the hidden decision is to move the launch to Friday"
+	long := strings.Repeat("filler ", 200) + needle
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", long); ran.code != cli.ExitOK {
+		t.Fatalf("long run: %d %s", ran.code, ran.stderr)
+	}
+	if ran := runApp(t, "memory", "view", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory view: %d %s", ran.code, ran.stderr)
+	}
+	for range 30 {
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
+	}
+	for range 5 {
+		ran := runApp(t, "memory", "work", "1")
+		if ran.code != cli.ExitOK {
+			t.Fatalf("memory work: %d %s", ran.code, ran.stderr)
+		}
+		if strings.Contains(ran.stdout, ": 0 nodes") {
+			break
+		}
+	}
+	found := false
+	for _, request := range api.Requests() {
+		body := string(request.Body)
+		if strings.Contains(body, "Node source:") && strings.Contains(body, needle) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the summarizer did not receive the content past the clip point")
 	}
 }

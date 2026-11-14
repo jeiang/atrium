@@ -1,0 +1,19 @@
+{{define "title"}}Inbox{{end}}
+{{define "heading"}}Inbox{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{if $d.Notifications}}
+<div class="table-container rounded-lg border bg-card">
+  <table class="table">
+    <caption class="sr-only">Notifications, newest first</caption>
+    <thead><tr><th scope="col">When</th><th scope="col">Notification</th><th scope="col">Channel</th><th scope="col">Thread</th><th scope="col">Push</th></tr></thead>
+    <tbody>
+      {{range $d.Notifications}}
+      {{template "inbox_row" (dict "Notification" . "CSRF" $csrf)}}
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p class="text-sm text-muted-foreground" data-empty>No notifications.</p>
+{{end}}
+{{end}}

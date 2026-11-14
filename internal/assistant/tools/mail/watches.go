@@ -3,47 +3,50 @@ package mailtools
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/contacts"
-	"github.com/jeiang/atrium/internal/mail/birthdays"
-	"github.com/jeiang/atrium/internal/mail/watches"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 var packagesSchema = json.RawMessage(`{"type":"object","properties":{"active_only":{"type":"boolean"}},"additionalProperties":false}`)
 
 var birthdaysSchema = json.RawMessage(`{"type":"object","properties":{"days":{"type":"integer","minimum":0,"maximum":` +
-	strconv.Itoa(birthdays.MaxDays) + `}},"additionalProperties":false}`)
+	strconv.Itoa(mailapp.BirthdaysMaxDays) + `}},"additionalProperties":false}`)
 
-func watchTools() []tool.Tool {
+func watchTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	return []tool.Tool{
 		{
 			Name: "packages",
 			Description: "List packages and orders tracked from shipping and order emails (carrier, tracking number, merchant, " +
 				"status). active_only (default true) hides delivered and stale ones.",
 			InputSchema: packagesSchema,
-			Handler:     packages,
-			Effect:      tool.Read,
-			Annotated:   true,
-			Marks:       tool.PII | tool.Messages | tool.Untrusted,
-			Contexts:    loopKinds,
+			Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+				return packages(ctx, tc, args, svc)
+			},
+			Effect:    tool.Read,
+			Annotated: true,
+			Marks:     tool.PII | tool.Messages | tool.Untrusted,
+			Contexts:  loopKinds,
 		},
 		{
 			Name: "upcoming_birthdays",
 			Description: "List birthdays and anniversaries from the address book within the next N days (default 14), soonest " +
 				"first, with the age when the birth year is known.",
 			InputSchema: birthdaysSchema,
-			Handler:     upcomingBirthdays,
-			Effect:      tool.Read,
-			Annotated:   true,
-			Marks:       tool.PII,
-			Contexts:    loopKinds,
+			Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+				return upcomingBirthdays(ctx, tc, args, svc)
+			},
+			Effect:    tool.Read,
+			Annotated: true,
+			Marks:     tool.PII,
+			Contexts:  loopKinds,
 		},
 	}
 }
 
-func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func packages(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
 	active, ok := args.Get("active_only")
 	if !ok {
 		active = true
@@ -52,10 +55,11 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if !isBool {
 		return nil, tool.Error("active_only must be true or false")
 	}
-	items, err := watches.ListPackages(ctx, tc.DB.Read, tc.Env, tc.Now(), activeOnly, false)
+	read, err := svc(tc).Packages(ctx, mailapp.PackagesInput{ActiveOnly: activeOnly})
 	if err != nil {
 		return nil, err
 	}
+	items := read.Data.Packages
 	out := make([]any, len(items))
 	marks := tool.Marks(0)
 	for i, p := range items {
@@ -78,28 +82,25 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	return tool.Marked{Value: map[string]any{"packages": out, "note": "Status comes from emails the operator received and, for tracked packages, from Ship24. Use track_package to register a package for live updates."}, Marks: marks}, nil
 }
 
-func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	defaultDays, maxDays, err := birthdays.Limits(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
+func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
+	var days *int64
+	if _, given := args.Get("days"); given {
+		n, err := tool.BoundedInt(args, "days", 0, math.MaxInt64, math.MinInt64)
+		if err != nil {
+			return nil, err
+		}
+		days = &n
 	}
-	days, err := tool.BoundedInt(args, "days", int64(defaultDays), int64(maxDays), 0)
-	if err != nil {
-		return nil, err
-	}
-	loc, err := zone(ctx, tc.Env)
+	loc, err := zone(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
 	now := localTime(tc.Now(), loc)
-	today := birthdays.Date(now.Year(), now.Month(), now.Day())
-	found, ok, err := birthdays.UpcomingFor(ctx, tc.DB.Read, today, int(days))
+	read, err := svc(tc).UpcomingBirthdays(ctx, mailapp.UpcomingBirthdaysInput{Today: mailapp.BirthdayDate(now.Year(), now.Month(), now.Day()), Days: days})
 	if err != nil {
-		return nil, err
+		return nil, mailboxFail(err)
 	}
-	if !ok {
-		return nil, tool.NotConfigured(contacts.DirKey + " is not set")
-	}
+	found := read.Data.Upcoming
 	out := make([]any, len(found))
 	marks := tool.Marks(0)
 	for i, item := range found {

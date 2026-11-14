@@ -11,8 +11,12 @@ CREATE TABLE IF NOT EXISTS mail_accounts (
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     auth_method TEXT NOT NULL DEFAULT 'password' CHECK (auth_method IN ('password', 'xoauth2')),
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    connection_id TEXT REFERENCES connections(id),
+    capability_prefix TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS mail_accounts_connection_capability
+  ON mail_accounts(connection_id,capability_prefix);
 CREATE TABLE IF NOT EXISTS mailboxes (
     id INTEGER PRIMARY KEY,
     account TEXT NOT NULL REFERENCES accounts(name),
@@ -68,7 +72,7 @@ CREATE TABLE IF NOT EXISTS messages (
     k_order INTEGER NOT NULL DEFAULT 0,
     k_vcode INTEGER NOT NULL DEFAULT 0,
     k_otp6 INTEGER NOT NULL DEFAULT 0,
-    embedded INTEGER NOT NULL DEFAULT 0,
+    embedded_hash TEXT,
     first_seen REAL NOT NULL,
     gone_at REAL,
     UNIQUE (account, mailbox_id, uidvalidity, uid)
@@ -132,9 +136,117 @@ CREATE VIEW IF NOT EXISTS filed_messages AS SELECT m.id, m.account, m.mailbox_id
     m.labels, CASE WHEN c.folder IS NULL THEN m.in_inbox ELSE 0 END AS in_inbox, m.sent, m.location,
     COALESCE(c.folder, m.folder) AS folder, m.category, m.from_addr, m.from_domain, m.from_name, m.to_addrs,
     m.reply_to, m.rpath_domain, m.list_id, m.precedence, m.subject, m.subject_tmpl, m.msgid_domain, m.in_reply_to,
-    m.refs, m.dkim_d, m.esp, m.att_types, m.att_names, m.k_order, m.k_vcode, m.k_otp6, m.embedded, m.first_seen,
-    m.gone_at
+    m.refs, m.dkim_d, m.esp, m.att_types, m.att_names, m.k_order, m.k_vcode, m.k_otp6, m.embedded_hash IS NOT NULL AS embedded,
+    m.first_seen, m.gone_at
 FROM messages m LEFT JOIN corrections c ON c.message_id = m.id
 WHERE m.gone_at IS NULL AND m.sent = 0
 AND COALESCE(c.folder, m.folder) IS NOT NULL AND COALESCE(c.folder, m.folder) != ''
 AND (c.folder IS NOT NULL OR m.in_inbox = 0);
+CREATE TRIGGER IF NOT EXISTS accounts_read_insert AFTER INSERT ON accounts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS accounts_read_update AFTER UPDATE ON accounts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS accounts_read_delete AFTER DELETE ON accounts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS mail_accounts_read_insert AFTER INSERT ON mail_accounts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS mail_accounts_read_update AFTER UPDATE ON mail_accounts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS mail_accounts_read_delete AFTER DELETE ON mail_accounts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS mailboxes_read_insert AFTER INSERT ON mailboxes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS mailboxes_read_update AFTER UPDATE ON mailboxes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS mailboxes_read_delete AFTER DELETE ON mailboxes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS messages_read_insert AFTER INSERT ON messages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS messages_read_update AFTER UPDATE ON messages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS messages_read_delete AFTER DELETE ON messages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS events_read_insert AFTER INSERT ON events BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS events_read_update AFTER UPDATE ON events BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS events_read_delete AFTER DELETE ON events BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS rules_read_insert AFTER INSERT ON rules BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS rules_read_update AFTER UPDATE ON rules BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS rules_read_delete AFTER DELETE ON rules BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS decisions_read_insert AFTER INSERT ON decisions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS decisions_read_update AFTER UPDATE ON decisions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS decisions_read_delete AFTER DELETE ON decisions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS flag_decisions_read_insert AFTER INSERT ON flag_decisions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS flag_decisions_read_update AFTER UPDATE ON flag_decisions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS flag_decisions_read_delete AFTER DELETE ON flag_decisions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS corrections_read_insert AFTER INSERT ON corrections BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS corrections_read_update AFTER UPDATE ON corrections BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS corrections_read_delete AFTER DELETE ON corrections BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

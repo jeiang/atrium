@@ -11,7 +11,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/textsearch"
@@ -23,12 +22,11 @@ type limits struct {
 }
 
 func readLimits(ctx context.Context, q Querier) (limits, error) {
-	r := endpoint.Read(ctx, q)
 	l := limits{
-		rrfK: r.Int(mail.KeySearchRRFK), branchLimit: r.Int(mail.KeySearchBranchLimit), maxTerms: r.Int(mail.KeySearchMaxTerms),
-		snippetTokens: r.Int(mail.KeySearchSnippetTokens), snippetChars: r.Int(mail.KeySearchSnippetChars), knnMax: r.Int(mail.KeyKNNMax),
+		rrfK: mail.TuningMailSearchRrfK, branchLimit: mail.TuningMailSearchBranchLimit, maxTerms: mail.TuningMailSearchMaxTerms,
+		snippetTokens: mail.TuningMailSearchSnippetTokens, snippetChars: mail.TuningMailSearchSnippetChars, knnMax: mail.TuningKnnMax,
 	}
-	return l, r.Err()
+	return l, nil
 }
 
 const baseSelect = "SELECT m.id, m.account, COALESCE(c.folder, m.folder, m.location) AS folder, m.from_addr, m.from_name, " +
@@ -154,9 +152,8 @@ func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit
 	if err != nil {
 		return nil, err
 	}
-	table := idx.MessageTable()
-	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&total); err != nil {
+	total, err := embed.MessageCount(ctx, q, idx)
+	if err != nil {
 		return nil, err
 	}
 	if total == 0 {
@@ -169,13 +166,7 @@ func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit
 	}
 	for {
 		k = min(k, total, knnMax)
-		knn := "SELECT rowid FROM " + table + " WHERE embedding MATCH ? AND k = ?"
-		args := []any{blob, k}
-		if f.Account != nil {
-			knn += " AND account = ?"
-			args = append(args, *f.Account)
-		}
-		hits, err := ids(q.QueryContext(ctx, knn, args...))
+		hits, err := embed.MessageIDs(ctx, q, idx, blob, k, f.Account)
 		if err != nil {
 			return nil, err
 		}
@@ -198,18 +189,19 @@ func semantic(ctx context.Context, q Querier, vector []float64, f Filters, limit
 			return ranked[:min(len(ranked), limit)], nil
 		}
 		if k == knnMax {
-			return exactSemantic(ctx, q, table, blob, where, params, limit)
+			return exactSemantic(ctx, q, idx, blob, where, params, limit)
 		}
 		k *= 4
 	}
 }
 
-func exactSemantic(ctx context.Context, q Querier, table string, blob []byte, where string, params []any, limit int) ([]int64, error) {
-	return ids(q.QueryContext(ctx,
-		"SELECT v.rowid FROM "+table+" v WHERE v.rowid IN "+
-			"(SELECT m.id FROM messages m LEFT JOIN corrections c ON c.message_id = m.id WHERE "+where+") "+
-			"ORDER BY vec_distance_cosine(v.embedding, ?) LIMIT ?",
-		slices.Concat(params, []any{blob, limit})...))
+func exactSemantic(ctx context.Context, q Querier, idx embed.Index, blob []byte, where string, params []any, limit int) ([]int64, error) {
+	candidates, err := ids(q.QueryContext(ctx,
+		"SELECT m.id FROM messages m LEFT JOIN corrections c ON c.message_id = m.id WHERE "+where, params...))
+	if err != nil {
+		return nil, err
+	}
+	return embed.MessageRank(ctx, q, idx, blob, candidates, limit)
 }
 
 func bodyHead(ctx context.Context, q Querier, list []int64, snippetChars int) (map[int64]string, error) {
@@ -291,10 +283,10 @@ func newHit(info Info, head string, marked *string) Hit {
 	return Hit{Info: info, Snippet: snippet.String()}
 }
 
-func recent(ctx context.Context, q Querier, f Filters, limit, snippetChars int) ([]Hit, error) {
+func recent(ctx context.Context, q Querier, f Filters, limit, offset, snippetChars int) ([]Hit, error) {
 	where, params := filterSQL(f)
-	infos, err := infoRows(q.QueryContext(ctx, baseSelect+" WHERE "+where+" ORDER BY m.date_ts DESC, m.id DESC LIMIT ?",
-		slices.Concat(params, []any{limit})...))
+	infos, err := infoRows(q.QueryContext(ctx, baseSelect+" WHERE "+where+" ORDER BY m.date_ts DESC, m.id DESC LIMIT ? OFFSET ?",
+		slices.Concat(params, []any{limit, offset})...))
 	if err != nil {
 		return nil, err
 	}
@@ -322,6 +314,7 @@ type Query struct {
 	Text    string
 	Filters Filters
 	Limit   int
+	Offset  int
 }
 
 func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFunc) (Result, error) {
@@ -343,7 +336,7 @@ func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFun
 	}
 	query := strings.TrimSpace(req.Text)
 	if query == "" {
-		hits, err := recent(ctx, q, f, limit, lim.snippetChars)
+		hits, err := recent(ctx, q, f, limit, req.Offset, lim.snippetChars)
 		return Result{Hits: hits}, err
 	}
 	match, err := textsearch.FTSQueryTerms(query, lim.maxTerms)
@@ -381,7 +374,7 @@ func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFun
 		marked[h.id] = h.snippet
 	}
 	fused := textsearch.RRFWith(lim.rrfK, lexIDs, sem)
-	fused = fused[:min(len(fused), max(limit, 0))]
+	fused = fused[min(len(fused), max(req.Offset, 0)):min(len(fused), max(req.Offset, 0)+max(limit, 0))]
 	fusedIDs := make([]int64, len(fused))
 	for i, s := range fused {
 		fusedIDs[i] = s.ID

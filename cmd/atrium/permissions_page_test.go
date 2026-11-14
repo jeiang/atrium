@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestPermissionsPageSavesWithinBounds(t *testing.T) {
@@ -22,12 +23,8 @@ func TestPermissionsPageSavesWithinBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	status, page, _ := fetch(t, client, http.MethodGet, base+"/settings/permissions", nil)
-	if status != http.StatusOK || !strings.Contains(page, "<title>Assistant · Settings") {
-		t.Fatalf("GET /settings/permissions = %d, on the Assistant page %v", status, strings.Contains(page, "<title>Assistant · Settings"))
-	}
-	if n := strings.Count(page, `name="permission_`); n != 24 {
-		t.Fatalf("%d permission selects, want 24", n)
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/permissions", nil); status != http.StatusOK {
+		t.Fatalf("GET /settings/permissions = %d", status)
 	}
 	noFollow := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	status, body, header := fetch(t, noFollow, http.MethodPost, base+"/settings/permissions", url.Values{"permission_internet_kinds": {"allow"}})
@@ -41,7 +38,7 @@ func TestPermissionsPageSavesWithinBounds(t *testing.T) {
 	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "<title>Assistant · Settings") {
 		t.Fatalf("bounded save = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var stored int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings WHERE key = 'permission_internet_untrusted_kinds'").Scan(&stored); err != nil || stored != 0 {

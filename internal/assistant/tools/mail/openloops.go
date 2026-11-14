@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/mail/openloops"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -20,39 +19,43 @@ func enum(values ...string) string {
 	return string(b)
 }
 
-var loopsLimitBound = tool.NewBound(assistant.KeyMailMaxLoopsLimit, "")
+var loopsLimitBound = tool.NewCeiling(mailapp.AgentMailMaxLoopsLimit, 1, mailapp.AgentMailMaxLoopsLimit)
 
 var openLoopsSchema = json.RawMessage(`{"type":"object","properties":{"state":{"type":"string","enum":` +
-	enum(openloops.States[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
+	enum(mailapp.LoopStates[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
 	`"additionalProperties":false}`)
 
 var commitmentsSchema = json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","enum":` +
-	enum(openloops.CommitmentStatuses[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
+	enum(mailapp.CommitmentStatuses[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
 	`"additionalProperties":false}`)
 
-func openLoopTools() []tool.Tool {
+func openLoopTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	return []tool.Tool{
 		{
 			Name: "open_loops",
 			Description: "List mail threads that need follow-up: owe_reply (someone wrote last and awaits the operator) and " +
 				"waiting_on_them (the operator wrote last and got no answer). Snoozed and dismissed loops are hidden.",
 			InputSchema: openLoopsSchema,
-			Handler:     openLoops,
-			Effect:      tool.Read,
-			Annotated:   true,
-			Marks:       tool.PII | tool.Messages | tool.Untrusted,
-			Contexts:    loopKinds,
+			Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+				return openLoops(ctx, tc, args, svc)
+			},
+			Effect:    tool.Read,
+			Annotated: true,
+			Marks:     tool.PII | tool.Messages | tool.Untrusted,
+			Contexts:  loopKinds,
 		},
 		{
 			Name: "commitments",
 			Description: "List explicit commitments and deadlines extracted from mail (owner 'me' = the operator promised, " +
 				"'them' = the other party). due is an explicit date or null. Status defaults to all.",
 			InputSchema: commitmentsSchema,
-			Handler:     commitments,
-			Effect:      tool.Read,
-			Annotated:   true,
-			Marks:       tool.Messages | tool.Untrusted,
-			Contexts:    loopKinds,
+			Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+				return commitments(ctx, tc, args, svc)
+			},
+			Effect:    tool.Read,
+			Annotated: true,
+			Marks:     tool.Messages | tool.Untrusted,
+			Contexts:  loopKinds,
 		},
 	}
 }
@@ -73,8 +76,8 @@ func oneOf(args tool.Args, name string, allowed []string) (string, error) {
 	return "", tool.Error(name + " must be one of " + strings.Join(allowed, ", "))
 }
 
-func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	state, err := oneOf(args, "state", openloops.States[:])
+func openLoops(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
+	state, err := oneOf(args, "state", mailapp.LoopStates[:])
 	if err != nil {
 		return nil, err
 	}
@@ -82,15 +85,15 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	now := tc.Now()
-	loc, err := zone(ctx, tc.Env)
+	loc, err := zone(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
-	items, err := openloops.ListLoops(ctx, tc.DB.Read, now, state, int(limit), false)
+	read, err := svc(tc).OpenLoops(ctx, mailapp.OpenLoopsInput{State: state, Limit: int(limit)})
 	if err != nil {
 		return nil, err
 	}
+	items := read.Data.Loops
 	loops := make([]any, len(items))
 	marks := tool.Marks(0)
 	for i, l := range items {
@@ -105,8 +108,8 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, erro
 	return tool.Marked{Value: map[string]any{"loops": loops, "note": "owe_reply: the last message in the thread is theirs and awaits the operator; waiting_on_them: the operator wrote last."}, Marks: marks}, nil
 }
 
-func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	status, err := oneOf(args, "status", openloops.CommitmentStatuses[:])
+func commitments(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
+	status, err := oneOf(args, "status", mailapp.CommitmentStatuses[:])
 	if err != nil {
 		return nil, err
 	}
@@ -114,10 +117,11 @@ func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	if err != nil {
 		return nil, err
 	}
-	items, err := openloops.ListCommitments(ctx, tc.DB.Read, status, int(limit))
+	read, err := svc(tc).Commitments(ctx, mailapp.CommitmentsInput{Status: status, Limit: int(limit)})
 	if err != nil {
 		return nil, err
 	}
+	items := read.Data.Commitments
 	out := make([]any, len(items))
 	marks := tool.Marks(0)
 	for i, c := range items {

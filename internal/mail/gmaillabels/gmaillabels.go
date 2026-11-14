@@ -10,7 +10,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -44,13 +43,9 @@ func (m mailbox) labels() []string {
 
 func load(ctx context.Context, q proposals.Querier, account string) (mailbox, error) {
 	m := mailbox{members: map[string][]int64{}, rows: map[int64]scanutil.Message{}}
-	r := endpoint.Read(ctx, q)
-	m.maxMessages = r.Int(mail.KeyGmailLabelsMaxMessages)
-	m.minTarget = r.Int(mail.KeyGmailLabelsMinTarget)
-	m.minOverlap = r.Float(mail.KeyGmailLabelsMinOverlap)
-	if err := r.Err(); err != nil {
-		return m, err
-	}
+	m.maxMessages = mail.TuningGmailLabelsMaxMessages
+	m.minTarget = mail.TuningGmailLabelsMinTargetMessages
+	m.minOverlap = mail.TuningGmailLabelsMinOverlap
 	rows, err := q.QueryContext(ctx, "SELECT id, labels, subject, from_name, from_addr, date_ts FROM messages "+
 		"WHERE account = ? AND gone_at IS NULL AND sent = 0", account)
 	if err != nil {

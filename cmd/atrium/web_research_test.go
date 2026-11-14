@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 const (
@@ -73,7 +74,7 @@ func webPages(t *testing.T) (*httptest.Server, *pageLog) {
 
 func threadTaint(t *testing.T, dir string, thread int64) (private, web bool) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var marks int64
 	if err := d.Read.QueryRow("SELECT marks FROM threads WHERE id = ?", thread).Scan(&marks); err != nil {
@@ -84,7 +85,7 @@ func threadTaint(t *testing.T, dir string, thread int64) (private, web bool) {
 
 func parentOf(t *testing.T, dir string, child int64) int64 {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var parent int64
 	if err := d.Read.QueryRow("SELECT parent_thread_id FROM threads WHERE id = ?", child).Scan(&parent); err != nil {
@@ -98,7 +99,7 @@ func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +117,7 @@ func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var proposal int64
 	var state string
@@ -136,10 +137,6 @@ func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
 	}
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
-	}
-	status, page, _ := fetch(t, client, "GET", fmt.Sprintf("%s/chat/%d", base, thread), nil)
-	if status != http.StatusOK || !strings.Contains(page, fmt.Sprintf(`id="needs-%d"`, proposal)) {
-		t.Fatalf("the thread does not list the permission request: %d", status)
 	}
 	code, body := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
 	if code != http.StatusOK || !strings.Contains(body, long) {

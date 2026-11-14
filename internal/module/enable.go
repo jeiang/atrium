@@ -6,13 +6,15 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
-	HoldOff    = "off"
-	HoldPinned = "pinned"
-	HoldNeeds  = string(NeedsSettings)
-	HoldDone   = "enabled"
+	HoldOff         = "off"
+	HoldPinned      = "pinned"
+	HoldNeeds       = string(NeedsSettings)
+	HoldUnavailable = string(Unavailable)
+	HoldDone        = "enabled"
 )
 
 type Hold struct {
@@ -22,7 +24,7 @@ type Hold struct {
 }
 
 func (s *Set) flagged(name string) bool {
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if r.Name == name {
 			return !r.Core
 		}
@@ -49,8 +51,13 @@ func (s *Set) Held(ctx context.Context, q db.Querier, name string) (Hold, error)
 	}
 	err = s.Guard(ctx, q, FlagKey(name), "true")
 	var needs *NeedsSettingsError
-	if errors.As(err, &needs) {
+	var unavailable *UnavailableError
+	switch {
+	case errors.As(err, &needs):
 		h.Result, h.Detail = HoldNeeds, joinReasons(needs.Unmet)
+		return h, nil
+	case errors.As(err, &unavailable):
+		h.Result, h.Detail = HoldUnavailable, unavailable.Err
 		return h, nil
 	}
 	if err != nil {
@@ -62,7 +69,7 @@ func (s *Set) Held(ctx context.Context, q db.Querier, name string) (Hold, error)
 
 func (s *Set) Enable(ctx context.Context, d *db.DB, name string) (Hold, error) {
 	var h Hold
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	err := settings.WithTx(WithSet(ctx, s), d, func(tx *sql.Tx) error {
 		var err error
 		if h, err = s.Held(ctx, tx, name); err != nil || h.Result != HoldOff {
 			return err

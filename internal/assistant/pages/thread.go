@@ -7,45 +7,44 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/projects"
-	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
 
-func (p *pages) loadThread(w http.ResponseWriter, r *http.Request, threadID int64) (*ThreadData, bool) {
-	v, err := service.View(r.Context(), p.deps.DB.Read, threadID)
-	check(err)
-	if v == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
-		return nil, false
-	}
-	view, err := threadView(v)
-	check(err)
-	return view, true
+func (p *pages) readFailed(w http.ResponseWriter, r *http.Request, err error) {
+	web.Fail(w, r, err, func(status int) { p.fail(w, r, status, application.Classify(err).Error()) })
 }
 
-func (p *pages) loadRun(w http.ResponseWriter, r *http.Request, threadID, runID int64) (*journal.Run, bool) {
-	found, err := journal.GetRun(r.Context(), p.deps.DB.Read, runID)
-	check(err)
-	if found == nil || found.ThreadID != threadID {
-		p.fail(w, r, http.StatusNotFound, "unknown run")
+func (p *pages) loadThread(w http.ResponseWriter, r *http.Request, threadID int64) (*asstapp.Transcript, bool) {
+	read, err := p.assistant().Transcript(r.Context(), asstapp.TranscriptInput{ID: threadID})
+	if err != nil {
+		p.readFailed(w, r, err)
 		return nil, false
 	}
-	return found, true
+	return &read.Data, true
 }
 
-func threadOf(view *ThreadData) threads.Thread { return view.Thread }
+func (p *pages) loadRun(w http.ResponseWriter, r *http.Request, threadID, runID int64) (*asstapp.Run, bool) {
+	read, err := p.assistant().RunDetail(r.Context(), asstapp.RunInput{ThreadID: threadID, RunID: runID})
+	if err != nil {
+		p.readFailed(w, r, err)
+		return nil, false
+	}
+	return &read.Data, true
+}
 
-func itemsOf(view *ThreadData) []*service.Item { return view.Items }
+func threadOf(view *asstapp.Transcript) asstapp.Thread { return view.Thread }
 
-func seqOf(item *service.Item) int64 { return item.Seq }
+func itemsOf(view *asstapp.Transcript) []*asstapp.Item { return view.Items }
 
-func runOf(item *service.Item) int64 {
+func seqOf(item *asstapp.Item) int64 { return item.Seq }
+
+func runOf(item *asstapp.Item) int64 {
 	if item.RunID != nil {
 		return *item.RunID
 	}
@@ -58,8 +57,8 @@ func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID i
 		return nil, false
 	}
 	t := threadOf(view)
-	return &ThreadPage{View: view, ThreadID: threadID, History: p.hasHistory(r.Context(), threadID),
-		Composer: composerData(r.Context(), t.Model, t.Effort, t.Thinking, threads.ContextLimitOf(t), bool(t.WebSearch), t.CostCapUSD, threadID)}, true
+	return &ThreadPage{View: view, ThreadID: threadID, History: view.History,
+		Composer: asstapp.ThreadComposer(r.Context(), t, threadID)}, true
 }
 
 func (p *pages) transcript(w http.ResponseWriter, r *http.Request, threadID int64, reswap string) {
@@ -83,18 +82,17 @@ func (p *pages) chatThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	work, err := workView(ctx, p.deps.DB.Read, threadID, p.now())
+	work, err := p.assistant().Work(ctx, asstapp.ThreadInput{ID: threadID})
 	check(err)
-	list, err := projects.List(ctx, p.deps.DB.Read, false)
+	list, err := p.assistant().ProjectList(ctx, asstapp.ProjectListInput{})
 	check(err)
-	if list == nil {
-		list = []projects.Project{}
-	}
-	data.Work, data.Projects, data.Project = work, list, nil
+	data.Work, data.Projects, data.Project = work.Data, list.Data, nil
 	if t := threadOf(data.View); t.ProjectID != nil && *t.ProjectID != 0 {
-		project, err := projects.Get(ctx, p.deps.DB.Read, *t.ProjectID)
-		check(err)
-		data.Project = project
+		found, err := p.assistant().ProjectDetail(ctx, asstapp.ProjectInput{ID: *t.ProjectID})
+		if application.Classify(err).Code != application.NotFound {
+			check(err)
+			data.Project = &found.Data.Project
+		}
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread.gohtml", data)
@@ -119,26 +117,16 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	thread, err := threads.Get(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	if thread == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
-		return
-	}
-	if thread.Kind == threads.Subagent {
-		p.fail(w, r, http.StatusConflict, "subagent threads are read-only")
-		return
-	}
-	attached, ok := p.attach(w, r, thread, uploads)
-	if !ok {
-		return
-	}
+	in := asstapp.SendInput{ThreadID: threadID, Text: text, Files: uploads, Operator: true}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
 	if edit, _ := web.Value(form, "edit"); edit != "" {
-		_, err := p.svc.EditLast(ctx, threadID, text, attached)
+		_, err := p.assistant().MessageEdit(ctx, in)
 		if p.refused(w, r, err) {
 			return
 		}
+		reply, cancel := context.WithTimeout(ctx, replyTimeout)
+		defer cancel()
+		r = r.WithContext(reply)
 		if !web.IsPartial(r) {
 			redirect(w, r, back)
 			return
@@ -146,10 +134,14 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		p.transcript(w, r, threadID, "innerHTML")
 		return
 	}
-	sent, err := p.svc.Send(ctx, threadID, text, attached)
+	change, err := p.assistant().MessageSend(ctx, in)
 	if p.refused(w, r, err) {
 		return
 	}
+	reply, cancel := context.WithTimeout(ctx, replyTimeout)
+	defer cancel()
+	r = r.WithContext(reply)
+	sent := change.Data
 	if !web.IsPartial(r) {
 		redirect(w, r, back)
 		return
@@ -158,25 +150,25 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if sent.Queued {
-		queued := []QueuedView{}
+	if sent.QueuedID != 0 {
+		queued := []asstapp.Queued{}
 		for _, q := range view.Queued {
-			if q.ID == sent.ID {
+			if q.ID == sent.QueuedID {
 				queued = append(queued, q)
 			}
 		}
 		p.fragment(w, r, http.StatusOK, "_queued.gohtml", QueuedData{Queued: queued})
 		return
 	}
-	items := []*service.Item{}
+	items := []*asstapp.Item{}
 	var after int64
 	for _, item := range itemsOf(view) {
-		if runOf(item) == sent.ID {
+		if runOf(item) == sent.RunID {
 			items = append(items, item)
 			after = max(after, seqOf(item))
 		}
 	}
-	p.fragment(w, r, http.StatusOK, "_run_started.gohtml", RunStarted{View: view, ThreadID: threadID, RunID: sent.ID, Items: items, After: after})
+	p.fragment(w, r, http.StatusOK, "_run_started.gohtml", RunStarted{View: view, ThreadID: threadID, RunID: sent.RunID, Items: items, After: after})
 }
 
 func (p *pages) chatRegenerate(w http.ResponseWriter, r *http.Request) {
@@ -184,8 +176,7 @@ func (p *pages) chatRegenerate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := p.svc.Regenerate(detached(r), threadID)
-	if p.refused(w, r, err) {
+	if _, err := p.assistant().ReplyRegenerate(detached(r), asstapp.ThreadInput{ID: threadID}); p.refused(w, r, err) {
 		return
 	}
 	if !web.IsPartial(r) {
@@ -200,16 +191,7 @@ func (p *pages) chatStop(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx := detached(r)
-	active, err := journal.ActiveRun(ctx, p.deps.DB.Read, threadID)
-	check(err)
-	stopped := false
-	if active != nil {
-		stopped, err = journal.RequestStop(ctx, p.deps.DB.Write, active.ID)
-		check(err)
-	}
-	if !stopped {
-		p.fail(w, r, http.StatusConflict, "no run is running")
+	if _, err := p.assistant().RunStop(detached(r), asstapp.ThreadInput{ID: threadID}); p.refused(w, r, err) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -231,31 +213,15 @@ func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	parent, err := threads.Get(detached(r), p.deps.DB.Read, threadID)
-	check(err)
-	if parent != nil && parent.ProjectID != nil && *parent.ProjectID != 0 {
-		project, err := projects.Get(detached(r), p.deps.DB.Read, *parent.ProjectID)
-		check(err)
-		if project != nil {
-			if problem, archived := archivedProject(project, "start chats in it"); archived {
-				p.failure(w, r, "Project archived", problem)
-				return
-			}
-		}
-	}
-	child, err := p.svc.Branch(detached(r), threadID, seq)
-	var unknown service.UnknownThread
-	var redo service.NothingToRedo
-	switch {
-	case errors.As(err, &unknown):
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
-		return
-	case errors.As(err, &redo):
+	branched, err := p.assistant().ThreadBranch(detached(r), asstapp.BranchInput{ThreadID: threadID, Seq: seq})
+	if errors.As(err, new(asstapp.NothingToRedo)) {
 		p.fail(w, r, http.StatusNotFound, err.Error())
 		return
 	}
-	check(err)
-	redirect(w, r, "/chat/"+strconv.FormatInt(child, 10))
+	if p.refused(w, r, err) {
+		return
+	}
+	redirect(w, r, "/chat/"+strconv.FormatInt(branched.Data.ThreadID, 10))
 }
 
 func (p *pages) chatWork(w http.ResponseWriter, r *http.Request) {
@@ -267,9 +233,9 @@ func (p *pages) chatWork(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	work, err := workView(r.Context(), p.deps.DB.Read, threadID, p.now())
+	work, err := p.assistant().Work(r.Context(), asstapp.ThreadInput{ID: threadID})
 	check(err)
-	data.Work = work
+	data.Work = work.Data
 	p.fragment(w, r, http.StatusOK, "_work_update.gohtml", data)
 }
 
@@ -303,17 +269,21 @@ func (p *pages) chatRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if found.State == journal.Running {
+	if found.State == asstapp.RunRunning {
 		p.fragment(w, r, http.StatusOK, "_run_live.gohtml", RunLive{View: view, ThreadID: threadID, RunID: runID, After: after})
 		return
 	}
-	items := []*service.Item{}
+	items := []*asstapp.Item{}
 	for _, item := range itemsOf(view) {
 		if seqOf(item) > after && runOf(item) == runID {
 			items = append(items, item)
 		}
 	}
-	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", RunDone{View: view, ThreadID: threadID, Run: found, Items: items})
+	work, err := p.assistant().Work(r.Context(), asstapp.ThreadInput{ID: threadID})
+	check(err)
+	pending, err := p.assistant().NeedsCount(r.Context())
+	check(err)
+	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", tpl.Fragment{PendingCount: pending, Data: RunDone{View: view, ThreadID: threadID, Run: found, Items: items, Work: work.Data}})
 }
 
 func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
@@ -326,12 +296,9 @@ func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
 	if _, ok := p.loadRun(w, r, threadID, runID); !ok {
 		return
 	}
-	err := p.svc.StartResume(detached(r), runID)
-	if errors.As(err, new(service.NotInterrupted)) {
-		p.fail(w, r, http.StatusConflict, "run is not interrupted")
+	if _, err := p.assistant().RunResume(detached(r), asstapp.ResumeInput{ThreadID: threadID, RunID: runID}); p.refused(w, r, err) {
 		return
 	}
-	check(err)
 	if !web.IsPartial(r) {
 		redirect(w, r, "/chat/"+strconv.FormatInt(threadID, 10))
 		return
@@ -358,8 +325,7 @@ func (p *pages) chatAnswer(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.FieldError{Loc: []string{"body", "text"}, Msg: "Type an answer first."})
 		return
 	}
-	if err := p.svc.Answer(detached(r), threadID, text); err != nil {
-		p.fail(w, r, http.StatusConflict, err.Error())
+	if _, err := p.assistant().RunAnswer(detached(r), asstapp.AnswerInput{ThreadID: threadID, Text: text}); p.refused(w, r, err) {
 		return
 	}
 	if !web.IsPartial(r) {

@@ -7,12 +7,12 @@ import (
 
 const settingKey = "key"
 
-func init() {
-	settings.MustRegister(settings.Secret(settings.SecretOpts{PinOnly: true}, settings.Def{
+func Settings() []settings.Def {
+	return []settings.Def{settings.Secret(settings.SecretOpts{PinOnly: true}, settings.Def{
 		Key: settingKey, Module: "db", Type: settings.String, Check: func(value string) error {
 			if _, err := db.ParseKey(value); err != nil {
 				return settings.Invalid("must be 64 hex digits")
 			}
 			return nil
-		}}))
+		}})}
 }

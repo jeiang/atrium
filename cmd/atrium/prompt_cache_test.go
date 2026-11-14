@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -75,7 +76,7 @@ func TestChatStepsReadTheCachedPrefixAndSeeTheTailVerbatim(t *testing.T) {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	thread := latestThread(t, dir)
-	setEnv(t, settingEnv(memory.VerbatimTokensKey), "0")
+	seedSettings(t, map[string]string{memory.VerbatimTokensKey: "0"})
 
 	long := strings.TrimSpace(strings.Repeat("The operator explains one more constraint in detail. ", 60))
 	items := make([]map[string]any, 20)
@@ -97,6 +98,12 @@ func TestChatStepsReadTheCachedPrefixAndSeeTheTailVerbatim(t *testing.T) {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	endedAt := time.Now().Add(time.Minute)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	planned := "ok thread:" + fmt.Sprint(thread) + " "
+	if got := operationAudits(t, d, "assistant.plan.replace"); len(got) != 2 || !strings.HasPrefix(got[0], planned) || !strings.HasPrefix(got[1], planned) {
+		t.Errorf("plan audits: %q", got)
+	}
 	requests := api.Requests()[sent:]
 	if len(requests) != 3 {
 		t.Fatalf("%d model requests, want 3", len(requests))

@@ -150,7 +150,7 @@ func needsUserinfo(id identity, cfg Config) bool {
 	return cfg.GroupsClaim != "" && !id.HasGroups
 }
 
-func (c Config) decide(id identity) (access, admin bool) {
+func (c Config) decide(id identity) bool {
 	emailOK := id.EmailVerified && id.Email != ""
 	domain := id.Email[strings.LastIndexByte(id.Email, '@')+1:]
 	if c.Preset.DomainClaim != "" {
@@ -159,7 +159,10 @@ func (c Config) decide(id identity) (access, admin bool) {
 	if domain == "" {
 		domain = "\x00"
 	}
-	admin = slices.Contains(id.Groups, c.AdminGroup) || (emailOK && (slices.Contains(c.AdminEmails, id.Email) || slices.Contains(c.AdminDomains, domain)))
-	access = admin || slices.Contains(id.Groups, c.AccessGroup) || (emailOK && (slices.Contains(c.AccessEmails, id.Email) || slices.Contains(c.AccessDomains, domain)))
-	return access, admin
+	for _, group := range c.AccessGroups {
+		if slices.Contains(id.Groups, group) {
+			return true
+		}
+	}
+	return emailOK && (slices.Contains(c.AccessEmails, id.Email) || slices.Contains(c.AccessDomains, domain))
 }

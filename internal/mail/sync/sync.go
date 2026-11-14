@@ -19,7 +19,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
@@ -32,9 +32,8 @@ type limits struct {
 }
 
 func readLimits(ctx context.Context, q db.Querier) (limits, error) {
-	r := endpoint.Read(ctx, q)
-	l := limits{fetchBatch: r.Int(mail.KeyFetchBatch), flagBatch: r.Int(mail.KeyFlagBatch), sentBackfillDays: r.Int(mail.KeySentBackfillDays), ftsBodyChars: r.Int(mail.KeyFTSBodyChars)}
-	return l, r.Err()
+	l := limits{fetchBatch: mail.TuningMailFetchBatch, flagBatch: mail.TuningMailFlagBatch, sentBackfillDays: mail.TuningSentBackfillDays, ftsBodyChars: mail.TuningMailFtsBodyChars}
+	return l, nil
 }
 
 var (
@@ -63,7 +62,7 @@ func (s *Syncer) now() float64 {
 }
 
 func (s *Syncer) One(ctx context.Context, account string, open mail.OpenFunc) (Stats, error) {
-	client, err := open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read})
+	client, err := open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read, ReadOnly: true})
 	if err != nil {
 		return Stats{}, err
 	}
@@ -172,7 +171,12 @@ func (s *Syncer) retireMailboxes(ctx context.Context, account string, listed map
 			return err
 		}
 		if len(ids) > 0 {
-			if _, err := s.DB.Write.ExecContext(ctx, "UPDATE messages SET gone_at = ? WHERE mailbox_id = ? AND gone_at IS NULL", run, mb.ID); err != nil {
+			if err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+				if _, err := tx.ExecContext(ctx, "UPDATE messages SET gone_at = ? WHERE mailbox_id = ? AND gone_at IS NULL", run, mb.ID); err != nil {
+					return err
+				}
+				return embed.DeleteMessages(ctx, tx, ids)
+			}); err != nil {
 				return err
 			}
 			stats.GoneIDs = append(stats.GoneIDs, ids...)
@@ -292,11 +296,28 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 	}
 	prev := mbx.Checkpoint
 	if prev.Valid && prev.Validity != validity {
-		if _, err := s.DB.Write.ExecContext(ctx, "UPDATE messages SET gone_at = ? WHERE mailbox_id = ? AND gone_at IS NULL", run, mbx.ID); err != nil {
+		rows, err := s.DB.Read.QueryContext(ctx, "SELECT id FROM messages WHERE mailbox_id = ? AND gone_at IS NULL", mbx.ID)
+		if err != nil {
 			return err
 		}
-		if _, err := s.DB.Write.ExecContext(ctx,
-			"UPDATE mailboxes SET uidvalidity = NULL, highest_uid = 0, highestmodseq = NULL WHERE id = ?", mbx.ID); err != nil {
+		ids, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
+			var id int64
+			return id, r.Scan(&id)
+		})
+		if err != nil {
+			return err
+		}
+		if err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+			if _, err := tx.ExecContext(ctx, "UPDATE messages SET gone_at = ? WHERE mailbox_id = ? AND gone_at IS NULL", run, mbx.ID); err != nil {
+				return err
+			}
+			if err := embed.DeleteMessages(ctx, tx, ids); err != nil {
+				return err
+			}
+			_, err := tx.ExecContext(ctx,
+				"UPDATE mailboxes SET uidvalidity = NULL, highest_uid = 0, highestmodseq = NULL WHERE id = ?", mbx.ID)
+			return err
+		}); err != nil {
 			return err
 		}
 		prev = checkpoint{}
@@ -345,12 +366,14 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 	}
 	if len(vanished) > 0 {
 		err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-			for _, r := range vanished {
+			ids := make([]int64, len(vanished))
+			for i, r := range vanished {
+				ids[i] = r.ID
 				if _, err := tx.ExecContext(ctx, "UPDATE messages SET gone_at = ? WHERE id = ?", run, r.ID); err != nil {
 					return err
 				}
 			}
-			return nil
+			return embed.DeleteMessages(ctx, tx, ids)
 		})
 		if err != nil {
 			return err

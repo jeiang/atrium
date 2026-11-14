@@ -67,11 +67,7 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 	if name == "" {
 		return cleaned{}, ProjectError("Give the project a name.")
 	}
-	r := assistant.Read(ctx, q)
-	maxName, maxInstructions := r.Int(assistant.KeyProjectNameChars), r.Int(assistant.KeyProjectInstructionChars)
-	if err := r.Err(); err != nil {
-		return cleaned{}, err
-	}
+	maxName, maxInstructions := assistant.TuningAgentProjectNameChars, assistant.TuningAgentProjectInstructionChars
 	if utf8.RuneCountInString(name) > maxName {
 		return cleaned{}, ProjectError(fmt.Sprintf("The name is limited to %d characters.", maxName))
 	}
@@ -129,6 +125,15 @@ func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
 func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 	rows, err := q.QueryContext(ctx,
 		listSQL+" WHERE p.archived = ? ORDER BY COALESCE(last_activity, p.updated_at) DESC, p.id DESC", store.Bit(archived))
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
+}
+
+func Page(ctx context.Context, q db.Querier, archived bool, after int64, limit int) ([]Project, error) {
+	rows, err := q.QueryContext(ctx,
+		listSQL+" WHERE p.archived = ? AND p.id > ? ORDER BY p.id LIMIT ?", store.Bit(archived), after, limit)
 	if err != nil {
 		return nil, err
 	}

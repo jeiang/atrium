@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/openloops"
 )
 
 type commitments struct{}
@@ -16,21 +17,13 @@ func Commitments() attention.Source { return commitments{} }
 func (commitments) Name() string { return "commitments" }
 
 func (commitments) Items(ctx context.Context, q db.Querier, now float64) ([]attention.Item, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT id, text, due, created_ts FROM commitments WHERE owner = 'me' AND status = 'open' AND due IS NOT NULL ORDER BY due")
+	found, err := openloops.AttentionCommitments(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	var items []attention.Item
-	for rows.Next() {
-		var id int64
-		var text, due string
-		var created float64
-		if err := rows.Scan(&id, &text, &due, &created); err != nil {
-			return nil, err
-		}
-		when, err := time.Parse("2006-01-02", due)
+	for _, c := range found {
+		when, err := time.Parse("2006-01-02", c.Due)
 		if err != nil {
 			continue
 		}
@@ -42,10 +35,10 @@ func (commitments) Items(ctx context.Context, q db.Querier, now float64) ([]atte
 			continue
 		}
 		items = append(items, attention.Item{
-			Kind: "commitment", SourceID: strconv.FormatInt(id, 10), Title: text, Detail: due,
-			Due: dueAt, Created: created, Group: group,
+			Kind: "commitment", SourceID: strconv.FormatInt(c.ID, 10), Title: c.Text, Detail: c.Due,
+			Due: dueAt, Created: c.CreatedTS, Group: group,
 			Actions: []attention.Action{{Kind: "done", Label: "Done"}, {Kind: "dismiss", Label: "Dismiss"}, {Kind: "snooze", Label: "Snooze"}},
 		})
 	}
-	return items, rows.Err()
+	return items, nil
 }

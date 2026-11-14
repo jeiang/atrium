@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/mail/report"
-	"github.com/jeiang/atrium/internal/mail/rules"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 )
 
 func (o Options) RulesCommand() *cli.Command {
@@ -22,11 +19,11 @@ func (o Options) RulesCommand() *cli.Command {
 		}),
 		o.leaf("export", func(*cli.Args) body {
 			return func(x *exec) error {
-				out, err := rules.ExportRules(x.Ctx, x.DB.Read)
+				read, err := x.opts.Application(x.Pass).RulesExport(x.Ctx, struct{}{})
 				if err != nil {
 					return err
 				}
-				b, err := json.MarshalIndent(out, "", "  ")
+				b, err := json.MarshalIndent(read.Data, "", "  ")
 				if err != nil {
 					return err
 				}
@@ -52,15 +49,15 @@ func importRules(x *exec, file string) error {
 	if err := json.Unmarshal(data, &document); err != nil {
 		return importJSONError(data, err)
 	}
-	count, err := rules.ImportRules(x.Ctx, x.DB, document)
+	done, err := x.opts.Application(x.Pass).RulesImport(x.Ctx, mailapp.RulesImportInput{Document: document})
 	if err != nil {
-		var ruleErr rules.RuleError
+		var ruleErr mailapp.RuleError
 		if errors.As(err, &ruleErr) {
 			return failure(cli.ExitUsage, err)
 		}
 		return err
 	}
-	x.Print(fmt.Sprintf("imported %d rules\n", count))
+	x.Print(fmt.Sprintf("imported %d rules\n", done.Data.Count))
 	return nil
 }
 
@@ -93,36 +90,24 @@ func (o Options) ShadowReportCommand() *cli.Command {
 			if a.Has("since") {
 				given = since
 			}
-			out, err := report.Build(x.Ctx, x.DB.Read, o.env(), given, clockTime(x.Now()))
+			out, err := o.Application(x.Pass).ShadowReport(x.Ctx, mailapp.ShadowReportInput{Since: given, Now: x.Now()})
 			if err != nil {
 				return err
 			}
-			x.Print(out)
+			x.Print(out.Data)
 			return nil
 		}
 	})
 }
 
-func clockTime(ts float64) time.Time {
-	return time.Unix(0, int64(ts*1e9))
-}
-
 func (o Options) ReindexCommand() *cli.Command {
 	return o.leaf("reindex", func(*cli.Args) body {
 		return func(x *exec) error {
-			url, err := embed.EmbedURL(x.Ctx, x.DB.Read)
+			out, err := o.Application(x.Pass).Reindex(x.Ctx, struct{}{})
 			if err != nil {
 				return err
 			}
-			ctx, err := embed.WithModels(x.Ctx, x.DB.Read)
-			if err != nil {
-				return err
-			}
-			n, err := embed.Reindex(ctx, x.DB, url)
-			if err != nil {
-				return err
-			}
-			x.Print(fmt.Sprintf("embedded %d messages\n", n))
+			x.Print(fmt.Sprintf("embedded %d messages\n", out.Data.Embedded))
 			return nil
 		}
 	})

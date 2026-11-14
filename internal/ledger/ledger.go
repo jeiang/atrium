@@ -3,6 +3,8 @@ package ledger
 type State string
 
 const (
+	Intent      State = "intent"
+	Done        State = "done"
 	Held        State = "held"
 	Applied     State = "applied"
 	OK          State = "ok"
@@ -34,19 +36,10 @@ func (s State) Settled() bool { return s == Settled || s == UndoSettled || s == 
 
 func (s State) Terminal() bool { return !s.Held() }
 
-func BlockedSQL(alias string) string {
-	return alias + ".state IN ('unknown', 'partial', 'undo_unknown', 'undo_partial')"
+func (s State) Final() bool {
+	return s == Done || s == Failed || s == Skipped || s == Partial || s == Unknown
 }
+
+func (s State) Blocking() bool { return s == Intent || s == Unknown || s == Partial }
 
 func ActiveSQL(alias string) string { return alias + ".state IN ('held', 'unknown', 'partial')" }
-
-func UnresolvedSQL(alias string) string {
-	return "EXISTS (SELECT 1 FROM proposal_actions " + alias + " WHERE " + alias + ".proposal_id = proposals.id AND " + ActiveSQL(alias) + ")"
-}
-
-var MailUnresolvedSQL = "(EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.uids') u WHERE " + ActiveSQL("pa") +
-	" AND u.value = m.uid AND COALESCE(json_extract(pa.action, '$.src_uidvalidity'), json_extract(pa.action, '$.uidvalidity')) = m.uidvalidity " +
-	"AND COALESCE(json_extract(pa.action, '$.src_imap'), json_extract(pa.action, '$.imap_name')) = mb.imap_name) OR " +
-	"EXISTS (SELECT 1 FROM proposal_actions pa, json_each(pa.action, '$.copied') u WHERE " + ActiveSQL("pa") + " AND " +
-	"u.key = CAST(m.uid AS TEXT) AND json_extract(pa.action, '$.src_uidvalidity') = m.uidvalidity " +
-	"AND json_extract(pa.action, '$.src_imap') = mb.imap_name))"

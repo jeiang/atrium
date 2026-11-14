@@ -3,15 +3,39 @@ package davmirror
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/runtime"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
-func SyncCommand(help, pass string, sync func(ctx context.Context, d *db.DB) (Stats, error)) *cli.Command {
+type Prepare func(ctx context.Context, d *db.DB) (func(context.Context) (Stats, error), error)
+
+func Pass(ctx context.Context, d *db.DB, pass string, prepare Prepare) (Stats, error) {
+	run, err := prepare(ctx, d)
+	if _, skip := errors.AsType[config.NotConfigured](err); skip {
+		return Stats{}, err
+	}
+	var st Stats
+	err = passrun.Track(ctx, d, pass, func() error {
+		if err != nil {
+			return err
+		}
+		var runErr error
+		st, runErr = run(ctx)
+		return runErr
+	})
+	return st, err
+}
+
+func SyncCommand(help, key, pass string, prepare Prepare) *cli.Command {
 	return &cli.Command{
 		Name: "sync",
 		Help: help,
@@ -21,7 +45,7 @@ func SyncCommand(help, pass string, sync func(ctx context.Context, d *db.DB) (St
 				if err != nil {
 					return cli.Fail(env, err)
 				}
-				d, err := db.Connect(cfg.DBPath)
+				d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(env.Ctx).DBKey()))
 				if err != nil {
 					return cli.Fail(env, err)
 				}
@@ -30,11 +54,17 @@ func SyncCommand(help, pass string, sync func(ctx context.Context, d *db.DB) (St
 					return cli.Fail(env, err)
 				}
 				var st Stats
-				err = passrun.Track(env.Ctx, d, pass, func() error {
-					var err error
-					st, err = sync(env.Ctx, d)
-					return err
+				var syncErr error
+				_, err = module.Invoke(env.Ctx, d, cfg, key, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+					st, syncErr = Pass(ctx, d, pass, prepare)
+					if missing, skip := errors.AsType[config.NotConfigured](syncErr); skip {
+						return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
+					}
+					return scheduler.Result{}, syncErr
 				})
+				if err == nil {
+					err = syncErr
+				}
 				if err != nil {
 					return cli.Fail(env, err)
 				}
@@ -43,5 +73,14 @@ func SyncCommand(help, pass string, sync func(ctx context.Context, d *db.DB) (St
 				return cli.ExitOK
 			}
 		},
+	}
+}
+
+func Job(owner, pass, prompt string, run func(context.Context, scheduler.Run) (scheduler.Result, error)) scheduler.Definition {
+	return scheduler.Definition{
+		Module: owner, Key: owner + "/" + pass, Name: pass, Kind: scheduler.JobBuiltin, Prompt: prompt,
+		Every: 15 * time.Minute, InitialDelay: time.Minute, Timeout: 10 * time.Minute, Spend: scheduler.ModelFree,
+		Backoff:  runtime.Backoff{Initial: time.Minute, Maximum: 15 * time.Minute},
+		Shutdown: scheduler.ShutdownCancel, RunsWhilePaused: true, Resources: []string{pass}, Needs: []string{owner}, Run: run,
 	}
 }

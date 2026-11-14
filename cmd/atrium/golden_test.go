@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/calendar"
 	caldav "github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
@@ -23,9 +26,11 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/golden"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 type cliGolden struct {
@@ -144,6 +149,10 @@ type fixture struct {
 	settings *settings.Registry
 	state    *config.State
 	base     string
+	flags    map[string]string
+	fakes    map[string]*mailtest.FakeClient
+	embedURL string
+	api      *anthropictest.Server
 }
 
 func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
@@ -151,35 +160,39 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	dir := t.TempDir()
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "contacts"), filepath.Join(dir, "contacts"))
-	srv := llmstub.Server(t, nil)
+	script := mailscript.Load(t)
+	embed := embedstub.Server(t)
+	api := anthropictest.New(t)
+	api.AnswerJSON(script.JSONAnswer)
 	caldavURL := caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"
 	vars := map[string]string{}
 	for k, v := range data.environment {
 		vars[k] = v
 	}
-	vars["ATRIUM_CALENDAR_ICLOUD_APPLE_ID"] = vars["ICLOUD_APPLE_ID"]
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
-	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
-	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
-	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
-	vars["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
+	vars[anthropic.BaseURLEnv] = api.URL
 	vars[calendar.CalDAVEnv] = caldavURL
 	for k, v := range extraEnv {
 		vars[k] = v
 	}
+	mode := vars["ATRIUM_MODE"]
+	qbitURL := vars["QBITTORRENT_URL"]
+	eztvURL := vars["EZTV_URL"]
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL", "ATRIUM_EMBED_URL": "ATRIUM_MAIL_MAIL_EMBED_URL",
-		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT", "QBITTORRENT_URL": "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL",
-		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
-		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR", "NOTION_TOKEN": "ATRIUM_NOTION_NOTION_TOKEN",
+		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
 	} {
 		if v, ok := vars[phaseA]; ok {
 			vars[canonical] = v
 		}
 		delete(vars, phaseA)
 	}
+	delete(vars, "ATRIUM_MODE")
+	delete(vars, "ATRIUM_MEDIA_MOVIES_URL")
+	delete(vars, "ATRIUM_MEDIA_TV_URL")
+	delete(vars, "QBITTORRENT_URL")
+	delete(vars, "EZTV_URL")
 	accounts := []mailAccount{
 		{"icloud", "icloud", vars["ICLOUD_MAIL_USERNAME"], vars["ICLOUD_APP_PASSWORD"], false},
 		{"gmail", "gmail", vars["GMAIL_ADDRESS"], vars["GMAIL_APP_PASSWORD"], false},
@@ -189,26 +202,71 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 			accounts[i] = mailAccount{a.id, a.preset, a.id, "unset", true}
 		}
 	}
-	vars[settingEnv(config.KeyMailAccountsFile)] = accountsFile(t, dir, accounts...)
-	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
+	anthropicKey := filepath.Join(testRoot, "host", "anthropic.key")
+	if value, ok := extraEnv["ANTHROPIC_API_KEY"]; ok && value == "" {
+		anthropicKey = ""
+	}
+	vars["ATRIUM_HOST_CONFIG"] = accountsFileEmbedding(t, dir, embed.URL+"/v1", anthropicKey, accounts...)
+	if qbitURL != "" {
+		hostPath := vars["ATRIUM_HOST_CONFIG"]
+		raw, err := os.ReadFile(hostPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := string(raw) + fmt.Sprintf(`
+[connections."service/qbittorrent"]
+kind = "service/qbittorrent"
+label = "qBittorrent"
+config = { url = %q }
+capabilities = ["api"]
+`, qbitURL) + defaultAgentConnection
+		if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if eztvURL != "" {
+		hostPath := vars["ATRIUM_HOST_CONFIG"]
+		raw, err := os.ReadFile(hostPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := string(raw) + fmt.Sprintf(`
+[connections."service/eztv"]
+kind = "service/eztv"
+label = "EZTV"
+config = { url = %q }
+capabilities = ["api"]
+`, eztvURL)
+		if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ATRIUM_NOTION_WIKI_ROOT", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}
 	env := config.Map(vars)
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
-			return mail.Gated(fakes[opts.Account], opts.Q), nil
+		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return fakes[opts.Account].Open(ctx, opts)
 		}
 	}
-	reg := settings.New()
-	st := config.NewState(reg)
-	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
+	app := newAppWith(env, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
-	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st}
-	fixturesByTest.Store(t, f)
-	fixturesByTest.Store(testKey(t), f)
-	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))
+	seedFlagsAt(t, app, filepath.Join(dir, "atrium.db"), allFlagsTrue())
+	if mode != "" {
+		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{mail.KeyMode: mode})
+	}
+	if wikiRoot := data.environment["ATRIUM_NOTION_WIKI_ROOT"]; wikiRoot != "" {
+		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{notion.WikiRootKey: wikiRoot})
+	}
+	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
+		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
+	}
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, embedURL: embed.URL + "/v1", api: api}
+	registerFixture(t, f)
+	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"), appKey(t, env))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
 	}
@@ -295,13 +353,13 @@ func copyFile(t *testing.T, from, to string) {
 	}
 }
 
-func seedNotionVectors(t *testing.T, path string) {
+func seedNotionVectors(t *testing.T, path string, key db.Key) {
 	t.Helper()
 	var vectors []notionVector
 	if err := json.Unmarshal(golden.ReadFile(t, ".", "notion_vec.json"), &vectors); err != nil {
 		t.Fatal(err)
 	}
-	d, err := db.Connect(path)
+	d, err := db.Connect(path, db.WithKey(key))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,9 +396,6 @@ func TestCLIGoldens(t *testing.T) {
 				argv[i] = strings.ReplaceAll(arg, "{tmp}", tmp)
 			}
 			limit := 60 * time.Second
-			if len(argv) > 0 && argv[0] == "watch" {
-				limit = 35 * time.Second
-			}
 			ctx, cancel := context.WithTimeout(context.Background(), limit)
 			defer cancel()
 			code, stdout, stderr := f.Run(ctx, argv...)
@@ -361,13 +416,13 @@ func TestCLIGoldens(t *testing.T) {
 	}
 }
 
-func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
+func TestWritingCommandsTakeTheMailPassLock(t *testing.T) {
 	t.Parallel()
 	data := loadGoldenData(t)
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {
 			f := newFixture(t, data, nil, "")
-			lock, err := db.Exclusive(context.Background(), filepath.Join(f.dir, "atrium.db"), db.ShortLockWait)
+			lock, err := db.ResourceLocks(context.Background(), filepath.Join(f.dir, "atrium.db"), []string{mail.PassResource}, db.ShortLockWait)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -426,5 +481,5 @@ func mediaServices(t *testing.T) map[string]string {
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return map[string]string{"QBITTORRENT_URL": srv.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": srv.URL + "/api/get-torrents"}
+	return map[string]string{"QBITTORRENT_URL": srv.URL, "EZTV_URL": srv.URL + "/api/get-torrents"}
 }

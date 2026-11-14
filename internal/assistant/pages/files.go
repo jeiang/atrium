@@ -2,7 +2,6 @@ package pages
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,44 +10,45 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"os"
-	"path"
-	"slices"
 	"strings"
-	"unicode/utf8"
+	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/files"
-	"github.com/jeiang/atrium/internal/assistant/projects"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 const (
 	uploadSlack = 1 << 20
-	sniffBytes  = 4096
 
 	badBodyDetail   = "There was an error parsing the body"
+	mediaTypeDetail = "Unsupported media type"
 	fieldBytes      = 1 << 20
 	bodyBufferBytes = 1 << 16
 	maxParts        = 1000
 	formBytes       = 4 << 20
 )
 
-var (
-	errBadBody    = errors.New("unparseable multipart body")
-	markdownTypes = []string{"text/markdown", "text/x-markdown"}
-	tableTypes    = []string{"text/csv", "application/csv", files.XLSXType}
+const (
+	formMedia      = "application/x-www-form-urlencoded"
+	multipartMedia = "multipart/form-data"
+	replyTimeout   = 10 * time.Second
 )
 
-func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, error) {
+var (
+	errBadBody   = errors.New("unparseable multipart body")
+	errMediaType = errors.New("unsupported media type")
+)
+
+func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []asstapp.UploadedFile, error) {
 	media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || !strings.HasPrefix(media, "multipart/") {
+	switch {
+	case err == nil && media == formMedia:
 		return web.FormValues(r), nil, nil
+	case err != nil || media != multipartMedia:
+		return url.Values{}, nil, errMediaType
 	}
-	limits, err := files.ReadLimits(r.Context(), p.deps.DB.Read)
+	limits, err := p.assistant().UploadLimits(r.Context())
 	check(err)
 	r.Body = http.MaxBytesReader(w, r.Body, int64(limits.MessageCap)+uploadSlack)
 	boundary := params["boundary"]
@@ -57,11 +57,14 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 	}
 	reader := multipart.NewReader(bufio.NewReaderSize(r.Body, bodyBufferBytes), boundary)
 	form := url.Values{}
-	var uploads []files.UploadedFile
+	var uploads []asstapp.UploadedFile
 	var parts, text int
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
+			if _, err := io.Copy(io.Discard, r.Body); err != nil {
+				return form, nil, uploadReadError(err, limits.MessageCap)
+			}
 			return form, uploads, nil
 		}
 		if err != nil {
@@ -87,23 +90,44 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 			return form, nil, uploadReadError(err, limits.MessageCap)
 		}
 		if name == "upload" && len(data) > 0 {
-			uploads = append(uploads, files.UploadedFile{Name: filename, Data: data, Type: part.Header.Get("Content-Type")})
+			uploads = append(uploads, asstapp.UploadedFile{Name: filename, Data: data, Type: part.Header.Get("Content-Type")})
 		}
 	}
 }
 
 func uploadReadError(err error, messageCap int) error {
 	if errors.As(err, new(*http.MaxBytesError)) {
-		return files.MessageCapError(messageCap)
+		return asstapp.MessageCapError(messageCap)
 	}
 	return errBadBody
 }
 
-func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, bool) {
+func (p *pages) command(pattern string, h http.HandlerFunc) http.HandlerFunc {
+	command := p.deps.Command(pattern, h)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || media != formMedia && media != multipartMedia {
+			p.fail(w, r, http.StatusUnsupportedMediaType, mediaTypeDetail)
+			return
+		}
+		limits, err := p.assistant().UploadLimits(r.Context())
+		check(err)
+		if r.ContentLength > int64(limits.MessageCap)+uploadSlack {
+			p.failureStatus(w, r, http.StatusRequestEntityTooLarge, "Not attached", asstapp.MessageCapError(limits.MessageCap).Error())
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, int64(limits.MessageCap)+uploadSlack)
+		command(w, r.WithContext(context.WithoutCancel(r.Context())))
+	}
+}
+
+func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values, []asstapp.UploadedFile, bool) {
 	form, uploads, err := p.parseUploads(w, r)
 	switch {
 	case errors.Is(err, errBadBody):
 		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
+		return nil, nil, false
+	case errors.Is(err, errMediaType):
+		p.fail(w, r, http.StatusUnsupportedMediaType, mediaTypeDetail)
 		return nil, nil, false
 	case err != nil && strings.TrimSpace(web.FormString(form, "text", "")) == "":
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
@@ -115,78 +139,53 @@ func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values,
 	return form, uploads, true
 }
 
-func archivedProject(project *projects.Project, verb string) (string, bool) {
-	if !bool(project.Archived) {
-		return "", false
+func (p *pages) fileFailed(w http.ResponseWriter, r *http.Request, err error) bool {
+	var e *application.Error
+	if errors.As(err, &e) && e.Code == application.NotFound {
+		p.fail(w, r, http.StatusNotFound, e.Message)
+		return true
 	}
-	return fmt.Sprintf("“%s” is archived. Restore it to %s.", project.Name, verb), true
+	check(err)
+	return false
 }
 
-func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, string, bool) {
+func (p *pages) threadFileInput(w http.ResponseWriter, r *http.Request) (asstapp.FileInput, bool) {
 	threadID, errs := pathInt(r, "thread_id")
 	fileID, more := pathInt(r, "file_id")
 	if errs = append(errs, more...); len(errs) > 0 {
 		web.Unprocessable(w, errs...)
-		return nil, "", false
+		return asstapp.FileInput{}, false
 	}
-	thread, err := threads.Get(r.Context(), p.deps.DB.Read, threadID)
-	check(err)
-	if thread == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown thread")
-		return nil, "", false
-	}
-	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
-	check(err)
-	if found == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown file")
-		return nil, "", false
-	}
-	owner, owned := files.OwnerOf(found)
-	if !owned || owner != files.ThreadOwner(threadID) {
-		p.fail(w, r, http.StatusNotFound, "unknown file")
-		return nil, "", false
-	}
-	return found, fmt.Sprintf("/chat/%d/files/%d", threadID, fileID), true
+	return asstapp.FileInput{ThreadID: threadID, FileID: fileID}, true
 }
 
 func (p *pages) chatFile(w http.ResponseWriter, r *http.Request) {
-	found, fileURL, ok := p.threadFile(w, r)
+	in, ok := p.threadFileInput(w, r)
 	if !ok {
 		return
 	}
-	preview, err := filePreview(r.Context(), p.deps.DB.Read, *found)
-	check(err)
-	p.fragment(w, r, http.StatusOK, "_file.gohtml", FileData{File: preview, FileURL: fileURL})
+	read, err := p.assistant().FilePreview(r.Context(), in)
+	if p.fileFailed(w, r, err) {
+		return
+	}
+	v := read.Data
+	f := v.File
+	preview := FilePreview{ID: f.ID, ThreadID: f.ThreadID, RunID: f.RunID, Name: f.Name, MediaType: f.MediaType,
+		Bytes: f.Bytes, Origin: f.Origin, CreatedAt: f.CreatedAt, Text: &v.Body, Tokens: f.Tokens,
+		ProjectID: f.ProjectID, Render: v.Render, Body: v.Body, Rows: v.Rows, Truncated: v.Truncated}
+	p.fragment(w, r, http.StatusOK, "_file.gohtml", FileData{File: preview, FileURL: fmt.Sprintf("/chat/%d/files/%d", in.ThreadID, in.FileID)})
 }
 
 func (p *pages) chatFileDownload(w http.ResponseWriter, r *http.Request) {
-	if found, _, ok := p.threadFile(w, r); ok {
-		p.download(w, r, *found)
+	if in, ok := p.threadFileInput(w, r); ok {
+		p.download(w, r, asstapp.DownloadInput{FileInput: in})
 	}
 }
 
 func (p *pages) chatFileRaw(w http.ResponseWriter, r *http.Request) {
-	found, _, ok := p.threadFile(w, r)
-	if !ok {
-		return
+	if in, ok := p.threadFileInput(w, r); ok {
+		p.download(w, r, asstapp.DownloadInput{FileInput: in, Raw: true})
 	}
-	if !files.IsImageType(found.MediaType) {
-		p.fail(w, r, http.StatusNotFound, "not an image")
-		return
-	}
-	f, err := os.Open(found.Path)
-	if err != nil {
-		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
-		return
-	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
-		return
-	}
-	w.Header().Set("Content-Type", found.MediaType)
-	http.ServeContent(w, r, "", info.ModTime(), f)
 }
 
 func contentType(media string) string {
@@ -203,51 +202,47 @@ func disposition(name string) string {
 	return `attachment; filename="` + name + `"`
 }
 
-func (p *pages) download(w http.ResponseWriter, r *http.Request, found files.Row) {
-	f, err := os.Open(found.Path)
-	if err != nil {
-		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
+func (p *pages) download(w http.ResponseWriter, r *http.Request, in asstapp.DownloadInput) {
+	read, err := p.assistant().FileDownload(r.Context(), in)
+	if p.fileFailed(w, r, err) {
 		return
 	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		p.fail(w, r, http.StatusNotFound, "file is missing from storage")
-		return
-	}
+	stream := read.Data
+	defer func() { _ = stream.File.Close() }()
 	h := w.Header()
-	h.Set("Content-Type", contentType(found.MediaType))
-	h.Set("Content-Disposition", disposition(found.Name))
-	http.ServeContent(w, r, "", info.ModTime(), f)
-}
-
-func (p *pages) loadProject(w http.ResponseWriter, r *http.Request, projectID int64) (*projects.Project, bool) {
-	found, err := projects.Get(r.Context(), p.deps.DB.Read, projectID)
-	check(err)
-	if found == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown project")
-		return nil, false
+	if in.Raw {
+		h.Set("Content-Type", stream.MediaType)
+	} else {
+		h.Set("Content-Type", contentType(stream.MediaType))
+		h.Set("Content-Disposition", disposition(stream.Name))
 	}
-	return found, true
+	http.ServeContent(w, r, "", stream.ModTime, stream.File)
 }
 
 func (p *pages) projectFiles(w http.ResponseWriter, r *http.Request, projectID int64, status int, problem *string) {
-	project, ok := p.loadProject(w, r, projectID)
-	if !ok {
+	read, err := p.assistant().FileList(r.Context(), asstapp.FileListInput{ProjectID: projectID})
+	if p.fileFailed(w, r, err) {
 		return
 	}
-	rows, err := files.OfProject(r.Context(), p.deps.DB.Read, projectID)
-	check(err)
-	if rows == nil {
-		rows = []files.Row{}
-	}
-	p.fragment(w, r, status, "_project_files.gohtml", ProjectFiles{Project: project, Files: rows, Error: problem})
+	p.fragment(w, r, status, "_project_files.gohtml", ProjectFiles{Project: read.Data.Project, Files: read.Data.Files, Error: problem})
 }
 
 func (p *pages) projectFilesList(w http.ResponseWriter, r *http.Request) {
 	if projectID, ok := pathID(w, r, "project_id"); ok {
 		p.projectFiles(w, r, projectID, http.StatusOK, nil)
 	}
+}
+
+func (p *pages) projectFilesChanged(w http.ResponseWriter, r *http.Request, projectID int64, err error) {
+	var e *application.Error
+	if errors.As(err, &e) && (e.Code == application.Invalid || e.Code == application.Conflict || e.Code == application.Refused) {
+		p.refuseProjectFiles(w, r, projectID, e.Message)
+		return
+	}
+	if p.fileFailed(w, r, err) {
+		return
+	}
+	p.projectFiles(w, r, projectID, http.StatusOK, nil)
 }
 
 func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
@@ -260,28 +255,16 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
 		return
 	}
-	project, ok := p.loadProject(w, r, projectID)
-	if !ok {
+	if errors.Is(err, errMediaType) {
+		p.fail(w, r, http.StatusUnsupportedMediaType, mediaTypeDetail)
 		return
 	}
-	if problem, archived := archivedProject(project, "add files"); archived {
-		p.refuseProjectFiles(w, r, projectID, problem)
-		return
-	}
-	if err == nil && len(uploads) == 0 {
-		err = files.FileError("Choose at least one file.")
-	}
-	if err == nil {
-		limit := project.ContextLimit
-		_, err = files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ProjectOwner(projectID), &limit)
-	}
-	var refused files.FileError
-	if errors.As(err, &refused) {
+	if err != nil {
 		p.refuseProjectFiles(w, r, projectID, err.Error())
 		return
 	}
-	check(err)
-	p.projectFiles(w, r, projectID, http.StatusOK, nil)
+	_, err = p.assistant().ProjectFileUpload(detached(r), asstapp.ProjectUploadInput{ProjectID: projectID, Uploads: uploads})
+	p.projectFilesChanged(w, r, projectID, err)
 }
 
 func (p *pages) refuseProjectFiles(w http.ResponseWriter, r *http.Request, projectID int64, problem string) {
@@ -292,107 +275,27 @@ func (p *pages) refuseProjectFiles(w http.ResponseWriter, r *http.Request, proje
 	p.fail(w, r, http.StatusUnprocessableEntity, problem)
 }
 
-func (p *pages) projectFile(w http.ResponseWriter, r *http.Request) (int64, *files.Row, bool) {
+func (p *pages) projectFileInput(w http.ResponseWriter, r *http.Request) (asstapp.FileInput, bool) {
 	projectID, errs := pathInt(r, "project_id")
 	fileID, more := pathInt(r, "file_id")
 	if errs = append(errs, more...); len(errs) > 0 {
 		web.Unprocessable(w, errs...)
-		return 0, nil, false
+		return asstapp.FileInput{}, false
 	}
-	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
-	check(err)
-	if found == nil {
-		p.fail(w, r, http.StatusNotFound, "unknown file")
-		return 0, nil, false
-	}
-	owner, owned := files.OwnerOf(found)
-	if !owned || owner != files.ProjectOwner(projectID) {
-		p.fail(w, r, http.StatusNotFound, "unknown file")
-		return 0, nil, false
-	}
-	return projectID, found, true
+	return asstapp.FileInput{ProjectID: projectID, FileID: fileID}, true
 }
 
 func (p *pages) projectFileDownload(w http.ResponseWriter, r *http.Request) {
-	if _, found, ok := p.projectFile(w, r); ok {
-		p.download(w, r, *found)
+	if in, ok := p.projectFileInput(w, r); ok {
+		p.download(w, r, asstapp.DownloadInput{FileInput: in})
 	}
 }
 
 func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
-	projectID, found, ok := p.projectFile(w, r)
+	in, ok := p.projectFileInput(w, r)
 	if !ok {
 		return
 	}
-	project, ok := p.loadProject(w, r, projectID)
-	if !ok {
-		return
-	}
-	if problem, archived := archivedProject(project, "remove files"); archived {
-		p.refuseProjectFiles(w, r, projectID, problem)
-		return
-	}
-	ctx := detached(r)
-	_, err := files.DeleteOne(ctx, p.deps.DB.Write, found.ID)
-	check(err)
-	p.projectFiles(w, r, projectID, http.StatusOK, nil)
-}
-
-func filePreview(ctx context.Context, q db.Querier, found files.Row) (FilePreview, error) {
-	limit, err := config.From(ctx).Limit(ctx, q, config.KeyPreviewBytes)
-	if err != nil {
-		return FilePreview{}, err
-	}
-	render, text, rows, truncated, err := previewOf(found, limit)
-	if err != nil {
-		return FilePreview{}, err
-	}
-	return FilePreview{ID: found.ID, ThreadID: found.ThreadID, RunID: found.RunID, Name: found.Name, MediaType: found.MediaType,
-		Bytes: found.Bytes, Path: found.Path, Origin: found.Origin, CreatedAt: found.CreatedAt, Text: found.Text, Tokens: found.Tokens,
-		ProjectID: found.ProjectID, Render: render, Body: text, Rows: rows, Truncated: truncated}, nil
-}
-
-func previewOf(found files.Row, previewBytes int) (render string, text string, rows [][]string, truncated bool, err error) {
-	rows = [][]string{}
-	media := found.MediaType
-	if files.IsImageType(media) {
-		return "image", "", rows, false, nil
-	}
-	if media == files.PDFType {
-		return "", "", rows, false, nil
-	}
-	var body *string
-	if found.Text == nil {
-		info, statErr := os.Stat(found.Path)
-		if statErr != nil || !info.Mode().IsRegular() {
-			return "", "", rows, false, nil
-		}
-		raw, readErr := os.ReadFile(found.Path)
-		if readErr != nil {
-			return "", "", nil, false, readErr
-		}
-		truncated = len(raw) > previewBytes
-		head := raw[:min(len(raw), sniffBytes)]
-		if strings.HasPrefix(media, "text/") || media == "application/json" || media == "application/xml" || bytes.IndexByte(head, 0) < 0 {
-			decoded := httpx.DecodeReplace(raw[:min(len(raw), previewBytes)])
-			body = &decoded
-		}
-	} else if utf8.RuneCountInString(*found.Text) > previewBytes {
-		cut := string([]rune(*found.Text)[:previewBytes])
-		body, truncated = &cut, true
-	} else {
-		body = found.Text
-	}
-	if body == nil {
-		return "", "", rows, false, nil
-	}
-	suffix := strings.ToLower(path.Ext(path.Base(found.Path)))
-	switch {
-	case slices.Contains(markdownTypes, media) || suffix == ".md" || suffix == ".markdown":
-		return "markdown", *body, rows, truncated, nil
-	case slices.Contains(tableTypes, media) || suffix == ".csv":
-		parsed, csvErr := pyCSV(*body)
-		return "table", "", parsed, truncated, csvErr
-	}
-	return "text", *body, rows, truncated, nil
+	_, err := p.assistant().ProjectFileDelete(detached(r), in)
+	p.projectFilesChanged(w, r, in.ProjectID, err)
 }

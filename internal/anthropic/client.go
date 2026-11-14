@@ -2,6 +2,8 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,13 +17,23 @@ import (
 )
 
 const (
-	BaseURLEnv     = "ANTHROPIC_BASE_URL"
-	connectTimeout = 5 * time.Second
-	readTimeout    = 10 * time.Minute
+	BaseURLEnv            = "ANTHROPIC_BASE_URL"
+	ConnectTimeout        = 5 * time.Second
+	ResponseHeaderTimeout = 10 * time.Minute
 )
 
 type Client struct {
 	sdk sdk.Client
+}
+
+type Outcome struct {
+	Message            *Message
+	Usage              Usage
+	Started            bool
+	Complete           bool
+	DefinitelyUnsent   bool
+	DefinitelyRejected bool
+	Err                error
 }
 
 type Option func(*settings)
@@ -65,8 +77,8 @@ func spendCapNoRetry(req *http.Request, next option.MiddlewareNext) (*http.Respo
 
 func defaultHTTPClient() *http.Client {
 	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.DialContext = (&net.Dialer{Timeout: connectTimeout, KeepAlive: 30 * time.Second}).DialContext
-	t.ResponseHeaderTimeout = readTimeout
+	t.DialContext = (&net.Dialer{Timeout: ConnectTimeout, KeepAlive: 30 * time.Second}).DialContext
+	t.ResponseHeaderTimeout = ResponseHeaderTimeout
 	return &http.Client{Transport: t}
 }
 
@@ -78,59 +90,130 @@ func (p Params) sdkParams() sdk.BetaMessageNewParams {
 	return sdk.BetaMessageNewParams{Betas: betas}
 }
 
-func (c *Client) Create(ctx context.Context, p Params) (*Message, error) {
+func (c *Client) Create(ctx context.Context, p Params) Outcome {
 	body, err := p.body()
 	if err != nil {
-		return nil, err
+		return Outcome{DefinitelyUnsent: true, Err: err}
 	}
-	res, err := c.sdk.Beta.Messages.New(ctx, p.sdkParams(), option.WithRequestBody("application/json", body))
+	res, err := c.sdk.Beta.Messages.New(ctx, p.sdkParams(), option.WithRequestBody("application/json", body), option.WithMaxRetries(0))
 	if err != nil {
-		return nil, classify(err)
+		classified := classify(err)
+		return Outcome{DefinitelyUnsent: unsent(classified), DefinitelyRejected: rejected(classified), Err: classified}
 	}
-	return decodeMessage(res.RawJSON())
+	raw := res.RawJSON()
+	msg, err := decodeMessage(raw)
+	if err == nil {
+		return Outcome{Message: msg, Usage: msg.Usage, Started: true, Complete: true}
+	}
+	known := usageOfRaw(raw)
+	partial := &Message{ID: res.ID, Model: string(res.Model), Usage: known}
+	return Outcome{Message: partial, Usage: known, Started: true, Complete: true, Err: err}
 }
 
-func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error) (*Message, error) {
+func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error) Outcome {
 	body, err := p.body()
 	if err != nil {
-		return nil, err
+		return Outcome{DefinitelyUnsent: true, Err: err}
 	}
-	stream := c.sdk.Beta.Messages.NewStreaming(ctx, p.sdkParams(), option.WithRequestBody("application/json", body))
+	stream := c.sdk.Beta.Messages.NewStreaming(ctx, p.sdkParams(), option.WithRequestBody("application/json", body), option.WithMaxRetries(0))
 	defer func() { _ = stream.Close() }()
 	var acc sdk.BetaMessage
+	var known Usage
 	started := false
 	stopped := false
 	for stream.Next() {
 		ev := stream.Current()
-		if err := acc.Accumulate(ev); err != nil {
-			return nil, fmt.Errorf("anthropic: %w", err)
-		}
 		started = started || ev.Type == "message_start"
 		stopped = stopped || ev.Type == "message_stop"
+		if err := acc.Accumulate(ev); err != nil {
+			return failedStream(&acc, known, started, stopped, fmt.Errorf("anthropic: %w", err))
+		}
+		if ev.Type == "message_start" || ev.Type == "message_delta" {
+			known = usageOf(&acc)
+		}
 		if observe == nil {
 			continue
 		}
 		if e := eventOf(&acc, ev); e != nil {
 			if err := observe(e); err != nil {
-				return nil, err
+				return failedStream(&acc, known, started, stopped, err)
 			}
 		}
 	}
 	err = stream.Err()
+	if stopped {
+		err = nil
+	}
 	if err == nil && !stopped {
 		err = io.ErrUnexpectedEOF
 	}
+	if err != nil {
+		return failedStream(&acc, known, started, stopped, classify(err))
+	}
+	msg, err := decodeMessage(acc.RawJSON())
+	if err != nil {
+		return failedStream(&acc, known, started, stopped, err)
+	}
+	return Outcome{Message: msg, Usage: msg.Usage, Started: true, Complete: true}
+}
+
+func failedStream(acc *sdk.BetaMessage, known Usage, started, stopped bool, err error) Outcome {
+	return Outcome{
+		Message:            knownMessage(acc, known),
+		Usage:              known,
+		Started:            started,
+		Complete:           stopped,
+		DefinitelyUnsent:   !started && unsent(err),
+		DefinitelyRejected: !started && rejected(err),
+		Err:                err,
+	}
+}
+
+func knownMessage(acc *sdk.BetaMessage, known Usage) *Message {
+	msg, err := decodeMessage(acc.RawJSON())
+	if err == nil && len(msg.Content) > 0 {
+		return msg
+	}
+	if acc.ID == "" && len(acc.Content) == 0 {
+		return nil
+	}
+	out := &Message{ID: acc.ID, Model: string(acc.Model), Usage: known, Content: accumulated(acc)}
 	if err == nil {
-		return decodeMessage(acc.RawJSON())
+		out.ID, out.Model, out.StopReason, out.ContextManagement = msg.ID, msg.Model, msg.StopReason, msg.ContextManagement
 	}
-	if !started {
-		return nil, classify(err)
+	return out
+}
+
+func accumulated(acc *sdk.BetaMessage) []json.RawMessage {
+	out := make([]json.RawMessage, 0, len(acc.Content))
+	for i := range acc.Content {
+		block := &acc.Content[i]
+		switch block.Type {
+		case "text":
+			raw, _ := json.Marshal(map[string]string{"type": "text", "text": block.Text})
+			out = append(out, raw)
+		case "thinking":
+			raw, _ := json.Marshal(map[string]string{"type": "thinking", "thinking": block.Thinking, "signature": block.Signature})
+			out = append(out, raw)
+		default:
+			if raw := block.RawJSON(); raw != "" {
+				out = append(out, json.RawMessage(raw))
+			}
+		}
 	}
-	partial, decodeErr := decodeMessage(acc.RawJSON())
-	if decodeErr != nil {
-		return nil, classify(err)
-	}
-	return partial, classify(err)
+	return out
+}
+
+func usageOf(acc *sdk.BetaMessage) Usage { return usageOfRaw(acc.RawJSON()) }
+
+func rejected(err error) bool {
+	var api *APIError
+	return errors.As(err, &api) && api.StatusCode >= 400
+}
+
+func unsent(err error) bool {
+	var api *APIError
+	return errors.As(err, &api) && api.Unsent()
 }
 
 func (c *Client) ModelIDs(ctx context.Context) ([]string, error) {

@@ -11,29 +11,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/actionlink"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/live"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
-	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/handlers"
+	"github.com/jeiang/atrium/internal/application"
+
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/module"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 //go:embed templates/*.gohtml
 var templates embed.FS
-
-const (
-	sourceMail     = "mail"
-	sourceWrite    = "write"
-	sourceSettings = "settings"
-	categoryMail   = "mail"
-)
 
 func Templates() fs.FS {
 	sub, err := fs.Sub(templates, "templates")
@@ -43,56 +32,37 @@ func Templates() fs.FS {
 	return sub
 }
 
-func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
-	_, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx)
-	return err
+type Options struct {
+	Compose func(*web.Deps) Services
+	Phone   func(func(context.Context, string, float64) (*proposalsapp.Proposal, error), func() float64) http.HandlerFunc
+	Routes  func(*web.Deps, *reviewapp.Service)
 }
 
-type Options struct {
-	Writes  *writes.Registry
-	Enabled func(context.Context, db.Querier, string) (bool, error)
+type Services struct {
+	Mail   *mailapp.Service
+	Review *reviewapp.Service
 }
 
 type service struct {
-	deps     *web.Deps
-	now      func() float64
-	pipeline *proposals.Pipeline
-	live     *live.Live
-	writes   *writes.Registry
-	drafts   *drafts.Store
-	registry *proposals.Registry
+	mail   *mailapp.Service
+	deps   *web.Deps
+	now    func() float64
+	review *reviewapp.Service
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
+func newService(o Options, d *web.Deps) *service {
+	built := o.Compose(d)
+	return &service{mail: built.Mail, deps: d, now: wallClock, review: built.Review}
+}
+
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		open := imapclient.Opener(d.Cfg)
-		now := wallClock
-		registry := proposals.NewRegistry()
-		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env, Resume: func(ctx context.Context, runID int64) error {
-			if d.ResumeRun == nil {
-				return proposals.ProposalError("the assistant module is not running")
-			}
-			return d.ResumeRun(ctx, runID)
-		}})
-		undo := o.Writes
-		if undo == nil {
-			undo = writes.NewRegistry()
-		}
-		s := &service{
-			deps:     d,
-			now:      now,
-			pipeline: &proposals.Pipeline{DB: d.DB, Registry: registry, Now: now, Enabled: o.Enabled},
-			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
-			writes:   undo,
-			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, Now: now},
-			registry: registry,
-		}
+		s := newService(o, d)
 
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-			n, err := needsCount(ctx, d.DB.Read)
+			n, err := s.review.NeedsCount(ctx)
 			f.PendingCount = n
 			return err
 		})
@@ -106,15 +76,26 @@ func Module(o Options) web.Module {
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)
 		r.Post("/proposals/{proposal_id}/undo", s.proposalUndo)
 		r.Post("/proposals/{proposal_id}/resolve", s.proposalResolve)
-		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.pipeline, s.now))
+		d.Public(http.MethodPost, "/actions/{token}", o.Phone(s.phone, s.now))
 
 		r.Get("/activity", s.activityPage)
 		r.Get("/activity/recent", s.recentActivity)
 		r.Post("/activity/mail/{action_id}/undo", s.undoMail)
 		r.Post("/activity/mail/{action_id}/resolve", s.resolveMail)
-		r.Post("/activity/write/{write_id}/undo", s.undoWrite)
-		r.Post("/activity/write/{write_id}/resolve", s.resolveWrite)
 
+		r.Post("/activity/effect/{effect_id}/undo", s.undoEffect)
+		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
+
+		if o.Routes != nil {
+			o.Routes(d, s.review)
+		}
+	}
+}
+
+func MailModule(o Options) web.Module {
+	return func(r chi.Router, d *web.Deps) {
+		s := newService(o, d)
+		r = r.With(bindMail)
 		r.Get("/drafts", s.draftsPage)
 		r.Get("/drafts/{draft_id}", s.draftPage)
 		r.Get("/drafts/{draft_id}/card", s.draftCardPage)
@@ -131,8 +112,26 @@ func Module(o Options) web.Module {
 
 		r.Get("/watches", s.watchesPage)
 		r.Post("/watches/packages/{package_id}/dismiss", s.packageDismiss)
-		s.apiRoutes(d)
 	}
+}
+
+func bindMail(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, err := module.BindOwner(r.Context(), module.Mail)
+		if err != nil {
+			if strings.HasPrefix(r.URL.Path, web.APIPrefix+"/") {
+				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
+			} else {
+				http.Error(w, err.Error(), http.StatusConflict)
+			}
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func check(err error) {
@@ -157,14 +156,27 @@ func (s *service) page(w http.ResponseWriter, r *http.Request, status int, page,
 }
 
 func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any, notice *tpl.Toast) {
-	f, err := s.deps.Render.Frame(r, "", data)
+	check(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: notice}))
+}
+
+func (s *service) mode(ctx context.Context) string {
+	mode, err := s.review.Mode(ctx)
 	check(err)
-	f.Toast = notice
-	check(s.deps.Render.Fragment(w, r, status, name, f))
+	return mode
 }
 
 func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detail string) {
 	s.deps.Error(w, r, status, detail)
+}
+
+func (s *service) failRead(w http.ResponseWriter, r *http.Request, err error, missing string) {
+	web.Fail(w, r, err, func(status int) {
+		detail := missing
+		if status != http.StatusNotFound {
+			detail = application.Classify(err).Message
+		}
+		s.fail(w, r, status, detail)
+	})
 }
 
 func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }
@@ -230,14 +242,4 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 		return 0, false
 	}
 	return id, true
-}
-
-func accountConfigured(ctx context.Context) map[string]bool {
-	accounts := config.From(ctx).Accounts()
-	out := make(map[string]bool, len(accounts))
-	for _, spec := range accounts {
-		_, _, ok := config.Credential(ctx, spec.Name)
-		out[spec.Name] = ok
-	}
-	return out
 }

@@ -9,6 +9,8 @@
           hx-confirm="You checked the mailbox and the write happened?">It happened</button>
   <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="{{.path}}" hx-vals='{"outcome": "not-applied"}' hx-target="{{.target}}" hx-swap="outerHTML" hx-disabled-elt="this"
           hx-confirm="You checked the mailbox and the write did not happen?">It did not happen</button>
+  <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="{{.path}}" hx-vals='{"outcome": "partial"}' hx-target="{{.target}}" hx-swap="outerHTML" hx-disabled-elt="this"
+          hx-confirm="Part of the write happened and you accept what remains?">It partly happened</button>
   {{else}}
   <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="{{.path}}" hx-target="{{.target}}" hx-swap="outerHTML" hx-disabled-elt="this"
           hx-confirm="You checked the mailbox and want to clear the blocked write?">Mark checked</button>

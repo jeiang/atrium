@@ -6,10 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/render"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
@@ -55,6 +58,9 @@ func Run(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, er
 }
 
 func readSetting(ctx context.Context, d *db.DB, key string) (string, error) {
+	if _, hosted := settings.From(ctx).HostDefOf(key); hosted {
+		return config.From(ctx).HostValue(key), nil
+	}
 	found, err := settings.From(ctx).Resolve(ctx, d.Read, key)
 	return strings.TrimSpace(found.Value), err
 }
@@ -106,16 +112,29 @@ func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Resu
 		entries = append(entries, pageEntry{recordID: rec.ID, page: render.RecordPage(rec.Record, src)})
 	}
 	entries = append(entries, pageEntry{recordID: 0, page: render.Index(indexEntries(records, loc))})
-	client, err := notion.NewClient(ctx, d.Read, env)
+	client, err := notion.NewClient(ctx, d.Read)
 	if err != nil {
 		return out, err
 	}
-	return syncNotion(ctx, d, now, client, parent, entries)
+	defer client.Close()
+	store, err := exportLedger(ctx, d, env)
+	if err != nil {
+		return out, err
+	}
+	return syncNotion(ctx, store, now, client, parent, entries)
+}
+
+func exportLedger(ctx context.Context, d *db.DB, env config.Env) (*ledger.Store, error) {
+	cfg, err := config.Load(env)
+	if err != nil {
+		return nil, err
+	}
+	return module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), nil)
 }
 
 func threadTitles(ctx context.Context, q db.Querier, records []kb.ExportRecord) (map[int64]string, error) {
 	out := make(map[int64]string)
-	var ids []any
+	var ids []int64
 	seen := make(map[int64]bool, len(records))
 	for _, rec := range records {
 		if rec.SourceThreadID == nil || seen[*rec.SourceThreadID] {
@@ -127,21 +146,14 @@ func threadTitles(ctx context.Context, q db.Querier, records []kb.ExportRecord) 
 	if len(ids) == 0 {
 		return out, nil
 	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-	rows, err := q.QueryContext(ctx, "SELECT id, title FROM threads WHERE id IN ("+placeholders+")", ids...)
+	titles, err := threads.Titles(ctx, q, ids)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id int64
-		var title string
-		if err := rows.Scan(&id, &title); err != nil {
-			return nil, err
-		}
+	for id, title := range titles {
 		out[id] = title
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func indexEntries(records []kb.ExportRecord, loc *time.Location) []render.Entry {

@@ -2,13 +2,10 @@ package mailcmd
 
 import (
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
-	"github.com/jeiang/atrium/internal/mail/scans"
-	"github.com/jeiang/atrium/internal/mail/scanutil"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 )
 
-func (o Options) scanGroup(name string, scan func(x *exec) (scanutil.Result, error)) *cli.Command {
+func (o Options) scanGroup(name string, scan func(x *exec) (mailapp.ScanResult, error)) *cli.Command {
 	return group(name, o.leaf("scan", func(*cli.Args) body {
 		return func(x *exec) error {
 			result, err := scan(x)
@@ -22,14 +19,10 @@ func (o Options) scanGroup(name string, scan func(x *exec) (scanutil.Result, err
 }
 
 func (o Options) ScanCommands() []*cli.Command {
-	out := make([]*cli.Command, len(scans.All))
-	for i, s := range scans.All {
-		out[i] = o.scanGroup(s.Command, func(x *exec) (scanutil.Result, error) {
-			url, err := endpoint.ChatURL(x.Ctx, x.DB.Read)
-			if err != nil {
-				return scanutil.Result{}, err
-			}
-			return s.Run(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(url))
+	out := make([]*cli.Command, len(mailapp.ScanKinds))
+	for i, s := range mailapp.ScanKinds {
+		out[i] = o.scanGroup(s.Command, func(x *exec) (mailapp.ScanResult, error) {
+			return x.opts.Application(x.Pass).WithSuggestedNamer(x.Classifier).Scans(x.Now())(x.Ctx, s.Key)
 		})
 	}
 	return out

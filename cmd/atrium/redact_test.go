@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
 )
@@ -37,12 +38,12 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 	if strings.Contains(ran.stderr, secret) {
 		t.Errorf("the secret reached the log stream: %q", ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var after string
-	if err := d.Read.QueryRow("SELECT after_json FROM agent_writes WHERE tool = 'kb_write'").Scan(&after); err != nil {
+	if err := d.Read.QueryRow("SELECT after_json FROM effects WHERE operation = 'kb_write' AND direction = 'forward'").Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(after, secret) || !strings.Contains(after, logx.Redacted) {
-		t.Errorf("agent_writes snapshot = %q, want the secret replaced by %s", after, logx.Redacted)
+		t.Errorf("effect snapshot = %q, want the secret replaced by %s", after, logx.Redacted)
 	}
 }

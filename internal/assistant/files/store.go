@@ -28,6 +28,41 @@ type Row struct {
 	ProjectID *int64  `json:"project_id"`
 }
 
+type Summary struct {
+	ID        int64   `json:"id"`
+	ThreadID  *int64  `json:"thread_id"`
+	RunID     *int64  `json:"run_id"`
+	Name      string  `json:"name"`
+	MediaType string  `json:"media_type"`
+	Bytes     int64   `json:"bytes"`
+	Origin    string  `json:"origin"`
+	CreatedAt float64 `json:"created_at"`
+	Tokens    int64   `json:"tokens"`
+	ProjectID *int64  `json:"project_id"`
+}
+
+func Summarize(f Row) Summary {
+	return Summary{ID: f.ID, ThreadID: f.ThreadID, RunID: f.RunID, Name: f.Name, MediaType: f.MediaType,
+		Bytes: f.Bytes, Origin: f.Origin, CreatedAt: f.CreatedAt, Tokens: f.Tokens, ProjectID: f.ProjectID}
+}
+
+func Summaries(rows []Row) []Summary {
+	out := make([]Summary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, Summarize(row))
+	}
+	return out
+}
+
+const summaryColumns = "id, thread_id, run_id, name, media_type, bytes, origin, created_at, tokens, project_id"
+
+func scanSummary(r interface{ Scan(...any) error }) (Row, error) {
+	var f Row
+	err := r.Scan(&f.ID, &f.ThreadID, &f.RunID, &f.Name, &f.MediaType, &f.Bytes, &f.Origin, &f.CreatedAt,
+		&f.Tokens, &f.ProjectID)
+	return f, err
+}
+
 const columns = "id, thread_id, run_id, name, media_type, bytes, path, origin, created_at, text, tokens, project_id"
 
 func scan(r interface{ Scan(...any) error }) (Row, error) {
@@ -108,19 +143,28 @@ func Get(ctx context.Context, q db.Querier, fileID int64) (*Row, error) {
 }
 
 func OfThread(ctx context.Context, q db.Querier, threadID int64) ([]Row, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
+	rows, err := q.QueryContext(ctx, "SELECT "+summaryColumns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scanSummary(r) })
 }
 
 func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
+	rows, err := q.QueryContext(ctx, "SELECT "+summaryColumns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scanSummary(r) })
+}
+
+func Page(ctx context.Context, q db.Querier, owner Owner, after int64, limit int) ([]Row, error) {
+	where, id := owner.where()
+	rows, err := q.QueryContext(ctx, "SELECT "+summaryColumns+" FROM thread_files WHERE "+where+" = ? AND id > ? ORDER BY id LIMIT ?", id, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scanSummary(r) })
 }
 
 type newFile struct {
@@ -296,6 +340,14 @@ func copyFile(from, to string) error {
 }
 
 func DeleteOwned(ctx context.Context, q db.Querier, dir string, owner Owner) (int, error) {
+	n, err := DeleteOwnedRows(ctx, q, owner)
+	if err != nil {
+		return 0, err
+	}
+	return n, RemoveOwned(dir, owner)
+}
+
+func DeleteOwnedRows(ctx context.Context, q db.Querier, owner Owner) (int, error) {
 	column, id := owner.where()
 	var n int
 	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM thread_files WHERE "+column+" = ?", id).Scan(&n); err != nil {
@@ -304,20 +356,34 @@ func DeleteOwned(ctx context.Context, q db.Querier, dir string, owner Owner) (in
 	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE "+column+" = ?", id); err != nil {
 		return 0, err
 	}
-	if err := os.RemoveAll(filepath.Join(dir, owner.dirName())); err != nil {
-		return n, err
-	}
 	return n, nil
 }
 
-func DeleteOne(ctx context.Context, q db.Querier, fileID int64) (bool, error) {
+func RemoveOwned(dir string, owner Owner) error {
+	return os.RemoveAll(filepath.Join(dir, owner.dirName()))
+}
+
+func DeleteRow(ctx context.Context, q db.Querier, fileID int64) (string, bool, error) {
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil {
-		return false, err
+		return "", false, err
 	}
-	if err := os.Remove(found.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, err
+	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE id = ?", fileID); err != nil {
+		return "", false, err
 	}
-	_, err = q.ExecContext(ctx, "DELETE FROM thread_files WHERE id = ?", fileID)
-	return err == nil, err
+	return found.Path, true, nil
+}
+
+func RemoveFile(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func ProjectFileName(ctx context.Context, q db.Querier, fileID int64) (string, int64, error) {
+	var name string
+	var project int64
+	err := q.QueryRowContext(ctx, "SELECT name, project_id FROM thread_files WHERE id = ? AND project_id IS NOT NULL", fileID).Scan(&name, &project)
+	return name, project, err
 }

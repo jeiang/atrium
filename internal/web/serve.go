@@ -4,64 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"net"
 	"net/http"
-	"os"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const (
-	defaultHost     = "127.0.0.1"
-	shutdownTimeout = 10 * time.Second
-	recoverInterval = time.Minute
+	defaultHost       = "127.0.0.1"
+	readHeaderTimeout = 30 * time.Second
+	noEmergency       = -1
 )
-
-func recoverProposals(ctx context.Context, d *db.DB) error {
-	n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9)
-	if n > 0 {
-		log.Warn("recovered interrupted approved proposals", "count", n)
-	}
-	return err
-}
-
-type Recover func(context.Context, *db.DB, config.Config) error
-
-func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config, recovers []Recover) {
-	t := time.NewTicker(recoverInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := db.Ready(ctx, d); err != nil && ctx.Err() == nil {
-				log.Error("database refresh failed", logx.Err, err.Error())
-			}
-			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
-				log.Error("proposal recovery failed", logx.Err, err.Error())
-			}
-			for _, run := range recovers {
-				if err := run(ctx, d, cfg); err != nil && ctx.Err() == nil {
-					log.Error("recovery failed", logx.Err, err.Error())
-				}
-			}
-		}
-	}
-}
 
 type NavItem = tpl.NavItem
 
@@ -71,64 +40,76 @@ type Page struct {
 	Globals   map[string]any
 	Public    func(config.Config, config.Env, *db.DB, *settings.Registry) func(*http.Request) bool
 	Home      string
-	Start     func(context.Context, *Deps) error
 	Nav       []tpl.NavItem
-	Recover   Recover
+	OIDC      oidc.Source
+	Bindings  map[string][]application.Binding
 }
 
-// Boot opens the application database and starts the modules that own it.
-// The serve command calls Open once, then Start after the modules are
-// registered and before the listener opens.
-type Boot interface {
-	Open(context.Context) (*db.DB, config.Config, error)
-	Start(context.Context, *Deps) error
+type Resource struct {
+	Name  string
+	Mount Module
 }
 
-// BootFunc adapts functions to Boot.
-type BootFunc struct {
-	OpenFunc  func(context.Context) (*db.DB, config.Config, error)
-	StartFunc func(context.Context, *Deps) error
+type ServeFlags struct {
+	Host          string
+	Port          int
+	Auth          []string
+	Hosts         []string
+	Trusted       []string
+	EmergencyHost string
+	EmergencyPort int
 }
 
-func (b BootFunc) Open(ctx context.Context) (*db.DB, config.Config, error) {
-	return b.OpenFunc(ctx)
-}
-
-func (b BootFunc) Start(ctx context.Context, d *Deps) error {
-	if b.StartFunc == nil {
-		return nil
-	}
-	return b.StartFunc(ctx, d)
-}
-
-func ServeCommand(boot Boot, pages ...Page) *cli.Command {
-	return &cli.Command{
-		Name: "serve",
-		Setup: func(args *cli.Args) cli.Handler {
-			host := args.String("host", defaultHost, cli.Opt{})
-			port := args.Int("port", 0, cli.Opt{Required: true})
-			modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
-			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
-			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
-			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: env.Env, boot: boot})
-			}
-		},
+func DefineServeFlags(args *cli.Args) func() ServeFlags {
+	host := args.String("host", defaultHost, cli.Opt{})
+	port := args.Int("port", 0, cli.Opt{Required: true})
+	modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
+	hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
+	trusted := args.Repeated("trusted-proxy", cli.Opt{Help: "socket peer CIDR allowed to set CF-Connecting-IP; repeatable"})
+	emergencyHost := args.String("emergency-host", defaultHost, cli.Opt{Help: "numeric loopback address (127.0.0.0/8 or ::1) of the emergency listener"})
+	emergencyPort := args.Int("emergency-port", noEmergency, cli.Opt{Help: "port of the emergency listener, which trusts every loopback request like --auth local; omitted runs none"})
+	return func() ServeFlags {
+		return ServeFlags{Host: *host, Port: *port, Auth: *modes, Hosts: *hosts, Trusted: *trusted, EmergencyHost: *emergencyHost, EmergencyPort: *emergencyPort}
 	}
 }
 
-type serveArgs struct {
-	host     string
-	port     int
-	auth     []string
-	hosts    []string
-	pages    []Page
-	env      config.Env
-	settings *settings.Registry
-	state    *config.State
-	boot     Boot
+type Endpoint struct {
+	Addr   string
+	policy Policy
+	hosts  []string
+}
 
-	forceDisableAuth bool
+type Plan struct {
+	Public    Endpoint
+	Emergency *Endpoint
+	trusted   []string
+}
+
+func (f ServeFlags) Resolve(stderr io.Writer, env config.Env) (Plan, bool) {
+	hosts := publicHosts(f.Hosts, env)
+	policy, ok := resolveAuth(stderr, f.Host, f.Auth, hosts)
+	if !ok {
+		return Plan{}, false
+	}
+	p := Plan{Public: Endpoint{Addr: net.JoinHostPort(f.Host, strconv.Itoa(f.Port)), policy: policy, hosts: hosts}, trusted: f.Trusted}
+	if f.EmergencyPort == noEmergency {
+		return p, true
+	}
+	if f.EmergencyPort < 0 || f.EmergencyPort > 65535 {
+		_, _ = fmt.Fprintf(stderr, "error: --emergency-port %d is not a port\n", f.EmergencyPort)
+		return Plan{}, false
+	}
+	if !emergencyBind(f.EmergencyHost) {
+		_, _ = fmt.Fprintf(stderr, "error: the emergency listener needs a numeric loopback --emergency-host in 127.0.0.0/8 or ::1; %q is not one\n", f.EmergencyHost)
+		return Plan{}, false
+	}
+	p.Emergency = &Endpoint{Addr: net.JoinHostPort(strings.Trim(f.EmergencyHost, "[]"), strconv.Itoa(f.EmergencyPort)), policy: Policy{Mode: ModeLocal}}
+	return p, true
+}
+
+func emergencyBind(host string) bool {
+	addr, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	return err == nil && addr.Zone() == "" && (addr.Is4() && addr.IsLoopback() || addr == netip.IPv6Loopback())
 }
 
 func publicHosts(given []string, env config.Env) []string {
@@ -141,118 +122,134 @@ func publicHosts(given []string, env config.Env) []string {
 	return nil
 }
 
-func serve(env *cli.Env, a serveArgs) int {
-	a.settings, a.state = settings.From(env.Ctx), config.From(env.Ctx)
-	hosts := publicHosts(a.hosts, a.env)
-	a, policy, ok := resolveAuth(env.Stderr, a, hosts)
-	if !ok {
-		return cli.ExitError
-	}
-	if err := run(env.Ctx, a, hosts, policy); err != nil {
-		if env.Ctx.Err() != nil {
-			return cli.ExitOK
+func trustedProxies(hostValue string, flags []string) ([]netip.Prefix, error) {
+	var values []string
+	for _, part := range strings.Split(hostValue, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			values = append(values, part)
 		}
-		log.Error("serve failed", logx.Err, err.Error())
-		return cli.ExitError
 	}
-	return cli.ExitOK
+	for _, flag := range flags {
+		if flag = strings.TrimSpace(flag); flag != "" {
+			values = append(values, flag)
+		}
+	}
+	out := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			addr, addrErr := netip.ParseAddr(value)
+			if addrErr != nil || addr.Zone() != "" {
+				return nil, fmt.Errorf("trusted proxy %q is not an address or CIDR", value)
+			}
+			prefix = netip.PrefixFrom(addr, addr.BitLen())
+		}
+		if prefix.Addr().Is4In6() {
+			if prefix.Bits() < 96 {
+				return nil, fmt.Errorf("trusted proxy %q maps more than the IPv4 space", value)
+			}
+			prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+		}
+		out = append(out, prefix.Masked())
+	}
+	return out, nil
 }
 
-func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error {
-	d, cfg, err := a.boot.Open(ctx)
+type Site struct {
+	Ctx      context.Context
+	Cfg      config.Config
+	Env      config.Env
+	DB       *db.DB
+	Settings *settings.Registry
+	State    *config.State
+	Pages    []Page
+	Start    func(*Deps) error
+	Drain    func(func(context.Context) error)
+	Commands func(pattern string, next http.Handler) http.Handler
+}
+
+func (p Plan) Build(site Site) (public, emergency *Server, err error) {
+	trusted, err := trustedProxies(site.State.Host().Value("trusted_proxy_cidrs"), p.trusted)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	defer func() { _ = d.Close() }()
-	if _, err := a.state.Location(a.env); err != nil {
-		return fmt.Errorf("the tz setting is not a time zone: %w", err)
-	}
-	var recovers []Recover
-	for _, p := range a.pages {
-		if p.Recover != nil {
-			recovers = append(recovers, p.Recover)
-		}
-	}
-	for _, run := range recovers {
-		if err := run(ctx, d, cfg); err != nil {
-			return err
-		}
-	}
-	if err := recoverProposals(ctx, d); err != nil {
-		return err
-	}
-	recovering, stopRecovering := context.WithCancel(ctx)
-	recovered := make(chan struct{})
-	go func() {
-		defer close(recovered)
-		recoverEvery(recovering, d, cfg, recovers)
-	}()
-	defer func() {
-		stopRecovering()
-		<-recovered
-	}()
 	var modules []Module
 	var templates []fs.FS
 	globals := map[string]any{}
-	var public []func(*http.Request) bool
+	var checks []func(*http.Request) bool
 	var nav []tpl.NavItem
 	home := ""
-	for _, p := range a.pages {
-		if p.Module != nil {
-			modules = append(modules, p.Module)
+	var oidcSource oidc.Source
+	bindings := map[string][]application.Binding{}
+	for _, page := range site.Pages {
+		if page.Module != nil {
+			modules = append(modules, page.Module)
 		}
-		if p.Public != nil {
-			public = append(public, p.Public(cfg, a.env, d, a.settings))
+		if page.Public != nil {
+			checks = append(checks, page.Public(site.Cfg, site.Env, site.DB, site.Settings))
 		}
-		if p.Templates != nil {
-			templates = append(templates, p.Templates)
+		if page.Templates != nil {
+			templates = append(templates, page.Templates)
 		}
-		if p.Home != "" {
-			home = p.Home
+		if page.Home != "" {
+			home = page.Home
 		}
-		maps.Copy(globals, p.Globals)
-		nav = append(nav, p.Nav...)
+		if page.OIDC != nil {
+			oidcSource = page.OIDC
+		}
+		maps.Copy(globals, page.Globals)
+		maps.Copy(bindings, page.Bindings)
+		nav = append(nav, page.Nav...)
+	}
+	build := func(e Endpoint, sessions *oidc.Service, start func(*Deps) error) (*Server, error) {
+		render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals, State: site.State}, nav...)
+		if err != nil {
+			return nil, err
+		}
+		var account *authapp.Service
+		if site.DB != nil {
+			account = authapp.New(site.DB, sessions, bearer.New(site.DB, sessions))
+		}
+		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Account: account, Home: home, Bindings: bindings, OnReady: start, Drain: site.Drain, Commands: site.Commands})
+		if err != nil {
+			return nil, err
+		}
+		srv.Hold()
+		return srv, nil
 	}
 	var sessions *oidc.Service
-	if policy.OIDC() {
-		sessions = oidc.New(d, a.env)
-		if err := sessions.Check(ctx); err != nil {
+	if p.Public.policy.OIDC() {
+		sessions = oidc.New(site.DB, site.Env, oidc.WithConnections(oidcSource))
+		if err := sessions.Check(site.Ctx); err != nil {
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals, State: a.state}, nav...)
-	if err != nil {
-		return err
-	}
-	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
-		if err := a.boot.Start(ctx, deps); err != nil {
-			return err
-		}
-		for _, p := range a.pages {
-			if p.Start != nil {
-				if err := p.Start(ctx, deps); err != nil {
-					return err
-				}
+	var provided Provided
+	start := func(d *Deps) error {
+		if site.Start != nil {
+			if err := site.Start(d); err != nil {
+				return err
 			}
 		}
+		provided = d.Provided
 		return nil
-	}})
-	if err != nil {
-		return err
 	}
-	defer srv.Close()
-	srv.Hold()
-	listener, err := net.Listen("tcp", net.JoinHostPort(a.host, strconv.Itoa(a.port)))
-	if err != nil {
-		return err
+	if public, err = build(p.Public, sessions, start); err != nil {
+		return nil, nil, err
 	}
-	if path, _ := a.env("ATRIUM_SERVE_ADDR_FILE"); path != "" {
-		if err := os.WriteFile(path, []byte(listener.Addr().String()), 0o600); err != nil {
-			_ = listener.Close()
-			return err
-		}
+	if p.Emergency == nil {
+		return public, nil, nil
 	}
-	return listenAndShutdown(ctx, listener, srv, a.env)
+	if emergency, err = build(*p.Emergency, nil, func(d *Deps) error { d.Provided = provided; return nil }); err != nil {
+		return nil, nil, errors.Join(err, public.Close())
+	}
+	return public, emergency, nil
+}
+
+func (s *Server) HTTP() *http.Server {
+	h := &http.Server{Handler: s, ReadHeaderTimeout: readHeaderTimeout}
+	h.RegisterOnShutdown(s.StopStreams)
+	return h
 }
 
 func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
@@ -267,31 +264,4 @@ func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
 		}
 		return false
 	}
-}
-
-func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server, env config.Env) error {
-	httpServer := &http.Server{Handler: srv, ReadHeaderTimeout: 30 * time.Second}
-	httpServer.RegisterOnShutdown(srv.StopStreams)
-	failed := make(chan error, 1)
-	go func() { failed <- httpServer.Serve(listener) }()
-	log.Info("listening", "addr", listener.Addr().String())
-	notifier := sdnotify.New(func(name string) string { v, _ := env(name); return v })
-	srv.Release()
-	notifier.Ready()
-	notifier.Status("serving " + listener.Addr().String())
-	go notifier.RunWatchdog(ctx, nil)
-	select {
-	case err := <-failed:
-		return err
-	case <-ctx.Done():
-	}
-	srv.StopStreams()
-	notifier.Stopping()
-	stop, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-	err := httpServer.Shutdown(stop)
-	if serveErr := <-failed; !errors.Is(serveErr, http.ErrServerClosed) {
-		err = errors.Join(err, serveErr)
-	}
-	return err
 }

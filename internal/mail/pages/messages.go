@@ -8,15 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/corrections"
-	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/mail/triage"
-	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/safety"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -59,8 +54,9 @@ func backTo(r *http.Request) backLink {
 	return backLink{URL: "/chat", Label: "Chat"}
 }
 
-func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) *message.View {
-	found, err := message.Get(r.Context(), s.deps.DB.Read, s.deps.Cfg.CacheDir, id)
+func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) *mailapp.MessageView {
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id})
+	found := read.Data.View
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown message")
@@ -68,8 +64,9 @@ func (s *service) loadMessage(w http.ResponseWriter, r *http.Request, id int64) 
 	return found
 }
 
-func (s *service) correctContext(r *http.Request, found *message.View, context string, selected, problem *string) *correctForm {
-	folders, err := triage.Folders(r.Context(), s.deps.DB.Read, found.Account)
+func (s *service) correctContext(r *http.Request, found *mailapp.MessageView, context string, selected, problem *string) *correctForm {
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: found.ID, Folders: true})
+	folders := read.Data.Folders
 	check(err)
 	return &correctForm{
 		MessageID: found.ID, Account: found.Account, Context: context, Folders: folders, Selected: selected, Error: problem,
@@ -82,13 +79,13 @@ func (s *service) messagePage(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, bad...)
 		return
 	}
-	found := s.loadMessage(w, r, id)
-	if found == nil {
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id, Draft: !web.IsPartial(r)})
+	check(err)
+	if read.Data.View == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown message")
 		return
 	}
-	draft, err := s.drafts.ForMessage(r.Context(), id)
-	check(err)
-	data := messageData{Message: found, Back: backTo(r), FromDraft: draft}
+	data := messageData{Message: read.Data.View, Back: backTo(r), FromDraft: read.Data.Draft}
 	if web.IsPartial(r) {
 		s.fragment(w, r, "_message.gohtml", data, nil)
 		return
@@ -108,11 +105,15 @@ func (s *service) correctForm(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	found := s.loadMessage(w, r, id)
+	read, err := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id, Folders: true})
+	check(err)
+	found := read.Data.View
 	if found == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown message")
 		return
 	}
-	s.fragment(w, r, "_correct.gohtml", correctData{Correct: s.correctContext(r, found, context, found.CorrectedTo, nil)}, nil)
+	correct := &correctForm{MessageID: found.ID, Account: found.Account, Context: context, Folders: read.Data.Folders, Selected: found.CorrectedTo}
+	s.fragment(w, r, "_correct.gohtml", correctData{Correct: correct}, nil)
 }
 
 func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
@@ -132,9 +133,14 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	if found == nil {
 		return
 	}
+	partial := web.IsPartial(r)
+	mode := mailapp.Deferred
+	if partial {
+		mode = mailapp.Immediate
+	}
 	var problem *string
-	recorded, err := corrections.Record(ctx, s.deps.DB, id, dest, corrections.Source, s.now())
-	var rejected corrections.Error
+	done, err := s.reads.Correct(ctx, mailapp.CorrectInput{MessageID: id, Folder: dest, Mode: mode})
+	var rejected mailapp.CorrectionError
 	switch {
 	case errors.As(err, &rejected):
 		text := rejected.Error()
@@ -143,14 +149,13 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	ok := problem == nil
-	partial := web.IsPartial(r)
 	if ok && !partial {
 		http.Redirect(w, r, "/messages/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 		return
 	}
 	var notice *tpl.Toast
 	if ok {
-		notice = toast("success", "Correction recorded", fmt.Sprintf("Corrected to %s.%s", recorded.Folder, s.moveCorrection(r, found, id)))
+		notice = toast("success", "Correction recorded", fmt.Sprintf("Corrected to %s.%s", done.Data.Correction.Folder, done.Data.Note))
 	}
 	fresh := s.loadMessage(w, r, id)
 	if fresh == nil {
@@ -170,7 +175,7 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case context == contextRow && partial:
-		row, err := triage.Get(ctx, s.deps.DB.Read, id)
+		row, err := s.reads.TriageRow(ctx, id)
 		check(err)
 		if row == nil {
 			s.fail(w, r, http.StatusNotFound, "message has no decision")
@@ -185,49 +190,19 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *service) moveCorrection(r *http.Request, found *message.View, id int64) string {
-	ctx := context.WithoutCancel(r.Context())
-	mode, err := mail.Mode(ctx, s.deps.DB.Read)
-	if err != nil {
-		log.Error(fmt.Sprintf("reading mail mode for corrected message %d failed", id), logx.Err, err.Error())
-		return ""
-	}
-	if mode != safety.Live {
-		return ""
-	}
-	out, err := func() (out appliedOutcome, err error) {
-		lock, err := db.Exclusive(ctx, s.deps.Cfg.DBPath, db.ShortLockWait)
-		if err != nil {
-			return out, err
-		}
-		defer func() { _ = lock.Close() }()
-		done, err := s.applier.ApplyCorrections(ctx, found.Account, []int64{id})
-		return appliedOutcome{done.Ran, done.Written, done.Failed + done.Skipped}, err
-	}()
-	if err != nil {
-		log.Error(fmt.Sprintf("moving corrected message %d failed", id), logx.Err, err.Error())
-		return " It could not be moved yet: " + err.Error() + "."
-	}
-	switch {
-	case !out.ran:
-		return " Moving is paused; it will move after you resume."
-	case out.written > 0:
-		return " The message was moved."
-	case out.unmoved > 0:
-		return " It could not be moved; see Decisions."
-	}
-	return ""
-}
-
-type appliedOutcome struct {
-	ran     bool
-	written int
-	unmoved int
-}
-
 func (s *service) togglePause(w http.ResponseWriter, r *http.Request, paused bool) {
-	check(s.live.SetPaused(paused))
-	if err := notify.PauseChanged(context.WithoutCancel(r.Context()), s.deps.DB, s.deps.Env, paused); err != nil {
+	ctx := context.WithoutCancel(r.Context())
+	var done application.Change[mailapp.PauseResult]
+	var err error
+	if paused {
+		done, err = s.reads.Pause(ctx, mailapp.PauseInput{})
+	} else {
+		done, err = s.reads.Resume(ctx, mailapp.PauseInput{})
+	}
+	if !mailapp.Committed(err) {
+		check(err)
+	}
+	if err := done.Data.NoticeError; err != nil {
 		log.Warn("pause notice failed", logx.Err, err.Error())
 	}
 	target := "/triage"
@@ -246,21 +221,22 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := context.WithoutCancel(r.Context())
-	found, err := live.Get(ctx, s.deps.DB.Read, id)
-	check(err)
-	if found == nil {
+	notice := toast("success", "Undone", "")
+	_, err := s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
+	var e *application.Error
+	switch {
+	case err == nil:
+	case !errors.As(err, &e):
+		panic(err)
+	case e.Code == application.NotFound:
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return
+	default:
+		notice = toast("error", "Not undone", e.Message)
 	}
-	notice := toast("success", "Undone", "")
-	var refused live.UndoError
-	switch _, err := s.live.Undo(ctx, id); {
-	case errors.As(err, &refused):
-		notice = toast("error", "Not undone", refused.Error())
-	case err != nil:
-		panic(err)
-	}
-	row, err := triage.Get(ctx, s.deps.DB.Read, found.MessageID)
+	found, err := s.review.LiveAction(ctx, id)
+	check(err)
+	row, err := s.reads.TriageRow(ctx, found.MessageID)
 	check(err)
 	if row == nil {
 		s.fail(w, r, http.StatusNotFound, "message has no decision")

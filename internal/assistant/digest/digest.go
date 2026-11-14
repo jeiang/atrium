@@ -18,9 +18,12 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -28,10 +31,10 @@ const (
 	lineCap   = 10
 )
 
-func init() {
-	settings.MustRegister(settings.Value(settings.UI, settings.Def{
+func Settings() []settings.Def {
+	return []settings.Def{settings.Value(settings.UI, settings.Def{
 		Key: NotifyKey, Module: "assistant", Type: settings.Bool, Default: "true",
-	}))
+	})}
 }
 
 type dreaming struct {
@@ -56,13 +59,9 @@ type conflict struct {
 	marks  int64
 }
 
-func Run(ctx context.Context, svc *service.Service, nowFn func() float64, sources []attention.Source) (bool, error) {
+func Run(ctx context.Context, svc *service.Service, nowFn func() float64, jobRunID int64, result attention.Result) (bool, error) {
 	now := nowFn()
 	loc, err := config.From(ctx).Location(svc.Env)
-	if err != nil {
-		return false, err
-	}
-	result, err := attention.Query(ctx, svc.DB.Read, now, sources...)
 	if err != nil {
 		return false, err
 	}
@@ -98,9 +97,13 @@ func Run(ctx context.Context, svc *service.Service, nowFn func() float64, source
 		for i, line := range push {
 			body[i] = "- " + line.Text
 		}
-		if _, err := notify.Send(ctx, svc.DB.Write, notify.Message{
+		occurrence := "digest:" + day.Format("2006-01-02")
+		if jobRunID != 0 {
+			occurrence = fmt.Sprintf("digest:%d", jobRunID)
+		}
+		if _, err := notify.Send(ctx, svc.DB, notify.Message{
 			Channel: notify.Assistant, Title: "Morning digest", Body: strings.Join(body, "\n"),
-			Now: func() float64 { return now },
+			Now: func() float64 { return now }, Occurrence: occurrence,
 		}); err != nil {
 			return false, err
 		}
@@ -145,20 +148,17 @@ func blockLines(content []json.RawMessage) (string, []block.DigestLine, bool, er
 
 func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error) {
 	var out dreaming
-	var jobRun, jobID, threadID int64
-	var status string
-	var jobStarted float64
-	err := q.QueryRowContext(ctx,
-		"SELECT jr.id, jr.job_id, jr.status, COALESCE(jr.thread_id, 0), COALESCE(jr.started_at, jr.due_at) FROM job_runs jr JOIN jobs j ON j.id = jr.job_id "+
-			"WHERE j.name = 'nightly' AND jr.ended_at IS NOT NULL AND jr.ended_at >= ? ORDER BY jr.id DESC LIMIT 1", now-86400).Scan(&jobRun, &jobID, &status, &threadID, &jobStarted)
-	if errors.Is(err, sql.ErrNoRows) {
-		return out, nil
-	}
-	if err != nil {
+	latest, err := scheduler.LatestCompleted(ctx, q, assistant.NightlyName, now-86400)
+	if err != nil || latest == nil {
 		return out, err
 	}
-	out.skipped = status == "skipped_budget"
-	out.failed = status == "error"
+	jobID, jobStarted := latest.JobID, latest.StartedAt
+	var threadID int64
+	if latest.ThreadID != nil {
+		threadID = *latest.ThreadID
+	}
+	out.skipped = latest.Status == scheduler.StatusSkippedBudget
+	out.failed = latest.Status == scheduler.StatusError
 	rows, err := q.QueryContext(ctx,
 		"SELECT r.id, r.started_at FROM runs r JOIN threads t ON t.id = r.thread_id WHERE t.job_id = ? AND r.started_at >= ? ORDER BY r.id", jobID, jobStarted)
 	if err != nil {
@@ -192,57 +192,45 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 		return out, nil
 	}
 	out.run = runs[0].id
-	ids := make([]any, 0, len(runs))
-	marks := strings.TrimSuffix(strings.Repeat("?,", len(runs)), ",")
+	runIDs := make([]int64, 0, len(runs))
 	for _, run := range runs {
-		ids = append(ids, run.id)
+		runIDs = append(runIDs, run.id)
 	}
-	visible := "r.private = 0 AND (r.project_id IS NULL OR r.project_id NOT IN (SELECT id FROM projects WHERE private = 1))"
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND "+visible, ids...).Scan(&out.new); err != nil {
+	if out.new, err = kb.CountRunRecords(ctx, q, runIDs); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id IN ("+marks+") AND w.tool = 'kb_write' AND r.id NOT IN (SELECT id FROM kb_records WHERE source_run_id IN ("+marks+")) AND "+visible, append(append([]any{}, ids...), ids...)...).Scan(&out.edited); err != nil {
+	if out.edited, err = kb.CountRunWrites(ctx, q, runIDs, "kb_write", true); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id IN ("+marks+") AND w.tool = 'kb_retract' AND "+visible, ids...).Scan(&out.retracted); err != nil {
+	if out.retracted, err = kb.CountRunWrites(ctx, q, runIDs, "kb_retract", false); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes WHERE run_id IN ("+marks+") AND tool = 'task_add'", ids...).Scan(&out.tasks); err != nil {
+	if out.tasks, err = ledger.CountForRuns(ctx, q, runIDs, "task_add"); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.title LIKE 'Lesson: %' AND "+visible, ids...).Scan(&out.lessons); err != nil {
+	if out.lessons, err = kb.CountRunLessons(ctx, q, runIDs); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.marks != 0 AND "+visible, ids...).Scan(&out.marked); err != nil {
+	if out.marked, err = kb.CountRunMarked(ctx, q, runIDs); err != nil {
 		return out, err
 	}
-	rows, err = q.QueryContext(ctx,
-		"SELECT r.id, r.title, r.source_thread_id, r.marks FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.aliases LIKE ? AND "+visible+" ORDER BY r.id LIMIT 2",
-		append(ids, `%"conflict"%`)...)
+	conflicts, err := kb.RunConflicts(ctx, q, runIDs, `%"conflict"%`)
 	if err != nil {
 		return out, err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var c conflict
-		if err := rows.Scan(&c.id, &c.title, &c.thread, &c.marks); err != nil {
-			return out, err
-		}
-		out.conflicts = append(out.conflicts, c)
+	for _, c := range conflicts {
+		out.conflicts = append(out.conflicts, conflict{id: c.ID, title: c.Title, thread: c.Thread, marks: int64(c.Marks)})
 	}
-	if err := rows.Err(); err != nil {
-		return out, err
-	}
-	if id, err := writes.UnknownTarget(ctx, q, "export:notion:"); err != nil {
+	if id, err := ledger.BlockedTarget(ctx, q, "export:notion:"); err != nil {
 		return out, err
 	} else if id != 0 {
 		out.exportID = id
-	} else if id, err := writes.UnknownTarget(ctx, q, "export:obsidian:"); err != nil {
+	} else if id, err := ledger.BlockedTarget(ctx, q, "export:obsidian:"); err != nil {
 		return out, err
 	} else {
 		out.exportID = id
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM ops_findings WHERE resolved_at IS NULL").Scan(&out.opsFinding); err != nil {
+	if out.opsFinding, err = serverops.CountUnresolved(ctx, q); err != nil {
 		return out, err
 	}
 	return out, nil

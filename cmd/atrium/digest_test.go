@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -27,7 +28,7 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	now := float64(time.Now().Unix())
 	exec := func(query string, args ...any) {
 		t.Helper()
@@ -42,7 +43,9 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	start := func() (context.CancelFunc, chan appRun) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan appRun, 1)
-		go func() { done <- runAppContext(t, f, ctx, "agent", "scheduler") }()
+		go func() {
+			done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+		}()
 		return cancel, done
 	}
 	cancel, done := start()
@@ -67,6 +70,13 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	requests := len(api.Requests())
 	cancel, done = start()
 	first := browser.decrypt(t, push.wait(t, 1).body)
+	waitFor(t, func() bool {
+		var running int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM job_runs WHERE status = 'running'").Scan(&running); err != nil {
+			t.Fatal(err)
+		}
+		return running == 0
+	})
 	cancel()
 	<-done
 	if len(api.Requests()) != requests {
@@ -74,6 +84,13 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	}
 	if !strings.Contains(fmt.Sprint(first["body"]), "Call the dentist") || !strings.Contains(fmt.Sprint(first["body"]), "Send invoice") {
 		t.Fatalf("digest does not list the items: %v", first)
+	}
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.digest' AND outcome = 'ok' AND source = 'job' AND job_run_id IS NOT NULL").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits != 1 {
+		t.Fatalf("digest audits = %d, want 1", audits)
 	}
 	exec("UPDATE ntfy_channels SET content = 'title' WHERE name = 'assistant'")
 	exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE name = 'daily-nudges'", now)

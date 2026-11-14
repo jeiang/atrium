@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"fmt"
+
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/proposals"
 )
 
 func TestOperatorResolvesAForwardInterruptedAction(t *testing.T) {
@@ -29,18 +30,22 @@ func TestOperatorResolvesAForwardInterruptedAction(t *testing.T) {
 	if err := db.Migrate(ctx, seed, path); err != nil {
 		t.Fatal(err)
 	}
+	seedSettingsAt(t, path, allFlagSettings())
 	now := float64(time.Now().UnixNano()) / 1e9
-	action := func(state ledger.State, text string) int64 {
-		res, err := seed.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, dest, state, error) VALUES (?, 'icloud', 1, 'file', 'Bills', ?, ?)",
-			now-100, state, text)
+	seq := 0
+	action := func(text string) int64 {
+		seq++
+		res, err := seed.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, account, message_id, target, action_json, dest, state, settled_at, error) "+
+			"VALUES (?, ?, ?, 'mail_auto', 'file', ?, 'forward', 'icloud', 1, 'mail:icloud:1', '{}', 'Bills', 'unknown', ?, ?)",
+			now-100, now-100, fmt.Sprintf("token-%d", seq), fmt.Sprintf("auto/1/file/Bills/%d", seq), now-100, text)
 		if err != nil {
 			t.Fatal(err)
 		}
 		id, _ := res.LastInsertId()
 		return id
 	}
-	interrupted := action(ledger.Interrupted, "interrupted before completion")
-	unknown := action(ledger.Unknown, "connection lost")
+	interrupted := action("interrupted before completion")
+	unknown := action("connection lost")
 	if err := seed.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -71,14 +76,22 @@ func TestOperatorResolvesAForwardInterruptedAction(t *testing.T) {
 	}
 	defer func() { _ = d.Close() }()
 	var applied, failed ledger.State
-	var failure *string
-	if err := d.Read.QueryRow("SELECT state FROM auto_actions WHERE id = ?", interrupted).Scan(&applied); err != nil {
+	var appliedOutcome, failedOutcome *string
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE id = ?", interrupted).Scan(&applied); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT state, error FROM auto_actions WHERE id = ?", unknown).Scan(&failed, &failure); err != nil {
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE id = ?", unknown).Scan(&failed); err != nil {
 		t.Fatal(err)
 	}
-	if applied != ledger.Applied || failed != ledger.Failed || failure == nil || *failure != proposals.NotAppliedText {
-		t.Fatalf("resolved states = %q %q (%v), want applied and failed", applied, failed, failure)
+	if err := d.Read.QueryRow("SELECT effective_outcome FROM effect_resolutions WHERE effect_id = ?", interrupted).Scan(&appliedOutcome); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT effective_outcome FROM effect_resolutions WHERE effect_id = ?", unknown).Scan(&failedOutcome); err != nil {
+		t.Fatal(err)
+	}
+	if applied != ledger.Unknown || failed != ledger.Unknown ||
+		appliedOutcome == nil || *appliedOutcome != "done" || failedOutcome == nil || *failedOutcome != "failed" {
+		t.Fatalf("resolved states = %q %q (%v %v), want unknown outcomes with done and failed resolutions",
+			applied, failed, appliedOutcome, failedOutcome)
 	}
 }

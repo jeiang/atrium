@@ -17,7 +17,7 @@ func TestAMailProposalRefusesToRunWhenTheMailModuleIsOff(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("approve with mail off: exit %d stdout %q", code, stdout)
 	}
-	if !strings.Contains(stderr, "the mail module is disabled") {
+	if !strings.Contains(stderr, "the mail module was disabled; start the action again") {
 		t.Fatalf("stderr = %q", stderr)
 	}
 	d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))

@@ -2,135 +2,94 @@ package media
 
 import (
 	"context"
-	"net/http"
+	"errors"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
 const module = "media"
 
 const (
-	KeyRoot              = "media_root"
-	KeyQbitURL           = "media_qbittorrent_url"
-	KeyMoviesURL         = "media_movies_url"
-	KeyTVURL             = "media_tv_url"
-	KeyLinkTTL           = "media_link_ttl_seconds"
-	KeyEZTVURL           = "media_eztv_url"
-	KeyEZTVLimit         = "media_eztv_limit"
-	KeyQbitTimeout       = "media_qbittorrent_timeout_seconds"
-	KeyEZTVTimeout       = "media_eztv_timeout_seconds"
-	KeyTMDBTimeout       = "media_tmdb_timeout_seconds"
-	KeyTMDBSearchLimit   = "media_tmdb_search_limit"
-	KeyShowSearchLimit   = "media_artwork_show_search_limit"
-	KeyArtworkMissTTL    = "media_artwork_miss_ttl_seconds"
-	KeyThumbWidth        = "media_thumbnail_width"
-	KeyThumbPosition     = "media_thumbnail_position"
-	KeyThumbPassLimit    = "media_thumbnail_pass_limit"
-	KeyFFmpegTimeout     = "media_ffmpeg_timeout_seconds"
-	KeyFFmpegNice        = "media_ffmpeg_nice"
-	KeyChannelSeenTTL    = "media_channel_seen_ttl_seconds"
-	KeyChannelNameChars  = "media_channel_name_chars"
-	KeyChannelPatternMax = "media_channel_pattern_chars"
-	KeySearchLimit       = "media_search_limit"
-	KeyChildLimit        = "media_child_limit"
-	KeyVideoExts         = "media_video_extensions"
-	KeySubtitleExts      = "media_subtitle_extensions"
-	KeyTorrentUploadCap  = "media_torrent_upload_bytes"
-	KeyLinkKey           = "link_key"
-	KeyQbitAPIKey        = "media_qbittorrent_api_key"
-	KeyTMDBToken         = "media_tmdb_token"
-	KeyTMDBURL           = "media_tmdb_url"
-	KeyTMDBImagesURL     = "media_tmdb_images_url"
+	KeyDownloadPrefix = "media_download_path_prefix"
+	KeyQbitURL        = "media_qbittorrent_url"
+	KeyVPNBaseURL     = "media_vpn_base_url"
+	KeyLinkTTL        = "media_link_ttl_seconds"
+	KeyEZTVURL        = "media_eztv_url"
+	KeyLinkKey        = "link_key"
+	KeyTMDBURL        = "media_tmdb_url"
+	KeyTMDBImagesURL  = "media_tmdb_images_url"
 )
 
 const (
-	defaultEZTVURL     = "https://eztvx.to/api/get-torrents"
-	defaultVideoExts   = ".mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv"
-	defaultSubtitleExt = ".srt,.sub,.idx,.ass,.ssa,.vtt"
+	DefaultEZTVURL    = "https://eztvx.to/api/get-torrents"
+	DefaultTMDBAPI    = "https://api.themoviedb.org/3"
+	DefaultTMDBImages = "https://image.tmdb.org/t/p/w342"
 )
 
-func init() {
-	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
-	}
-	between := func(key string, def string, lo, hi int64) settings.Def {
-		return adv(key, settings.Int, def, wholeBetween(lo, hi))
-	}
-	settings.MustRegister(
-		settings.Deploy(settings.Def{Key: KeyRoot, Module: module, Type: settings.String}),
-		settings.Deploy(settings.Def{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL}),
-		settings.Value(settings.UI, settings.Def{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL}),
-		settings.Value(settings.UI, settings.Def{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL}),
-		between(KeyLinkTTL, "43200", 60, 30*86400),
-		adv(KeyEZTVURL, settings.String, defaultEZTVURL, requiredHTTPURL),
-		adv(KeyTMDBURL, settings.String, defaultTMDBAPI, requiredHTTPURL),
-		adv(KeyTMDBImagesURL, settings.String, defaultTMDBImages, requiredHTTPURL),
-		between(KeyEZTVLimit, "100", 1, 100),
-		between(KeyQbitTimeout, "15", 1, 300),
-		between(KeyEZTVTimeout, "30", 1, 300),
-		between(KeyTMDBTimeout, "15", 1, 300),
-		between(KeyTMDBSearchLimit, "8", 1, 20),
-		between(KeyShowSearchLimit, "5", 1, 20),
-		between(KeyArtworkMissTTL, "604800", 60, 90*86400),
-		between(KeyThumbWidth, "480", 64, 3840),
-		adv(KeyThumbPosition, settings.Float, "0.1", settings.Between(0, 0.95)),
-		between(KeyThumbPassLimit, "200", 1, 10000),
-		between(KeyFFmpegTimeout, "120", 5, 3600),
-		between(KeyFFmpegNice, "10", 0, 19),
-		between(KeyChannelSeenTTL, "7776000", 86400, 3650*86400),
-		between(KeyChannelNameChars, "120", 10, 500),
-		between(KeyChannelPatternMax, "300", 20, 1000),
-		between(KeySearchLimit, "50", 1, 500),
-		between(KeyChildLimit, "500", 1, 5000),
-		adv(KeyVideoExts, settings.String, defaultVideoExts, extensionsCheck),
-		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
-		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
+func SettingsDefs() []settings.Def {
+	return []settings.Def{
+		settings.Value(settings.UI, settings.Def{Key: KeyLinkTTL, Module: module, Type: settings.Int, Default: "43200", Check: settings.Between(60, 30*86400)}),
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Check: settings.NonEmpty}),
-		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyQbitAPIKey, Module: module, Type: settings.String}),
-		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyTMDBToken, Module: module, Type: settings.String}),
-	)
-}
-
-func wholeBetween(lo, hi int64) func(string) error {
-	return func(value string) error {
-		n, ok := parseInt(value)
-		if !ok {
-			return settings.Invalid("must be a whole number")
-		}
-		if n < lo || n > hi {
-			return settings.Invalid("must be between " + strconv.FormatInt(lo, 10) + " and " + strconv.FormatInt(hi, 10))
-		}
-		return nil
 	}
 }
 
-func httpURL(value string) error {
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: KeyDownloadPrefix, Module: module, Type: settings.String},
+		{Key: KeyVPNBaseURL, Module: module, Type: settings.String, Check: vpnOrigin},
+	}
+}
+
+func vpnOrigin(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil
 	}
-	return requiredHTTPURL(value)
+	u, err := url.Parse(value)
+	if err != nil || strings.Contains(value, "#") || u.Opaque != "" || u.User != nil || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return settings.Invalid("must be an origin such as https://media.example.org:8443, with no path, query or credentials")
+	}
+	if u.Scheme == "https" || u.Scheme == "http" && loopbackHost(u.Hostname()) {
+		return nil
+	}
+	return settings.Invalid("must use https; http is allowed only for a loopback host")
+}
+
+func vpnBase(value string) string {
+	u, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port := u.Port(); port != "" && port != map[string]string{"https": "443", "http": "80"}[u.Scheme] {
+		host += ":" + port
+	}
+	return u.Scheme + "://" + host
+}
+
+func loopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 func requiredHTTPURL(value string) error {
 	u, err := url.Parse(strings.TrimSpace(value))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return settings.Invalid("must be an http or https URL")
-	}
-	return nil
-}
-
-func extensionsCheck(value string) error {
-	if _, err := extensionSet(value); err != nil {
-		return err
 	}
 	return nil
 }
@@ -155,11 +114,7 @@ func extensionSet(value string) (map[string]bool, error) {
 
 type Tuning struct {
 	LinkTTL         int64
-	EZTVURL         string
 	EZTVLimit       int
-	QbitTimeout     time.Duration
-	EZTVTimeout     time.Duration
-	TMDBTimeout     time.Duration
 	TMDBSearchLimit int
 	ShowSearchLimit int
 	ArtworkMissTTL  float64
@@ -180,22 +135,19 @@ type Tuning struct {
 
 type Settings struct {
 	Tuning
-	Root       string
-	QbitURL    string
-	QbitKey    string
-	MoviesURL  string
-	TVURL      string
-	PublicURL  string
-	TMDBToken  string
-	TMDBURL    string
-	TMDBImages string
-	QbitHTTP   *http.Client
-	TMDBHTTP   *http.Client
-	EZTVHTTP   *http.Client
+	DownloadPrefix string
+	QbitLease      *connections.Lease
+	QbitStore      *connections.Store
+	TMDBLease      *connections.Lease
+	TMDBStore      *connections.Store
+	EZTVLease      *connections.Lease
+	AgentLease     *connections.Lease
+	VPNBaseURL     string
+	PublicURL      string
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
-	out := Settings{PublicURL: config.From(ctx).PublicURL(env)}
+	out := Settings{PublicURL: config.From(ctx).PublicURL(env), Tuning: DefaultTuning()}
 	var failure error
 	resolve := func(key string) settings.Resolved {
 		if failure != nil {
@@ -205,8 +157,6 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		failure = err
 		return found
 	}
-	text := func(key string) string { return strings.TrimSpace(resolve(key).Value) }
-	link := func(key string) string { return strings.TrimRight(text(key), "/") }
 	whole := func(key string) int64 {
 		found := resolve(key)
 		if failure != nil {
@@ -216,90 +166,89 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		failure = err
 		return n
 	}
-	seconds := func(key string) time.Duration { return time.Duration(whole(key)) * time.Second }
-	float := func(key string) float64 {
-		found := resolve(key)
-		if failure != nil {
-			return 0
-		}
-		f, err := found.Float()
-		failure = err
-		return f
-	}
-	exts := func(key string) map[string]bool {
-		found := resolve(key)
-		if failure != nil {
-			return nil
-		}
-		set, err := extensionSet(found.Value)
-		if err != nil {
-			failure = settings.Invalid(key + " " + err.Error())
-		}
-		return set
-	}
-	out.Root, out.QbitURL = link(KeyRoot), link(KeyQbitURL)
-	out.TMDBURL, out.TMDBImages = link(KeyTMDBURL), link(KeyTMDBImagesURL)
-	out.MoviesURL, out.TVURL = link(KeyMoviesURL), link(KeyTVURL)
-	out.Tuning = Tuning{
-		LinkTTL:         whole(KeyLinkTTL),
-		EZTVURL:         text(KeyEZTVURL),
-		EZTVLimit:       int(whole(KeyEZTVLimit)),
-		QbitTimeout:     seconds(KeyQbitTimeout),
-		EZTVTimeout:     seconds(KeyEZTVTimeout),
-		TMDBTimeout:     seconds(KeyTMDBTimeout),
-		TMDBSearchLimit: int(whole(KeyTMDBSearchLimit)),
-		ShowSearchLimit: int(whole(KeyShowSearchLimit)),
-		ArtworkMissTTL:  float64(whole(KeyArtworkMissTTL)),
-		ThumbWidth:      int(whole(KeyThumbWidth)),
-		ThumbPosition:   float(KeyThumbPosition),
-		ThumbPassLimit:  int(whole(KeyThumbPassLimit)),
-		FFmpegTimeout:   seconds(KeyFFmpegTimeout),
-		FFmpegNice:      strconv.FormatInt(whole(KeyFFmpegNice), 10),
-		SeenTTL:         float64(whole(KeyChannelSeenTTL)),
-		NameChars:       int(whole(KeyChannelNameChars)),
-		PatternChars:    int(whole(KeyChannelPatternMax)),
-		SearchLimit:     int(whole(KeySearchLimit)),
-		ChildLimit:      int(whole(KeyChildLimit)),
-		VideoExts:       exts(KeyVideoExts),
-		SubtitleExts:    exts(KeySubtitleExts),
-		TorrentUpload:   int(whole(KeyTorrentUploadCap)),
-	}
+	out.DownloadPrefix = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyDownloadPrefix)), "/")
+	out.VPNBaseURL = vpnBase(config.From(ctx).HostValue(KeyVPNBaseURL))
+	out.LinkTTL = whole(KeyLinkTTL)
 	if failure != nil {
 		return Settings{}, failure
 	}
-	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
-	if out.QbitKey, failure = store.Value(ctx, KeyQbitAPIKey); failure != nil {
+	lease := func(id connections.ID) (*connections.Lease, error) {
+		found, err := openLease(ctx, q, id)
+		if err != nil {
+			var unknown connections.UnknownID
+			if errors.As(err, &unknown) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return found, nil
+	}
+	if out.QbitLease, failure = lease(connections.ID(KindQbittorrent)); failure != nil {
 		return Settings{}, failure
 	}
-	if out.TMDBToken, failure = store.Value(ctx, KeyTMDBToken); failure != nil {
+	if out.TMDBLease, failure = lease(connections.ID(KindTMDB)); failure != nil {
 		return Settings{}, failure
 	}
-	if out.QbitHTTP, failure = transport.For(ctx, q, "qbittorrent", out.QbitTimeout); failure != nil {
+	if out.EZTVLease, failure = lease(connections.ID(KindEZTV)); failure != nil {
 		return Settings{}, failure
 	}
-	if out.TMDBHTTP, failure = transport.For(ctx, q, "tmdb", out.TMDBTimeout); failure != nil {
+	if out.AgentLease, failure = lease(connections.ID(KindMediaAgent)); failure != nil {
 		return Settings{}, failure
 	}
-	if out.EZTVHTTP, failure = transport.For(ctx, q, "eztv", out.EZTVTimeout); failure != nil {
-		return Settings{}, failure
-	}
+	out.QbitStore = connections.DefaultFor(q)
+	out.TMDBStore = out.QbitStore
 	return out, nil
 }
 
-func (s Settings) TMDB() *TMDB { return NewTMDBAt(s.TMDBToken, s.TMDBHTTP, s.TMDBURL, s.TMDBImages) }
-
-func (s Settings) NeedRoot() (string, error) {
-	if s.Root == "" {
-		return "", config.NotConfigured("media_root is not set; pin it with ATRIUM_MEDIA_MEDIA_ROOT")
+func openLease(ctx context.Context, q db.Querier, id connections.ID) (*connections.Lease, error) {
+	if store := connections.DefaultFor(q); store != nil {
+		return store.Open(ctx, id)
 	}
-	return s.Root, nil
+	return connections.OpenRead(ctx, q, config.From(ctx).Host(), id)
+}
+
+func (s Settings) TMDB() *TMDB {
+	if s.TMDBLease == nil {
+		return nil
+	}
+	token, err := s.TMDBLease.Credential("read_token")
+	if err != nil || token == "" {
+		return nil
+	}
+	api, err := s.TMDBLease.Endpoint("url")
+	if err != nil {
+		return nil
+	}
+	images, _ := s.TMDBLease.Endpoint("images_url")
+	apiHTTP, err := s.TMDBLease.HTTPRead("url")
+	if err != nil {
+		return nil
+	}
+	imageHTTP, err := s.TMDBLease.HTTPRead("images_url")
+	if err != nil {
+		return nil
+	}
+	tmdb := NewTMDBAt(token, apiHTTP, imageHTTP, api, images)
+	if s.TMDBStore != nil && tmdb != nil {
+		lease, store := s.TMDBLease, s.TMDBStore
+		tmdb.report = func(ctx context.Context, state connections.State, reason string) {
+			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{
+				Capability: "api", State: state, Reason: reason,
+			})
+		}
+	}
+	return tmdb
 }
 
 func (s Settings) NeedQbit() (string, error) {
-	if s.QbitURL == "" {
-		return "", config.NotConfigured("media_qbittorrent_url is not set; pin it with ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL")
+	if s.QbitLease == nil {
+		return "", config.NotConfigured("the qBittorrent connection is not configured")
 	}
-	return s.QbitURL, nil
+	base, err := s.QbitLease.Endpoint("url")
+	if err != nil {
+		return "", config.NotConfigured("the qBittorrent connection has no URL")
+	}
+	return base, nil
 }
 
 func (s Settings) Qbit() (*Qbit, error) {
@@ -307,5 +256,19 @@ func (s Settings) Qbit() (*Qbit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQbit(base, s.QbitKey, s.QbitHTTP), nil
+	client, err := s.QbitLease.HTTP("url")
+	if err != nil {
+		return nil, err
+	}
+	token, _ := s.QbitLease.Credential("api_key")
+	q := NewQbit(base, token, client)
+	if s.QbitStore != nil {
+		lease, store := s.QbitLease, s.QbitStore
+		q.report = func(ctx context.Context, state connections.State, reason string) {
+			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{
+				Capability: "api", State: state, Reason: reason,
+			})
+		}
+	}
+	return q, nil
 }

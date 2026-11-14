@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/auth/oidc"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 type loginState struct {
@@ -43,16 +44,21 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request, reason, next 
 		reason, state = "", loginStates[""]
 	}
 	button := "Sign in"
-	cfg, cfgErr := s.oidc.Config(r.Context())
-	if cfgErr != nil {
+	cfg, err := s.account.Configuration(r.Context())
+	if err != nil {
+		log.Error("sign-in configuration failed", logx.Err, err.Error())
+		deny(w, http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if !cfg.Data.Active {
 		reason, state = "unconfigured", loginStates["unconfigured"]
-	} else if cfg.Preset.Display != "" {
-		button = "Sign in with " + cfg.Preset.Display
+	} else {
+		if cfg.Data.Display != "" {
+			button = "Sign in with " + cfg.Data.Display
+		}
+		w.Header().Set("Content-Security-Policy", strings.Replace(csp, "form-action 'self'", "form-action 'self' "+strings.Join(cfg.Data.Origins, " "), 1))
 	}
-	if cfgErr == nil {
-		w.Header().Set("Content-Security-Policy", strings.Replace(csp, "form-action 'self'", "form-action 'self' "+strings.Join(s.oidc.Origins(cfg), " "), 1))
-	}
-	view := loginView{Next: oidc.SafeReturn(next), Button: button, Reason: reason, Tone: state.tone, Message: state.message, Start: state.start}
+	view := loginView{Next: urlx.SafeReturn(next), Button: button, Reason: reason, Tone: state.tone, Message: state.message, Start: state.start}
 	if s.render == nil {
 		deny(w, state.status, state.message)
 		return
@@ -73,7 +79,7 @@ func (s *Server) registerAuthRoutes() {
 		noStore(w)
 		q := r.URL.Query()
 		if _, ok := IdentityOf(r.Context()); ok {
-			http.Redirect(w, r, oidc.SafeReturn(q.Get("next")), http.StatusSeeOther)
+			http.Redirect(w, r, urlx.SafeReturn(q.Get("next")), http.StatusSeeOther)
 			return
 		}
 		s.loginPage(w, r, q.Get("reason"), q.Get("next"))
@@ -82,40 +88,34 @@ func (s *Server) registerAuthRoutes() {
 		noStore(w)
 		form := FormValues(r)
 		next := form.Get("next")
-		login, err := s.oidc.Begin(r.Context(), next)
+		login, err := s.account.SigninStart(r.Context(), authapp.SigninStartInput{Next: next})
 		if err != nil {
 			s.signInFailed(w, r, err, next)
 			return
 		}
-		setCookie(w, bindingCookie, login.Binding, 600, secure(r))
-		http.Redirect(w, r, login.URL, http.StatusSeeOther)
+		setCookie(w, bindingCookie, login.Data.Binding, 600, secure(r))
+		http.Redirect(w, r, login.Data.URL, http.StatusSeeOther)
 	})
-	s.registerLinkRoutes()
-	s.registerWizardRoutes()
 	s.route(accessPublic, http.MethodGet, callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()
-		if s.oidc.IsTestState(q.Get("state")) {
-			s.testCallback(w, r)
-			return
-		}
 		expireCookie(w, bindingCookie, secure(r))
 		if q.Get("error") != "" {
 			log.Warn("provider refused the sign-in", "error", sanitizeLog(q.Get("error")))
 			s.loginPage(w, r, "refused", "")
 			return
 		}
-		grant, err := s.oidc.Complete(r.Context(), q.Get("state"), q.Get("code"), cookieValue(r, bindingCookie, secure(r)))
+		grant, err := s.account.SigninComplete(r.Context(), authapp.SigninCompleteInput{State: q.Get("state"), Code: q.Get("code"), Binding: cookieValue(r, bindingCookie, secure(r))})
 		if err != nil {
 			s.signInFailed(w, r, err, "")
 			return
 		}
-		setCookie(w, sessionCookie, grant.Token, int(grant.MaxAge.Seconds()), secure(r))
-		http.Redirect(w, r, grant.ReturnTo, http.StatusSeeOther)
+		setCookie(w, sessionCookie, grant.Data.Token, int(grant.Data.MaxAge.Seconds()), secure(r))
+		http.Redirect(w, r, grant.Data.ReturnTo, http.StatusSeeOther)
 	})
-	s.mux.Post(logoutPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessDefault, http.MethodPost, logoutPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
-		if err := s.oidc.End(r.Context(), cookieValue(r, sessionCookie, secure(r))); err != nil {
+		if _, err := s.account.Logout(r.Context(), authapp.LogoutInput{Token: cookieValue(r, sessionCookie, secure(r))}); err != nil {
 			log.Error("sign-out failed", logx.Err, err.Error())
 			s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
 			return
@@ -140,32 +140,12 @@ func sanitizeLog(s string) string {
 func noStore(w http.ResponseWriter) { w.Header().Set("Cache-Control", "no-store") }
 
 func (s *Server) signInFailed(w http.ResponseWriter, r *http.Request, err error, next string) {
-	var unconfigured *oidc.ConfigError
-	reason := ""
-	switch {
-	case errors.Is(err, oidc.ErrDenied):
-		reason = "denied"
-	case errors.Is(err, oidc.ErrLoginTimeout):
-		reason = "timeout"
-	case errors.Is(err, oidc.ErrLogin), errors.Is(err, oidc.ErrNoPKCE), errors.Is(err, oidc.ErrRejected), errors.Is(err, oidc.ErrToken):
-		reason = "refused"
-	case errors.Is(err, oidc.ErrProvider):
-		reason = "unreachable"
-	case errors.As(err, &unconfigured):
-		reason = "unconfigured"
-	default:
+	var failed *authapp.SigninError
+	if !errors.As(err, &failed) {
 		log.Error("sign-in failed", logx.Err, err.Error())
 		s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
-	log.Warn("sign-in failed", "reason", reason, logx.Err, err.Error())
-	s.loginPage(w, r, reason, next)
-}
-
-func (s *Server) registerWizardRoutes() {
-	s.route(accessAdmin, http.MethodGet, wizardPath, s.wizardPage)
-	s.route(accessAdmin, http.MethodGet, wizardPath+"/preset", s.wizardPreset)
-	s.route(accessAdmin, http.MethodPost, testPath, s.wizardTest)
-	s.route(accessAdmin, http.MethodGet, testPath+"/status", s.wizardStatus)
-	s.route(accessAdmin, http.MethodPost, wizardPath+"/activate", s.wizardActivate)
+	log.Warn("sign-in failed", "reason", failed.Reason, logx.Err, failed.Cause.Error())
+	s.loginPage(w, r, failed.Reason, next)
 }

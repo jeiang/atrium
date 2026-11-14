@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/tokens"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -20,26 +20,57 @@ type ProfileRecord struct {
 	Tokens   int64  `json:"tokens"`
 }
 
-func ProfileEntries(ctx context.Context, q db.Querier, budget int64) ([]ProfileRecord, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM kb_records r WHERE r.pinned = 1 AND r.retracted_at IS NULL ORDER BY r.title, r.id")
+type profileRow struct {
+	rec     Record
+	private bool
+}
+
+func (r profileRow) visible(projectID int64) bool {
+	if !r.rec.Private && !r.private {
+		return true
+	}
+	return r.rec.ProjectID != nil && *r.rec.ProjectID == projectID
+}
+
+func profileRows(ctx context.Context, q db.Querier, projectID int64, all bool) ([]profileRow, error) {
+	query := "SELECT " + columns + ", COALESCE(p.private, 0)" + fromClause() + " WHERE r.pinned = 1 AND r.retracted_at IS NULL"
+	args := []any{}
+	if !all {
+		clause, pargs := privateClause("r", projectID)
+		query += " AND " + clause
+		args = append(args, pargs...)
+	}
+	query += " ORDER BY r.title, r.id"
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
-	found, err := db.Collect(rows, func(r *sql.Rows) (Record, error) { return scan(r) })
-	if err != nil {
-		return nil, err
-	}
-	total := actx.EstimateTokens(ProfileHeader)
+	return db.Collect(rows, func(r *sql.Rows) (profileRow, error) {
+		var row profileRow
+		var private int64
+		rec, err := scanExtra(r, &private)
+		row.rec, row.private = rec, private != 0
+		return row, err
+	})
+}
+
+func profileEntries(found []profileRow, budget, projectID int64, review bool) []ProfileRecord {
+	total := tokens.Estimate(ProfileHeader)
 	out := make([]ProfileRecord, 0, len(found))
-	for _, rec := range found {
-		entry := ProfileRecord{Record: rec}
+	for _, row := range found {
+		if !review && !row.visible(projectID) {
+			continue
+		}
+		entry := ProfileRecord{Record: row.rec}
 		switch {
-		case !rec.Confirmed():
+		case !row.rec.Confirmed():
 			entry.Reason = "unconfirmed"
-		case rec.Marks&(tool.Untrusted|tool.PII|tool.Messages) != 0:
+		case row.rec.Marks&(tool.Untrusted|tool.PII|tool.Messages) != 0:
 			entry.Reason = "marked"
+		case review && !row.visible(projectID):
+			entry.Reason = "private"
 		default:
-			entry.Tokens = actx.EstimateTokens("- " + rec.Title + ": " + rec.Body)
+			entry.Tokens = tokens.Estimate("- " + row.rec.Title + ": " + row.rec.Body)
 			if total+entry.Tokens > budget {
 				entry.Reason = "over budget"
 			} else {
@@ -49,16 +80,28 @@ func ProfileEntries(ctx context.Context, q db.Querier, budget int64) ([]ProfileR
 		}
 		out = append(out, entry)
 	}
-	return out, nil
+	return out
 }
 
-func ProfileBlock(ctx context.Context, q db.Querier) (string, error) {
-	r := assistant.Read(ctx, q)
-	budget := int64(r.Int(assistant.KeyKBProfileTokens))
-	if err := r.Err(); err != nil {
-		return "", err
+func ProfileEntries(ctx context.Context, q db.Querier, budget, projectID int64) ([]ProfileRecord, error) {
+	found, err := profileRows(ctx, q, projectID, false)
+	if err != nil {
+		return nil, err
 	}
-	entries, err := ProfileEntries(ctx, q, budget)
+	return profileEntries(found, budget, projectID, false), nil
+}
+
+func ProfileReview(ctx context.Context, q db.Querier, budget int64) ([]ProfileRecord, error) {
+	found, err := profileRows(ctx, q, 0, true)
+	if err != nil {
+		return nil, err
+	}
+	return profileEntries(found, budget, 0, true), nil
+}
+
+func ProfileBlock(ctx context.Context, q db.Querier, projectID int64) (string, error) {
+	budget := int64(assistant.TuningAgentKbProfileTokens)
+	entries, err := ProfileEntries(ctx, q, budget, projectID)
 	if err != nil {
 		return "", err
 	}

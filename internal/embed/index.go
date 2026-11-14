@@ -5,8 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
+	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
+	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
+	notionembedding "github.com/jeiang/atrium/internal/notion/embedding"
 )
 
 const (
@@ -105,15 +109,6 @@ func (b *Build) Swap(ctx context.Context) (bool, error) {
 		if err != nil {
 			return err
 		}
-		for _, stmt := range []string{
-			"UPDATE messages SET embedded = 1 WHERE id IN (SELECT rowid FROM " + b.MessageTable() + ")",
-			"UPDATE notion_pages SET embedded = 1 WHERE rid IN (SELECT rowid FROM " + b.NotionTable() + ")",
-			"UPDATE kb_records SET embedded = 1 WHERE id IN (SELECT rowid FROM " + b.KBTable() + ")",
-		} {
-			if _, err := tx.ExecContext(ctx, stmt); err != nil {
-				return err
-			}
-		}
 		if err := drop(ctx, tx, old); err != nil {
 			return err
 		}
@@ -131,7 +126,18 @@ func (b *Build) Discard(ctx context.Context) error {
 	if err := b.building(); err != nil {
 		return err
 	}
-	return b.d.WithTx(ctx, func(tx *sql.Tx) error { return drop(ctx, tx, b.Index) })
+	return b.d.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := mailembedding.ClearIn(ctx, tx, b.MessageTable()); err != nil {
+			return err
+		}
+		if err := notionembedding.ClearIn(ctx, tx, b.NotionTable()); err != nil {
+			return err
+		}
+		if err := kbembedding.ClearIn(ctx, tx, b.KBTable()); err != nil {
+			return err
+		}
+		return drop(ctx, tx, b.Index)
+	})
 }
 
 func (i Index) Adopt(ctx context.Context, d *db.DB, url, model string) error {
@@ -161,6 +167,30 @@ func DeleteKB(ctx context.Context, q execer, id int64) error {
 			continue
 		}
 		if _, err := q.ExecContext(ctx, "DELETE FROM "+i.KBTable()+" WHERE rowid = ?", id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func DeleteMessages(ctx context.Context, q execer, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	marks := "(?" + strings.TrimSuffix(strings.Repeat(",?", len(ids)-1), ",") + ")"
+	for _, state := range []string{StateActive, StateBuilding} {
+		i, ok, err := lookup(ctx, q, state)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if _, err := q.ExecContext(ctx, "DELETE FROM "+i.MessageTable()+" WHERE rowid IN "+marks, args...); err != nil {
 			return err
 		}
 	}
@@ -222,13 +252,18 @@ func drop(ctx context.Context, tx *sql.Tx, i Index) error {
 	return err
 }
 
-func counts(ctx context.Context, q rowQuerier, i Index) (done, total int, err error) {
-	err = q.QueryRowContext(ctx, "SELECT "+
-		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts) AND id IN (SELECT rowid FROM "+i.MessageTable()+")) + "+
-		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0 AND rid IN (SELECT rowid FROM "+i.NotionTable()+")) + "+
-		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL AND id IN (SELECT rowid FROM "+i.KBTable()+")), "+
-		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts)) + "+
-		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0) + "+
-		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL)").Scan(&done, &total)
-	return done, total, err
+func counts(ctx context.Context, q db.Querier, i Index) (done, total int, err error) {
+	messageDone, messageTotal, err := mailembedding.Counts(ctx, q, i.MessageTable())
+	if err != nil {
+		return 0, 0, err
+	}
+	notionDone, notionTotal, err := notionembedding.Counts(ctx, q, i.NotionTable())
+	if err != nil {
+		return 0, 0, err
+	}
+	kbDone, kbTotal, err := kbembedding.Counts(ctx, q, i.KBTable())
+	if err != nil {
+		return 0, 0, err
+	}
+	return messageDone + notionDone + kbDone, messageTotal + notionTotal + kbTotal, nil
 }

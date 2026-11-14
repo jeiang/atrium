@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 var log = logx.Logger("atrium.module")
@@ -25,19 +26,24 @@ func (s *Set) enabled(name string) bool {
 }
 
 func (s *Set) Pages() []web.Page {
-	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}}
-	for _, r := range s.regs {
+	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}, Bindings: s.cat.WebBindings()}}
+	for _, r := range s.decls {
 		for _, p := range r.Pages {
-			if p.Module == nil && p.Start == nil && len(p.Nav) == 0 {
+			if p.Module == nil && len(p.Nav) == 0 {
 				continue
 			}
 			if !r.Core {
 				p = s.gatePage(r.Name, p)
+			} else if p.Module != nil {
+				p.Module = web.Owned(r.Name, p.Module, nil)
 			}
 			pages = append(pages, p)
 		}
 	}
-	return append(pages, settingspage.Page(s.settingPages()))
+	groups, generic, control := s.settingPages()
+	settingsPage := settingspage.Page(groups, generic, control, s.cat.Sections())
+	settingsPage.Module = web.Owned(Core, settingsPage.Module, nil)
+	return append(pages, settingsPage)
 }
 
 func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error) {
@@ -46,8 +52,16 @@ func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (sett
 		return settings.ModuleView{}, err
 	}
 	view := settings.ModuleView{On: held.Result == "", Running: s.enabled(name)}
-	if held.Result == HoldNeeds {
+	switch held.Result {
+	case HoldNeeds:
 		view.Reason = held.Detail
+	case HoldUnavailable:
+		view.Error = held.Detail
+	}
+	if snap := s.Current(); snap != nil {
+		if st, _ := snap.Status(name); st.State == Unavailable {
+			view.Error = st.Err
+		}
 	}
 	source, pinned, err := s.reg.Pinned(FlagKey(name))
 	if pinned {
@@ -62,7 +76,7 @@ func (s *Set) settingMark(name string) string {
 		return ""
 	}
 	switch st, _ := snap.Status(name); st.State {
-	case NeedsSettings:
+	case NeedsSettings, Unavailable:
 		return "warning"
 	case Off:
 		return "off"
@@ -70,11 +84,16 @@ func (s *Set) settingMark(name string) string {
 	return "on"
 }
 
+func (s *Set) OfferedSetting(key string) (settingspage.Section, bool) {
+	groups, _, _ := s.settingPages()
+	return settingspage.Offered(groups, s.cat.Sections(), key)
+}
+
 func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
 	var groups []settingspage.Group
 	var generic []settingspage.Generic
 	control := settingspage.Control{State: s.settingState, Mark: s.settingMark}
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if !r.Core {
 			for _, p := range r.Pages {
 				for _, item := range p.Nav {
@@ -96,8 +115,8 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 				}
 			}
 		}
-		own := home == "" && !r.Core && settingspage.Wanted(r.Name)
-		for _, g := range r.Settings {
+		own := home == "" && !r.Core && s.cat.SectionModules()[r.Name]
+		for _, g := range r.Groups {
 			g.Module = r.Name
 			at := settingspage.Group{Group: g, URL: g.Page}
 			if g.Page == "" {
@@ -126,11 +145,34 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 			p.Nav[i].Module = owner
 		}
 	}
-	inner := p.Module
-	p.Module = func(r chi.Router, d *web.Deps) {
-		if s.Current().Enabled(owner) {
-			inner(r, d)
-		}
+	if p.Module != nil {
+		mount := p.Module
+		p.Module = web.Owned(owner, func(r chi.Router, d *web.Deps) {
+			onFrame := d.OnFrame
+			d.OnFrame = func(fn web.FrameFunc) {
+				onFrame(func(ctx context.Context, f *tpl.Frame) error {
+					if !s.enabled(owner) {
+						return nil
+					}
+					return fn(ctx, f)
+				})
+			}
+			defer func() { d.OnFrame = onFrame }()
+			mount(r, d)
+		}, func(d *web.Deps, next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				set := SetFrom(r.Context())
+				var snap *Snapshot
+				if set != nil {
+					snap = set.Current()
+				}
+				if snap == nil || !snap.Enabled(owner) {
+					d.NotFound(w, r)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		})
 	}
 	if public := p.Public; public != nil {
 		p.Public = func(cfg config.Config, env config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {
@@ -146,7 +188,7 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 
 func (s *Set) Commands() []*cli.Command {
 	var out []*cli.Command
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		for _, c := range r.Commands {
 			out = append(out, s.gateCommand(r, c, c.Name, Leaf{}))
 		}
@@ -154,7 +196,7 @@ func (s *Set) Commands() []*cli.Command {
 	return out
 }
 
-func (s *Set) gateCommand(r Registration, c *cli.Command, path string, inherited Leaf) *cli.Command {
+func (s *Set) gateCommand(r Declaration, c *cli.Command, path string, inherited Leaf) *cli.Command {
 	rule, ok := r.Leaves[path]
 	if !ok {
 		rule = inherited
@@ -202,22 +244,8 @@ func skip(path string, st Status, msg string) {
 	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
 }
 
-// Open loads the configuration, opens the database and boots it. It is the
-// serve command's only path to the application database.
 func (s *Set) Open(ctx context.Context) (*db.DB, config.Config, error) {
-	cfg, err := config.Load(s.env)
-	if err != nil {
-		return nil, config.Config{}, err
-	}
-	d, err := db.Connect(cfg.DBPath)
-	if err != nil {
-		return nil, config.Config{}, err
-	}
-	if err := config.Boot(ctx, s.env, d, cfg); err != nil {
-		_ = d.Close()
-		return nil, config.Config{}, err
-	}
-	return d, cfg, nil
+	return s.opener(ctx)
 }
 
 func (s *Set) open(ctx context.Context) (*db.DB, error) {
@@ -225,22 +253,20 @@ func (s *Set) open(ctx context.Context) (*db.DB, error) {
 	return d, err
 }
 
-// Start seeds the module flags and evaluates the one startup snapshot. A
-// failure to evaluate leaves the process serving core only, matching the
-// behaviour the module gate has always had.
 func (s *Set) Start(ctx context.Context, d *web.Deps) error {
 	if err := s.Seed(ctx, d.DB); err != nil {
-		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
-		s.cur.Store(s.coreOnly())
-		return nil
+		return coreFailure(err)
 	}
 	snap, err := s.Evaluate(ctx, d.DB.Read)
 	if err != nil {
-		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
-		snap = s.coreOnly()
+		return err
 	}
-	s.cur.Store(snap)
+	s.publishFirst(snap)
 	return nil
+}
+
+func coreFailure(err error) error {
+	return &DeclarationError{Module: Core, Field: "evaluation", Err: err}
 }
 
 func (s *Set) load(ctx context.Context) (*Snapshot, error) {
@@ -250,12 +276,12 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 	}
 	defer func() { _ = d.Close() }()
 	if err := s.Seed(ctx, d); err != nil {
-		return nil, err
+		return nil, coreFailure(err)
 	}
 	snap, err := s.Evaluate(ctx, d.Read)
 	if err != nil {
 		return nil, err
 	}
-	s.cur.Store(snap)
+	s.publishFirst(snap)
 	return snap, nil
 }

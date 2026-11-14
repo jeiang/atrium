@@ -3,10 +3,13 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,7 +21,8 @@ import (
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 const apiClient = "atrium-ios"
@@ -50,24 +54,107 @@ func newAPISite(t *testing.T) *apiSite {
 	return startAPISite(t, dir, api)
 }
 
-func startAPISite(t *testing.T, dir string, api *modelLog) *apiSite {
+func startAPISite(t *testing.T, dir string, api *modelLog, extra ...string) *apiSite {
 	t.Helper()
 	idp := oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test", GroupsIn: "userinfo"})
 	idp.AddUser(oidctest.User{Name: "owner", Email: "owner@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
 	idp.AddUser(oidctest.User{Name: "guest", Email: "guest@example.com", Groups: []string{"atrium_access"}})
 	idp.AddUser(oidctest.User{Name: "stranger", Email: "stranger@example.com"})
-	setEnv(t, settingEnv(config.KeyPublicURL), "http://127.0.0.1")
-	setEnv(t, settingEnv(oidc.KeyIssuer), idp.Issuer())
-	setEnv(t, settingEnv(oidc.KeyClientID), idp.ClientID())
-	setEnv(t, settingEnv(oidc.KeyGroupsClaim), "groups")
-	setEnv(t, settingEnv(oidc.KeyAPIClientID), apiClient)
-	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
-	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	_, port, _ := net.SplitHostPort(l.Addr().String())
+	_ = l.Close()
+	base := "http://127.0.0.1:" + port
+	setEnv(t, settingEnv(config.KeyPublicURL), base)
+	setEnv(t, "ATRIUM_HOST_CONFIG", oidcHostConfig(t, dir, oidcHost{
+		Issuer:      idp.Issuer(),
+		ClientID:    idp.ClientID(),
+		APIClientID: apiClient,
+		Secret:      "s3cret-for-the-test",
+		GroupsClaim: "groups",
+	}))
+	args := []string{"--port", port, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1"}
+	args = append(args, extra...)
+	served, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if served != base {
+		t.Fatalf("serve listens on %s, want %s", served, base)
+	}
 	t.Cleanup(stop)
 	return &apiSite{t: t, base: base, dir: dir, idp: idp, api: api}
+}
+
+type oidcHost struct {
+	Issuer       string
+	ClientID     string
+	APIClientID  string
+	Secret       string
+	GroupsClaim  string
+	AccessGroups string
+	Scopes       string
+	Preset       string
+}
+
+func oidcHostConfig(t *testing.T, dir string, h oidcHost) string {
+	t.Helper()
+	if h.Preset == "" {
+		h.Preset = oidc.PresetGeneric
+	}
+	if h.GroupsClaim == "" {
+		h.GroupsClaim = "groups"
+	}
+	if h.Scopes == "" {
+		h.Scopes = "openid profile email groups"
+	}
+	base := defaultHostConfig
+	if f := fixtureFor(t); f != nil {
+		if path, ok := f.lookup("ATRIUM_HOST_CONFIG"); ok && path != "" {
+			base = path
+		}
+	}
+	existing, err := os.ReadFile(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := [][2]string{
+		{"preset", h.Preset},
+		{"issuer", h.Issuer},
+		{"client_id", h.ClientID},
+		{"scopes", h.Scopes},
+		{"groups_claim", h.GroupsClaim},
+	}
+	if h.APIClientID != "" {
+		config = append(config, [2]string{"api_client_id", h.APIClientID})
+	}
+	if h.AccessGroups != "" {
+		config = append(config, [2]string{"access_groups", h.AccessGroups})
+	}
+	var b strings.Builder
+	b.Write(existing)
+	b.WriteString("\n[connections.\"service/oidc\"]\nkind = \"service/oidc\"\nlabel = \"Sign-in\"\nconfig = {")
+	for i, kv := range config {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, " %s = %q", kv[0], kv[1])
+	}
+	b.WriteString(" }\ncapabilities = [\"discovery\", \"client_auth\"]\n")
+	if h.Secret != "" {
+		secret := filepath.Join(dir, "oidc-client-secret")
+		if err := os.WriteFile(secret, []byte(h.Secret+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(&b, "credential_files = { client_secret = %q }\n", secret)
+	}
+	path := filepath.Join(dir, "oidc-host.toml")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func (s *apiSite) token(name string, o ...oidctest.AccessOptions) string {
@@ -134,6 +221,7 @@ func (s *apiSite) events(token string, threadID, runID int64, lastID string) (st
 		s.t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept-Encoding", "gzip")
 	if lastID != "" {
 		req.Header.Set("Last-Event-ID", lastID)
 	}
@@ -143,8 +231,11 @@ func (s *apiSite) events(token string, threadID, runID int64, lastID string) (st
 		s.t.Fatal(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		s.t.Fatalf("event stream: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	if resp.StatusCode == http.StatusNoContent && lastID != "" {
+		return "", lastID
+	}
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") || resp.Header.Get("Content-Encoding") != "" {
+		s.t.Fatalf("event stream: %d %s, encoding %q (SSE is never compressed)", resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Encoding"))
 	}
 	var all strings.Builder
 	last := ""
@@ -173,15 +264,43 @@ func number(t *testing.T, v any) int64 {
 	return int64(f)
 }
 
+func oidcBrowser(t *testing.T, base string, idp *oidctest.Provider, user string) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	browser := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if code, body, _ := fetch(t, browser, http.MethodGet, base+"/login", nil); code != http.StatusOK {
+		t.Fatalf("login page: %d %s", code, body)
+	}
+	idp.Approve(user)
+	code, body, header := fetch(t, browser, http.MethodPost, base+"/login", url.Values{"next": {""}})
+	if code != http.StatusSeeOther {
+		t.Fatalf("POST /login: %d %s", code, body)
+	}
+	code, body, header = fetch(t, browser, http.MethodGet, header.Get("Location"), nil)
+	if code != http.StatusFound {
+		t.Fatalf("authorize: %d %s", code, body)
+	}
+	if code, body, _ = fetch(t, browser, http.MethodGet, header.Get("Location"), nil); code != http.StatusSeeOther {
+		t.Fatalf("callback: %d %s", code, body)
+	}
+	return browser
+}
+
 func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	s := newAPISite(t)
 	owner := s.token("owner")
 
 	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
-	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["admin"] != true || me.header.Get("Cache-Control") != "no-store" {
+	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.header.Get("Cache-Control") != "private, no-cache" {
 		t.Fatalf("me: %d %s %v", me.status, me.body, me.header)
 	}
-	if guest := s.do(http.MethodGet, "/api/v1/me", s.token("guest"), nil); guest.status != http.StatusOK || guest.json["admin"] != false {
+	if _, ok := me.json["admin"]; ok {
+		t.Fatalf("me still reports an administrator field: %s", me.body)
+	}
+	if guest := s.do(http.MethodGet, "/api/v1/me", s.token("guest"), nil); guest.status != http.StatusOK || guest.json["subject"] != "sub-guest" {
 		t.Fatalf("guest me: %d %s", guest.status, guest.body)
 	}
 
@@ -221,21 +340,13 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	}
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", s.token("stranger"), nil), http.StatusForbidden, "forbidden")
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/inbox", s.token("guest"), nil), http.StatusForbidden, "admin_required")
+	if inbox := s.do(http.MethodGet, "/api/v1/inbox", s.token("guest"), nil); inbox.status != http.StatusOK {
+		t.Fatalf("an admitted member cannot read the inbox API: %d %s", inbox.status, inbox.body)
+	}
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "", nil, "Remote-Groups", "atrium_access,atrium_admin", "Remote-User", "owner"), http.StatusUnauthorized, "unauthenticated")
 
-	link := runApp(t, "login-link")
-	if link.code != cli.ExitOK {
-		t.Fatalf("login-link: %d %s", link.code, link.stderr)
-	}
-	_, token, _ := strings.Cut(strings.TrimSpace(link.stdout), "#")
-	jar, _ := cookiejar.New(nil)
-	browser := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	fetch(t, browser, http.MethodGet, s.base+"/login/link", nil)
-	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/login/link", url.Values{"token": {token}}); code != http.StatusSeeOther {
-		t.Fatalf("login link redeem: %d %s", code, body)
-	}
+	browser := oidcBrowser(t, s.base, s.idp, "owner")
 	if code, _, _ := fetch(t, browser, http.MethodGet, s.base+"/settings/auth", nil); code != http.StatusOK {
 		t.Fatalf("the web session does not work: %d", code)
 	}
@@ -256,26 +367,105 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	s.idp.RevokeAll = false
 }
 
-func TestAPIIsUnavailableWithoutOIDC(t *testing.T) {
+func TestThreadTranscriptRevision(t *testing.T) {
+	s := newAPISite(t)
+	owner := s.token("owner")
+	made := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "hello there"})
+	if made.status != http.StatusCreated {
+		t.Fatalf("create: %d %s", made.status, made.body)
+	}
+	thread, _ := made.json["thread"].(map[string]any)
+	threadID := number(t, thread["id"])
+	s.events(owner, threadID, number(t, made.json["run_id"]), "")
+	path := "/api/v1/threads/" + strconv.FormatInt(threadID, 10)
+
+	first := s.do(http.MethodGet, path, owner, nil)
+	tag := first.header.Get("ETag")
+	firstItems, _ := first.json["items"].([]any)
+	if first.status != http.StatusOK || tag == "" || len(firstItems) < 2 {
+		t.Fatalf("transcript: %d etag %q %s", first.status, tag, first.body)
+	}
+	if same := s.do(http.MethodGet, path, owner, nil, "If-None-Match", tag); same.status != http.StatusNotModified || same.body != "" || same.header.Get("ETag") != tag {
+		t.Fatalf("unchanged transcript with its ETag = %d %q %s", same.status, same.header.Get("ETag"), same.body)
+	}
+	if paged := s.do(http.MethodGet, path+"?limit=1", owner, nil, "If-None-Match", tag); paged.status != http.StatusOK {
+		t.Fatalf("a different page with the full transcript ETag = %d", paged.status)
+	}
+
+	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
+	sent := s.do(http.MethodPost, path+"/messages", owner, map[string]any{"text": "once more"})
+	if sent.status != http.StatusAccepted {
+		t.Fatalf("send: %d %s", sent.status, sent.body)
+	}
+	s.events(owner, threadID, number(t, sent.json["run_id"]), "")
+	changed := s.do(http.MethodGet, path, owner, nil, "If-None-Match", tag)
+	items, _ := changed.json["items"].([]any)
+	if changed.status != http.StatusOK || changed.header.Get("ETag") == tag || len(items) <= len(firstItems) {
+		t.Fatalf("transcript after a new message with the old ETag = %d etag %q %s", changed.status, changed.header.Get("ETag"), changed.body)
+	}
+}
+
+func TestMeConditionalAndErrorMembers(t *testing.T) {
+	s := newAPISite(t)
+	owner := s.token("owner")
+	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
+	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.json["api_version"] != float64(1) || len(me.json) != 4 {
+		t.Fatalf("me: %d %s", me.status, me.body)
+	}
+	tag := me.header.Get("ETag")
+	if !strings.HasPrefix(tag, `W/"`) || me.header.Get("Cache-Control") != "private, no-cache" {
+		t.Fatalf("me headers: %v", me.header)
+	}
+	if again := s.do(http.MethodGet, "/api/v1/me", owner, nil, "If-None-Match", tag); again.status != http.StatusNotModified || again.body != "" {
+		t.Fatalf("conditional me: %d %q", again.status, again.body)
+	}
+	if guest := s.do(http.MethodGet, "/api/v1/me", s.token("guest"), nil, "If-None-Match", tag); guest.status != http.StatusOK || guest.json["subject"] != "sub-guest" || guest.header.Get("ETag") == tag {
+		t.Fatalf("guest conditional me: %d %s %v", guest.status, guest.body, guest.header)
+	}
+	if conditional := s.do(http.MethodGet, "/api/v1/me", "", nil, "If-None-Match", tag); conditional.status != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated conditional me: %d %s", conditional.status, conditional.body)
+	}
+
+	none := s.do(http.MethodGet, "/api/v1/me", "", nil)
+	expectAPI(t, none, http.StatusUnauthorized, "unauthenticated")
+	e, _ := none.json["error"].(map[string]any)
+	if e["status"] != float64(http.StatusUnauthorized) || e["type"] != "urn:atrium:problem:unauthenticated" || e["instance"] == "" || e["instance"] != none.header.Get("Atrium-Request-Id") {
+		t.Fatalf("error members: %s %v", none.body, none.header)
+	}
+	other := s.do(http.MethodGet, "/api/v1/me", "", nil)
+	if o, _ := other.json["error"].(map[string]any); o["instance"] == e["instance"] {
+		t.Fatalf("two requests share instance %v", e["instance"])
+	}
+	refused := s.do(http.MethodGet, "/api/v1/me", s.token("stranger"), nil)
+	expectAPI(t, refused, http.StatusForbidden, "forbidden")
+	if r, _ := refused.json["error"].(map[string]any); r["status"] != float64(http.StatusForbidden) || r["type"] != "urn:atrium:problem:forbidden" {
+		t.Fatalf("forbidden members: %s", refused.body)
+	}
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", owner, "{}"), http.StatusBadRequest, "bad_request")
+}
+
+func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(oidc.KeyAPIClientID), apiClient)
+	issued := runApp(t, "auth", "token", "issue", "--name", "phone")
+	if issued.code != cli.ExitOK {
+		t.Fatalf("auth token issue: exit %d stdout %q stderr %q", issued.code, issued.stdout, issued.stderr)
+	}
+	secret := strings.TrimSpace(issued.stdout)
+	if !strings.HasPrefix(secret, "atr_") {
+		t.Fatalf("issue printed %q, not a token secret", issued.stdout)
+	}
 	for _, auth := range [][]string{{"--auth", "local"}, {"--auth", "proxy", "--allowed-host", "127.0.0.1"}} {
 		base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, auth...)
 		if err != nil {
 			t.Fatal(err)
 		}
-		req, _ := http.NewRequest(http.MethodGet, base+"/api/v1/me", nil)
-		req.Header.Set("Authorization", "Bearer a.b.c")
-		req.Header.Set("Remote-Groups", "atrium_access,atrium_admin")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
+		s := &apiSite{t: t, base: base}
+		if me := s.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK || me.json["api_version"] != float64(1) || me.json["email"] != "" || me.json["name"] != "" {
+			t.Fatalf("%v: a local token cannot read the API: %d %s", auth, me.status, me.body)
 		}
-		data, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound || !strings.Contains(string(data), `"api_unavailable"`) {
-			t.Fatalf("%v: %d %s", auth, resp.StatusCode, data)
-		}
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "a.b.c", nil), http.StatusNotFound, "api_unavailable")
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "", nil), http.StatusUnauthorized, "unauthenticated")
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "atr_short", nil), http.StatusUnauthorized, "invalid_token")
 		stop()
 	}
 }
@@ -298,7 +488,7 @@ func TestAPIChatSendStreamsTheRun(t *testing.T) {
 		}
 	}
 	replay, _ := s.events(owner, threadID, runID, last)
-	if strings.Contains(replay, "event: text") || !strings.Contains(replay, "event: done") {
+	if replay != "" {
 		t.Fatalf("Last-Event-ID replayed earlier events:\n%s", replay)
 	}
 
@@ -339,7 +529,7 @@ func TestAPIChatSendStreamsTheRun(t *testing.T) {
 		t.Fatalf("replay: %d %s %v", replayed.status, replayed.body, replayed.header)
 	}
 	expectAPI(t, s.do(http.MethodPost, path, owner, map[string]any{"text": "different"}, "Idempotency-Key", "k-1"), http.StatusUnprocessableEntity, "idempotency_mismatch")
-	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var runs int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE thread_id = ?", threadID).Scan(&runs); err != nil || runs != 2 {
@@ -382,5 +572,95 @@ func TestAPIChatSendStreamsTheRun(t *testing.T) {
 	tailItems, _ := tail.json["items"].([]any)
 	if len(tailItems) == 0 || tailItems[0].(map[string]any)["title"] != "one" {
 		t.Fatalf("inbox page 2: %s", tail.body)
+	}
+}
+
+type proxyOwner struct{ next http.RoundTripper }
+
+func (p proxyOwner) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Remote-User", "owner")
+	r.Header.Set("Remote-Groups", "atrium_access,atrium_admin")
+	return p.next.RoundTrip(r)
+}
+
+func (s *apiSite) browser() *http.Client {
+	s.t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, Transport: proxyOwner{http.DefaultTransport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, body, _ := fetch(s.t, client, http.MethodGet, s.base+"/chat", nil); status != http.StatusOK {
+		s.t.Fatalf("GET /chat = %d: %s", status, body)
+	}
+	return client
+}
+
+func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("budget: %d %s", ran.code, ran.stderr)
+	}
+	d := asstDB(t, dir)
+	asstSpendAt(t, d, inference.SourceLoop, 5, float64(time.Now().Unix()))
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
+	before, requests := threads(), len(api.Requests())
+	listed := len(s.do(http.MethodGet, "/api/v1/threads", owner, nil).json["items"].([]any))
+
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "x"}), http.StatusConflict, "budget_exceeded")
+	if after := s.do(http.MethodGet, "/api/v1/threads", owner, nil); len(after.json["items"].([]any)) != listed {
+		t.Fatalf("API refusal changed the thread list: %s", after.body)
+	}
+	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {"x"}}); status < http.StatusBadRequest {
+		t.Fatalf("HTML start under an exhausted budget = %d: %s", status, body)
+	}
+	if ran := runApp(t, "agent", "run", "--text", "x"); ran.code == cli.ExitOK {
+		t.Fatalf("CLI start under an exhausted budget: %d %s", ran.code, ran.stdout)
+	}
+	if after := threads(); after != before {
+		t.Fatalf("threads = %d after refused starts, want %d", after, before)
+	}
+	if sent := len(api.Requests()) - requests; sent != 0 {
+		t.Fatalf("%d provider requests after refused starts", sent)
+	}
+	if refused := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused'"); refused != 3 {
+		t.Fatalf("refused start audits = %d, want 3", refused)
+	}
+}
+
+func TestStartRefusedAfterTheThreadRowLeavesNoThread(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	d := asstDB(t, dir)
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
+	before, requests := threads(), len(api.Requests())
+	refusedRef := "@thread/999999 compare"
+
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": refusedRef}), http.StatusUnprocessableEntity, "reference_refused")
+	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {refusedRef}}); status < http.StatusBadRequest {
+		t.Fatalf("HTML start with a refused reference = %d: %s", status, body)
+	}
+	if ran := runApp(t, "agent", "run", "--text", refusedRef); ran.code == cli.ExitOK {
+		t.Fatalf("CLI start with a refused reference: %d %s", ran.code, ran.stdout)
+	}
+	if ran := runApp(t, "agent", "run", "--text", "   "); ran.code != cli.ExitUsage {
+		t.Fatalf("CLI start with blank text = %d, want %d: %s", ran.code, cli.ExitUsage, ran.stderr)
+	}
+	if after := threads(); after != before {
+		t.Fatalf("threads = %d after starts refused once the thread existed, want %d (soft-deleted rows count)", after, before)
+	}
+	if sent := len(api.Requests()) - requests; sent != 0 {
+		t.Fatalf("%d provider requests after refused starts", sent)
+	}
+	if refused := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused' AND target = ''"); refused != 3 {
+		t.Fatalf("refused start audits without a removed thread target = %d, want 3", refused)
 	}
 }
