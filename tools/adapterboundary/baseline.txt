@@ -1,4 +1,0 @@
-internal/web/server.go	github.com/jeiang/atrium/internal/config
-internal/web/server.go	github.com/jeiang/atrium/internal/db
-internal/web/server.go	github.com/jeiang/atrium/internal/obs
-internal/web/server.go	github.com/jeiang/atrium/internal/settings

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -19,7 +17,6 @@ import (
 const (
 	module   = "github.com/jeiang/atrium"
 	internal = module + "/internal/"
-	baseline = "tools/adapterboundary/baseline.txt"
 )
 
 type adapter struct {
@@ -61,12 +58,16 @@ var adapters = []adapter{
 	{pattern: "internal/web/api.go"},
 	{pattern: "internal/web/auth_routes.go"},
 	{pattern: "internal/web/auth_settings.go"},
-	{pattern: "internal/web/server.go"},
 	{pattern: "internal/db/dbcmd/*"},
 	{pattern: "internal/backup/*", marker: "cli.Command{"},
 	{pattern: "internal/ledger/ledgercmd/*"},
 	{pattern: "internal/writes/writescmd/*"},
 	{pattern: "internal/serverops/*", marker: "scheduler.Definition"},
+}
+
+var roots = map[string]string{
+	"internal/assistant/tools/*/*module/register.go": "module-registration",
+	"internal/web/server.go":                         "web-composition-root",
 }
 
 var allowed = map[string]bool{
@@ -92,44 +93,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "adapterboundary:", err)
 		os.Exit(1)
 	}
-	want, err := os.ReadFile(baseline)
-	if errors.Is(err, fs.ErrNotExist) {
-		for _, e := range edges {
-			fmt.Println(e)
-		}
-		fmt.Fprintln(os.Stderr, "adapterboundary: "+baseline+" is missing; the edges above are the current baseline")
-		os.Exit(1)
-	}
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "adapterboundary:", err)
-		os.Exit(1)
-	}
-	listed := map[string]bool{}
-	sc := bufio.NewScanner(bytes.NewReader(want))
-	for sc.Scan() {
-		if line := sc.Text(); line != "" {
-			listed[line] = true
-		}
-	}
-	failed := false
 	for _, e := range edges {
-		if listed[e] {
-			delete(listed, e)
-			continue
-		}
 		fmt.Fprintln(os.Stderr, "adapter imports a forbidden package:", e)
-		failed = true
 	}
-	stale := make([]string, 0, len(listed))
-	for line := range listed {
-		stale = append(stale, line)
-	}
-	slices.Sort(stale)
-	for _, line := range stale {
-		fmt.Fprintln(os.Stderr, "stale baseline line; delete it from "+baseline+":", line)
-		failed = true
-	}
-	if failed {
+	if len(edges) > 0 {
 		os.Exit(1)
 	}
 }
@@ -172,8 +139,10 @@ func scan() ([]string, error) {
 }
 
 func isAdapter(file string, src []byte) bool {
-	if matches("internal/assistant/tools/*/*module/register.go", file) {
-		return false
+	for pattern := range roots {
+		if matches(pattern, file) {
+			return false
+		}
 	}
 	for _, a := range adapters {
 		if matches(a.pattern, file) && (a.marker == "" || bytes.Contains(src, []byte(a.marker))) {
