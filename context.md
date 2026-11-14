@@ -115,8 +115,8 @@ partial, or unknown inverse is not silently treated as a completed undo.
 Application operation audit records are distinct from effect rows and durable
 HTTP command receipts. Queries need not audit; commands declare their audit
 policy. `mail.sync` and `mail.reindex` audit their operations. A watch pass that
-produces no effects writes no operation audit row. `review.propose` records
-metadata, not the proposal payload. Assistant defaults have their own
+succeeds without effects writes no operation audit row. `review.propose` records
+metadata, not the proposal payload. `PUT /api/v1/assistant/defaults` has its own
 `assistant.defaults-set` audit entry. Sampler rows and their audit entry commit
 atomically; memory work, token issue/revoke, SQL shell sessions, and import also
 record operation audit. Token changes additionally retain settings audit.
