@@ -1103,8 +1103,8 @@ func TestImportV2RefusesConnectionEndpointUserinfo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connections WHERE id = 'service/embedding'"); count != "0" {
-		t.Fatal("refused v2 import stored the connection")
+	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connections WHERE instr(config_json, ?) > 0", password); count != "0" {
+		t.Fatal("refused v2 import stored the userinfo URL")
 	}
 	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(old_value, '') || COALESCE(new_value, ''), ?) > 0", password); count != "0" {
 		t.Fatal("refused v2 import stored userinfo in the audit")
