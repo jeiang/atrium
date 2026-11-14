@@ -93,7 +93,12 @@ func (r *mailClassifierRig) requests(t *testing.T) []sentClassification {
 
 func callerOf(t *testing.T, body map[string]any) string {
 	t.Helper()
-	schema, _ := body["output_config"].(map[string]any)["format"].(map[string]any)["schema"].(map[string]any)
+	oc, _ := body["output_config"].(map[string]any)
+	format, _ := oc["format"].(map[string]any)
+	if format == nil {
+		return "plain"
+	}
+	schema, _ := format["schema"].(map[string]any)
 	required, _ := schema["required"].([]any)
 	keys := make([]string, 0, len(required))
 	for _, k := range required {
