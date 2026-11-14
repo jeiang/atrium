@@ -30,9 +30,9 @@
   </table>{{else}}<div class="set-row"><span>No tokens.</span></div>{{end}}
   <form method="post" action="/settings/auth/tokens">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
-    <label>Name <input name="name" required maxlength="100" autocomplete="off"></label>
-    <label>Expires <input name="expires_at" placeholder="2026-01-02T15:04:05Z" autocomplete="off"></label>
-    <button type="submit" class="btn" data-size="sm">Issue</button>
+    <div role="group" class="set-row"><label for="token-name">Name</label><input id="token-name" name="name" class="input" required maxlength="100" autocomplete="off"></div>
+    <div role="group" class="set-row"><label for="token-expires">Expires</label><input id="token-expires" name="expires_at" class="input" placeholder="2026-01-02T15:04:05Z" autocomplete="off"></div>
+    <footer><button type="submit" class="btn" data-size="sm" data-variant="outline">Issue</button></footer>
   </form>
 </section>
 {{if $d.Configured}}{{template "settings_groups" .}}{{end}}

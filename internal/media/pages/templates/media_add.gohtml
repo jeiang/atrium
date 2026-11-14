@@ -16,8 +16,8 @@
   </div>
   <fieldset class="flex flex-col gap-2">
     <legend class="text-sm font-medium">What is it?</legend>
-    <label class="flex items-start gap-2 text-sm" title="Tagged media; video and subtitle files are selected and filed into the library when complete"><input type="radio" name="mode" value="media"{{if eq .Data.AddMode "media"}} checked{{end}}><span>Media</span></label>
-    <label class="flex items-start gap-2 text-sm" title="Stays in downloads/, served on the VPN"><input type="radio" name="mode" value="plain"{{if eq .Data.AddMode "plain"}} checked{{end}}><span>Plain torrent</span></label>
+    <label class="flex items-start gap-2 text-sm" title="Tagged media; video and subtitle files are selected and filed into the library when complete"><input type="radio" class="input" name="mode" value="media"{{if eq .Data.AddMode "media"}} checked{{end}}><span>Media</span></label>
+    <label class="flex items-start gap-2 text-sm" title="Stays in downloads/, served on the VPN"><input type="radio" class="input" name="mode" value="plain"{{if eq .Data.AddMode "plain"}} checked{{end}}><span>Plain torrent</span></label>
   </fieldset>
   {{if .Data.Error}}<p class="text-sm text-destructive" role="alert">{{.Data.Error}}</p>{{end}}
   <div><button type="submit" class="btn">{{icon "plus"}}Add</button></div>
