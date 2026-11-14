@@ -1302,19 +1302,38 @@ func TestImportV2Ship24WithoutAURLTestsTheDefaultEndpoint(t *testing.T) {
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
+	var mu sync.Mutex
+	var connects []string
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		connects = append(connects, r.Method+" "+r.Host)
+		mu.Unlock()
+		http.Error(w, "refused", http.StatusForbidden)
+	}))
+	t.Cleanup(proxy.Close)
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO settings (key, value) VALUES ('ship24_proxy', %q)", proxy.URL))
 	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_ship24_api_key', 'ship24-imported', 1762000800, 'fixture')")
 	imported := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
 	if imported.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", imported.code, imported.stdout, imported.stderr)
 	}
-	runImportApp(t, importTestApp(t, dir, clock), "connections", "test", "service/ship24")
+	tested := runImportApp(t, importTestApp(t, dir, clock), "connections", "test", "service/ship24")
+	if tested.code != cli.ExitError {
+		t.Fatalf("connections test service/ship24: exit %d stdout %q stderr %q; want the default endpoint call to fail through the proxy", tested.code, tested.stdout, tested.stderr)
+	}
+	mu.Lock()
+	got := slices.Clone(connects)
+	mu.Unlock()
+	if want := []string{"CONNECT api.ship24.com:443"}; !slices.Equal(got, want) {
+		t.Fatalf("proxy saw %q; want %q", got, want)
+	}
 	q, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(importKey(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = q.Close() }()
-	if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/ship24'"); state == "" || state == "unconfigured" {
-		t.Fatalf("Ship24 imported without a URL is %q; want the default endpoint to be used", state)
+	if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/ship24'"); state != "failing" {
+		t.Fatalf("Ship24 imported without a URL is %q; want failing from the default endpoint", state)
 	}
 }
 
