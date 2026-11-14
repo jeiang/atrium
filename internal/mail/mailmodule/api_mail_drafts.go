@@ -1,4 +1,4 @@
-package reviewpages
+package mailmodule
 
 import (
 	"context"
@@ -9,8 +9,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
+	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
@@ -39,13 +42,13 @@ type DraftResolveRequest struct {
 	Outcome string `json:"outcome" api:"enum=sent|draft"`
 }
 type DraftResponse struct {
-	Draft apiDraft `json:"draft"`
+	Draft reviewpages.Draft `json:"draft"`
 }
 type DraftSendResponse struct {
-	Draft      apiDraft `json:"draft"`
-	Filed      string   `json:"filed"`
-	FiledError string   `json:"filed_error,omitempty"`
-	Refused    []string `json:"refused"`
+	Draft      reviewpages.Draft `json:"draft"`
+	Filed      string            `json:"filed"`
+	FiledError string            `json:"filed_error,omitempty"`
+	Refused    []string          `json:"refused"`
 }
 type DraftsRequest struct {
 	Status drafts.Status `query:"status" json:"-" api:"enum=draft|unknown|sent|discarded|sending"`
@@ -53,11 +56,16 @@ type DraftsRequest struct {
 	Limit  api.Limit     `query:"limit" json:"-"`
 }
 type DraftsResponse struct {
-	Items      []apiDraft `json:"items"`
-	NextCursor *string    `json:"next_cursor" api:"nullable"`
+	Items      []reviewpages.Draft `json:"items"`
+	NextCursor *string             `json:"next_cursor" api:"nullable"`
 }
 
-func (s *service) draftRevision(ctx context.Context, id int64, body *int64, header string) (*int64, error) {
+type draftAPI struct {
+	mail   *mailapp.Service
+	drafts *drafts.Store
+}
+
+func (s *draftAPI) draftRevision(ctx context.Context, id int64, body *int64, header string) (*int64, error) {
 	if header == "" {
 		return body, nil
 	}
@@ -96,13 +104,26 @@ func draftFailure(err error, reason string, effects []int64) error {
 	}
 	return &e
 }
-func DraftAPIBindings() []application.Binding { return (*service)(nil).draftAPIBindings(nil) }
-func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
+func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
+	s := &draftAPI{}
+	if d != nil {
+		open := imapclient.Opener(d.Cfg)
+		if m.Clients != nil {
+			open = m.Clients(d.Cfg)
+		}
+		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, mail.WallClock)
+		if err != nil {
+			panic(err)
+		}
+		d.DrainOnStop(effects.Drain)
+		s.drafts = &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: mail.WallClock}
+		s.mail = mailPageService(d).WithSender(s.drafts)
+	}
 	shape := func(t reflect.Type) application.APIShape { return application.APIShape{Area: "drafts", Response: t} }
 	return []application.Binding{
-		api.Query(d, mailapp.DescribeDraft(), shape(reflect.TypeFor[apiDraft]()), "GET /drafts/{draft_id}", func(ctx context.Context, in DraftRequest) (application.Read[apiDraft], error) {
+		api.Query(d, mailapp.DescribeDraft(), shape(reflect.TypeFor[reviewpages.Draft]()), "GET /drafts/{draft_id}", func(ctx context.Context, in DraftRequest) (application.Read[reviewpages.Draft], error) {
 			r, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: in.ID})
-			out := application.Read[apiDraft]{Revision: r.Revision}
+			out := application.Read[reviewpages.Draft]{Revision: r.Revision}
 			if err == nil {
 				out.Data = s.currentDraft(ctx, in.ID)
 			}
@@ -119,7 +140,7 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 				return application.Read[DraftsResponse]{}, &application.Error{Code: application.BadCursor, Message: "Invalid cursor"}
 			}
 			r, err := s.mail.Drafts(ctx, mailapp.DraftsInput{Status: in.Status, Offset: offset, Limit: int(in.Limit) + 1})
-			out := DraftsResponse{Items: []apiDraft{}}
+			out := DraftsResponse{Items: []reviewpages.Draft{}}
 			if err != nil {
 				return application.Read[DraftsResponse]{}, err
 			}
@@ -132,13 +153,13 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 			for i, c := range cards {
 				wire[i] = reviewapp.DraftCard{Row: c.Row, Unexpected: c.Unexpected}
 			}
-			out.Items = draftsOf(wire, reviewapp.AccountConfigured(ctx))
+			out.Items = reviewpages.DraftsOf(wire, reviewapp.AccountConfigured(ctx))
 			return application.Read[DraftsResponse]{Revision: r.Revision, Data: out}, nil
 		}),
-		api.Command(d, mailapp.DescribeDraftUpdate(), shape(reflect.TypeFor[apiDraft]()), "PATCH /drafts/{draft_id}", func(ctx context.Context, in DraftUpdateRequest) (application.Change[apiDraft], error) {
+		api.Command(d, mailapp.DescribeDraftUpdate(), shape(reflect.TypeFor[reviewpages.Draft]()), "PATCH /drafts/{draft_id}", func(ctx context.Context, in DraftUpdateRequest) (application.Change[reviewpages.Draft], error) {
 			rev, err := s.draftRevision(ctx, in.ID, in.Revision, in.IfMatch)
 			if err != nil {
-				return application.Change[apiDraft]{}, err
+				return application.Change[reviewpages.Draft]{}, err
 			}
 			fields := mailapp.DraftFields{Account: in.Account, Subject: in.Subject, Body: in.Body}
 			if in.To != nil {
@@ -148,7 +169,7 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 				fields.Cc = &mailapp.Recipients{Text: *in.Cc}
 			}
 			r, err := s.mail.DraftUpdate(ctx, mailapp.DraftUpdateInput{ID: in.ID, Revision: rev, Fields: fields})
-			out := application.Change[apiDraft]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
+			out := application.Change[reviewpages.Draft]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
 			if err != nil {
 				e := *application.Classify(err)
 				if e.Code == application.Conflict {
@@ -190,7 +211,7 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 			for i, v := range result.Refused {
 				refused[i] = v.Addr
 			}
-			out.Data = DraftSendResponse{Draft: s.currentDraft(ctx, in.ID), Filed: filedCode(result.Filed), FiledError: result.FiledError, Refused: refused}
+			out.Data = DraftSendResponse{Draft: s.currentDraft(ctx, in.ID), Filed: draftFiled(result.Filed), FiledError: result.FiledError, Refused: refused}
 			return out, nil
 		}),
 		api.Command(d, mailapp.DescribeDraftDiscard(), application.APIShape{Area: "drafts", Body: application.BodyNone, Response: reflect.TypeFor[DraftResponse]()}, "POST /drafts/{draft_id}/discard", func(ctx context.Context, in DraftRequest) (application.Change[DraftResponse], error) {
@@ -220,4 +241,26 @@ func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
 			return out, nil
 		}),
 	}
+}
+
+func (s *draftAPI) currentDraft(ctx context.Context, id int64) reviewpages.Draft {
+	found, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: id})
+	if err != nil {
+		panic(err)
+	}
+	return reviewpages.DraftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(ctx))[0]
+}
+
+func draftFiled(f drafts.Filed) string {
+	switch f {
+	case drafts.FiledCopy:
+		return "copy"
+	case drafts.FiledByServer:
+		return "server"
+	case drafts.FiledNoMailbox:
+		return "no_mailbox"
+	case drafts.FiledFailed:
+		return "failed"
+	}
+	return "none"
 }

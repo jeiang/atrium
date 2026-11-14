@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
-	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
@@ -42,7 +41,7 @@ type apiApproval struct {
 	Result        json.RawMessage `json:"result"`
 }
 
-type apiDraft struct {
+type Draft struct {
 	ID                   int64    `json:"id"`
 	ThreadID             *int64   `json:"thread_id"`
 	Account              string   `json:"account"`
@@ -74,10 +73,6 @@ func (s *service) apiRoutes(d *web.Deps) {
 	d.API(http.MethodPost, "/effects/{effect_id}/undo", s.apiEffectUndo)
 }
 
-func (s *service) mailAPIRoutes(d *web.Deps) {
-	s.draftAPIBindings(d)
-}
-
 func approvalOf(c reviewapp.Card) apiApproval {
 	return apiApproval{
 		ID: c.ID, Kind: c.Kind, KindLabel: c.KindLabel, Module: c.Module, Approval: c.Approval, Status: c.Status,
@@ -95,15 +90,15 @@ func approvalsOf(cards []reviewapp.Card) []apiApproval {
 	return out
 }
 
-func draftsOf(cards []reviewapp.DraftCard, configured map[string]bool) []apiDraft {
-	out := make([]apiDraft, len(cards))
+func DraftsOf(cards []reviewapp.DraftCard, configured map[string]bool) []Draft {
+	out := make([]Draft, len(cards))
 	for i, c := range cards {
 		row := c.Row
 		recipients := c.Unexpected
 		if recipients == nil {
 			recipients = []string{}
 		}
-		out[i] = apiDraft{
+		out[i] = Draft{
 			ID: row.ID, ThreadID: row.ThreadID, Account: row.Account, To: row.ToAddrs, Cc: row.CcAddrs, Subject: row.Subject,
 			Body: row.Body, InReplyToMessageID: row.InReplyToMessageID, Status: string(row.Status), Revision: row.Revision,
 			CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, SentAt: row.SentAt, SMTPResult: row.SMTPResult,
@@ -124,7 +119,7 @@ type pendingBody struct {
 	Approvals []apiApproval `json:"approvals"`
 	Blocked   []apiApproval `json:"blocked"`
 	Counts    pendingCounts `json:"counts"`
-	Drafts    []apiDraft    `json:"drafts"`
+	Drafts    []Draft       `json:"drafts"`
 }
 
 func (s *service) apiPending(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +138,7 @@ func (s *service) apiPending(w http.ResponseWriter, r *http.Request) {
 	web.APIRead(w, r, found.Revision, pendingBody{
 		Approvals: approvalsOf(data.Approvals),
 		Blocked:   approvalsOf(data.Blocked),
-		Drafts:    draftsOf(data.Drafts, data.Configured),
+		Drafts:    DraftsOf(data.Drafts, data.Configured),
 		Counts:    pendingCounts{Approvals: len(data.Approvals), Blocked: len(data.Blocked), Drafts: len(data.Drafts) - unknown, Unknown: unknown},
 	})
 }
@@ -451,26 +446,6 @@ func (s *service) apiEffectUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	web.JSON(w, http.StatusOK, map[string]any{"effect": done.Data.Effect, "undo": done.Data.Undo, "undone": true})
-}
-
-func (s *service) currentDraft(ctx context.Context, id int64) apiDraft {
-	found, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: id})
-	check(err)
-	return draftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(ctx))[0]
-}
-
-func filedCode(f drafts.Filed) string {
-	switch f {
-	case drafts.FiledCopy:
-		return "copy"
-	case drafts.FiledByServer:
-		return "server"
-	case drafts.FiledNoMailbox:
-		return "no_mailbox"
-	case drafts.FiledFailed:
-		return "failed"
-	}
-	return "none"
 }
 
 func apiRaw(v any) json.RawMessage {
