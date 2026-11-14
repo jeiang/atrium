@@ -178,8 +178,11 @@ Consecutive disabled-module occurrences without assistant threads share one `ski
   Supply a replacement for every stored credential in the same save, or
   disconnect first. The refusal happens before Test sends a request, so an old
   secret is never tested against the new endpoint. Keeping the same endpoint
-  can retain its credentials. Unknown credential slots are refused; secret
-  values are never returned.
+  can retain its credentials. Issuer and provider preset changes count as
+  endpoint identity changes too. Endpoint URLs containing userinfo are refused
+  before save or Test, including host configuration and v2 import. The refusal
+  names the connection and field without showing the URL. Unknown credential
+  slots are refused; secret values are never returned.
 - **Naming.** The environment variable for a host key is `ATRIUM_<MODULE>_<KEY>`, where `<KEY>` is the whole key. When the key already begins with the module name, the module appears twice: `ATRIUM_ASSISTANT_ANTHROPIC_CA_FILE` for `anthropic_ca_file`. The [environment variable list](../config/environment.md) is authoritative. A host secret accepts only a `_FILE` variable naming a file whose trimmed contents are the value; a raw secret value is refused. An `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key is refused at startup with its destination (`atrium settings set <key>` or the compiled constant), as is a connection-owned host key such as `ATRIUM_GRAFANA_GRAFANA_URL` (use `connections.<id>`). `ATRIUM_CONFIG` and its pin file are gone. The database key is `ATRIUM_DB_KEY` or `ATRIUM_DB_KEY_FILE`, or `database.keyFile` in the NixOS module.
 - **Renamed variables.** The earlier unprefixed names (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIUM_PUBLIC_URL`, `ATRIUM_CHAT_URL`, `ATRIUM_EMBED_URL`, `ATRIUM_CALENDAR_DIR`, `ATRIUM_ICLOUD_CALENDAR`, `ICLOUD_APPLE_ID`, `GOOGLE_OAUTH_CLIENT_ID`, `ATRIUM_CONTACTS_DIR`, `ATRIUM_MEDIA_ROOT`, `QBITTORRENT_URL`, `ATRIUM_MEDIA_MOVIES_URL`, `ATRIUM_MEDIA_TV_URL`, `ATRIUM_CODEMODE_SOCKET`, `ATRIUM_ASSISTANT_MAX_RUN_COST_USD`) are not read and do not pin anything. The command does not warn about them; remove them from the host environment.
 - **Time zone and public URL.** `public_url` is host configuration. `tz` is an operator setting: on a fresh database it is seeded from `ATRIUM_INITIAL_TZ`, then stored and editable; an existing or imported value wins over the seed. `http_timeout_seconds` is a compiled constant (600 seconds), not a setting. An operator setting is read from the database or its default; only a host-declared module flag overrides it.

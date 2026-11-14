@@ -118,6 +118,9 @@ func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, conf
 	if err != nil {
 		return err
 	}
+	if err := validateEndpointURLs(id, configJSON); err != nil {
+		return err
+	}
 	now := s.stamp()
 	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
@@ -193,6 +196,15 @@ func (s *Store) EnsureCredential(ctx context.Context, id ID, slot string, genera
 func (s *Store) ReconcileHost(ctx context.Context) error {
 	if s.d == nil {
 		return errors.New("connections: host reconciliation needs a writable database")
+	}
+	for _, id := range sortedKeys(s.host.Connections) {
+		raw, err := json.Marshal(s.host.Connections[id].Config)
+		if err != nil {
+			return err
+		}
+		if err := validateEndpointURLs(ID(id), raw); err != nil {
+			return err
+		}
 	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Validate != nil {
 		if err := s.reg.sync.Validate(ctx, s.host); err != nil {
@@ -417,9 +429,40 @@ func changedEndpoint(from, to string) (string, bool) {
 	return "", false
 }
 
-func endpointIdentity(key, value string) (string, bool) {
+func endpointURLField(key string) bool {
 	name := strings.ToLower(strings.TrimSpace(key))
-	if name != "url" && name != "api" && name != "host" && !strings.HasSuffix(name, "_url") && !strings.HasSuffix(name, "_host") {
+	return name == "url" || name == "api" || name == "host" || name == "issuer" || strings.HasSuffix(name, "_url") || strings.HasSuffix(name, "_host")
+}
+
+func validateEndpointURLs(id ID, raw json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return &Invalid{Cause: fmt.Errorf("connections: %s: config must be an object", id)}
+	}
+	for _, field := range sortedKeys(fields) {
+		if !endpointURLField(field) {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal(fields[field], &value); err != nil {
+			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a string", id, field)}
+		}
+		u, err := url.Parse(strings.TrimSpace(value))
+		if err != nil {
+			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must be a valid endpoint without URL userinfo", id, field)}
+		}
+		if u.User != nil {
+			return &Invalid{Cause: fmt.Errorf("connections: %s: %s must not contain URL userinfo", id, field)}
+		}
+	}
+	return nil
+}
+
+func endpointIdentity(key, value string) (string, bool) {
+	if strings.EqualFold(strings.TrimSpace(key), "preset") {
+		return strings.TrimSpace(value), true
+	}
+	if !endpointURLField(key) {
 		return "", false
 	}
 	value = strings.TrimSpace(value)
@@ -1023,6 +1066,9 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if !ok {
 		return View{}, UnknownKind(lease.kind)
 	}
+	if err := validateEndpointURLs(id, lease.Config()); err != nil {
+		return View{}, err
+	}
 	results, err := def.Test(ctx, lease, lease.caps)
 	if err != nil {
 		return View{}, err
@@ -1377,6 +1423,9 @@ func validateCandidate(def Definition, cand Candidate, current View) error {
 	}
 	if !json.Valid(cand.Config) {
 		return &Invalid{Cause: errors.New("connections: config must be valid JSON")}
+	}
+	if err := validateEndpointURLs(current.ID, cand.Config); err != nil {
+		return err
 	}
 	if current.ConfigSource == SourceHost {
 		var want, got map[string]string
