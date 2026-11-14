@@ -38,6 +38,11 @@
           pkgs.pkg-config
           pkgs.tailwindcss_4
           pkgs.brotli
+          pkgs.gopls
+          pkgs.nixd
+          pkgs.typescript-language-server
+          pkgs.tailwindcss-language-server
+          pkgs.bash-language-server
         ]
         ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
       env =
