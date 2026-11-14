@@ -252,7 +252,7 @@ func (s *Service) agenda(ctx context.Context, q db.Querier, day time.Time) (*Age
 	now := day.In(tz)
 	listing, err := calendar.ListEvents(ctx, s.env, set, now.Format(time.DateOnly), now.AddDate(0, 0, 1).Format(time.DateOnly), calendar.Filter{})
 	if err != nil {
-		return nil, err
+		return nil, &application.Error{Code: application.Unavailable, Message: "The calendar is unavailable.", Cause: err}
 	}
 	out := &Agenda{Events: agendaOf(listing.Events, tz, now)}
 	for i, event := range out.Events {

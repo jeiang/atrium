@@ -3,6 +3,6 @@
 {{define "content"}}
 <a href="/library/knowledge" class="btn self-start" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Knowledge</a>
 <div class="max-w-3xl">
-  {{template "knowledge_form" (dict "form" .Data "csrf" .CSRF)}}
+  {{template "knowledge_form" (dict "form" .Data "csrf" .CSRF "target" "body" "swap" "innerHTML")}}
 </div>
 {{- end}}

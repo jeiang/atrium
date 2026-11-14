@@ -258,6 +258,37 @@ func TestServeRendersReviewPages(t *testing.T) {
 	if status, _, _ := fetch(t, http.DefaultClient, "GET", base+"/proposals", nil); status != http.StatusNotFound {
 		t.Errorf("GET /proposals = %d, want 404", status)
 	}
+	report, code := runCatalogOperations(t, "--json")
+	if code != 0 {
+		t.Fatalf("catalog operations --json exit %d", code)
+	}
+	targets := map[string]bool{}
+	for _, op := range report.Operations {
+		for _, b := range op.Bindings {
+			if b.Kind == "html" {
+				targets[b.Target] = true
+			}
+		}
+	}
+	for _, p := range report.ProtocolOnly {
+		if p.Listener == "" {
+			targets[p.Target] = true
+		}
+	}
+	pages := 0
+	for target := range targets {
+		path, ok := strings.CutPrefix(target, "GET ")
+		if !ok || strings.ContainsAny(path, "{*") {
+			continue
+		}
+		pages++
+		if status, body, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status >= 500 && status != http.StatusServiceUnavailable {
+			t.Errorf("GET %s = %d: %.300s", path, status, body)
+		}
+	}
+	if pages < 40 {
+		t.Errorf("the catalog lists %d GET pages without path parameters, want at least 40", pages)
+	}
 }
 
 func TestServeRendersNotionPages(t *testing.T) {
