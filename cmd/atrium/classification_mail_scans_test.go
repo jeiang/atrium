@@ -93,7 +93,12 @@ func (r *mailClassifierRig) requests(t *testing.T) []sentClassification {
 
 func callerOf(t *testing.T, body map[string]any) string {
 	t.Helper()
-	schema, _ := body["output_config"].(map[string]any)["format"].(map[string]any)["schema"].(map[string]any)
+	oc, _ := body["output_config"].(map[string]any)
+	format, _ := oc["format"].(map[string]any)
+	if format == nil {
+		return "plain"
+	}
+	schema, _ := format["schema"].(map[string]any)
 	required, _ := schema["required"].([]any)
 	keys := make([]string, 0, len(required))
 	for _, k := range required {
@@ -249,10 +254,13 @@ func TestMailPassFlagsAndEventsThroughTheClassifier(t *testing.T) {
 		if body["model"] != pricing.HaikuID || body["max_tokens"] != float64(80) {
 			t.Errorf("%s request model/max_tokens: %v %v", req.caller, body["model"], body["max_tokens"])
 		}
-		for _, key := range []string{"tools", "tool_choice", "thinking"} {
+		for _, key := range []string{"tools", "tool_choice"} {
 			if _, ok := body[key]; ok {
 				t.Errorf("%s request carries %s", req.caller, key)
 			}
+		}
+		if thinking, _ := body["thinking"].(map[string]any); len(thinking) != 1 || thinking["type"] != "disabled" {
+			t.Errorf("%s request thinking: %v", req.caller, body["thinking"])
 		}
 		if format := body["output_config"].(map[string]any)["format"].(map[string]any); format["type"] != "json_schema" {
 			t.Errorf("%s output format: %v", req.caller, format)

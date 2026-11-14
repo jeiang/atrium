@@ -222,6 +222,7 @@ func (s *Service) run(ctx context.Context, r Request, runID, threadID int64, wir
 		Params: anthropic.Params{
 			Model:     pricing.HaikuID,
 			MaxTokens: maxTokens,
+			Thinking:  &anthropic.Thinking{Type: anthropic.ThinkingDisabled},
 			System:    json.RawMessage(jsonx.Dumps(r.System)),
 			OutputConfig: &anthropic.OutputConfig{Format: &anthropic.JSONOutputFormat{
 				Type: anthropic.FormatJSONSchema, Schema: wire,
