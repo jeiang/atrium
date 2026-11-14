@@ -62,9 +62,10 @@ type Result struct {
 }
 
 type Definition struct {
-	Kind     Kind
-	Validate func(Candidate) error
-	Test     func(context.Context, *Lease, []Capability) ([]Result, error)
+	Kind            Kind
+	CredentialSlots []string
+	Validate        func(Candidate) error
+	Test            func(context.Context, *Lease, []Capability) ([]Result, error)
 	// Silent replaces Test during a periodic health pass when the explicit
 	// test has a visible side effect, such as a diagnostic push.
 	Silent func(context.Context, *Lease, []Capability) ([]Result, error)
@@ -228,15 +229,13 @@ func (e *TestFailed) Error() string {
 	return fmt.Sprintf("test failed (%s): %s", e.View.State, e.View.Reason)
 }
 
-// CredentialEndpointChanged refuses a host declaration that would send a
-// retained database credential to a different endpoint.
 type CredentialEndpointChanged struct {
 	ID    ID
 	Field string
 }
 
 func (e *CredentialEndpointChanged) Error() string {
-	return fmt.Sprintf("connections: %s is declared with a different %s endpoint while it holds a stored credential; declare a credential file for it, or disconnect the stored credential first", e.ID, e.Field)
+	return fmt.Sprintf("connections: %s has a different %s endpoint while it holds a stored credential; replace every retained credential in the same request, declare a credential file for it, or disconnect the stored credential first", e.ID, e.Field)
 }
 
 type EncryptedRequired struct{ Slot string }

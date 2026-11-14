@@ -104,6 +104,10 @@ func Handle(d *web.Deps, b application.Binding, h http.HandlerFunc) application.
 	if b.Kind != application.API || b.API == nil {
 		panic("api: " + b.Target + " has no API shape")
 	}
+	method, _, _ := application.Route(b.Target)
+	if method != http.MethodGet && method != http.MethodHead {
+		panic("api: " + b.Target + " must use Query or Command for an unsafe method")
+	}
 	if d != nil {
 		mount(d, b.Target, *b.API, h)
 	}

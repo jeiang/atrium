@@ -3,12 +3,15 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -128,4 +131,142 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 		t.Fatalf("refused tokens were stored: %d %v", minted, err)
 	}
 
+}
+
+func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
+	requireCipher(t)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "operator.toml", ""))
+	var mu sync.Mutex
+	var seenA, seenB []string
+	endpoint := func(seen *[]string) *httptest.Server {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			*seen = append(*seen, r.Header.Get("Authorization"))
+			mu.Unlock()
+			switch r.URL.Path {
+			case "/api/user":
+				_, _ = w.Write([]byte(`{"login":"atrium"}`))
+			case "/api/search":
+				_, _ = w.Write([]byte(`[]`))
+			default:
+				w.WriteHeader(http.StatusNotFound)
+			}
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+	a, b := endpoint(&seenA), endpoint(&seenB)
+	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("DELETE FROM connections WHERE id = 'service/grafana'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) VALUES ('service/grafana', 'service/grafana', 'Grafana', 'operator', ?, '{}', 1, 1, 'untested', 0, 0)", fmt.Sprintf(`{"url":%q}`, a.URL)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO connection_capabilities (connection_id, name, enabled, config_json) VALUES ('service/grafana', 'viewer', 1, '{}')"); err != nil {
+		t.Fatal(err)
+	}
+	token := localAPIToken(t, "credential-move")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+	s := &apiSite{t: t, base: base}
+	const path = "/api/v1/connections/service/grafana"
+	old := map[string]string{"viewer_token": "glsa_old_viewer", "api_key": "glsa_old_fallback"}
+	apiData(t, s.do(http.MethodPut, path, token, map[string]any{"url": a.URL, "credentials": old}), http.StatusOK)
+	apiData(t, s.do(http.MethodPatch, path, token, map[string]any{"url": a.URL}), http.StatusOK)
+	refuse := func(reply apiReply) {
+		t.Helper()
+		expectAPI(t, reply, http.StatusUnprocessableEntity, "invalid")
+		for _, secret := range old {
+			if strings.Contains(reply.body, secret) {
+				t.Fatalf("credential in refusal: %s", reply.body)
+			}
+		}
+		if !strings.Contains(reply.body, "replace every retained credential") || !strings.Contains(reply.body, "disconnect") {
+			t.Fatalf("credential move refusal lacks a remedy: %s", reply.body)
+		}
+	}
+	refuse(s.do(http.MethodPatch, path, token, map[string]any{"url": b.URL}))
+	refuse(s.do(http.MethodPut, path, token, map[string]any{"url": b.URL}))
+	refuse(s.do(http.MethodPut, path, token, map[string]any{"url": b.URL, "credentials": map[string]string{"api_key": "glsa_new_fallback"}}))
+	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"credentials": map[string]string{"unexpected": "never-store-me"}}), http.StatusUnprocessableEntity, "invalid")
+	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"credentials": map[string]string{"unexpected": ""}}), http.StatusUnprocessableEntity, "invalid")
+	apiData(t, s.do(http.MethodPatch, path, token, map[string]any{"url": a.URL, "credentials": map[string]string{"viewer_token": ""}}), http.StatusOK)
+	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana' AND slot = 'unexpected'"); count != "0" {
+		t.Fatalf("unknown slot was stored: %s", count)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	browser := &http.Client{Jar: jar}
+	if status, _, _ := fetch(t, browser, http.MethodGet, base+"/settings/connections", nil); status != http.StatusOK {
+		t.Fatalf("connections page: %d", status)
+	}
+	if status, body, _ := fetch(t, browser, http.MethodPost, base+"/settings/connections/test", url.Values{"id": {"service/grafana"}, "url": {b.URL}}); status != http.StatusUnprocessableEntity || strings.Contains(body, old["viewer_token"]) {
+		t.Fatalf("HTML endpoint change: %d %s", status, body)
+	}
+	mu.Lock()
+	requestsAtB := append([]string(nil), seenB...)
+	mu.Unlock()
+	if len(requestsAtB) != 0 {
+		t.Fatalf("refused endpoint B received requests with Authorization %q", requestsAtB)
+	}
+	if source, _, _, cfg := connectionRow(t, dir, "service/grafana"); source != "operator" || !strings.Contains(cfg, a.URL) {
+		t.Fatalf("refused move changed the connection: %s %s", source, cfg)
+	}
+	for slot, secret := range old {
+		if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/grafana' AND slot = ?", slot); got != secret {
+			t.Fatalf("refused move changed slot %s", slot)
+		}
+	}
+	replacement := map[string]string{"viewer_token": "glsa_new_viewer", "api_key": "glsa_new_fallback"}
+	patched := s.do(http.MethodPatch, path, token, map[string]any{"url": b.URL, "credentials": replacement})
+	if got := apiData(t, patched, http.StatusOK); got["state"] != "untested" {
+		t.Fatalf("replacement PATCH: %s", patched.body)
+	}
+	tested := s.do(http.MethodPut, path, token, map[string]any{"url": b.URL})
+	if got := apiData(t, tested, http.StatusOK); got["state"] != "ok" {
+		t.Fatalf("test after replacement: %s", tested.body)
+	}
+	mu.Lock()
+	requestsAtB = append([]string(nil), seenB...)
+	mu.Unlock()
+	if len(requestsAtB) < 2 {
+		t.Fatalf("replacement did not test endpoint B: %q", requestsAtB)
+	}
+	for _, authorization := range requestsAtB {
+		if authorization != "Bearer "+replacement["viewer_token"] {
+			t.Fatalf("endpoint B received Authorization %q", authorization)
+		}
+	}
+	apiData(t, s.do(http.MethodPut, path, token, map[string]any{"url": a.URL, "credentials": old}), http.StatusOK)
+	apiData(t, s.do(http.MethodPut, path, token, map[string]any{"url": b.URL, "credentials": replacement}), http.StatusOK)
+	mu.Lock()
+	requestsAtB = append([]string(nil), seenB...)
+	mu.Unlock()
+	for _, authorization := range requestsAtB {
+		if authorization != "Bearer "+replacement["viewer_token"] {
+			t.Fatalf("endpoint B received an old Authorization after PUT: %q", authorization)
+		}
+	}
+	for _, reply := range []apiReply{patched, tested, s.do(http.MethodGet, "/api/v1/connections", token, nil)} {
+		for _, secret := range replacement {
+			if strings.Contains(reply.body, secret) {
+				t.Fatalf("credential in response: %s", reply.body)
+			}
+		}
+	}
+	if got := s.do(http.MethodDelete, path, token, nil); got.status != http.StatusNoContent {
+		t.Fatalf("disconnect: %d %s", got.status, got.body)
+	}
+	apiData(t, s.do(http.MethodPatch, path, token, map[string]any{"url": a.URL}), http.StatusOK)
+	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana'"); count != "0" {
+		t.Fatalf("disconnect retained %s credentials", count)
+	}
 }

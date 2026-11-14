@@ -16,9 +16,10 @@ const KindNotion connections.Kind = "service/notion"
 
 func Connections() []connections.Definition {
 	return []connections.Definition{{
-		Kind:     KindNotion,
-		Validate: validateConnection,
-		Test:     testConnection,
+		Kind:            KindNotion,
+		CredentialSlots: []string{"token"},
+		Validate:        validateConnection,
+		Test:            testConnection,
 	}}
 }
 

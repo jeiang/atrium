@@ -130,9 +130,7 @@ func (s *Service) candidate(ctx context.Context, id ID, label, url string, crede
 		}
 	}
 	for slot, value := range credentials {
-		if slot != "" && value != "" {
-			cand.Credentials = append(cand.Credentials, connections.CredentialInput{Slot: slot, Value: value})
-		}
+		cand.Credentials = append(cand.Credentials, connections.CredentialInput{Slot: slot, Value: value})
 	}
 	return cand, nil
 }

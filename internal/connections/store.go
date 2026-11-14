@@ -1326,8 +1326,23 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate) (*Lease, error) {
 	caps := make([]Capability, 0, len(cand.Capabilities))
 	caps = append(caps, cand.Capabilities...)
-	creds, err := s.loadCredentials(ctx, s.q, current.ID)
+	tx, err := s.d.Read.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var revision int64
+	if err := tx.QueryRowContext(ctx, "SELECT revision FROM connections WHERE id = ?", current.ID).Scan(&revision); err != nil {
+		return nil, err
+	}
+	if revision != current.revisionValue() {
+		return nil, &Conflict{ID: current.ID, Revision: current.revisionValue()}
+	}
+	creds, err := s.loadCredentials(ctx, tx, current.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	for _, c := range cand.Credentials {
@@ -1340,7 +1355,7 @@ func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate
 		config = current.Config
 	}
 	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
-	lease.shared = s.sharedFor(current.ID, current.revisionValue())
+	lease.shared = &shared{clients: map[string]*http.Client{}, tokens: map[string]string{}}
 	return lease, nil
 }
 
@@ -1377,11 +1392,34 @@ func validateCandidate(def Definition, cand Candidate, current View) error {
 		}
 	}
 	for _, c := range cand.Credentials {
+		known := false
+		for _, pattern := range def.CredentialSlots {
+			if matched, _ := path.Match(pattern, c.Slot); matched {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return &Invalid{Cause: errors.New("connections: unknown credential slot for this connection kind")}
+		}
 		if c.HostFileRef != "" {
 			return &Invalid{Cause: errors.New("connections: a host file credential is only accepted from host configuration")}
 		}
-		if c.Value == "" {
-			return MissingCredential{Slot: c.Slot}
+	}
+	if current.ConfigSource == SourceOperator {
+		if field, changed := changedEndpoint(string(current.Config), string(cand.Config)); changed {
+			for _, stored := range current.Credentials {
+				replaced := false
+				for _, c := range cand.Credentials {
+					if c.Slot == stored.Slot && c.Value != "" {
+						replaced = true
+						break
+					}
+				}
+				if stored.Present && !replaced {
+					return &Invalid{Cause: &CredentialEndpointChanged{ID: current.ID, Field: field}}
+				}
+			}
 		}
 	}
 	return nil

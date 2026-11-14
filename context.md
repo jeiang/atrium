@@ -344,6 +344,12 @@ behavior-parity target.
   hash of the text that was sent, so an edit re-queues it, a write-back whose
   row changed, was retracted or was deleted in flight is discarded, and a
   retraction or deletion removes the vector in the same transaction.
+- Connection endpoint edits on the Connections page and the PUT/test and
+  PATCH/save-fields APIs refuse to retain a stored credential across an endpoint
+  identity change. Replace every retained credential in the same request or
+  disconnect first. Refusal happens before the connectivity test; an unchanged
+  endpoint can keep its credentials. Credential slots must belong to the
+  connection kind, and credential values remain write-only.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification

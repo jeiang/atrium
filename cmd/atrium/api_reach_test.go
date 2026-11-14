@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,7 +21,11 @@ type reachApprovalRow struct {
 }
 
 func TestEveryAreaReachableFromSchema(t *testing.T) {
-	s := newAPISite(t)
+	dir, _ := davFixture(t)
+	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
+		t.Fatalf("sync reach fixture calendar: %d %s", got.code, got.stderr)
+	}
+	s := startAPISite(t, dir, nil)
 	out := t.TempDir()
 	if got := runApp(t, "catalog", "openapi", "--output", out); got.code != cli.ExitOK {
 		t.Fatalf("catalog openapi: %d %s", got.code, got.stderr)
@@ -54,10 +59,22 @@ func TestEveryAreaReachableFromSchema(t *testing.T) {
 		t.Fatalf("approval-reached operations = %+v (%d)", reach.ApprovalReached, reach.TotalApprovalReached)
 	}
 
+	type responseSchema struct {
+		Ref        string                     `json:"$ref"`
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
 	var doc struct {
 		Paths map[string]map[string]struct {
-			Tags []string `json:"tags"`
+			Tags      []string `json:"tags"`
+			Responses map[string]struct {
+				Content map[string]struct {
+					Schema responseSchema `json:"schema"`
+				} `json:"content"`
+			} `json:"responses"`
 		} `json:"paths"`
+		Components struct {
+			Schemas map[string]responseSchema `json:"schemas"`
+		} `json:"components"`
 	}
 	readJSON(t, filepath.Join(out, "openapi.json"), &doc)
 	param := regexp.MustCompile(`\{[^}]+\}`)
@@ -78,16 +95,41 @@ func TestEveryAreaReachableFromSchema(t *testing.T) {
 		}
 	}
 	token := s.token("owner")
+	project := s.do(http.MethodPost, "/api/v1/projects", token, map[string]any{"name": "Reach fixture", "effort": "high", "context_limit": 200000})
+	if project.status != http.StatusCreated {
+		t.Fatalf("create reach fixture project: %d %s", project.status, project.body)
+	}
+	projectID := strconv.FormatInt(number(t, project.json["id"]), 10)
 	for _, a := range application.Areas {
 		p, ok := pick[string(a)]
 		if !ok {
 			t.Errorf("area %s has no GET path in the schema", a)
 			continue
 		}
-		got := s.do(http.MethodGet, "/api/v1"+param.ReplaceAllString(p, "1"), token, nil)
-		routeMissing := got.status == http.StatusNotFound && got.code() == "not_found" && !strings.Contains(p, "{")
-		if got.status == http.StatusMethodNotAllowed || routeMissing || got.status == http.StatusUnauthorized {
+		path := "/api/v1" + param.ReplaceAllString(p, projectID)
+		if string(a) == "search" {
+			path += "?q=reach"
+		}
+		got := s.do(http.MethodGet, path, token, nil)
+		if got.status != http.StatusOK {
 			t.Errorf("area %s: GET %s = %d %.200s", a, p, got.status, got.body)
+			continue
+		}
+		schema := doc.Paths[p]["get"].Responses["200"].Content["application/json"].Schema
+		if schema.Ref != "" {
+			schema = doc.Components.Schemas[strings.TrimPrefix(schema.Ref, "#/components/schemas/")]
+		}
+		keys := make([]string, 0, len(schema.Properties))
+		for key := range schema.Properties {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		if len(keys) == 0 {
+			t.Errorf("area %s: GET %s has no object field in its schema", a, p)
+			continue
+		}
+		if _, ok := got.json[keys[0]]; !ok {
+			t.Errorf("area %s: GET %s lacks %q: %.200s", a, p, keys[0], got.body)
 		}
 	}
 }
