@@ -1297,6 +1297,27 @@ func TestImportV2CarriesTheShip24ConnectionAndPollsWithTheCompiledWindow(t *test
 	}
 }
 
+func TestImportV2Ship24WithoutAURLTestsTheDefaultEndpoint(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_ship24_api_key', 'ship24-imported', 1762000800, 'fixture')")
+	imported := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
+	if imported.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", imported.code, imported.stdout, imported.stderr)
+	}
+	runImportApp(t, importTestApp(t, dir, clock), "connections", "test", "service/ship24")
+	q, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/ship24'"); state == "" || state == "unconfigured" {
+		t.Fatalf("Ship24 imported without a URL is %q; want the default endpoint to be used", state)
+	}
+}
+
 func TestImportV2HoldsMailOnlyForAMatchingEmbeddingFingerprint(t *testing.T) {
 	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())

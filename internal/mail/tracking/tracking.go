@@ -162,7 +162,7 @@ func Load(ctx context.Context, q db.Querier) (Settings, error) {
 	s.lease = lease
 	if s.URL, err = lease.Endpoint("url"); err != nil {
 		lease.Close()
-		return Settings{}, config.NotConfigured("the Ship24 connection has no URL")
+		return Settings{}, err
 	}
 	if s.Key, err = lease.Credential("api_key"); err != nil {
 		var missing connections.MissingCredential

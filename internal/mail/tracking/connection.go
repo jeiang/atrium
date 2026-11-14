@@ -22,6 +22,7 @@ func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:            KindShip24,
 		CredentialSlots: []string{"api_key"},
+		Defaults:        map[string]string{"url": DefaultURL},
 		Validate:        validateConnection,
 		Test:            testConnection,
 	}}
@@ -37,6 +38,9 @@ func validateConnection(c connections.Candidate) error {
 	for key, value := range cfg {
 		switch key {
 		case "url":
+			if strings.TrimSpace(value) == "" {
+				continue
+			}
 			if err := httpURL(value); err != nil {
 				return fmt.Errorf("ship24 url %w", err)
 			}
@@ -58,7 +62,7 @@ func httpURL(value string) error {
 func testConnection(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {
 	base, err := lease.Endpoint("url")
 	if err != nil {
-		return []connections.Result{{Capability: "api", State: connections.Unconfigured, Reason: "no Ship24 URL configured"}}, nil
+		return nil, err
 	}
 	key, err := lease.Credential("api_key")
 	if err != nil {
