@@ -85,6 +85,31 @@ func TestServeWatchesHostICloudAccountAfterTransientCLI(t *testing.T) {
 	strictSMTPRig(t, map[string]string{"operator@icloud.test": "icloud-pass"})
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
+	transient := t.TempDir()
+	env := appEnv(t)
+	app := newAppWith(func(name string) (string, bool) {
+		if name == "CREDENTIALS_DIRECTORY" {
+			return transient, true
+		}
+		return env(name)
+	}, imapclient.Opener, nil, quietLog)
+	runTransient := func() {
+		t.Helper()
+		if err := os.MkdirAll(transient, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(transient, "icloud.password"), []byte("icloud-pass\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var out, errs bytes.Buffer
+		if code := app.Run(context.Background(), []string{"connections", "list"}, &out, &errs); code != cli.ExitOK {
+			t.Fatalf("transient connections list: %d %s", code, errs.String())
+		}
+		if err := os.RemoveAll(transient); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runTransient()
 	opsBase := opsAddr(t)
 	_, logs, _ := startServeWith(t, dir, true)
 	waitWatching(t, fake)
@@ -95,24 +120,7 @@ func TestServeWatchesHostICloudAccountAfterTransientCLI(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT revision FROM connections WHERE id = 'mail/icloud'").Scan(&revision); err != nil {
 		t.Fatal(err)
 	}
-	transient := t.TempDir()
-	if err := os.WriteFile(filepath.Join(transient, "icloud.password"), []byte("icloud-pass\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	env := appEnv(t)
-	app := newAppWith(func(name string) (string, bool) {
-		if name == "CREDENTIALS_DIRECTORY" {
-			return transient, true
-		}
-		return env(name)
-	}, imapclient.Opener, nil, quietLog)
-	var out, errs bytes.Buffer
-	if code := app.Run(context.Background(), []string{"connections", "list"}, &out, &errs); code != cli.ExitOK {
-		t.Fatalf("transient connections list: %d %s", code, errs.String())
-	}
-	if err := os.RemoveAll(transient); err != nil {
-		t.Fatal(err)
-	}
+	runTransient()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := fake.DropIdle(ctx); err != nil {

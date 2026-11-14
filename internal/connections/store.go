@@ -841,9 +841,6 @@ func (s *Store) loadCredentials(ctx context.Context, q db.Querier, id ID) (map[s
 		c.value, c.fileRef = value.String, fileRef.String
 		if c.source == "host_file" {
 			c.fileRef = s.host.Connections[string(id)].CredentialFiles[slot]
-			if c.fileRef == "" {
-				return nil, MissingCredential{Slot: slot}
-			}
 		}
 		if expires.Valid {
 			c.expires = fromUnix(&expires.Float64)
@@ -1072,7 +1069,7 @@ func (l *Lease) Transport() (*http.Client, error) {
 
 func (l *Lease) Credential(slot string) (string, error) {
 	c, ok := l.creds[slot]
-	if !ok {
+	if !ok || c.source == "host_file" && c.fileRef == "" {
 		return "", MissingCredential{Slot: slot}
 	}
 	if c.source == "database" {
