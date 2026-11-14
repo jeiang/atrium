@@ -27323,13 +27323,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -27508,13 +27501,6 @@
           {
             "in": "header",
             "name": "If-Modified-Since",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
             "schema": {
               "type": "string"
             }
@@ -27807,13 +27793,6 @@
           {
             "in": "header",
             "name": "If-Modified-Since",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
             "schema": {
               "type": "string"
             }

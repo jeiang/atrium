@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,10 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 		Paths map[string]map[string]struct {
 			OperationID string `json:"operationId"`
 			Area        string `json:"x-atrium-area"`
+			Parameters  []struct {
+				Name string `json:"name"`
+				In   string `json:"in"`
+			} `json:"parameters"`
 		} `json:"paths"`
 		Components struct {
 			Schemas map[string]struct {
@@ -65,6 +70,21 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 	}
 	if search, threads := doc.Paths["/search"]["get"].OperationID, doc.Paths["/threads"]["get"].OperationID; search != "assistant.search" || threads != "assistant.thread.list" || search == threads {
 		t.Fatalf("search/thread operation ids collide or changed: %q / %q", search, threads)
+	}
+	for path, ops := range doc.Paths {
+		for method, op := range ops {
+			seen := map[string]bool{}
+			for _, p := range op.Parameters {
+				key := p.In + " " + p.Name
+				if p.In == "header" {
+					key = p.In + " " + http.CanonicalHeaderKey(p.Name)
+				}
+				if seen[key] {
+					t.Errorf("%s %s declares parameter %s twice", method, path, key)
+				}
+				seen[key] = true
+			}
+		}
 	}
 	for schema, field := range map[string]string{
 		"AssistantmoduleapiSchedulePatch":   "schedule",

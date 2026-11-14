@@ -99,6 +99,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	shape := b.API
 	unsafe := method != http.MethodGet && method != http.MethodHead
 	params := []any{}
+	declared := map[string]bool{}
 	for _, f := range reflect.VisibleFields(shape.Request) {
 		if f.Anonymous || !f.IsExported() {
 			continue
@@ -120,11 +121,16 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 				p["required"] = true
 			}
 			params = append(params, p)
+			if in == "header" {
+				declared[http.CanonicalHeaderKey(name)] = true
+			}
 		}
 	}
 	if unsafe && !shape.ReadOnlyPost {
-		params = append(params, object{"name": "Idempotency-Key", "in": "header", "schema": object{"type": "string", "minLength": 1, "maxLength": 255}})
-	} else if kind == application.Query && !shape.ReadOnlyPost && shape.Body != application.BodyEventStream && !shape.Uncached {
+		if !declared["Idempotency-Key"] {
+			params = append(params, object{"name": "Idempotency-Key", "in": "header", "schema": object{"type": "string", "minLength": 1, "maxLength": 255}})
+		}
+	} else if kind == application.Query && !shape.ReadOnlyPost && shape.Body != application.BodyEventStream && !shape.Uncached && !declared["If-None-Match"] {
 		params = append(params, object{"name": "If-None-Match", "in": "header", "schema": object{"type": "string"}})
 	}
 	id := string(b.Uses[0])
