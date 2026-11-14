@@ -3,11 +3,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -15,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	mailrun "github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/passrun"
@@ -59,6 +63,98 @@ func watchRig(t *testing.T, creds map[string]string, accounts ...mailAccount) (s
 	}
 	strictIMAPRig(t, creds, fakes)
 	return dir, fakes
+}
+
+func TestServeWatchesHostICloudAccountAfterTransientCLI(t *testing.T) {
+	dir, embed := keyedMailFixture(t)
+	host := accountsFileEmbedding(t, dir, embed, filepath.Join(testRoot, "host", "anthropic.key"),
+		mailAccount{"icloud", "icloud", "operator@icloud.test", "icloud-pass", false})
+	raw, err := os.ReadFile(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = bytes.ReplaceAll(raw, []byte(filepath.Join(dir, "icloud.password")), []byte("${CREDENTIALS_DIRECTORY}/icloud.password"))
+	if err := os.WriteFile(host, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", host)
+	setEnv(t, "CREDENTIALS_DIRECTORY", dir)
+	fake := mailtest.NewFakeClient()
+	fake.AddBox("INBOX", mailtest.NewBox(1))
+	strictIMAPRig(t, map[string]string{"operator@icloud.test": "icloud-pass"}, map[string]*mailtest.FakeClient{"icloud": fake})
+	strictSMTPRig(t, map[string]string{"operator@icloud.test": "icloud-pass"})
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	transient := t.TempDir()
+	env := appEnv(t)
+	app := newAppWith(func(name string) (string, bool) {
+		if name == "CREDENTIALS_DIRECTORY" {
+			return transient, true
+		}
+		return env(name)
+	}, imapclient.Opener, nil, quietLog)
+	runTransient := func() {
+		t.Helper()
+		if err := os.MkdirAll(transient, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(transient, "icloud.password"), []byte("icloud-pass\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var out, errs bytes.Buffer
+		if code := app.Run(context.Background(), []string{"connections", "list"}, &out, &errs); code != cli.ExitOK {
+			t.Fatalf("transient connections list: %d %s", code, errs.String())
+		}
+		if err := os.RemoveAll(transient); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runTransient()
+	opsBase := opsAddr(t)
+	_, logs, _ := startServeWith(t, dir, true)
+	waitWatching(t, fake)
+	if got := runApp(t, "connections", "test", "mail/icloud"); got.code != cli.ExitOK {
+		t.Fatalf("initial connection test: %d %s", got.code, got.stderr)
+	}
+	var revision int64
+	if err := d.Read.QueryRow("SELECT revision FROM connections WHERE id = 'mail/icloud'").Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	runTransient()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := fake.DropIdle(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, 30*time.Second, "the iCloud watch to reconnect or report missing credentials", func() bool {
+		return serviceStarts(logs, mailrun.WatchServiceName("icloud")) >= 2 && fake.Idling() == 1 ||
+			strings.Contains(logs.String(), "missing credentials for icloud")
+	})
+	if fake.Idling() != 1 || strings.Contains(logs.String(), "missing credentials for icloud") {
+		t.Fatalf("the iCloud watch did not reconnect: %s", logs.String())
+	}
+	if health := watchHealth(t, opsBase); health["mail-watch/icloud"].Status != "running" {
+		t.Fatalf("iCloud watch health: %+v", health)
+	}
+	if strings.Contains(logs.String(), "watch failed") {
+		t.Fatalf("watch failed after transient CLI: %s", logs.String())
+	}
+	manual := syncDue(t, d)
+	waitUntil(t, 60*time.Second, "the scheduled mail sync after transient credentials disappear", scheduledRunEnded(d, passrun.Sync, manual))
+	if status, text := schedulerStatus(t, d, passrun.Sync); status != "ok" {
+		t.Fatalf("scheduled sync: %s %s", status, text)
+	}
+	var state string
+	var after int64
+	if err := d.Read.QueryRow("SELECT state, revision FROM connections WHERE id = 'mail/icloud'").Scan(&state, &after); err != nil {
+		t.Fatal(err)
+	}
+	if state != "ok" || after != revision {
+		t.Fatalf("connection after transient CLI: state %s revision %d, want ok revision %d", state, after, revision)
+	}
+	if got := runApp(t, "connections", "test", "mail/icloud"); got.code != cli.ExitOK {
+		t.Fatalf("connection test after transient CLI: %d %s", got.code, got.stderr)
+	}
 }
 
 func TestServeWatchesEachAccountAndRestartsOnlyTheDroppedOne(t *testing.T) {

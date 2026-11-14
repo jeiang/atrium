@@ -350,15 +350,33 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx,
-		"DELETE FROM connection_credentials WHERE connection_id = ? AND source = 'host_file'", id); err != nil {
+	rows, err := tx.QueryContext(ctx, "SELECT slot FROM connection_credentials WHERE connection_id = ? AND source = 'host_file'", id)
+	if err != nil {
 		return err
+	}
+	stored, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var slot string
+		err := r.Scan(&slot)
+		return slot, err
+	})
+	if err != nil {
+		return err
+	}
+	for _, slot := range stored {
+		if _, declared := hc.CredentialFiles[slot]; !declared {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot); err != nil {
+				return err
+			}
+		}
 	}
 	for _, slot := range sortedKeys(hc.CredentialFiles) {
 		var prior string
 		err := tx.QueryRowContext(ctx, "SELECT source FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot).Scan(&prior)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
+		}
+		if prior == "host_file" {
+			continue
 		}
 		if prior == "database" {
 			log.Info("the host credential file replaces the database credential", logx.Integration, string(id), "SLOT", slot)
@@ -695,8 +713,11 @@ func (s *Store) credentials(ctx context.Context, q db.Querier, id ID, withValues
 		if err := rows.Scan(&c.Slot, &c.Source, &value, &fileRef, &expires, &setAt, &c.SetBy); err != nil {
 			return nil, err
 		}
-		c.Present = value.Valid && value.String != "" || fileRef.Valid && fileRef.String != ""
 		c.FileRef = fileRef.String
+		if c.Source == "host_file" {
+			c.FileRef = s.host.Connections[string(id)].CredentialFiles[c.Slot]
+		}
+		c.Present = value.Valid && value.String != "" || c.FileRef != ""
 		if expires.Valid {
 			t := fromUnix(&expires.Float64)
 			c.ExpiresAt = t
@@ -818,6 +839,9 @@ func (s *Store) loadCredentials(ctx context.Context, q db.Querier, id ID) (map[s
 			return nil, err
 		}
 		c.value, c.fileRef = value.String, fileRef.String
+		if c.source == "host_file" {
+			c.fileRef = s.host.Connections[string(id)].CredentialFiles[slot]
+		}
 		if expires.Valid {
 			c.expires = fromUnix(&expires.Float64)
 		}
@@ -1045,7 +1069,7 @@ func (l *Lease) Transport() (*http.Client, error) {
 
 func (l *Lease) Credential(slot string) (string, error) {
 	c, ok := l.creds[slot]
-	if !ok {
+	if !ok || c.source == "host_file" && c.fileRef == "" {
 		return "", MissingCredential{Slot: slot}
 	}
 	if c.source == "database" {

@@ -52,6 +52,10 @@ These are fields of each `connections.<id>` submodule, not top-level settings.
 | `credentialFiles` | attribute set of strings | `{}` | Credential slot to host file path; each becomes a systemd credential. |
 
 Credentials never become literal secret values in the generated host TOML.
+Each process resolves credential files from its own host configuration and
+systemd credentials directory. Running `atrium-run` does not replace the
+running server's credential paths or reset connection health merely because
+the transient unit uses a different credentials directory.
 The application validates credential slots. On host takeover of an
 operator-owned connection, a changed endpoint cannot retain a stored database
 credential: replace it with a declared credential file or disconnect first.
