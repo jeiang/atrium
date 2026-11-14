@@ -12,19 +12,8 @@ import (
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
-	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
-	"github.com/jeiang/atrium/internal/mail/scans"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
-	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
 	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
@@ -37,24 +26,15 @@ func nullable[T any](v *T) any {
 }
 
 type Options struct {
-	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
-	Env     config.Env
-	Enabled func(context.Context, db.Querier, string) (bool, error)
-	Store   func(*db.DB, config.Config) *ledger.Store
-	Tools   registry.Source
-	Namer   func(context.Context, *db.DB, config.Config) (rebalance.Namer, error)
+	Session func(context.Context, func(Runtime) error) error
 }
 
-func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
-	return o.Store(d, cfg)
-}
-
-func (o Options) env() config.Env {
-	if o.Env == nil {
-		return config.OS
-	}
-	return o.Env
+type Runtime struct {
+	Reads   *reviewapp.Service
+	Review  func() *reviewapp.Service
+	Scanner func(func() float64) *mailapp.Service
+	Namer   func(context.Context) (mailapp.Namer, error)
 }
 
 func (o Options) now() float64 {
@@ -74,9 +54,8 @@ func (e *exitError) Error() string { return e.text }
 func failure(code int, err error) error { return &exitError{code: code, text: err.Error()} }
 
 type exec struct {
+	Runtime
 	Ctx    context.Context
-	Cfg    config.Config
-	DB     *db.DB
 	Stdout io.Writer
 	Stderr io.Writer
 	opts   Options
@@ -101,35 +80,6 @@ func (x *exec) JSON(value any) {
 		return
 	}
 	_, _ = fmt.Fprintln(x.Stdout, jsonx.Dumps(value, jsonx.Opts{Indent: 2}))
-}
-
-func (x *exec) registry(store *ledger.Store) *proposals.Registry {
-	clients := x.opts.Clients
-	if clients == nil {
-		clients = imapclient.Opener
-	}
-	open := clients(x.Cfg)
-	cat := module.SetFrom(x.Ctx).Catalog()
-	registry, err := cat.Proposals(module.EffectDeps{
-		DB: x.DB, Ledger: store, Open: open,
-		Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(), Tools: x.opts.Tools, Approvals: cat.Approvals(),
-	})
-	if err != nil {
-		panic(err)
-	}
-	return registry
-}
-
-func (x *exec) Pipeline() *proposals.Pipeline {
-	store := x.opts.store(x.DB, x.Cfg)
-	return &proposals.Pipeline{
-		DB: x.DB, Ledger: store, Registry: x.registry(store), Now: x.opts.Now, Enabled: x.opts.Enabled,
-	}
-}
-
-func (x *exec) review() *reviewapp.Service {
-	p := x.Pipeline()
-	return reviewapp.New(reviewapp.Deps{DB: x.DB, Ledger: p.Ledger, Registry: p.Registry, Pipeline: p})
 }
 
 func selectionOf(raw string) (any, error) {
@@ -180,18 +130,18 @@ func Command(o Options) *cli.Command {
 	return &cli.Command{Name: "proposals", Commands: []*cli.Command{
 		o.leaf("scan-all", func(*cli.Args) body {
 			return func(x *exec) error {
-				scanner := mailapp.New(x.DB, x.Cfg, config.OS, x.Now)
+				scanner := x.Scanner(x.Now)
 				if !scanner.ScansEnabled(x.Ctx) {
 					return nil
 				}
-				if x.opts.Namer == nil {
+				if x.Namer == nil {
 					return errors.New("proposal scans are not bound to a classifier")
 				}
-				namer, err := x.opts.Namer(x.Ctx, x.DB, x.Cfg)
+				namer, err := x.Namer(x.Ctx)
 				if err != nil {
 					return err
 				}
-				out, err := scans.Manual(x.Ctx, x.DB, x.Cfg, scanner.WithNamer(namer).Scans(x.Now()))
+				out, err := scanner.WithNamer(namer).ManualScans(x.Ctx, x.Now())
 				if err != nil {
 					return err
 				}
@@ -216,7 +166,7 @@ func Command(o Options) *cli.Command {
 			status := a.String("status", "", cli.Opt{Choices: proposalsapp.Statuses[:]})
 			kind := a.String("kind", "", cli.Opt{})
 			return func(x *exec) error {
-				found, err := reviewapp.New(reviewapp.Deps{DB: x.DB}).Proposals(x.Ctx, reviewapp.ProposalsInput{Status: *status, Kind: *kind})
+				found, err := x.Reads.Proposals(x.Ctx, reviewapp.ProposalsInput{Status: *status, Kind: *kind})
 				if err != nil {
 					return err
 				}
@@ -236,7 +186,7 @@ func Command(o Options) *cli.Command {
 					}
 					in.Selection = chosen
 				}
-				approved, err := x.review().Approve(x.Ctx, in)
+				approved, err := x.Review().Approve(x.Ctx, in)
 				if approved.Data.Proposal != nil {
 					x.JSON(approved.Data.Proposal.Dict())
 				}
@@ -253,7 +203,7 @@ func Command(o Options) *cli.Command {
 			id := a.IntArg("id", cli.Opt{})
 			forever := a.Bool("forever", cli.Opt{})
 			return func(x *exec) error {
-				if _, err := x.review().Dismiss(x.Ctx, reviewapp.DismissInput{ProposalID: int64(*id), Suppress: *forever}); err != nil {
+				if _, err := x.Review().Dismiss(x.Ctx, reviewapp.DismissInput{ProposalID: int64(*id), Suppress: *forever}); err != nil {
 					return recorded(err, fmt.Sprintf("unknown proposal %d", *id))
 				}
 				x.JSON(dismissView{ID: int64(*id), Dismissed: true})
@@ -264,7 +214,7 @@ func Command(o Options) *cli.Command {
 			id := a.IntArg("id", cli.Opt{})
 			outcome := a.String("outcome", "", cli.Opt{Choices: proposalsapp.Outcomes, Help: "what the operator found: applied, not-applied or partial for a write; undone or not-undone for an undo"})
 			return func(x *exec) error {
-				resolved, err := x.review().Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}, Outcome: *outcome})
+				resolved, err := x.Review().Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}, Outcome: *outcome})
 				if err != nil {
 					return recorded(err, fmt.Sprintf("unknown proposal %d", *id))
 				}
@@ -279,7 +229,7 @@ func Command(o Options) *cli.Command {
 		o.leaf("undo", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
 			return func(x *exec) error {
-				result, err := x.review().Undo(x.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}})
+				result, err := x.Review().Undo(x.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}})
 				outcome := result.Data.Outcome
 				if err == nil || len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
 					x.JSON(outcome.Dict())
@@ -304,22 +254,7 @@ func (o Options) execute(env *cli.Env, run body) int {
 }
 
 func (o Options) run(env *cli.Env, run body) error {
-	cfg, err := config.Load(o.env())
-	if err != nil {
-		return err
-	}
-	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(env.Ctx).DBKey()))
-	if err != nil {
-		return err
-	}
-	defer func() { _ = d.Close() }()
-	if err := config.Boot(env.Ctx, o.env(), d, cfg); err != nil {
-		return err
-	}
-	if set := module.SetFrom(env.Ctx); set != nil {
-		if err := set.Refresh(env.Ctx, d.Read); err != nil {
-			return err
-		}
-	}
-	return run(&exec{Ctx: env.Ctx, Cfg: cfg, DB: d, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
+	return o.Session(env.Ctx, func(rt Runtime) error {
+		return run(&exec{Runtime: rt, Ctx: env.Ctx, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
+	})
 }

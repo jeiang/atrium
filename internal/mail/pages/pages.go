@@ -11,12 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/applier"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/live"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -34,7 +30,7 @@ func Templates() fs.FS {
 
 func PauseModule(reads func(*web.Deps) *mailapp.Service) func(chi.Router, *web.Deps) {
 	return func(r chi.Router, d *web.Deps) {
-		s := &service{reads: reads(d), deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
+		s := &service{reads: reads(d), deps: d}
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 			mode, err := s.reads.Mode(ctx)
 			if err != nil {
@@ -77,9 +73,8 @@ func Globals() map[string]any {
 type service struct {
 	reads  *mailapp.Service
 	deps   *web.Deps
+	review *reviewapp.Service
 	now    func() float64
-	live   *live.Live
-	drafts *drafts.Store
 }
 
 const pageSize = 50
@@ -88,23 +83,11 @@ const learnedLimit = 50
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-func Module(reads func(*web.Deps) *mailapp.Service) func(chi.Router, *web.Deps) {
+func Module(compose func(*web.Deps) (*mailapp.Service, *reviewapp.Service)) func(chi.Router, *web.Deps) {
 	return func(r chi.Router, d *web.Deps) {
 		r = r.With(bindMail)
-		open := imapclient.Opener(d.Cfg)
-		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: wallClock}
-		cat := module.SetFrom(d.Ctx).Catalog()
-		store, err := cat.Ledger(d.DB, d.Env, open, wallClock)
-		if err != nil {
-			panic(err)
-		}
-		d.DrainOnStop(store.Drain)
-		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: store, Env: d.Env, Open: open, Syncer: syncer, Now: wallClock, Approvals: cat.Approvals()})
-		if err != nil {
-			panic(err)
-		}
-		l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: store, Open: open, Registry: registry, Now: wallClock}
-		s := &service{reads: reads(d).WithApplier(applier.New(l, open, syncer)), deps: d, now: wallClock, live: l, drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
+		reads, review := compose(d)
+		s := &service{reads: reads, review: review, deps: d, now: wallClock}
 
 		r.Get("/messages/{message_id}", s.messagePage)
 		r.Get("/messages/{message_id}/correct", s.correctForm)

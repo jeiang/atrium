@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
+	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
@@ -42,6 +43,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/mail/mailmodule"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
@@ -152,7 +154,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
 			}},
-			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled, Routes: func(d *web.Deps, svc *reviewapp.Service) {
+			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Phone: actionlink.Handler, Routes: func(d *web.Deps, svc *reviewapp.Service) {
 				reviewRoutes(d, func() *reviewapp.Service { return svc })
 			}}), Templates: reviewpages.Templates(), Public: actionlinkPublic, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
@@ -178,7 +180,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Now: m.Now, Open: openLedger}),
 			ledgercmd.Command(ledgercmd.Options{Now: m.Now, Open: openLedger}),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}),
+			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}.session}),
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),

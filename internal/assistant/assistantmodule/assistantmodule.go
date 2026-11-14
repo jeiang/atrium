@@ -51,6 +51,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
+	"github.com/jeiang/atrium/internal/mail/mailmodule"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -107,7 +108,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}}},
 		Pages: []web.Page{{
 			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI(mc.Tools), Home: func(d *web.Deps) func(context.Context) (any, any, error) {
-				reader := reviewpages.Reads(d)
+				reader := mailmodule.ReviewReads(d)
 				return func(ctx context.Context) (any, any, error) {
 					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
 					if err != nil {

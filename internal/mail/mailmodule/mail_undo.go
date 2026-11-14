@@ -1,4 +1,4 @@
-package mailtools
+package mailmodule
 
 import (
 	"context"
@@ -59,7 +59,7 @@ func validateOp(name string) func(json.RawMessage) error {
 	}
 }
 
-func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
+func mailUndo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 	var out []ledger.UndoDefinition
 	for _, name := range []string{"draft_delete", "draft_restore"} {
 		out = append(out, ledger.UndoDefinition{Operation: name, Undoer: ledger.Undoer{
@@ -80,8 +80,8 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 		}})
 	}
 	return append(out,
-		ledger.UndoDefinition{Operation: UndoFolderDelete, Undoer: ledger.Undoer{
-			Validate: validateOp(UndoFolderDelete),
+		ledger.UndoDefinition{Operation: mailapp.UndoFolderDelete, Undoer: ledger.Undoer{
+			Validate: validateOp(mailapp.UndoFolderDelete),
 			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := undoFolderDelete(ctx, open, s, raw)
@@ -90,8 +90,8 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 				}
 				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 			}}},
-		ledger.UndoDefinition{Operation: UndoMoveBack, Undoer: ledger.Undoer{
-			Validate: validateOp(UndoMoveBack),
+		ledger.UndoDefinition{Operation: mailapp.UndoMoveBack, Undoer: ledger.Undoer{
+			Validate: validateOp(mailapp.UndoMoveBack),
 			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := undoMailMoveBack(ctx, open, s, raw)

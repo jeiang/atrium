@@ -222,7 +222,7 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := context.WithoutCancel(r.Context())
 	notice := toast("success", "Undone", "")
-	_, err := reviewapp.New(reviewapp.Deps{DB: s.deps.DB, Live: s.live}).Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
+	_, err := s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
 	var e *application.Error
 	switch {
 	case err == nil:
@@ -234,7 +234,7 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = toast("error", "Not undone", e.Message)
 	}
-	found, err := s.live.Get(ctx, id)
+	found, err := s.review.LiveAction(ctx, id)
 	check(err)
 	row, err := s.reads.TriageRow(ctx, found.MessageID)
 	check(err)

@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/mailconn"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
@@ -84,7 +83,7 @@ func ProposeKinds() []proposals.Definition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers, Application: mailCLIService(mc.Env)}
+	mailCmds := m.mailCommands(mc.Env)
 	cmds := []*cli.Command{
 		mailCmds.SyncCommand(),
 		mailCmds.RulesCommand(),
@@ -126,11 +125,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Name:           module.Mail,
 		Operations:     operations,
 		Bindings:       append(bindings, finalBindings()...),
-		Recover:        reviewpages.RecoverDrafts,
+		Recover:        recoverDrafts,
 		Settings:       slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:           mail.HostSettings(),
 		Attention:      AttentionSources(),
-		Jobs:           []scheduler.Definition{mailcmd.TrackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		Jobs:           []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
 		ServiceSets:    m.watchServices(mc.Env),
 		ServiceSetName: "mail/watch",
 		Requires:       Requirements(),
@@ -141,13 +140,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				mailPassRoutes(d, m)
 				mailDraftRoutes(d, m)
 			}},
-			{Module: pages.Module(mailPageService), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+			{Module: pages.Module(mailPageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule(mailPageService)},
-			{Module: reviewpages.MailModule(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Application: mailPageService}), Nav: []web.NavItem{
+			{Module: reviewpages.MailModule(reviewpages.Options{Compose: ReviewServices(ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Application: mailPageService})}), Nav: []web.NavItem{
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},
@@ -168,7 +167,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			effects := module.Effects{
 				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
-				Undo:      slices.Concat(e.Undo(), mailtools.Undo(d.Ledger, d.Open), live.Undo(d.Open, d.DB), openloops.Undo()),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, d.Open), live.Undo(d.Open, d.DB), openloops.Undo()),
 				Resolve:   live.Resolve(),
 			}
 			if d.Syncer != nil {

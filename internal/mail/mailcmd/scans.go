@@ -3,7 +3,6 @@ package mailcmd
 import (
 	"github.com/jeiang/atrium/internal/cli"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 )
 
 func (o Options) scanGroup(name string, scan func(x *exec) (mailapp.ScanResult, error)) *cli.Command {
@@ -23,7 +22,7 @@ func (o Options) ScanCommands() []*cli.Command {
 	out := make([]*cli.Command, len(mailapp.ScanKinds))
 	for i, s := range mailapp.ScanKinds {
 		out[i] = o.scanGroup(s.Command, func(x *exec) (mailapp.ScanResult, error) {
-			return x.opts.Application(x.Pass).WithNamer(rebalance.SuggestName(x.Classifier)).Scans(x.Now())(x.Ctx, s.Key)
+			return x.opts.Application(x.Pass).WithSuggestedNamer(x.Classifier).Scans(x.Now())(x.Ctx, s.Key)
 		})
 	}
 	return out

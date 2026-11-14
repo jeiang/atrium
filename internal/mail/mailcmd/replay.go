@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 )
 
@@ -27,11 +26,11 @@ func (o Options) replay(env *cli.Env, account string, limit int, model bool) int
 	if limit < 0 {
 		return env.UsageError("argument --limit: must be a whole number of at least 0")
 	}
-	cfg, err := config.Load(o.env())
+	cfg, err := o.Load()
 	if err != nil {
 		return cli.Fail(env, err)
 	}
-	read, err := mailapp.New(nil, cfg, o.env(), o.Now).WithClassifiers(o.Classifiers).Replay(env.Ctx, mailapp.ReplayInput{Account: account, Limit: limit, Model: model})
+	read, err := o.Standalone(cfg, o.Now).Replay(env.Ctx, mailapp.ReplayInput{Account: account, Limit: limit, Model: model})
 	if code, ok := unknownAccount(env, account, err); ok {
 		return code
 	}

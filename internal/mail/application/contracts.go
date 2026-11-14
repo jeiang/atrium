@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -19,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/openloops"
+	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
@@ -69,6 +72,9 @@ type (
 	Package                = watches.Package
 	UnknownAccount         = run.UnknownAccount
 	OpenFunc               = mail.OpenFunc
+	Pass                   = run.Pass
+	Config                 = config.Config
+	Namer                  = rebalance.Namer
 )
 
 const (
@@ -139,4 +145,33 @@ func (s *Service) ScansEnabled(ctx context.Context) bool {
 	}
 	reason, err := endpoint.EmbeddingConfigured(ctx, s.db.Read)
 	return err == nil && reason == ""
+}
+
+func AccountNames(ctx context.Context) []string {
+	var names []string
+	for _, a := range config.From(ctx).Accounts() {
+		names = append(names, a.Name)
+	}
+	return names
+}
+
+func Exclusive(ctx context.Context, dbPath string) (*db.Lock, error) {
+	return db.Exclusive(ctx, dbPath, db.ShortLockWait)
+}
+
+func PassLocks(ctx context.Context, dbPath string) (context.Context, *db.LockSet, error) {
+	locks, err := db.ResourceLocks(ctx, dbPath, []string{mail.PassResource}, db.ShortLockWait)
+	if err != nil {
+		return nil, nil, err
+	}
+	return db.WithHeld(ctx, locks), locks, nil
+}
+
+func (s *Service) WithSuggestedNamer(c *classifier.Service) *Service {
+	s.namer = rebalance.SuggestName(c)
+	return s
+}
+
+func (s *Service) ManualScans(ctx context.Context, at float64) (map[string]any, error) {
+	return scans.Manual(ctx, s.db, s.cfg, s.Scans(at))
 }
