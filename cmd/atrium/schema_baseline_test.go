@@ -83,6 +83,13 @@ func assertPreviousMigrationSchemas(t *testing.T, env []string, fresh string) {
 			fixture = filepath.Join(golden.Dir(), "world.db")
 		}
 		t.Run(fmt.Sprintf("migration-%d", version), func(t *testing.T) {
+			dir := t.TempDir()
+			previous := filepath.Join(dir, "previous.db")
+			copyFile(t, fixture, previous)
+			got := runProcessStdin(t, "SELECT MAX(version) FROM schema_migrations;\n", "db shell", schemaBaselineEnv(dir, previous, "")...)
+			if got.code != cli.ExitOK || got.stdout != strconv.Itoa(version-1)+"\n" {
+				t.Fatalf("%s must be at migration %d: exit %d, version %q, error %s", filepath.Base(fixture), version-1, got.code, got.stdout, got.stderr)
+			}
 			migrateSchemaFixture(t, fixture, fresh)
 		})
 	}
@@ -98,7 +105,7 @@ func TestSchemaBaselineFrozenAndPreviousMigrationsMatchFresh(t *testing.T) {
 	if versions.code != cli.ExitOK || versions.stdout != "1\n" {
 		t.Fatalf("frozen world.db must remain at migration 1: exit %d, versions %q, error %s", versions.code, versions.stdout, versions.stderr)
 	}
-	baseline, err := os.ReadFile(filepath.Join("..", "..", "internal", "db", "schema", "baseline.v3.txt"))
+	baseline, err := os.ReadFile(filepath.Join("..", "..", "testdata", "schema", "baseline.v3.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
