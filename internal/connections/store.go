@@ -84,6 +84,7 @@ type Lease struct {
 	options  transportOptions
 	caps     []Capability
 	creds    map[string]credential
+	defaults map[string]string
 	shared   *shared
 	closed   bool
 }
@@ -100,6 +101,9 @@ func New(d *db.DB, host config.Host, r *Registry) (*Store, error) {
 
 func OpenRead(ctx context.Context, q db.Querier, host config.Host, id ID) (*Lease, error) {
 	s := &Store{q: q, host: host, now: time.Now, shared: map[string]*shared{}, digests: map[string]string{}}
+	if reg, err := From(ctx); err == nil {
+		s.reg = reg
+	}
 	return s.open(ctx, q, id)
 }
 
@@ -793,6 +797,7 @@ func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisable
 		}
 	}
 	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds}
+	lease.defaults = s.defaultsFor(v.Kind)
 	lease.shared = s.sharedFor(id, revision)
 	return lease, nil
 }
@@ -880,9 +885,23 @@ func (l *Lease) Endpoint(name string) (string, error) {
 	}
 	value := strings.TrimSpace(m[name])
 	if value == "" {
+		value = l.defaults[name]
+	}
+	if value == "" {
 		return "", fmt.Errorf("connections: %s has no %s endpoint", l.id, name)
 	}
 	return value, nil
+}
+
+func (s *Store) defaultsFor(kind Kind) map[string]string {
+	if s.reg == nil {
+		return nil
+	}
+	def, ok := s.reg.Lookup(kind)
+	if !ok {
+		return nil
+	}
+	return def.Defaults
 }
 
 func (l *Lease) HTTP(name string) (*http.Client, error) {
@@ -1474,6 +1493,7 @@ func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate
 		config = current.Config
 	}
 	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
+	lease.defaults = s.defaultsFor(current.Kind)
 	lease.shared = &shared{clients: map[string]*http.Client{}, tokens: map[string]string{}}
 	return lease, nil
 }
