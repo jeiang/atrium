@@ -696,6 +696,9 @@ func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T
 	r.f.fakes["icloud"].Boxes["INBOX"].Box.Add(h, x, nil, nil)
 	r.f.fakes["icloud"].Idle = true
 
+	for range 4 {
+		r.f.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("ok")))
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	done := make(chan int, 1)
@@ -721,7 +724,15 @@ func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T
 	if _, err := r.d.Write.Exec("UPDATE connections SET enabled = 1 WHERE kind = 'service/anthropic'"); err != nil {
 		t.Fatal(err)
 	}
-	waitFor("asked a paid classification after the connection was re-enabled", func() bool { return len(r.requests(t)) > 0 })
+	classified := func() bool {
+		for _, sent := range r.requests(t) {
+			if sent.caller == "flag" || sent.caller == "event" {
+				return true
+			}
+		}
+		return false
+	}
+	waitFor("asked a paid classification after the connection was re-enabled", classified)
 	cancel()
 	<-done
 }
