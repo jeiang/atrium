@@ -211,6 +211,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	if unsafe {
 		statuses = append(statuses, guardWrite...)
 	}
+	if shape.Body == application.BodyBinary && b.Module != module.Core {
+		statuses = append(statuses, http.StatusConflict)
+	}
 	for _, code := range shape.Errors {
 		statuses = append(statuses, web.Status(code))
 	}

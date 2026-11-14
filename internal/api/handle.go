@@ -19,6 +19,9 @@ const actor = "operator"
 func Query[I, O any](d *web.Deps, def application.Definition, shape application.APIShape, target string, run func(context.Context, I) (application.Read[O], error)) application.Binding {
 	shape = defaults[I](shape, reflect.TypeFor[application.Read[O]](), application.BodyNone)
 	if d != nil {
+		if owner := d.Owner(); owner != module.Core && shape.Body == application.BodyBinary {
+			shape.BeforeBody = ownerBeforeBody(owner, shape.BeforeBody)
+		}
 		mount(d, target, shape, func(w http.ResponseWriter, r *http.Request) {
 			var in I
 			if !decode(w, r, def.Name, &in, shape) {
@@ -100,13 +103,17 @@ const (
 func ownerBeforeBody(owner string, next func(context.Context) error) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if _, err := module.BindOwner(ctx, owner); err != nil {
-			return &application.Error{Code: application.Conflict, Reason: "module_disabled", Message: err.Error(), Cause: err}
+			return ownerRefusal(err)
 		}
 		if next == nil {
 			return nil
 		}
 		return next(ctx)
 	}
+}
+
+func ownerRefusal(err error) error {
+	return &application.Error{Code: application.Conflict, Reason: "module_disabled", Message: err.Error(), Cause: err}
 }
 
 func ownerHalted(err error) error {

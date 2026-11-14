@@ -128,4 +128,5 @@ func TestAPIDisabledAssistantBeforeBody(t *testing.T) {
 	for _, body := range []string{"{", strings.Repeat("x", 2<<20)} {
 		expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", token, body), http.StatusConflict, "module_disabled")
 	}
+	expectAPI(t, s.do(http.MethodPut, "/api/v1/assistant/defaults", token, map[string]any{}, "Idempotency-Key", "defaults-1"), http.StatusConflict, "module_disabled")
 }

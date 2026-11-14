@@ -291,6 +291,13 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, cap)
+	} else if g.apiShape != nil {
+		if shape := g.apiShape(r); shape != nil && shape.Body == application.BodyBinary && shape.BeforeBody != nil {
+			if err := shape.BeforeBody(r.Context()); err != nil {
+				APIFail(w, err)
+				return
+			}
+		}
 	}
 	who.BearerID = tok.ID
 	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
