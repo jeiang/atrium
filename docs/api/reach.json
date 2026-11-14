@@ -14,9 +14,12 @@
     },
     {
       "area": "composer",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.configuration",
+        "assistant.thread.options"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "devices",
@@ -38,18 +41,25 @@
     },
     {
       "area": "files",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.file.download",
+        "assistant.file.list",
+        "assistant.file.preview"
+      ],
+      "required": 3,
+      "bound": 3
     },
     {
       "area": "home",
       "operations": [
+        "assistant.about",
+        "assistant.home",
+        "assistant.today.ensure",
         "calendar.find-slot",
         "calendar.list"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "inbox",
@@ -83,6 +93,11 @@
     {
       "area": "knowledge",
       "operations": [
+        "assistant.memory.backfill",
+        "assistant.memory.estimate",
+        "assistant.memory.tree",
+        "assistant.memory.view",
+        "assistant.memory.work",
         "knowledge.confirm",
         "knowledge.confirm-matching",
         "knowledge.confirm-selected",
@@ -97,8 +112,8 @@
         "knowledge.retract",
         "knowledge.retract-run"
       ],
-      "required": 13,
-      "bound": 13
+      "required": 18,
+      "bound": 18
     },
     {
       "area": "mail",
@@ -108,9 +123,27 @@
     },
     {
       "area": "media",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "media.add",
+        "media.channel-add",
+        "media.channel-remove",
+        "media.channels",
+        "media.downloads",
+        "media.file-item",
+        "media.filing-preview",
+        "media.ignore",
+        "media.library",
+        "media.library-detail",
+        "media.poll",
+        "media.release-preview",
+        "media.select-files",
+        "media.show-lookup",
+        "media.show-search",
+        "media.sweep",
+        "media.torrent-files"
+      ],
+      "required": 17,
+      "bound": 17
     },
     {
       "area": "permissions",
@@ -125,9 +158,17 @@
     },
     {
       "area": "projects",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.project-file.delete",
+        "assistant.project-file.upload",
+        "assistant.project.archive",
+        "assistant.project.create",
+        "assistant.project.detail",
+        "assistant.project.edit",
+        "assistant.project.list"
+      ],
+      "required": 7,
+      "bound": 7
     },
     {
       "area": "proposals",
@@ -149,19 +190,31 @@
     },
     {
       "area": "schedules",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.schedule.cancel",
+        "assistant.schedule.enabled",
+        "assistant.schedule.history",
+        "assistant.schedule.list",
+        "assistant.schedule.update"
+      ],
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "search",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.search"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "settings",
       "operations": [
+        "assistant.subagent.delete",
+        "assistant.subagent.enabled",
+        "assistant.subagent.list",
+        "assistant.subagent.set",
         "auth.bearer-issue",
         "auth.bearer-list",
         "auth.bearer-revoke",
@@ -178,8 +231,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 15,
-      "bound": 15
+      "required": 19,
+      "bound": 19
     },
     {
       "area": "tasks",
@@ -195,18 +248,35 @@
     {
       "area": "threads",
       "operations": [
+        "assistant.message.edit",
+        "assistant.message.send",
+        "assistant.reply.regenerate",
+        "assistant.run.answer",
+        "assistant.run.detail",
         "assistant.run.events",
+        "assistant.run.resume",
+        "assistant.run.stop",
+        "assistant.thread.archive",
+        "assistant.thread.branch",
+        "assistant.thread.delete",
+        "assistant.thread.history",
         "assistant.thread.list",
-        "assistant.thread.transcript"
+        "assistant.thread.pin",
+        "assistant.thread.project",
+        "assistant.thread.start",
+        "assistant.thread.transcript",
+        "assistant.thread.work"
       ],
-      "required": 3,
-      "bound": 3
+      "required": 18,
+      "bound": 18
     },
     {
       "area": "usage",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.usage"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "wiki",
@@ -219,6 +289,6 @@
       "bound": 3
     }
   ],
-  "total_required": 203,
-  "total_bound": 73
+  "total_required": 204,
+  "total_bound": 136
 }

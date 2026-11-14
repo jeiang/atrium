@@ -24,11 +24,6 @@ func TestCLIExitProcess(t *testing.T) {
 			os.Exit(cli.ExitError)
 		}
 		ctx, stop := cli.SignalContext(context.Background())
-		if marker := os.Getenv("ATRIUM_CLI_EXIT_SIGNALS_FILE"); marker != "" {
-			if err := os.WriteFile(marker, nil, 0o600); err != nil {
-				os.Exit(cli.ExitError)
-			}
-		}
 		code := defaultApp(t).Run(ctx, args, os.Stdout, os.Stderr)
 		stop()
 		os.Exit(code)

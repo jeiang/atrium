@@ -5,7 +5,11 @@
 {{end}}
 
 {{define "settings_groups"}}{{$csrf := .CSRF}}{{range .SettingGroups}}
-<form method="post" action="/settings/groups/{{.Module}}/{{.Name}}" class="set-group" data-group="{{.Module}}.{{.Name}}">
+{{template "settings_group" (dict "Group" . "CSRF" $csrf)}}
+{{end}}{{end}}
+
+{{define "settings_group"}}{{$csrf := .CSRF}}{{with .Group}}
+<form method="post" action="/settings/groups/{{.Module}}/{{.Name}}" hx-post="/settings/groups/{{.Module}}/{{.Name}}" hx-target="this" hx-swap="outerHTML" class="set-group" data-group="{{.Module}}.{{.Name}}">
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   <h2>{{.Title}}</h2>
   {{with .Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}

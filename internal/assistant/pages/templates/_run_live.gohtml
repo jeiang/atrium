@@ -10,5 +10,15 @@
   <div class="msg" data-live-answer hidden>
     <div class="msg-body"><div class="prose-assistant whitespace-pre-wrap break-words" data-live-text></div></div>
   </div>
+  <template data-step="thinking"><li data-step="thinking"><div class="whitespace-pre-wrap break-words text-muted-foreground" data-step-text></div></li></template>
+  <template data-step="note"><li data-step="note"><div class="whitespace-pre-wrap break-words" data-step-text></div></li></template>
+  <template data-step="tool"><li data-step="tool"><details class="trace">
+    <summary><span class="trace-label" data-tool-name></span><span class="trace-args" data-tool-args></span><span class="badge ms-auto" data-variant="outline" data-tool-state>running</span></summary>
+    <div class="trace-body trace-code" data-tool-result>(no result yet)</div>
+  </details></li></template>
+  <template data-step="subagent"><li data-step="subagent"><div class="flex flex-col gap-1 rounded-md border px-3 py-2"><span class="flex items-center gap-2 text-muted-foreground"><span class="badge" data-variant="secondary" data-child-role></span><span class="truncate" data-child-title></span><span class="badge ms-auto" data-variant="outline" data-child-state>running</span></span><ol class="flex flex-col gap-1.5 border-s ps-3"></ol></div></li></template>
+  {{template "chat_user_template"}}
 </li>
 {{- end}}
+
+{{define "chat_user_template"}}<template data-message="user"><li class="msg" data-role="user"><div class="msg-body"><div class="msg-user" data-user-text></div></div></li></template>{{end}}

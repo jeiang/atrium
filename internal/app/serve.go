@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/actionlink"
@@ -112,7 +113,7 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if _, err := a.state.Location(a.env); err != nil {
 		return &refusal{fmt.Errorf("the tz setting is not a time zone: %w", err)}
 	}
-	cmds, err := commands.Open(ctx, a.db, func() ([]byte, error) { return actionlink.Material(ctx, a.db.Write) })
+	cmds, err := commands.Open(ctx, a.db, func() ([]byte, error) { return actionlink.Material(ctx, a.db.Write) }, filepath.Join(filepath.Dir(a.config.DBPath), "temp"))
 	if err != nil {
 		return err
 	}

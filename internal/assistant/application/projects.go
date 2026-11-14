@@ -75,6 +75,8 @@ type ProjectInput struct {
 
 type ProjectListInput struct {
 	Archived bool
+	After    int64
+	Limit    int
 }
 
 type ProjectChanged struct {
@@ -140,7 +142,13 @@ var projectScopes = []string{state.Assistant}
 func (s *Service) ProjectList(ctx context.Context, in ProjectListInput) (application.Read[[]Project], error) {
 	out := []Project{}
 	rev, err := s.snapshot(ctx, string(ProjectListName), projectScopes, in, func(q db.Querier) error {
-		rows, err := projects.List(ctx, q, in.Archived)
+		var rows []projects.Project
+		var err error
+		if in.Limit > 0 {
+			rows, err = projects.Page(ctx, q, in.Archived, in.After, in.Limit)
+		} else {
+			rows, err = projects.List(ctx, q, in.Archived)
+		}
 		for _, row := range rows {
 			out = append(out, projectOf(row))
 		}

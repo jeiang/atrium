@@ -1,0 +1,12 @@
+{{template "inbox_row" (dict "Notification" .Data "CSRF" .CSRF)}}
+{{with .Toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
+
+{{define "inbox_row"}}{{$csrf := .CSRF}}{{with .Notification}}
+<tr id="notification-{{.ID}}">
+  <td class="whitespace-nowrap text-muted-foreground">{{ts .TS}}</td>
+  <td><span class="font-medium">{{.Title}}</span><br><span class="whitespace-pre-line text-muted-foreground">{{.Body}}</span></td>
+  <td class="capitalize">{{or .Channel "assistant"}}</td>
+  <td>{{if .ThreadLink}}<a class="underline underline-offset-4" href="{{str .ThreadLink}}">open</a>{{end}}</td>
+  <td>{{if .Delivered}}<span class="badge" data-variant="secondary">Sent</span>{{else}}<form method="post" action="/inbox/{{.ID}}/resend" hx-post="/inbox/{{.ID}}/resend" hx-target="closest tr" hx-swap="outerHTML" class="flex items-center gap-2"><input type="hidden" name="csrf_token" value="{{$csrf}}"><span class="badge" data-variant="outline" title="{{or (str .Error) ""}}">Local only</span><button type="submit" class="btn" data-size="sm" data-variant="ghost">Resend</button></form>{{end}}</td>
+</tr>
+{{end}}{{end}}

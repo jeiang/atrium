@@ -217,7 +217,12 @@ func (rd *Renderer) Page(w http.ResponseWriter, r *http.Request, status int, nam
 	return write(w, status, &b)
 }
 
-func (rd *Renderer) Fragment(w http.ResponseWriter, r *http.Request, status int, name string, f *tpl.Frame) error {
+func (rd *Renderer) Fragment(w http.ResponseWriter, r *http.Request, status int, name string, data any) error {
+	f := tpl.Fragment{Data: data}
+	if supplied, ok := data.(tpl.Fragment); ok {
+		f = supplied
+	}
+	f.CSRF = CSRFToken(r.Context())
 	var b bytes.Buffer
 	if err := rd.engine.Fragment(&b, name, f); err != nil {
 		return err
@@ -234,14 +239,19 @@ func write(w http.ResponseWriter, status int, b *bytes.Buffer) error {
 
 func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
 	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path}
-	f, err := rd.Frame(r, "", view)
-	if err == nil && !IsPartial(r) {
-		err = rd.Page(w, r, status, "error.gohtml", f)
-	} else if err == nil {
+	var err error
+	if IsPartial(r) {
+		f := tpl.Fragment{Data: view}
 		if status == http.StatusUnprocessableEntity {
 			f.Toast = &tpl.Toast{Category: "error", Title: "Filter not understood", Description: problem}
 		}
 		err = rd.Fragment(w, r, status, "_error.gohtml", f)
+	} else {
+		var f *tpl.Frame
+		f, err = rd.Frame(r, "", view)
+		if err == nil {
+			err = rd.Page(w, r, status, "error.gohtml", f)
+		}
 	}
 	if err != nil {
 		log.Error("render error page failed", "err", err.Error())

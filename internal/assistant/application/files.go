@@ -67,7 +67,10 @@ type DownloadInput struct {
 }
 
 type FileListInput struct {
+	ThreadID  int64
 	ProjectID int64
+	After     int64
+	Limit     int
 }
 
 type ProjectUploadInput struct {
@@ -94,11 +97,11 @@ type FileWriteInput struct {
 }
 
 type FileView struct {
-	File      files.Row  `json:"file"`
-	Render    string     `json:"render"`
-	Body      string     `json:"body"`
-	Rows      [][]string `json:"rows"`
-	Truncated bool       `json:"truncated"`
+	File      files.Summary `json:"file"`
+	Render    string        `json:"render"`
+	Body      string        `json:"body"`
+	Rows      [][]string    `json:"rows"`
+	Truncated bool          `json:"truncated"`
 }
 
 type FileStream struct {
@@ -223,7 +226,12 @@ func (s *Service) FilePreview(ctx context.Context, in FileInput) (application.Re
 }
 
 func (s *Service) FileDownload(ctx context.Context, in DownloadInput) (application.Read[FileStream], error) {
-	found, err := s.locate(ctx, s.db.Read, in.FileInput)
+	var found *files.Row
+	rev, err := s.snapshot(ctx, string(FileDownloadName), []string{"assistant"}, in, func(q db.Querier) error {
+		var err error
+		found, err = s.locate(ctx, q, in.FileInput)
+		return err
+	})
 	if err != nil {
 		return application.Read[FileStream]{}, err
 	}
@@ -239,12 +247,31 @@ func (s *Service) FileDownload(ctx context.Context, in DownloadInput) (applicati
 		_ = f.Close()
 		return application.Read[FileStream]{}, notFound(missingStorage)
 	}
-	return application.Read[FileStream]{Data: FileStream{Name: found.Name, MediaType: found.MediaType, ModTime: info.ModTime(), File: f}}, nil
+	return application.Read[FileStream]{Revision: rev, Data: FileStream{Name: found.Name, MediaType: found.MediaType, ModTime: info.ModTime(), File: f}}, nil
 }
 
 func (s *Service) FileList(ctx context.Context, in FileListInput) (application.Read[FileList], error) {
 	out := FileList{Files: []files.Row{}, Library: []LibraryEntry{}}
 	rev, err := s.snapshot(ctx, string(FileListName), []string{"assistant"}, in, func(q db.Querier) error {
+		if in.ThreadID != 0 {
+			thread, err := threads.Get(ctx, q, in.ThreadID)
+			if err != nil {
+				return err
+			}
+			if thread == nil {
+				return notFound("unknown thread")
+			}
+			var rows []files.Row
+			if in.Limit > 0 {
+				rows, err = files.Page(ctx, q, files.ThreadOwner(in.ThreadID), in.After, in.Limit)
+			} else {
+				rows, err = files.OfThread(ctx, q, in.ThreadID)
+			}
+			if rows != nil {
+				out.Files = rows
+			}
+			return err
+		}
 		if in.ProjectID == 0 {
 			rows, err := q.QueryContext(ctx, libraryFilesQuery, config.TuningWebPageSize)
 			if err != nil {
@@ -264,7 +291,12 @@ func (s *Service) FileList(ctx context.Context, in FileListInput) (application.R
 			return notFound(unknownProject)
 		}
 		out.Project = project
-		rows, err := files.OfProject(ctx, q, in.ProjectID)
+		var rows []files.Row
+		if in.Limit > 0 {
+			rows, err = files.Page(ctx, q, files.ProjectOwner(in.ProjectID), in.After, in.Limit)
+		} else {
+			rows, err = files.OfProject(ctx, q, in.ProjectID)
+		}
 		if rows != nil {
 			out.Files = rows
 		}
@@ -354,7 +386,7 @@ func (s *Service) ProjectFileDelete(ctx context.Context, in FileInput) (applicat
 }
 
 func previewOf(found files.Row, previewBytes int) (FileView, error) {
-	view := FileView{File: found, Rows: [][]string{}}
+	view := FileView{File: files.Summarize(found), Rows: [][]string{}}
 	media := found.MediaType
 	if files.IsImageType(media) {
 		view.Render = "image"

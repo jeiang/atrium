@@ -53,7 +53,7 @@ type ConfigurationInput struct {
 	Composer *ComposerInput
 }
 
-type Configuration struct {
+type ModelConfiguration struct {
 	Models        []pricing.Model `json:"models"`
 	Defaults      threads.Options `json:"defaults"`
 	Efforts       []string        `json:"efforts"`
@@ -72,7 +72,7 @@ type ComposerState struct {
 }
 
 func DescribeConfiguration() application.Definition {
-	return application.Describe[ConfigurationInput, Configuration](ConfigurationName, application.Query,
+	return application.Describe[ConfigurationInput, ModelConfiguration](ConfigurationName, application.Query,
 		[]application.Authority{application.Operator}, application.NoEffect, false)
 }
 
@@ -142,22 +142,22 @@ func (in ComposerInput) state() (ComposerState, error) {
 	return out, nil
 }
 
-func (s *Service) Configuration(ctx context.Context, in ConfigurationInput) (application.Read[Configuration], error) {
+func (s *Service) Configuration(ctx context.Context, in ConfigurationInput) (application.Read[ModelConfiguration], error) {
 	var requested *ComposerState
 	if in.Composer != nil {
 		chosen, err := in.Composer.state()
 		if err != nil {
-			return application.Read[Configuration]{}, err
+			return application.Read[ModelConfiguration]{}, err
 		}
 		requested = &chosen
 	}
-	var out Configuration
+	var out ModelConfiguration
 	rev, err := s.snapshot(ctx, string(ConfigurationName), []string{state.Settings}, in, func(q db.Querier) error {
 		defaults, err := threads.Defaults(ctx, q)
 		if err != nil {
 			return err
 		}
-		out = Configuration{Models: pricing.Models(), Defaults: defaults, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits}
+		out = ModelConfiguration{Models: pricing.Models(), Defaults: defaults, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits}
 		if requested != nil {
 			out.Composer = Composer(ctx, *requested)
 		} else {
@@ -165,5 +165,5 @@ func (s *Service) Configuration(ctx context.Context, in ConfigurationInput) (app
 		}
 		return nil
 	})
-	return application.Read[Configuration]{Revision: rev, Data: out}, err
+	return application.Read[ModelConfiguration]{Revision: rev, Data: out}, err
 }

@@ -30,14 +30,36 @@ func newWalker() *walker {
 	return &walker{schemas: map[string]object{}, names: map[string]reflect.Type{}}
 }
 
+const threadAPI = "github.com/jeiang/atrium/internal/assistant/assistantmodule.api"
+
+var pinnedNames = map[string]string{
+	threadAPI + "Attachment":   "PagesapiAttachment",
+	threadAPI + "Item":         "PagesapiItem",
+	threadAPI + "ListedThread": "PagesapiListedThread",
+	threadAPI + "Question":     "PagesapiQuestion",
+	threadAPI + "Queued":       "PagesapiQueued",
+	threadAPI + "Run":          "PagesapiRun",
+	threadAPI + "SearchResult": "PagesapiSearchResult",
+	threadAPI + "Step":         "PagesapiStep",
+	threadAPI + "StreamEvent":  "PagesapiStreamEvent",
+	threadAPI + "Thread":       "PagesapiThread",
+	threadAPI + "Transcript":   "PagesapiTranscript",
+}
+
 func componentName(t reflect.Type) string {
 	pkg := t.PkgPath()
-	pkg = pkg[strings.LastIndex(pkg, "/")+1:]
 	base, args, generic := strings.Cut(t.Name(), "[")
-	name := capitalize(pkg) + base
+	if pinned, ok := pinnedNames[pkg+"."+base]; ok && !generic {
+		return pinned
+	}
+	name := capitalize(pkg[strings.LastIndex(pkg, "/")+1:]) + base
 	if generic {
 		for _, m := range argPath.FindAllStringSubmatch(args, -1) {
 			full := m[0]
+			if pinned, ok := pinnedNames[full]; ok {
+				name += pinned
+				continue
+			}
 			name += capitalize(full[strings.LastIndex(full, "/")+1 : strings.LastIndex(full, ".")])
 			name += m[1]
 		}
@@ -159,7 +181,7 @@ func (w *walker) structSchema(t reflect.Type) (object, error) {
 		}
 		schema = constrain(schema, f.Tag.Get("api"))
 		props[name] = schema
-		if f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
+		if strings.Contains(","+f.Tag.Get("api")+",", ",required,") || f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
 			required = append(required, name)
 		}
 	}

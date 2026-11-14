@@ -50,6 +50,7 @@ type routeRule struct {
 	pattern string
 	access  access
 	owner   string
+	api     *application.APIShape
 }
 
 type Provided struct {
@@ -255,6 +256,7 @@ func New(o Options) (*Server, error) {
 		return nil, errors.Join(err, s.Close())
 	}
 	guard := newGuard(auth, o.AllowedHosts, o.Trusted, o.Public, s.access)
+	guard.apiShape = s.apiShape
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
 	guard.bearers = s.bearers
@@ -331,6 +333,18 @@ func (b baseValues) Value(key any) any {
 func (s *Server) route(class access, method, pattern string, h http.HandlerFunc) {
 	(&Registrar{Router: s.mux, owner: "core", state: s.registrations}).Method(method, pattern, h)
 	s.routes = append(s.routes, routeRule{method: method, pattern: pattern, access: class, owner: "core"})
+}
+
+func (s *Server) apiShape(r *http.Request) *application.APIShape {
+	ctx := chi.NewRouteContext()
+	if s.mux.Match(ctx, r.Method, r.URL.Path) {
+		for _, rule := range s.routes {
+			if rule.method == r.Method && rule.pattern == ctx.RoutePattern() {
+				return rule.api
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Server) access(r *http.Request) access {

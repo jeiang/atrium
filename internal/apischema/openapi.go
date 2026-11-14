@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -30,7 +31,7 @@ var (
 )
 
 var transportCodes = []string{
-	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "command_interrupted", "command_result_withheld", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "stream_expired", "too_large", "unsupported_media_type",
+	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "command_interrupted", "command_result_withheld", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "module_disabled", "no_active_run", "no_question", "not_answered", "nothing_to_edit", "project_archived", "read_only_thread", "reference_refused", "run_active", "stream_expired", "too_large", "unsupported_media_type",
 }
 
 func Generate(cat *module.Catalog) (map[string][]byte, error) {
@@ -59,6 +60,7 @@ func openAPI(cat *module.Catalog) (object, error) {
 		kinds[op.Name] = op.Kind
 	}
 	paths := object{}
+	ids := map[string]string{}
 	bindings := cat.Bindings()
 	slices.SortFunc(bindings, func(a, b module.Binding) int { return cmp.Compare(a.Target, b.Target) })
 	for _, b := range bindings {
@@ -71,6 +73,11 @@ func openAPI(cat *module.Catalog) (object, error) {
 		if err != nil {
 			return nil, err
 		}
+		id := op["operationId"].(string)
+		if other, ok := ids[id]; ok {
+			return nil, fmt.Errorf("apischema: operationId %s is used by %s and %s", id, other, b.Target)
+		}
+		ids[id] = b.Target
 		item, _ := paths[pattern].(object)
 		if item == nil {
 			item = object{}
@@ -106,6 +113,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 				return nil, err
 			}
 			p := object{"name": name, "in": in, "schema": constrain(schema, f.Tag.Get("api"))}
+			if doc := f.Tag.Get("doc"); doc != "" {
+				p["description"] = doc
+			}
 			if in == "path" {
 				p["required"] = true
 			}
@@ -114,15 +124,22 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	}
 	if unsafe {
 		params = append(params, object{"name": "Idempotency-Key", "in": "header", "schema": object{"type": "string", "minLength": 1, "maxLength": 255}})
-	} else if kind == application.Query && !shape.Fresh && shape.Body != application.BodyEventStream {
+	} else if kind == application.Query && shape.Body != application.BodyEventStream && !shape.Uncached {
 		params = append(params, object{"name": "If-None-Match", "in": "header", "schema": object{"type": "string"}})
 	}
+	id := string(b.Uses[0])
+	if shape.ID != "" {
+		id = shape.ID
+	}
 	op := object{
-		"operationId":     string(b.Uses[0]),
+		"operationId":     id,
 		"tags":            []any{string(shape.Area)},
 		"x-atrium-area":   string(shape.Area),
 		"x-atrium-module": b.Module,
 		"parameters":      params,
+	}
+	if id != string(b.Uses[0]) {
+		op["x-atrium-operation"] = string(b.Uses[0])
 	}
 	switch shape.Body {
 	case application.BodyJSON:
@@ -132,14 +149,24 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		}
 		op["requestBody"] = object{"required": true, "content": object{"application/json": object{"schema": schema}}}
 	case application.BodyMultipart:
-		op["requestBody"] = object{"required": true, "content": object{"multipart/form-data": object{"schema": object{"type": "object"}}}}
+		schema, err := w.ref(shape.Request)
+		if err != nil {
+			return nil, err
+		}
+		content := object{"multipart/form-data": object{"schema": object{"allOf": []any{schema, object{"type": "object", "properties": object{"upload": object{"type": "array", "items": object{"type": "string", "format": "binary"}}}}}}}}
+		if shape.AllowJSON {
+			content["application/json"] = object{"schema": schema}
+		}
+		op["requestBody"] = object{"required": true, "content": content}
 	case application.BodyBinary:
-		op["requestBody"] = object{"required": true, "content": object{"application/octet-stream": object{"schema": object{"type": "string", "contentMediaType": "application/octet-stream"}}}}
+		if unsafe {
+			op["requestBody"] = object{"required": true, "content": object{"application/octet-stream": object{"schema": object{"type": "string", "contentMediaType": "application/octet-stream"}}}}
+		}
 	}
 	headers := object{}
 	if unsafe {
 		headers["Atrium-Command-Id"] = object{"schema": object{"type": "string"}}
-	} else if kind == application.Query && !shape.Fresh && shape.Body != application.BodyEventStream {
+	} else if kind == application.Query && shape.Body != application.BodyEventStream && !shape.Uncached {
 		headers["ETag"] = object{"schema": object{"type": "string"}}
 	}
 	success := object{"description": http.StatusText(shape.Success), "headers": headers}
@@ -149,18 +176,29 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 			return nil, err
 		}
 		media := "application/json"
+		if shape.Body == application.BodyBinary {
+			media = "application/octet-stream"
+			schema = object{"type": "string", "format": "binary"}
+		}
 		if shape.Body == application.BodyEventStream {
 			media = "text/event-stream"
 		}
 		success["content"] = object{media: object{"schema": schema}}
 	}
 	responses := object{strconv.Itoa(shape.Success): success}
+	if shape.Body == application.BodyBinary {
+		responses["206"] = success
+		responses["416"] = object{"description": "Range Not Satisfiable"}
+	}
+	if shape.Body == application.BodyMultipart {
+		op["x-atrium-body-limit"] = shape.BodyLimit
+	}
 	if shape.Body == application.BodyEventStream {
 		responses["204"] = object{"description": http.StatusText(http.StatusNoContent)}
 		responses["410"] = object{"description": http.StatusText(http.StatusGone), "content": object{"application/json": object{"schema": object{"allOf": []any{errorRef, object{
 			"type": "object", "required": []any{"run_id"}, "properties": object{"run_id": object{"type": "integer"}},
 		}}}}}}
-	} else if kind == application.Query && !unsafe && !shape.Fresh {
+	} else if kind == application.Query && !unsafe && !shape.Uncached {
 		responses["304"] = object{"description": http.StatusText(http.StatusNotModified), "headers": object{"ETag": object{"schema": object{"type": "string"}}}}
 	}
 	statuses := slices.Clone(guardSafe)

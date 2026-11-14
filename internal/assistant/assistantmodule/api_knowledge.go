@@ -58,7 +58,7 @@ type KnowledgeMatchingRequest struct {
 }
 
 type KnowledgeRunRequest struct {
-	RunID int64 `json:"run_id"`
+	RunID int64 `json:"run_id,omitempty"`
 }
 
 type KnowledgeImportRequest struct {

@@ -23,12 +23,14 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/textsearch"
 )
 
 const (
 	ThreadListName       application.Name = "assistant.thread.list"
+	SearchName           application.Name = "assistant.search"
 	ThreadTranscriptName application.Name = "assistant.thread.transcript"
 	ThreadWorkName       application.Name = "assistant.thread.work"
 	ThreadHistoryName    application.Name = "assistant.thread.history"
@@ -52,8 +54,10 @@ type Work struct {
 }
 
 type Need struct {
-	ID    int64  `json:"id"`
-	Title string `json:"title"`
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Status   string `json:"status"`
+	KindIcon string `json:"kind_icon"`
 }
 
 type Transcript struct {
@@ -154,6 +158,15 @@ func describeRead[I, O any](name application.Name) application.Definition {
 
 func DescribeThreadList() application.Definition {
 	return describeRead[ThreadListInput, ThreadList](ThreadListName)
+}
+
+func DescribeSearch() application.Definition {
+	return describeRead[ThreadListInput, ThreadList](SearchName)
+}
+
+func (s *Service) Search(ctx context.Context, in ThreadListInput) (application.Read[ThreadList], error) {
+	in.Strict = true
+	return s.ThreadList(ctx, in)
 }
 
 func DescribeThreadTranscript() application.Definition {
@@ -344,7 +357,7 @@ func work(ctx context.Context, q db.Querier, threadID int64, now float64) (Work,
 	}
 	w.Needs = make([]Need, len(pending))
 	for i, p := range pending {
-		w.Needs[i] = Need{ID: p.ID, Title: p.Title}
+		w.Needs[i] = Need{ID: p.ID, Title: p.Title, Status: p.Status}
 	}
 	if w.Sources == nil {
 		w.Sources = []workspace.Source{}
@@ -367,6 +380,15 @@ func (s *Service) Work(ctx context.Context, in ThreadInput) (application.Read[Wo
 		return err
 	})
 	return application.Read[Work]{Revision: rev, Data: out}, err
+}
+
+func (s *Service) NeedsCount(ctx context.Context) (int, error) {
+	n, err := proposals.NeedsCount(ctx, s.db.Read)
+	if err != nil {
+		return 0, err
+	}
+	d, err := drafts.CountNeeds(ctx, s.db.Read)
+	return n + d, err
 }
 
 func (s *Service) History(ctx context.Context, in HistoryInput) (application.Read[History], error) {

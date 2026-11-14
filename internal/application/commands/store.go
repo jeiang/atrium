@@ -33,14 +33,18 @@ const (
 )
 
 type Store struct {
-	db     *db.DB
-	now    func() time.Time
-	appKey func() ([]byte, error)
-	mu     sync.Mutex
-	mac    []byte
+	db             *db.DB
+	now            func() time.Time
+	appKey         func() ([]byte, error)
+	mu             sync.Mutex
+	mac            []byte
+	tempDir        string
+	multipartSlots chan struct{}
 }
 
-func New(d *db.DB) *Store { return &Store{db: d, now: time.Now} }
+func New(d *db.DB) *Store {
+	return &Store{db: d, now: time.Now, multipartSlots: make(chan struct{}, 4)}
+}
 
 type record struct {
 	id          string
@@ -119,12 +123,16 @@ func reportsEffects(body []byte) bool {
 
 func (s *Store) finish(ctx context.Context, id string, res result) error {
 	state := Succeeded
-	if res.status >= http.StatusBadRequest {
+	var status any = res.status
+	switch {
+	case res.status == 0:
+		state, status = Interrupted, nil
+	case res.status >= http.StatusBadRequest:
 		state = Failed
 	}
 	withheld := res.keyed && res.withheld && state == Succeeded
 	var headers, body any
-	if res.keyed && !withheld {
+	if res.keyed && !withheld && state != Interrupted {
 		raw, err := json.Marshal(res.headers)
 		if err != nil {
 			return err
@@ -133,7 +141,7 @@ func (s *Store) finish(ctx context.Context, id string, res result) error {
 	}
 	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "UPDATE commands SET state = ?, ended_at = ?, status = ?, headers_json = ?, body = ?, withheld = ? WHERE id = ? AND state = ?",
-			string(state), seconds(s.now()), res.status, headers, body, withheld, id, string(Running)); err != nil {
+			string(state), seconds(s.now()), status, headers, body, withheld, id, string(Running)); err != nil {
 			return err
 		}
 		if !res.keyed || !retryable(res.status) || reportsEffects(res.body) {

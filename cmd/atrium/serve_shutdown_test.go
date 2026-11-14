@@ -399,20 +399,51 @@ func TestSchedulerTickAndServeStopCleanlyWhenCanceledDuringStartup(t *testing.T)
 
 func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	d := asstDB(t, dir)
-	conn, err := d.Write.Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("SQLite write lock", func(t *testing.T) {
+		t.Parallel()
+		dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+		d := asstDB(t, dir)
+		conn, err := d.Write.Conn(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = conn.Close() }()
+		// The statement releases the write gate when it ends, so serve waits in SQLite.
+		if _, err := conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+			t.Fatal(err)
+		}
+		serveStopsBeforeReady(t, dir)
+		if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("write gate", func(t *testing.T) {
+		t.Parallel()
+		dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+		path, err := db.CanonicalPath(filepath.Join(dir, "atrium.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		gate, err := os.OpenFile(path+".write.lock", os.O_RDONLY|os.O_CREATE, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = gate.Close() }()
+		if err := syscall.Flock(int(gate.Fd()), syscall.LOCK_EX); err != nil {
+			t.Fatal(err)
+		}
+		serveStopsBeforeReady(t, dir)
+	})
+}
+
+func serveStopsBeforeReady(t *testing.T, dir string) {
+	t.Helper()
 	addrFile := filepath.Join(dir, "serve-addr")
-	signalsFile := filepath.Join(dir, "serve-signals")
+	if _, err := os.Stat(filepath.Join(dir, "atrium.db.serve.lock")); !os.IsNotExist(err) {
+		t.Fatalf("a serve lock exists before serve started: %v", err)
+	}
 	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
-	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile, "ATRIUM_CLI_EXIT_SIGNALS_FILE="+signalsFile)
+	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile)
 	stderr := &lockedBuffer{}
 	cmd.Stdout, cmd.Stderr = io.Discard, stderr
 	if err := cmd.Start(); err != nil {
@@ -420,10 +451,9 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	// A loaded host can take seconds to reach main; a SIGTERM before the process handles
-	// signals at all would test the kernel, not serve.
-	waitUntil(t, 60*time.Second, "serve to handle signals", func() bool {
-		_, err := os.Stat(signalsFile)
+	serveLock := filepath.Join(dir, "atrium.db.serve.lock")
+	waitUntil(t, 60*time.Second, "serve to take its serve lock", func() bool {
+		_, err := os.Stat(serveLock)
 		return err == nil
 	})
 	time.Sleep(3 * time.Second)
@@ -438,12 +468,9 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 		if code := exitCode(err); code != cli.ExitOK || strings.Contains(stderr.String(), "error:") {
 			t.Fatalf("serve stopped before it was ready: exit %d, stderr %q", code, stderr.String())
 		}
-	case <-time.After(60 * time.Second):
+	case <-time.After(15 * time.Second):
 		_ = cmd.Process.Kill()
-		t.Fatalf("serve ignored SIGTERM before it was ready, stderr %q", stderr.String())
-	}
-	if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
-		t.Fatal(err)
+		t.Fatalf("serve kept waiting on the database after SIGTERM, stderr %q", stderr.String())
 	}
 }
 

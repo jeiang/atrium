@@ -50,7 +50,7 @@ func submittedProject(form url.Values) asstapp.ProjectFields {
 	}
 }
 
-func submittedValues(cfg asstapp.Configuration, f asstapp.ProjectFields, fallback ProjectFormValues) ProjectFormValues {
+func submittedValues(cfg asstapp.ModelConfiguration, f asstapp.ProjectFields, fallback ProjectFormValues) ProjectFormValues {
 	effort := fallback.Effort
 	if slices.Contains(cfg.Efforts, f.Effort) {
 		effort = f.Effort
@@ -72,17 +72,17 @@ func (p *pages) projectRoutes(r chi.Router) {
 	r.Post("/projects/{project_id}/archive", p.projectArchive)
 }
 
-func (p *pages) configuration(r *http.Request) asstapp.Configuration {
+func (p *pages) configuration(r *http.Request) asstapp.ModelConfiguration {
 	read, err := p.assistant().Configuration(r.Context(), asstapp.ConfigurationInput{})
 	check(err)
 	return read.Data
 }
 
-func formData(cfg asstapp.Configuration, project *asstapp.Project, values ProjectFormValues, problem *string) ProjectFormData {
+func formData(cfg asstapp.ModelConfiguration, project *asstapp.Project, values ProjectFormValues, problem *string) ProjectFormData {
 	return ProjectFormData{Project: project, Values: values, Efforts: cfg.Efforts, ContextLimits: cfg.ContextLimits, Error: problem}
 }
 
-func defaultValues(cfg asstapp.Configuration) ProjectFormValues {
+func defaultValues(cfg asstapp.ModelConfiguration) ProjectFormValues {
 	limit := cfg.Defaults.ContextLimit
 	return ProjectFormValues{Effort: cfg.Defaults.Effort, ContextLimit: &limit}
 }

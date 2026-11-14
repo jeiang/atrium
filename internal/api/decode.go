@@ -1,6 +1,12 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"reflect"
 	"slices"
@@ -13,14 +19,16 @@ import (
 )
 
 var (
-	limitType  = reflect.TypeFor[Limit]()
-	cursorType = reflect.TypeFor[Cursor]()
-	timeType   = reflect.TypeFor[time.Time]()
+	limitType     = reflect.TypeFor[Limit]()
+	cursorType    = reflect.TypeFor[Cursor]()
+	timeType      = reflect.TypeFor[time.Time]()
+	unmarshalType = reflect.TypeFor[json.Unmarshaler]()
 )
 
 type rules struct {
-	min, max *int64
-	enum     []string
+	min, max  *int64
+	enum      []string
+	legacyInt bool
 }
 
 func parseRules(tag string) rules {
@@ -40,14 +48,22 @@ func parseRules(tag string) rules {
 			}
 		case "enum":
 			out.enum = strings.Split(value, "|")
+		case "legacy-int":
+			out.legacyInt = true
 		}
 	}
 	return out
 }
 
-func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, body application.BodyKind) bool {
+func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, body application.BodyKind, ignoreBody bool) bool {
 	rv := reflect.ValueOf(v).Elem()
 	query := r.URL.Query()
+	cursorQuery := r.URL.Query()
+	for _, f := range reflect.VisibleFields(rv.Type()) {
+		if name, ok := f.Tag.Lookup("path"); ok {
+			cursorQuery.Set("$path:"+name, web.PathParam(r, name))
+		}
+	}
 	for _, f := range reflect.VisibleFields(rv.Type()) {
 		if f.Anonymous || !f.IsExported() {
 			continue
@@ -75,7 +91,7 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 				}
 				field.SetInt(int64(n))
 			case cursorType:
-				c, ok := parseCursor(op, query, raw)
+				c, ok := parseCursor(op, cursorQuery, raw)
 				if !ok {
 					web.APIError(w, http.StatusBadRequest, "bad_cursor", "The cursor is not valid.")
 					return false
@@ -85,9 +101,14 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 				if raw == "" {
 					continue
 				}
-				if msg := setValue(field, raw, parseRules(f.Tag.Get("api"))); msg != "" {
+				rule := parseRules(f.Tag.Get("api"))
+				if msg := setValue(field, raw, rule); msg != "" {
+					kind := "value_error"
+					if rule.legacyInt {
+						kind = "int_parsing"
+					}
 					web.APIError(w, http.StatusUnprocessableEntity, "invalid", "The "+name+" parameter is not valid.",
-						web.FieldError{Type: "value_error", Loc: []string{"query", name}, Msg: msg, Input: raw})
+						web.FieldError{Type: kind, Loc: []string{"query", name}, Msg: msg, Input: raw})
 					return false
 				}
 			}
@@ -105,9 +126,42 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 			}
 		}
 	}
+	if ignoreBody {
+		return true
+	}
 	switch body {
+	case application.BodyMultipart:
+		media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if media == "application/json" || (r.Header.Get("Content-Type") == "" && r.ContentLength == 0) {
+			return decodeBody(w, r, v, rv.Type())
+		}
+		decoder, ok := v.(interface{ DecodeMultipart(*multipart.Reader) error })
+		if err != nil || params["boundary"] == "" || !ok {
+			web.APIError(w, http.StatusBadRequest, "bad_request", "Invalid multipart body.")
+			return false
+		}
+		err = decoder.DecodeMultipart(multipart.NewReader(r.Body, params["boundary"]))
+		var large *http.MaxBytesError
+		if errors.As(err, &large) {
+			web.APIError(w, 413, "too_large", "Request too large.")
+			return false
+		}
+		if err != nil {
+			var appErr *application.Error
+			if errors.As(err, &appErr) {
+				web.APIFail(w, err)
+			} else {
+				if _, drainErr := io.Copy(io.Discard, r.Body); errors.As(drainErr, &large) {
+					web.APIError(w, 413, "too_large", "Request too large.")
+					return false
+				}
+				web.APIError(w, 400, "bad_request", "Invalid multipart body.")
+			}
+			return false
+		}
+		return true
 	case application.BodyJSON:
-		return web.DecodeJSON(w, r, v)
+		return decodeBody(w, r, v, rv.Type())
 	case application.BodyNone:
 		if r.ContentLength != 0 {
 			web.APIError(w, http.StatusBadRequest, "bad_request", "This request takes no body.")
@@ -115,6 +169,84 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 		}
 	}
 	return true
+}
+
+func decodeBody(w http.ResponseWriter, r *http.Request, v any, t reflect.Type) bool {
+	if len(checkBody(t, json.RawMessage("{}"), nil)) == 0 {
+		return web.DecodeJSON(w, r, v)
+	}
+	var raw bytes.Buffer
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.TeeReader(r.Body, &raw), r.Body}
+	if !web.DecodeOptionalJSON(w, r, v) {
+		return false
+	}
+	body := bytes.TrimSpace(raw.Bytes())
+	if len(body) == 0 {
+		body = []byte("{}")
+	}
+	if errs := checkBody(t, body, []string{"body"}); len(errs) > 0 {
+		message := "A required field is missing."
+		if errs[0].Type != "missing" {
+			message = "A field is not valid."
+		}
+		web.APIError(w, http.StatusUnprocessableEntity, "invalid", message, errs...)
+		return false
+	}
+	return true
+}
+
+func checkBody(t reflect.Type, raw json.RawMessage, loc []string) []web.FieldError {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t == timeType || reflect.PointerTo(t).Implements(unmarshalType) {
+		return nil
+	}
+	var out []web.FieldError
+	switch t.Kind() {
+	case reflect.Slice:
+		var items []json.RawMessage
+		if json.Unmarshal(raw, &items) != nil {
+			return nil
+		}
+		for i, item := range items {
+			out = append(out, checkBody(t.Elem(), item, append(slices.Clip(loc), strconv.Itoa(i)))...)
+		}
+	case reflect.Struct:
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil {
+			return nil
+		}
+		for _, f := range reflect.VisibleFields(t) {
+			tag := f.Tag.Get("json")
+			if f.Anonymous || !f.IsExported() || tag == "-" {
+				continue
+			}
+			name, opts, _ := strings.Cut(tag, ",")
+			if name == "" {
+				name = f.Name
+			}
+			at := append(slices.Clip(loc), name)
+			value, ok := fields[name]
+			if !ok || string(value) == "null" {
+				if strings.Contains(","+f.Tag.Get("api")+",", ",required,") || f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
+					out = append(out, web.FieldError{Type: "missing", Loc: at, Msg: "Field required"})
+				}
+				continue
+			}
+			if enum := parseRules(f.Tag.Get("api")).enum; len(enum) > 0 {
+				var s string
+				if json.Unmarshal(value, &s) == nil && !slices.Contains(enum, strings.TrimSpace(s)) {
+					out = append(out, web.FieldError{Type: "enum", Loc: at, Msg: "Input should be one of " + strings.Join(enum, ", "), Input: s})
+				}
+			}
+			out = append(out, checkBody(f.Type, value, at)...)
+		}
+	}
+	return out
 }
 
 func setValue(field reflect.Value, raw string, rule rules) string {
@@ -141,6 +273,9 @@ func setValue(field reflect.Value, raw string, rule rules) string {
 		}
 		field.SetString(raw)
 	case reflect.Int, reflect.Int64, reflect.Int32:
+		if rule.legacyInt {
+			raw = strings.TrimSpace(raw)
+		}
 		n, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || field.OverflowInt(n) {
 			return "Input should be an integer"

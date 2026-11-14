@@ -40,7 +40,7 @@ func authRoutes(d *web.Deps) []application.Binding {
 			"GET /auth", func(ctx context.Context, _ struct{}) (application.Read[authapp.Configuration], error) {
 				return d.Account.Configuration(ctx)
 			}),
-		api.Query(d, authapp.DescribeBearerList(), application.APIShape{Area: "settings", Fresh: true},
+		api.Query(d, authapp.DescribeBearerList(), application.APIShape{Area: "settings", Uncached: true},
 			"GET /auth/tokens", func(ctx context.Context, _ struct{}) (application.Read[Tokens], error) {
 				read, err := d.Account.BearerList(ctx)
 				return application.Read[Tokens]{Revision: read.Revision, Data: Tokens{Tokens: read.Data}}, err

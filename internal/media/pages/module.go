@@ -23,6 +23,7 @@ func Templates() fs.FS {
 
 type Options struct {
 	Service func(*web.Deps) *mediaapp.Service
+	Routes  func(*web.Deps, *mediaapp.Service)
 }
 
 type service struct {
@@ -33,6 +34,9 @@ type service struct {
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		s := &service{deps: d, app: o.Service(d)}
+		if o.Routes != nil {
+			o.Routes(d, s.app)
+		}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)

@@ -649,17 +649,20 @@ func PendingQuestion(ctx context.Context, q db.Querier, threadID int64) (*Questi
 
 // Answer stores the operator's answer as the parked tool's result and resumes
 // the run through the normal resume path.
+var ErrAnswerRequired = errors.New("answer is required")
+var ErrNoPendingQuestion = errors.New("no pending question")
+
 func (s *Service) Answer(ctx context.Context, threadID int64, text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return fmt.Errorf("answer is required")
+		return ErrAnswerRequired
 	}
 	q, err := PendingQuestion(ctx, s.DB.Read, threadID)
 	if err != nil {
 		return err
 	}
 	if q == nil {
-		return fmt.Errorf("no pending question")
+		return ErrNoPendingQuestion
 	}
 	result := map[string]any{"type": block.ToolResult, "tool_use_id": q.ToolUseID, "content": text}
 	raw := json.RawMessage(jsonx.Dumps(result, jsonx.Opts{Compact: true, NoEnsureASCII: true}))

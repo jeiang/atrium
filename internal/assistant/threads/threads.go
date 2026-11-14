@@ -176,6 +176,9 @@ type Options struct {
 }
 
 func (o Options) Validate() (Options, error) {
+	if o.CostCapUSD != nil && (math.IsNaN(*o.CostCapUSD) || math.IsInf(*o.CostCapUSD, 0) || *o.CostCapUSD < 0) {
+		return Options{}, OptionError("The cost cap must be finite and nonnegative.")
+	}
 	m, err := CleanModel(o.Model)
 	if err != nil {
 		return Options{}, err

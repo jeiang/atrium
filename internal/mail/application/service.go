@@ -56,3 +56,5 @@ func (s *Service) snapshot(ctx context.Context, name application.Name, input any
 	}
 	return application.Revision(state.Revision(string(name), counters, input, "operator")), nil
 }
+
+func (s *Service) Mode(ctx context.Context) (string, error) { return mail.Mode(ctx, s.db.Read) }

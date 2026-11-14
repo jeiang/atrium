@@ -26,7 +26,7 @@ func agentOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			asstapp.DescribeSubagentSet(), asstapp.DescribeSubagentEnabled(), asstapp.DescribeSubagentDelete(),
 			asstapp.DescribeSubagentList(), asstapp.DescribePlanReplace(), asstapp.DescribeQuestionAsk(),
-		}, []application.Binding{
+		}, append(subagentAPIBindings(nil), []application.Binding{
 			{Kind: application.CLI, Target: "agent subagents list", Uses: uses(asstapp.SubagentListName)},
 			{Kind: application.CLI, Target: "agent subagents set", Uses: uses(asstapp.SubagentSetName)},
 			{Kind: application.CLI, Target: "agent subagents enable", Uses: uses(asstapp.SubagentEnabledName)},
@@ -34,5 +34,5 @@ func agentOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.CLI, Target: "agent subagents delete", Uses: uses(asstapp.SubagentDeleteName)},
 			{Kind: application.Tool, Target: "plan", Uses: uses(asstapp.PlanReplaceName)},
 			{Kind: application.Tool, Target: "ask_operator", Uses: uses(asstapp.QuestionAskName)},
-		}
+		}...)
 }

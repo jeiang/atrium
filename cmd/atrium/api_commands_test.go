@@ -80,7 +80,7 @@ func TestCommandKeyReplaysAcrossRestartAndBearers(t *testing.T) {
 	}
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", second, map[string]any{"web_search": true}, "Idempotency-Key", "thread-1"), http.StatusUnprocessableEntity, "idempotency_mismatch")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", second, body, "Idempotency-Key", strings.Repeat("k", 256)), http.StatusUnprocessableEntity, "invalid")
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM commands WHERE idempotency_key = 'thread-1'"); n != 1 {
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM commands WHERE idempotency_key LIKE '%:thread-1'"); n != 1 {
 		t.Fatalf("%d command rows for one key", n)
 	}
 	var stored string
@@ -183,7 +183,7 @@ func TestInterruptedCommandNeverReruns(t *testing.T) {
 		t.Fatalf("the approval never reached qBittorrent: %s", p.stderr.String())
 	}
 	var command string
-	if err := d.Read.QueryRow("SELECT id FROM commands WHERE idempotency_key = 'add-1' AND state = 'running'").Scan(&command); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM commands WHERE idempotency_key LIKE '%:add-1' AND state = 'running'").Scan(&command); err != nil {
 		t.Fatalf("no running command for the held approval: %v", err)
 	}
 	p.stop(t, syscall.SIGKILL)

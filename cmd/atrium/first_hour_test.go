@@ -108,7 +108,7 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 	}
 	missing = filepath.Join(dir, "unreadable-key.db")
 	got := runProcess(t, "serve --host 127.0.0.1 --port 0 --auth local", "ATRIUM_DB="+missing, "ATRIUM_DB_KEY_FILE="+filepath.Join(dir, "absent-key"))
-	if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "ATRIUM_DB_KEY_FILE") {
+	if got.code != cli.ExitError || !strings.Contains(got.stderr, "ATRIUM_DB_KEY_FILE") {
 		t.Fatalf("unreadable key serve exit = %d, stderr = %q", got.code, got.stderr)
 	}
 	if _, err := os.Stat(missing); !os.IsNotExist(err) {

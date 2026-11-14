@@ -140,6 +140,24 @@ func (h handlers) content(w http.ResponseWriter, r *http.Request) {
 	h.done(w, r, err, "Saved")
 }
 
+func (h handlers) resendReply(w http.ResponseWriter, r *http.Request, id int64, status int, toast *tpl.Toast) {
+	if !web.IsPartial(r) {
+		h.renderInbox(w, r, status, toast)
+		return
+	}
+	found, err := h.service.Inbox(r.Context(), notifyapp.InboxInput{Before: id + 1, Limit: 1})
+	if err != nil {
+		panic(err)
+	}
+	if len(found.Data.Items) == 0 || found.Data.Items[0].ID != id {
+		http.NotFound(w, r)
+		return
+	}
+	if err := h.d.Render.Fragment(w, r, status, "_inbox_row.gohtml", tpl.Fragment{Data: found.Data.Items[0], Toast: toast}); err != nil {
+		panic(err)
+	}
+}
+
 func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
@@ -153,13 +171,13 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if refused(err) {
-		h.renderInbox(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not resent", Description: err.Error()})
+		h.resendReply(w, r, id, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not resent", Description: err.Error()})
 		return
 	}
 	if err != nil {
 		panic(err)
 	}
-	h.renderInbox(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Resent"})
+	h.resendReply(w, r, id, http.StatusOK, &tpl.Toast{Category: "success", Title: "Resent"})
 }
 
 func (h handlers) subscribe(w http.ResponseWriter, r *http.Request) {

@@ -21,7 +21,7 @@ import (
 const settingsFrame = "settings"
 
 type AssistantData struct {
-	asstapp.Configuration
+	asstapp.ModelConfiguration
 	Saved    string          `json:"saved"`
 	Error    string          `json:"error"`
 	Channels []string        `json:"channels"`
@@ -100,7 +100,7 @@ func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int
 	for s, label := range registry.PermissionSituationLabels {
 		data.Rows = append(data.Rows, PermissionRow{Label: label, Cells: views[s*channels : (s+1)*channels]})
 	}
-	data.Configuration, data.Channels = p.configuration(r), registry.PermissionChannelLabels[:]
+	data.ModelConfiguration, data.Channels = p.configuration(r), registry.PermissionChannelLabels[:]
 	f, err := p.deps.Render.Frame(r, settingsFrame, data)
 	check(err)
 	mutate(f)

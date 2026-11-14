@@ -44,7 +44,7 @@ func memoryOperations() ([]application.Definition, []application.Binding) {
 			asstapp.DescribeMemoryTree(), asstapp.DescribeMemoryView(), asstapp.DescribeMemoryEstimate(),
 			asstapp.DescribeMemoryWork(), asstapp.DescribeMemoryBackfill(), asstapp.DescribeMemoryZoom(),
 			asstapp.DescribeMemorySearch(), asstapp.DescribeResultRecall(), asstapp.DescribeUsage(),
-		}, []application.Binding{
+		}, append(memoryAPIBindings(nil), []application.Binding{
 			{Kind: application.CLI, Target: "memory tree", Uses: uses(asstapp.MemoryTreeName)},
 			{Kind: application.CLI, Target: "memory view", Uses: uses(asstapp.MemoryViewName)},
 			{Kind: application.CLI, Target: "memory work", Uses: uses(asstapp.MemoryWorkName)},
@@ -53,5 +53,5 @@ func memoryOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.Tool, Target: "zoom", Uses: uses(asstapp.MemoryZoomName)},
 			{Kind: application.Tool, Target: "search_threads", Uses: uses(asstapp.MemorySearchName)},
 			{Kind: application.Tool, Target: "recall", Uses: uses(asstapp.ResultRecallName)},
-		}
+		}...)
 }

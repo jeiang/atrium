@@ -67,7 +67,8 @@ type ScheduleUpdateInput struct {
 }
 
 type ScheduleToggleInput struct {
-	ID int64
+	ID      int64
+	Enabled *bool
 }
 
 type ScheduleCancelInput struct {
@@ -80,8 +81,9 @@ type ScheduleListInput struct {
 }
 
 type ScheduleHistoryInput struct {
-	JobID int64
-	Limit int
+	JobID  int64
+	Before int64
+	Limit  int
 }
 
 type ScheduleJob struct {
@@ -102,6 +104,7 @@ type ScheduleJob struct {
 }
 
 type ScheduleRun struct {
+	ID          int64   `json:"id"`
 	JobName     string  `json:"job_name"`
 	Status      string  `json:"status"`
 	StartedText *string `json:"started_text"`
@@ -207,7 +210,7 @@ func scheduleRunOf(run scheduler.ListedRun, zone *time.Location) ScheduleRun {
 	if strings.HasPrefix(hint, "skipped_") && (run.Tokens > 0 || run.Cost > 0) {
 		hint += "_partial"
 	}
-	return ScheduleRun{JobName: run.JobName, Status: run.Status, StartedText: scheduleStamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
+	return ScheduleRun{ID: run.ID, JobName: run.JobName, Status: run.Status, StartedText: scheduleStamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
 }
 
 func (s *Service) scheduleZone(ctx context.Context) (string, *time.Location, error) {
@@ -265,7 +268,16 @@ func (s *Service) ScheduleHistory(ctx context.Context, in ScheduleHistoryInput) 
 	}
 	out := []ScheduleRun{}
 	rev, err := s.snapshot(ctx, string(ScheduleHistoryName), scheduleScopes, in, func(q db.Querier) error {
-		runs, err := scheduler.ListRuns(ctx, q, in.JobID, limit)
+		if in.JobID != 0 {
+			exists, err := scheduler.JobExists(ctx, q, in.JobID)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return notFound("Unknown schedule.")
+			}
+		}
+		runs, err := scheduler.ListRuns(ctx, q, in.JobID, in.Before, limit)
 		for _, run := range runs {
 			out = append(out, scheduleRunOf(run, zone))
 		}
@@ -457,6 +469,9 @@ func (s *Service) ScheduleEnabled(ctx context.Context, in ScheduleToggleInput) (
 			return ScheduleChanged{}, ledger.Result{}, err
 		}
 		enabled := !job.State.Active()
+		if in.Enabled != nil {
+			enabled = *in.Enabled
+		}
 		if _, err := scheduler.UpdateJob(ctx, tx, job.ID, now, scheduler.JobUpdate{Enabled: &enabled, Actor: scheduler.Operator}); err != nil {
 			return ScheduleChanged{}, ledger.Result{}, err
 		}

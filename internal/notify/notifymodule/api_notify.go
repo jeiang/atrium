@@ -29,7 +29,7 @@ type inboxKey struct {
 
 type InboxReadState struct {
 	ID   int64 `path:"id" json:"-"`
-	Read bool  `json:"read"`
+	Read bool  `json:"read,omitempty"`
 }
 
 type InboxItem struct {
@@ -44,11 +44,11 @@ type ResendResult struct {
 }
 
 type DeviceRegistration struct {
-	Transport string `json:"transport"`
+	Transport string `json:"transport,omitempty"`
 	Endpoint  string `json:"endpoint"`
 	P256DH    string `json:"p256dh"`
 	Auth      string `json:"auth"`
-	Label     string `json:"label"`
+	Label     string `json:"label,omitempty"`
 }
 
 type RegisteredDevice struct {
@@ -84,8 +84,8 @@ type ChannelContent struct {
 }
 
 type PhonePolicy struct {
-	Enabled bool     `json:"enabled"`
-	Kinds   []string `json:"kinds"`
+	Enabled bool     `json:"enabled,omitempty"`
+	Kinds   []string `json:"kinds,omitempty"`
 }
 
 func notificationRoutes(d *web.Deps, svc *notifyapp.Service) []application.Binding {

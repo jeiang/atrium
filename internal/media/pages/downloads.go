@@ -48,10 +48,7 @@ func (s *service) dlPageOut(w http.ResponseWriter, r *http.Request, status int, 
 }
 
 func (s *service) dlFragmentOut(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
-	f, err := s.deps.Render.Frame(r, "", data)
-	dlCheck(err)
-	f.Toast = toast
-	dlCheck(s.deps.Render.Fragment(w, r, status, name, f))
+	dlCheck(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: toast}))
 }
 
 func (s *service) dlRead(w http.ResponseWriter, r *http.Request) (mediaapp.Downloads, bool) {

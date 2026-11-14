@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"net/url"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -36,9 +35,12 @@ type cursorWire struct {
 
 func (c Cursor) Set() bool { return len(c.last) > 0 }
 
-var ErrBadCursor = errors.New("bad cursor")
+var ErrBadCursor error = &application.Error{Code: application.BadCursor, Message: "The cursor is not valid."}
 
 func (c Cursor) Last(v any) error {
+	if bytes.Equal(bytes.TrimSpace(c.last), []byte("null")) {
+		return ErrBadCursor
+	}
 	dec := json.NewDecoder(bytes.NewReader(c.last))
 	dec.DisallowUnknownFields()
 	if dec.Decode(v) != nil {
@@ -75,6 +77,9 @@ func filterOf(query url.Values) string {
 }
 
 func parseCursor(op application.Name, query url.Values, raw string) (Cursor, bool) {
+	if op == "assistant.search" || (op == "assistant.thread.list" && query.Get("q") != "") {
+		op = "assistant.thread.list"
+	}
 	c := Cursor{op: op, filter: filterOf(query)}
 	if raw == "" {
 		return c, true
@@ -101,7 +106,22 @@ func parseCursor(op application.Name, query url.Values, raw string) (Cursor, boo
 	dec.DisallowUnknownFields()
 	var wire cursorWire
 	if dec.Decode(&wire) != nil || wire.V != cursorVersion || wire.Op != op || wire.Filter != c.filter || len(wire.Last) == 0 {
-		return Cursor{}, false
+		if op != "assistant.thread.list" && op != "assistant.thread.transcript" {
+			return Cursor{}, false
+		}
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(data, &fields) != nil {
+			return Cursor{}, false
+		}
+		if op == "assistant.thread.list" {
+			if len(fields) != 3 || fields["Pinned"] == nil || fields["UpdatedAt"] == nil || fields["ID"] == nil {
+				return Cursor{}, false
+			}
+		} else if len(fields) != 1 || fields["seq"] == nil {
+			return Cursor{}, false
+		}
+		c.last = data
+		return c, true
 	}
 	c.last = wire.Last
 	return c, true
