@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -191,6 +192,9 @@ func TestCalendarCandidatesAPIRunsThroughTheJobGates(t *testing.T) {
 	seed(dir)
 	s, token := serve()
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/calendar/candidates", token, nil), http.StatusConflict, "refused")
+	if got := runApp(t, "calendar", "candidates"); got.code != cli.ExitOK || got.stdout != "" {
+		t.Fatalf("CLI candidates with mail off: (%d, %q), want the module gate to skip it", got.code, got.stdout)
+	}
 	if got := len(api.Requests()); got != 0 {
 		t.Fatalf("candidates with mail off sent %d model requests", got)
 	}
@@ -202,6 +206,9 @@ func TestCalendarCandidatesAPIRunsThroughTheJobGates(t *testing.T) {
 	}
 	s, token = serve()
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/calendar/candidates", token, nil), http.StatusConflict, "refused")
+	if got := runApp(t, "calendar", "candidates"); got.code != cli.ExitError || !strings.Contains(got.stderr, "paused") {
+		t.Fatalf("CLI candidates while paused: (%d, %q), want the job's pause refusal", got.code, got.stderr)
+	}
 	if got := len(api.Requests()); got != 0 {
 		t.Fatalf("candidates while paused sent %d model requests", got)
 	}
@@ -213,5 +220,17 @@ func TestCalendarCandidatesAPIRunsThroughTheJobGates(t *testing.T) {
 	}
 	if len(api.Requests()) == 0 {
 		t.Fatal("candidates after resume sent no model request")
+	}
+	requests := len(api.Requests())
+	ran := runApp(t, "calendar", "candidates")
+	if ran.code != cli.ExitOK {
+		t.Fatalf("CLI candidates after the queue drained: (%d, %q)", ran.code, ran.stderr)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(ran.stdout), &result); err != nil || number(t, result["candidates"]) != 0 {
+		t.Fatalf("empty CLI candidate result %q: %v", ran.stdout, err)
+	}
+	if len(api.Requests()) != requests {
+		t.Fatal("empty CLI candidate pass sent a model request")
 	}
 }

@@ -15,7 +15,7 @@ func assistantService(d *web.Deps) *asstapp.Service {
 func projectOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			asstapp.DescribeProjectCreate(), asstapp.DescribeProjectEdit(), asstapp.DescribeProjectArchive(),
-			asstapp.DescribeProjectDetail(), asstapp.DescribeProjectList(), asstapp.DescribeConfiguration(),
+			asstapp.DescribeProjectDetail(), asstapp.DescribeProjectList(), asstapp.DescribeConfiguration(), asstapp.DescribeDefaultsSet(),
 		}, append(projectAPIBindings(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /projects/new", Uses: []application.Name{asstapp.ConfigurationName}},
 			{Kind: application.HTML, Target: "POST /projects", Uses: []application.Name{asstapp.ProjectCreateName, asstapp.ConfigurationName}},

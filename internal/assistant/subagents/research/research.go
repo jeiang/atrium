@@ -9,17 +9,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/loop"
-	"github.com/jeiang/atrium/internal/assistant/subagents"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-const Name = loop.Research
+const Name = asstapp.LoopResearch
 
 const Description = "Delegate a read-only investigation to a subagent and get back a structured digest (findings with source ids/URLs, uncertainty). " +
 	"The subagent cannot write, notify or schedule. Several research calls in one response run in order. " +
@@ -53,8 +49,8 @@ func Definition() module.ToolDefinition {
 	return module.ToolDefinition{Tool: Metadata(), Bind: Bind}
 }
 
-func Bind(ctx context.Context, q db.Querier, t tool.Tool) (tool.Tool, bool, error) {
-	agents, err := subagents.Enabled(ctx, q)
+func Bind(ctx context.Context, q asstapp.Querier, t tool.Tool) (tool.Tool, bool, error) {
+	agents, err := asstapp.EnabledSubagents(ctx, q)
 	if err != nil || len(agents) == 0 {
 		return t, false, err
 	}
@@ -113,7 +109,7 @@ func (r *Research) Handle(ctx context.Context, tc *tool.Context, args tool.Args)
 	if err != nil {
 		return nil, err
 	}
-	ids, err := cleanIDs(args, assistant.TuningAgentSubagentContextIDs)
+	ids, err := cleanIDs(args, asstapp.SubagentContextIDsLimit)
 	if err != nil {
 		return nil, err
 	}

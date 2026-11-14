@@ -1,4 +1,4 @@
-package mediatools
+package application
 
 import (
 	"context"
@@ -8,11 +8,10 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
-	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func channelOf(c mediaapp.ChannelUndo) media.Channel {
+func channelOf(c ChannelUndo) media.Channel {
 	return media.Channel{
 		ID: c.ID, Name: c.Name, IMDB: c.IMDB, Pattern: c.Pattern, CaseSensitive: c.CaseSensitive,
 		Primed: c.Primed, Created: c.Created, TMDBID: c.TMDBID,
@@ -47,7 +46,7 @@ func channelFailed(err error) error {
 }
 
 func undoChannelDelete(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (any, error) {
-	var u mediaapp.ChannelDeleteUndo
+	var u ChannelDeleteUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
 		return nil, ledger.Refused("media undo payload is invalid")
 	}
@@ -59,7 +58,7 @@ func undoChannelDelete(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (an
 }
 
 func undoChannelRestore(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (any, error) {
-	var u mediaapp.ChannelRestoreUndo
+	var u ChannelRestoreUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
 		return nil, ledger.Refused("media undo payload is invalid")
 	}

@@ -324,6 +324,14 @@ func TorrentHash(data []byte) (string, error) {
 	if !found {
 		return "", QbitError("not a torrent file")
 	}
+	fields, isInfo := info[0].(bdict)
+	if !isInfo {
+		return "", QbitError("not a torrent file")
+	}
+	pieces, isBytes := fields["pieces"][0].([]byte)
+	if !isBytes || len(pieces) == 0 || len(pieces)%sha1.Size != 0 {
+		return "", QbitError("the torrent has no v1 info hash")
+	}
 	sum := sha1.Sum(data[info[1].(int):info[2].(int)]) //nolint:gosec // the BitTorrent v1 info hash is SHA-1
 	return hex.EncodeToString(sum[:]), nil
 }

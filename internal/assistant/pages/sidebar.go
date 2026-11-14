@@ -6,8 +6,6 @@ import (
 	"time"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -26,7 +24,7 @@ func (p *pages) sidebar(ctx context.Context, f *tpl.Frame) error {
 	if err != nil {
 		return err
 	}
-	loc, err := config.From(ctx).Location(p.deps.Env)
+	loc, err := p.assistant().Location(ctx)
 	if err != nil {
 		return err
 	}
@@ -38,7 +36,7 @@ func (p *pages) sidebar(ctx context.Context, f *tpl.Frame) error {
 	return nil
 }
 
-func sidebarOf(listed []threads.Listed, hidden map[int64]bool, now time.Time) *tpl.SidebarThreads {
+func sidebarOf(listed []asstapp.Listed, hidden map[int64]bool, now time.Time) *tpl.SidebarThreads {
 	out := &tpl.SidebarThreads{}
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	bounds := []struct {

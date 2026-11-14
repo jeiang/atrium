@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -156,7 +155,7 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func chPolled(title, idle string, out media.PollResult) *tpl.Toast {
+func chPolled(title, idle string, out mediaapp.PollResult) *tpl.Toast {
 	titles := make([]string, len(out.Added))
 	for i, a := range out.Added {
 		titles[i] = a.Title

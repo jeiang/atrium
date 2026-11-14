@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )

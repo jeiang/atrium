@@ -5,7 +5,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 )
 
 const (
@@ -138,36 +138,36 @@ func dlSpeedText(n *int64) string {
 	return dlHumanSize(n) + "/s"
 }
 
-func torrentView(t media.Torrent) TorrentView {
+func torrentView(t mediaapp.QBitTorrent) TorrentView {
 	state := t.State
 	if state == "" {
 		state = "unknown"
 	}
-	label, ok := media.StateLabels[state]
+	label, ok := mediaapp.StateLabels[state]
 	if !ok {
 		label = state
 	}
 	kind := dlModePlain
-	if t.HasTag(media.TagMedia) {
+	if t.HasTag(mediaapp.TagMedia) {
 		kind = dlModeMedia
 	}
 	return TorrentView{
 		Hash: t.Hash, Name: t.Name, Kind: kind, Label: label, Size: dlHumanSize(t.Size),
 		Down: dlSpeedText(t.DLSpeed), Up: dlSpeedText(t.UpSpeed), ETA: dlHumanETA(t.ETA),
 		Percent: int64(math.Round(t.Progress * 100)),
-		Filed:   t.HasTag(media.TagFiled), Ignored: t.HasTag(media.TagIgnored),
+		Filed:   t.HasTag(mediaapp.TagFiled), Ignored: t.HasTag(mediaapp.TagIgnored),
 		Active: t.Active(),
 	}
 }
 
-func fileView(f media.TorrentFile) FileView {
+func fileView(f mediaapp.QBitTorrentFile) FileView {
 	return FileView{
-		Index: f.Index, Wanted: f.Priority != media.PrioritySkip, Name: f.Name,
+		Index: f.Index, Wanted: f.Priority != mediaapp.PrioritySkip, Name: f.Name,
 		SizeText: dlHumanSize(f.Size), Percent: int64(math.Round(f.Progress * 100)),
 	}
 }
 
-func queueView(v media.View) QueueView {
+func queueView(v mediaapp.View) QueueView {
 	files := make([]QueueFile, len(v.Files))
 	for i, f := range v.Files {
 		files[i] = QueueFile{Rel: f.Rel, Season: f.Season, Episode: f.Episode, Dest: f.Dest}

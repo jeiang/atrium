@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/kb"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -32,7 +31,7 @@ func sourceMap(source *kbapp.Source) any {
 
 func resultMap(r kbapp.Record) map[string]any {
 	out := map[string]any{
-		"id": r.ID, "cite": kb.Cite(r.ID), "title": r.Title, "aliases": r.Aliases, "scope": r.Scope,
+		"id": r.ID, "cite": kbapp.Cite(r.ID), "title": r.Title, "aliases": r.Aliases, "scope": r.Scope,
 		"writer": r.Writer, "confirmed": r.Confirmed, "pinned": r.Pinned, "marks": r.MarkNames,
 		"updated": time.Unix(int64(r.UpdatedAt), 0).UTC().Format("2006-01-02"), "retracted": r.Retracted,
 	}
@@ -192,7 +191,7 @@ func write(svc func(*tool.Context) *kbapp.Service) tool.Handler {
 		if err != nil {
 			return nil, agentFail(err)
 		}
-		return map[string]any{"id": written.Data.ID, "cite": kb.Cite(written.Data.ID), "write_id": written.EffectIDs[0]}, nil
+		return map[string]any{"id": written.Data.ID, "cite": kbapp.Cite(written.Data.ID), "write_id": written.EffectIDs[0]}, nil
 	}
 }
 
@@ -210,7 +209,7 @@ func retract(svc func(*tool.Context) *kbapp.Service) tool.Handler {
 		if err != nil {
 			return nil, agentFail(err)
 		}
-		return map[string]any{"id": retracted.Data.ID, "cite": kb.Cite(retracted.Data.ID), "retracted": true, "write_id": retracted.EffectIDs[0]}, nil
+		return map[string]any{"id": retracted.Data.ID, "cite": kbapp.Cite(retracted.Data.ID), "retracted": true, "write_id": retracted.EffectIDs[0]}, nil
 	}
 }
 
@@ -262,7 +261,7 @@ func Tools(svc func(*tool.Context) *kbapp.Service) []tool.Tool {
 				"Creating needs title and body; pass id to edit an unconfirmed record. Never store secrets. Logged and undoable by the operator.",
 			InputSchema: json.RawMessage(writeSchema()),
 			Handler:     write(svc),
-			Effect:      tool.WriteUndo, Undo: kb.UndoOp,
+			Effect:      tool.WriteUndo, Undo: kbapp.UndoOp,
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.DefaultKinds,
@@ -272,7 +271,7 @@ func Tools(svc func(*tool.Context) *kbapp.Service) []tool.Tool {
 			Description: "Retract a knowledge record that is wrong or superseded. The record stays in history and the operator can undo. Give a short reason.",
 			InputSchema: json.RawMessage(retractSchema),
 			Handler:     retract(svc),
-			Effect:      tool.WriteUndo, Undo: kb.UndoOp,
+			Effect:      tool.WriteUndo, Undo: kbapp.UndoOp,
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.DefaultKinds,

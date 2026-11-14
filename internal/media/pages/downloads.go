@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -51,10 +50,16 @@ func (s *service) dlFragmentOut(w http.ResponseWriter, r *http.Request, status i
 	dlCheck(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: toast}))
 }
 
-func (s *service) dlRead(w http.ResponseWriter, r *http.Request) (mediaapp.Downloads, bool) {
-	read, err := s.app.Downloads(r.Context(), mediaapp.DownloadsInput{})
+func (s *service) dlRead(w http.ResponseWriter, r *http.Request, torrentsOnly bool) (mediaapp.Downloads, bool) {
+	read, err := s.app.Downloads(r.Context(), mediaapp.DownloadsInput{TorrentsOnly: torrentsOnly})
 	if err != nil {
-		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
+		web.Fail(w, r, err, func(status int) {
+			if torrentsOnly {
+				s.dlFragmentOut(w, r, status, "_media_torrents.gohtml", torrentsView{Torrents: []TorrentView{}, Error: application.Classify(err).Error(), Poll: dlPollSeconds}, nil)
+				return
+			}
+			s.deps.Error(w, r, status, application.Classify(err).Error())
+		})
 		return mediaapp.Downloads{}, false
 	}
 	return read.Data, true
@@ -80,8 +85,8 @@ func dlAnyActive(rows []TorrentView) bool {
 	return false
 }
 
-func (s *service) dlDownloads(w http.ResponseWriter, r *http.Request, toast *tpl.Toast, status int, edited *media.View) {
-	found, ok := s.dlRead(w, r)
+func (s *service) dlDownloads(w http.ResponseWriter, r *http.Request, toast *tpl.Toast, status int, edited *mediaapp.View) {
+	found, ok := s.dlRead(w, r, false)
 	if !ok {
 		return
 	}
@@ -111,7 +116,7 @@ func (s *service) dlDownloadsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) dlTorrentsGet(w http.ResponseWriter, r *http.Request) {
-	found, ok := s.dlRead(w, r)
+	found, ok := s.dlRead(w, r, true)
 	if !ok {
 		return
 	}

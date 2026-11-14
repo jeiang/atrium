@@ -11,8 +11,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -20,7 +18,7 @@ func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	partial := web.IsPartial(r)
 	read, err := p.assistant().Home(r.Context(), asstapp.HomeInput{Q: web.QueryValue(query, "q"), View: web.QueryValue(query, "view"),
-		About: web.QueryValue(query, "about"), Limit: config.TuningChatThreadLimit, List: partial})
+		About: web.QueryValue(query, "about"), Limit: asstapp.ChatThreadLimit, List: partial})
 	if err != nil {
 		p.readFailed(w, r, err)
 		return
@@ -49,7 +47,7 @@ func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *pages) threadList(w http.ResponseWriter, r *http.Request, q, view string) {
-	read, err := p.assistant().Home(r.Context(), asstapp.HomeInput{Q: q, View: view, Limit: config.TuningChatThreadLimit, List: true})
+	read, err := p.assistant().Home(r.Context(), asstapp.HomeInput{Q: q, View: view, Limit: asstapp.ChatThreadLimit, List: true})
 	if err != nil {
 		p.readFailed(w, r, err)
 		return
@@ -84,7 +82,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	started, err := p.assistant().ThreadStart(detached(r), asstapp.StartInput{
-		Kind: threads.Chat, ProjectID: projectID, About: web.FormString(form, "about", ""),
+		Kind: asstapp.ChatKind, ProjectID: projectID, About: web.FormString(form, "about", ""),
 		Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: optional(form, "context_limit"),
 		Thinking: web.FormString(form, "thinking", ""), WebSearch: &webSearch, CostCapUSD: costCap,
 		Text: text, Files: uploads, Operator: true,
@@ -147,7 +145,7 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	_, err := p.assistant().ThreadOptions(detached(r), asstapp.OptionsInput{ThreadID: threadID, Model: web.FormString(form, "model", ""),
 		Effort: web.FormString(form, "effort", ""), ContextLimit: web.FormString(form, "context_limit", "")})
-	var refused threads.OptionError
+	var refused asstapp.OptionError
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not saved", err.Error())
 		return
@@ -165,7 +163,7 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	thread := threadOf(view)
 	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", OptionsSaved{
-		View: view, Composer: composerOf(r.Context(), thread, threadID),
+		View: view, Composer: asstapp.ThreadComposer(r.Context(), thread, threadID),
 	})
 }
 

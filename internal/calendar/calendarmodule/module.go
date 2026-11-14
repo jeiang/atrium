@@ -16,6 +16,7 @@ import (
 	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
@@ -39,7 +40,7 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	command := calendarcmd.Command(mc.Env, calendarCLI(mc.Env, mc.Tools))
+	command := calendarcmd.Command(m.calendarCLI(mc.Env, mc.Tools), connectionsapp.CLI(mc.Env))
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
 		Name:      module.Calendar,

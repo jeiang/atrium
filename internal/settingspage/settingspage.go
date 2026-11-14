@@ -11,8 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -22,7 +20,7 @@ import (
 var assets embed.FS
 
 type Group struct {
-	settings.Group
+	settingsapp.Group
 	URL string
 	Tab string
 }
@@ -41,7 +39,7 @@ type Module struct {
 type Control struct {
 	Modules []Module
 	Mark    func(name string) string
-	State   func(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error)
+	State   func(ctx context.Context, q settingsapp.Querier, name string) (settingsapp.ModuleView, error)
 }
 
 type pageData struct {
@@ -151,13 +149,13 @@ func withSections(groups []Group, generic []Generic, sections Sections) []Generi
 	return generic
 }
 
-func (h handlers) views(ctx context.Context, url string) ([]settings.GroupView, error) {
-	var out []settings.GroupView
+func (h handlers) views(ctx context.Context, url string) ([]settingsapp.GroupView, error) {
+	var out []settingsapp.GroupView
 	for _, g := range h.groups {
 		if g.URL != url {
 			continue
 		}
-		fields, err := settings.From(ctx).Fields(g.Keys)
+		fields, err := settingsapp.From(ctx).Fields(g.Keys)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +163,7 @@ func (h handlers) views(ctx context.Context, url string) ([]settings.GroupView, 
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, settings.GroupView{Module: g.Module, Name: g.Name, Title: g.Title, Fields: read.Data.Fields})
+		out = append(out, settingsapp.GroupView{Module: g.Module, Name: g.Name, Title: g.Title, Fields: read.Data.Fields})
 	}
 	return out, nil
 }
@@ -197,7 +195,7 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	}
 	form := web.FormValues(r)
 	ctx := context.WithoutCancel(r.Context())
-	fields, err := settings.From(ctx).Fields(group.Keys)
+	fields, err := settingsapp.From(ctx).Fields(group.Keys)
 	if err != nil {
 		panic(err)
 	}
@@ -216,7 +214,7 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			panic(err)
 		}
-		view := settings.GroupView{Module: module, Name: name, Title: group.Title, Fields: read.Data.Fields, Saved: failure == nil}
+		view := settingsapp.GroupView{Module: module, Name: name, Title: group.Title, Fields: read.Data.Fields, Saved: failure == nil}
 		if failure != nil {
 			view.Error = web.Message(failure)
 			for j, f := range view.Fields {
@@ -286,7 +284,7 @@ func (h handlers) sectionViews(ctx context.Context, path, saved string) (connect
 	return view, nil
 }
 
-func changes(fields []settings.Field, values map[string]string) []settingsapp.Value {
+func changes(fields []settingsapp.Field, values map[string]string) []settingsapp.Value {
 	out := make([]settingsapp.Value, 0, len(values))
 	for _, f := range fields {
 		value, ok := values[f.Key]
@@ -299,7 +297,7 @@ func changes(fields []settings.Field, values map[string]string) []settingsapp.Va
 	return out
 }
 
-func fieldValues(fields []settings.Field, form url.Values) map[string]string {
+func fieldValues(fields []settingsapp.Field, form url.Values) map[string]string {
 	values := make(map[string]string, len(fields))
 	for _, f := range fields {
 		if !f.Multi {
@@ -345,7 +343,7 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 			}
 			for i := range view.Sections {
 				if view.Sections[i].Name == name {
-					settings.EchoFields(ctx, view.Sections[i].Fields, values)
+					settingsapp.EchoFields(ctx, view.Sections[i].Fields, values)
 				}
 			}
 			shown := func(f *tpl.Frame) { f.Connections = view }

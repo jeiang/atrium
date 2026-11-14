@@ -2,10 +2,6 @@ package pages
 
 import (
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/files"
-	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/projects"
-	"github.com/jeiang/atrium/internal/assistant/service"
 )
 
 type HomePage struct {
@@ -54,9 +50,9 @@ type FileData struct {
 }
 
 type ProjectFiles struct {
-	Project *projects.Project `json:"project"`
-	Files   []files.Row       `json:"files"`
-	Error   *string           `json:"error"`
+	Project *asstapp.StoredProject `json:"project"`
+	Files   []asstapp.FileRow      `json:"files"`
+	Error   *string                `json:"error"`
 }
 
 type OptionsSaved struct {
@@ -68,7 +64,7 @@ type RunStarted struct {
 	View     *asstapp.Transcript `json:"view"`
 	ThreadID int64               `json:"thread_id"`
 	RunID    int64               `json:"run_id"`
-	Items    []*service.Item     `json:"items"`
+	Items    []*asstapp.Item     `json:"items"`
 	After    int64               `json:"after"`
 }
 
@@ -82,7 +78,7 @@ type RunLive struct {
 type RunDone struct {
 	View     *asstapp.Transcript `json:"view"`
 	ThreadID int64               `json:"thread_id"`
-	Run      *journal.Run        `json:"run"`
-	Items    []*service.Item     `json:"items"`
+	Run      *asstapp.Run        `json:"run"`
+	Items    []*asstapp.Item     `json:"items"`
 	Work     asstapp.Work        `json:"work"`
 }

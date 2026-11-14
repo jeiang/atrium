@@ -89,6 +89,7 @@ func TestWikiAPI(t *testing.T) {
 	f := newFixture(t, goldenData{}, nil, "")
 	setEnv(t, "ATRIUM_HOST_CONFIG", notionHostConfig(t, f.dir, srv.URL, "ntn_good"))
 	token := localAPIToken(t, "api")
+	opsAddr(t)
 	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {
 		t.Fatal(err)

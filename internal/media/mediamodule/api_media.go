@@ -39,7 +39,8 @@ type MediaFiles struct {
 	Next  *string             `json:"next,omitempty"`
 }
 type MediaAddInput struct {
-	Magnet string `json:"magnet"`
+	Magnet  string            `json:"magnet"`
+	Torrent *mediaapp.Torrent `json:"-"`
 }
 type MediaAdded struct {
 	Hash string `json:"hash"`
@@ -175,8 +176,12 @@ func mediaRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 			}
 			return mediaRead(r, out), nil
 		}),
-		api.Command(d, mediaapp.DescribeAdd(), mediaShape[MediaAdded](), "POST /media/torrents", func(ctx context.Context, in MediaAddInput) (application.Change[MediaAdded], error) {
-			r, e := s.Add(ctx, mediaapp.AddInput{Media: true, Magnet: &mediaapp.Magnet{URI: in.Magnet}})
+		api.Command(d, mediaapp.DescribeAdd(), mediaAddShape(), "POST /media/torrents", func(ctx context.Context, in MediaAddInput) (application.Change[MediaAdded], error) {
+			input := mediaapp.AddInput{Media: true, Torrent: in.Torrent}
+			if in.Magnet != "" {
+				input.Magnet = &mediaapp.Magnet{URI: in.Magnet}
+			}
+			r, e := s.Add(ctx, input)
 			return mediaChange(r, MediaAdded{Hash: r.Data.Hash}), e
 		}),
 		api.Command(d, mediaapp.DescribeSelectFiles(), mediaShape[MediaAdded](), "PUT /media/torrents/{hash}/files", func(ctx context.Context, in MediaSelectInput) (application.Change[MediaAdded], error) {
@@ -276,5 +281,5 @@ func mediaRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 			return mediaRead(r, out), e
 		}),
 	}
-	return append(append(routes, mediaLibraryRoutes(d, s)...), mediaFilingRoutes(d, s)...)
+	return append(append(append(routes, mediaLibraryRoutes(d, s)...), mediaFilingRoutes(d, s)...), mediaBinaryRoutes(d, s)...)
 }

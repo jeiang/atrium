@@ -113,7 +113,7 @@ func (s *Server) registerAuthRoutes() {
 		setCookie(w, sessionCookie, grant.Data.Token, int(grant.Data.MaxAge.Seconds()), secure(r))
 		http.Redirect(w, r, grant.Data.ReturnTo, http.StatusSeeOther)
 	})
-	s.mux.Post(logoutPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessDefault, http.MethodPost, logoutPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		if _, err := s.account.Logout(r.Context(), authapp.LogoutInput{Token: cookieValue(r, sessionCookie, secure(r))}); err != nil {
 			log.Error("sign-out failed", logx.Err, err.Error())

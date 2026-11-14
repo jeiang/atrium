@@ -165,7 +165,29 @@ func missingField(def application.Definition) string {
 
 func checkBinding(d Declaration, b application.Binding, owner map[application.Name]string) error {
 	invalid := &InvalidBinding{Module: d.Name, Kind: b.Kind, Target: b.Target}
-	if len(b.Uses) == 0 || strings.TrimSpace(b.Target) == "" || (b.Composite && !d.Core) {
+	if strings.TrimSpace(b.Target) == "" || (b.Composite && !d.Core) {
+		return invalid
+	}
+	if b.Kind == application.ProtocolOnly {
+		if len(b.Uses) != 0 || len(b.Delegates) != 0 || b.Composite || b.API != nil {
+			return invalid
+		}
+		switch b.Reason {
+		case "transport", "redirect", "static", "coordinator", "native-tool", "lifecycle":
+		default:
+			return invalid
+		}
+		if _, _, ok := application.Route(b.Target); ok {
+			return nil
+		}
+		for _, kind := range []application.BindingKind{application.CLI, application.Tool, application.Job, application.Service} {
+			if declares(d, kind, b.Target) {
+				return nil
+			}
+		}
+		return &UnknownBindingTarget{Module: d.Name, Kind: b.Kind, Target: b.Target}
+	}
+	if len(b.Uses) == 0 || b.Reason != "" {
 		return invalid
 	}
 	switch b.Kind {
@@ -180,12 +202,17 @@ func checkBinding(d Declaration, b application.Binding, owner map[application.Na
 	default:
 		return invalid
 	}
+	for _, name := range b.Delegates {
+		if !slices.Contains(b.Uses, name) || owner[name] != Core || owner[name] == d.Name {
+			return invalid
+		}
+	}
 	for _, name := range b.Uses {
 		mod, ok := owner[name]
 		if !ok {
 			return &UnknownOperation{Module: d.Name, Target: b.Target, Name: name}
 		}
-		if mod != d.Name && !b.Composite {
+		if mod != d.Name && !b.Composite && (mod != Core || !slices.Contains(b.Delegates, name)) {
 			return &ForeignOperation{Module: d.Name, Owner: mod, Name: name}
 		}
 	}
@@ -201,7 +228,7 @@ func declares(d Declaration, kind application.BindingKind, target string) bool {
 	case application.Job:
 		return slices.ContainsFunc(d.Jobs, func(j scheduler.Definition) bool { return j.Key == target })
 	case application.Service:
-		return slices.ContainsFunc(d.Services, func(s runtime.ServiceDefinition) bool { return s.Name == target })
+		return slices.ContainsFunc(d.Services, func(s runtime.ServiceDefinition) bool { return s.Name == target }) || (d.ServiceSets != nil && d.ServiceSetName != "" && d.ServiceSetName == target)
 	}
 	return false
 }

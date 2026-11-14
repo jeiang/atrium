@@ -62,12 +62,13 @@ func Describe[I, O any](name Name, kind Kind, authority []Authority, effect Effe
 type BindingKind string
 
 const (
-	HTML    BindingKind = "html"
-	API     BindingKind = "api"
-	CLI     BindingKind = "cli"
-	Tool    BindingKind = "tool"
-	Job     BindingKind = "job"
-	Service BindingKind = "service"
+	HTML         BindingKind = "html"
+	API          BindingKind = "api"
+	CLI          BindingKind = "cli"
+	Tool         BindingKind = "tool"
+	Job          BindingKind = "job"
+	Service      BindingKind = "service"
+	ProtocolOnly BindingKind = "protocol-only"
 )
 
 type Binding struct {
@@ -76,6 +77,8 @@ type Binding struct {
 	Uses      []Name
 	Composite bool
 	API       *APIShape
+	Delegates []Name
+	Reason    string
 }
 
 func Route(target string) (method, pattern string, ok bool) {

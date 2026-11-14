@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	kbexport "github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"

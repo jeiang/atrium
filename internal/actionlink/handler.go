@@ -8,14 +8,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/settings"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 )
 
-func PublicCheck(_ config.Config, _ config.Env, _ *db.DB, _ *settings.Registry) func(*http.Request) bool {
+func PublicCheck() func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		return strings.HasPrefix(r.URL.Path, "/actions/")
 	}
@@ -23,7 +20,7 @@ func PublicCheck(_ config.Config, _ config.Env, _ *db.DB, _ *settings.Registry) 
 
 var log = logx.Logger("atrium.actionlink")
 
-func Handler(phone func(ctx context.Context, token string, now float64) (*proposals.Proposal, error), now func() float64) http.HandlerFunc {
+func Handler(phone func(ctx context.Context, token string, now float64) (*proposalsapp.Proposal, error), now func() float64) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -41,7 +38,7 @@ func Handler(phone func(ctx context.Context, token string, now float64) (*propos
 			http.Error(w, "This link is not valid.", http.StatusBadRequest)
 		case errors.Is(err, ErrRefused):
 			http.Error(w, "This action is not allowed from the phone.", http.StatusForbidden)
-		case unfinished == nil && errors.As(err, new(*db.LockBusy)):
+		case unfinished == nil && proposalsapp.IsLockBusy(err):
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		case err != nil && unfinished != nil:
 			log.Error("action link did not finish", logx.Err, err.Error())

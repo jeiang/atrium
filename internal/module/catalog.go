@@ -64,7 +64,7 @@ func (c *Catalog) Bindings() []Binding { return slices.Clone(c.bindings) }
 func (c *Catalog) WebBindings() map[string][]application.Binding {
 	out := map[string][]application.Binding{}
 	for _, b := range c.bindings {
-		if b.Kind == application.HTML || b.Kind == application.API {
+		if b.Kind == application.HTML || b.Kind == application.API || (b.Kind == application.ProtocolOnly && strings.Contains(b.Target, " /")) {
 			out[b.Module] = append(out[b.Module], b.Binding)
 		}
 	}
@@ -83,7 +83,7 @@ func (c *Catalog) Unbound() []Binding {
 	}
 	var out []Binding
 	add := func(module string, kind application.BindingKind, target string) {
-		if !bound[key{module, kind, target}] {
+		if !bound[key{module, kind, target}] && !bound[key{module, application.ProtocolOnly, target}] {
 			out = append(out, Binding{Module: module, Binding: application.Binding{Kind: kind, Target: target}})
 		}
 	}
@@ -99,6 +99,9 @@ func (c *Catalog) Unbound() []Binding {
 		}
 		for _, s := range d.Services {
 			add(d.Name, application.Service, s.Name)
+		}
+		if d.ServiceSets != nil && d.ServiceSetName != "" {
+			add(d.Name, application.Service, d.ServiceSetName)
 		}
 	}
 	return out

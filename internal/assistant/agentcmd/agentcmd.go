@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/tool"
@@ -22,17 +20,19 @@ var Kinds = func() []string {
 	return out
 }()
 
-func threadKind(run string) threads.Kind {
+func threadKind(run string) asstapp.ThreadKind {
 	if run == string(tool.Sub) {
-		return threads.Subagent
+		return asstapp.SubagentThread
 	}
-	return threads.Kind(run)
+	return asstapp.ThreadKind(run)
 }
 
-type Open func(context.Context) (context.Context, *service.Service, func(), error)
+type Open func(context.Context) (context.Context, *asstapp.Service, func(), error)
 
-func Command(enabled func(module string) bool, open Open, subagents OpenService) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{tickCommand(open, enabled), runCommand(open), subagentsCommand(subagents)}}
+type Tick func(context.Context, func(module string) bool) error
+
+func Command(enabled func(module string) bool, open Open, subagents OpenService, tick Tick) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{tickCommand(tick, enabled), runCommand(open), subagentsCommand(subagents)}}
 }
 
 func runCommand(open Open) *cli.Command {
@@ -41,7 +41,7 @@ func runCommand(open Open) *cli.Command {
 		Setup: func(args *cli.Args) cli.Handler {
 			thread := args.Int("thread", 0, cli.Opt{Help: "existing thread id; omitted creates a new thread of --kind"})
 			text := args.String("text", "", cli.Opt{Required: true})
-			kind := args.String("kind", string(threads.Chat), cli.Opt{Choices: Kinds})
+			kind := args.String("kind", string(asstapp.ChatThread), cli.Opt{Choices: Kinds})
 			toolChoice := args.String("tool-choice", "", cli.Opt{Help: "force the first request to call a tool: any, or a tool name; models that reject forcing get the request without it"})
 			return func(env *cli.Env) int {
 				if strings.TrimSpace(*text) == "" {
@@ -63,12 +63,11 @@ func runCommand(open Open) *cli.Command {
 }
 
 func run(env *cli.Env, open Open, threadID *int64, text, kind, toolChoice string, explicitKind bool) error {
-	ctx, svc, closeApp, err := open(env.Ctx)
+	ctx, app, closeApp, err := open(env.Ctx)
 	if err != nil {
 		return err
 	}
 	defer closeApp()
-	app := asstapp.New(svc.DB, svc.Env, svc.Now).WithRuns(func() *service.Service { return svc })
 	var runID int64
 	if threadID == nil {
 		started, err := app.ThreadStart(ctx, asstapp.StartInput{Kind: threadKind(kind), Text: text, ToolChoice: toolChoice, Wait: true})
@@ -81,7 +80,7 @@ func run(env *cli.Env, open Open, threadID *int64, text, kind, toolChoice string
 			in.Kind = threadKind(kind)
 		}
 		sent, err := app.MessageSend(ctx, in)
-		var unknown service.UnknownThread
+		var unknown asstapp.UnknownThread
 		var mismatch asstapp.KindMismatch
 		switch {
 		case errors.As(err, &unknown):
@@ -93,7 +92,7 @@ func run(env *cli.Env, open Open, threadID *int64, text, kind, toolChoice string
 			return err
 		}
 	}
-	out, err := service.RunDict(ctx, svc.DB.Read, runID)
+	out, err := app.RunDict(ctx, runID)
 	if err != nil {
 		return err
 	}

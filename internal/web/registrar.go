@@ -35,6 +35,14 @@ func (e *UnmountedBinding) Error() string {
 	return fmt.Sprintf("web: %s declares %s binding %s but does not mount it", e.Owner, e.Kind, e.Target)
 }
 
+type UnboundRoute struct {
+	Route
+}
+
+func (e *UnboundRoute) Error() string {
+	return fmt.Sprintf("web: %s mounts %s %s without a binding", e.Owner, e.Method, e.Pattern)
+}
+
 type Route struct {
 	Owner   string
 	Kind    application.BindingKind
@@ -65,6 +73,9 @@ func (s *registrations) check() error {
 			}
 			s.bound[key] = true
 		}
+	}
+	if routes := s.unbound(); len(routes) != 0 {
+		return &UnboundRoute{Route: routes[0]}
 	}
 	return nil
 }

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/calendar"
@@ -24,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
+	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/media"

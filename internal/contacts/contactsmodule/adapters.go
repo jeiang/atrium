@@ -8,9 +8,7 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -96,22 +94,17 @@ func included(args tool.Args) ([]string, error) {
 	return out, nil
 }
 
-func syncCommand(env config.Env) *cli.Command {
+type syncOpen func(context.Context) (*contactsapp.Service, contactsapp.Config, func(), error)
+
+func syncCommand(open syncOpen) *cli.Command {
 	return &cli.Command{Name: "sync", Help: "mirror the iCloud address books into the contacts directory (read-only)", Setup: func(*cli.Args) cli.Handler {
 		return func(e *cli.Env) int {
-			cfg, err := config.Load(env)
+			svc, cfg, done, err := open(e.Ctx)
 			if err != nil {
 				return cli.Fail(e, err)
 			}
-			d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(e.Ctx).DBKey()))
-			if err != nil {
-				return cli.Fail(e, err)
-			}
-			defer func() { _ = d.Close() }()
-			if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
-				return cli.Fail(e, err)
-			}
-			change, err := contactsapp.New(d, env).SyncManual(e.Ctx, cfg)
+			defer done()
+			change, err := svc.SyncManual(e.Ctx, cfg)
 			if err != nil {
 				return cli.Fail(e, err)
 			}

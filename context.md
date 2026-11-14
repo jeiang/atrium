@@ -298,6 +298,13 @@ behavior-parity target.
   `operation_audit` row (`assistant.project-file.upload|delete`,
   `assistant.file.write` naming its effect); a project upload over the body
   cap is refused with 422 before the project is looked up.
+  Saving the chat defaults on `/settings/assistant` runs
+  `assistant.defaults-set`: the stored settings are unchanged, and it writes
+  one `operation_audit` row (`invalid` when the model, effort or context limit
+  is refused, still answered 422 with the same message). `PUT
+  /api/v1/assistant/defaults` (bearer only) takes the same three fields
+  (`model`, `effort`, `context_limit`) through the same operation and
+  validation, answering 422 `invalid` with that message.
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
@@ -577,7 +584,9 @@ behavior-parity target.
   candidates` and its job) run as `calendar.sync` and
   `calendar.draft-candidates`, one `operation_audit` row per pass (`noop`
   for an empty candidate queue; a sync that is not configured or changed
-  no file writes none); the drafting run starts through
+  no file writes none). The CLI candidate command takes the same job claim
+  as the API and scheduled pass and refuses work while paused or when mail
+  or the assistant is off; the drafting run starts through
   `assistant.thread.start`, so a missing key or exhausted budget is refused
   before a thread exists. Nightly dreaming, the daily digest and every
   scheduled prompt run (weekly review and cron jobs) run as
@@ -689,8 +698,10 @@ behavior-parity target.
   refuses to start when a declared HTML/API binding is not mounted by its
   module. `atrium catalog operations [--json] [--missing-api] [--unbound]
   [--require-api]` prints that catalog without a database or credentials;
-  `--unbound` adds mounted routes, commands, tools, jobs and services that no
-  operation binds, and `--require-api` exits 1 when an operation has no API
+  `--unbound` prints only the mounted routes, commands, tools, jobs and
+  services that no operation binds (`[]` when there are none),
+  `--missing-api` prints only the operator operations without a typed API
+  binding, and `--require-api` exits 1 when an operation has no API
   binding. `GET /api/v1/me` is bound to `auth.identity`.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
@@ -742,6 +753,8 @@ behavior-parity target.
 - The media agent now supports read-only source/import/directory metadata and preparation, durable receipt-keyed filing, progress and inspection, and receipt-derived undo. Torrent plans hardlink downloads; import plans use exclusive rename; cleanup refuses remaining videos and is non-undoable. Mutations are globally serialized, preserve library-group permissions, and never copy across devices or replace destinations. Crash recovery only inspects receipts; identical replay returns the terminal result and never resumes. Main files media through the agent: the downloads queue maps each tagged torrent's qBittorrent content path to the agent `downloads` root by the `media_download_path_prefix` string prefix (no main-side stat) and lists imports, sources and show folders through the agent; filing re-checks the torrent (hash, `media` tag, complete, unchanged path), prepares the plan, records one `media_file` effect with a deterministic receipt key and `media-agent:<agent>:<root>/<path>` claims, streams progress into the held effect, and settles from the agent result (a transport loss stays `unknown`, blocks repeats and is never retried). Only a `done` filing tags the torrent `filed`. An import with no video left (samples count as videos) gets a non-undoable `media_import_cleanup` effect. `atrium media inspect-filing <effect-id>` prints the receipt and current evidence. Undo asks the agent for the receipt-derived inverse; filings made before the agent are refused. The service unit remains pending.
 - The library catalogue, `media_library_search`, library pages, episode thumbnails and the `media-thumbnails` job read from the media agent; the main process has no media filesystem access. The host key `media_root` is refused at startup (exit 78) and at Nix evaluation, naming `services.atrium.mediaAgent.roots`. The media module requires the `service/media-agent` connection. One catalogue per process is refreshed by the noncritical `media-catalogue` service every minute and after each filing (complete scan snapshots only; one restart when a snapshot expires; 30 s bound). A failed refresh keeps the previous catalogue and marks it stale (the library page says so; the tool and page JSON report `catalogue` state); with no catalogue yet, library reads answer 503 rather than an empty library. Thumbnails are generated and cached by the agent; `/apps/media/thumb/*` relays them behind login and shows the placeholder when the agent has none or is unavailable.
 - VPN library links come from one host key, `media.media_vpn_base_url` (https origin; http only on loopback), as `<base>/library/{movies,tv}/<path>`, served by the media agent's `[vpn]` listener (GET/HEAD only on those two prefixes, exact Host allow-list, peer CIDR check, no bearer, everything else 404). Unset means no VPN link. `media_movies_url`/`media_tv_url` are refused. Signed public links are unchanged.
+- Bearer media file reads resolve opaque ids through catalogue detail before streaming through the media agent. GET/HEAD content supports byte ranges without opening library paths in main; thumbnails, artwork and path-free filing inspection are API resources. Torrent adds accept either the existing JSON magnet form or multipart magnet/torrent input under shared upload admission and the existing torrent size cap.
+- The media torrent polling fragment requests the torrent-only downloads view, skipping filing queue/source and show-directory reads. Other media fragments already use their own operation and minimal fragment renderer; complete library and channel navigations retain their page frames.
 - The NixOS module adds `atrium-media-agent.service` (`services.atrium.mediaAgent.*`): it renders the agent TOML (never `vpn.allow_loopback`), the `service/media-agent` connection and `host.media.media_vpn_base_url`; the agent unit is the only one with media filesystem access (one writable library directory holding all four roots, setgid folders kept, own state and cache directories, bearer and VPN TLS by `LoadCredential`, no database or app keys); `atrium.service` lost the media group, media `ReadWritePaths` and ffmpeg, and has `InaccessiblePaths=-<library directory>` (also on `atrium-run`); the agent's groups must differ from the atrium group. The agent exits 78 on permanent configuration errors (`RestartPreventExitStatus=78`) and 1 on transient ones; evaluation checks `vpn.allowedPeers` are CIDR prefixes and derives the rendered `allowed_hosts` and default base URL from `vpn.allowedHosts` plus the listen port.
 
 ## Current authority boundaries

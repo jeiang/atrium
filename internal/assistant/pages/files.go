@@ -15,7 +15,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -41,7 +40,7 @@ var (
 	errMediaType = errors.New("unsupported media type")
 )
 
-func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, error) {
+func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values, []asstapp.UploadedFile, error) {
 	media, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	switch {
 	case err == nil && media == formMedia:
@@ -49,7 +48,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 	case err != nil || media != multipartMedia:
 		return url.Values{}, nil, errMediaType
 	}
-	limits, err := files.ReadLimits(r.Context(), p.deps.DB.Read)
+	limits, err := p.assistant().UploadLimits(r.Context())
 	check(err)
 	r.Body = http.MaxBytesReader(w, r.Body, int64(limits.MessageCap)+uploadSlack)
 	boundary := params["boundary"]
@@ -58,7 +57,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 	}
 	reader := multipart.NewReader(bufio.NewReaderSize(r.Body, bodyBufferBytes), boundary)
 	form := url.Values{}
-	var uploads []files.UploadedFile
+	var uploads []asstapp.UploadedFile
 	var parts, text int
 	for {
 		part, err := reader.NextPart()
@@ -91,14 +90,14 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 			return form, nil, uploadReadError(err, limits.MessageCap)
 		}
 		if name == "upload" && len(data) > 0 {
-			uploads = append(uploads, files.UploadedFile{Name: filename, Data: data, Type: part.Header.Get("Content-Type")})
+			uploads = append(uploads, asstapp.UploadedFile{Name: filename, Data: data, Type: part.Header.Get("Content-Type")})
 		}
 	}
 }
 
 func uploadReadError(err error, messageCap int) error {
 	if errors.As(err, new(*http.MaxBytesError)) {
-		return files.MessageCapError(messageCap)
+		return asstapp.MessageCapError(messageCap)
 	}
 	return errBadBody
 }
@@ -110,10 +109,10 @@ func (p *pages) command(pattern string, h http.HandlerFunc) http.HandlerFunc {
 			p.fail(w, r, http.StatusUnsupportedMediaType, mediaTypeDetail)
 			return
 		}
-		limits, err := files.ReadLimits(r.Context(), p.deps.DB.Read)
+		limits, err := p.assistant().UploadLimits(r.Context())
 		check(err)
 		if r.ContentLength > int64(limits.MessageCap)+uploadSlack {
-			p.failureStatus(w, r, http.StatusRequestEntityTooLarge, "Not attached", files.MessageCapError(limits.MessageCap).Error())
+			p.failureStatus(w, r, http.StatusRequestEntityTooLarge, "Not attached", asstapp.MessageCapError(limits.MessageCap).Error())
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limits.MessageCap)+uploadSlack)
@@ -121,7 +120,7 @@ func (p *pages) command(pattern string, h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values, []files.UploadedFile, bool) {
+func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values, []asstapp.UploadedFile, bool) {
 	form, uploads, err := p.parseUploads(w, r)
 	switch {
 	case errors.Is(err, errBadBody):
