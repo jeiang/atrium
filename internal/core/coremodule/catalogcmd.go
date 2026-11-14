@@ -46,7 +46,6 @@ type catalogUnbound struct {
 
 type catalogReport struct {
 	Operations   []catalogOperation `json:"operations"`
-	Unbound      []catalogUnbound   `json:"unbound"`
 	ProtocolOnly []catalogProtocol  `json:"protocol_only"`
 }
 
@@ -63,32 +62,46 @@ func catalogCommand(mc module.Context) *cli.Command {
 		Help: "list application operations and their bindings",
 		Setup: func(a *cli.Args) cli.Handler {
 			asJSON := a.Bool("json", cli.Opt{Help: "print JSON"})
-			missing := a.Bool("missing-api", cli.Opt{Help: "list only operator operations without a typed API binding"})
-			unbound := a.Bool("unbound", cli.Opt{Help: "also list mounted routes, commands, tools, jobs and services without a binding"})
+			missing := a.Bool("missing-api", cli.Opt{Help: "print only the operator operations without a typed API binding"})
+			unbound := a.Bool("unbound", cli.Opt{Help: "print only the mounted routes, commands, tools, jobs and services without a binding"})
 			require := a.Bool("require-api", cli.Opt{Help: "exit 1 when an operator operation has no typed API binding"})
 			return func(env *cli.Env) int {
 				cat := mc.Catalog()
-				report := catalogReport{Operations: catalogOperations(cat, *missing || *require), Unbound: []catalogUnbound{}, ProtocolOnly: catalogProtocols(cat)}
 				if *unbound {
 					found, err := catalogUnboundItems(env, cat)
 					if err != nil {
 						return cli.Fail(env, err)
 					}
-					report.Unbound = found
-				}
-				if *asJSON {
-					out, err := json.MarshalIndent(report, "", "  ")
-					if err != nil {
-						return cli.Fail(env, err)
+					if !*asJSON && len(found) > 0 {
+						printUnbound(env, found)
+						return cli.ExitOK
 					}
-					_, _ = fmt.Fprintln(env.Stdout, string(out))
+					return printJSON(env, found)
+				}
+				ops := catalogOperations(cat, *missing || *require)
+				code := cli.ExitOK
+				if *require && len(ops) > 0 {
+					code = cli.ExitError
+				}
+				if *missing {
+					if !*asJSON && len(ops) > 0 {
+						printOperations(env, ops)
+						return code
+					}
+					if out := printJSON(env, ops); out != cli.ExitOK {
+						return out
+					}
+					return code
+				}
+				report := catalogReport{Operations: ops, ProtocolOnly: catalogProtocols(cat)}
+				if *asJSON {
+					if out := printJSON(env, report); out != cli.ExitOK {
+						return out
+					}
 				} else {
-					printCatalog(env, report)
+					printOperations(env, report.Operations)
 				}
-				if *require && len(report.Operations) > 0 {
-					return cli.ExitError
-				}
-				return cli.ExitOK
+				return code
 			}
 		},
 	}, {
@@ -179,10 +192,19 @@ func catalogUnboundItems(env *cli.Env, cat *module.Catalog) ([]catalogUnbound, e
 	return out, nil
 }
 
-func printCatalog(env *cli.Env, report catalogReport) {
+func printJSON(env *cli.Env, v any) int {
+	out, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return cli.Fail(env, err)
+	}
+	_, _ = fmt.Fprintln(env.Stdout, string(out))
+	return cli.ExitOK
+}
+
+func printOperations(env *cli.Env, ops []catalogOperation) {
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "MODULE\tNAME\tKIND\tAREA\tINPUT\tOUTPUT\tAUTHORITY\tEFFECT\tAUDIT\tBINDINGS")
-	for _, op := range report.Operations {
+	for _, op := range ops {
 		authority := make([]string, len(op.Authority))
 		for i, a := range op.Authority {
 			authority[i] = string(a)
@@ -194,11 +216,14 @@ func printCatalog(env *cli.Env, report catalogReport) {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\n", op.Module, op.Name, op.Kind, cmp.Or(op.Area, "-"), op.Input, op.Output,
 			strings.Join(authority, ","), op.Effect, op.Audit, strings.Join(targets, " "))
 	}
-	if len(report.Unbound) > 0 {
-		_, _ = fmt.Fprintln(w, "\nUNBOUND\tKIND\tTARGET")
-		for _, u := range report.Unbound {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", u.Module, u.Kind, u.Target)
-		}
+	_ = w.Flush()
+}
+
+func printUnbound(env *cli.Env, items []catalogUnbound) {
+	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "MODULE\tKIND\tTARGET")
+	for _, u := range items {
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", u.Module, u.Kind, u.Target)
 	}
 	_ = w.Flush()
 }

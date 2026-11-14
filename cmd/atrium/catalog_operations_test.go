@@ -25,12 +25,7 @@ type catalogOperationBinding struct {
 }
 
 type catalogOperationsReport struct {
-	Operations []catalogOperationRow `json:"operations"`
-	Unbound    []struct {
-		Module string `json:"module"`
-		Kind   string `json:"kind"`
-		Target string `json:"target"`
-	} `json:"unbound"`
+	Operations   []catalogOperationRow `json:"operations"`
 	ProtocolOnly []struct {
 		Module   string `json:"module"`
 		Listener string `json:"listener"`
@@ -40,6 +35,13 @@ type catalogOperationsReport struct {
 }
 
 func runCatalogOperations(t *testing.T, args ...string) (catalogOperationsReport, int) {
+	t.Helper()
+	var report catalogOperationsReport
+	code := runCatalogOperationsInto(t, &report, args...)
+	return report, code
+}
+
+func runCatalogOperationsInto(t *testing.T, into any, args ...string) int {
 	t.Helper()
 	path := os.Getenv(builtBinaryEnv)
 	if path == "" {
@@ -57,11 +59,10 @@ func runCatalogOperations(t *testing.T, args ...string) (catalogOperationsReport
 		}
 		code = exit.ExitCode()
 	}
-	var report catalogOperationsReport
-	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+	if err := json.Unmarshal(stdout.Bytes(), into); err != nil {
 		t.Fatalf("catalog operations %v printed non-JSON (exit %d, stderr %q): %v", args, code, stderr.String(), err)
 	}
-	return report, code
+	return code
 }
 
 func hasOperation(rows []catalogOperationRow, name string) (catalogOperationRow, bool) {
@@ -129,14 +130,14 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 		t.Fatalf("protocol lifecycle/ops inventory incomplete: %+v", all.ProtocolOnly)
 	}
 
-	missing, code := runCatalogOperations(t, "--json", "--missing-api")
-	if code != 0 {
+	var missing []catalogOperationRow
+	if code := runCatalogOperationsInto(t, &missing, "--json", "--missing-api"); code != 0 {
 		t.Fatalf("catalog operations --missing-api exited %d", code)
 	}
-	if _, ok := hasOperation(missing.Operations, "auth.identity"); ok {
+	if _, ok := hasOperation(missing, "auth.identity"); ok {
 		t.Fatal("--missing-api lists auth.identity, which has an API binding")
 	}
-	for _, row := range missing.Operations {
+	for _, row := range missing {
 		if row.Area != "" {
 			t.Errorf("--missing-api lists %s, which has a typed API binding in area %s", row.Name, row.Area)
 		}
@@ -149,21 +150,29 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 
 	_, code = runCatalogOperations(t, "--json", "--require-api")
 	want := 0
-	if len(missing.Operations) > 0 {
+	if len(missing) > 0 {
 		want = 1
 	}
 	if code != want {
-		t.Fatalf("--require-api exited %d with %d operations missing an API binding, want %d", code, len(missing.Operations), want)
+		t.Fatalf("--require-api exited %d with %d operations missing an API binding, want %d", code, len(missing), want)
 	}
 
-	unbound, code := runCatalogOperations(t, "--json", "--unbound")
-	if code != 0 {
-		t.Fatalf("catalog operations --unbound exited %d", code)
+	// --unbound prints only the unbound list: a JSON array, [] when every
+	// adapter has a binding, never the operation catalog.
+	for _, args := range [][]string{{"--unbound"}, {"--json", "--unbound"}} {
+		var unbound []struct {
+			Module string `json:"module"`
+			Kind   string `json:"kind"`
+			Target string `json:"target"`
+		}
+		if code := runCatalogOperationsInto(t, &unbound, args...); code != 0 {
+			t.Fatalf("catalog operations %v exited %d", args, code)
+		}
+		if unbound == nil || len(unbound) != 0 {
+			t.Fatalf("catalog operations %v = %+v, want []", args, unbound)
+		}
 	}
-	if len(unbound.Unbound) != 0 {
-		t.Fatalf("unbound adapters: %+v", unbound.Unbound)
-	}
-	if len(missing.Operations) == 0 {
+	if len(missing) == 0 {
 		t.Fatal("missing API report unexpectedly empty before the mail API cutover")
 	}
 }

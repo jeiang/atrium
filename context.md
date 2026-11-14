@@ -301,7 +301,10 @@ behavior-parity target.
   Saving the chat defaults on `/settings/assistant` runs
   `assistant.defaults-set`: the stored settings are unchanged, and it writes
   one `operation_audit` row (`invalid` when the model, effort or context limit
-  is refused, still answered 422 with the same message).
+  is refused, still answered 422 with the same message). `PUT
+  /api/v1/assistant/defaults` (bearer only) takes the same three fields
+  (`model`, `effort`, `context_limit`) through the same operation and
+  validation, answering 422 `invalid` with that message.
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
@@ -695,8 +698,10 @@ behavior-parity target.
   refuses to start when a declared HTML/API binding is not mounted by its
   module. `atrium catalog operations [--json] [--missing-api] [--unbound]
   [--require-api]` prints that catalog without a database or credentials;
-  `--unbound` adds mounted routes, commands, tools, jobs and services that no
-  operation binds, and `--require-api` exits 1 when an operation has no API
+  `--unbound` prints only the mounted routes, commands, tools, jobs and
+  services that no operation binds (`[]` when there are none),
+  `--missing-api` prints only the operator operations without a typed API
+  binding, and `--require-api` exits 1 when an operation has no API
   binding. `GET /api/v1/me` is bound to `auth.identity`.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
