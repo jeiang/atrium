@@ -86,6 +86,8 @@ type ConnectionTestSave struct {
 	Credentials map[string]string `json:"credentials,omitempty" api:"writeonly"`
 }
 
+type ConnectionFields ConnectionTestSave
+
 type Connections struct {
 	Connections []connectionsapp.View `json:"connections"`
 }
@@ -139,6 +141,14 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 					return application.Change[connectionsapp.View]{}, err
 				}
 				return s.TestSave(ctx, connectionsapp.TestSaveInput{ID: connectionsapp.ID(in.Kind + "/" + in.Name), Label: in.Label, URL: in.URL, Credentials: in.Credentials})
+			}),
+		api.Command(d, connectionsapp.DescribeSaveFields(), application.APIShape{Area: area, Errors: refusable},
+			"PATCH /connections/{kind}/{name}", func(ctx context.Context, in ConnectionFields) (application.Change[connectionsapp.View], error) {
+				s, err := svc()
+				if err != nil {
+					return application.Change[connectionsapp.View]{}, err
+				}
+				return s.SaveFields(ctx, connectionsapp.SaveFieldsInput{ID: connectionsapp.ID(in.Kind + "/" + in.Name), Label: in.Label, URL: in.URL, Credentials: in.Credentials})
 			}),
 		api.Command(d, connectionsapp.DescribeDisconnect(), application.APIShape{Area: area, Body: application.BodyNone, Success: http.StatusNoContent, Errors: refusable},
 			"DELETE /connections/{kind}/{name}", func(ctx context.Context, in ConnectionRef) (application.Change[struct{}], error) {

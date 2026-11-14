@@ -174,7 +174,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, optional bool) bo
 	return false
 }
 
-func (d *Deps) API(method, pattern string, h http.HandlerFunc) {
+func (d *Deps) apiRoute(method, pattern string, h http.HandlerFunc) {
 	if d.commands != nil && isUnsafe(method) {
 		h = d.commands(APIPrefix+pattern, h).ServeHTTP
 	}
@@ -188,11 +188,11 @@ func (d *Deps) Command(pattern string, h http.HandlerFunc) http.HandlerFunc {
 	return d.commands(pattern, h).ServeHTTP
 }
 
-func (d *Deps) DeclaredAPI(method, pattern string, shape application.APIShape, h http.HandlerFunc) {
+func MountAPI(d *Deps, method, pattern string, shape application.APIShape, h http.HandlerFunc) {
 	if shape.ReadOnlyPost {
 		d.route(method, APIPrefix+pattern, accessDefault, h)
 	} else {
-		d.API(method, pattern, h)
+		d.apiRoute(method, pattern, h)
 	}
 	(*d.routes)[len(*d.routes)-1].api = &shape
 }

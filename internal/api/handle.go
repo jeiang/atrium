@@ -100,6 +100,16 @@ const (
 	ownerRetryAfter = 5 * time.Second
 )
 
+func Handle(d *web.Deps, b application.Binding, h http.HandlerFunc) application.Binding {
+	if b.Kind != application.API || b.API == nil {
+		panic("api: " + b.Target + " has no API shape")
+	}
+	if d != nil {
+		mount(d, b.Target, *b.API, h)
+	}
+	return b
+}
+
 func ownerBeforeBody(owner string, next func(context.Context) error) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if _, err := module.BindOwner(ctx, owner); err != nil {
@@ -150,7 +160,7 @@ func binding(def application.Definition, shape application.APIShape, target stri
 
 func mount(d *web.Deps, target string, shape application.APIShape, h http.HandlerFunc) {
 	method, pattern, _ := application.Route(target)
-	d.DeclaredAPI(method, pattern, shape, h)
+	web.MountAPI(d, method, pattern, shape, h)
 }
 
 func write(w http.ResponseWriter, shape application.APIShape, data reflect.Type, raw, envelope any) {

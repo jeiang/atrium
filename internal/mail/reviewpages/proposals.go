@@ -187,10 +187,10 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if done.Data.Applied {
-		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Applied", resultString(done.Data.Proposal.Result, "summary")))
+		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Applied", ResultString(done.Data.Proposal.Result, "summary")))
 		return
 	}
-	s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "It did not finish", resultString(done.Data.Proposal.Result, "error")))
+	s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "It did not finish", ResultString(done.Data.Proposal.Result, "error")))
 }
 
 func (s *service) decided(w http.ResponseWriter, r *http.Request, err error, missing string) (error, bool) {
@@ -320,7 +320,7 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 	}
 	s.card(w, r, id, resolvedToast(outcome))
 }
-func resultString(v any, key string) string {
+func ResultString(v any, key string) string {
 	switch x := v.(type) {
 	case map[string]any:
 		s, _ := x[key].(string)

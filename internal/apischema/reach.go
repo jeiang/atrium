@@ -15,10 +15,17 @@ type reachArea struct {
 	Bound      int                `json:"bound"`
 }
 
+type reachApproval struct {
+	Operation  application.Name `json:"operation"`
+	ReachedVia application.Name `json:"reached_via"`
+}
+
 type reachReport struct {
-	Areas         []reachArea `json:"areas"`
-	TotalRequired int         `json:"total_required"`
-	TotalBound    int         `json:"total_bound"`
+	Areas                []reachArea     `json:"areas"`
+	ApprovalReached      []reachApproval `json:"approval_reached"`
+	TotalRequired        int             `json:"total_required"`
+	TotalBound           int             `json:"total_bound"`
+	TotalApprovalReached int             `json:"total_approval_reached"`
 }
 
 func reach(cat *module.Catalog) reachReport {
@@ -34,11 +41,16 @@ func reach(cat *module.Catalog) reachReport {
 	for _, a := range application.Areas {
 		byArea[a] = &reachArea{Area: a, Operations: []application.Name{}}
 	}
-	var report reachReport
+	report := reachReport{ApprovalReached: []reachApproval{}}
 	for _, op := range cat.Operations() {
 		required := application.RequiresAPI(op.Authority)
-		if required {
+		if required || application.ApprovalOnly(op.Authority) {
 			report.TotalRequired++
+		}
+		if via := cat.ReachedVia(op); via != "" {
+			report.ApprovalReached = append(report.ApprovalReached, reachApproval{Operation: op.Name, ReachedVia: via})
+			report.TotalApprovalReached++
+			report.TotalBound++
 		}
 		a, ok := area[op.Name]
 		if !ok {

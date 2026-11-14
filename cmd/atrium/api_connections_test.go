@@ -52,6 +52,15 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 	if state := connectionState(t, f.dir, "service/grafana"); state != "ok" {
 		t.Fatalf("grafana state = %q", state)
 	}
+	patched := s.do(http.MethodPatch, "/api/v1/connections/service/grafana", token, map[string]any{"label": "Ops Grafana", "credentials": map[string]string{"api_key": "glsa_patch"}})
+	if got := apiData(t, patched, http.StatusOK); got["label"] != "Ops Grafana" || got["state"] != "untested" || strings.Contains(patched.body, "glsa_patch") {
+		t.Fatalf("save fields: %s", patched.body)
+	}
+	if n := stored("glsa_patch"); n != "1" {
+		t.Fatalf("saved credential rows = %s, want 1", n)
+	}
+	expectAPI(t, s.do(http.MethodPatch, "/api/v1/connections/service/grafana", token, map[string]any{"colour": "red"}), http.StatusBadRequest, "bad_request")
+	expectAPI(t, s.do(http.MethodPatch, "/api/v1/connections/service/missing", token, map[string]any{"label": "x"}), http.StatusNotFound, "not_found")
 	listed := s.do(http.MethodGet, "/api/v1/connections", token, nil)
 	if apiData(t, listed, http.StatusOK)["connections"] == nil || strings.Contains(listed.body, "glsa_good") {
 		t.Fatalf("connections list: %.300s", listed.body)

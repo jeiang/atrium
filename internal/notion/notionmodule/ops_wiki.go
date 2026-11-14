@@ -20,6 +20,14 @@ type WikiSearchRequest struct {
 	Limit   *int64 `query:"limit" json:"-" api:"min=1,max=100"`
 }
 
+type WikiListRequest struct {
+	Query string `query:"q" json:"-"`
+}
+
+type WikiPages struct {
+	Pages []notion.Listed `json:"pages"`
+}
+
 type WikiPageRequest struct {
 	PageID  string `path:"page_id" json:"-"`
 	Related bool   `query:"related" json:"-"`
@@ -51,6 +59,14 @@ func (m Module) wikiRoutes(d *web.Deps) []application.Binding {
 					limit = int(*in.Limit)
 				}
 				return wiki().Search(ctx, notionapp.SearchInput{Query: in.Query, Private: in.Private, Limit: limit})
+			}),
+		api.Query(d, defs[1], application.APIShape{Area: "wiki"},
+			"GET /wiki/pages", func(ctx context.Context, in WikiListRequest) (application.Read[WikiPages], error) {
+				read, err := wiki().List(ctx, notionapp.ListInput{Query: in.Query})
+				if read.Data == nil {
+					read.Data = []notion.Listed{}
+				}
+				return application.Read[WikiPages]{Revision: read.Revision, Data: WikiPages{Pages: read.Data}}, err
 			}),
 		api.Query(d, defs[2], application.APIShape{Area: "wiki", Errors: []application.Code{application.NotFound}},
 			"GET /wiki/{page_id}", func(ctx context.Context, in WikiPageRequest) (application.Read[notionapp.Detail], error) {

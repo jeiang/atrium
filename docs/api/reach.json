@@ -7,10 +7,11 @@
         "review.activity",
         "review.effect",
         "review.effects",
+        "review.undo",
         "review.undoable"
       ],
-      "required": 5,
-      "bound": 5
+      "required": 6,
+      "bound": 6
     },
     {
       "area": "composer",
@@ -89,13 +90,14 @@
         "connections.oauth-configure",
         "connections.oauth-setup",
         "connections.oauth-start",
+        "connections.save-fields",
         "connections.test",
         "connections.test-save",
         "contacts.lookup",
         "contacts.sync"
       ],
-      "required": 12,
-      "bound": 12
+      "required": 13,
+      "bound": 13
     },
     {
       "area": "knowledge",
@@ -229,11 +231,14 @@
     {
       "area": "proposals",
       "operations": [
+        "review.approve",
+        "review.dismiss",
         "review.proposal",
-        "review.proposals"
+        "review.proposals",
+        "review.resolve"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "review",
@@ -339,13 +344,61 @@
       "area": "wiki",
       "operations": [
         "wiki.detail",
+        "wiki.list",
         "wiki.search",
         "wiki.sync"
       ],
-      "required": 3,
-      "bound": 3
+      "required": 4,
+      "bound": 4
+    }
+  ],
+  "approval_reached": [
+    {
+      "operation": "assistant.lookup",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.memory.search",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.memory.zoom",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.research",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.result.recall",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.schedule.create",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.search-web",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.weather",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "assistant.web-fetch",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "calendar.request-delete",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "mail.propose-tracking",
+      "reached_via": "review.approve"
     }
   ],
   "total_required": 208,
-  "total_bound": 191
+  "total_bound": 208,
+  "total_approval_reached": 11
 }

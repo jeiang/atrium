@@ -11,11 +11,12 @@ import (
 )
 
 type catalogOperationRow struct {
-	Name      string                    `json:"name"`
-	Area      string                    `json:"area"`
-	Authority []string                  `json:"authority"`
-	Bindings  []catalogOperationBinding `json:"bindings"`
-	APIRoutes []string                  `json:"api_routes"`
+	Name       string                    `json:"name"`
+	Area       string                    `json:"area"`
+	ReachedVia string                    `json:"reached_via"`
+	Authority  []string                  `json:"authority"`
+	Bindings   []catalogOperationBinding `json:"bindings"`
+	APIRoutes  []string                  `json:"api_routes"`
 }
 
 type catalogOperationBinding struct {
@@ -148,13 +149,28 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 		}
 	}
 
-	_, code = runCatalogOperations(t, "--json", "--require-api")
-	want := 0
-	if len(missing) > 0 {
-		want = 1
+	if len(missing) != 0 {
+		t.Fatalf("--missing-api = %+v, want none", missing)
 	}
-	if code != want {
-		t.Fatalf("--require-api exited %d with %d operations missing an API binding, want %d", code, len(missing), want)
+	if _, code = runCatalogOperations(t, "--json", "--require-api"); code != 0 {
+		t.Fatalf("--require-api exited %d, want 0", code)
+	}
+	approvalOnly := []string{
+		"assistant.lookup", "assistant.memory.search", "assistant.memory.zoom", "assistant.research",
+		"assistant.result.recall", "assistant.schedule.create", "assistant.search-web", "assistant.weather",
+		"assistant.web-fetch", "calendar.request-delete", "mail.propose-tracking",
+	}
+	for _, row := range all.Operations {
+		want := ""
+		if slices.Contains(approvalOnly, row.Name) {
+			want = "review.approve"
+		}
+		if row.ReachedVia != want {
+			t.Errorf("%s reached_via = %q, want %q", row.Name, row.ReachedVia, want)
+		}
+		if want != "" && len(row.APIRoutes) != 0 {
+			t.Errorf("approval-only %s has its own API routes %v", row.Name, row.APIRoutes)
+		}
 	}
 
 	// --unbound prints only the unbound list: a JSON array, [] when every
@@ -171,8 +187,5 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 		if unbound == nil || len(unbound) != 0 {
 			t.Fatalf("catalog operations %v = %+v, want []", args, unbound)
 		}
-	}
-	if len(missing) == 0 {
-		t.Fatal("missing API report unexpectedly empty before the mail API cutover")
 	}
 }

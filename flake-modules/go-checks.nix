@@ -95,6 +95,7 @@
       docsgen = goCheck "docsgen" [] ''
         go run -tags modernc ./cmd/toolsdocs check
         go run -tags modernc ./cmd/atrium catalog openapi --check docs/api
+        go run -tags modernc ./cmd/atrium catalog operations --require-api >/dev/null
       '';
 
       ownership = goCheck "ownership" [] ''

@@ -705,9 +705,14 @@ behavior-parity target.
   [--require-api]` prints that catalog without a database or credentials;
   `--unbound` prints only the mounted routes, commands, tools, jobs and
   services that no operation binds (`[]` when there are none),
-  `--missing-api` prints only the operator operations without a typed API
-  binding, and `--require-api` exits 1 when an operation has no API
-  binding. `GET /api/v1/me` is bound to `auth.identity`.
+  `--missing-api` prints only the operations the API does not reach, and
+  `--require-api` exits 1 when there is one or when an API binding has no
+  shape (`just verify` and the Go check run it). An operation with the
+  `operator` or `operator_send` authority needs its own typed API route; one
+  whose only operator-class authority is `approved` is reached through
+  `review.approve` (`reached_via` in `--json`), which needs a typed route and
+  a non-server tool binding that can propose it. `GET /api/v1/me` is bound to
+  `auth.identity`.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
   without remounting or restarting; disabled routes keep the rendered 404
@@ -1058,6 +1063,17 @@ behavior-parity target.
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
   and `atrium writes list` go through the `review.*` operations in
   `internal/review/application`.
+- API reach (phase 10): every `/api/v1` route is a typed binding mounted
+  through `internal/api`, and `docs/api/openapi.json` and `docs/api/reach.json`
+  are generated from the catalog (`atrium catalog openapi --output docs/api`,
+  drift-checked by `--check`). All 22 feature areas are reachable; the 11
+  approval-only operations count as reached through `review.approve` and are
+  listed separately in `reach.json`. Every unsafe request is a durable command
+  with `Atrium-Command-Id` and optional `Idempotency-Key` replay. The run
+  event stream is documented in `docs/api/run-stream.md` (heartbeats,
+  `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day retention).
+  Static assets are served from content-hashed immutable URLs, and first-hour
+  bootstrap is described under the public auth default above.
 - Code execution is not part of the application. The code-mode worker
   command and units are removed; coding may return as an external module.
 

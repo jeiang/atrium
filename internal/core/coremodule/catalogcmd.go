@@ -25,17 +25,18 @@ type catalogBinding struct {
 }
 
 type catalogOperation struct {
-	Module    string                  `json:"module"`
-	Name      application.Name        `json:"name"`
-	Kind      application.Kind        `json:"kind"`
-	Input     string                  `json:"input"`
-	Output    string                  `json:"output"`
-	Authority []application.Authority `json:"authority"`
-	Effect    application.Effect      `json:"effect"`
-	Audit     bool                    `json:"audit"`
-	Area      application.Area        `json:"area,omitempty"`
-	Bindings  []catalogBinding        `json:"bindings"`
-	APIRoutes []string                `json:"api_routes"`
+	Module     string                  `json:"module"`
+	Name       application.Name        `json:"name"`
+	Kind       application.Kind        `json:"kind"`
+	Input      string                  `json:"input"`
+	Output     string                  `json:"output"`
+	Authority  []application.Authority `json:"authority"`
+	Effect     application.Effect      `json:"effect"`
+	Audit      bool                    `json:"audit"`
+	Area       application.Area        `json:"area,omitempty"`
+	ReachedVia application.Name        `json:"reached_via,omitempty"`
+	Bindings   []catalogBinding        `json:"bindings"`
+	APIRoutes  []string                `json:"api_routes"`
 }
 
 type catalogUnbound struct {
@@ -82,6 +83,12 @@ func catalogCommand(mc module.Context) *cli.Command {
 				code := cli.ExitOK
 				if *require && len(ops) > 0 {
 					code = cli.ExitError
+				}
+				for _, b := range cat.Bindings() {
+					if *require && b.Kind == application.API && b.API == nil {
+						_, _ = fmt.Fprintf(env.Stderr, "%s: API binding %s has no shape\n", b.Module, b.Target)
+						code = cli.ExitError
+					}
 				}
 				if *missing {
 					if !*asJSON && len(ops) > 0 {
@@ -157,7 +164,7 @@ func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation 
 	for _, op := range cat.Operations() {
 		row := catalogOperation{
 			Module: op.Module, Name: op.Name, Kind: op.Kind, Input: op.Input.String(), Output: op.Output.String(),
-			Authority: op.Authority, Effect: op.Effect, Audit: op.Audit, Area: areas[op.Name], Bindings: bound[op.Name], APIRoutes: []string{},
+			Authority: op.Authority, Effect: op.Effect, Audit: op.Audit, Area: areas[op.Name], ReachedVia: cat.ReachedVia(op), Bindings: bound[op.Name], APIRoutes: []string{},
 		}
 		slices.SortFunc(row.Bindings, func(a, b catalogBinding) int {
 			return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Target, b.Target))
@@ -167,7 +174,7 @@ func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation 
 				row.APIRoutes = append(row.APIRoutes, b.Target)
 			}
 		}
-		if missingAPI && (row.Area != "" || !application.RequiresAPI(op.Authority)) {
+		if missingAPI && (row.Area != "" || row.ReachedVia != "" || !application.RequiresAPI(op.Authority) && !application.ApprovalOnly(op.Authority)) {
 			continue
 		}
 		out = append(out, row)

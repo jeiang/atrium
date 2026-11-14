@@ -1,16 +1,10 @@
 package reviewpages
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
-	"reflect"
 	"strconv"
-	"strings"
 
-	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/jsonx"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
@@ -61,18 +55,13 @@ type apiDraft struct {
 	AccountConfigured    bool     `json:"account_configured"`
 }
 
-func (s *service) apiRoutes(d *web.Deps) {
-	d.API(http.MethodGet, "/pending", s.apiPending)
-	d.API(http.MethodPost, "/approvals/{proposal_id}/approve", s.apiApprove)
-	d.API(http.MethodPost, "/approvals/{proposal_id}/deny", s.apiDeny)
-	d.API(http.MethodPost, "/approvals/{proposal_id}/resolve", s.apiResolve)
-	d.API(http.MethodGet, "/undo", s.apiUndoFeed)
-	d.API(http.MethodPost, "/undo/{entry_id}", s.apiUndo)
-	d.API(http.MethodGet, "/effects", s.apiEffects)
-	d.API(http.MethodGet, "/effects/{effect_id}", s.apiEffect)
-	d.API(http.MethodPost, "/effects/{effect_id}/resolve", s.apiEffectResolve)
-	d.API(http.MethodPost, "/effects/{effect_id}/undo", s.apiEffectUndo)
-}
+type (
+	Approval        = apiApproval
+	Pending         = pendingBody
+	UndoFeedRequest = apiUndoRequest
+	EffectsRequest  = apiEffectsRequest
+	EffectRequest   = apiEffectRequest
+)
 
 func approvalOf(c reviewapp.Card) apiApproval {
 	return apiApproval{
@@ -90,6 +79,8 @@ func approvalsOf(cards []reviewapp.Card) []apiApproval {
 	}
 	return out
 }
+
+func ApprovalOf(c reviewapp.Card) Approval { return approvalOf(c) }
 
 func DraftsOf(cards []reviewapp.DraftCard, configured map[string]bool) []Draft {
 	out := make([]Draft, len(cards))
@@ -123,8 +114,8 @@ type pendingBody struct {
 	Drafts    []Draft       `json:"drafts"`
 }
 
-func (s *service) apiPending(w http.ResponseWriter, r *http.Request) {
-	found, err := s.review.Pending(r.Context(), reviewapp.PendingInput{Refs: true})
+func PendingRead(w http.ResponseWriter, r *http.Request, s *reviewapp.Service) {
+	found, err := s.Pending(r.Context(), reviewapp.PendingInput{Refs: true})
 	if err != nil {
 		web.APIFail(w, err)
 		return
@@ -144,121 +135,6 @@ func (s *service) apiPending(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func apiRefused(w http.ResponseWriter, err error, code, missing string, extra map[string]any) bool {
-	if err == nil {
-		return false
-	}
-	var e *application.Error
-	if !errors.As(err, &e) {
-		panic(err)
-	}
-	switch e.Code {
-	case application.NotFound:
-		web.APIError(w, http.StatusNotFound, "not_found", missing)
-	case application.Invalid:
-		fields := make([]web.FieldError, len(e.Fields))
-		code = "invalid"
-		for i, f := range e.Fields {
-			fields[i] = web.FieldError{Type: f.Code, Loc: []string{"body", f.Name}, Msg: f.Message}
-			if f.Name == "selection" {
-				code = "bad_selection"
-			}
-		}
-		web.APIError(w, http.StatusUnprocessableEntity, code, e.Message, fields...)
-	case application.Refused, application.Conflict:
-		if extra != nil {
-			web.APIErrorWith(w, http.StatusConflict, code, e.Message, extra)
-			return true
-		}
-		web.APIError(w, http.StatusConflict, code, e.Message)
-	default:
-		web.APIFail(w, err)
-	}
-	return true
-}
-
-func (s *service) currentApproval(ctx context.Context, id int64) apiApproval {
-	found, err := s.review.Proposal(ctx, reviewapp.ProposalInput{ID: id})
-	check(err)
-	return approvalOf(found.Data)
-}
-
-func (s *service) apiApprove(w http.ResponseWriter, r *http.Request) {
-	id, ok := web.PathID(w, r, "proposal_id")
-	if !ok {
-		return
-	}
-	var in struct {
-		Selection json.RawMessage `json:"selection"`
-	}
-	if !web.DecodeOptionalJSON(w, r, &in) {
-		return
-	}
-	input := reviewapp.ApproveInput{ProposalID: id}
-	if len(in.Selection) > 0 && string(in.Selection) != "null" {
-		picked, err := jsonx.Loads(in.Selection)
-		if err != nil {
-			panic(err)
-		}
-		input.SelectionValue = picked
-	}
-	done, err := s.review.Approve(detached(r), input)
-	var extra map[string]any
-	if done.Data.Proposal != nil {
-		extra = map[string]any{"approval": approvalOf(s.review.CardOf(done.Data.Proposal)), "outcome": "failed"}
-	}
-	if apiRefused(w, err, "not_approved", "Unknown approval.", extra) {
-		return
-	}
-	out := map[string]any{"approval": approvalOf(s.review.CardOf(done.Data.Proposal))}
-	if done.Data.Applied {
-		out["outcome"] = "applied"
-		out["summary"] = resultString(done.Data.Proposal.Result, "summary")
-	} else {
-		out["outcome"] = "failed"
-		out["error"] = resultString(done.Data.Proposal.Result, "error")
-	}
-	web.JSON(w, http.StatusOK, out)
-}
-
-func (s *service) apiDeny(w http.ResponseWriter, r *http.Request) {
-	id, ok := web.PathID(w, r, "proposal_id")
-	if !ok {
-		return
-	}
-	var in struct {
-		Forever bool `json:"forever"`
-	}
-	if !web.DecodeOptionalJSON(w, r, &in) {
-		return
-	}
-	ctx := detached(r)
-	_, err := s.review.Dismiss(ctx, reviewapp.DismissInput{ProposalID: id, Suppress: in.Forever})
-	if apiRefused(w, err, "not_dismissed", "Unknown approval.", nil) {
-		return
-	}
-	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, id)})
-}
-
-func (s *service) apiResolve(w http.ResponseWriter, r *http.Request) {
-	id, ok := web.PathID(w, r, "proposal_id")
-	if !ok {
-		return
-	}
-	var in struct {
-		Outcome string `json:"outcome"`
-	}
-	if !web.DecodeOptionalJSON(w, r, &in) {
-		return
-	}
-	ctx := detached(r)
-	_, err := s.review.Resolve(ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}, Outcome: in.Outcome})
-	if apiRefused(w, err, "not_resolved", "Unknown approval.", nil) {
-		return
-	}
-	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, id)})
-}
-
 func optionalID(w http.ResponseWriter, r *http.Request, name string) (*int64, bool) {
 	raw := web.QueryValue(r.URL.Query(), name)
 	if raw == "" {
@@ -272,7 +148,7 @@ func optionalID(w http.ResponseWriter, r *http.Request, name string) (*int64, bo
 	return &n, true
 }
 
-func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
+func UndoFeed(w http.ResponseWriter, r *http.Request, s *reviewapp.Service) {
 	thread, ok := optionalID(w, r, "thread_id")
 	if !ok {
 		return
@@ -290,7 +166,7 @@ func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
 	if after {
 		in.After = &cursor
 	}
-	found, err := s.review.Undoable(r.Context(), in)
+	found, err := s.Undoable(r.Context(), in)
 	if err != nil {
 		web.APIFail(w, err)
 		return
@@ -302,73 +178,7 @@ func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
 	web.APIRead(w, r, found.Revision, out)
 }
 
-func (s *service) undoEffectEntry(ctx context.Context, id int64) (*reviewapp.UndoEntry, error) {
-	e, err := s.review.StoredEffect(ctx, id)
-	var missing *reviewapp.EffectNotFound
-	if errors.As(err, &missing) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	entry, err := reviewapp.UndoEffectEntry(e)
-	if err != nil {
-		return nil, err
-	}
-	return &entry, nil
-}
-
-func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
-	const missing = "Unknown undo entry."
-	source, raw, _ := strings.Cut(web.PathParam(r, "entry_id"), ":")
-	id, perr := strconv.ParseInt(raw, 10, 64)
-	if perr != nil || id < 1 {
-		web.APIError(w, http.StatusNotFound, "not_found", missing)
-		return
-	}
-	ctx := detached(r)
-	switch source {
-	case "write":
-		known, err := s.undoEffectEntry(ctx, id)
-		check(err)
-		if known == nil {
-			web.APIError(w, http.StatusNotFound, "not_found", missing)
-			return
-		}
-		_, err = s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}})
-		if apiRefused(w, err, "not_undone", missing, nil) {
-			return
-		}
-		entry, err := s.undoEffectEntry(ctx, id)
-		check(err)
-		web.JSON(w, http.StatusOK, map[string]any{"entry": entry, "undone": true})
-	case "proposal":
-		done, err := s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}})
-		outcome := done.Data.Outcome
-		var extra map[string]any
-		if done.Data.Proposal != nil && (len(outcome.Outcomes) > 0 || outcome.SyncError != nil) {
-			view := outcome.Dict()
-			extra = map[string]any{"entry": reviewapp.UndoProposalEntry(done.Data.Proposal), "outcomes": view.Outcomes, "sync_error": view.SyncError}
-		}
-		if apiRefused(w, err, "not_undone", missing, extra) {
-			return
-		}
-		out := map[string]any{"entry": reviewapp.UndoProposalEntry(done.Data.Proposal), "undone": outcome.Undone}
-		if !outcome.Undone {
-			for _, o := range outcome.Outcomes {
-				if o["ok"] != true {
-					out["error"], _ = o["error"].(string)
-					break
-				}
-			}
-		}
-		web.JSON(w, http.StatusOK, out)
-	default:
-		web.APIError(w, http.StatusNotFound, "not_found", missing)
-	}
-}
-
-func (s *service) apiEffects(w http.ResponseWriter, r *http.Request) {
+func EffectsRead(w http.ResponseWriter, r *http.Request, s *reviewapp.Service) {
 	in := reviewapp.EffectsInput{
 		Origin:      web.QueryValue(r.URL.Query(), "origin"),
 		Operation:   web.QueryValue(r.URL.Query(), "operation"),
@@ -397,7 +207,7 @@ func (s *service) apiEffects(w http.ResponseWriter, r *http.Request) {
 		}
 		in.Limit = n
 	}
-	found, err := s.review.Effects(r.Context(), in)
+	found, err := s.Effects(r.Context(), in)
 	if err != nil {
 		web.APIFail(w, err)
 		return
@@ -405,48 +215,17 @@ func (s *service) apiEffects(w http.ResponseWriter, r *http.Request) {
 	web.APIRead(w, r, found.Revision, web.List[reviewapp.Effect]{Items: found.Data})
 }
 
-func (s *service) apiEffect(w http.ResponseWriter, r *http.Request) {
+func EffectRead(w http.ResponseWriter, r *http.Request, s *reviewapp.Service) {
 	id, ok := web.PathID(w, r, "effect_id")
 	if !ok {
 		return
 	}
-	found, err := s.review.Effect(r.Context(), reviewapp.EffectInput{ID: id})
+	found, err := s.Effect(r.Context(), reviewapp.EffectInput{ID: id})
 	if err != nil {
 		web.APIFail(w, err)
 		return
 	}
 	web.APIRead(w, r, found.Revision, found.Data)
-}
-
-func (s *service) apiEffectResolve(w http.ResponseWriter, r *http.Request) {
-	id, ok := web.PathID(w, r, "effect_id")
-	if !ok {
-		return
-	}
-	var in struct {
-		Outcome  string          `json:"outcome"`
-		Evidence json.RawMessage `json:"evidence"`
-	}
-	if !web.DecodeOptionalJSON(w, r, &in) {
-		return
-	}
-	done, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}, Outcome: in.Outcome, Evidence: in.Evidence})
-	if apiRefused(w, err, "not_resolved", "Unknown effect.", nil) {
-		return
-	}
-	web.JSON(w, http.StatusOK, map[string]any{"effect": done.Data.Effect})
-}
-
-func (s *service) apiEffectUndo(w http.ResponseWriter, r *http.Request) {
-	id, ok := web.PathID(w, r, "effect_id")
-	if !ok {
-		return
-	}
-	done, err := s.review.Undo(detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}})
-	if apiRefused(w, err, "not_undone", "Unknown effect.", nil) {
-		return
-	}
-	web.JSON(w, http.StatusOK, map[string]any{"effect": done.Data.Effect, "undo": done.Data.Undo, "undone": true})
 }
 
 func apiRaw(v any) json.RawMessage {
@@ -473,13 +252,4 @@ type apiEffectsRequest struct {
 }
 type apiEffectRequest struct {
 	EffectID int64 `path:"effect_id" json:"-"`
-}
-
-func APIReadBindings() []application.Binding {
-	return []application.Binding{
-		{Kind: application.API, Target: "GET /pending", Uses: []application.Name{reviewapp.PendingName}, API: &application.APIShape{Area: "review", Request: reflect.TypeFor[struct{}](), Response: reflect.TypeFor[pendingBody](), Body: application.BodyNone, Success: 200}},
-		{Kind: application.API, Target: "GET /undo", Uses: []application.Name{reviewapp.UndoableName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiUndoRequest](), Response: reflect.TypeFor[web.List[reviewapp.UndoEntry]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
-		{Kind: application.API, Target: "GET /effects", Uses: []application.Name{reviewapp.EffectsName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectsRequest](), Response: reflect.TypeFor[web.List[reviewapp.Effect]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
-		{Kind: application.API, Target: "GET /effects/{effect_id}", Uses: []application.Name{reviewapp.EffectName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectRequest](), Response: reflect.TypeFor[reviewapp.Effect](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound}}},
-	}
 }

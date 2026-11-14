@@ -86,7 +86,6 @@ func Module(o Options) web.Module {
 		r.Post("/activity/effect/{effect_id}/undo", s.undoEffect)
 		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
 
-		s.apiRoutes(d)
 		if o.Routes != nil {
 			o.Routes(d, s.review)
 		}
