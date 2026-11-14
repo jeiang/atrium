@@ -27,5 +27,11 @@ func credentialAt(ctx context.Context, q db.Querier, id, slot string) (config.Ac
 		return config.AccountCredential{}, err
 	}
 	c.Value, c.FileRef = value.String, fileRef.String
+	if c.Source == "host_file" {
+		c.FileRef = config.From(ctx).Host().Connections[id].CredentialFiles[slot]
+		if c.FileRef == "" {
+			return config.AccountCredential{}, MissingCredential{Slot: slot}
+		}
+	}
 	return c, nil
 }
