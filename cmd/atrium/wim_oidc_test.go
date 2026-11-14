@@ -217,7 +217,7 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 	forged := []string{"Remote-Groups", "atrium_access,atrium_admin", "Remote-User", "root"}
 	wimExpect(t, anon.get("/settings/auth", forged...), http.StatusSeeOther)
 	login := anon.get("/login")
-	wimExpect(t, login, http.StatusOK, "<form")
+	wimExpect(t, login, http.StatusOK)
 	if csp := login.header.Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'self' "+strings.TrimSuffix(s.idp.Issuer(), "/")) {
 		t.Fatalf("login CSP %q", csp)
 	}

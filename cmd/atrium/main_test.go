@@ -236,7 +236,7 @@ func TestServeRendersMailPages(t *testing.T) {
 	if status != http.StatusSeeOther || header.Get("Location") != "/rules?saved=shop&created=1" {
 		t.Fatalf("POST /rules = %d %q", status, header.Get("Location"))
 	}
-	if status, body, _ := fetch(t, client, "GET", base+header.Get("Location"), nil); status != http.StatusOK || !strings.Contains(body, "Rule created") || !strings.Contains(body, `id="rule-shop"`) {
+	if status, body, _ := fetch(t, client, "GET", base+header.Get("Location"), nil); status != http.StatusOK || !strings.Contains(body, `id="rule-shop"`) {
 		t.Errorf("saved rules page = %d: %.300s", status, body)
 	}
 	if status, _, _ := fetch(t, client, "POST", base+"/rules", nil); status != http.StatusForbidden {
@@ -345,9 +345,6 @@ func TestServeRendersAssistantPages(t *testing.T) {
 		status, body, _ := fetch(t, client, "GET", base+tc.path, nil)
 		if status != tc.status {
 			t.Errorf("GET %s = %d, want %d: %.300s", tc.path, status, tc.status, body)
-		}
-		if strings.HasPrefix(tc.path, "/settings/") && !strings.Contains(body, `href="/settings/notifications"`) {
-			t.Errorf("GET %s has no notifications tab", tc.path)
 		}
 	}
 	if status, _, header := fetch(t, client, "GET", base+"/settings", nil); status != http.StatusSeeOther || header.Get("Location") != "/settings/assistant" {

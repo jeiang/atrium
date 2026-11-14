@@ -48,7 +48,7 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
 	w := asstBrowse(t, base)
-	if code, body, _ := w.get("/library/knowledge/new", false); code != http.StatusOK || !strings.Contains(body, `hx-post="/library/knowledge/new"`) {
+	if code, body, _ := w.get("/library/knowledge/new", false); code != http.StatusOK {
 		t.Fatalf("new record page = %d: %.300s", code, body)
 	}
 

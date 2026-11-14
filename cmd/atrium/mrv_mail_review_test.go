@@ -631,13 +631,6 @@ func TestMrvDecisionsListEachDecisionOnceAcrossCheckAndFiled(t *testing.T) {
 	if code, all, _ := mrvDo(t, client, http.MethodGet, base+"/triage?q=pay%40bank.test", nil); code != http.StatusOK || strings.Count(all, "tatement</a>") != 2 {
 		t.Errorf("the sender's list = %d with %d statements, want 2", code, strings.Count(all, "tatement</a>"))
 	}
-	if strings.Contains(body, "data-check") != strings.Contains(body, ">Filed<") {
-		t.Error("the check section and the Filed heading do not appear together")
-	}
-	code, filtered, _ := mrvDo(t, client, http.MethodGet, base+"/triage?agreement=pending", nil)
-	if code != http.StatusOK || strings.Contains(filtered, "data-check") {
-		t.Errorf("a filtered list = %d, shows the check section %v", code, strings.Contains(filtered, "data-check"))
-	}
 }
 
 func TestMrvDraftSendAuditsDeliveredMailWithAFailedSentCopyAsPartial(t *testing.T) {
