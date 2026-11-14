@@ -215,6 +215,7 @@
     {
       "area": "settings",
       "operations": [
+        "assistant.defaults-set",
         "assistant.subagent.delete",
         "assistant.subagent.enabled",
         "assistant.subagent.list",
@@ -235,8 +236,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 19,
-      "bound": 19
+      "required": 20,
+      "bound": 20
     },
     {
       "area": "tasks",
@@ -294,5 +295,5 @@
     }
   ],
   "total_required": 206,
-  "total_bound": 140
+  "total_bound": 141
 }

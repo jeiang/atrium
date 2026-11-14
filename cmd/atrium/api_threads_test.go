@@ -109,6 +109,22 @@ func TestThreadsAPIActions(t *testing.T) {
 	if cfg.status != http.StatusOK || len(efforts) < 2 {
 		t.Fatalf("configuration: %d %s", cfg.status, cfg.body)
 	}
+	if zipped := s.do(http.MethodGet, "/api/v1/assistant/configuration", owner, nil, "Accept-Encoding", "gzip"); zipped.status != http.StatusOK || zipped.header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("JSON configuration is not compressed: %d %v", zipped.status, zipped.header)
+	}
+	// PUT /assistant/defaults takes exactly the settings page fields, with the
+	// page's validation, and only from a bearer token.
+	defaults := map[string]any{"effort": "high", "context_limit": 200000}
+	expectAPI(t, s.do(http.MethodPut, "/api/v1/assistant/defaults", "", defaults), http.StatusUnauthorized, "unauthenticated")
+	expectAPI(t, s.do(http.MethodPut, "/api/v1/assistant/defaults", owner, map[string]any{"effort": "ultra", "context_limit": 200000}), http.StatusUnprocessableEntity, "invalid")
+	expectAPI(t, s.do(http.MethodPut, "/api/v1/assistant/defaults", owner, map[string]any{"effort": "high", "context_limit": 12345}), http.StatusUnprocessableEntity, "invalid")
+	if saved := s.do(http.MethodPut, "/api/v1/assistant/defaults", owner, defaults); saved.status != http.StatusOK || saved.json["effort"] != "high" || number(t, saved.json["context_limit"]) != 200000 || saved.json["model"] == "" {
+		t.Fatalf("assistant defaults: %d %s", saved.status, saved.body)
+	}
+	after := s.do(http.MethodGet, "/api/v1/assistant/configuration", owner, nil)
+	if stored, _ := after.json["defaults"].(map[string]any); after.status != http.StatusOK || stored["effort"] != "high" || number(t, stored["context_limit"]) != 200000 {
+		t.Fatalf("configuration after defaults: %d %s", after.status, after.body)
+	}
 	if opts := s.do(http.MethodGet, "/api/v1/composer-options?model=claude-haiku-5-5&web_search=0", owner, nil); opts.status != http.StatusOK || opts.json["composer"] == nil {
 		t.Fatalf("composer options: %d %s", opts.status, opts.body)
 	}

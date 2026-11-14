@@ -110,6 +110,18 @@ func TestHashedAssetsNegotiateAndCache(t *testing.T) {
 			t.Errorf("unknown asset %s: %d", url, resp.StatusCode)
 		}
 	}
+	// HTML pages are compressed by the gzip middleware when the client accepts it.
+	page, compressed := request(http.MethodGet, "/about", "gzip", "")
+	if page.StatusCode != http.StatusOK || page.Header.Get("Content-Encoding") != "gzip" || !strings.Contains(page.Header.Get("Vary"), "Accept-Encoding") {
+		t.Fatalf("HTML page: %d %v", page.StatusCode, page.Header)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if html, err := io.ReadAll(zr); err != nil || !strings.Contains(string(html), "</html>") {
+		t.Fatalf("HTML page body: %v %.200s", err, html)
+	}
 	worker, script := request(http.MethodGet, "/static/sw.js", "", "")
 	if worker.StatusCode != http.StatusOK || worker.Header.Get("Cache-Control") != "no-cache" || worker.Header.Get("Service-Worker-Allowed") != "/" || !strings.Contains(string(script), assets["app.css"]) {
 		t.Errorf("service worker: %d %v", worker.StatusCode, worker.Header)

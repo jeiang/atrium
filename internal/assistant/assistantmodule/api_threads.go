@@ -337,6 +337,14 @@ type apiOptionsRequest struct {
 	ContextLimit *int64 `json:"context_limit"`
 }
 
+// apiDefaultsRequest carries exactly the fields the assistant settings page
+// offers; the page and the API share DefaultsSet's validation.
+type apiDefaultsRequest struct {
+	Model        string `json:"model,omitempty"`
+	Effort       string `json:"effort"`
+	ContextLimit int64  `json:"context_limit"`
+}
+
 type apiComposerRequest struct {
 	Model        string `query:"model" json:"-"`
 	Effort       string `query:"effort" json:"-"`
@@ -729,6 +737,10 @@ func apiBindings(p *apiPages) []application.Binding {
 		apiQuery(p, asstapp.DescribeConfiguration(), application.APIShape{Area: "composer"}, "GET /assistant/configuration",
 			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.ModelConfiguration], error) {
 				return svc.Configuration(ctx, asstapp.ConfigurationInput{})
+			}),
+		apiCommand(p, asstapp.DescribeDefaultsSet(), application.APIShape{Area: "settings", Errors: errs(application.Invalid)}, "PUT /assistant/defaults",
+			func(ctx context.Context, svc *asstapp.Service, in apiDefaultsRequest) (application.Change[asstapp.DefaultsChanged], error) {
+				return svc.DefaultsSet(ctx, asstapp.DefaultsSetInput{Model: in.Model, Effort: in.Effort, ContextLimit: strconv.FormatInt(in.ContextLimit, 10)})
 			}),
 		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", Errors: errs(application.Invalid)}, "GET /home",
 			func(ctx context.Context, svc *asstapp.Service, in apiHomeRequest) (application.Read[apiHome], error) {

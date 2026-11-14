@@ -221,6 +221,7 @@ func (s *apiSite) events(token string, threadID, runID int64, lastID string) (st
 		s.t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept-Encoding", "gzip")
 	if lastID != "" {
 		req.Header.Set("Last-Event-ID", lastID)
 	}
@@ -233,8 +234,8 @@ func (s *apiSite) events(token string, threadID, runID int64, lastID string) (st
 	if resp.StatusCode == http.StatusNoContent && lastID != "" {
 		return "", lastID
 	}
-	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		s.t.Fatalf("event stream: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") || resp.Header.Get("Content-Encoding") != "" {
+		s.t.Fatalf("event stream: %d %s, encoding %q (SSE is never compressed)", resp.StatusCode, resp.Header.Get("Content-Type"), resp.Header.Get("Content-Encoding"))
 	}
 	var all strings.Builder
 	last := ""
