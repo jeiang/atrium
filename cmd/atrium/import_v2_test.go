@@ -1083,6 +1083,34 @@ func TestImportV2CarriesPushDevices(t *testing.T) {
 	}
 }
 
+func TestImportV2RefusesConnectionEndpointUserinfo(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const password = "import-userinfo-must-not-be-stored"
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO settings (key, value) VALUES ('mail_embed_url', %q)", "https://operator:"+password+"@embedding.example/v1"))
+	reply := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	output := reply.stdout + reply.stderr
+	if reply.code == cli.ExitOK || !strings.Contains(output, "service/embedding") || !strings.Contains(output, "url") || !strings.Contains(output, "userinfo") {
+		t.Fatal("v2 import did not refuse endpoint userinfo with the connection and field")
+	}
+	if strings.Contains(output, password) {
+		t.Fatal("v2 import returned the userinfo password")
+	}
+	d, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connections WHERE instr(config_json, ?) > 0", password); count != "0" {
+		t.Fatal("refused v2 import stored the userinfo URL")
+	}
+	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(old_value, '') || COALESCE(new_value, ''), ?) > 0", password); count != "0" {
+		t.Fatal("refused v2 import stored userinfo in the audit")
+	}
+}
+
 func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
 	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())

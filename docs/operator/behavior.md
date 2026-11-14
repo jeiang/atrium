@@ -150,6 +150,11 @@ endpoint and applies to preferred and fallback slots. A blank known credential
 field retains the old value; it does not authorize an endpoint change. Unknown
 credential slots are refused. Boot also refuses a host takeover of a stored
 operator connection with a changed endpoint and unreplaced database credential.
+An `issuer` or provider `preset` change is an endpoint identity change too.
+
+Endpoint URLs cannot carry userinfo (`user:password@`). Such a URL is refused
+at save, at Test, at v2 import, and at boot host reconciliation; the refusal
+names the connection and field, never the URL.
 
 Module flags are restart-only. Change `<name>_enabled` through `atrium settings
 set` or host configuration, then restart serve. Settings pages show module

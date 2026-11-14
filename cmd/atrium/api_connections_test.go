@@ -176,6 +176,22 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 	t.Cleanup(stop)
 	s := &apiSite{t: t, base: base}
 	const path = "/api/v1/connections/service/grafana"
+	userinfoURL, err := url.Parse(b.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const userinfoPassword = "endpoint-userinfo-must-not-be-audited"
+	userinfoURL.User = url.UserPassword("operator", userinfoPassword)
+	for _, method := range []string{http.MethodPatch, http.MethodPut} {
+		reply := s.do(method, path, token, map[string]any{"url": userinfoURL.String()})
+		expectAPI(t, reply, http.StatusUnprocessableEntity, "invalid")
+		if strings.Contains(reply.body, userinfoPassword) {
+			t.Fatal("userinfo password was returned")
+		}
+		if !strings.Contains(reply.body, "url") || !strings.Contains(reply.body, "userinfo") {
+			t.Fatal("userinfo refusal does not name the field and cause")
+		}
+	}
 	old := map[string]string{"viewer_token": "glsa_old_viewer", "api_key": "glsa_old_fallback"}
 	apiData(t, s.do(http.MethodPut, path, token, map[string]any{"url": a.URL, "credentials": old}), http.StatusOK)
 	apiData(t, s.do(http.MethodPatch, path, token, map[string]any{"url": a.URL}), http.StatusOK)
@@ -210,6 +226,12 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 	}
 	if status, body, _ := fetch(t, browser, http.MethodPost, base+"/settings/connections/test", url.Values{"id": {"service/grafana"}, "url": {b.URL}}); status != http.StatusUnprocessableEntity || strings.Contains(body, old["viewer_token"]) {
 		t.Fatalf("HTML endpoint change: %d %s", status, body)
+	}
+	if status, body, _ := fetch(t, browser, http.MethodPost, base+"/settings/connections/test", url.Values{"id": {"service/grafana"}, "url": {userinfoURL.String()}}); status != http.StatusUnprocessableEntity || strings.Contains(body, userinfoPassword) {
+		t.Fatalf("HTML userinfo refusal: status %d; password absent %t", status, !strings.Contains(body, userinfoPassword))
+	}
+	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(old_value, '') || COALESCE(new_value, ''), ?) > 0", userinfoPassword); count != "0" {
+		t.Fatal("userinfo password entered the settings audit")
 	}
 	mu.Lock()
 	requestsAtB := append([]string(nil), seenB...)
@@ -268,5 +290,66 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 	apiData(t, s.do(http.MethodPatch, path, token, map[string]any{"url": a.URL}), http.StatusOK)
 	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana'"); count != "0" {
 		t.Fatalf("disconnect retained %s credentials", count)
+	}
+}
+
+func TestConnectionOIDCIssuerAndPresetCannotMoveARetainedClientSecret(t *testing.T) {
+	requireCipher(t)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "operator-oidc.toml", ""))
+	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
+	const original = `{"issuer":"https://issuer.example/original","preset":"generic","client_id":"atrium"}`
+	if _, err := d.Write.Exec("INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) VALUES ('service/oidc', 'service/oidc', 'Sign-in', 'operator', ?, '{}', 1, 1, 'untested', 0, 0) ON CONFLICT(id) DO UPDATE SET config_source = 'operator', config_json = excluded.config_json", original); err != nil {
+		t.Fatal(err)
+	}
+	const secret = "oidc-client-secret-retained-at-original"
+	if _, err := d.Write.Exec("INSERT INTO connection_credentials (connection_id, slot, source, value, set_at, set_by) VALUES ('service/oidc', 'client_secret', 'database', ?, 0, 'fixture')", secret); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []struct{ field, issuer, preset string }{
+		{"issuer", "https://issuer.example/changed", "generic"},
+		{"preset", "https://issuer.example/original", "keycloak"},
+	} {
+		t.Run(change.field, func(t *testing.T) {
+			host := fmt.Sprintf("[connections.\"service/oidc\"]\nkind = \"service/oidc\"\n[connections.\"service/oidc\".config]\nissuer = %q\npreset = %q\nclient_id = \"atrium\"\n", change.issuer, change.preset)
+			setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, change.field+".toml", host))
+			reply := runApp(t, "connections", "list")
+			output := reply.stdout + reply.stderr
+			if reply.code == 0 || !strings.Contains(output, "service/oidc") || !strings.Contains(output, change.field) || !strings.Contains(output, "disconnect") {
+				t.Fatal("CLI host takeover did not refuse the identity change with a field-specific remedy")
+			}
+			if strings.Contains(output, secret) {
+				t.Fatal("CLI identity refusal returned the client secret")
+			}
+			if cfg := importValue(t, d.Read, "SELECT config_json FROM connections WHERE id = 'service/oidc'"); cfg != original {
+				t.Fatal("refused OIDC takeover changed the stored configuration")
+			}
+			if value := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/oidc' AND slot = 'client_secret'"); value != secret {
+				t.Fatal("refused OIDC takeover changed the client secret")
+			}
+		})
+	}
+}
+
+func TestConnectionHostRejectsIssuerUserinfoBeforeReconciliation(t *testing.T) {
+	requireCipher(t)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	const password = "host-issuer-userinfo-must-not-be-stored"
+	host := "[connections.\"service/oidc\"]\nkind = \"service/oidc\"\n[connections.\"service/oidc\".config]\nissuer = \"https://operator:" + password + "@issuer.example/\"\nclient_id = \"atrium\"\n"
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "userinfo.toml", host))
+	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
+	before := importValue(t, d.Read, "SELECT COUNT(*) FROM connections WHERE id = 'service/oidc'")
+	reply := runApp(t, "connections", "list")
+	output := reply.stdout + reply.stderr
+	if reply.code == 0 || !strings.Contains(output, "service/oidc") || !strings.Contains(output, "issuer") || !strings.Contains(output, "userinfo") {
+		t.Fatal("host reconciliation did not refuse issuer userinfo with the connection and field")
+	}
+	if strings.Contains(output, password) {
+		t.Fatal("host refusal returned the userinfo password")
+	}
+	if after := importValue(t, d.Read, "SELECT COUNT(*) FROM connections WHERE id = 'service/oidc'"); after != before {
+		t.Fatal("refused host declaration materialized a connection")
 	}
 }

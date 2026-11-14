@@ -290,7 +290,10 @@ claims about the running application. Operator contracts are in
   PATCH/save-fields APIs refuse to retain a stored credential across an endpoint
   identity change. Replace every retained credential in the same request or
   disconnect first. Refusal happens before the connectivity test; an unchanged
-  endpoint can keep its credentials. Credential slots must belong to the
+  endpoint can keep its credentials. Issuer and provider preset changes also
+  count as endpoint identity changes. Endpoint URLs cannot contain userinfo,
+  including during v2 import and host reconciliation; refusals name the
+  connection and field, never the URL. Credential slots must belong to the
   connection kind, and credential values remain write-only.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
