@@ -698,18 +698,25 @@ func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	done := make(chan int, 1)
+	type exit struct {
+		code   int
+		stderr string
+	}
+	done := make(chan exit, 1)
 	go func() {
-		code, _, _ := r.f.Run(ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
-		done <- code
+		code, _, stderr := r.f.Run(ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
+		done <- exit{code, stderr}
 	}()
 	waitFor := func(what string, ok func() bool) {
 		t.Helper()
 		for !ok() {
-			if ctx.Err() != nil {
+			select {
+			case e := <-done:
+				t.Fatalf("serve exited %d before the watch %s: %s", e.code, what, e.stderr)
+			case <-ctx.Done():
 				t.Fatalf("watch never %s", what)
+			case <-time.After(100 * time.Millisecond):
 			}
-			time.Sleep(100 * time.Millisecond)
 		}
 	}
 	waitFor("synced the new mail", func() bool {

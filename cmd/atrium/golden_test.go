@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/golden"
@@ -174,6 +175,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
 	vars[anthropic.BaseURLEnv] = api.URL
 	vars[calendar.CalDAVEnv] = caldavURL
+	vars[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
 	for k, v := range extraEnv {
 		vars[k] = v
 	}
