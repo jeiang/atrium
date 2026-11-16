@@ -189,6 +189,16 @@ claims about the running application. Operator contracts are in
   generated `action_link_key` secret, or the host file's
   `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
   fingerprints; host-file bytes are never copied into the database.
+- A background chat run that parks on `ask_operator` while no client
+  watches its event stream sends one assistant push "atrium: question
+  waiting" (`ask:<tool call id>`, linking `/chat/<thread>`; the question
+  text stays out of it), and answering marks that inbox row read. A
+  background chat run that fails unwatched, other than an operator stop,
+  sends one system push "atrium: run failed" (`run-failed:<run id>`) naming
+  the thread and a plain failure class. Synchronous runs report to their
+  caller and scheduled runs keep the job failure push, so a run pushes at
+  most once. Connection health notices link `/settings/connections`. None
+  of these count against the agent notify caps.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable

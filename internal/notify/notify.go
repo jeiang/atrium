@@ -288,6 +288,12 @@ func MarkRead(ctx context.Context, q db.Querier, id int64, read bool, now float6
 	return n > 0, err
 }
 
+func Withdraw(ctx context.Context, q db.Querier, occurrence string, now float64) error {
+	_, err := q.ExecContext(ctx, "UPDATE notifications SET read_at = ? WHERE read_at IS NULL AND id IN "+
+		"(SELECT json_extract(after_json, '$.notification_id') FROM effects WHERE origin = 'notify' AND operation_key = ?)", now, occurrence)
+	return err
+}
+
 func Recent(ctx context.Context, q db.Querier, limit int) ([]Notification, error) {
 	return RecentBefore(ctx, q, 0, limit)
 }
