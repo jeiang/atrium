@@ -61,7 +61,7 @@
 </script>
 
 <div class="offline-status">
-  {#if !device.online}
+  {#if !device.online && device.offlineHint}
     <p>Offline.{shown} Nothing can be sent until you reconnect.</p>
   {:else}
     <p>Cannot reach atrium.{shown}</p>

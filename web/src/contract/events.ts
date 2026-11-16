@@ -46,7 +46,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<boolean> {
     done.abort();
     resolve(online);
   };
-  const timer = navigator.onLine ? setTimeout(() => finish(false), ms) : undefined;
+  const timer = setTimeout(() => finish(false), ms);
   addEventListener('online', () => finish(true), { once: true, signal: done.signal });
   signal.addEventListener('abort', () => finish(false), { once: true, signal: done.signal });
   return promise;
@@ -55,11 +55,6 @@ function sleep(ms: number, signal: AbortSignal): Promise<boolean> {
 async function stream(signal: AbortSignal, emit: (notice: AppNotice) => void): Promise<void> {
   let delay = MIN_DELAY_MS;
   while (!signal.aborted) {
-    if (!navigator.onLine) {
-      await sleep(0, signal);
-      delay = MIN_DELAY_MS;
-      continue;
-    }
     let synced = false;
     let busy = false;
     try {

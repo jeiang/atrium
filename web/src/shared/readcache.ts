@@ -108,9 +108,13 @@ async function entries(): Promise<Entry[]> {
     const request = store.getAll() as IDBRequest<Entry[]>;
     request.onsuccess = () => {
       kept = [];
-      for (const entry of request.result) {
-        if (entry.updatedAt <= now && now - entry.updatedAt < MAX_AGE_MS) kept.push(entry);
-        else store.delete(entry.key);
+      try {
+        for (const entry of request.result) {
+          if (entry.updatedAt <= now && now - entry.updatedAt < MAX_AGE_MS) kept.push(entry);
+          else store.delete(entry.key);
+        }
+      } catch {
+        kept = [];
       }
     };
   });

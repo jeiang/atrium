@@ -1187,8 +1187,13 @@ claims about the running application. Operator contracts are in
   token. Keys starting with `session`, `settings`, `connections`, `auth`,
   `tokens` or `secrets` are never kept. Sign-out, a 401, a different subject,
   a changed API contract hash or 7 days without a verified session delete
-  it; storage errors mean no cache. Writes refuse at once while the browser
-  is offline and are never queued.
+  it; storage errors mean no cache. Offline means atrium itself did not
+  answer: the last request or stream to it failed, and the next response
+  clears it. `navigator.onLine` is only a hint (the wording of the notice,
+  and the `online` and `offline` events probe the session at once), because
+  a VPN or LAN can reach atrium while the browser reports offline. While
+  offline, writes refuse at once and are never queued. A lazy page missing
+  from the device shows "Not available" instead of failing.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open

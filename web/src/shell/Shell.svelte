@@ -29,7 +29,7 @@
 
   const signedIn = $derived(session.view.status === 'signed-in' ? session.view.session : undefined);
   const cached = $derived(session.view.status === 'signed-in' && session.view.cached === true);
-  const abnormal = $derived(signedIn !== undefined && (cached || !device.online || !device.reachable));
+  const abnormal = $derived(signedIn !== undefined && (cached || !device.online));
   const shell = useShell(() => signedIn !== undefined);
 
   const frame = $derived(signedIn ? shell.data : undefined);

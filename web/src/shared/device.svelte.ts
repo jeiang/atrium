@@ -1,4 +1,4 @@
-import { onReachability } from '../contract';
+import { onReachability, webFetch } from '../contract';
 import { queryClient } from './query';
 import { setPersistence, wipe } from './readcache';
 
@@ -12,7 +12,7 @@ function storedForget(): boolean {
   }
 }
 
-export const device = $state({ online: navigator.onLine, reachable: true, forget: storedForget() });
+export const device = $state({ online: true, offlineHint: !navigator.onLine, forget: storedForget() });
 
 setPersistence(!device.forget);
 if (device.forget) void wipe();
@@ -31,17 +31,23 @@ export function setForget(on: boolean): void {
   applyForget(on);
 }
 
+function probe(): void {
+  webFetch('/session').catch(() => undefined);
+}
+
 onReachability((ok) => {
-  if (ok === device.reachable) return;
-  device.reachable = ok;
+  if (ok === device.online) return;
+  device.online = ok;
   if (ok) void queryClient.refetchQueries({ type: 'active' });
 });
 
 addEventListener('online', () => {
-  device.online = true;
+  device.offlineHint = false;
+  probe();
 });
 addEventListener('offline', () => {
-  device.online = false;
+  device.offlineHint = true;
+  probe();
 });
 addEventListener('storage', (event) => {
   if (event.key === FORGET_KEY) applyForget(event.newValue === '1');

@@ -8,6 +8,12 @@ const NON_JSON_SUCCESS = ['application/octet-stream', 'text/event-stream'];
 let csrfToken: string | undefined;
 let unauthorized: ((signIn: WebSignIn | undefined) => void) | undefined;
 let reached: ((ok: boolean) => void) | undefined;
+let reachable = true;
+
+function reach(ok: boolean): void {
+  reachable = ok;
+  reached?.(ok);
+}
 
 export const OFFLINE_MESSAGE = 'You are offline. Nothing was sent.';
 
@@ -36,7 +42,7 @@ export async function webFetch(url: string, init: RequestInit = {}): Promise<Res
   if (typeof init.body === 'string' && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const method = (init.method ?? 'GET').toUpperCase();
   if (UNSAFE[method]) {
-    if (!navigator.onLine) throw new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } });
+    if (!reachable) throw new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } });
     if (!headers.has('Idempotency-Key')) headers.set('Idempotency-Key', crypto.randomUUID());
     if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
   }
@@ -44,10 +50,10 @@ export async function webFetch(url: string, init: RequestInit = {}): Promise<Res
   try {
     res = await fetch(API_BASE + url, { ...init, headers, credentials: 'same-origin' });
   } catch (error) {
-    if (!init.signal?.aborted) reached?.(false);
+    if (!init.signal?.aborted) reach(false);
     throw error;
   }
-  reached?.(true);
+  reach(true);
   if (res.status === 401 && !url.startsWith('/session') && unauthorized) {
     const type = res.headers.get('Content-Type') ?? '';
     const body = type.includes('json')

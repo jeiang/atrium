@@ -6,7 +6,7 @@ function retry(failures: number, error: unknown): boolean {
   return failures < 2;
 }
 
-onlineManager.setOnline(navigator.onLine);
+onlineManager.setEventListener(() => undefined);
 
 export const queryClient = new QueryClient({
   defaultOptions: {

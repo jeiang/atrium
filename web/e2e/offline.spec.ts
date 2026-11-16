@@ -220,6 +220,42 @@ test.describe('the cached shell', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Spaces' })).toBeVisible();
   });
 
+  test('a page missing from the device shows that it is not available', async ({ page, site }) => {
+    await signedIn(page, `${site.url}/next/`);
+    await workerReady(page);
+    const removed = await page.evaluate(async () => {
+      const [name] = (await caches.keys()).filter((key) => key.startsWith('next-shell-'));
+      const cache = await caches.open(name ?? '');
+      const gone: string[] = [];
+      for (const request of await cache.keys()) {
+        if (!/\/assets\/AppsPage-/.test(request.url)) continue;
+        gone.push(request.url);
+        await cache.delete(request);
+      }
+      return gone;
+    });
+    expect(removed).toHaveLength(1);
+    site.down(true);
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Apps', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Not available' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Try again' }).first()).toBeVisible();
+  });
+
+  test('a browser that reports offline while atrium answers stays online', async ({ page, site }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, 'onLine', { get: () => false });
+    });
+    await signedIn(page, `${site.url}/next/`);
+    await expect(inboxCount(page)).toContainText('3');
+    const probes = site.api.calls.length;
+    await page.evaluate(() => dispatchEvent(new Event('offline')));
+    await expect.poll(() => site.api.calls.length).toBeGreaterThan(probes);
+    await expect(page.locator('.offline-status')).toHaveCount(0);
+    await openAccount(page);
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
+    await expect.poll(() => site.api.logouts).toBe(1);
+  });
+
   test('the worker never answers API, stream or sign-in requests', async ({ page, site }) => {
     const fromWorker: string[] = [];
     page.on('response', (response) => {

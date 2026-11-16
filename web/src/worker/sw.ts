@@ -26,9 +26,12 @@ async function prune(): Promise<void> {
   await Promise.all(keys.filter((key) => key.startsWith(PREFIX) && key !== CACHE).map((key) => caches.delete(key)));
 }
 
-async function asset(request: Request): Promise<Response> {
-  const cache = await caches.open(CACHE);
-  return (await cache.match(request)) ?? fetch(request);
+async function asset(request: Request, pathname: string): Promise<Response> {
+  const cached = await caches
+    .open(CACHE)
+    .then((cache) => cache.match(pathname))
+    .catch(() => undefined);
+  return cached ?? fetch(request).catch(() => Response.error());
 }
 
 async function shell(): Promise<Response | undefined> {
@@ -78,7 +81,7 @@ worker.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== worker.location.origin || !url.pathname.startsWith(BASE)) return;
   if (url.pathname.startsWith(`${BASE}assets/`)) {
-    event.respondWith(asset(request));
+    if (precached.has(url.pathname)) event.respondWith(asset(request, url.pathname));
   } else if (request.mode === 'navigate') {
     event.respondWith(navigate(request));
   }
