@@ -280,6 +280,8 @@ func (n *Snapshot) Status(name string) (Status, bool) {
 	return Status{}, false
 }
 
+func (n *Snapshot) Statuses() []Status { return slices.Clone(n.statuses) }
+
 func (n *Snapshot) Attention() []attention.Source {
 	var out []attention.Source
 	for _, r := range n.set.decls {

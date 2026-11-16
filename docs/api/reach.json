@@ -65,7 +65,7 @@
         "assistant.today.ensure",
         "calendar.find-slot",
         "calendar.list",
-        "state.events"
+        "core.shell"
       ],
       "required": 6,
       "bound": 6
@@ -281,6 +281,7 @@
         "auth.bearer-revoke",
         "auth.configuration",
         "auth.identity",
+        "core.about",
         "maintenance.backup",
         "maintenance.check",
         "maintenance.db-backup",
@@ -292,8 +293,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 20,
-      "bound": 20
+      "required": 21,
+      "bound": 21
     },
     {
       "area": "tasks",
@@ -397,7 +398,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 207,
-  "total_bound": 207,
+  "total_required": 208,
+  "total_bound": 208,
   "total_approval_reached": 11
 }
