@@ -35,6 +35,8 @@ func ParseTarget(value string) (Target, error) {
 		return ICloud, nil
 	case Google:
 		return Google, nil
+	case Birthdays:
+		return "", errReadOnly
 	}
 	return "", Error("calendar must be one of " + TargetsText)
 }
@@ -53,6 +55,8 @@ func ParseFilter(value string) (Filter, error) {
 		return Filter{Target: Google}, nil
 	case strings.EqualFold(trimmed, ICloud):
 		return Filter{Target: ICloud}, nil
+	case strings.EqualFold(trimmed, Birthdays):
+		return Filter{Target: Birthdays}, nil
 	}
 	return Filter{Target: ICloud, Collection: trimmed}, nil
 }
@@ -246,7 +250,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 	events, notes := []Row{}, []string{}
 	reached := 0
 	var googleErr error
-	if filter.Target != Google {
+	if filter.Target == "" || filter.Target == ICloud {
 		if dir := set.CalendarDir; dir != "" {
 			found, extra, err := MirrorEvents(dir, ws, we, tz, filter.Collection, set.MaxOccurrences)
 			var missing NotConfigured
@@ -262,6 +266,14 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 			}
 		} else {
 			notes = append(notes, "ATRIUM_CALENDAR_CALENDAR_DIR not set: iCloud mirror skipped")
+		}
+	}
+	if filter.Target == "" || filter.Target == Birthdays {
+		if found, ok := birthdayRows(set.ContactsDir, ws, we, tz); ok {
+			events = append(events, found...)
+			reached++
+		} else if filter.Target == Birthdays {
+			notes = append(notes, "contacts are not synced: Birthdays skipped")
 		}
 	}
 	if filter.Target == "" || filter.Target == Google {

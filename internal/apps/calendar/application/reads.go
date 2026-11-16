@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -19,6 +20,7 @@ type Listing struct {
 	Value     map[string]any `json:"value"`
 	Messages  bool           `json:"-"`
 	Untrusted bool           `json:"-"`
+	PII       bool           `json:"-"`
 }
 
 type FindSlotInput struct {
@@ -47,7 +49,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 		return application.Read[Listing]{}, classify(err)
 	}
 	marked := len(listing.Events) > 0
-	out := Listing{Value: listing.Dict(), Messages: marked, Untrusted: marked}
+	out := Listing{Value: listing.Dict(), Messages: marked, Untrusted: marked, PII: slices.ContainsFunc(listing.Events, func(r calendar.Row) bool { return r.Calendar == calendar.Birthdays })}
 	rev, err := s.read(ctx, ListName, []string{state.Calendar, state.Settings, state.Connections}, in, out.Value)
 	if err != nil {
 		return application.Read[Listing]{}, err

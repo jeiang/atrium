@@ -186,11 +186,10 @@
         "mail.search",
         "mail.shadow-report",
         "mail.sync",
-        "mail.triage",
-        "mail.upcoming-birthdays"
+        "mail.triage"
       ],
-      "required": 42,
-      "bound": 42
+      "required": 41,
+      "bound": 41
     },
     {
       "area": "media",
@@ -407,7 +406,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 231,
-  "total_bound": 231,
+  "total_required": 230,
+  "total_bound": 230,
   "total_approval_reached": 11
 }

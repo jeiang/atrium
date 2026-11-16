@@ -263,7 +263,7 @@ func targetOf(raw map[string]any) (Target, error) {
 	}
 	target, err := ParseTarget(s)
 	if err != nil {
-		return "", ProposalError(err.Error())
+		return "", proposalError(err)
 	}
 	return target, nil
 }
@@ -273,7 +273,7 @@ func uidOf(raw map[string]any) (string, error) {
 	if !ok || strings.TrimSpace(s) == "" {
 		return "", ProposalError("uid is required")
 	}
-	return s, nil
+	return s, RefuseBirthday(s)
 }
 
 func (p *Proposals) ProposeUpdate(ctx context.Context, raw map[string]any) (int64, bool, error) {

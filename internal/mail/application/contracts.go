@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/backlog"
-	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/executors"
@@ -80,7 +79,6 @@ const (
 	AgentMailMaxResults    = assistant.TuningAgentMailMaxResults
 	AgentMailBodyChars     = assistant.TuningAgentMailBodyChars
 	AgentMailMaxLoopsLimit = assistant.TuningAgentMailMaxLoopsLimit
-	BirthdaysMaxDays       = birthdays.MaxDays
 	PassResource           = mail.PassResource
 	MailTriage             = executors.MailTriage
 	TriageArchive          = executors.TriageArchive
@@ -119,10 +117,6 @@ func ErrorMessage(err error) string { return httpx.Message(err) }
 func SearchText(value string) *string { return search.Text(value) }
 
 func SearchDay(value string, endOfDay bool) (*float64, error) { return search.Day(value, endOfDay) }
-
-func BirthdayDate(year int, month time.Month, day int) time.Time {
-	return birthdays.Date(year, month, day)
-}
 
 func Zone(ctx context.Context, env config.Env) (*time.Location, error) {
 	return scheduler.Zone(config.From(ctx).TZName(env))

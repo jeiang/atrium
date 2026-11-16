@@ -138,7 +138,7 @@ func (p *Proposals) Propose(ctx context.Context, raw map[string]any, source map[
 	if s, ok := raw["calendar"].(string); ok && s != "" {
 		parsed, err := ParseTarget(s)
 		if err != nil {
-			return 0, false, ProposalError(err.Error())
+			return 0, false, proposalError(err)
 		}
 		target = parsed
 	}

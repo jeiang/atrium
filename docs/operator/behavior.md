@@ -707,8 +707,8 @@ so the same request can be tried later. A disabled owner at admission returns
 creates proposals. Rule preview and unpaid replay are read-only POST routes
 without command/idempotency admission; paid replay is not offered by the API.
 
-Reads expose ETags where supported. The nine mail resource projections for
-message, rules, rules export, accounts, loops, commitments, packages, birthdays,
+Reads expose ETags where supported. The eight mail resource projections for
+message, rules, rules export, accounts, loops, commitments, packages,
 and single draft track the actual served payload. Draft PATCH and send accept
 that draft's ETag in `If-Match`; revision compare-and-swap still protects the
 write. Knowledge PATCH does not support `If-Match`.
