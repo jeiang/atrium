@@ -5,10 +5,10 @@ import (
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 
+	"github.com/jeiang/atrium/internal/apps/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
-	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"

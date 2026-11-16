@@ -750,7 +750,7 @@ func (s *Store) fill(ctx context.Context, v *View) error {
 	if s.reg != nil {
 		v.Dependents = s.reg.dependents(*v)
 	}
-	if v.Enabled && idle(v.Dependents) {
+	if v.Enabled && s.reg != nil && s.reg.idle(v.Dependents) {
 		v.Idle = ReasonUnitOff
 	}
 	return nil

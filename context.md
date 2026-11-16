@@ -34,7 +34,7 @@ claims about the running application. Operator contracts are in
   birthdays stay under mail. The agenda answers 404 when no provider's unit
   is on and 503 `unavailable` when the calendar cannot be listed, for example
   when no calendar is configured. `tools/adapterboundary` fails when an
-  assistant package imports `internal/calendar` outside its listed
+  assistant package imports `internal/apps/calendar` outside its listed
   exceptions, or when `internal/day` imports any unit.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
@@ -152,11 +152,12 @@ claims about the running application. Operator contracts are in
 - A space is a `projects` row presented in Knowledge; the table, its
   columns and the thread, file, record and task `project_id` links are
   unchanged, so nothing moves. `/api/v1/knowledge/spaces` lists them and
-  creates one, `/knowledge/spaces/{id}` reads the space page (fields, the
+  creates one (effort and context limit default to the thread defaults), `/knowledge/spaces/{id}` reads the space page (fields, the
   instructions split into sections like a subject page, files, chat
   threads, tasks whose source is `project`/id, records linked to it, and
   counts), edits name, instructions, effort, context limit and the private
-  flag, and `/archive` archives or restores it; files live under
+  flag (an optional `If-Match`, the read ETag or the numeric `updated_at`,
+  refuses a stale edit with 409 `stale`), and `/archive` archives or restores it; files live under
   `/knowledge/spaces/{id}/files`. The `/projects*` API is removed. A
   record links to a space with target kind `space` (state `live` or
   `archived`, address `/knowledge/spaces/{id}`). The instructions still
@@ -504,8 +505,9 @@ claims about the running application. Operator contracts are in
 - Unit lifecycle (`internal/connections/lifecycle.go`): the module set signals
   the registry on every publish; the health watch then runs `SyncUnits`, which
   disables operator-owned built-in rows (the `builtinConnections` list) whose
-  dependents are all inactive (reason `its app is off`) and re-enables them as
-  untested when a dependent returns. Operator-created and host rows are never
+  dependents' units are all turned off (`Status.On`, the flag; a unit that is
+  on but blocked still counts as on) with reason `its app is off`, and
+  re-enables them as untested when one is turned on again. Operator-created and host rows are never
   written; the view computes `idle` instead, and idle rows skip scheduled
   checks, `announce` and repairs. `connections.enable`/`connections.disable`
   (`POST /connections/{kind}/{name}/enable|disable`, operator-only) refuse host
@@ -959,12 +961,19 @@ claims about the running application. Operator contracts are in
   `automation.pause` and `automation.resume`, bump the `automation` event
   topic and send the pause notice, and `GET /shell` carries the same state
   as `pause`. `POST /api/v1/mail/live/pause` and `/resume` and `atrium live
-  pause|resume` are aliases of the same pause with unchanged shapes.
+  pause|resume` are aliases of the same pause with unchanged shapes: each
+  gesture records one `automation.*` audit row and, with notifications on,
+  one notice.
 - Each `module.Declaration` states its contract: `Name` (the stable id),
   `Title`, `Core` (the platform core), `App` (a switchable app; units with
   `App` false are core units), `Depends` (other units it needs on),
   `Needs` (connection kinds, hard or `Soft`), `Packages` (the `internal/`
-  package roots it owns; the longest matching root wins) and `Tables`.
+  package roots it owns; the longest matching root wins; every package under
+  `internal/apps/<name>` belongs to the unit `<name>`) and `Tables`. The
+  Calendar app lives in `internal/apps/calendar` (providers, mirror, ICS and
+  recurrence, proposals and undo, invitations, its tools, CLI, HTTP
+  operations, `day` provider and `event:` resolver); only the candidate
+  queue stays in `internal/calendar/candidates` until the candidates move.
   `module.Compile` fails start on an empty title, a core declaration that is
   an app or declares dependencies, an unknown dependency, a core unit that
   depends on an app, a dependency cycle (named in order), a need for a
@@ -1629,6 +1638,15 @@ claims about the running application. Operator contracts are in
   `<source type>:<source id>`; `GET /queue/{item_id}` returns one item, so
   `proposal:<id>` and `draft:<id>` resolve the old proposal and draft
   addresses. `GET /pending` keeps its older proposals-plus-drafts count.
+  Open-loop attention items carry `loop_id` (the `open_loops` rowid the
+  `/mail/loops/{loop_id}/...` verbs take). `GET /home` returns `needs_you`
+  (`total`, `counts`, and the first three `items`) from the same queue read,
+  and its revision folds in the queue revision.
+- `POST /commitments/{ref}/snooze` (`commitments.snooze`, body `until` in Unix
+  seconds, in the future, open items only) writes `attention_snoozes` through
+  one local undoable effect (`task_snooze` or `commitment_snooze`); the item
+  leaves `/queue` and Needs you until then and `/commitments` shows
+  `snoozed_until`.
   Operations may carry an OpenAPI `description`
   (`application.APIShape.Description`); the queue's lists the topics to
   refetch on.
@@ -1663,8 +1681,9 @@ claims about the running application. Operator contracts are in
 - Search has its own `assistant.search` operation; its cursors are shared with `/threads?q=…`. New cursors bind the operation, filters and path parameters; legacy thread and inbox cursors remain accepted. Schedule history remains readable for cancelled jobs and returns not_found for absent jobs on every page. API subagent saves refuse built-in definitions without changing the CLI's editing behavior. OpenAPI marks handler-required schedule and enabled fields as required, while queued memory work remains optional.
 - One search, `search.all` at `GET /search/all` (core module, operator
   authority, never writes), covers threads, mail messages, knowledge records,
-  tasks and library files. `types` (comma list of `thread`, `message`,
-  `record`, `task`, `file`) narrows it; `limit` (1 to 20, default 5) is per
+  tasks, library files, spaces and contacts. `types` (comma list of `thread`,
+  `message`, `record`, `task`, `file`, `space`, `contact`) narrows it; a contact
+  hit has no numeric id and names its vCard UID in `ref`; `limit` (1 to 20, default 5) is per
   type. Each type comes from the module that owns it and only while that
   module is on; messages come only from enabled accounts. The answer holds a
   group per type in its own best-match order, a `top` list of at most five

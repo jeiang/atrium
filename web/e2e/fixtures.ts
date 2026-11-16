@@ -84,6 +84,7 @@ const mockStreamAborted =
 const firefoxUnlocatedInvalidState =
   '[JavaScript Error: "InvalidStateError: An attempt was made to use an object that is not, or is no longer, usable"]';
 const resizeObserverDeferred = 'ResizeObserver loop completed with undelivered notifications';
+const firefoxFontAborted = /downloadable font: download failed .*status=2152398850 /;
 
 function unlocatedFirefoxInvalidState(browserName: string, message: ConsoleMessage): boolean {
   const { url, lineNumber, columnNumber } = message.location();
@@ -110,6 +111,7 @@ export const test = base.extend<{ problems: string[]; allowStatus: number[]; all
         if (unlocatedFirefoxInvalidState(browserName, message)) return;
         if (allowConsole.some((pattern) => pattern.test(message.text()))) return;
         if (browserName === 'webkit' && message.text().includes(resizeObserverDeferred)) return;
+        if (browserName === 'firefox' && firefoxFontAborted.test(message.text())) return;
         problems.push(`console error: ${message.text()}`);
       });
       page.on('pageerror', (error) => {

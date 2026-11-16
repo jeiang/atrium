@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/applier"
@@ -301,7 +302,13 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 			if err != nil {
 				return application.Read[MailSearchPage]{}, err
 			}
-			r, err := svc().Search(ctx, mailapp.SearchInput{Query: in.Q, Limit: int(in.Limit) + 1, Offset: offset, Filters: search.Filters{Account: search.Text(in.Account), Folder: search.Text(in.Folder), From: search.Text(in.From), Unread: in.Unread, Flagged: in.Flagged, HasAttachment: in.HasAttachment, DateFrom: in.DateFrom, DateTo: in.DateTo}})
+			var disabled []string
+			for _, a := range config.From(ctx).Accounts() {
+				if !a.Enabled {
+					disabled = append(disabled, a.Name)
+				}
+			}
+			r, err := svc().Search(ctx, mailapp.SearchInput{Query: in.Q, Limit: int(in.Limit) + 1, Offset: offset, Filters: search.Filters{Account: search.Text(in.Account), Folder: search.Text(in.Folder), From: search.Text(in.From), Unread: in.Unread, Flagged: in.Flagged, HasAttachment: in.HasAttachment, DateFrom: in.DateFrom, DateTo: in.DateTo, Disabled: disabled}})
 			if err != nil {
 				return application.Read[MailSearchPage]{}, err
 			}

@@ -26,6 +26,7 @@
         (root + "/web/src/tokens/gen")
       ])))
       (root + "/docs/api/openapi.json")
+      (root + "/docs/api/settings-schema.json")
       (lib.fileset.maybeMissing (root + "/design/tokens"))
     ];
   };

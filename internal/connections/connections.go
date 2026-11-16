@@ -88,6 +88,7 @@ type Registry struct {
 	defs   map[Kind]Definition
 	needs  []Need
 	active func(string) bool
+	on     func(string) bool
 	sync   *AccountSync
 	notify Notifier
 	units  chan struct{}

@@ -2,16 +2,19 @@ package assistantmodule
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/search"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/textsearch"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 func SearchSources() []search.Source {
@@ -20,6 +23,7 @@ func SearchSources() []search.Source {
 		{Type: search.Record, Find: findRecords},
 		{Type: search.Task, Find: findTasks},
 		{Type: search.File, Find: findFiles},
+		{Type: search.Space, Find: findSpaces},
 	}
 }
 
@@ -107,6 +111,36 @@ func findFiles(ctx context.Context, env search.Env, q search.Query) (search.Page
 			h.Detail, h.Path = f.ProjectName, "/knowledge/spaces/"+strconv.FormatInt(f.ProjectID, 10)+"/files/"+strconv.FormatInt(f.ID, 10)
 		}
 		page.Hits = append(page.Hits, h)
+	}
+	return page, nil
+}
+
+func findSpaces(ctx context.Context, env search.Env, q search.Query) (search.Page, error) {
+	found, err := projects.List(ctx, env.DB.Read, false)
+	if err != nil {
+		return search.Page{}, err
+	}
+	terms := strings.Fields(textutil.Casefold(q.Text))
+	var page search.Page
+	skipped := 0
+	for _, p := range found {
+		haystack := textutil.Casefold(p.Name + " " + p.Instructions)
+		if len(terms) == 0 || slices.ContainsFunc(terms, func(t string) bool { return !strings.Contains(haystack, t) }) {
+			continue
+		}
+		if skipped < q.Offset {
+			skipped++
+			continue
+		}
+		snippet, matches := search.Excerpt(p.Name, q.Text)
+		if len(matches) == 0 {
+			snippet, matches = search.Excerpt(p.Instructions, q.Text)
+		}
+		page.Hits = append(page.Hits, search.Hit{Type: search.Space, ID: p.ID, Title: p.Name, Snippet: snippet, Matches: matches, When: p.UpdatedAt,
+			Path: "/knowledge/spaces/" + strconv.FormatInt(p.ID, 10), Private: bool(p.Private)})
+		if len(page.Hits) >= q.Limit {
+			break
+		}
 	}
 	return page, nil
 }

@@ -86,6 +86,9 @@ func NewSet(cat *Catalog, reg *settings.Registry, env config.Env, open Opener) (
 		cat.conns.Activate(func(name string) bool {
 			snap := s.Current()
 			return snap == nil || snap.Enabled(name)
+		}, func(name string) bool {
+			snap := s.Current()
+			return snap == nil || snap.TurnedOn(name)
 		})
 	}
 	return s, nil
@@ -268,9 +271,10 @@ func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map
 	states := map[string]State{}
 	statuses := make([]Status, 0, len(decls))
 	for _, r := range decls {
-		st := Status{Name: r.Name, State: Enabled}
+		st := Status{Name: r.Name, State: Enabled, On: true}
 		if !r.Core {
 			unmet, on, err := fn(ctx, r, states)
+			st.On = on
 			var broken *requirementError
 			switch {
 			case errors.As(err, &broken):
@@ -352,6 +356,11 @@ func (n *Snapshot) Visible(name string) bool {
 func (n *Snapshot) Enabled(name string) bool {
 	st, ok := n.Status(name)
 	return ok && st.State == Enabled
+}
+
+func (n *Snapshot) TurnedOn(name string) bool {
+	st, ok := n.Status(name)
+	return ok && (st.On || st.State == Unavailable)
 }
 
 func (n *Snapshot) ServicesOf(owner string) []runtime.ServiceDefinition {

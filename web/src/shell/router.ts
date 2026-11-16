@@ -1,5 +1,6 @@
 import { createRouter } from 'sv-router';
 import { preloadMarkdown } from '../shared/markdown/load';
+import { routeLoaded } from './firstView';
 import NotFound from './NotFound.svelte';
 import { appById } from './nav';
 import Unavailable from './Unavailable.svelte';
@@ -12,12 +13,13 @@ declare module 'sv-router' {
 
 const unavailable = () => ({ default: Unavailable });
 
-const placeholder = () => import('./PlaceholderPage.svelte').catch(unavailable);
 const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgePage.svelte').catch(unavailable));
 const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
 
+const settingsPage = () => import('../features/settings/SettingsPage.svelte').catch(unavailable);
 export const { p, navigate, isActive, route } = createRouter(
   {
+    hooks: { afterLoad: routeLoaded },
     '/': { '/': () => import('../features/home/HomePage.svelte').catch(unavailable), meta: { title: 'Home' } },
     '/inbox': {
       '/': () => import('../features/inbox/InboxPage.svelte').catch(unavailable),
@@ -61,9 +63,20 @@ export const { p, navigate, isActive, route } = createRouter(
       '/:app': () => import('./AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },
     },
-    '/assistant': { '/': placeholder, meta: { title: 'Assistant' } },
+    '/assistant': {
+      '/': () => import('../features/assistant/RoutinesPage.svelte').catch(unavailable),
+      '/behavior': () => import('../features/assistant/BehaviorPage.svelte').catch(unavailable),
+      '/authority': () => import('../features/assistant/AuthorityPage.svelte').catch(unavailable),
+      '/spend': () => import('../features/assistant/SpendPage.svelte').catch(unavailable),
+      '/routines': {
+        '/': () => import('../features/assistant/RoutinesPage.svelte').catch(unavailable),
+        '/:id': () => import('../features/assistant/RoutinesPage.svelte').catch(unavailable),
+      },
+      meta: { title: 'Assistant' },
+    },
     '/settings': {
-      '/': placeholder,
+      '/': settingsPage,
+      '/:group': settingsPage,
       '/connections': {
         '/': () => import('../features/connections/ConnectionsPage.svelte').catch(unavailable),
         '/:kind/:name': () => import('../features/connections/ConnectionPage.svelte').catch(unavailable),

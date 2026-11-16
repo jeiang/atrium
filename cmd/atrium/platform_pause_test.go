@@ -76,6 +76,7 @@ func TestPlatformPauseHonorsTheOldBinaryPauseFileForMailWrites(t *testing.T) {
 	}
 
 	m.run(t, "live", "resume")
+	pauseTrail(t, func(q string) string { return m.scalar(t, q) }, "the CLI resume", "R", "R")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("resume left the pause file: %v", err)
 	}
@@ -96,6 +97,7 @@ func TestPlatformPauseHonorsTheOldBinaryPauseFileForMailWrites(t *testing.T) {
 	}
 
 	m.run(t, "live", "pause")
+	pauseTrail(t, func(q string) string { return m.scalar(t, q) }, "the CLI pause", "RP", "RP")
 	raw, err := os.ReadFile(path)
 	if err != nil || !strings.Contains(string(raw), `"since"`) {
 		t.Fatalf("the new pause file %q, %v", raw, err)
@@ -110,6 +112,14 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
 	path := writeOldPauseFile(t, dir)
+	scalar := func(q string) string {
+		t.Helper()
+		var v string
+		if err := d.Read.QueryRow(q).Scan(&v); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		return v
+	}
 	token := localAPIToken(t, "pause")
 	base, _, stop := startServeStoppable(t, f.dir)
 	s := &apiSite{t: t, base: base}
@@ -139,7 +149,9 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	if got := apiData(t, s.do(http.MethodGet, "/api/v1/automation/pause", token, nil), http.StatusOK); got["paused"] != false {
 		t.Fatalf("pause state after a separate resume: %v", got)
 	}
+	pauseTrail(t, scalar, "a separate CLI resume", "R", "R")
 	cliProcess("live", "pause")
+	pauseTrail(t, scalar, "a separate CLI pause", "RP", "RP")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("a separate pause wrote no file: %v", err)
 	}
@@ -180,20 +192,32 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/resume", token, nil), http.StatusOK); got["paused"] != false || len(got) != 1 {
 		t.Fatalf("mail resume alias: %v", got)
 	}
+	pauseTrail(t, scalar, "the alias resume", "RPRPR", "RPRPR")
 	if got := apiData(t, s.do(http.MethodGet, "/api/v1/automation/pause", token, nil), http.StatusOK); got["paused"] != false {
 		t.Fatalf("pause state after the alias resume: %v", got)
 	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation IN ('automation.pause', 'automation.resume') AND outcome = 'ok'"); n != 2 {
-		t.Fatalf("%d platform pause audits, want 2", n)
-	}
+	browser := newWebClient(t, s.base, nil)
+	browser.session("local")
+	apiData(t, browser.do(http.MethodPost, "/web/v1/automation/pause", map[string]any{}), http.StatusOK)
+	apiData(t, browser.do(http.MethodPost, "/web/v1/automation/resume", nil), http.StatusOK)
+	pauseTrail(t, scalar, "the web prefix pause and resume", "RPRPRPR", "RPRPRPR")
 
 	stop()
 	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "false"})
-	s.base = startServeIn(t, f.dir)
+	base, _, stop = startServeStoppable(t, f.dir)
+	s.base = base
 	apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/pause", token, nil), http.StatusOK)
 	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/resume", token, nil), http.StatusOK); got["paused"] != false {
 		t.Fatalf("mail resume alias with mail off: %v", got)
 	}
+	pauseTrail(t, scalar, "the aliases with mail off", "RPRPRPRPR", "RPRPRPRPR")
+
+	stop()
+	seedSettings(t, map[string]string{module.FlagKey(unit.Notifications): "false"})
+	s.base = startServeIn(t, f.dir)
+	cliProcess("live", "pause")
+	apiData(t, s.do(http.MethodPost, "/api/v1/automation/resume", token, nil), http.StatusOK)
+	pauseTrail(t, scalar, "a pause and resume with notifications off", "RPRPRPRPR", "RPRPRPRPRPR")
 }
 
 func TestPlatformPauseIsNotAnAgentTool(t *testing.T) {
@@ -220,5 +244,20 @@ func TestPlatformPauseIsNotAnAgentTool(t *testing.T) {
 	}
 	if got := runApp(t, "live", "status"); !strings.Contains(got.stdout, `"paused": false`) {
 		t.Fatalf("live status after the agent call: %s", got.stdout)
+	}
+}
+
+const (
+	pauseNoticesQuery = "SELECT COALESCE(group_concat(CASE title WHEN 'atrium: automation paused' THEN 'P' ELSE 'R' END, ''), '') FROM (SELECT title FROM notifications WHERE title IN ('atrium: automation paused', 'atrium: automation resumed') ORDER BY id)"
+	pauseAuditsQuery  = "SELECT COALESCE(group_concat(CASE operation WHEN 'automation.pause' THEN 'P' WHEN 'automation.resume' THEN 'R' ELSE operation END, ''), '') FROM (SELECT operation FROM operation_audit WHERE operation IN ('automation.pause', 'automation.resume', 'mail.pause', 'mail.resume') ORDER BY id)"
+)
+
+func pauseTrail(t *testing.T, scalar func(string) string, step, notices, audits string) {
+	t.Helper()
+	if got := scalar(pauseNoticesQuery); got != notices {
+		t.Errorf("after %s the pause notices are %q, want %q", step, got, notices)
+	}
+	if got := scalar(pauseAuditsQuery); got != audits {
+		t.Errorf("after %s the pause audits are %q, want %q", step, got, audits)
 	}
 }

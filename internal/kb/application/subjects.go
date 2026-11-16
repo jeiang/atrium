@@ -22,6 +22,7 @@ type SubjectsInput struct {
 	Kind  string
 	Scope string
 	Limit int
+	Sort  string
 	After *kb.ListKey
 }
 
@@ -35,6 +36,7 @@ type SubjectRow struct {
 	Pinned    bool
 	Facts     int
 	Updated   float64
+	Created   float64
 }
 
 type Subjects struct {
@@ -135,6 +137,9 @@ func (in SubjectsInput) Normalize() (SubjectsInput, error) {
 	if in.Kind != "" && !slices.Contains(kb.Kinds, in.Kind) {
 		return in, invalid("kind", "kind must be fact, lesson or wiki")
 	}
+	if in.Sort != "" && !slices.Contains([]string{"changed", "title", "created"}, in.Sort) {
+		return in, invalid("sort", "sort must be changed, title or created")
+	}
 	return in, nil
 }
 
@@ -145,7 +150,7 @@ func (s *Service) Subjects(ctx context.Context, in SubjectsInput) (application.R
 	}
 	var out Subjects
 	rev, err := s.snapshot(ctx, string(SubjectsName), pageScopes, in, func(q db.Querier) error {
-		found, err := kb.List(ctx, q, kb.ListFilter{Query: in.Query, Titles: true, Scope: in.Scope, Kind: in.Kind, State: "live", Limit: in.Limit, After: in.After})
+		found, err := kb.List(ctx, q, kb.ListFilter{Query: in.Query, Titles: true, Scope: in.Scope, Kind: in.Kind, State: "live", Limit: in.Limit, Sort: in.Sort, After: in.After})
 		if err != nil {
 			return err
 		}
@@ -156,7 +161,7 @@ func (s *Service) Subjects(ctx context.Context, in SubjectsInput) (application.R
 		out = Subjects{Filter: in, Rows: make([]SubjectRow, len(found))}
 		for i, r := range found {
 			out.Rows[i] = SubjectRow{ID: r.ID, Title: r.Title, Kind: kb.KindOf(r), Scope: r.Scope, Private: r.Private,
-				Confirmed: r.Confirmed(), Pinned: r.Pinned, Facts: counts[r.ID], Updated: r.UpdatedAt}
+				Confirmed: r.Confirmed(), Pinned: r.Pinned, Facts: counts[r.ID], Updated: r.UpdatedAt, Created: r.CreatedAt}
 		}
 		return nil
 	})
