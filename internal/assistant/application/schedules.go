@@ -33,7 +33,8 @@ const (
 	ScheduleAddName     application.Name = "assistant.schedule.add"
 	ScheduleRunNowName  application.Name = "assistant.schedule.run_now"
 
-	SourceBuiltin = "built-in"
+	SourceBuiltin  = "built-in"
+	SourceOperator = scheduler.Operator
 
 	ScheduleDeleteOp  = "schedule_delete"
 	ScheduleRestoreOp = "schedule_restore"
@@ -307,7 +308,7 @@ func (s *Service) ScheduleList(ctx context.Context, in ScheduleListInput) (appli
 		}
 		targets := []string{}
 		for _, j := range jobs {
-			if in.Editable && (j.Fixed() || j.CreatedBy == scheduler.Operator) {
+			if in.Editable && j.Fixed() {
 				continue
 			}
 			view, err := scheduleJobOf(j, zone, in.Editable)

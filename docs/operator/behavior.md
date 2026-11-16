@@ -35,7 +35,9 @@ prompt; the mail pass and the backup cannot be disabled or deleted. `run <id>`
 asks serve to run the schedule now and prints the requested run (`run`, `job`,
 `status`) without waiting; the run passes the same pause, module and budget
 checks as a scheduled run. It exits 69 when no serve is running. The
-assistant's schedule tools cannot see or change schedules the operator made.
+assistant's `schedule_list` shows schedules the operator made as read-only
+(`created_by: operator`, `read_only: true`) so it can say what is scheduled;
+its edit, cancel, enable and disable calls on them are refused.
 A scheduled run that fails after one that did not sends one push on the
 system channel; further failures stay quiet until a run succeeds.
 
