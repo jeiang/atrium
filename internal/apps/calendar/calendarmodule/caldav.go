@@ -3,8 +3,8 @@ package calendarmodule
 import (
 	"context"
 
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"

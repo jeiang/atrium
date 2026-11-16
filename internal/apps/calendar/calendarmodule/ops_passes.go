@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/apps/calendar"
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
+	"github.com/jeiang/atrium/internal/apps/calendar/calendarcmd"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -13,9 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/calendar"
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
-	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -72,7 +71,7 @@ func (m Module) calendarCLI(env config.Env, tools registry.Source) calendarcmd.O
 		if err := config.Boot(ctx, env, d, cfg); err != nil {
 			return fail(err)
 		}
-		store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, cfg, assistant.Now)
+		store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, cfg, calendar.Now)
 		if err != nil {
 			return fail(err)
 		}
@@ -83,7 +82,7 @@ func (m Module) calendarCLI(env config.Env, tools registry.Source) calendarcmd.O
 		svc := service.New(ctx, d, cfg, env, r)
 		cliModule := m
 		cliModule.Jobs.Service = func(context.Context) (*service.Service, error) { return svc, nil }
-		app := calendarService(svc, assistant.Now, nil).WithDraftPass(func(ctx context.Context, in calapp.DraftCandidatesInput) (application.Change[candidates.Result], error) {
+		app := calendarService(svc, calendar.Now, nil).WithDraftPass(func(ctx context.Context, in calapp.DraftCandidatesInput) (application.Change[candidates.Result], error) {
 			return cliModule.draftNow(ctx, &web.Deps{DB: d, Cfg: cfg, Env: env}, in)
 		})
 		return app, cfg, func() { svc.Close(); _ = d.Close() }, nil

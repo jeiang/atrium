@@ -8,13 +8,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/apps/calendar"
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
+	"github.com/jeiang/atrium/internal/apps/calendar/calendarcmd"
+	calendartools "github.com/jeiang/atrium/internal/apps/calendar/calendartools"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
-	"github.com/jeiang/atrium/internal/calendar"
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
-	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
@@ -55,7 +55,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Kind: davmirror.KindICloud, Soft: true, Capability: davmirror.CapabilityCalDAV, Features: []string{"iCloud calendar sync"}},
 			{Kind: connections.KindGoogle, Soft: true, Capability: connections.GoogleCalendar, Features: []string{"Google calendar sync"}},
 		},
-		Packages:      []string{"internal/assistant/tools/calendar", "internal/calendar"},
+		Packages:      []string{"internal/apps/calendar", "internal/calendar/candidates"},
 		Tables:        []string{"agent_events", "event_candidates"},
 		EffectOrigins: []module.EffectOrigin{{Name: "calendar", Direct: true}},
 		Refs:          []module.RefKind{eventRef(mc.Env)},

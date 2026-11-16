@@ -7,9 +7,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/apps/calendar"
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/davmirror"
@@ -73,7 +73,7 @@ func retype[T any](v map[string]any) (T, error) {
 }
 
 func (m Module) calendarRoutes(d *web.Deps) []application.Binding {
-	reads := func() *calapp.Service { return calapp.New(d.DB, d.Env, nil, assistant.Now) }
+	reads := func() *calapp.Service { return calapp.New(d.DB, d.Env, nil, calendar.Now) }
 	return []application.Binding{
 		api.Query(d, calapp.Describe()[0], application.APIShape{Area: "home", Errors: []application.Code{application.Invalid}},
 			"GET /calendar/events", func(ctx context.Context, in EventsRequest) (application.Read[Events], error) {

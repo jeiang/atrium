@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/application"
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/unit"
