@@ -309,7 +309,9 @@ While no app that is on needs it, its view shows `idle: "its app is off"` and it
 gets no scheduled test, no state-change notice, and no repair; it keeps its
 enabled flag, credentials, and last state, and normal checks resume when an app
 that needs it is on. Neither path deletes a row or a credential, and neither
-sends a notice.
+sends a notice. An app counts as on when its switch is on, even while it waits
+for a setting or a failing connection, so that connection keeps being checked
+and reported.
 
 `POST /api/v1/connections/{kind}/{name}/disable` (`connections.disable`) turns
 an operator-owned connection off with the reason `turned off by the operator`;

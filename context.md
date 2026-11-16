@@ -505,8 +505,9 @@ claims about the running application. Operator contracts are in
 - Unit lifecycle (`internal/connections/lifecycle.go`): the module set signals
   the registry on every publish; the health watch then runs `SyncUnits`, which
   disables operator-owned built-in rows (the `builtinConnections` list) whose
-  dependents are all inactive (reason `its app is off`) and re-enables them as
-  untested when a dependent returns. Operator-created and host rows are never
+  dependents' units are all turned off (`Status.On`, the flag; a unit that is
+  on but blocked still counts as on) with reason `its app is off`, and
+  re-enables them as untested when one is turned on again. Operator-created and host rows are never
   written; the view computes `idle` instead, and idle rows skip scheduled
   checks, `announce` and repairs. `connections.enable`/`connections.disable`
   (`POST /connections/{kind}/{name}/enable|disable`, operator-only) refuse host
