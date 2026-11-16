@@ -175,8 +175,8 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			deny(w, http.StatusBadRequest, "Bad Host header")
 			return
 		}
-		if isAPI(r) {
-			g.api(w, r, next)
+		if surface, ok := surfaceOf(r); ok {
+			surface.guard(g, w, r, next)
 			return
 		}
 		if g.auth.OIDC() && signInRequest(r) && !g.limitSignIn(w, r) {

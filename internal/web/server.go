@@ -77,6 +77,7 @@ type Deps struct {
 	commands      func(pattern string, next http.Handler) http.Handler
 	router        chi.Router
 	routes        *[]routeRule
+	operations    *[]operation
 	owner         string
 	registrations *registrations
 	coreRoutes    func(*Deps)
@@ -224,7 +225,7 @@ func New(o Options) (*Server, error) {
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Account: s.account, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
 		drain:    o.Drain,
-		commands: o.Commands, router: core, routes: &s.routes, owner: "core", registrations: s.registrations,
+		commands: o.Commands, router: core, routes: &s.routes, operations: new([]operation), owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
 		deps.OnFrame = o.Render.OnFrame
@@ -248,6 +249,9 @@ func New(o Options) (*Server, error) {
 	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
+	}
+	for _, surface := range surfaces {
+		deps.mountSurface(surface)
 	}
 	if err := (&Registrar{state: deps.registrations}).Seal(); err != nil {
 		return nil, errors.Join(err, s.Close())
