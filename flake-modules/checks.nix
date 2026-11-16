@@ -596,7 +596,7 @@
         sqlcipher-provenance = pkgs.runCommand "atrium-sqlcipher-provenance" {nativeBuildInputs = [pkgs.binutils pkgs.gnugrep];} ''
           set -euo pipefail
           for member in libcrypto-lib-evp_enc.o libcrypto-lib-hmac.o libcrypto-lib-aes_cfb.o libcrypto-lib-sha256.o; do
-            ar t ${sqlcipherLib}/lib/libsqlite3.a | grep -qx "$member"
+            ar t ${sqlcipherLib}/lib/libsqlite3.a | grep -x "$member" >/dev/null
           done
           grep -q '#define SQLITE_VERSION        "3.53.4"' ${sqlcipherLib}/include/sqlite3.h
           grep -q 'sqlite3_key(' ${sqlcipherLib}/include/sqlite3.h
@@ -659,10 +659,10 @@
             diff -u ${expectedRunArgv} "$TMPDIR/argv"
             export ATRIUM_DB_KEY_FILE="$CREDENTIALS_DIRECTORY/db-key"
             atrium settings list >/dev/null
-            atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
-            atrium settings get tz | grep -q '"value": "UTC"'
+            atrium settings get public_url | grep '"value": "https://atrium.example.org"' >/dev/null
+            atrium settings get tz | grep '"value": "UTC"' >/dev/null
             atrium settings set tz Europe/Berlin >/dev/null
-            atrium settings get tz | grep -q '"value": "Europe/Berlin"'
+            atrium settings get tz | grep '"value": "Europe/Berlin"' >/dev/null
             if atrium settings set public_url https://other.example >/dev/null 2>&1; then
               echo "a host setting was editable" >&2
               exit 1
@@ -687,9 +687,9 @@
               echo "a legacy pin file was accepted" >&2
               exit 1
             fi
-            atrium connections list | grep -q 'service/qbittorrent'
-            atrium connections list | grep -q 'mail/icloud'
-            atrium connections list | grep -q 'service/media-agent'
+            atrium connections list | grep 'service/qbittorrent' >/dev/null
+            atrium connections list | grep 'mail/icloud' >/dev/null
+            atrium connections list | grep 'service/media-agent' >/dev/null
             code=0
             ATRIUM_MEDIA_MEDIA_ROOT=/srv/media timeout 60 atrium serve --port 0 --auth local >/dev/null 2>"$TMPDIR/serve.err" || code=$?
             if [ "$code" != 78 ] || ! grep -q 'ATRIUM_MEDIA_MEDIA_ROOT is no longer read; use services.atrium.mediaAgent.roots' "$TMPDIR/serve.err"; then
