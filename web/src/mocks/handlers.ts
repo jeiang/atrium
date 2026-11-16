@@ -91,6 +91,7 @@ function shell(state: MockScenario): Shell {
     notify_failing: [],
     pause: { paused: false },
     mail: state.mail ?? { mode: 'live', paused: false },
+    pause: { paused: false },
     modules: MODULES.map((name) => ({ name, state: state.modules?.[name] ?? 'enabled' })),
     version: '0.0.0-mock',
   };

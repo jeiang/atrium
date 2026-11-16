@@ -206,17 +206,23 @@ failed backup creation does not prune archives. v2 archives named
 archive needs another name or location. Off-host copying belongs to the host.
 
 `atrium backup list` (with `--json`) and the API's `GET /maintenance/backups`
-show up to 100 of the newest `atrium-*.backup` archives in the backup directory,
-with the total count, each archive's size and modification time, and the
-facts its unencrypted header states (format, creation time, schema,
-encryption and key id, file count) or why that header cannot be read. The
-header is not checked for tampering; `POST /maintenance/backups/verify` with a
-listed name, or `atrium restore --verify`, checks the whole archive. Verify
-results are not stored. Symlinks, subdirectories and other names in the
-directory are not listed. Without `backup.directory` (host key
-`core.backup_directory`), the list reports that no directory is configured; a
-configured directory that does not exist yet is reported as missing. To write
-an archive named `list` in the current directory, run `atrium backup ./list`.
+show up to 100 of the newest atrium archives in the backup directory, with the
+total count, each archive's size and modification time, whether pruning may
+delete it, and the facts its unencrypted header states (format, creation time,
+schema, encryption and key id, file count) or that its format is too old or
+too new. Both the scheduled `atrium-*.backup` archives and named archives
+written there with `atrium backup PATH` (for example a pre-deploy
+`pre-<deploy>-<stamp>.archive`) are listed; named archives are never pruned
+and do not count toward the kept number. Any file whose header is not an
+atrium archive header is ignored, as are symlinks, subdirectories and names
+starting with a dot. Only the newest 1000 files in the directory are examined;
+the list reports how many older files were not. The header is not checked for
+tampering; `POST /maintenance/backups/verify` with a listed name, or
+`atrium restore --verify`, checks the whole archive. Verify results are not
+stored. Without `backup.directory` (host key `core.backup_directory`), the list
+reports that no directory is configured; a configured directory that does not
+exist yet is reported as missing. To write an archive named `list` in the
+current directory, run `atrium backup ./list`.
 
 Restore replaces database and uploaded state and requires resident users of the
 database to be stopped. `atrium restore --verify ARCHIVE` checks an archive

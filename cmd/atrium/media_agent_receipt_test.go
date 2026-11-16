@@ -407,6 +407,9 @@ func TestMediaAgentGroupMembershipAndUndoChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Lchown(itemDir, -1, other); err != nil {
+		if errors.Is(err, syscall.EINVAL) {
+			t.Skip("the test user's other group has no mapping in this user namespace")
+		}
 		t.Fatal(err)
 	}
 	if err := os.Chmod(itemDir, 0o755); err != nil {

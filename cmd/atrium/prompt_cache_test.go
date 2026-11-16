@@ -72,11 +72,11 @@ func cachedPrefix(t *testing.T, body map[string]any, through int) string {
 
 func TestChatStepsReadTheCachedPrefixAndSeeTheTailVerbatim(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp(t, "agent", "run", "--text", "warm the thread"); ran.code != cli.ExitOK {
+	warm := "warm the thread " + strings.Repeat("note ", memory.TuningMemoryVerbatimTokens)
+	if ran := runApp(t, "agent", "run", "--text", warm); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	thread := latestThread(t, dir)
-	seedSettings(t, map[string]string{memory.VerbatimTokensKey: "0"})
 
 	long := strings.TrimSpace(strings.Repeat("The operator explains one more constraint in detail. ", 60))
 	items := make([]map[string]any, 20)
