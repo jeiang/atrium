@@ -1062,8 +1062,10 @@ claims about the running application. Operator contracts are in
   Mail binds its IMAP opener and post-proposal sync hook in its own module
   declaration, and its assistant tools take the opener from the same place.
   `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
-  `internal/tool`, `internal/ledger`, `internal/proposals`, `internal/review`
-  and its subpackages, `internal/notify`, `internal/web` or `internal/web/tpl`
+  `internal/tool`, `internal/ledger`, `internal/proposals`,
+  `internal/proposals/proposalscmd`, `internal/embed`, `internal/ops`,
+  `internal/ops/collectors`, `internal/scheduler`, `internal/review` and its
+  subpackages, `internal/notify`, `internal/web` or `internal/web/tpl`
   imports a unit package (mail, media, calendar, contacts, kb, tasks, weather,
   grafana, serverops, or the agent tools under `internal/assistant/tools`).
   `internal/module` names only `core`; every other module name is a constant
@@ -1075,9 +1077,20 @@ claims about the running application. Operator contracts are in
   notification channels (`Channels`; `system` stays the platform's), the
   Review, Library and Apps hubs (core's `Hub` nav items), reference kinds for
   chat "about" links (`Refs`), thread attachments such as mail drafts
-  (`Attachments`), and Activity write categories (`EffectCategories`, keyed by
-  operation prefix with one default). Each registry covers every declared
-  unit, enabled or not.
+  (`Attachments`), Activity write categories (`EffectCategories`, keyed by
+  operation prefix with one default), embedding corpora (`Corpora`: mail's
+  `message` and the assistant's `kb`, one vec0 table each per index
+  generation), attention queues (`Queues`, served as the samples of
+  `atrium_queue_depth` sorted by queue name), metrics (`Metrics`), and the
+  `proposals scan-all` scans (`ProposalScan`, run in module-name order). The
+  `propose` tool lists every declared proposal kind sorted by name, so its
+  schema does not depend on module order; each request still offers only the
+  enabled modules' kinds. The schedule floor
+  `agent_schedule_min_interval_seconds` is declared by the assistant, and a
+  host setting names its derived NixOS option on its own `settings.HostDef`
+  (`NixOption`); `settingsgen` keeps only `db.key` and
+  `mail.mail_accounts_file` as platform host options. Each registry covers
+  every declared unit, enabled or not.
   Settlement continues on a cancellation-detached context. Resolving an
   unknown or partial effect appends actor, source, outcome, prior state and
   evidence to `effect_resolutions`; it does not rewrite the raw attempt.
