@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/runtime"
@@ -176,7 +175,7 @@ func (c *Catalog) UndoModules() map[string]bool {
 	return out
 }
 
-func (c *Catalog) Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func() float64) (*ledger.Store, error) {
+func (c *Catalog) Ledger(d *db.DB, env config.Env, cfg config.Config, now func() float64) (*ledger.Store, error) {
 	return ledger.NewStoreWith(d, now, func(s *ledger.Store) ([]ledger.UndoDefinition, []ledger.ResolveDefinition, error) {
 		operations := map[string]string{}
 		kinds := map[string]string{}
@@ -224,7 +223,7 @@ func (c *Catalog) Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func(
 				operations[def.Tool.Name] = decl.Name
 			}
 			if decl.Effects != nil {
-				effects := decl.Effects(EffectDeps{DB: d, Ledger: s, Env: env, Open: open, Now: now})
+				effects := decl.Effects(EffectDeps{DB: d, Ledger: s, Env: env, Cfg: cfg, Now: now})
 				for _, def := range effects.Proposals {
 					kinds[def.Kind.Name] = decl.Name
 				}
