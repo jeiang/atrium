@@ -131,10 +131,12 @@ in {
   };
   web-e2e = check {
     pname = "atrium-web-e2e";
-    env = browserEnv // {
-      ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";
-      ATRIUM_WEB_DIST = "${atrium-web}";
-    };
+    env =
+      browserEnv
+      // {
+        ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";
+        ATRIUM_WEB_DIST = "${atrium-web}";
+      };
     command = "npm run e2e -- --reporter=line";
   };
   web-size = runCommand "atrium-web-size" {nativeBuildInputs = [nodejs_24];} ''
