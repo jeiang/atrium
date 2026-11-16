@@ -30,10 +30,7 @@ func OpenSource(path string, key Key) (*sql.DB, error) {
 	if plain {
 		key = Key{}
 	}
-	s, err := readOnlyDSN(path, key)
-	if err != nil {
-		return nil, err
-	}
+	s := readOnlyDSN(path, key)
 	if err := guardFile(path, key); err != nil {
 		return nil, err
 	}

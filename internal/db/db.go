@@ -82,14 +82,8 @@ func connect(path string, opts []Option) (*DB, error) {
 	}
 	o := applyOptions(opts)
 	key := o.key
-	writeDSN, err := dsn(path, true, key)
-	if err != nil {
-		return nil, err
-	}
-	readDSN, err := dsn(path, false, key)
-	if err != nil {
-		return nil, err
-	}
+	writeDSN := dsn(path, true, key)
+	readDSN := dsn(path, false, key)
 	if err := guardFile(path, key); err != nil {
 		return nil, err
 	}
@@ -108,6 +102,7 @@ func connect(path string, opts []Option) (*DB, error) {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
+	var err error
 	if gate.path, err = CanonicalPath(path); err != nil {
 		_ = w.Close()
 		return nil, err

@@ -36,17 +36,75 @@ type Batch struct {
 }
 
 func Append(ctx context.Context, tx db.Querier, runID int64, p Payload) error {
-	rows, err := tx.QueryContext(ctx, "WITH RECURSIVE ancestors(id,parent_run_id) AS (SELECT id,parent_run_id FROM runs WHERE id=? UNION SELECT r.id,r.parent_run_id FROM runs r JOIN ancestors a ON r.id=a.parent_run_id) SELECT id FROM ancestors", runID)
-	if err != nil {
-		return err
-	}
-	ids, err := db.Collect(rows, func(r *sql.Rows) (int64, error) { var id int64; err := r.Scan(&id); return id, err })
+	ids, err := ancestors(ctx, tx, runID)
 	if err != nil {
 		return err
 	}
 	for _, id := range ids {
 		if err := appendOne(ctx, tx, id, runID, p); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func ancestors(ctx context.Context, q db.Querier, runID int64) ([]int64, error) {
+	rows, err := q.QueryContext(ctx, "WITH RECURSIVE ancestors(id,parent_run_id) AS (SELECT id,parent_run_id FROM runs WHERE id=? UNION SELECT r.id,r.parent_run_id FROM runs r JOIN ancestors a ON r.id=a.parent_run_id) SELECT id FROM ancestors", runID)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (int64, error) { var id int64; err := r.Scan(&id); return id, err })
+}
+
+const liveBuffer = 32
+
+var liveListeners = struct {
+	sync.Mutex
+	streams map[int64]map[chan string]struct{}
+}{streams: make(map[int64]map[chan string]struct{})}
+
+func SubscribeLive(streamID int64) (<-chan string, func()) {
+	ch := make(chan string, liveBuffer)
+	liveListeners.Lock()
+	if liveListeners.streams[streamID] == nil {
+		liveListeners.streams[streamID] = make(map[chan string]struct{})
+	}
+	liveListeners.streams[streamID][ch] = struct{}{}
+	liveListeners.Unlock()
+	return ch, func() {
+		liveListeners.Lock()
+		defer liveListeners.Unlock()
+		delete(liveListeners.streams[streamID], ch)
+		if len(liveListeners.streams[streamID]) == 0 {
+			delete(liveListeners.streams, streamID)
+		}
+	}
+}
+
+func Publish(ctx context.Context, q db.Querier, runID int64, kind string, data map[string]any) error {
+	liveListeners.Lock()
+	idle := len(liveListeners.streams) == 0
+	liveListeners.Unlock()
+	if idle {
+		return nil
+	}
+	ids, err := ancestors(ctx, q, runID)
+	if err != nil {
+		return err
+	}
+	fields := map[string]any{"run_id": runID}
+	for k, v := range data {
+		fields[k] = v
+	}
+	frame := "event: " + kind + "\ndata: " + jsonx.Dumps(fields, dataOpts) + "\n\n"
+	liveListeners.Lock()
+	defer liveListeners.Unlock()
+	for _, id := range ids {
+		for ch := range liveListeners.streams[id] {
+			select {
+			case ch <- frame:
+			default:
+			}
 		}
 	}
 	return nil

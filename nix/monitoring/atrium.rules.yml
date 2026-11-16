@@ -75,6 +75,13 @@ groups:
           severity: warning
         annotations:
           summary: "atrium integration {{ $labels.integration }} is {{ $labels.state }}."
+      - alert: AtriumIntegrationUnhealthy
+        expr: atrium_integration_state{state="untested"} == 1
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "atrium integration {{ $labels.integration }} is {{ $labels.state }}."
       - alert: AtriumMailSyncSlow
         expr: histogram_quantile(0.9, sum by (le) (rate(atrium_mail_sync_duration_seconds_bucket[30m]))) > 300
         for: 10m

@@ -47,12 +47,7 @@
           runHook postInstall
         '';
       });
-    eachDriver = cmd: ''
-      for tags in libsqlite3,sqlite_fts5 modernc; do
-        echo "tags: $tags"
-        ${cmd}
-      done
-    '';
+    tags = "libsqlite3,sqlite_fts5";
     inherit (pkgs.stdenv.hostPlatform) isLinux;
     containmentTools = lib.optionals isLinux [pkgs.util-linux pkgs.iproute2];
     testTags = tags: ''
@@ -74,11 +69,11 @@
     '';
   in {
     checks = {
-      go-vet = goCheck "vet" [] (eachDriver ''go vet -tags "$tags" ./...'');
+      go-vet = goCheck "vet" [] "go vet -tags ${tags} ./...";
 
       go-lint = goCheck "lint" [pkgs.golangci-lint] ''
         export GOLANGCI_LINT_CACHE=$TMPDIR/golangci-lint
-        ${eachDriver ''golangci-lint run --build-tags "$tags" ./...''}
+        golangci-lint run --build-tags ${tags} ./...
       '';
 
       gofmt = goCheck "gofmt" [] ''
@@ -91,28 +86,28 @@
       '';
 
       settingsgen = goCheck "settingsgen" [pkgs.diffutils] ''
-        go run -tags modernc ./tools/settingsgen $TMPDIR/config
+        go run -tags ${tags} ./tools/settingsgen $TMPDIR/config
         diff -r docs/config $TMPDIR/config
       '';
 
       docsgen = goCheck "docsgen" [] ''
-        go run -tags modernc ./cmd/toolsdocs check
-        go run -tags modernc ./cmd/atrium catalog openapi --check docs/api
-        go run -tags modernc ./cmd/atrium catalog operations --require-api >/dev/null
+        go run -tags ${tags} ./cmd/toolsdocs check
+        go run -tags ${tags} ./cmd/atrium catalog openapi --check docs/api
+        go run -tags ${tags} ./cmd/atrium catalog operations --require-api >/dev/null
       '';
 
       ownership = goCheck "ownership" [] ''
         go run ./tools/tableownership
-        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go run ./tools/registrationownership''}
+        GOFLAGS="$GOFLAGS -tags=${tags}" go run ./tools/registrationownership
         go run ./tools/adapterboundary
       '';
 
-      go-test = goCheck "test" containmentTools (testTags "libsqlite3,sqlite_fts5");
+      go-test = goCheck "test" containmentTools (testTags tags);
 
       go-licenses = goCheck "licenses" [pkgs.go-licenses pkgs.diffutils] ''
-        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" ${goSrc.licenseCheck}''}
+        GOFLAGS="$GOFLAGS -tags=${tags}" ${goSrc.licenseCheck}
         mkdir -p $out
-        GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5" ${goSrc.licenseReport "$out/THIRD_PARTY_NOTICES"}
+        GOFLAGS="$GOFLAGS -tags=${tags}" ${goSrc.licenseReport "$out/THIRD_PARTY_NOTICES"}
         ${sqlcipherLib.appendNotices "$out/THIRD_PARTY_NOTICES"}
         diff -u internal/about/THIRD_PARTY_NOTICES $out/THIRD_PARTY_NOTICES
       '';
@@ -124,7 +119,7 @@
           ${stageAssets}
           mapfile -t modDirs < <(find . -name vendor -prune -o -name testdata -prune -o -name go.mod -printf '%h\n' | sort)
           for dir in "''${modDirs[@]}"; do
-            ${eachDriver ''echo "govulncheck: $dir" && (cd "$dir" && govulncheck -tags "$tags" ./...)''}
+            echo "govulncheck: $dir" && (cd "$dir" && govulncheck -tags ${tags} ./...)
           done
           runHook postBuild
         '';
