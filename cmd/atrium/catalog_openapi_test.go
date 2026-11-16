@@ -57,6 +57,7 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 				Name string `json:"name"`
 				In   string `json:"in"`
 			} `json:"parameters"`
+			Responses map[string]json.RawMessage `json:"responses"`
 		} `json:"paths"`
 		Security   []map[string][]string `json:"security"`
 		Components struct {
@@ -98,6 +99,9 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 					t.Errorf("%s %s declares parameter %s twice", method, path, key)
 				}
 				seen[key] = true
+			}
+			if seen["query limit"] && op.Responses["422"] == nil {
+				t.Errorf("%s %s takes a limit but does not document 422", method, path)
 			}
 		}
 	}
