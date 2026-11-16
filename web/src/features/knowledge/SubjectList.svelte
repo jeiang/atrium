@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { KnowledgeSubjectRow } from '../../contract';
   import { formatDay, plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import List from '../../shared/ui/List.svelte';
@@ -49,7 +50,7 @@
   const rows = $derived(
     (subjects.data?.pages.flatMap((page) => page.items) ?? []).filter((row) => row.id !== standingId),
   );
-  const offline = $derived(subjects.fetchStatus === 'paused' && rows.length === 0);
+  const offline = $derived(unreachable(subjects));
 
   function meta(row: KnowledgeSubjectRow): string {
     const parts = [KINDS[row.kind] ?? row.kind];
@@ -93,7 +94,7 @@
   {/if}
   <div class="subjects__region" aria-busy={subjects.isFetching || undefined}>
     {#if offline}
-      <ViewState kind="offline" title="You are offline" level={3}>
+      <ViewState kind="offline" title="Cannot reach atrium" level={3}>
         Subjects load again when the connection returns.
         {#snippet action()}
           <Button onclick={onRetry}>Try again</Button>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { on } from 'svelte/events';
+  import { unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
   import Page from '../../shared/ui/Page.svelte';
@@ -51,10 +52,8 @@
     (standing && instructionsStatus === 'error') ||
       (opening && firstStatus === 'error' && instructionsStatus === 'error'),
   );
-  const firstFetch = $derived(first.fetchStatus);
-  const instructionsFetch = $derived(instructions.fetchStatus);
   const offline = $derived(
-    shown === undefined && ((standing && instructionsFetch === 'paused') || (opening && firstFetch === 'paused')),
+    shown === undefined && ((standing && unreachable(instructions)) || (opening && unreachable(first))),
   );
 
   function onRetry(): void {
@@ -78,7 +77,7 @@
       <SubjectPage id={shown} {phone} />
     {/if}
   {:else if offline}
-    <ViewState kind="offline" title="You are offline" level={2}>
+    <ViewState kind="offline" title="Cannot reach atrium" level={2}>
       Knowledge loads when the connection returns.
       {#snippet action()}
         <Button onclick={onRetry}>Try again</Button>

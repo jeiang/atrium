@@ -4,6 +4,8 @@
   import { ApiError, type KnowledgeFact, type KnowledgeHistory, type KnowledgeLink } from '../../contract';
   import { announce } from '../../shared/announce.svelte';
   import { formatClock, formatDay, formatDayTime, plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
+  import Markdown from '../../shared/markdown/Markdown.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import List from '../../shared/ui/List.svelte';
@@ -14,10 +16,10 @@
   import TextField from '../../shared/ui/TextField.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import Markdown from '../../shared/markdown/Markdown.svelte';
   import { navigate, p } from '../../shell/router';
   import {
     dialogOpen,
+    failureText,
     handleConfirm,
     handleRemoveLink,
     handleRestore,
@@ -68,7 +70,7 @@
   const subject = $derived(data?.subject);
   const outgoing = $derived(liveLinks(links.data?.outgoing));
   const incoming = $derived(liveLinks(links.data?.incoming));
-  const offline = $derived(page.fetchStatus === 'paused' && !data);
+  const offline = $derived(unreachable(page));
   const missing = $derived(page.error instanceof ApiError && page.error.status === 404);
 
   $effect(() => {
@@ -149,8 +151,7 @@
   }
 
   function failure(error: unknown): string {
-    if (error instanceof TypeError) return 'You are offline. Nothing changed.';
-    return error instanceof Error ? error.message : 'Something went wrong.';
+    return failureText(error, 'Cannot reach atrium. Nothing changed.');
   }
 
   function onEdit(): void {
@@ -373,7 +374,7 @@
   <h1 class="visually-hidden">Knowledge</h1>
 {/if}
 {#if offline}
-  <ViewState kind="offline" title="You are offline" level={2}>
+  <ViewState kind="offline" title="Cannot reach atrium" level={2}>
     This page loads when the connection returns.
     {#snippet action()}
       <Button onclick={onRetry}>Try again</Button>

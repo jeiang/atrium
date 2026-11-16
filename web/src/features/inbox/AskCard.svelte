@@ -4,6 +4,7 @@
   import { formatDayTime } from '../../shared/assistant/format';
   import type { InboxId } from '../../shared/assistant/inboxId';
   import ReceiptLine, { UNDO_MS } from '../../shared/assistant/ReceiptLine.svelte';
+  import { unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
@@ -181,8 +182,8 @@
         <a class="btn btn--secondary" href={p('/inbox')}>Back to the Inbox</a>
       {/snippet}
     </ViewState>
-  {:else if query.isPending && query.fetchStatus === 'paused'}
-    <ViewState kind="offline" title="You are offline" {level}>
+  {:else if unreachable(query)}
+    <ViewState kind="offline" title="Cannot reach atrium" {level}>
       This item loads when the connection is back. Nothing was decided.
     </ViewState>
   {:else if query.isPending || (commitment.isPending && commitment.fetchStatus !== 'idle')}

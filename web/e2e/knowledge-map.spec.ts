@@ -7,7 +7,7 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks';
-import { expect, layouts, test, useScenario } from './fixtures';
+import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures';
 
 test.describe('knowledge map', () => {
   test('M opens the map of the open subject and Escape returns with focus on Map', async ({ page }) => {
@@ -120,18 +120,20 @@ test.describe('knowledge map', () => {
     });
   });
 
-  test('offline says so', async ({ page, context }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await gotoShell(page, '/knowledge/map?subject=23');
-    await expect(page.getByRole('heading', { level: 1, name: 'Map of Garden weather station' })).toBeVisible();
-    await context.setOffline(true);
-    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
-    await page
-      .locator('svg.kmap__svg')
-      .getByRole('link', { name: /^Ilse de Wit/ })
-      .click();
-    await expect(page.getByText('You are offline').first()).toBeVisible();
-    await context.setOffline(false);
+  test.describe('when atrium cannot be reached', () => {
+    test.use({ allowConsole: unreachableConsole });
+
+    test('an unopened subject says so', async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await gotoShell(page, '/knowledge/map?subject=23');
+      await expect(page.getByRole('heading', { level: 1, name: 'Map of Garden weather station' })).toBeVisible();
+      await goUnreachable(page);
+      await page
+        .locator('svg.kmap__svg')
+        .getByRole('link', { name: /^Ilse de Wit/ })
+        .click();
+      await expect(page.getByRole('heading', { name: 'Cannot reach atrium' })).toBeVisible();
+    });
   });
 
   for (const layout of layouts) {

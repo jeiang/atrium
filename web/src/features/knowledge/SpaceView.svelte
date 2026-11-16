@@ -2,6 +2,8 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import { ApiError, type SpaceFile, type SpaceRecord, type SpaceTask } from '../../contract';
   import { formatDay, formatDayTime, plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
+  import Markdown from '../../shared/markdown/Markdown.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import List from '../../shared/ui/List.svelte';
@@ -10,7 +12,6 @@
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { p } from '../../shell/router';
-  import Markdown from '../../shared/markdown/Markdown.svelte';
   import AddToSpaceDialog from './AddToSpaceDialog.svelte';
   import {
     failureText,
@@ -33,7 +34,7 @@
 
   const data = $derived(detail.data);
   const space = $derived(data?.space);
-  const offline = $derived(detail.fetchStatus === 'paused' && !data);
+  const offline = $derived(unreachable(detail));
   const missing = $derived(detail.error instanceof ApiError && detail.error.status === 404);
 
   function recordMeta(record: SpaceRecord): string {
@@ -58,7 +59,7 @@
       await handleUndoEffects(effects);
       toast(`Put ${title} back in ${name}.`);
     } catch (failure) {
-      toast(failureText(failure, 'You are offline. Nothing was undone.'), { tone: 'error' });
+      toast(failureText(failure, 'Cannot reach atrium. Nothing was undone.'), { tone: 'error' });
     } finally {
       await refreshKnowledge(client);
     }
@@ -81,7 +82,7 @@
         toast(`${title} was already taken out. The space has been reloaded.`);
         await refreshKnowledge(client);
       } else {
-        toast(failureText(failure, 'You are offline. Nothing changed.'), { tone: 'error' });
+        toast(failureText(failure, 'Cannot reach atrium. Nothing changed.'), { tone: 'error' });
       }
     } finally {
       removing = undefined;
@@ -105,7 +106,7 @@
   <h1 class="visually-hidden">Space</h1>
 {/if}
 {#if offline}
-  <ViewState kind="offline" title="You are offline" level={2}>
+  <ViewState kind="offline" title="Cannot reach atrium" level={2}>
     This space loads when the connection returns.
     {#snippet action()}
       <Button onclick={onRetry}>Try again</Button>

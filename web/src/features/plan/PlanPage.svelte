@@ -3,6 +3,7 @@
   import { on } from 'svelte/events';
   import type { CommitmentItem } from '../../contract';
   import { plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import List from '../../shared/ui/List.svelte';
   import ListRow from '../../shared/ui/ListRow.svelte';
@@ -63,7 +64,7 @@
   const counts = $derived(list.data?.pages[0]?.counts);
   const sideCounts = $derived(counts?.[side]);
   const overdue = $derived(status === 'open' ? items.filter((item) => bucketOf(item.due) === 'overdue').length : 0);
-  const offline = $derived(list.isPending && list.fetchStatus === 'paused');
+  const offline = $derived(unreachable(list));
   const statusOptions = $derived(
     statuses.map((value) => ({
       value,
@@ -162,7 +163,7 @@
 
 {#snippet listBody()}
   {#if offline}
-    <ViewState kind="offline" title="You are offline">Your plan loads when the connection is back.</ViewState>
+    <ViewState kind="offline" title="Cannot reach atrium">Your plan loads when the connection is back.</ViewState>
   {:else if list.isError && !list.data}
     <ViewState kind="error" title="Your plan did not load">
       {list.error.message}

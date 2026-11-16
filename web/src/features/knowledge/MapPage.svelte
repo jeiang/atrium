@@ -3,6 +3,7 @@
   import { ApiError, type KnowledgeLink, type KnowledgeMapNode } from '../../contract';
   import { announce } from '../../shared/announce.svelte';
   import { plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import List from '../../shared/ui/List.svelte';
@@ -63,7 +64,7 @@
       ...liveLinks(links.data?.incoming).map((link) => ({ link, end: link.source, side: 'in' as const })),
     ].filter((item) => item.end.kind !== 'record' || item.end.state !== 'live'),
   );
-  const offline = $derived(map.fetchStatus === 'paused' && !data);
+  const offline = $derived(unreachable(map));
   const missing = $derived(map.error instanceof ApiError && map.error.status === 404);
   const showMap = $derived(!phone && view === 'map');
   const title = $derived(center ? `Map of ${center.title || 'Untitled'}` : 'Subject map');
@@ -231,7 +232,7 @@
         {/snippet}
       </ViewState>
     {:else if offline}
-      <ViewState kind="offline" title="You are offline" level={2}>
+      <ViewState kind="offline" title="Cannot reach atrium" level={2}>
         The map loads when the connection returns.
         {#snippet action()}
           <Button onclick={onRetry}>Try again</Button>

@@ -2,6 +2,7 @@
   import { on } from 'svelte/events';
   import type { Space } from '../../contract';
   import { formatDay, plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
@@ -31,7 +32,7 @@
   const invalid = $derived(raw !== undefined && id === undefined);
   const spaces = useSpaces();
   const rows = $derived(spaces.data?.pages.flatMap((page) => page.items) ?? []);
-  const offline = $derived(spaces.fetchStatus === 'paused' && rows.length === 0);
+  const offline = $derived(unreachable(spaces));
 
   function meta(space: Space): string {
     const parts = [plural(space.thread_count, 'chat')];
@@ -58,7 +59,7 @@
   )}
   <div class="subjects__region" aria-busy={spaces.isFetching || undefined}>
     {#if offline}
-      <ViewState kind="offline" title="You are offline" {level}>
+      <ViewState kind="offline" title="Cannot reach atrium" {level}>
         Spaces load again when the connection returns.
         {#snippet action()}
           <Button onclick={onRetry}>Try again</Button>

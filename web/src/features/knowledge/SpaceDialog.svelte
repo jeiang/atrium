@@ -61,7 +61,7 @@
     } catch (failure) {
       error = failureText(
         failure,
-        space ? 'You are offline. Nothing was renamed.' : 'You are offline. Nothing was made.',
+        space ? 'Cannot reach atrium. Nothing was renamed.' : 'Cannot reach atrium. Nothing was made.',
       );
     } finally {
       pending = false;

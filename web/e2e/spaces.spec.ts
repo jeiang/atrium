@@ -8,7 +8,7 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks';
-import { expect, layouts, test, useScenario } from './fixtures';
+import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures';
 
 interface Sent {
   method: string;
@@ -54,7 +54,7 @@ test.describe('knowledge spaces', () => {
     ).toHaveAttribute('href', '/chat/401');
     await expect(
       page.getByRole('list', { name: 'Tasks in this space' }).getByRole('link', { name: /Order raised bed timber/ }),
-    ).toHaveAttribute('href', '/tasks/7');
+    ).toHaveAttribute('href', '/plan/tasks/7');
     await expect(page.getByRole('list', { name: 'Files in this space' })).toContainText('garden-seeds.csv');
   });
 
@@ -193,17 +193,19 @@ test.describe('knowledge spaces', () => {
     });
   });
 
-  test('offline says so', async ({ page, context }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await openGarden(page);
-    await context.setOffline(true);
-    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
-    await page
-      .getByRole('navigation', { name: 'Spaces' })
-      .getByRole('link', { name: /Studio move/ })
-      .click();
-    await expect(page.getByText('You are offline').first()).toBeVisible();
-    await context.setOffline(false);
+  test.describe('when atrium cannot be reached', () => {
+    test.use({ allowConsole: unreachableConsole });
+
+    test('an unopened space says so', async ({ page }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await openGarden(page);
+      await goUnreachable(page);
+      await page
+        .getByRole('navigation', { name: 'Spaces' })
+        .getByRole('link', { name: /Studio move/ })
+        .click();
+      await expect(page.getByRole('heading', { name: 'Cannot reach atrium' })).toBeVisible();
+    });
   });
 
   for (const layout of layouts) {
@@ -227,25 +229,23 @@ test.describe('knowledge spaces', () => {
     });
   }
 
-  // The base has no shared offline state for writes: a write that cannot reach the server rejects with a
-  // TypeError. The mock service worker answers even when the context is offline, so fetch is made to fail.
-  test('a write that cannot reach the server keeps the dialog and its text', async ({ page }) => {
-    await openGarden(page);
-    await page.evaluate(() => {
-      const real = window.fetch;
-      window.fetch = (input, init) =>
-        init?.method && init.method !== 'GET' ? Promise.reject(new TypeError('Failed to fetch')) : real(input, init);
+  test.describe('writes while atrium cannot be reached', () => {
+    test.use({ allowConsole: unreachableConsole });
+
+    test('a refused write keeps the dialog and its text', async ({ page }) => {
+      await openGarden(page);
+      await goUnreachable(page);
+      await page.getByRole('button', { name: 'Rename' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Rename Shared garden' });
+      await dialog.getByLabel('Name').fill('Garden');
+      await dialog.getByRole('button', { name: 'Rename' }).click();
+      await expect(dialog.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
+      await expect(dialog.getByLabel('Name')).toHaveValue('Garden');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await page.getByRole('button', { name: 'Take Shared garden project out of Shared garden' }).click();
+      await expect(page.locator('.toast__text', { hasText: 'Cannot reach atrium. Nothing was sent.' })).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Subjects in this space' }).getByRole('listitem')).toHaveCount(1);
+      expect(await sent(page)).toEqual([]);
     });
-    await page.getByRole('button', { name: 'Rename' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Rename Shared garden' });
-    await dialog.getByLabel('Name').fill('Garden');
-    await dialog.getByRole('button', { name: 'Rename' }).click();
-    await expect(dialog.getByText('You are offline. Nothing was renamed.')).toBeVisible();
-    await expect(dialog.getByLabel('Name')).toHaveValue('Garden');
-    await dialog.getByRole('button', { name: 'Cancel' }).click();
-    await page.getByRole('button', { name: 'Take Shared garden project out of Shared garden' }).click();
-    await expect(page.locator('.toast__text', { hasText: 'You are offline. Nothing changed.' })).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Subjects in this space' }).getByRole('listitem')).toHaveCount(1);
-    expect(await sent(page)).toEqual([]);
   });
 });

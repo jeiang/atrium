@@ -2,6 +2,7 @@
   import { createInfiniteQuery } from '@tanstack/svelte-query';
   import { API_BASE, type Hit, ok, searchAll } from '../../contract';
   import { formatDay } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
@@ -95,7 +96,7 @@
       .filter((group) => group.items.length > 0 || group.more);
   });
   const count = $derived(top.length + groups.reduce((sum, group) => sum + group.items.length, 0));
-  const offline = $derived(found.fetchStatus === 'paused' && !found.data);
+  const offline = $derived(unreachable(found));
 
   function href(hit: Hit): string {
     const id = String(hit.id);
@@ -227,7 +228,7 @@
           Type a few words. Press Command K or Control K from anywhere to come back here.
         </ViewState>
       {:else if offline}
-        <ViewState kind="offline" title="You are offline" level={2}>
+        <ViewState kind="offline" title="Cannot reach atrium" level={2}>
           Search works again when the connection returns.
           {#snippet action()}
             <Button onclick={onRetry}>Try again</Button>

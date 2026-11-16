@@ -9,6 +9,7 @@
   import SelectField from '../../shared/ui/SelectField.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
   import {
+    failureText,
     findTargets,
     handleAddLink,
     handleUndoEffects,
@@ -81,12 +82,7 @@
       });
       await refreshKnowledge(client);
     } catch (failure) {
-      error =
-        failure instanceof TypeError
-          ? 'You are offline. Nothing was linked.'
-          : failure instanceof Error
-            ? failure.message
-            : 'The link could not be added.';
+      error = failureText(failure, 'Cannot reach atrium. Nothing was linked.');
     } finally {
       pending = false;
     }

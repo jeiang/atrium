@@ -3,6 +3,7 @@
   import { on } from 'svelte/events';
   import type { Task, TaskAddRequest } from '../../contract';
   import { plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import List from '../../shared/ui/List.svelte';
   import ListRow from '../../shared/ui/ListRow.svelte';
@@ -67,7 +68,7 @@
   const items = $derived(list.data?.pages.flatMap((page) => page.items) ?? []);
   const counts = $derived(list.data?.pages[0]?.counts);
   const off = $derived(isModuleOff(list.error));
-  const offline = $derived(list.isPending && list.fetchStatus === 'paused');
+  const offline = $derived(unreachable(list));
   const overdue = $derived(status === 'open' ? items.filter((item) => bucketOf(item.due) === 'overdue').length : 0);
   const lede = $derived.by(() => {
     if (!counts) return undefined;
@@ -189,7 +190,7 @@
   {#if off}
     <ViewState kind="empty" title="Tasks are off">Turn on the Assistant app to keep tasks.</ViewState>
   {:else if offline}
-    <ViewState kind="offline" title="You are offline">Your tasks load when the connection is back.</ViewState>
+    <ViewState kind="offline" title="Cannot reach atrium">Your tasks load when the connection is back.</ViewState>
   {:else if list.isError && !list.data}
     <ViewState kind="error" title="Your tasks did not load">
       {list.error.message}

@@ -51,7 +51,7 @@
       await handleUndoEffects(effects);
       toast(`Took ${title} out of ${space.name}.`);
     } catch (failure) {
-      toast(failureText(failure, 'You are offline. Nothing was undone.'), { tone: 'error' });
+      toast(failureText(failure, 'Cannot reach atrium. Nothing was undone.'), { tone: 'error' });
     } finally {
       await refreshKnowledge(client);
     }
@@ -76,7 +76,7 @@
       });
       await refreshKnowledge(client);
     } catch (failure) {
-      error = failureText(failure, 'You are offline. Nothing was added.');
+      error = failureText(failure, 'Cannot reach atrium. Nothing was added.');
     } finally {
       pending = false;
     }

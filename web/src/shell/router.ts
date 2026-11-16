@@ -52,7 +52,10 @@ export const { p, navigate, isActive, route } = createRouter(
       '/:id': knowledge,
       meta: { title: 'Knowledge' },
     },
-    '/search': { '/': () => import('../features/search/SearchPage.svelte').catch(unavailable), meta: { title: 'Search' } },
+    '/search': {
+      '/': () => import('../features/search/SearchPage.svelte').catch(unavailable),
+      meta: { title: 'Search' },
+    },
     '/apps': {
       '/': () => import('./AppsPage.svelte').catch(unavailable),
       '/:app': () => import('./AppPage.svelte').catch(unavailable),

@@ -4,6 +4,8 @@
   import { tick } from 'svelte';
   import { announce } from '../../shared/announce.svelte';
   import { formatClock, formatDayTime, plural } from '../../shared/assistant/format';
+  import { unreachable } from '../../shared/device.svelte';
+  import Markdown from '../../shared/markdown/Markdown.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Dialog from '../../shared/ui/Dialog.svelte';
@@ -12,7 +14,6 @@
   import Segmented from '../../shared/ui/Segmented.svelte';
   import TextArea from '../../shared/ui/TextArea.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import Markdown from '../../shared/markdown/Markdown.svelte';
   import { failureText, handleSaveEdit, isStale, refreshKnowledge, useInstructions } from './knowledge';
   import LineDiff from './LineDiff.svelte';
   import { type Version, versions } from './versions';
@@ -43,7 +44,7 @@
   const record = $derived(data?.record);
   const list = $derived(record ? versions(record, data?.history ?? []) : []);
   const dirty = $derived(editing && draft !== saved);
-  const offline = $derived(instructions.fetchStatus === 'paused' && !data);
+  const offline = $derived(unreachable(instructions));
 
   $effect(() =>
     blockNavigation({
@@ -147,7 +148,7 @@
         announce('The instructions changed since you opened them. They have been reloaded. Your text is kept.');
         return;
       }
-      error = failureText(failure, 'You are offline. Your text is kept; save again when the connection returns.');
+      error = failureText(failure, 'Cannot reach atrium. Your text is kept; save again when the connection returns.');
     } finally {
       saving = false;
     }
@@ -183,7 +184,7 @@
 
 {#if offline}
   <h1 class="visually-hidden">Standing instructions</h1>
-  <ViewState kind="offline" title="You are offline" level={2}>
+  <ViewState kind="offline" title="Cannot reach atrium" level={2}>
     The instructions load when the connection returns.
     {#snippet action()}
       <Button onclick={onRetry}>Try again</Button>

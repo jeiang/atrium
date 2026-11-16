@@ -8,7 +8,7 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks';
-import { expect, layouts, test, useScenario } from './fixtures';
+import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures';
 
 interface Sent {
   method: string;
@@ -113,23 +113,19 @@ test.describe('standing instructions', () => {
     });
   });
 
-  // A save that cannot reach the server rejects with a TypeError; fetch is made to fail because the mock
-  // service worker answers even when the context is offline.
-  test('a save that cannot reach the server keeps the draft', async ({ page }) => {
-    await openInstructions(page);
-    await page.getByRole('button', { name: 'Edit' }).click();
-    await page.getByRole('textbox', { name: 'Instructions' }).fill('Kept draft');
-    await page.evaluate(() => {
-      const real = window.fetch;
-      window.fetch = (input, init) =>
-        init?.method && init.method !== 'GET' ? Promise.reject(new TypeError('Failed to fetch')) : real(input, init);
+  test.describe('while atrium cannot be reached', () => {
+    test.use({ allowConsole: unreachableConsole });
+
+    test('a refused save keeps the draft', async ({ page }) => {
+      await openInstructions(page);
+      await page.getByRole('button', { name: 'Edit' }).click();
+      await page.getByRole('textbox', { name: 'Instructions' }).fill('Kept draft');
+      await goUnreachable(page);
+      await page.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
+      await expect(page.getByRole('textbox', { name: 'Instructions' })).toHaveValue('Kept draft');
+      expect(await sent(page)).toEqual([]);
     });
-    await page.getByRole('button', { name: 'Save' }).click();
-    await expect(
-      page.getByText('You are offline. Your text is kept; save again when the connection returns.'),
-    ).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Instructions' })).toHaveValue('Kept draft');
-    expect(await sent(page)).toEqual([]);
   });
 
   test('leaving with unsaved text asks first', async ({ page }) => {

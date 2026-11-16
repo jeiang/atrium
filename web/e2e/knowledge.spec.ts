@@ -8,7 +8,7 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks';
-import { expect, layouts, test, useScenario } from './fixtures';
+import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures';
 
 interface Sent {
   method: string;
@@ -198,16 +198,18 @@ test.describe('knowledge', () => {
     });
   });
 
-  test('offline says so', async ({ page, context }) => {
-    await openIlse(page);
-    await context.setOffline(true);
-    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
-    await page
-      .getByRole('navigation', { name: 'Knowledge subjects' })
-      .getByRole('link', { name: /Shared garden project/ })
-      .click();
-    await expect(page.getByText('You are offline').first()).toBeVisible();
-    await context.setOffline(false);
+  test.describe('when atrium cannot be reached', () => {
+    test.use({ allowConsole: unreachableConsole });
+
+    test('an unopened subject says so', async ({ page }) => {
+      await openIlse(page);
+      await goUnreachable(page);
+      await page
+        .getByRole('navigation', { name: 'Knowledge subjects' })
+        .getByRole('link', { name: /Shared garden project/ })
+        .click();
+      await expect(page.getByRole('heading', { name: 'Cannot reach atrium' })).toBeVisible();
+    });
   });
 
   for (const layout of layouts) {

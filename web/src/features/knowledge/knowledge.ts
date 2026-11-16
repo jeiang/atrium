@@ -28,6 +28,7 @@ import {
   reviewUndoEffect,
   searchAll,
 } from '../../contract';
+import { refusedOffline } from '../../shared/device.svelte';
 import type { ListOption } from '../../shared/ui/Listbox.svelte';
 
 export const TOPICS = ['knowledge'];
@@ -260,8 +261,9 @@ export async function handleAddToSpace(
   return ok(await knowledgeLink(record, { target_kind: 'space', target_id: String(space), relation }, oneGesture()));
 }
 
-export function failureText(error: unknown, offline: string): string {
-  if (error instanceof TypeError) return offline;
+export function failureText(error: unknown, lost: string): string {
+  if (refusedOffline(error) && error instanceof Error) return error.message;
+  if (error instanceof TypeError) return lost;
   if (error instanceof ApiError && error.status === 403) return 'You can read this but not change it.';
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
