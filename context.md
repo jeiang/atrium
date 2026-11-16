@@ -891,11 +891,16 @@ claims about the running application. Operator contracts are in
   empty database starts core only. The platform checks settings, secrets and
   usage rows; each module declares its own check (`HasOperatorData`: mail
   checks accounts, the assistant checks threads). `atrium settings set <name>_enabled true`
-  is refused with the unmet reasons. A module flag change takes effect after
-  the atrium units restart: the running application has no control that
-  writes a flag, a module's Settings page marks "Restart atrium to apply"
-  when the stored flag differs from the running state, and the API refuses
-  module flags. The assistant tool
+  is refused with the unmet reasons. A module flag change applies live: the
+  operator-only Apps switch (`apps.switch`, `PUT /apps/{id}/enabled`) writes
+  the flag through the settings write and publishes the new module set, and
+  the core `module-flags` service polls the settings revision counter every
+  two seconds so a flag written by a separate CLI process reaches a running
+  serve. `apps.list` (`GET /apps`) is the manifest of the four apps (mail,
+  calendar, media, grafana); the assistant, contacts and notifications are
+  core units the switch refuses (`core_unit`). The settings API still refuses
+  module flags, no assistant tool writes one, and the system prompt lists the
+  apps that are off. The assistant tool
   registry is built from the enabled modules' tools.
   Each run and dispatch resolves the current handler-bound tool registry.
   Pending mutations retain their owner's generation and refuse before recording

@@ -35,10 +35,12 @@ no default; a `null` default is not a usable credential or listener value.
 The module derives mirror paths, backup inputs, tracing destination, knowledge
 export path, proxy CIDRs, and generated connections in the host file. The
 application does not read host-owned values from database setting rows. A
-host-declared module flag wins over a stored flag and is read-only. A flag the
-host file does not declare is a stored operator setting: the first start seeds
-it, and `atrium settings set` changes it. A flag change requires restarting
-serve; there is no runtime module-toggle UI or API.
+host-declared module flag wins over a stored flag and is read-only; the Apps
+manifest shows it as pinned and refuses to switch it. A flag the host file does
+not declare is a stored operator setting: the first start seeds it, and the
+Apps switch (`PUT /apps/{id}/enabled`, operator only) or `atrium settings set`
+changes it. A running serve applies a change within a few seconds, including
+one written by a separate `atrium settings set` process; no restart is needed.
 
 ### Connection fields
 
