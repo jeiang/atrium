@@ -16,10 +16,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/tool"
 )
 

@@ -7,11 +7,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/run"

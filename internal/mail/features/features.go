@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/apps/mail/mime"
 )
 
 const month = `(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`

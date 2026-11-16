@@ -9,11 +9,11 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/scanutil"

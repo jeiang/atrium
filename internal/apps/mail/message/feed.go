@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/apps/mail/mime"
 	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/mime"
 )
 
 const summaryColumns = "id, account, from_name, from_addr, to_addrs, subject, date_ts, seen, flagged, in_inbox, sent, " +

@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/mail"
 )
 
 type Dialer = func(ctx context.Context, a config.AccountSpec, password string) (mail.Conn, error)

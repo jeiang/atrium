@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/app"
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 )

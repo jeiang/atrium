@@ -3,9 +3,9 @@ package mailmodule
 import (
 	"context"
 
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/config"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/run"
 )

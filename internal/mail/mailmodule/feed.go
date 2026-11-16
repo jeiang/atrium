@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/apps/mail/message"
 	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	mailclassify "github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/mailscan"
-	"github.com/jeiang/atrium/internal/mail/message"
 )
 
 type feed struct {

@@ -500,6 +500,9 @@ func scan(root string) ([]violation, error) {
 
 func moduleOf(path string) string {
 	parts := strings.Split(path, "/")
+	if len(parts) > 2 && parts[0] == "internal" && parts[1] == "apps" {
+		return parts[2]
+	}
 	if len(parts) > 1 && parts[0] == "internal" {
 		return parts[1]
 	}

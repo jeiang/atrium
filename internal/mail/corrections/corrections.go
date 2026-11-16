@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/apps/mail/message"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/message"
 )
 
 const (

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
 	"golang.org/x/text/cases"
 )
 

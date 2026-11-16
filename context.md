@@ -54,7 +54,11 @@ claims about the running application. Operator contracts are in
   are not listed. Event candidates read invitations and message bodies from
   the feed; the mail pass still calls them, passing its paid event judge.
   The drafts and packages attention sources live in
-  `internal/mail/attentionsources`.
+  `internal/mail/attentionsources`. The Mail app's store (the message
+  client, the write gate, queries, roles, settings and tuning), IMAP client,
+  connection opener, message and MIME parsers, search, sync, rules and router
+  live in `internal/apps/mail`; the rest of Mail stays in `internal/mail`
+  until the later P13 slices move it, and both trees are the one `mail` unit.
 - The core `signals` unit (`internal/signals` for the domain,
   `internal/signals/signalsmodule` for its service, API routes, Loops page,
   `open_loops` tool and declaration) owns open loops, commitments and
@@ -74,7 +78,7 @@ claims about the running application. Operator contracts are in
   name and the `openloops_*` setting keys are unchanged. `tools/adapterboundary`
   fails when a mail package imports `internal/signals`, and the general rule
   below fails when signals imports mail. `tools/adapterboundary` fails when a Go
-  file outside `internal/mail` (under `internal` or `cmd`) imports a mail
+  file outside `internal/mail` and `internal/apps/mail` (under `internal` or `cmd`) imports a mail
   package, except the listed exceptions with the slice that removes each
   (the composition roots `cmd/atrium` and `internal/app`; the agent mail
   tools until P13.2b; account rows in

@@ -4,8 +4,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/mail"
 )
 
 var systemRoles = map[string]bool{"trash": true, "sent": true, "drafts": true, "junk": true}

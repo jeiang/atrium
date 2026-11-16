@@ -8,7 +8,7 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 
-	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/apps/mail"
 )
 
 var (

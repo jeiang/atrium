@@ -12,9 +12,9 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"golang.org/x/text/cases"
 )
 

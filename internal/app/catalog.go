@@ -5,6 +5,7 @@ import (
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
@@ -13,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailmodule"
 	"github.com/jeiang/atrium/internal/media/mediamodule"
 	"github.com/jeiang/atrium/internal/module"

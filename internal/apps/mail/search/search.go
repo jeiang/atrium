@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/timex"
 )

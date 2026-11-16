@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/apps/mail"
 )
 
 func RawWith(subject, sender, msgid, body string) (header, text []byte) {

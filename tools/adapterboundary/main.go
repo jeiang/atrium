@@ -106,9 +106,10 @@ var platform = map[string]bool{
 const (
 	dayContract  = "internal/day"
 	calendarUnit = module + "/internal/calendar"
-	mailUnit     = "internal/mail"
 	signalsUnit  = "internal/signals"
 )
+
+var mailUnits = []string{"internal/mail", "internal/apps/mail"}
 
 var mailImporters = map[string]string{
 	"cmd/atrium":                    "composition root",
@@ -118,7 +119,7 @@ var mailImporters = map[string]string{
 }
 
 var units = []string{
-	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
+	"internal/mail", "internal/apps/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
 	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
 }
 
@@ -155,7 +156,7 @@ func scan() ([]string, error) {
 		platformFile := platform[path.Dir(file)] || strings.HasPrefix(file, dayContract+"/")
 		adapterFile := isAdapter(file, src)
 		dayReader := strings.HasPrefix(file, "internal/assistant/") && !strings.HasPrefix(file, "internal/assistant/tools/")
-		outsideMail := !strings.HasPrefix(file, mailUnit+"/")
+		outsideMail := !inMail(file)
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
 		if err != nil {
 			return err
@@ -177,7 +178,7 @@ func scan() ([]string, error) {
 			if !outsideMail && (imp == module+"/"+signalsUnit || strings.HasPrefix(imp, module+"/"+signalsUnit+"/")) {
 				edges = append(edges, "mail package imports signals instead of calling the platform hook: "+file+"\t"+imp)
 			}
-			if outsideMail && (imp == module+"/"+mailUnit || strings.HasPrefix(imp, module+"/"+mailUnit+"/")) {
+			if rel, ok := strings.CutPrefix(imp, module+"/"); outsideMail && ok && inMail(rel) {
 				if _, ok := mailImporters[path.Dir(file)]; ok {
 					importing[path.Dir(file)] = true
 				} else {
@@ -199,6 +200,15 @@ func scan() ([]string, error) {
 	}
 	slices.Sort(edges)
 	return slices.Compact(edges), nil
+}
+
+func inMail(rel string) bool {
+	for _, unit := range mailUnits {
+		if rel == unit || strings.HasPrefix(rel, unit+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func isAdapter(file string, src []byte) bool {
