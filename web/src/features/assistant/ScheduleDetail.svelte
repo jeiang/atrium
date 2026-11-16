@@ -32,7 +32,9 @@
   const runsOffline = $derived(unreachable(runs));
   const builtin = $derived(job.source === 'builtin');
 
-  let draft = $state({ name: '', schedule: '', prompt: '' });
+  type Draft = { name: string; schedule: string; prompt: string };
+  let draft = $state<Draft>({ name: '', schedule: '', prompt: '' });
+  let origin: Draft = { name: '', schedule: '', prompt: '' };
   let synced = $state<string>();
   let busy = $state<'save' | 'run' | 'enable' | 'delete'>();
   let errors = $state<Record<string, string>>({});
@@ -51,7 +53,14 @@
   $effect(() => {
     const key = `${job.id}:${job.revision}`;
     if (key === synced) return;
-    if (synced === undefined || !synced.startsWith(`${job.id}:`) || !dirty) draft = { ...base };
+    const next = { ...base };
+    if (synced?.startsWith(`${job.id}:`)) {
+      for (const field of ['name', 'schedule', 'prompt'] as const) {
+        if (draft[field].trim() !== origin[field]) next[field] = draft[field];
+      }
+    }
+    draft = next;
+    origin = { ...base };
     synced = key;
   });
 

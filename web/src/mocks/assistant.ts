@@ -571,7 +571,10 @@ export function assistantHandlers(read: () => { assistant?: AssistantScenario })
       if (url.searchParams.get('kind') !== 'permission') return undefined;
       const state = scenario(read);
       await delay(150);
-      return failed(state, 'requests') ?? HttpResponse.json({ items: state.empty ? [] : requests });
+      return (
+        failed(state, 'requests') ??
+        HttpResponse.json({ data: { items: state.empty ? [] : requests, next_cursor: null }, revision: '9' })
+      );
     }),
     http.get(`*${API_BASE}/schedules`, async () => {
       const state = scenario(read);

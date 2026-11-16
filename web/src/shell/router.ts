@@ -12,7 +12,6 @@ declare module 'sv-router' {
 
 const unavailable = () => ({ default: Unavailable });
 
-const placeholder = () => import('./PlaceholderPage.svelte').catch(unavailable);
 const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgePage.svelte').catch(unavailable));
 const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
 

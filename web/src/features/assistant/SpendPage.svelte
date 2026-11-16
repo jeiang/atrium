@@ -15,6 +15,7 @@
   import { p } from '../../shell/router';
   import AssistantNav from './AssistantNav.svelte';
   import { classWords, dateTime, dayOf, kindWords, money, percent, useSpend, words } from './assistant';
+  import SpendMeter from './SpendMeter.svelte';
   import './assistant.css';
 
   const ROUTINE_SCOPES = ['dreaming_run', 'dreaming_month', 'ops_run', 'ops_month'];
@@ -42,7 +43,6 @@
 
   const data = $derived(spend.data);
   const budget = $derived(data?.budget);
-  const used = $derived(budget ? budget.spent_usd + budget.committed_usd + budget.reserved_usd : 0);
   const capOf = (scope: string): SpendCap | undefined => data?.caps.find((cap) => cap.scope === scope);
   const runCap = $derived(capOf('run'));
   const threadCap = $derived(capOf('thread'));
@@ -103,40 +103,7 @@
       </Section>
     {:else}
       <Section id="month" title="This month" meta={data.month}>
-        <div class="asst-meter" data-state={data.state}>
-          <meter
-            class="asst-meter__bar"
-            min="0"
-            max={budget.budget_usd > 0 ? budget.budget_usd : 1}
-            value={used}
-            low={budget.unattended_ceiling_usd}
-            high={budget.interactive_ceiling_usd}
-            optimum="0"
-            aria-label="Budget used"
-          ></meter>
-          <p class="asst-meter__text">
-            <strong>{money(budget.spent_usd)}</strong>
-            spent of {money(budget.budget_usd)}.
-            {#if budget.committed_usd + budget.reserved_usd > 0}
-              {money(budget.committed_usd + budget.reserved_usd)}
-              is held for runs in progress.
-            {/if}
-            {money(budget.remaining_usd)}
-            left. The budget starts again on {resets}.
-          </p>
-          {#if budget.carry_in_usd > 0 || budget.unknown_usd > 0}
-            <p class="asst-meta">
-              {#if budget.carry_in_usd > 0}
-                {money(budget.carry_in_usd)}
-                carried in from last month.
-              {/if}
-              {#if budget.unknown_usd > 0}
-                {money(budget.unknown_usd)}
-                has no confirmed price yet.
-              {/if}
-            </p>
-          {/if}
-        </div>
+        <SpendMeter {budget} state={data.state} />
         {#if data.state === 'exhausted'}
           <Notice tone="error" variant="inline" title="The budget is used up">
             atrium refuses new chat messages and scheduled runs until {resets}. Raise the monthly budget below to go on.

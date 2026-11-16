@@ -196,7 +196,7 @@
                   {:else}
                     <SelectField
                       label={situationWords[rule.situation] ?? rule.situation}
-                      bind:value={draft[rule.key]}
+                      bind:value={() => draft[rule.key] ?? '', (next) => (draft[rule.key] = next)}
                       options={options(rule)}
                       help={help(rule)}
                       error={errors[rule.key] ?? errors.changes}
