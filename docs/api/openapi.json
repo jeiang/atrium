@@ -295,6 +295,113 @@
         ],
         "type": "object"
       },
+      "AppEvent": {
+        "anyOf": [
+          {
+            "discriminator": {
+              "mapping": {
+                "change": "#/components/schemas/AppEventChange",
+                "sync": "#/components/schemas/AppEventSync"
+              },
+              "propertyName": "event"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AppEventSync"
+              },
+              {
+                "$ref": "#/components/schemas/AppEventChange"
+              }
+            ]
+          },
+          {
+            "properties": {
+              "data": {
+                "type": "object"
+              },
+              "event": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "event",
+              "data"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AppEventChange": {
+        "properties": {
+          "data": {
+            "properties": {
+              "revision": {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "topic": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "event": {
+            "const": "change",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AppEventSync": {
+        "properties": {
+          "data": {
+            "properties": {
+              "topics": {
+                "items": {
+                  "properties": {
+                    "revision": {
+                      "format": "int64",
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    "topic": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "topic",
+                    "revision"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "topics"
+            ],
+            "type": "object"
+          },
+          "event": {
+            "const": "sync",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
       "Applied": {
         "properties": {
           "error": {
@@ -19007,6 +19114,107 @@
         "x-atrium-area": "activity",
         "x-atrium-module": "core",
         "x-atrium-operation": "review.undo"
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "state.events",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppEvent"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {}
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "home"
+        ],
+        "x-atrium-area": "home",
+        "x-atrium-module": "core",
+        "x-atrium-stream-event": {
+          "$ref": "#/components/schemas/AppEvent"
+        }
       }
     },
     "/home": {

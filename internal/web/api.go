@@ -295,7 +295,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		return
 	}
 	who.BearerID = tok.ID
-	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
+	ctx := g.withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
 		_, err := g.bearers.Authenticate(ctx, token)
 		return err
 	})

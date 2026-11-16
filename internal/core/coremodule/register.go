@@ -88,6 +88,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
 	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
+	eventOps, eventBindings := eventOperations()
+	operations, bindings = append(operations, eventOps...), append(bindings, eventBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -148,6 +150,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: func(_ chi.Router, d *web.Deps) {
 				authRoutes(d)
 				commandRoutes(d)
+				eventRoutes(d)
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)

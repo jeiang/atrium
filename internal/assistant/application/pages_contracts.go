@@ -50,8 +50,6 @@ var (
 
 func MessageCapError(cap int) FileError { return files.MessageCapError(cap) }
 
-func AcquireStream(key string) (func(), error) { return progress.Acquire(key) }
-
 func ThreadComposer(ctx context.Context, t Thread, live int64) ComposerView {
 	return Composer(ctx, ComposerState{Model: t.Model, Effort: t.Effort, Thinking: t.Thinking,
 		ContextLimit: threads.ContextLimitOf(t), WebSearch: bool(t.WebSearch), CostCap: t.CostCapUSD, Live: live})

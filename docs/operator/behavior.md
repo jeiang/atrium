@@ -392,7 +392,10 @@ The assistant event stream is durable and reconnectable with `Last-Event-ID`;
 only the progress lines of sub-agent tools are live and are not replayed.
 It is not a separate run. It sends a heartbeat every 15 seconds. At most 4
 streams per credential and 16 per server are open at once; more get 429.
-Finished streams are kept for 30 days. Multipart file requests share four upload slots;
+Finished streams are kept for 30 days. The app event stream (`/events`) tells
+a client which topics changed, with revision numbers and no content; at most
+2 per credential and 8 per server are open at once, counted apart from run
+streams; more get 429. Multipart file requests share four upload slots;
 excess requests get 429 with `Retry-After: 1`. A bounded 1 MiB scan determines
 whether a multipart request has files; malformed or incomplete bodies count
 as file-bearing. Multipart reads have a 30-second idle deadline. Uploads also

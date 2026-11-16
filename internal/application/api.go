@@ -26,12 +26,20 @@ func (b BodyKind) Valid() bool {
 	return false
 }
 
+type StreamKind string
+
+const (
+	RunStream StreamKind = "run"
+	AppStream StreamKind = "app"
+)
+
 type APIShape struct {
 	Area                 Area
 	Request              reflect.Type
 	Response             reflect.Type
 	Success              int
 	Body                 BodyKind
+	Stream               StreamKind
 	BodyLimit            int64
 	AllowJSON            bool
 	MultipartFile        string

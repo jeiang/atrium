@@ -142,6 +142,9 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 	if events := doc.Components.Schemas["RunStreamEvent"]; len(events.AnyOf) != 2 || !strings.Contains(string(events.AnyOf[0]), "RunStreamEventToolDone") {
 		t.Errorf("RunStreamEvent is not an open union of typed events: %+v", events)
 	}
+	if events := doc.Components.Schemas["AppEvent"]; len(events.AnyOf) != 2 || !strings.Contains(string(events.AnyOf[0]), "AppEventSync") || !strings.Contains(string(events.AnyOf[0]), "AppEventChange") {
+		t.Errorf("AppEvent is not an open union of typed events: %+v", events)
+	}
 	var reach struct {
 		Areas []struct {
 			Area       string   `json:"area"`
