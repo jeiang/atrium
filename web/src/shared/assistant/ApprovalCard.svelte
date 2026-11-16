@@ -58,6 +58,7 @@
   let receiptEl = $state<HTMLElement>();
   let rowHeight = $state(0);
   let chromeEnd = $state(0);
+  let measured = $state(false);
   let touch = $state(false);
   let endSeen = $state(false);
   let cardSeen = $state(false);
@@ -99,6 +100,7 @@
       frame = requestAnimationFrame(() => {
         rowHeight = target.offsetHeight;
         chromeEnd = Number.parseFloat(getComputedStyle(target).insetBlockEnd) || 0;
+        measured = true;
       });
     });
     observer.observe(target);
@@ -150,7 +152,7 @@
   });
 
   $effect(() => {
-    if (!sentinel || endSeen) return;
+    if (!sentinel || endSeen || !measured) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) endSeen = true;
