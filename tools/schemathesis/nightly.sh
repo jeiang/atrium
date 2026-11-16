@@ -16,7 +16,7 @@ pid=
 trap '[ -z "$pid" ] || { kill "$pid"; wait "$pid"; } 2>/dev/null || true; rm -rf "$work"' EXIT
 
 export HOME=$work/home ATRIUM_DB=$work/atrium.db ATRIUM_CACHE_DIR=$work/cache ATRIUM_INITIAL_TZ=UTC
-export ATRIUM_SERVE_ADDR_FILE=$work/addr
+export ATRIUM_SERVE_ADDR_FILE=$work/addr ATRIUM_CORE_OPS_LISTEN=127.0.0.1:0
 mkdir -p "$HOME"
 
 token=$("$bin" auth token issue --name schemathesis)
@@ -38,6 +38,11 @@ if [ -z "$base" ]; then
   exit 2
 fi
 
+webOnly=()
+while IFS= read -r path; do
+  webOnly+=(--exclude-path "$path")
+done < <(jq -r '.paths | to_entries[] | .key as $path | .value[] | objects | select(has("servers") and (.servers | map(.url) | index("/api/v1") | not)) | $path' "$spec" | sort -u)
+
 start=$(date +%s)
 status=0
 cd "$work"
@@ -45,6 +50,7 @@ timeout $((budget + 300)) uvx --from "schemathesis==$version" schemathesis --no-
   --url "$base/api/v1" \
   --header "Authorization: Bearer $token" \
   --include-method GET \
+  "${webOnly[@]}" \
   --checks not_a_server_error,status_code_conformance,content_type_conformance,response_schema_conformance \
   --phases examples,coverage,fuzzing \
   --max-time "$budget" \

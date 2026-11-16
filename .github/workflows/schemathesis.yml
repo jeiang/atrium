@@ -37,7 +37,7 @@ jobs:
 
       - name: Run Schemathesis against /api/v1
         run: |
-          nix shell --inputs-from . nixpkgs#uv nixpkgs#curl -c \
+          nix shell --inputs-from . nixpkgs#uv nixpkgs#curl nixpkgs#jq -c \
             tools/schemathesis/nightly.sh "$(cat "$RUNNER_TEMP/atrium-out")/bin/atrium" "$RUNNER_TEMP/schemathesis"
 
       - name: Open or update the issue
