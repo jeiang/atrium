@@ -10,6 +10,7 @@ result
 
 /internal/web/static/
 /internal/web/static.next/
+/internal/web/app/dist/
 node_modules/
 
 # SQLite sidecars from opening the golden world fixture

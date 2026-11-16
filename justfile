@@ -97,6 +97,10 @@ assets:
   rm -rf internal/web/static
   cp -R "${ATRIUM_STATIC_ASSETS:?set by the dev shell}" internal/web/static
   chmod -R u+w internal/web/static
+  [ "${ATRIUM_WEB_ASSETS:?set by the dev shell}" != "{{justfile_directory()}}/web/dist" ] || (cd web && npm run build)
+  rm -rf internal/web/app/dist
+  cp -R "$ATRIUM_WEB_ASSETS" internal/web/app/dist
+  chmod -R u+w internal/web/app/dist
 
 css mode="watch":
   #!/usr/bin/env bash
@@ -148,13 +152,13 @@ css mode="watch":
   done
 
 web-dev:
-  {{dev}} bash -c 'cd web && { [ -d node_modules ] || npm ci; } && npm run dev'
+  {{dev}} bash -c 'cd web && npm run dev'
 
 web-build:
-  {{dev}} bash -c 'cd web && { [ -d node_modules ] || npm ci; } && npm run build && npm run build:mock'
+  {{dev}} bash -c 'cd web && npm run build && npm run build:mock'
 
 web-lint:
-  {{dev}} bash -c 'cd web && { [ -d node_modules ] || npm ci; } && npm run lint && npm run check'
+  {{dev}} bash -c 'cd web && npm run lint && npm run check'
 
 settingsgen:
   go run -tags modernc ./tools/settingsgen docs/config
