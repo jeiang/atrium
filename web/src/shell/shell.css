@@ -1,5 +1,25 @@
 @import "../tokens/gen/media.css";
 
+@layer reset {
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  fieldset {
+    min-inline-size: 0;
+  }
+}
+
 @layer base {
   html {
     text-size-adjust: 100%;
