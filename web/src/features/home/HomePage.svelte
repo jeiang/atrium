@@ -105,20 +105,6 @@
 
   let draft = $state('');
   let sending = $state(false);
-  let root = $state<HTMLElement>();
-  let dock = $state<HTMLElement>();
-
-  $effect(() => {
-    if (!root || !dock) return;
-    const page = root;
-    const observer = new ResizeObserver(([entry]) => {
-      const height = entry?.borderBoxSize[0]?.blockSize ?? dock?.offsetHeight ?? 0;
-      page.style.setProperty('--dock', `${Math.ceil(height)}px`);
-    });
-    observer.observe(dock);
-    return () => observer.disconnect();
-  });
-
   async function onSubmit(text: string): Promise<void> {
     sending = true;
     try {
@@ -134,11 +120,11 @@
   }
 </script>
 
-<div class="home" bind:this={root} data-docked={assistantOn || undefined}>
+<div class="home">
   <h1 class="visually-hidden">Home</h1>
 
   {#if assistantOn}
-    <div class="home__composer" bind:this={dock}>
+    <div class="home__composer">
       <Composer bind:value={draft} busy={sending} placeholder="Ask atrium anything" onsubmit={onSubmit} />
     </div>
   {:else}

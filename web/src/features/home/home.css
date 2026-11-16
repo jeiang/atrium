@@ -48,7 +48,7 @@
   .home__all {
     display: inline-flex;
     align-items: center;
-    min-block-size: var(--row);
+    min-block-size: var(--target);
     font-size: var(--t-sm);
     font-weight: 700;
   }
@@ -124,27 +124,25 @@
       grid-template-areas:
         "weather"
         "needs"
-        "digest";
+        "composer";
       gap: var(--s-5);
     }
 
-    .home[data-docked] {
-      padding-block-end: var(--dock, 0px);
+    .home__digest {
+      display: none;
     }
 
     .home__composer {
-      position: fixed;
-      inset-inline: 0;
+      position: sticky;
       inset-block-end: var(--chrome-end, 0px);
       z-index: 20;
       max-inline-size: none;
-      padding: var(--s-2) calc(var(--s-3) + var(--safe-right)) var(--s-2) calc(var(--s-3) + var(--safe-left));
-      border-block-start: 1px solid var(--line);
+      padding-block: var(--s-2);
       background: var(--paper);
     }
 
     .home__composer .composer {
-      padding: var(--s-1);
+      padding: 2px;
       box-shadow: none;
     }
 

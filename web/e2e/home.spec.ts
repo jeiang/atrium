@@ -210,22 +210,25 @@ test.describe('home failures', () => {
 test.describe('home on a phone', () => {
   test.use(phone);
 
-  test('weather comes before Needs you and the composer docks above the tab bar', async ({ page }) => {
+  test('weather, then Needs you, then a 50 px composer docked above the tab bar', async ({ page }) => {
     await useScenario(page, { needsYou: 12, home: { digest: 7 } });
     await gotoHome(page);
     await expect(page.getByRole('heading', { level: 2, name: 'Weather in Hillfield' })).toBeVisible();
     const weather = await page.locator('.home__weather').boundingBox();
     const needs = await needsYou(page).boundingBox();
     expect(weather && needs && weather.y < needs.y).toBe(true);
+    await expect(page.locator('.home__digest')).toBeHidden();
     const dock = await page.locator('.home__composer').boundingBox();
     const tabbar = await page.locator('.tabbar').boundingBox();
     if (!dock || !tabbar) throw new Error('no dock or tab bar');
     expect(Math.abs(dock.y + dock.height - tabbar.y)).toBeLessThanOrEqual(1);
-    expect(dock.height).toBeLessThanOrEqual(72);
+    const composer = await page.locator('.home__composer .composer').boundingBox();
+    expect(Math.round(composer?.height ?? 0)).toBe(50);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    const last = await page.locator('.home__digest').boundingBox();
-    if (!last) throw new Error('no digest');
-    expect(last.y + last.height).toBeLessThanOrEqual(dock.y + 1);
+    const last = await needsYou(page).boundingBox();
+    const docked = await page.locator('.home__composer').boundingBox();
+    if (!last || !docked) throw new Error('no list or dock');
+    expect(last.y + last.height).toBeLessThanOrEqual(docked.y + 1);
     await expect(page.getByRole('button', { name: 'Send' })).toHaveCSS('width', '44px');
   });
 
@@ -245,12 +248,13 @@ test.describe('home design checks', () => {
       test('passes the design checks and axe', async ({ page }) => {
         await page.emulateMedia({ reducedMotion: 'reduce' });
         await gotoHome(page);
-        await expect(page.locator('.home__digest .digest__list > li')).toHaveCount(5);
+        if (layout.width > 860) await expect(page.locator('.home__digest .digest__list > li')).toHaveCount(5);
+        else await expect(page.getByRole('heading', { level: 2, name: 'Weather in Hillfield' })).toBeVisible();
         await expectNoSeriousAxeFindings(page);
         await expectNoHorizontalScroll(page);
-        await expectRoundedSurfaces(page, ['.rail', '.tabbar', '.home__composer']);
+        await expectRoundedSurfaces(page, ['.rail', '.tabbar']);
         await expectNoBlue(page);
-        if (layout.touch) await expectTouchTargets(page, '.home');
+        if (layout.touch) await expectTouchTargets(page);
         await expectFocusVisible(page, '.home');
         await expectReducedMotion(page);
       });
