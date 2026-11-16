@@ -6,6 +6,7 @@
   import Approvals from './sections/Approvals.svelte';
   import Assistant from './sections/Assistant.svelte';
   import Collections from './sections/Collections.svelte';
+  import Connections from './sections/Connections.svelte';
   import Forms from './sections/Forms.svelte';
   import Foundations from './sections/Foundations.svelte';
   import Overlays from './sections/Overlays.svelte';
@@ -35,6 +36,7 @@
   <Collections />
   <States />
   <Overlays />
+  <Connections />
   <Widgets />
   <Approvals />
   <Tools />

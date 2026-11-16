@@ -37,7 +37,15 @@ export const { p, navigate, isActive, route } = createRouter(
       meta: { title: 'Apps' },
     },
     '/assistant': { '/': placeholder, meta: { title: 'Assistant' } },
-    '/settings': { '/': placeholder, meta: { title: 'Settings' } },
+    '/settings': {
+      '/': placeholder,
+      '/connections': {
+        '/': () => import('../features/connections/ConnectionsPage.svelte').catch(unavailable),
+        '/:kind/:name': () => import('../features/connections/ConnectionPage.svelte').catch(unavailable),
+        meta: { title: 'Connections' },
+      },
+      meta: { title: 'Settings' },
+    },
     '/spaces': { '/': () => import('./SpacesPage.svelte').catch(unavailable), meta: { title: 'Spaces' } },
     '/__gallery':
       import.meta.env.MODE === 'mock'
