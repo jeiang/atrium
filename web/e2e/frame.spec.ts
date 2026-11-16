@@ -72,13 +72,13 @@ test.describe('signed in', () => {
   });
 
   test('a placeholder links to the same place in the current interface', async ({ page }) => {
-    await gotoShell(page, '/plan');
-    await expect(page.getByRole('heading', { level: 1, name: 'Plan' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Plan in the current interface' })).toHaveAttribute(
+    await gotoShell(page, '/knowledge');
+    await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open Knowledge in the current interface' })).toHaveAttribute(
       'href',
-      '/loops',
+      '/library/knowledge',
     );
-    await expect(page).toHaveTitle('Plan · atrium');
+    await expect(page).toHaveTitle('Knowledge · atrium');
   });
 
   test('back and forward move between destinations', async ({ page }) => {

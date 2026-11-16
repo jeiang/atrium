@@ -3,7 +3,8 @@ import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract
 import { API_BASE } from '../contract';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type HomeScenario, homeHandlers } from './home';
-import { decideElsewhere, type InboxScenario, inboxCount, inboxHandlers } from './inbox';
+import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
+import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -17,13 +18,14 @@ export interface MockScenario {
   chat?: ChatScenario;
   home?: HomeScenario;
   unreachable?: boolean;
+  plan?: PlanScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
 export const MOCK_EVENTS = 'atrium-mock-events';
 const CSRF = 'mock-csrf-token';
 const MODULES = ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'];
-const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant'];
+const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant', 'tasks'];
 const encoder = new TextEncoder();
 
 function scenario(): MockScenario {
@@ -124,7 +126,9 @@ export const handlers = [
         const topics = [...revisions].map(([topic, revision]) => ({ topic, revision }));
         send(`retry: 1000\n\nevent: sync\ndata: ${JSON.stringify({ topics })}\n\n`);
         channel.addEventListener('message', (event: MessageEvent<{ topic: string; decide?: string }>) => {
-          if (event.data.decide) decideElsewhere(event.data.decide);
+          const decided = event.data.decide;
+          if (decided?.startsWith('task:') || decided?.startsWith('commitment:')) planDecideElsewhere(decided);
+          else if (decided) decideElsewhere(decided);
           const revision = (revisions.get(event.data.topic) ?? 0) + 1;
           revisions.set(event.data.topic, revision);
           send(`event: change\ndata: ${JSON.stringify({ topic: event.data.topic, revision })}\n\n`);
@@ -139,6 +143,8 @@ export const handlers = [
     });
   }),
   ...homeHandlers(scenario),
+  ...inboxAskHandlers,
+  ...planHandlers,
   ...chatHandlers,
   ...simulatorHandlers,
   ...inboxHandlers,

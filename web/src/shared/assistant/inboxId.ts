@@ -1,15 +1,11 @@
 import { p } from '../../shell/router';
 
-export const inboxTypes = ['proposal', 'draft', 'attention', 'ask'] as const;
-
-export type InboxType = (typeof inboxTypes)[number];
-
 export interface InboxId {
-  type: InboxType;
-  id: number;
+  type: string;
+  id: string;
 }
 
-export function inboxPath(type: InboxType, id: number): string {
+export function inboxPath(type: string, id: number | string): string {
   return p('/inbox/:item', { params: { item: `${type}:${id}` } });
 }
 
@@ -20,10 +16,9 @@ export function parseInboxId(segment: string): InboxId | undefined {
   } catch {
     return undefined;
   }
-  const match = /^([a-z]+):([1-9][0-9]{0,15})$/.exec(text);
-  if (!match) return undefined;
-  const type = inboxTypes.find((item) => item === match[1]);
-  const id = Number(match[2]);
-  if (!type || !Number.isSafeInteger(id)) return undefined;
+  const match = /^([a-z][a-z_]{0,39}):([A-Za-z0-9][A-Za-z0-9._@+-]{0,199})$/.exec(text);
+  if (!match?.[1] || !match[2]) return undefined;
+  const [, type, id] = match;
+  if ((type === 'proposal' || type === 'draft') && !/^[1-9][0-9]{0,15}$/.test(id)) return undefined;
   return { type, id };
 }

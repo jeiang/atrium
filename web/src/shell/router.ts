@@ -30,7 +30,17 @@ export const { p, navigate, isActive, route } = createRouter(
       '/:id': () => preloadMarkdown(import('../features/chats/ChatPage.svelte').catch(unavailable)),
       meta: { title: 'Chats' },
     },
-    '/plan': { '/': placeholder, meta: { title: 'Plan' } },
+    '/plan': {
+      '/': () => import('../features/plan/PlanPage.svelte'),
+      '/waiting': () => import('../features/plan/PlanPage.svelte'),
+      '/item/:ref': () => import('../features/plan/PlanPage.svelte'),
+      '/tasks': {
+        '/': () => import('../features/plan/TasksPage.svelte'),
+        '/:id': () => import('../features/plan/TasksPage.svelte'),
+        meta: { title: 'Tasks' },
+      },
+      meta: { title: 'Plan' },
+    },
     '/knowledge': { '/': placeholder, meta: { title: 'Knowledge' } },
     '/apps': {
       '/': () => import('./AppsPage.svelte').catch(unavailable),
