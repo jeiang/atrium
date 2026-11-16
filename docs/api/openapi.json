@@ -4686,11 +4686,6 @@
         ],
         "type": "object"
       },
-      "EventDelete": {
-        "additionalProperties": false,
-        "properties": {},
-        "type": "object"
-      },
       "EventPatch": {
         "additionalProperties": false,
         "properties": {
@@ -19743,16 +19738,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EventDelete"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {

@@ -165,6 +165,9 @@ func ReadEvent(ctx context.Context, env config.Env, set Settings, target Target,
 }
 
 func missingICloud(err error) error {
+	if err == nil {
+		return nil
+	}
 	if text := err.Error(); strings.HasPrefix(text, "no iCloud event with uid") {
 		return Missing(text)
 	}

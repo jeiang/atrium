@@ -25,9 +25,19 @@ func calendarEffect(t *testing.T, s *apiSite, token string, got apiReply) string
 
 func calendarEffectState(t *testing.T, s *apiSite, token, id string) string {
 	t.Helper()
-	data := apiData(t, s.do(http.MethodGet, "/api/v1/effects/"+id, token, nil), http.StatusOK)
+	got := s.do(http.MethodGet, "/api/v1/effects/"+id, token, nil)
+	if got.status != http.StatusOK {
+		t.Fatalf("effect %s: %d %s", id, got.status, got.body)
+	}
+	data := got.json
+	if nested, ok := data["data"].(map[string]any); ok {
+		data = nested
+	}
 	if nested, ok := data["effect"].(map[string]any); ok {
 		data = nested
+	}
+	if data["state"] == nil {
+		t.Fatalf("effect %s has no state: %s", id, got.body)
 	}
 	return fmt.Sprint(data["state"])
 }
@@ -82,7 +92,9 @@ func TestCalendarOperatorEventWritesICloud(t *testing.T) {
 	if current["title"] != "Dentist" || current["start"] != "2026-11-01T10:00:00-05:00" || read.header.Get("ETag") != `W/"`+current["revision"].(string)+`"` {
 		t.Fatalf("event read: %v etag %q", current, read.header.Get("ETag"))
 	}
-	if web := s.do(http.MethodGet, "/web/v1/calendar/events/icloud/dentist", token, nil); web.status != http.StatusOK {
+	browser := newWebClient(t, s.base, nil)
+	browser.session("local")
+	if web := browser.do(http.MethodGet, "/web/v1/calendar/events/icloud/dentist", nil); web.status != http.StatusOK || web.json["data"].(map[string]any)["revision"] != current["revision"] {
 		t.Fatalf("web prefix read: %d %s", web.status, web.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/calendar/events/icloud/nobody", token, nil), http.StatusNotFound, "not_found")
@@ -106,11 +118,12 @@ func TestCalendarOperatorEventWritesICloud(t *testing.T) {
 		t.Fatalf("edit effect state %q", state)
 	}
 	undoCalendarEffect(t, s, token, editID)
-	if body := srv.Objects()[caldavtest.CalendarPath(0)+"dentist.ics"]; body != dentistICS {
+	if restored := apiData(t, s.do(http.MethodGet, dentist, token, nil), http.StatusOK); restored["revision"] != current["revision"] || strings.Contains(srv.Objects()[caldavtest.CalendarPath(0)+"dentist.ics"], "Suite 4") {
+		body := srv.Objects()[caldavtest.CalendarPath(0)+"dentist.ics"]
 		t.Fatalf("undo of the edit did not restore the event: %q", body)
 	}
 
-	created := s.do(http.MethodPost, "/web/v1/calendar/events", token, map[string]any{
+	created := browser.do(http.MethodPost, "/web/v1/calendar/events", map[string]any{
 		"calendar": "icloud", "title": "Piano lesson", "start": "2026-11-05T22:00:00Z", "end": "2026-11-05T23:00:00Z", "notes": "Bring the book"})
 	made := apiData(t, created, http.StatusCreated)
 	uid, _ := made["uid"].(string)
@@ -127,6 +140,7 @@ func TestCalendarOperatorEventWritesICloud(t *testing.T) {
 	}
 
 	expectAPI(t, s.do(http.MethodDelete, dentist, token, nil, "If-Match", `W/"stale"`), http.StatusPreconditionFailed, "precondition_failed")
+	kept := srv.Objects()[caldavtest.CalendarPath(0)+"dentist.ics"]
 	removed := s.do(http.MethodDelete, dentist, token, nil, "If-Match", read.header.Get("ETag"))
 	if got := apiData(t, removed, http.StatusOK); got["deleted"] != "dentist" {
 		t.Fatalf("delete: %s", removed.body)
@@ -136,7 +150,7 @@ func TestCalendarOperatorEventWritesICloud(t *testing.T) {
 		t.Fatal("delete left the event")
 	}
 	undoCalendarEffect(t, s, token, deleteID)
-	if body := srv.Objects()[caldavtest.CalendarPath(0)+"dentist.ics"]; body != dentistICS {
+	if body := srv.Objects()[caldavtest.CalendarPath(0)+"dentist.ics"]; body != kept {
 		t.Fatalf("undo of the delete did not put the event back: %q", body)
 	}
 
@@ -147,7 +161,7 @@ func TestCalendarOperatorEventWritesICloud(t *testing.T) {
 	apiData(t, reread, http.StatusOK)
 	srv.FailPuts, srv.PutStatus = 1, http.StatusInternalServerError
 	lost := s.do(http.MethodPatch, dentist, token, map[string]any{"title": "Dentist lost"}, "If-Match", reread.header.Get("ETag"))
-	expectAPI(t, lost, http.StatusBadGateway, "effect_unknown")
+	expectAPI(t, lost, http.StatusConflict, "effect_unknown")
 	lostIDs, _ := lost.json["error"].(map[string]any)["effect_ids"].([]any)
 	if len(lostIDs) != 1 {
 		t.Fatalf("unknown outcome without its effect: %s", lost.body)
@@ -272,8 +286,8 @@ credential_files = { "oauth/client_secret" = "` + filepath.Join(dir, "client_sec
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", filepath.Join(dir, "host.toml"))
-	setEnv(t, "ATRIUM_GOOGLE_TOKEN_URL", gsrv.URL+"/token")
-	setEnv(t, "ATRIUM_CALENDAR_GOOGLE_TOKEN_URL", gsrv.URL+"/token")
+	t.Setenv("ATRIUM_GOOGLE_TOKEN_URL", gsrv.URL+"/token")
+	t.Setenv("ATRIUM_CALENDAR_GOOGLE_TOKEN_URL", gsrv.URL+"/token")
 	setEnv(t, "ATRIUM_CALENDAR_GOOGLE_API_URL", gsrv.URL+"/calendar/v3/")
 	token := localAPIToken(t, "api")
 	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")

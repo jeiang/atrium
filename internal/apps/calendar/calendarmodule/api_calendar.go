@@ -193,6 +193,7 @@ func eventRoutes(d *web.Deps) []application.Binding {
 	create.Success = 201
 	patch := shape("Changes any of title, start, end, all_day, location and notes. If-Match is required: send the revision from the event read; a stale revision gets 412 and nothing is written.", application.NotFound, application.Precondition, application.Unknown)
 	remove := shape("Deletes the event. If-Match is optional: with it, a stale revision gets 412 and nothing is deleted. Undo puts the event back.", application.NotFound, application.Precondition, application.Unknown)
+	remove.Body = application.BodyNone
 	return []application.Binding{
 		api.Query(d, defs[0], get, "GET /calendar/events/{calendar}/{uid}", func(ctx context.Context, in EventPath) (application.Read[calendar.Event], error) {
 			return writes.Event(ctx, calapp.EventRef{Calendar: in.Calendar, UID: in.UID})
