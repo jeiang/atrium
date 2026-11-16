@@ -97,7 +97,7 @@ func ConnectionHealth(id string) Requirement {
 		default:
 			return "", nil
 		}
-		reason := id + " is " + strings.ReplaceAll(string(view.State), "_", " ")
+		reason := id + " is " + strings.ReplaceAll(view.Status(), "_", " ")
 		if view.Reason != "" {
 			reason += ": " + view.Reason
 		}

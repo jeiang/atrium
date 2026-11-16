@@ -45,6 +45,7 @@ func Connections() []connections.Definition {
 		Kind:            connections.Kind(KindEmbedding),
 		CredentialSlots: []string{"bearer"},
 		Validate:        validateEmbedding,
+		Grace:           connections.UnreachableGrace,
 		Test:            testEmbedding,
 	}}
 }

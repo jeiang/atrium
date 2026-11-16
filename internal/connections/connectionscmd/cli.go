@@ -16,6 +16,7 @@ func Command(open connectionsapp.Open) *cli.Command {
 		Commands: []*cli.Command{
 			{Name: "list", Help: "list connections with their capabilities, credential presence and health", Setup: s.list},
 			{Name: "test", Help: "test one connection or every configured connection and save the outcome", Setup: s.test},
+			{Name: "check", Help: "check configured connections without test side effects and save the outcome", Setup: s.check},
 		},
 	}
 }
@@ -39,7 +40,7 @@ func (s *service) list(a *cli.Args) cli.Handler {
 			return writeJSON(e, views)
 		}
 		for _, v := range views {
-			_, _ = fmt.Fprintf(e.Stdout, "%s\t%s\t%s\t%s\t%s\n", v.ID, v.Kind, credentialSummary(v), v.State, reasonOr(v.Reason, "-"))
+			_, _ = fmt.Fprintf(e.Stdout, "%s\t%s\t%s\t%s\t%s\n", v.ID, v.Kind, credentialSummary(v), v.Status(), reasonOr(v.Reason, "-"))
 		}
 		return cli.ExitOK
 	}
@@ -63,25 +64,53 @@ func (s *service) test(a *cli.Args) cli.Handler {
 			return cli.Fail(e, err)
 		}
 		views := change.Data
-		if *jsonOut {
-			if code := writeJSON(e, views); code != cli.ExitOK {
-				return code
-			}
-		} else {
-			for _, v := range views {
-				_, _ = fmt.Fprintf(e.Stdout, "%s\t%s\t%s\n", v.ID, v.State, reasonOr(v.Reason, "-"))
-			}
-		}
-		for _, v := range views {
-			if v.State == "failing" || v.State == "needs_reauth" {
-				return cli.ExitError
-			}
+		if code := report(e, views, *jsonOut); code != cli.ExitOK {
+			return code
 		}
 		if !*all && len(views) == 1 && (views[0].State == "unconfigured" || views[0].State == "disabled") {
 			return cli.ExitError
 		}
 		return cli.ExitOK
 	}
+}
+
+func (s *service) check(a *cli.Args) cli.Handler {
+	changed := a.Bool("changed", cli.Opt{Help: "check only connections whose configuration changed since their last check"})
+	jsonOut := a.Bool("json", cli.Opt{Help: "print JSON"})
+	return func(e *cli.Env) int {
+		svc, closeDB, err := s.open(e.Ctx)
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		defer closeDB()
+		change, err := svc.Check(e.Ctx, connectionsapp.CheckInput{Changed: *changed})
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		if len(change.Data) == 0 && !*jsonOut {
+			_, _ = fmt.Fprintln(e.Stdout, "no connection to check")
+			return cli.ExitOK
+		}
+		return report(e, change.Data, *jsonOut)
+	}
+}
+
+func report(e *cli.Env, views []connectionsapp.View, jsonOut bool) int {
+	if jsonOut {
+		if code := writeJSON(e, views); code != cli.ExitOK {
+			return code
+		}
+	} else {
+		for _, v := range views {
+			_, _ = fmt.Fprintf(e.Stdout, "%s\t%s\t%s\n", v.ID, v.Status(), reasonOr(v.Reason, "-"))
+		}
+	}
+	for _, v := range views {
+		if v.State == "failing" || v.State == "needs_reauth" {
+			return cli.ExitError
+		}
+	}
+	return cli.ExitOK
 }
 
 func writeJSON(e *cli.Env, v any) int {

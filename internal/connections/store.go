@@ -672,6 +672,7 @@ func (s *Store) scanView(sc scanner) (View, error) {
 	if v.Results == nil {
 		v.Results = []Result{}
 	}
+	v.GraceUntil = graceUntil(v.State, v.Results, time.Now())
 	return v, nil
 }
 
@@ -1180,16 +1181,13 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, results, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
 }
 
-func (s *Store) record(ctx context.Context, id ID, revision int64, results []Result, commits ...Commit) (View, error) {
+func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, results []Result, commits ...Commit) (View, error) {
 	state, reason := aggregate(results, nil)
-	raw, err := json.Marshal(results)
-	if err != nil {
-		return View{}, err
-	}
-	now := s.stamp()
+	at := s.now()
+	now := float64(at.UnixNano()) / 1e9
 	var lastOK, reauthAt any
 	if state == OK {
 		lastOK = now
@@ -1197,13 +1195,26 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 	if state == NeedsReauth {
 		reauthAt = now
 	}
-	var previous State
+	var previous, next State
 	updated := false
 	if err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, "SELECT state FROM connections WHERE id = ? AND revision = ?", id, revision).Scan(&previous); err != nil {
+		var (
+			prior       State
+			priorJSON   string
+			priorAt     *float64
+			priorResult []Result
+		)
+		if err := tx.QueryRowContext(ctx, "SELECT state, results_json, checked_at FROM connections WHERE id = ? AND revision = ?", id, revision).Scan(&prior, &priorJSON, &priorAt); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return committed(ctx, tx, false, commits)
 			}
+			return err
+		}
+		_ = json.Unmarshal([]byte(priorJSON), &priorResult)
+		carryGrace(results, priorResult, prior, grace, at)
+		previous, next = effective(prior, priorResult, timeOr(fromUnix(priorAt), at)), effective(state, results, at)
+		raw, err := json.Marshal(results)
+		if err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx,
@@ -1225,7 +1236,7 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 	if !updated {
 		return s.afterWrite(ctx, id)
 	}
-	s.announce(ctx, id, previous, state, reason)
+	s.announce(ctx, id, previous, next, reason)
 	return s.afterWrite(ctx, id)
 }
 
@@ -1420,9 +1431,11 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		var (
 			currentRevision int64
 			resultsJSON     string
+			kind            Kind
+			priorAt         *float64
 		)
-		if err := tx.QueryRowContext(ctx, "SELECT revision, results_json, state FROM connections WHERE id = ?", id).
-			Scan(&currentRevision, &resultsJSON, &previous); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT revision, results_json, state, kind, checked_at FROM connections WHERE id = ?", id).
+			Scan(&currentRevision, &resultsJSON, &previous, &kind, &priorAt); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return UnknownID(id)
 			}
@@ -1434,10 +1447,11 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		if previous == Disabled {
 			return nil
 		}
-		var results []Result
+		var prior []Result
 		if resultsJSON != "" {
-			_ = json.Unmarshal([]byte(resultsJSON), &results)
+			_ = json.Unmarshal([]byte(resultsJSON), &prior)
 		}
+		results := slices.Clone(prior)
 		replaced := false
 		for i := range results {
 			if results[i].Capability == result.Capability {
@@ -1448,15 +1462,25 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		if !replaced {
 			results = append(results, result)
 		}
-		state, reason = aggregate(results, nil)
+		var grace time.Duration
+		if s.reg != nil {
+			if def, ok := s.reg.Lookup(kind); ok {
+				grace = def.Grace
+			}
+		}
+		at := s.now()
+		carryGrace(results, prior, previous, grace, at)
+		var stored State
+		stored, reason = aggregate(results, nil)
+		previous, state = effective(previous, prior, timeOr(fromUnix(priorAt), at)), effective(stored, results, at)
 		raw, err := json.Marshal(results)
 		if err != nil {
 			return err
 		}
-		now := s.stamp()
+		now := float64(at.UnixNano()) / 1e9
 		res, err := tx.ExecContext(ctx,
 			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
-			state, reason, now, string(raw), now, id, revision)
+			stored, reason, now, string(raw), now, id, revision)
 		if err != nil {
 			return err
 		}

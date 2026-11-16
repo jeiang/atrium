@@ -23,10 +23,13 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 	if s.reg != nil {
 		n = s.reg.notify
 	}
-	if n == nil || s.d == nil || previous == next || next == Untested {
+	if n == nil || s.d == nil || previous == next || next == Untested || next == Away {
 		return
 	}
 	if (previous == "" || previous == Untested) && next != Failing && next != NeedsReauth && next != Disabled {
+		return
+	}
+	if previous == Away && (next == OK || next == Expiring) {
 		return
 	}
 	label := string(id)
@@ -64,7 +67,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 		if !errors.As(err, &invalid) {
 			return View{}, err
 		}
-		return s.record(ctx, id, lease.revision, []Result{{State: Failing, Reason: err.Error()}}, commits...)
+		return s.record(ctx, id, lease.revision, 0, []Result{{State: Failing, Reason: err.Error()}}, commits...)
 	}
 	action := def.Test
 	if def.Silent != nil {
@@ -74,7 +77,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, results, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
 }
 
 type HealthState struct {

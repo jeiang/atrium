@@ -349,6 +349,7 @@
         + " --emergency-host 127.0.0.1 --emergency-port 8481";
     in
       command == expected) ["oidc" "proxy" "proxy+oidc" "local"]; true;
+    deployCheck = assert hasLines "atrium.service" ["ExecStartPre=-${lib.getExe cfg.package} connections check --changed"]; true;
     backupInServe = let
       defaultHost = defaults.config.services.atrium.renderedHost;
       web = unitText "atrium.service";
@@ -536,7 +537,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
+        module = assert exampleEvaluates && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig && deployCheck;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

@@ -2260,6 +2260,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "grace_until": {
+            "format": "date-time",
+            "type": "string"
+          },
           "reason": {
             "type": "string"
           },
@@ -2318,6 +2322,10 @@
             "type": "boolean"
           },
           "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "grace_until": {
             "format": "date-time",
             "type": "string"
           },

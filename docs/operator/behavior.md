@@ -179,6 +179,26 @@ failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
 keeps its row and credentials, and is announced once.
 
+qBittorrent and the embedding endpoint ride out short outages: a failure that
+follows an `ok` or `expiring` state starts a 6-hour grace window. The stored
+state stays `failing`, but the CLI, the Connections page and the module
+settings header show `away until <time UTC>`, and the connection read model
+carries `grace_until`. Nothing is sent inside the window, and a recovery inside
+it is silent. The first check after the window that still fails shows
+`failing` and notifies once; the hourly watch rechecks these rows, so the
+notice arrives within about an hour of the window ending. A failure from any
+other state, such as the first check after a host change, has no window.
+Other connection kinds have no window.
+
+`atrium connections check` runs the silent check of every configured
+connection and records the result; `--changed` checks only connections that
+were added or whose host declaration changed since their last check, and
+prints `no connection to check` when there are none. Each checked connection
+prints its id, state (or `away until <time UTC>`) and reason. The command
+exits 1 when a checked connection is failing, in its window or not, or needs
+reauth. `connections test` keeps the explicit test, which may have visible
+side effects such as a diagnostic push.
+
 A connection that lacks what it needs checks as `unconfigured`, not `ok` or
 `failing`: Anthropic without an API key, web push without a subject or VAPID
 key, and weather without a location name or both coordinates. Mail, the

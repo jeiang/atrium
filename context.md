@@ -313,6 +313,23 @@ claims about the running application. Operator contracts are in
   also after a host change. A host-declared row dropped from the host file
   is disabled with its credentials kept and announced once; runtime
   observations do not change a disabled row.
+- qBittorrent and the embedding endpoint have a 6-hour grace window,
+  compiled into their connection kinds. A failure right after an `ok` or
+  `expiring` state stores `failing` with the window end in its result;
+  reads show `away until <time UTC>` (CLI, Connections page, module
+  settings header) and add `grace_until` to the connection read model.
+  Inside the window no notice is sent, and recovery is silent. The first
+  check after the window that still fails shows plain `failing` and
+  notifies once; the hourly watch rechecks such rows. A failure from any
+  other state, including a host change, gets no window. Other kinds have
+  none.
+- `atrium connections check` runs the silent check of every configured
+  connection, and `--changed` only those never checked since they were
+  added or their host declaration changed. It exits non-zero when a
+  checked connection is failing (in its window or not) or needs reauth.
+  The NixOS unit runs `connections check --changed` as `ExecStartPre`
+  with failure ignored, so a deploy reports changed connections in the
+  unit journal before serve starts.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification

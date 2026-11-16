@@ -26,6 +26,12 @@ const (
 	Failing      State = "failing"
 	Expiring     State = "expiring"
 	NeedsReauth  State = "needs_reauth"
+	Away         State = "away"
+)
+
+const (
+	UnreachableGrace = 6 * time.Hour
+	graceLayout      = "2006-01-02 15:04 UTC"
 )
 
 const (
@@ -58,6 +64,7 @@ type Result struct {
 	State      State           `json:"state"`
 	Reason     string          `json:"reason,omitempty"`
 	ExpiresAt  *time.Time      `json:"expires_at,omitempty"`
+	GraceUntil *time.Time      `json:"grace_until,omitempty"`
 	Data       json.RawMessage `json:"data,omitempty"`
 }
 
@@ -66,6 +73,7 @@ type Definition struct {
 	CredentialSlots []string
 	Defaults        map[string]string
 	Validate        func(Candidate) error
+	Grace           time.Duration
 	Test            func(context.Context, *Lease, []Capability) ([]Result, error)
 	// Silent replaces Test during a periodic health pass when the explicit
 	// test has a visible side effect, such as a diagnostic push.
@@ -184,6 +192,7 @@ type View struct {
 	ExpiresAt    *time.Time       `json:"expires_at,omitempty"`
 	ReauthAt     *time.Time       `json:"reauth_at,omitempty"`
 	Results      []Result         `json:"results"`
+	GraceUntil   *time.Time       `json:"grace_until,omitempty"`
 
 	revision  int64
 	transport transportOptions
@@ -199,6 +208,76 @@ func (v View) Configured() bool {
 }
 
 func (v View) Healthy() bool { return v.State == OK }
+
+func (v View) Status() string {
+	if v.GraceUntil != nil {
+		return string(Away) + " until " + v.GraceUntil.UTC().Format(graceLayout)
+	}
+	return string(v.State)
+}
+
+func (v View) GraceLapsed() bool {
+	if v.State != Failing || v.GraceUntil != nil || v.CheckedAt == nil {
+		return false
+	}
+	for _, r := range v.Results {
+		if r.State == Failing && r.GraceUntil != nil && v.CheckedAt.Before(*r.GraceUntil) {
+			return true
+		}
+	}
+	return false
+}
+
+func graceUntil(state State, results []Result, at time.Time) *time.Time {
+	if state != Failing {
+		return nil
+	}
+	var until *time.Time
+	for _, r := range results {
+		if r.State != Failing {
+			continue
+		}
+		if r.GraceUntil == nil || !at.Before(*r.GraceUntil) {
+			return nil
+		}
+		if until == nil || r.GraceUntil.Before(*until) {
+			until = r.GraceUntil
+		}
+	}
+	return until
+}
+
+func effective(state State, results []Result, at time.Time) State {
+	if graceUntil(state, results, at) != nil {
+		return Away
+	}
+	return state
+}
+
+func carryGrace(results, previous []Result, prior State, grace time.Duration, now time.Time) {
+	for i := range results {
+		if results[i].State != Failing {
+			continue
+		}
+		results[i].GraceUntil = nil
+		for _, p := range previous {
+			if p.Capability == results[i].Capability && p.State == Failing && p.GraceUntil != nil {
+				results[i].GraceUntil = p.GraceUntil
+			}
+		}
+		if results[i].GraceUntil == nil && grace > 0 && (prior == OK || prior == Expiring) {
+			until := now.Add(grace).UTC()
+			results[i].GraceUntil = &until
+		}
+	}
+}
+
+func timeOr(t *time.Time, fallback time.Time) time.Time {
+	if t == nil {
+		return fallback
+	}
+	return *t
+}
 
 type UnknownID string
 
