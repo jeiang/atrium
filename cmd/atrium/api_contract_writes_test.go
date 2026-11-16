@@ -120,12 +120,16 @@ func TestContractSpecPreviewsAndRuleVocabulary(t *testing.T) {
 	if err := json.Unmarshal(raw, &spec); err != nil {
 		t.Fatal(err)
 	}
-	paths := spec["paths"].(map[string]any)
+	paths, _ := spec["paths"].(map[string]any)
 	op := func(path, method string) map[string]any {
 		t.Helper()
-		o, _ := paths[path].(map[string]any)[method].(map[string]any)
+		item, _ := paths[path].(map[string]any)
+		if item == nil {
+			t.Fatalf("spec has no path %s", path)
+		}
+		o, _ := item[method].(map[string]any)
 		if o == nil {
-			t.Fatalf("no %s %s", method, path)
+			t.Fatalf("spec path %s has no %s", path, method)
 		}
 		return o
 	}
@@ -135,10 +139,13 @@ func TestContractSpecPreviewsAndRuleVocabulary(t *testing.T) {
 	if _, marked := op("/settings", "patch")["x-atrium-undoable"]; marked {
 		t.Fatal("settings patch is marked undoable")
 	}
-	if _, marked := op("/mail/scans/rebalance", "post")["x-atrium-undoable"]; marked {
+	if _, marked := op("/mail/scans/deletions", "post")["x-atrium-undoable"]; marked {
 		t.Fatal("a scan is marked undoable")
 	}
-	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
+	schemas := object(object(spec["components"])["schemas"])
+	if schemas == nil {
+		t.Fatal("spec has no components.schemas")
+	}
 
 	davFixture(t)
 	notes := strings.TrimSpace(strings.Repeat("Bring the referral letter and the insurance card. ", 40))
@@ -152,7 +159,7 @@ func TestContractSpecPreviewsAndRuleVocabulary(t *testing.T) {
 	s := &apiSite{t: t, base: base}
 
 	detail := apiData(t, s.do(http.MethodGet, "/api/v1/proposals/"+id, token, nil), http.StatusOK)
-	change, _ := detail["payload"].(map[string]any)["change"].(map[string]any)
+	change := object(object(detail["payload"])["change"])
 	if change == nil || change["kind"] != "calendar_event" || change["notes"] != notes {
 		t.Fatalf("typed preview: %v", detail["payload"])
 	}
@@ -160,9 +167,18 @@ func TestContractSpecPreviewsAndRuleVocabulary(t *testing.T) {
 	vocabulary := apiData(t, s.do(http.MethodGet, "/api/v1/mail/rules/vocabulary", token, nil), http.StatusOK)
 	validateSchema(t, schemas, object(schemas["RuleVocabulary"]), vocabulary, "vocabulary")
 	names := func(key string) []string {
+		t.Helper()
+		items, ok := vocabulary[key].([]any)
+		if !ok {
+			t.Fatalf("vocabulary has no list %s: %v", key, vocabulary)
+		}
 		var out []string
-		for _, it := range vocabulary[key].([]any) {
-			out = append(out, it.(map[string]any)["name"].(string))
+		for _, it := range items {
+			name, ok := object(it)["name"].(string)
+			if !ok {
+				t.Fatalf("vocabulary %s entry has no name: %v", key, it)
+			}
+			out = append(out, name)
 		}
 		return out
 	}
