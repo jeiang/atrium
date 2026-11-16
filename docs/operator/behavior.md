@@ -95,6 +95,10 @@ separate from the operator routes and serves `/metrics`, `/readyz`, `/livez`,
 `degraded`, or `not_ready` with 503. `/livez` answers 503 when serve is stalled.
 `/healthz` reports the runtime state. Public operator routes do not expose these.
 
+`atrium_scheduler_job_runs_total{scheduled_job,status}` counts finished job runs
+from the stored run history, so a restart does not reset it. Operator schedules
+share the `operator_schedule` label.
+
 Every command can export OTLP/HTTP traces when the host sets
 `otel_traces_endpoint`. Span attributes are an allowlist of ids, counts,
 durations and bounded names; string values are scrubbed of known secrets and

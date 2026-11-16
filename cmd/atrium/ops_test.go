@@ -21,6 +21,7 @@ var opsMetricNames = []string{
 	"atrium_budget_spent_usd",
 	"atrium_budget_spent_ratio",
 	"atrium_scheduler_jobs",
+	"atrium_scheduler_job_runs_total",
 	"atrium_scheduler_job_next_due_timestamp_seconds",
 	"atrium_scheduler_job_last_started_timestamp_seconds",
 	"atrium_db_exclusive_waits_total",

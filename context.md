@@ -652,7 +652,11 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery. The ops listener also serves
+  notification delivery, and `atrium_scheduler_job_runs_total{scheduled_job,status}`,
+  which counts finished runs from the stored run history at scrape time, so it
+  survives restarts; operator schedules share the label `operator_schedule`,
+  consecutive identical skips stored as one run count once, and within one
+  process the value never falls below what it last reported. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   The host owns the scrape job and the traces endpoint.
