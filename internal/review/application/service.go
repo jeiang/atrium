@@ -7,9 +7,9 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/live"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 )
 
 const (
@@ -29,24 +29,51 @@ const (
 type Deps struct {
 	DB       *db.DB
 	Ledger   *ledger.Store
-	Drafts   *drafts.Store
-	Live     *live.Live
+	Kinds    []review.Contribution
 	Registry *proposals.Registry
 	Pipeline *proposals.Pipeline
+	Modules  *module.Set
 }
 
 type Service struct {
 	db       *db.DB
 	state    *state.Store
 	ledger   *ledger.Store
-	drafts   *drafts.Store
-	live     *live.Live
+	kinds    []review.Contribution
 	registry *proposals.Registry
 	pipeline *proposals.Pipeline
+	modules  *module.Set
 }
 
 func New(d Deps) *Service {
-	return &Service{db: d.DB, state: state.New(d.DB), ledger: d.Ledger, drafts: d.Drafts, live: d.Live, registry: d.Registry, pipeline: d.Pipeline}
+	return &Service{db: d.DB, state: state.New(d.DB), ledger: d.Ledger, kinds: d.Kinds, registry: d.Registry, pipeline: d.Pipeline, modules: d.Modules}
+}
+
+func (s *Service) contributions(ctx context.Context) []review.Contribution {
+	set := module.SetFrom(ctx)
+	if set == nil {
+		set = s.modules
+	}
+	if set == nil || set.Current() == nil {
+		return s.kinds
+	}
+	snap := set.Current()
+	var out []review.Contribution
+	for _, c := range s.kinds {
+		if snap.Visible(c.Module) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (s *Service) actions() *review.Actions {
+	for _, c := range s.kinds {
+		if c.Kinds.Actions != nil {
+			return c.Kinds.Actions
+		}
+	}
+	return nil
 }
 
 func Describe() []application.Definition {

@@ -14,7 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/live"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -23,7 +23,6 @@ const (
 	SourceWrite        = "write"
 	SourceSettings     = "settings"
 	SourceOperation    = "operation"
-	CategoryMail       = "mail"
 	CategoryAssistant  = "assistant"
 	CategoryKnowledge  = "knowledge"
 	CategoryMedia      = "media"
@@ -33,18 +32,28 @@ const (
 	snippetLimit       = 800
 )
 
-var Categories = []string{CategoryMail, CategoryAssistant, CategoryKnowledge, CategoryMedia, CategorySettings}
+var platformCategories = []string{CategoryAssistant, CategoryKnowledge, CategoryMedia, CategorySettings}
+
+func (s *Service) Categories(ctx context.Context) []string {
+	var out []string
+	for _, c := range s.contributions(ctx) {
+		if c.Kinds.Actions != nil && c.Category != "" {
+			out = append(out, c.Category)
+		}
+	}
+	return append(out, platformCategories...)
+}
 
 type ActivityEntry struct {
-	Source    string             `json:"source"`
-	ID        int64              `json:"id"`
-	Category  string             `json:"category"`
-	TS        float64            `json:"ts"`
-	Mail      *MailActivity      `json:"mail,omitempty"`
-	Write     *WriteActivity     `json:"write,omitempty"`
-	Settings  *SettingsActivity  `json:"settings,omitempty"`
-	Phone     *PhoneActivity     `json:"phone,omitempty"`
-	Operation *OperationActivity `json:"operation,omitempty"`
+	Source    string               `json:"source"`
+	ID        int64                `json:"id"`
+	Category  string               `json:"category"`
+	TS        float64              `json:"ts"`
+	Mail      *review.MailActivity `json:"mail,omitempty"`
+	Write     *WriteActivity       `json:"write,omitempty"`
+	Settings  *SettingsActivity    `json:"settings,omitempty"`
+	Phone     *PhoneActivity       `json:"phone,omitempty"`
+	Operation *OperationActivity   `json:"operation,omitempty"`
 }
 
 type OperationActivity struct {
@@ -64,26 +73,6 @@ type PhoneActivity struct {
 	Kind   string `json:"kind"`
 	Status string `json:"status"`
 	Target string `json:"target"`
-}
-
-type MailActivity struct {
-	MessageID        int64   `json:"message_id"`
-	Subject          *string `json:"subject"`
-	Kind             string  `json:"kind"`
-	FromName         *string `json:"from_name"`
-	FromAddr         *string `json:"from_addr"`
-	Account          string  `json:"account"`
-	Src              *string `json:"src"`
-	Dest             *string `json:"dest"`
-	Status           string  `json:"status"`
-	Error            *string `json:"error"`
-	Undoable         bool    `json:"undoable"`
-	State            string  `json:"state"`
-	Blocked          bool    `json:"blocked"`
-	UndoBlocked      bool    `json:"undo_blocked"`
-	Undone           bool    `json:"undone"`
-	Resolved         bool    `json:"resolved"`
-	EffectiveOutcome string  `json:"effective_outcome,omitempty"`
 }
 
 type WriteActivity struct {
@@ -215,7 +204,7 @@ func (in ActivityInput) bound(source string) (float64, int64) {
 }
 
 func (s *Service) Activity(ctx context.Context, in ActivityInput) (application.Read[Activity], error) {
-	if in.Category != "" && !slices.Contains(Categories, in.Category) {
+	if in.Category != "" && !slices.Contains(s.Categories(ctx), in.Category) {
 		return application.Read[Activity]{}, invalid("category", "unknown category")
 	}
 	if in.After != nil && !in.After.Valid() {
@@ -378,15 +367,23 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, err
 		}
 		pages = append(pages, page)
 	}
-	if category == "" || category == CategoryMail {
+	var contributed []string
+	for _, c := range s.contributions(ctx) {
+		if c.Kinds.Actions == nil || c.Category == "" {
+			continue
+		}
+		contributed = append(contributed, c.Category)
+		if category != "" && category != c.Category {
+			continue
+		}
 		ts, id := in.bound(SourceMail)
-		actions, err := s.live.Before(ctx, ts, id, fetch)
+		actions, err := c.Kinds.Actions.Before(ctx, ts, id, fetch)
 		if err != nil {
 			return Activity{}, err
 		}
 		var mail sourcePage
 		for _, a := range actions {
-			e := MailEntry(a)
+			e := ActionEntry(c.Category, a)
 			mail.saw(keyOf(e), len(actions), fetch)
 			mail.entries = append(mail.entries, e)
 		}
@@ -398,7 +395,7 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, err
 		var phone sourcePage
 		for _, r := range found {
 			e := ActivityEntry{
-				ID: r.ID, TS: r.TS, Source: "phone", Category: CategoryMail,
+				ID: r.ID, TS: r.TS, Source: "phone", Category: c.Category,
 				Phone: &PhoneActivity{Actor: r.Actor, Kind: phoneKind(r), Status: r.Outcome, Target: phoneTarget(r)},
 			}
 			phone.saw(keyOf(e), len(found), fetch)
@@ -421,7 +418,7 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, err
 		}
 		pages = append(pages, settings)
 	}
-	if category != CategoryMail && category != CategorySettings && s.ledger != nil {
+	if !slices.Contains(contributed, category) && category != CategorySettings && s.ledger != nil {
 		filter := effectFilter(category, fetch)
 		filter.ByTime = true
 		filter.BeforeTS, filter.BeforeID = in.bound("effect")
@@ -504,16 +501,18 @@ func EffectEntry(e ledger.Effect) ActivityEntry {
 	}
 }
 
-func MailEntry(a live.Action) ActivityEntry {
-	return ActivityEntry{
-		Source: SourceMail, ID: a.ID, Category: CategoryMail, TS: a.TS,
-		Mail: &MailActivity{
-			MessageID: a.MessageID, Subject: a.Subject, Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr,
-			Account: a.Account, Src: a.Src, Dest: a.Dest, Status: a.Status, Error: a.Error,
-			Undoable: a.Undoable && !a.Blocked && !a.UndoBlocked, Blocked: a.Blocked || a.UndoBlocked, UndoBlocked: a.UndoBlocked,
-			Undone: a.Undone, Resolved: a.Resolved, EffectiveOutcome: a.EffectiveOutcome,
-		},
+func (s *Service) ActionEntry(a review.Action) ActivityEntry {
+	for _, c := range s.kinds {
+		if c.Kinds.Actions != nil {
+			return ActionEntry(c.Category, a)
+		}
 	}
+	return ActionEntry("", a)
+}
+
+func ActionEntry(category string, a review.Action) ActivityEntry {
+	activity := a.Activity
+	return ActivityEntry{Source: SourceMail, ID: a.ID, Category: category, TS: a.TS, Mail: &activity}
 }
 
 type mailMark struct {

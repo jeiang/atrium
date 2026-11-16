@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
@@ -56,6 +57,8 @@ type Declaration struct {
 	Tools             []ToolDefinition
 	ProposeKinds      []proposals.Definition
 	Effects           func(EffectDeps) Effects
+	ReviewKinds       func(ReviewDeps) review.Kinds
+	ActivityCategory  string
 	EffectOrigins     []string
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync
@@ -89,6 +92,15 @@ type EffectDeps struct {
 	Resume    func(context.Context, int64) error
 	Tools     registry.Source
 	Approvals []tool.Tool
+}
+
+type ReviewDeps struct {
+	DB       *db.DB
+	Ledger   *ledger.Store
+	Registry *proposals.Registry
+	Env      config.Env
+	Cfg      config.Config
+	Now      func() float64
 }
 
 type Effects struct {

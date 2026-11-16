@@ -79,14 +79,19 @@ var allowed = map[string]bool{
 	"internal/numx":               true,
 	"internal/urlx":               true,
 	"internal/assistant/registry": true,
+	"internal/review":             true,
+	"internal/review/hub":         true,
 }
 
 var platform = map[string]bool{
-	"internal/module":    true,
-	"internal/unit":      true,
-	"internal/tool":      true,
-	"internal/ledger":    true,
-	"internal/proposals": true,
+	"internal/module":             true,
+	"internal/unit":               true,
+	"internal/tool":               true,
+	"internal/ledger":             true,
+	"internal/proposals":          true,
+	"internal/review":             true,
+	"internal/review/application": true,
+	"internal/review/hub":         true,
 }
 
 var units = []string{

@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -33,6 +34,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
@@ -164,7 +166,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule(mailPageService)},
-			{Module: reviewpages.MailModule(reviewpages.Options{Compose: ReviewServices(ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Application: mailPageService})}), Nav: []web.NavItem{
+			{Module: reviewpages.MailModule(reviewpages.Options{Compose: ReviewServices(ReviewOptions{Clients: m.opener, Tools: mc.Tools, Application: mailPageService})}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},
@@ -191,7 +193,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),
 			}
 		},
-		Connections: slices.Concat(Connections(), tracking.Connections()),
-		AccountSync: mailconn.AccountSync(),
+		ReviewKinds: func(d module.ReviewDeps) review.Kinds {
+			open := m.opener(d.Cfg)
+			l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: d.Ledger, Open: open, Registry: d.Registry, Now: d.Now}
+			store := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: d.Ledger, Open: open, Now: d.Now}
+			return review.Kinds{Mode: mail.Mode, Needs: drafts.ReviewNeeds, Drafts: store.ReviewDrafts, Actions: l.ReviewActions()}
+		},
+		ActivityCategory: unit.Mail,
+		Connections:      slices.Concat(Connections(), tracking.Connections()),
+		AccountSync:      mailconn.AccountSync(),
 	}
 }

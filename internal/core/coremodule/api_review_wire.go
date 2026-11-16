@@ -12,8 +12,8 @@ import (
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/jsonx"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -47,14 +47,14 @@ type UndoRequest struct {
 }
 
 type Approved struct {
-	Approval reviewpages.Approval `json:"approval"`
-	Error    *string              `json:"error,omitempty"`
-	Outcome  string               `json:"outcome"`
-	Summary  *string              `json:"summary,omitempty"`
+	Approval hub.Approval `json:"approval"`
+	Error    *string      `json:"error,omitempty"`
+	Outcome  string       `json:"outcome"`
+	Summary  *string      `json:"summary,omitempty"`
 }
 
 type Decided struct {
-	Approval reviewpages.Approval `json:"approval"`
+	Approval hub.Approval `json:"approval"`
 }
 
 type Undone struct {
@@ -111,14 +111,14 @@ func reviewWireRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.
 		if err != nil {
 			return Decided{}, err
 		}
-		return Decided{Approval: reviewpages.ApprovalOf(found.Data)}, nil
+		return Decided{Approval: hub.ApprovalOf(found.Data)}, nil
 	}
 	proposals := func(response reflect.Type, codes ...application.Code) application.APIShape {
 		return application.APIShape{Area: "proposals", OptionalBody: true, Response: response, Errors: codes}
 	}
 	return []application.Binding{
-		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /pending", Uses: []application.Name{reviewapp.PendingName}, API: &application.APIShape{Area: "review", Request: reflect.TypeFor[struct{}](), Response: reflect.TypeFor[reviewpages.Pending](), Body: application.BodyNone, Success: 200}},
-			func(w http.ResponseWriter, r *http.Request) { reviewpages.PendingRead(w, r, svc()) }),
+		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /pending", Uses: []application.Name{reviewapp.PendingName}, API: &application.APIShape{Area: "review", Request: reflect.TypeFor[struct{}](), Response: reflect.TypeFor[hub.Pending](), Body: application.BodyNone, Success: 200}},
+			func(w http.ResponseWriter, r *http.Request) { hub.PendingRead(w, r, svc()) }),
 		api.Command(d, reviewapp.DescribeOne(reviewapp.ApproveName), proposals(reflect.TypeFor[Approved](), application.NotFound, application.Invalid, application.Conflict),
 			"POST /approvals/{proposal_id}/approve", func(ctx context.Context, in ApproveRequest) (application.Change[Approved], error) {
 				input := reviewapp.ApproveInput{ProposalID: in.ProposalID}
@@ -134,16 +134,16 @@ func reviewWireRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.
 				if err != nil {
 					var extra map[string]any
 					if done.Data.Proposal != nil {
-						extra = map[string]any{"approval": reviewpages.ApprovalOf(s.CardOf(done.Data.Proposal)), "outcome": "failed"}
+						extra = map[string]any{"approval": hub.ApprovalOf(s.CardOf(done.Data.Proposal)), "outcome": "failed"}
 					}
 					return application.Change[Approved]{}, refusal(err, "not_approved", missingApproval, extra)
 				}
-				out := Approved{Approval: reviewpages.ApprovalOf(s.CardOf(done.Data.Proposal)), Outcome: "failed"}
+				out := Approved{Approval: hub.ApprovalOf(s.CardOf(done.Data.Proposal)), Outcome: "failed"}
 				if done.Data.Applied {
 					out.Outcome = "applied"
-					out.Summary = new(reviewpages.ResultString(done.Data.Proposal.Result, "summary"))
+					out.Summary = new(hub.ResultString(done.Data.Proposal.Result, "summary"))
 				} else {
-					out.Error = new(reviewpages.ResultString(done.Data.Proposal.Result, "error"))
+					out.Error = new(hub.ResultString(done.Data.Proposal.Result, "error"))
 				}
 				return application.Change[Approved]{Data: out, AuditID: done.AuditID}, nil
 			}),
@@ -165,8 +165,8 @@ func reviewWireRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.
 				out, err := decided(ctx, in.ProposalID)
 				return application.Change[Decided]{Data: out, AuditID: done.AuditID}, err
 			}),
-		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /undo", Uses: []application.Name{reviewapp.UndoableName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[reviewpages.UndoFeedRequest](), Response: reflect.TypeFor[web.List[reviewapp.UndoEntry]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
-			func(w http.ResponseWriter, r *http.Request) { reviewpages.UndoFeed(w, r, svc()) }),
+		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /undo", Uses: []application.Name{reviewapp.UndoableName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[hub.UndoFeedRequest](), Response: reflect.TypeFor[web.List[reviewapp.UndoEntry]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+			func(w http.ResponseWriter, r *http.Request) { hub.UndoFeed(w, r, svc()) }),
 		api.Command(d, reviewapp.DescribeOne(reviewapp.UndoName), application.APIShape{Area: "activity", Body: application.BodyNone, IgnoreBody: true, Response: reflect.TypeFor[Undone](), Errors: []application.Code{application.NotFound, application.Conflict}},
 			"POST /undo/{entry_id}", func(ctx context.Context, in UndoRequest) (application.Change[Undone], error) {
 				s := svc()
@@ -216,10 +216,10 @@ func reviewWireRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.
 				}
 				return application.Change[Undone]{}, unknown(missingEntry)
 			}),
-		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /effects", Uses: []application.Name{reviewapp.EffectsName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[reviewpages.EffectsRequest](), Response: reflect.TypeFor[web.List[reviewapp.Effect]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
-			func(w http.ResponseWriter, r *http.Request) { reviewpages.EffectsRead(w, r, svc()) }),
-		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /effects/{effect_id}", Uses: []application.Name{reviewapp.EffectName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[reviewpages.EffectRequest](), Response: reflect.TypeFor[reviewapp.Effect](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound}}},
-			func(w http.ResponseWriter, r *http.Request) { reviewpages.EffectRead(w, r, svc()) }),
+		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /effects", Uses: []application.Name{reviewapp.EffectsName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[hub.EffectsRequest](), Response: reflect.TypeFor[web.List[reviewapp.Effect]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+			func(w http.ResponseWriter, r *http.Request) { hub.EffectsRead(w, r, svc()) }),
+		api.Handle(d, application.Binding{Kind: application.API, Target: "GET /effects/{effect_id}", Uses: []application.Name{reviewapp.EffectName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[hub.EffectRequest](), Response: reflect.TypeFor[reviewapp.Effect](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound}}},
+			func(w http.ResponseWriter, r *http.Request) { hub.EffectRead(w, r, svc()) }),
 		api.Command(d, reviewapp.DescribeOne(reviewapp.ResolveName), application.APIShape{Area: "activity", ID: "review.resolve-effect", OptionalBody: true, Response: reflect.TypeFor[EffectResolved](), Errors: []application.Code{application.NotFound, application.Invalid, application.Conflict}},
 			"POST /effects/{effect_id}/resolve", func(ctx context.Context, in EffectResolveRequest) (application.Change[EffectResolved], error) {
 				done, err := svc().Resolve(ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: in.EffectID}, Outcome: in.Outcome, Evidence: in.Evidence})

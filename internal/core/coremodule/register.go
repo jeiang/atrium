@@ -41,8 +41,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/obs/opsmetrics"
@@ -52,6 +50,7 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -144,9 +143,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
 			}},
-			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Routes: func(d *web.Deps, svc *reviewapp.Service) {
+			{Module: hub.Module(hub.Options{Compose: func(d *web.Deps) *reviewapp.Service {
+				return hub.Compose(hub.ComposeOptions{Tools: mc.Tools, Enabled: enabled})(d).Review
+			}, Routes: func(d *web.Deps, svc *reviewapp.Service) {
 				reviewRoutes(d, func() *reviewapp.Service { return svc })
-			}}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
+			}}), Templates: hub.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
