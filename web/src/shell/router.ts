@@ -61,7 +61,16 @@ export const { p, navigate, isActive, route } = createRouter(
       '/:app': () => import('./AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },
     },
-    '/assistant': { '/': placeholder, meta: { title: 'Assistant' } },
+    '/assistant': {
+      '/': () => import('../features/assistant/BehaviorPage.svelte').catch(unavailable),
+      '/authority': () => import('../features/assistant/AuthorityPage.svelte').catch(unavailable),
+      '/spend': () => import('../features/assistant/SpendPage.svelte').catch(unavailable),
+      '/routines': {
+        '/': () => import('../features/assistant/RoutinesPage.svelte').catch(unavailable),
+        '/:id': () => import('../features/assistant/RoutinesPage.svelte').catch(unavailable),
+      },
+      meta: { title: 'Assistant' },
+    },
     '/settings': {
       '/': placeholder,
       '/connections': {

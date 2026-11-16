@@ -1,0 +1,152 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .asst {
+    display: grid;
+    gap: var(--s-6);
+  }
+
+  .asst-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    margin-block-end: var(--s-4);
+  }
+
+  .asst-nav__link {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--s-1) var(--s-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-pill);
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+
+  .asst-nav__link[aria-current="page"] {
+    border-color: var(--moss-line);
+    background: var(--moss-soft);
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .asst-form {
+    max-inline-size: 40rem;
+  }
+
+  .asst-text,
+  .asst-meta {
+    margin: 0;
+    color: var(--ink-2);
+  }
+
+  .asst-meta {
+    font-size: var(--t-sm);
+  }
+
+  .asst-pre {
+    white-space: pre-wrap;
+  }
+
+  .asst-error {
+    display: block;
+    color: var(--ink-2);
+  }
+
+  .asst-link {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .asst-facts {
+    display: grid;
+    gap: var(--s-2);
+    margin: 0;
+    padding-inline-start: var(--s-5);
+  }
+
+  .asst-roles {
+    display: grid;
+    gap: var(--s-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .asst-role {
+    display: grid;
+    gap: var(--s-1);
+    padding: var(--s-3);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+  }
+
+  .asst-role__name {
+    margin: 0;
+    font-size: var(--t-md);
+  }
+
+  .asst-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+
+  .asst-dl {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--s-2) var(--s-4);
+    margin: 0;
+  }
+
+  .asst-dl dd {
+    margin: 0;
+  }
+
+  .asst-meter {
+    display: grid;
+    gap: var(--s-2);
+  }
+
+  .asst-meter__bar,
+  .asst-bars__bar {
+    inline-size: 100%;
+    block-size: 0.75rem;
+    border-radius: var(--r-pill);
+  }
+
+  .asst-meter__text {
+    margin: 0;
+  }
+
+  .asst-bars {
+    display: grid;
+    gap: var(--s-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .asst-bars__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--s-1) var(--s-3);
+  }
+
+  .asst-bars__bar {
+    grid-column: 1 / -1;
+  }
+
+  @media (--touch) {
+    .asst-nav__link,
+    .asst-link,
+    .asst-details > summary {
+      min-block-size: var(--target);
+    }
+
+    .asst-details > summary {
+      display: flex;
+      align-items: center;
+    }
+  }
+}
