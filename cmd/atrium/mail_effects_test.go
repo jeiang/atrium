@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -118,6 +119,50 @@ func (m *mailSafety) effectIDs(t *testing.T, query string, args ...any) []string
 		return nil
 	}
 	return strings.Split(joined, ",")
+}
+
+func TestMailBacklogApprovalHonoursTheGroupSelection(t *testing.T) {
+	fake := mailtest.NewFakeClient()
+	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
+	fake.AddBox("Bills", mailtest.NewBox(3))
+	for i, subject := range []string{"Bank statement 1", "Bank statement 2"} {
+		h, x := mailtest.RawWith(subject, "statements@bank.test", fmt.Sprintf("statement-%d", i), "Your statement is ready.")
+		inbox.Add(h, x, []string{`\Seen`}, nil)
+	}
+	m := mailEffectsFixture(t, "live", "icloud", fake)
+	m.ruleFor(t, "work", "Bills", "statements@bank.test")
+	m.run(t, "sync")
+	m.run(t, "live", "rebaseline")
+	m.run(t, "live", "backlog")
+	proposal := m.scalar(t, "SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'inbox_backlog' AND status = 'pending' ORDER BY id DESC LIMIT 1")
+	if proposal == "<nil>" {
+		t.Fatalf("no pending inbox_backlog proposal")
+	}
+
+	for _, bad := range []struct{ selection, want string }{
+		{`{"groups": []}`, "selection does not match the proposal groups"},
+		{`{"groups": [{"id": "Elsewhere", "message_ids": []}]}`, `selection does not name group "Bills"`},
+		{"{", "Expecting property name"},
+	} {
+		if ran := runApp(t, "proposals", "approve", proposal, "--selection", bad.selection); ran.code != cli.ExitUsage || !strings.Contains(ran.stderr, bad.want) {
+			t.Fatalf("approve with selection %s = %d %q, want usage error %q", bad.selection, ran.code, ran.stderr, bad.want)
+		}
+	}
+	if status := m.scalar(t, "SELECT status FROM proposals WHERE id = ?", proposal); status != "pending" {
+		t.Fatalf("a refused selection left the proposal %s, want pending", status)
+	}
+	if len(m.fake.Writes) != 0 {
+		t.Fatalf("a refused selection wrote to IMAP: %v", m.verbs())
+	}
+
+	first := m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE subject = 'Bank statement 1'")
+	m.run(t, "proposals", "approve", proposal, "--selection", `{"groups": [{"id": "Bills", "message_ids": [`+first+`]}]}`)
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("Bills holds %d messages after a one-message selection, want 1", n)
+	}
+	if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 1 {
+		t.Fatalf("the inbox holds %d messages after a one-message selection, want 1", n)
+	}
 }
 
 func TestMailProposalMoveWithUnknownCopyBlocksReapprovalUntilResolved(t *testing.T) {

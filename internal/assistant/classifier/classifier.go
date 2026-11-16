@@ -2,7 +2,6 @@ package classifier
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,12 +114,6 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 	if err != nil {
 		return nil, err
 	}
-	if def.reuse {
-		kept, err := s.kept(ctx, r)
-		if err != nil || kept != nil {
-			return kept, err
-		}
-	}
 	failures, last, err := s.itemFailures(ctx, r)
 	if err != nil {
 		return nil, err
@@ -143,12 +136,6 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 		return nil, err
 	}
 	out, reason, err := s.run(ctx, r, runID, threadID, wire, def.maxTokens, limits)
-	if err == nil && def.reuse {
-		if _, keepErr := journal.AppendMessage(ctx, s.db, threadID, &runID, "assistant",
-			[]json.RawMessage{json.RawMessage(jsonx.Dumps(map[string]any{"type": "text", "text": string(out)}))}, s.now(), nil); keepErr != nil {
-			out, reason, err = nil, "storage", keepErr
-		}
-	}
 	var unanswered *Unanswered
 	if errors.As(err, &unanswered) {
 		unanswered.Final = failures+1 >= MaxItemFailures
@@ -175,34 +162,6 @@ func (s *Service) itemFailures(ctx context.Context, r Request) (int, float64, er
 	err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MAX(r.started_at), 0) "+classificationRuns+" AND r.error IN (?, ?, ?, ?)",
 		"classification:"+string(r.Caller), journal.Failed, r.Item.Key, ReasonRefusal, ReasonTruncated, ReasonStop, ReasonMalformed).Scan(&n, &last)
 	return n, last, err
-}
-
-func (s *Service) kept(ctx context.Context, r Request) (json.RawMessage, error) {
-	rows, err := s.db.Read.QueryContext(ctx, "SELECT m.content_json FROM thread_messages m JOIN runs r ON r.id = m.run_id "+
-		strings.TrimPrefix(classificationRuns, "FROM runs r ")+" AND m.role = 'assistant' ORDER BY m.id DESC",
-		"classification:"+string(r.Caller), journal.Done, r.Item.Key)
-	if err != nil {
-		return nil, err
-	}
-	stored, err := db.Collect(rows, func(rows *sql.Rows) (string, error) {
-		var content string
-		err := rows.Scan(&content)
-		return content, err
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, content := range stored {
-		var blocks []json.RawMessage
-		if json.Unmarshal([]byte(content), &blocks) != nil {
-			continue
-		}
-		text, err := onlyText(blocks)
-		if err == nil && anthropic.ValidateJSONOutput(r.Schema, json.RawMessage(text)) == nil {
-			return json.RawMessage(text), nil
-		}
-	}
-	return nil, nil
 }
 
 func (s *Service) run(ctx context.Context, r Request, runID, threadID int64, wire json.RawMessage, maxTokens int64, limits caps) (json.RawMessage, string, error) {

@@ -55,8 +55,7 @@ var delegates = map[string]string{
 }
 
 var initExemptions = map[string]bool{
-	"internal/db/open_cgo.go:19":              true,
-	"internal/mail/rebalance/rebalance.go:73": true,
+	"internal/db/open_cgo.go:19": true,
 }
 
 type listed struct {

@@ -217,6 +217,10 @@ go-live eligibility.
 
 ### Long passes and busy work
 
+The monthly mail scan job proposes deletions only; folder rebalancing and the
+Gmail label merge are gone. A stored proposal of a removed kind still lists
+and can be dismissed, but approving or undoing it fails with
+`unknown proposal kind`.
 The mail scan job holds the shared `mail-pass` resource for up to two hours;
 mail sync has a 20-minute bound. Approvals, assistant moves, and undo wait five
 seconds before returning busy. They have not thereby approved, moved, or undone

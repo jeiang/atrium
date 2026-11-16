@@ -100,20 +100,11 @@ func previewGet(preview any, key string) any {
 
 func selectionOf(p *proposalsapp.Proposal, kind proposalsapp.Kind, form url.Values) (map[string]any, error) {
 	switch {
-	case kind.Groups || kind.Group:
-		var groups []any
-		if kind.Groups {
-			groups, _ = previewGet(p.Preview, "groups").([]any)
-		} else {
-			groups = []any{previewGet(p.Preview, "group")}
-		}
+	case kind.Groups:
+		groups, _ := previewGet(p.Preview, "groups").([]any)
 		out := make([]any, len(groups))
 		for i, g := range groups {
 			group, _ := g.(map[string]any)
-			var name any
-			if v, ok := web.Value(form, fmt.Sprintf("name-%d", i)); ok {
-				name = v
-			}
 			messages := group["messages"]
 			ids, err := picked(form, i, messages)
 			if err != nil {
@@ -124,7 +115,7 @@ func selectionOf(p *proposalsapp.Proposal, kind proposalsapp.Kind, form url.Valu
 				chosen = ids
 			}
 			id := group["name"]
-			out[i] = map[string]any{"id": id, "name": name, "message_ids": chosen}
+			out[i] = map[string]any{"id": id, "name": nil, "message_ids": chosen}
 		}
 		return map[string]any{"groups": out}, nil
 	case kind.Messages:

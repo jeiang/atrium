@@ -633,8 +633,7 @@ claims about the running application. Operator contracts are in
   keeps every registration in the module catalog: it type-checks the
   production packages and fails, naming file and line, when an `init`
   function calls into another package (only the SQLite driver setup in
-  `internal/db/open_cgo.go` and the stopword table in
-  `internal/mail/rebalance/rebalance.go` may), when code outside
+  `internal/db/open_cgo.go` may), when code outside
   `internal/module` and `internal/app` builds or fills a registry
   (settings, connections, scheduled jobs, proposal kinds, the effect
   ledger's undo and resolve hooks, the assistant tool registry) or sets a

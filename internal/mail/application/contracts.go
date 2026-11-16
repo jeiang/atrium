@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
@@ -21,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/openloops"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
@@ -74,7 +72,6 @@ type (
 	OpenFunc               = mail.OpenFunc
 	Pass                   = run.Pass
 	Config                 = config.Config
-	Namer                  = rebalance.Namer
 )
 
 const (
@@ -165,11 +162,6 @@ func PassLocks(ctx context.Context, dbPath string) (context.Context, *db.LockSet
 		return nil, nil, err
 	}
 	return db.WithHeld(ctx, locks), locks, nil
-}
-
-func (s *Service) WithSuggestedNamer(c *classifier.Service) *Service {
-	s.namer = rebalance.SuggestName(c)
-	return s
 }
 
 func (s *Service) ManualScans(ctx context.Context, at float64) (map[string]any, error) {

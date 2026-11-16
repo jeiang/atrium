@@ -23,7 +23,6 @@ const (
 	Event       Caller = "mail_event"
 	Commitments Caller = "mail_commitments"
 	Package     Caller = "mail_package"
-	FolderName  Caller = "mail_folder_name"
 	Ops         Caller = "ops_condenser"
 )
 
@@ -36,7 +35,6 @@ type definition struct {
 	maxTokens int64
 	keys      []string
 	ops       bool
-	reuse     bool
 }
 
 var definitions = map[Caller]definition{
@@ -45,7 +43,6 @@ var definitions = map[Caller]definition{
 	Event:       {maxTokens: 80, keys: []string{"has_event"}},
 	Commitments: {maxTokens: 500, keys: []string{"commitments"}},
 	Package:     {maxTokens: 200, keys: []string{"carrier", "is_order", "merchant", "order_ref", "status", "status_text", "tracking_number"}},
-	FolderName:  {maxTokens: 80, keys: []string{"name"}, reuse: true},
 	Ops:         {maxTokens: 2000, keys: []string{"findings"}, ops: true},
 }
 
