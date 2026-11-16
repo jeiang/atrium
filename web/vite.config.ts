@@ -83,6 +83,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'mock' ? 'dist-mock' : 'dist',
     target: 'baseline-widely-available',
+    rolldownOptions: { output: { codeSplitting: { groups: [{ name: 'index', tags: ['$initial'] }] } } },
     manifest: true,
   },
 }));

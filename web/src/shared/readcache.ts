@@ -148,13 +148,11 @@ export async function restore(client: QueryClient, session: CachedSession, verif
     identity: session.identity,
     sign_out: session.sign_out,
   };
-  const loaded = same
-    ? []
-    : client
-        .getQueryCache()
-        .getAll()
-        .filter((query) => query.state.status === 'success' && persistable(query))
-        .map(entryOf);
+  const loaded = client
+    .getQueryCache()
+    .getAll()
+    .filter((query) => query.state.status === 'success' && persistable(query))
+    .map(entryOf);
   await transact('readwrite', (store, meta) => {
     if (!same) store.clear();
     for (const entry of loaded) store.put(entry);
