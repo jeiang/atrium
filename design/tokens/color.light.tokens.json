@@ -1,0 +1,244 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "color": {
+    "$type": "color",
+    "paper": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.972, 0.007, 80]
+      }
+    },
+    "paper-2": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.952, 0.009, 80]
+      }
+    },
+    "leaf": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.993, 0.004, 80]
+      }
+    },
+    "leaf-2": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.982, 0.006, 80]
+      }
+    },
+    "line": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.9, 0.01, 80]
+      }
+    },
+    "line-strong": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.64, 0.012, 80]
+      }
+    },
+    "ink": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.255, 0.014, 70]
+      }
+    },
+    "ink-2": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.43, 0.014, 70]
+      }
+    },
+    "ink-3": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.515, 0.012, 70]
+      }
+    },
+    "moss": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.47, 0.085, 150]
+      }
+    },
+    "moss-ink": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.975, 0.012, 150]
+      }
+    },
+    "moss-soft": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.935, 0.024, 128]
+      }
+    },
+    "moss-line": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.8, 0.055, 150]
+      }
+    },
+    "ok": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.39, 0.08, 105]
+      }
+    },
+    "ok-soft": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.945, 0.03, 105]
+      }
+    },
+    "honey": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.53, 0.12, 82]
+      }
+    },
+    "honey-soft": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.95, 0.045, 90]
+      }
+    },
+    "honey-line": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.8, 0.1, 85]
+      }
+    },
+    "brick": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.505, 0.15, 30]
+      }
+    },
+    "brick-soft": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.945, 0.03, 30]
+      }
+    },
+    "taupe": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.48, 0.03, 60]
+      }
+    },
+    "taupe-soft": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.938, 0.012, 70]
+      }
+    },
+    "d1": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.56, 0.09, 150]
+      }
+    },
+    "d2": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.56, 0.075, 52]
+      }
+    },
+    "d3": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.64, 0.11, 75]
+      }
+    },
+    "d4": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.56, 0.085, 112]
+      }
+    },
+    "d5": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.6, 0.02, 80]
+      }
+    },
+    "d6": {
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.56, 0.12, 30]
+      }
+    }
+  },
+  "shadow": {
+    "$type": "shadow",
+    "shadow-1": {
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.4, 0.02, 70],
+            "alpha": 0.06
+          },
+          "offsetX": { "value": 0, "unit": "px" },
+          "offsetY": { "value": 1, "unit": "px" },
+          "blur": { "value": 2, "unit": "px" },
+          "spread": { "value": 0, "unit": "px" }
+        }
+      ]
+    },
+    "shadow-2": {
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.4, 0.02, 70],
+            "alpha": 0.05
+          },
+          "offsetX": { "value": 0, "unit": "px" },
+          "offsetY": { "value": 1, "unit": "px" },
+          "blur": { "value": 2, "unit": "px" },
+          "spread": { "value": 0, "unit": "px" }
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.4, 0.02, 70],
+            "alpha": 0.07
+          },
+          "offsetX": { "value": 0, "unit": "px" },
+          "offsetY": { "value": 8, "unit": "px" },
+          "blur": { "value": 24, "unit": "px" },
+          "spread": { "value": 0, "unit": "px" }
+        }
+      ]
+    },
+    "shadow-3": {
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.4, 0.02, 70],
+            "alpha": 0.06
+          },
+          "offsetX": { "value": 0, "unit": "px" },
+          "offsetY": { "value": 2, "unit": "px" },
+          "blur": { "value": 6, "unit": "px" },
+          "spread": { "value": 0, "unit": "px" }
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.4, 0.02, 70],
+            "alpha": 0.14
+          },
+          "offsetX": { "value": 0, "unit": "px" },
+          "offsetY": { "value": 24, "unit": "px" },
+          "blur": { "value": 64, "unit": "px" },
+          "spread": { "value": 0, "unit": "px" }
+        }
+      ]
+    }
+  }
+}

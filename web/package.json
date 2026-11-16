@@ -8,14 +8,17 @@
   },
   "scripts": {
     "gen": "orval --config orval.config.ts",
-    "dev": "npm run gen && vite --mode mock",
-    "build": "npm run gen && vite build",
-    "build:mock": "npm run gen && vite build --mode mock",
-    "check": "npm run gen && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
-    "lint": "npm run gen && biome check --error-on-warnings . && node scripts/lint-commands.ts",
-    "format": "biome check --write ."
+    "dev": "npm run gen && npm run tokens && vite --mode mock",
+    "build": "npm run gen && npm run tokens && vite build",
+    "build:mock": "npm run gen && npm run tokens && vite build --mode mock",
+    "check": "npm run gen && npm run tokens && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "lint": "npm run gen && npm run tokens && biome check --error-on-warnings . && node scripts/lint-commands.ts",
+    "format": "biome check --write .",
+    "tokens": "node scripts/tokens.ts"
   },
   "dependencies": {
+    "@fontsource/alegreya-sans": "5.3.0",
+    "@fontsource/fira-mono": "5.3.0",
     "@tanstack/svelte-query": "6.4.1",
     "sv-router": "0.19.0",
     "svelte": "5.57.3"
@@ -25,6 +28,7 @@
     "@types/node": "24.19.2",
     "msw": "3.0.4",
     "orval": "8.47.0",
+    "style-dictionary": "5.8.0",
     "svelte-check": "4.7.8",
     "typescript": "6.0.3",
     "vite": "8.3.6"
