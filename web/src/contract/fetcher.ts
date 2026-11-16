@@ -15,11 +15,26 @@ function reach(ok: boolean): void {
   reached?.(ok);
 }
 
+const STAY_MS = 3_000;
 let leaving = new AbortController();
+let stay: PromiseWithResolvers<void> | undefined;
+let stayTimer: ReturnType<typeof setTimeout> | undefined;
+
+function stayed(): void {
+  clearTimeout(stayTimer);
+  if (!stay) return;
+  stay.resolve();
+  stay = undefined;
+  leaving = new AbortController();
+}
+
 globalThis.addEventListener?.('beforeunload', () => {
   leaving.abort();
-  leaving = new AbortController();
+  stay ??= Promise.withResolvers<void>();
+  clearTimeout(stayTimer);
+  stayTimer = setTimeout(stayed, STAY_MS);
 });
+for (const type of ['pageshow', 'pointerdown', 'keydown']) globalThis.addEventListener?.(type, stayed);
 
 export const OFFLINE_MESSAGE = 'Cannot reach atrium. Nothing was sent.';
 
@@ -53,6 +68,7 @@ export async function webFetch(url: string, init: RequestInit = {}): Promise<Res
     if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
   }
   let res: Response;
+  if (stay) await stay.promise;
   const signal = init.signal ? AbortSignal.any([init.signal, leaving.signal]) : leaving.signal;
   try {
     res = await fetch(API_BASE + url, { ...init, signal, headers, credentials: 'same-origin' });

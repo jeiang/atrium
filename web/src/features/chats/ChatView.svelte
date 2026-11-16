@@ -123,11 +123,10 @@
   }
 
   let lastY = 0;
-  // Set by downward operator input; only that may turn following back on at the bottom.
-  let seeking = false;
 
   function toBottom(): void {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+    const top = document.documentElement.scrollHeight - window.innerHeight;
+    if (Math.abs(window.scrollY - top) > 1) window.scrollTo({ top, behavior: 'instant' });
     lastY = window.scrollY;
   }
 
@@ -189,43 +188,32 @@
       }
       return false;
     };
-    const operator = (up: boolean, target: EventTarget | null): void => {
-      if (inner(target, up)) return;
-      if (up) {
-        seeking = false;
-        if (window.scrollY > 0) following = false;
-      } else {
-        seeking = true;
-      }
+    // Upward operator input stops following before its first scroll step, which can land inside the slack.
+    const scrolledUp = (target: EventTarget | null): void => {
+      if (window.scrollY === 0 || dock?.contains(target as Node) || inner(target, true)) return;
+      following = false;
     };
     const onWheel = (event: WheelEvent): void => {
-      if (event.deltaY) operator(event.deltaY < 0, event.target);
+      if (event.deltaY < 0) scrolledUp(event.target);
     };
     const onTouchStart = (event: TouchEvent): void => {
       touchY = event.touches[0]?.clientY ?? 0;
     };
     const onTouchMove = (event: TouchEvent): void => {
       const y = event.touches[0]?.clientY ?? touchY;
-      if (y !== touchY) operator(y > touchY, event.target);
+      if (y > touchY) scrolledUp(event.target);
       touchY = y;
     };
     const onKey = (event: KeyboardEvent): void => {
       const target = event.target;
       if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) return;
-      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) operator(true, target);
-      else if (['ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) operator(false, target);
-    };
-    // A press beside the content box lands on the page scrollbar; the drag direction then decides.
-    const onPointerDown = (event: PointerEvent): void => {
-      if (event.clientX >= document.documentElement.clientWidth) seeking = true;
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) scrolledUp(target);
     };
     const onScroll = (): void => {
       const y = window.scrollY;
-      if (y < lastY && !atBottom()) following = false;
-      else if (seeking && atBottom()) {
-        following = true;
-        seeking = false;
-      }
+      const bottom = atBottom();
+      if (bottom && y > lastY) following = true;
+      else if (!bottom && y < lastY) following = false;
       lastY = y;
       if (following) unseen = false;
       if (scrollFrame) return;
@@ -234,18 +222,16 @@
         sessionStorage.setItem(storageKey, String(Math.round(window.scrollY)));
       });
     };
-    addEventListener('wheel', onWheel, { passive: true });
     addEventListener('touchstart', onTouchStart, { passive: true });
     addEventListener('touchmove', onTouchMove, { passive: true });
     addEventListener('keydown', onKey);
-    addEventListener('pointerdown', onPointerDown, { passive: true });
     addEventListener('scroll', onScroll, { passive: true });
+    addEventListener('wheel', onWheel, { passive: true });
     return () => {
       removeEventListener('wheel', onWheel);
       removeEventListener('touchstart', onTouchStart);
       removeEventListener('touchmove', onTouchMove);
       removeEventListener('keydown', onKey);
-      removeEventListener('pointerdown', onPointerDown);
       removeEventListener('scroll', onScroll);
       cancelAnimationFrame(scrollFrame);
     };
