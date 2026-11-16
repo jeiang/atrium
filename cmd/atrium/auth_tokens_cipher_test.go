@@ -3,6 +3,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -21,6 +23,13 @@ func authTokenApp(t *testing.T) *cli.App {
 		t.Fatal("no fixture")
 	}
 	return newAppWith(f.lookup, imapclient.Opener, nil, quietLog)
+}
+
+func runAppOn(t *testing.T, app *cli.App, args ...string) appRun {
+	t.Helper()
+	var out, errs bytes.Buffer
+	code := app.Run(context.Background(), args, &out, &errs)
+	return appRun{code, out.String(), errs.String()}
 }
 
 func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
@@ -52,7 +61,7 @@ func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
 		t.Fatalf("the token settings page is not reachable in local mode: %d %.300s", page.status, page.body)
 	}
 
-	phone := tokenRow(t, runImportApp(t, authTokenApp(t), "auth", "token", "list").stdout, "phone")
+	phone := tokenRow(t, runAppOn(t, authTokenApp(t), "auth", "token", "list").stdout, "phone")
 	if phone[5] == "-" {
 		t.Fatalf("a successful API call did not record last use: %v", phone)
 	}
@@ -60,12 +69,12 @@ func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
 	if bad := api.do(http.MethodGet, "/api/v1/me", "atr_"+strings.Repeat("A", 43), nil); bad.status != http.StatusUnauthorized || bad.code() != "invalid_token" {
 		t.Fatalf("an unknown atr_ token: %d %s", bad.status, bad.body)
 	}
-	phone = tokenRow(t, runImportApp(t, authTokenApp(t), "auth", "token", "list").stdout, "phone")
+	phone = tokenRow(t, runAppOn(t, authTokenApp(t), "auth", "token", "list").stdout, "phone")
 	if phone[5] != before {
 		t.Fatalf("a refused request changed last use: %q -> %q", before, phone[5])
 	}
 
-	if revoked := runImportApp(t, authTokenApp(t), "auth", "token", "revoke", phone[0]); revoked.code != cli.ExitOK {
+	if revoked := runAppOn(t, authTokenApp(t), "auth", "token", "revoke", phone[0]); revoked.code != cli.ExitOK {
 		t.Fatalf("revoke: exit %d stderr %q", revoked.code, revoked.stderr)
 	}
 	if refused := api.do(http.MethodGet, "/api/v1/me", secret, nil); refused.status != http.StatusUnauthorized || refused.code() != "invalid_token" {
@@ -100,7 +109,7 @@ func TestAuthTokenRevocationBeatsAWarmOIDCCache(t *testing.T) {
 		t.Fatalf("cached use: %d %s", warm.status, warm.body)
 	}
 
-	listed := runImportApp(t, authTokenApp(t), "auth", "token", "list")
+	listed := runAppOn(t, authTokenApp(t), "auth", "token", "list")
 	rows := tokenRows(t, listed.stdout)
 	if len(rows) != 1 || rows[0][2] != "oidc" {
 		t.Fatalf("the validated JWT is not listed as an enrolled token:\n%s", listed.stdout)
@@ -112,7 +121,7 @@ func TestAuthTokenRevocationBeatsAWarmOIDCCache(t *testing.T) {
 		t.Fatalf("enrolled subject = %q, %v", subject, err)
 	}
 
-	if revoked := runImportApp(t, authTokenApp(t), "auth", "token", "revoke", rows[0][0]); revoked.code != cli.ExitOK {
+	if revoked := runAppOn(t, authTokenApp(t), "auth", "token", "revoke", rows[0][0]); revoked.code != cli.ExitOK {
 		t.Fatalf("revoke: exit %d stderr %q", revoked.code, revoked.stderr)
 	}
 	if refused := s.do(http.MethodGet, "/api/v1/me", owner, nil); refused.status != http.StatusUnauthorized || refused.code() != "invalid_token" {

@@ -279,7 +279,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 	}
 	t.Run("live routes and security", func(t *testing.T) {
 		_, _, f := moduleFixture(t, flagsExcept(module.Media, "false"))
-		base, _, _, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1")
+		base, _, _, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -140,12 +140,11 @@ func (l *limiter) evict(now time.Time, entries map[string]*limitBucket) bool {
 }
 
 func (g *Guard) clientAddr(r *http.Request) (netip.Addr, bool) {
-	peer, err := netip.ParseAddrPort(r.RemoteAddr)
-	if err != nil {
+	addr, trusted, ok := g.peer(r)
+	if !ok {
 		return netip.Addr{}, false
 	}
-	addr := peer.Addr().Unmap()
-	if !g.trustedPeer(addr) {
+	if !trusted {
 		return addr, true
 	}
 	values := r.Header.Values("CF-Connecting-IP")
@@ -160,20 +159,25 @@ func (g *Guard) clientAddr(r *http.Request) (netip.Addr, bool) {
 	if forwarded == "" || strings.Contains(forwarded, ",") {
 		return netip.Addr{}, false
 	}
-	addr, err = netip.ParseAddr(forwarded)
+	addr, err := netip.ParseAddr(forwarded)
 	if err != nil {
 		return netip.Addr{}, false
 	}
 	return addr.Unmap(), true
 }
 
-func (g *Guard) trustedPeer(addr netip.Addr) bool {
+func (g *Guard) peer(r *http.Request) (addr netip.Addr, trusted, ok bool) {
+	peer, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err != nil {
+		return netip.Addr{}, false, false
+	}
+	addr = peer.Addr().Unmap()
 	for _, prefix := range g.trusted {
 		if prefix.Contains(addr) {
-			return true
+			return addr, true, true
 		}
 	}
-	return false
+	return addr, false, true
 }
 
 func tokenKey(token string) string {

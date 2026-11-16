@@ -142,25 +142,6 @@ func nanoUSD(usd float64) int64 { return int64(math.Ceil(usd * NanoUSD)) }
 
 func usdOf(n int64) float64 { return float64(n) / NanoUSD }
 
-func classFor(source, kind string) Class {
-	if source == SourceSubscription {
-		return ClassSubscription
-	}
-	switch kind {
-	case KindMemory, "cron", "nightly", "worker":
-		return Unattended
-	default:
-		return Interactive
-	}
-}
-
-func nullable(id int64) *int64 {
-	if id == 0 {
-		return nil
-	}
-	return &id
-}
-
 func nullableText(text string) *string {
 	if text == "" {
 		return nil

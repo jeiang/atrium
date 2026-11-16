@@ -1,36 +1,36 @@
 package settings
 
-func ClassOf(key string) (ImportClass, bool) {
-	entry, ok := ImportEntryFor(key)
+func ClassOf(key string) (Class, bool) {
+	entry, ok := EntryFor(key)
 	if !ok {
 		return "", false
 	}
 	return entry.Class, true
 }
 
-func CutoverEntry(key string) (ImportEntry, bool) {
-	entry, ok := ImportEntryFor(key)
+func CutoverEntry(key string) (Entry, bool) {
+	entry, ok := EntryFor(key)
 	if !ok || !entry.Runtime {
-		return ImportEntry{}, false
+		return Entry{}, false
 	}
 	return entry, true
 }
 
-func CutoverDestination(entry ImportEntry) string {
+func CutoverDestination(entry Entry) string {
 	return Destination(entry)
 }
 
 func HostOwnedKey(key string) bool {
-	entry, ok := ImportEntryFor(key)
-	return ok && entry.Class == ImportHost
+	entry, ok := EntryFor(key)
+	return ok && entry.Class == ClassHost
 }
 
 func DBBacked(key string) bool {
 	class, ok := ClassOf(key)
-	return !ok || class == ImportOperator
+	return !ok || class == ClassOperator
 }
 
 func hostOwned(key string) error {
-	entry, _ := ImportEntryFor(key)
+	entry, _ := EntryFor(key)
 	return HostOwned{Key: key, Destination: entry.Target}
 }

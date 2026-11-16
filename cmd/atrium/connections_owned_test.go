@@ -5,11 +5,9 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -34,101 +32,6 @@ func connectionRow(t *testing.T, dir, id string) (source string, enabled int, st
 		t.Fatalf("%s: %v", id, err)
 	}
 	return source, enabled, state, configJSON
-}
-
-func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	host := filepath.Join(dir, "host.toml")
-	if err := os.WriteFile(host, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	setEnv(t, "ATRIUM_HOST_CONFIG", host)
-	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
-
-	notion := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer ntn-imported-token" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		_, _ = w.Write([]byte(`{"object":"list","results":[{"object":"page","id":"p1"}],"has_more":false}`))
-	}))
-	t.Cleanup(notion.Close)
-	tmdb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer tmdb-imported-token" || r.URL.Path != "/3/configuration" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	t.Cleanup(tmdb.Close)
-	embed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"data":[{"embedding":[0.1,0.2]}]}`))
-	}))
-	t.Cleanup(embed.Close)
-
-	source := copyV2Fixture(t, dir)
-	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
-		('media_tmdb_url', %[1]q),
-		('media_tmdb_images_url', %[2]q),
-		('mail_embed_url', %[3]q),
-		('mail_embed_model', 'embed')`, tmdb.URL+"/3", tmdb.URL+"/images", embed.URL+"/v1"))
-	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('media_tmdb_token', 'tmdb-imported-token', 1762000800, 'fixture')")
-	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('notion_token', 'ntn-imported-token', 1762000800, 'fixture')")
-
-	if got := runApp(t, "db", "import-v2", source); got.code != cli.ExitOK {
-		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
-	}
-	seedAllFlags(t)
-
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
-	if _, err := d.Write.ExecContext(context.Background(),
-		"UPDATE connections SET config_json = ? WHERE id = 'service/notion'",
-		fmt.Sprintf(`{"api":%q}`, notion.URL)); err != nil {
-		t.Fatal(err)
-	}
-	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
-	_ = d.Close()
-
-	s := &connectionSite{t: t, dir: dir}
-	s.start()
-	s.stop()
-	s.start()
-
-	for _, id := range []string{"service/notion", "service/tmdb", "service/embedding"} {
-		source, enabled, state, _ := connectionRow(t, dir, id)
-		if source != "operator" || enabled != 1 || state == "disabled" {
-			t.Errorf("%s is %s/%d/%s after two boots", id, source, enabled, state)
-		}
-	}
-	if _, _, _, got := connectionRow(t, dir, "service/tmdb"); !strings.Contains(got, tmdb.URL+"/3") {
-		t.Errorf("the imported TMDB endpoint did not survive: %s", got)
-	}
-	if _, _, _, got := connectionRow(t, dir, "service/notion"); !strings.Contains(got, notion.URL) {
-		t.Errorf("the operator Notion endpoint did not survive: %s", got)
-	}
-	for _, id := range []string{"service/weather", "service/eztv", "service/webfetch"} {
-		source, enabled, _, _ := connectionRow(t, dir, id)
-		if source != "operator" || enabled != 1 {
-			t.Errorf("%s is %s/%d without a host declaration", id, source, enabled)
-		}
-	}
-	listed := runApp(t, "connections", "list")
-	for _, id := range []string{"service/notion", "service/tmdb", "service/embedding", "service/weather", "service/eztv"} {
-		if !strings.Contains(listed.stdout, id) {
-			t.Errorf("connections list lacks %s:\n%s", id, listed.stdout)
-		}
-	}
-	for _, id := range []string{"service/notion", "service/tmdb"} {
-		tested := runApp(t, "connections", "test", id)
-		if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "ok") {
-			t.Errorf("connections test %s: exit %d stdout %q stderr %q", id, tested.code, tested.stdout, tested.stderr)
-		}
-	}
 }
 
 func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {

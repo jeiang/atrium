@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 )
@@ -427,6 +428,9 @@ func DescribePoll() application.Definition {
 
 func (s *Service) Poll(ctx context.Context, in PollInput) (application.Change[Polled], error) {
 	out, err := s.poll(ctx, in)
+	if err == nil && !out.Ran {
+		return application.Change[Polled]{Data: out}, config.NotConfigured("no show is followed")
+	}
 	outcome := state.Noop
 	if len(out.Result.Added) > 0 {
 		outcome = state.OK
