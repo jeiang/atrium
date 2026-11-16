@@ -317,6 +317,22 @@
     assert builtins.length (builtins.filter (lib.hasPrefix "LoadCredential=") cfg.runProperties) == builtins.length credentialLines; true;
     defaultAuth = assert defaults.config.services.atrium.web.auth == "oidc";
     assert builtins.any (lib.hasInfix "services.atrium.web.allowedHost") (failing (host {}));
+    assert builtins.all (mode:
+      builtins.any (lib.hasInfix "services.atrium.web.trustedProxyCidrs") (failing (host {
+        web = {
+          auth = mode;
+          allowedHost = "atrium.example.org";
+        };
+      }))) ["proxy" "proxy+oidc"];
+    assert builtins.all (mode:
+      failing (host {
+        web = {
+          auth = mode;
+          allowedHost = "atrium.example.org";
+          trustedProxyCidrs = ["127.0.0.1/32"];
+        };
+      })
+      == []) ["proxy" "proxy+oidc"];
     assert builtins.all (mode: let
       system = host {
         web = {

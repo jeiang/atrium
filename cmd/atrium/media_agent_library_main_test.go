@@ -187,7 +187,7 @@ func TestThumbnailRouteUsesTheAgent(t *testing.T) {
 
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	logs := &lockedBuffer{}
-	base, _, stop, err := startServeAppArgs(t, defaultApp(t), logs, "--auth", "proxy", "--allowed-host", "127.0.0.1")
+	base, _, stop, err := startServeAppArgs(t, defaultApp(t), logs, "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
 	if err != nil {
 		t.Fatalf("%v: %s", err, logs.String())
 	}
