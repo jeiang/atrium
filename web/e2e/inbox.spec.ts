@@ -179,6 +179,7 @@ test.describe('inbox on a desktop', () => {
         .click();
       await expect(page.getByRole('heading', { name: 'You are offline' })).toBeVisible();
       await context.setOffline(false);
+      await page.evaluate(() => dispatchEvent(new Event('online')));
       await expect(card(page, 'proposal:12')).toContainText('Move the dentist visit to Friday');
       expect(await requests(page)).toEqual([]);
     });

@@ -33,7 +33,6 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
   import Markdown from './Markdown.svelte';
-  import { network } from './network.svelte';
   import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';
@@ -254,7 +253,7 @@
   }
 
   function message(error: unknown): string {
-    if (!network.online) return 'You are offline. The message was kept.';
+    if (error instanceof TypeError) return 'You are offline. The message was kept.';
     return error instanceof Error && error.message ? error.message : 'The message was not sent.';
   }
 
@@ -388,17 +387,20 @@
     <ViewState kind="error" title="This chat does not exist" level={2}>
       Check the link, or open a chat from the list.
     </ViewState>
+  {:else if id !== undefined && transcript.fetchStatus === 'paused' && !first}
+    <ViewState kind="offline" title="You are offline" level={2}>
+      The chat loads again when the connection returns.
+      {#snippet action()}
+        <Button onclick={onRetry}>Try again</Button>
+      {/snippet}
+    </ViewState>
   {:else if id !== undefined && transcript.isPending}
     <div class="chat__skeleton">
       <ViewState kind="loading" title="Loading the chat" />
     </div>
   {:else if id !== undefined && transcript.isError && !first}
-    <ViewState
-      kind={network.online ? 'error' : 'offline'}
-      title={network.online ? 'The chat could not be loaded' : 'You are offline'}
-      level={2}
-    >
-      {network.online ? transcript.error.message : 'The chat loads again when the connection returns.'}
+    <ViewState kind="error" title="The chat could not be loaded" level={2}>
+      {transcript.error.message}
       {#snippet action()}
         <Button onclick={onRetry}>Try again</Button>
       {/snippet}

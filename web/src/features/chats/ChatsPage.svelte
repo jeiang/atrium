@@ -10,7 +10,6 @@
   import StatusMark from '../../shared/ui/StatusMark.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { p } from '../../shell/router';
-  import { network } from './network.svelte';
   import './chats.css';
 
   const PAGE = 30;
@@ -46,7 +45,7 @@
   {#snippet actions()}
     <a class="btn btn--primary" href={p('/chat/new')}><Icon name="plus" />New chat</a>
   {/snippet}
-  {#if !network.online && rows.length === 0}
+  {#if threads.fetchStatus === 'paused' && rows.length === 0}
     <ViewState kind="offline" title="You are offline" level={2}>
       Chats load again when the connection returns.
       {#snippet action()}
