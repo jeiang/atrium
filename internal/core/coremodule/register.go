@@ -30,6 +30,7 @@ import (
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/connections/connectionscmd"
 	"github.com/jeiang/atrium/internal/connections/connweb"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
@@ -136,7 +137,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
 		Queues:            collectors.Queues(),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
-		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
+		Connections:       slices.Concat(connections.Connections(), davmirror.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{

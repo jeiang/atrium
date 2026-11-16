@@ -100,6 +100,7 @@ var platform = map[string]bool{
 	"internal/notify":                 true,
 	"internal/web":                    true,
 	"internal/web/tpl":                true,
+	"internal/davmirror":              true,
 }
 
 const (
@@ -110,6 +111,10 @@ const (
 var units = []string{
 	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
 	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
+}
+
+var isolated = map[string]bool{
+	"internal/contacts": true,
 }
 
 func main() {
@@ -144,7 +149,8 @@ func scan() ([]string, error) {
 		platformFile := platform[path.Dir(file)] || strings.HasPrefix(file, dayContract+"/")
 		adapterFile := isAdapter(file, src)
 		dayReader := strings.HasPrefix(file, "internal/assistant/") && !strings.HasPrefix(file, "internal/assistant/tools/")
-		if !platformFile && !adapterFile && !dayReader {
+		own := unitOf(file)
+		if !platformFile && !adapterFile && !dayReader && !isolated[own] {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
@@ -159,11 +165,14 @@ func scan() ([]string, error) {
 			if adapterFile && forbidden(imp) {
 				edges = append(edges, "adapter imports a forbidden package: "+file+"\t"+imp)
 			}
-			if platformFile && unitImport(imp) {
+			if platformFile && unitOf(imp) != "" {
 				edges = append(edges, "platform package imports a unit: "+file+"\t"+imp)
 			}
 			if dayReader && (imp == calendarUnit || strings.HasPrefix(imp, calendarUnit+"/")) {
 				edges = append(edges, "core assistant package imports calendar instead of reading the day contract: "+file+"\t"+imp)
+			}
+			if other := unitOf(imp); isolated[own] && other != "" && other != own {
+				edges = append(edges, "unit imports another unit: "+file+"\t"+imp)
 			}
 		}
 		return nil
@@ -186,17 +195,14 @@ func isAdapter(file string, src []byte) bool {
 	return false
 }
 
-func unitImport(imp string) bool {
-	rel, ok := strings.CutPrefix(imp, module+"/")
-	if !ok {
-		return false
-	}
+func unitOf(name string) string {
+	rel := strings.TrimPrefix(name, module+"/")
 	for _, unit := range units {
 		if rel == unit || strings.HasPrefix(rel, unit+"/") {
-			return true
+			return unit
 		}
 	}
-	return false
+	return ""
 }
 
 func matches(pattern, file string) bool {
