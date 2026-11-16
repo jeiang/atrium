@@ -24,7 +24,7 @@ func (m Module) syncJob(env config.Env) scheduler.Definition {
 		Module: module.Mail, Key: run.SyncJobKey, Name: passrun.Sync, Kind: scheduler.JobBuiltin,
 		Prompt: "Every 15 minutes: sync the mailboxes, then route, flag and file mail under the mail safety gate (no assistant run).",
 		Every:  15 * time.Minute, InitialDelay: 2 * time.Minute, Timeout: 20 * time.Minute,
-		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, RunsWhilePaused: true,
+		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, RunsWhilePaused: true, Protected: true,
 		Resources: []string{mail.PassResource}, Needs: []string{module.Mail},
 		Run: func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 			d, cfg, err := m.Resources(ctx)

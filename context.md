@@ -581,6 +581,24 @@ claims about the running application. Operator contracts are in
   `contacts sync` and `media poll|sweep`: with serve up they hand their
   declared job to serve (input flags such as `--account` refuse), without it
   they run in process as before.
+- Job rows own every schedule. The former `agent_schedule_*` settings are
+  retired; at start or tick a stored value that differs from the default
+  is carried once onto a job row still at its default, marked by an audit
+  row (actor `atrium`, source `migration`). `agent_schedule_min_interval_seconds`
+  stays a setting and is checked on writes only. Operator schedules
+  (`atrium schedule list|create|edit|delete|run`, `POST /schedules`,
+  `PATCH /schedules/{job_id}`, `POST /schedules/{job_id}/run`) are cron jobs
+  with `created_by = operator`; the agent's schedule tools neither list nor
+  edit them. `PATCH` takes any of schedule, prompt, name and enabled and an
+  optional `If-Match` against the per-job `revision` (412 when stale).
+  Definitions marked `Protected` (mail pass, backup) refuse disable and
+  delete. Run now inserts a `requested` row through `scheduler.RequestJob`
+  (404 unknown or deleted, 409 running with the run id, 503 without serve);
+  serve admits it through the same pause, module and budget gate as a
+  scheduled run and records a skip status when the gate refuses. A run that
+  ends `error` after a run that did not sends one System push
+  (`job-failed:<run id>`, linking its thread or `/scheduled?run=<id>`);
+  repeated failures push nothing until a success.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,

@@ -250,14 +250,16 @@
     {
       "area": "schedules",
       "operations": [
+        "assistant.schedule.add",
         "assistant.schedule.cancel",
         "assistant.schedule.enabled",
         "assistant.schedule.history",
         "assistant.schedule.list",
+        "assistant.schedule.run_now",
         "assistant.schedule.update"
       ],
-      "required": 5,
-      "bound": 5
+      "required": 7,
+      "bound": 7
     },
     {
       "area": "search",
@@ -396,7 +398,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 213,
-  "total_bound": 213,
+  "total_required": 215,
+  "total_bound": 215,
   "total_approval_reached": 11
 }

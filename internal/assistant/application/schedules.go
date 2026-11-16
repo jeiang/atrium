@@ -2,7 +2,9 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,13 +30,18 @@ const (
 	ScheduleCancelName  application.Name = "assistant.schedule.cancel"
 	ScheduleListName    application.Name = "assistant.schedule.list"
 	ScheduleHistoryName application.Name = "assistant.schedule.history"
+	ScheduleAddName     application.Name = "assistant.schedule.add"
+	ScheduleRunNowName  application.Name = "assistant.schedule.run_now"
+
+	SourceBuiltin = "built-in"
 
 	ScheduleDeleteOp  = "schedule_delete"
 	ScheduleRestoreOp = "schedule_restore"
 
-	scheduleStampLayout = "Mon 02 Jan 15:04"
-	scheduleDueLayout   = "2006-01-02T15:04-07:00"
-	builtinAgentRefusal = "built-in runs are managed by the operator"
+	scheduleStampLayout  = "Mon 02 Jan 15:04"
+	scheduleDueLayout    = "2006-01-02T15:04-07:00"
+	builtinAgentRefusal  = "built-in runs are managed by the operator"
+	operatorAgentRefusal = "schedules the operator made are managed by the operator"
 )
 
 var (
@@ -64,6 +71,23 @@ type ScheduleUpdateInput struct {
 	Prompt   *string
 	Schedule *string
 	Enabled  *bool
+	IfMatch  string
+}
+
+type ScheduleAddInput struct {
+	Name     string
+	Prompt   string
+	Schedule string
+}
+
+type ScheduleRunNowInput struct {
+	ID int64
+}
+
+type ScheduleRunStarted struct {
+	Run    int64  `json:"run"`
+	Job    int64  `json:"job"`
+	Status string `json:"status"`
 }
 
 type ScheduleToggleInput struct {
@@ -91,14 +115,20 @@ type ScheduleJob struct {
 	Name            string  `json:"name"`
 	Kind            string  `json:"kind"`
 	CreatedBy       string  `json:"created_by"`
+	Source          string  `json:"source"`
+	Protected       bool    `json:"protected"`
+	Revision        string  `json:"revision"`
 	Cadence         string  `json:"cadence"`
 	Schedule        string  `json:"schedule"`
 	Prompt          string  `json:"prompt"`
 	Enabled         bool    `json:"enabled"`
 	NextDueText     *string `json:"next_due_text"`
+	NextRunAt       *string `json:"next_run_at"`
+	LastRunID       *int64  `json:"last_run_id"`
 	LastStatus      *string `json:"last_status"`
 	LastError       *string `json:"last_error"`
 	LastStartedText *string `json:"last_started_text"`
+	LastRunAt       *string `json:"last_run_at"`
 	NextDue         *string `json:"-"`
 	Fixed           bool    `json:"-"`
 }
@@ -166,6 +196,41 @@ func DescribeScheduleHistory() application.Definition {
 	return describeRead[ScheduleHistoryInput, []ScheduleRun](ScheduleHistoryName)
 }
 
+func DescribeScheduleAdd() application.Definition {
+	return application.Describe[ScheduleAddInput, ScheduleChanged](ScheduleAddName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+}
+
+func DescribeScheduleRunNow() application.Definition {
+	return application.Describe[ScheduleRunNowInput, ScheduleRunStarted](ScheduleRunNowName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+}
+
+func ScheduleRevision(j scheduler.Job) string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%d\x00%s\x00%s\x00%s\x00%s", j.ID, j.Name, j.Prompt, j.Schedule, j.State))
+	return hex.EncodeToString(sum[:8])
+}
+
+func revisionMatches(ifMatch, revision string) bool {
+	if strings.TrimSpace(ifMatch) == "" {
+		return true
+	}
+	for tag := range strings.SplitSeq(ifMatch, ",") {
+		tag = strings.TrimSpace(tag)
+		if tag == "*" || strings.Trim(strings.TrimPrefix(tag, "W/"), `"`) == revision {
+			return true
+		}
+	}
+	return false
+}
+
+func scheduleInstant(epoch *float64, loc *time.Location) *string {
+	if epoch == nil || *epoch == 0 {
+		return nil
+	}
+	sec, us := timex.SplitTimestamp(*epoch)
+	text := time.Unix(sec, us*1000).In(loc).Format(time.RFC3339)
+	return &text
+}
+
 func (s *Service) WithJobs(defs []scheduler.Definition) *Service {
 	c := *s
 	c.jobs = defs
@@ -183,11 +248,17 @@ func scheduleStamp(epoch *float64, loc *time.Location) *string {
 
 func scheduleJobOf(j scheduler.ListedJob, zone *time.Location, agent bool) (ScheduleJob, error) {
 	v := ScheduleJob{
-		ID: j.ID, Name: j.Name, Kind: j.Kind, CreatedBy: j.CreatedBy, Cadence: scheduler.Describe(j.Schedule, j.TZ), Schedule: j.Schedule,
-		Prompt: j.Prompt, Enabled: j.State.Active(), LastStatus: j.LastStatus, LastError: j.LastError, LastStartedText: scheduleStamp(j.LastStarted, zone),
+		ID: j.ID, Name: j.Name, Kind: j.Kind, CreatedBy: j.CreatedBy, Source: j.CreatedBy, Revision: ScheduleRevision(j.Job),
+		Cadence: scheduler.Describe(j.Schedule, j.TZ), Schedule: j.Schedule, Prompt: j.Prompt, Enabled: j.State.Active(),
+		LastRunID: j.LastRunID, LastStatus: j.LastStatus, LastError: j.LastError, LastStartedText: scheduleStamp(j.LastStarted, zone),
+		LastRunAt: scheduleInstant(j.LastStarted, zone),
+	}
+	if j.Fixed() {
+		v.Source = SourceBuiltin
 	}
 	if j.State.Active() {
 		v.NextDueText = scheduleStamp(j.NextDue, zone)
+		v.NextRunAt = scheduleInstant(j.NextDue, zone)
 	}
 	if agent && j.NextDue != nil {
 		loc, err := scheduler.Zone(j.TZ)
@@ -236,7 +307,7 @@ func (s *Service) ScheduleList(ctx context.Context, in ScheduleListInput) (appli
 		}
 		targets := []string{}
 		for _, j := range jobs {
-			if in.Editable && j.Fixed() {
+			if in.Editable && (j.Fixed() || j.CreatedBy == scheduler.Operator) {
 				continue
 			}
 			view, err := scheduleJobOf(j, zone, in.Editable)
@@ -245,6 +316,7 @@ func (s *Service) ScheduleList(ctx context.Context, in ScheduleListInput) (appli
 			}
 			def, declared := scheduler.Declared(s.jobs, j.Job)
 			view.Fixed = declared && def.CarriedSetting == ""
+			view.Protected = declared && def.Protected
 			out.Jobs = append(out.Jobs, view)
 			targets = append(targets, target("schedule", j.ID))
 		}
@@ -359,6 +431,9 @@ func (s *Service) scheduleView(ctx context.Context, job *scheduler.Job) (*Schedu
 		return nil, err
 	}
 	view, err := scheduleJobOf(scheduler.ListedJob{Job: *job}, zone, true)
+	def, declared := scheduler.Declared(s.jobs, *job)
+	view.Fixed = declared && def.CarriedSetting == ""
+	view.Protected = declared && def.Protected
 	return &view, err
 }
 
@@ -367,13 +442,86 @@ func (s *Service) existingJob(ctx context.Context, q db.Querier, id int64, agent
 	if err != nil {
 		return nil, err
 	}
-	if job == nil {
+	if job == nil || job.State == scheduler.StateCancelled {
 		return nil, noSchedule(id)
 	}
 	if agent && job.Fixed() {
 		return nil, refusal(builtinAgentRefusal)
 	}
+	if agent && job.CreatedBy == scheduler.Operator {
+		return nil, refusal(operatorAgentRefusal)
+	}
 	return job, nil
+}
+
+func (s *Service) protectedRefusal(job *scheduler.Job) error {
+	if def, declared := scheduler.Declared(s.jobs, *job); declared && def.Protected {
+		return refusal(job.Name + " is protected and cannot be disabled; disable its module or pause atrium instead")
+	}
+	return nil
+}
+
+func (s *Service) ScheduleAdd(ctx context.Context, in ScheduleAddInput) (application.Change[ScheduleChanged], error) {
+	now := s.now()
+	return s.scheduleCommand(ctx, ScheduleAddName, 0, nil, "", func(ctx context.Context, tx *sql.Tx) (ScheduleChanged, ledger.Result, error) {
+		name, prompt, schedule := strings.TrimSpace(in.Name), strings.TrimSpace(in.Prompt), strings.TrimSpace(in.Schedule)
+		switch {
+		case name == "":
+			return ScheduleChanged{}, ledger.Result{}, invalid("name", "name is empty", nil)
+		case prompt == "":
+			return ScheduleChanged{}, ledger.Result{}, invalid("prompt", "prompt is empty", nil)
+		case schedule == "":
+			return ScheduleChanged{}, ledger.Result{}, invalid("schedule", "schedule is empty", nil)
+		}
+		tz := config.From(ctx).TZName(s.env)
+		if _, err := scheduler.Parse(schedule, tz); err != nil {
+			return ScheduleChanged{}, ledger.Result{}, invalid("schedule", err.Error(), nil)
+		}
+		id, err := scheduler.CreateJob(ctx, tx, scheduler.NewJob{
+			Name: name, Prompt: prompt, Schedule: schedule, TZ: tz, Now: now,
+			CreatedBy: scheduler.Operator, PromptBy: scheduler.Operator, Kind: scheduler.JobCron, Floor: true,
+		})
+		if err != nil {
+			return ScheduleChanged{}, ledger.Result{}, err
+		}
+		job, err := scheduler.GetJob(ctx, tx, id)
+		if err != nil {
+			return ScheduleChanged{}, ledger.Result{}, err
+		}
+		view, err := s.scheduleView(ctx, job)
+		if err != nil {
+			return ScheduleChanged{}, ledger.Result{}, err
+		}
+		return ScheduleChanged{ID: id, Enabled: job.State.Active(), Job: view}, ledger.Result{}, nil
+	})
+}
+
+func (s *Service) ScheduleRunNow(ctx context.Context, in ScheduleRunNowInput) (application.Change[ScheduleRunStarted], error) {
+	where := target("schedule", in.ID)
+	job, err := s.existingJob(ctx, s.db.Read, in.ID, false)
+	if err != nil {
+		return application.Change[ScheduleRunStarted]{}, s.reject(ctx, ScheduleRunNowName, where, err)
+	}
+	running, err := db.ServeRunning(ctx, config.From(ctx).DBPath())
+	if err != nil {
+		return application.Change[ScheduleRunStarted]{}, err
+	}
+	if !running {
+		return application.Change[ScheduleRunStarted]{}, &application.Error{Code: application.Unavailable, Message: "atrium serve is not running on this database; start it to run jobs"}
+	}
+	runID, err := scheduler.RequestJob(ctx, s.db, job.ID, s.now())
+	if busy, ok := errors.AsType[*scheduler.Running](err); ok {
+		return application.Change[ScheduleRunStarted]{}, s.reject(ctx, ScheduleRunNowName, where,
+			&application.Error{Code: application.Conflict, Message: fmt.Sprintf("%s is already running (run %d)", job.Name, busy.RunID)})
+	}
+	if err != nil {
+		return application.Change[ScheduleRunStarted]{}, s.reject(ctx, ScheduleRunNowName, where, scheduleError(err))
+	}
+	auditID, err := s.audit(ctx, nil, ScheduleRunNowName, where, state.OK)
+	if err != nil {
+		return application.Change[ScheduleRunStarted]{}, err
+	}
+	return application.Change[ScheduleRunStarted]{Data: ScheduleRunStarted{Run: runID, Job: job.ID, Status: string(scheduler.StatusRequested)}, AuditID: auditID}, nil
 }
 
 func restoreUndo(job *scheduler.Job) json.RawMessage {
@@ -417,22 +565,64 @@ func (s *Service) ScheduleUpdate(ctx context.Context, in ScheduleUpdateInput) (a
 			if err != nil {
 				return ScheduleChanged{}, ledger.Result{}, err
 			}
-			if in.Schedule == nil || strings.TrimSpace(*in.Schedule) == "" {
-				return ScheduleChanged{}, ledger.Result{}, invalid("schedule", "schedule is empty", nil)
-			}
-			schedule := strings.TrimSpace(*in.Schedule)
-			if _, err := scheduler.Parse(schedule, job.TZ); err != nil {
-				return ScheduleChanged{}, ledger.Result{}, invalid("schedule", err.Error(), nil)
+			if !revisionMatches(in.IfMatch, ScheduleRevision(*job)) {
+				return ScheduleChanged{}, ledger.Result{}, &application.Error{Code: application.Precondition, Message: "The schedule changed since it was read; reload it and try again."}
 			}
 			def, known := scheduler.Declared(s.jobs, *job)
-			if known && def.CarriedSetting == "" {
-				return ScheduleChanged{}, ledger.Result{}, refusal("the schedule of " + job.Name + " is fixed by its module")
+			u := scheduler.JobUpdate{Actor: scheduler.Operator, Floor: def.PromptRun || job.Kind == scheduler.JobCron}
+			if in.Schedule != nil {
+				schedule := strings.TrimSpace(*in.Schedule)
+				if schedule == "" {
+					return ScheduleChanged{}, ledger.Result{}, invalid("schedule", "schedule is empty", nil)
+				}
+				if _, err := scheduler.Parse(schedule, job.TZ); err != nil {
+					return ScheduleChanged{}, ledger.Result{}, invalid("schedule", err.Error(), nil)
+				}
+				if known && def.CarriedSetting == "" {
+					return ScheduleChanged{}, ledger.Result{}, refusal("the schedule of " + job.Name + " is fixed by its module")
+				}
+				u.Schedule = &schedule
 			}
-			updated, err := scheduler.UpdateJob(ctx, tx, job.ID, now, scheduler.JobUpdate{Schedule: &schedule, Actor: scheduler.Operator, Floor: def.PromptRun})
+			if in.Name != nil {
+				name := strings.TrimSpace(*in.Name)
+				if name == "" {
+					return ScheduleChanged{}, ledger.Result{}, invalid("name", "name is empty", nil)
+				}
+				if job.Fixed() {
+					return ScheduleChanged{}, ledger.Result{}, refusal("the name of " + job.Name + " is fixed by its module")
+				}
+				u.Name = &name
+			}
+			if in.Prompt != nil {
+				prompt := strings.TrimSpace(*in.Prompt)
+				if prompt == "" {
+					return ScheduleChanged{}, ledger.Result{}, invalid("prompt", "prompt is empty", nil)
+				}
+				if job.Fixed() {
+					return ScheduleChanged{}, ledger.Result{}, refusal("the prompt of " + job.Name + " is fixed by its module")
+				}
+				u.Prompt, u.PromptBy = &prompt, scheduler.Operator
+			}
+			if in.Enabled != nil {
+				if !*in.Enabled {
+					if err := s.protectedRefusal(job); err != nil {
+						return ScheduleChanged{}, ledger.Result{}, err
+					}
+				}
+				u.Enabled = in.Enabled
+			}
+			if u.Schedule == nil && u.Name == nil && u.Prompt == nil && u.Enabled == nil {
+				return ScheduleChanged{}, ledger.Result{}, invalid("schedule", "nothing to change", nil)
+			}
+			updated, err := scheduler.UpdateJob(ctx, tx, job.ID, now, u)
 			if err != nil {
 				return ScheduleChanged{}, ledger.Result{}, err
 			}
-			return ScheduleChanged{ID: job.ID, Enabled: updated.State.Active()}, ledger.Result{}, nil
+			view, err := s.scheduleView(ctx, updated)
+			if err != nil {
+				return ScheduleChanged{}, ledger.Result{}, err
+			}
+			return ScheduleChanged{ID: job.ID, Enabled: updated.State.Active(), Job: view}, ledger.Result{}, nil
 		})
 	}
 	return s.scheduleCommand(ctx, ScheduleUpdateName, in.ID, in.Agent, "schedule_update", func(ctx context.Context, tx *sql.Tx) (ScheduleChanged, ledger.Result, error) {
@@ -470,6 +660,11 @@ func (s *Service) ScheduleEnabled(ctx context.Context, in ScheduleToggleInput) (
 		enabled := !job.State.Active()
 		if in.Enabled != nil {
 			enabled = *in.Enabled
+		}
+		if !enabled {
+			if err := s.protectedRefusal(job); err != nil {
+				return ScheduleChanged{}, ledger.Result{}, err
+			}
 		}
 		if _, err := scheduler.UpdateJob(ctx, tx, job.ID, now, scheduler.JobUpdate{Enabled: &enabled, Actor: scheduler.Operator}); err != nil {
 			return ScheduleChanged{}, ledger.Result{}, err

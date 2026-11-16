@@ -40,6 +40,7 @@ type Dependencies struct {
 	Enabled   func(string) bool
 	Beat      func()
 	Recovered func(error)
+	Failed    func(context.Context, Failure) error
 	Work      context.Context
 }
 
@@ -368,6 +369,9 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 		return released
 	}
 	finished := s.Finish(done, claim, result)
+	if finished == nil && result.Status == StatusError {
+		s.failed(done, claim, result)
+	}
 	s.settle(done, claim, finished)
 	return finished
 }

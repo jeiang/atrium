@@ -24,6 +24,21 @@ run) or serve did not take the request within 30 seconds, and 69 when no serve
 holds the database's serve lock; then nothing runs. Interrupting the wait
 leaves a started run running in serve.
 
+`atrium schedule list|create|edit|delete|run` manages schedules from the
+command line, with the same rules as the Scheduled page and the API. `create
+<name> --schedule <when> --prompt <text>` adds an operator schedule; recurring
+schedules closer together than `agent_schedule_min_interval_seconds` are
+refused. `edit <id>` changes any of `--schedule`, `--prompt`, `--name` and
+`--enabled`, and `--if-match <revision>` refuses the change when the schedule
+changed since it was listed. Built-in schedules keep their module's name and
+prompt; the mail pass and the backup cannot be disabled or deleted. `run <id>`
+asks serve to run the schedule now and prints the requested run (`run`, `job`,
+`status`) without waiting; the run passes the same pause, module and budget
+checks as a scheduled run. It exits 69 when no serve is running. The
+assistant's schedule tools cannot see or change schedules the operator made.
+A scheduled run that fails after one that did not sends one push on the
+system channel; further failures stay quiet until a run succeeds.
+
 While serve is up, the one-shot commands `sync`, `calendar sync`,
 `calendar candidates`, `contacts sync`, `media poll` and `media sweep` hand
 their declared job to serve the same way and print its run record instead of

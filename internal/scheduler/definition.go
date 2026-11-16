@@ -49,6 +49,7 @@ type Definition struct {
 	InitialDelay    time.Duration
 	Persistent      bool
 	RunsWhilePaused bool
+	Protected       bool
 	Overlap         bool
 	Timeout         time.Duration
 	Spend           Spend

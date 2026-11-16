@@ -28,12 +28,24 @@ type Requested struct {
 }
 
 func Request(ctx context.Context, d *db.DB, key string, now float64) (int64, error) {
+	var jobID int64
+	err := d.Read.QueryRowContext(ctx, "SELECT id FROM jobs WHERE declaration_key = ?", key).Scan(&jobID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("scheduler: no declared job %s", key)
+	}
+	if err != nil {
+		return 0, err
+	}
+	return RequestJob(ctx, d, jobID, now)
+}
+
+func RequestJob(ctx context.Context, d *db.DB, jobID int64, now float64) (int64, error) {
 	var id int64
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		var jobID int64
-		err := tx.QueryRowContext(ctx, "SELECT id FROM jobs WHERE declaration_key = ?", key).Scan(&jobID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("scheduler: no declared job %s", key)
+		var state State
+		err := tx.QueryRowContext(ctx, "SELECT state FROM jobs WHERE id = ?", jobID).Scan(&state)
+		if errors.Is(err, sql.ErrNoRows) || state == StateCancelled {
+			return errNoActive(jobID)
 		}
 		if err != nil {
 			return err
@@ -123,11 +135,23 @@ func (s *Scheduler) takeRequests(ctx context.Context) error {
 
 func (s *Scheduler) runRequest(ctx context.Context, id int64, at float64, job Job) error {
 	now := s.now()
-	if _, declared := Declared(s.jobs, job); !declared {
+	if _, declared := Declared(s.jobs, job); !declared && job.Fixed() {
 		return s.refuse(ctx, id, "not a declared job")
+	}
+	if job.State == StateCancelled {
+		return s.refuse(ctx, id, "the schedule was deleted")
 	}
 	if now-at > requestExpires.Seconds() {
 		return s.refuse(ctx, id, "the request expired before serve took it")
+	}
+	if s.deps.Gate != nil {
+		gate, err := s.deps.Gate(ctx, now)
+		if err != nil {
+			return err
+		}
+		if status := s.admit(gate)(job); status != "" {
+			return s.skipRequest(ctx, id, job.ID, status, now)
+		}
 	}
 	if busy := s.enter(job.ID); busy != nil {
 		return s.refuseRunning(ctx, id, busy)
@@ -169,4 +193,16 @@ func (s *Scheduler) refuse(ctx context.Context, id int64, reason string) error {
 	_, err := s.db.Write.ExecContext(ctx, "UPDATE job_runs SET status = ?, ended_at = ?, error = ? WHERE id = ? AND status = ?",
 		StatusRefused, s.now(), reason, id, StatusRequested)
 	return err
+}
+
+func (s *Scheduler) skipRequest(ctx context.Context, id, jobID int64, status Status, now float64) error {
+	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE job_runs SET status = ?, started_at = ?, ended_at = ?, owner = NULL WHERE id = ? AND status = ?",
+			status, now, now, id, StatusRequested))
+		if err != nil || !ok {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "UPDATE jobs SET last_run_id = ? WHERE id = ?", id, jobID)
+		return err
+	})
 }

@@ -93,6 +93,20 @@ var held = struct {
 	paths map[string]int
 }{paths: map[string]int{}}
 
+func ServeRunning(ctx context.Context, path string) (bool, error) {
+	id, err := identify(path)
+	if err != nil {
+		return false, err
+	}
+	held.Lock()
+	own := held.paths[id.path] > 0
+	held.Unlock()
+	if own {
+		return true, nil
+	}
+	return OtherServe(ctx, path)
+}
+
 func OtherServe(ctx context.Context, path string) (bool, error) {
 	id, err := identify(path)
 	if err != nil {

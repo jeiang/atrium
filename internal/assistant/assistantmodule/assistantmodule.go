@@ -25,6 +25,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/schedulecmd"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
@@ -133,7 +134,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), subagentCLIService(mc.Env, mc.Tools, m.Now), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now))},
+		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), subagentCLIService(mc.Env, mc.Tools, m.Now), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), schedulecmd.Command(scheduleCLIService(mc.Env, m.Now))},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
