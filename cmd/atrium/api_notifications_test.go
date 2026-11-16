@@ -101,6 +101,7 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 		t.Fatalf("configuration after channel change = %d %s", again.status, again.body)
 	}
 
+	clearBootNotices(t, d)
 	for i := 1; i <= 120; i++ {
 		if _, err := d.Write.Exec("INSERT INTO notifications (ts, title, body, channel, delivered) VALUES (?, ?, 'body', 'assistant', 0)", i, fmt.Sprintf("Notice %03d", i)); err != nil {
 			t.Fatal(err)

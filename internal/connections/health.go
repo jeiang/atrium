@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -14,14 +16,15 @@ import (
 // Notifier delivers one operator notification for a health state transition.
 type Notifier func(ctx context.Context, d *db.DB, title, body string) error
 
-// announce reports a state change after its write committed. The first
-// observation of a connection is evidence, not a transition, so it is silent.
 func (s *Store) announce(ctx context.Context, id ID, previous, next State, reason string) {
 	var n Notifier
 	if s.reg != nil {
 		n = s.reg.notify
 	}
-	if n == nil || s.d == nil || previous == next || previous == "" || previous == Untested || next == Untested {
+	if n == nil || s.d == nil || previous == next || next == Untested {
+		return
+	}
+	if (previous == "" || previous == Untested) && next != Failing && next != NeedsReauth && next != Disabled {
 		return
 	}
 	label := string(id)
@@ -89,19 +92,29 @@ func HealthStates(ctx context.Context, q db.Querier) ([]HealthState, error) {
 	})
 }
 
-type failure struct {
+type outcome struct {
 	ID       ID
 	Revision int64
+	OK       bool
 }
 
-var failures = make(chan failure, 64)
+var (
+	outcomes  = make(chan outcome, 64)
+	succeeded sync.Map
+)
 
-// Failed reports a runtime request that suggests the connection is unhealthy.
-func Failed() <-chan failure { return failures }
+func Outcomes() <-chan outcome { return outcomes }
 
-func report(id ID, revision int64) {
+func report(id ID, revision int64, ok bool) {
+	if ok {
+		now := time.Now().UnixNano()
+		if last, seen := succeeded.Load(id); seen && now-last.(int64) < int64(time.Minute) {
+			return
+		}
+		succeeded.Store(id, now)
+	}
 	select {
-	case failures <- failure{ID: id, Revision: revision}:
+	case outcomes <- outcome{ID: id, Revision: revision, OK: ok}:
 	default:
 	}
 }
@@ -114,8 +127,11 @@ type reporter struct {
 
 func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := r.next.RoundTrip(req)
-	if err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500) {
-		report(r.id, r.revision)
+	switch {
+	case err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500):
+		report(r.id, r.revision, false)
+	case err == nil && resp.StatusCode < http.StatusBadRequest:
+		report(r.id, r.revision, true)
 	}
 	return resp, err
 }

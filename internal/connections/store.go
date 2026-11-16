@@ -232,34 +232,39 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	for _, id := range sortedKeys(s.host.Connections) {
 		declared[id] = true
 	}
+	type dropped struct {
+		id    ID
+		state State
+	}
+	var removed []dropped
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, id := range sortedKeys(s.host.Connections) {
 			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id]); err != nil {
 				return err
 			}
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id FROM connections WHERE config_source = 'host'")
+		rows, err := tx.QueryContext(ctx, "SELECT id, state FROM connections WHERE config_source = 'host' AND NOT (enabled = 0 AND state = 'disabled')")
 		if err != nil {
 			return err
 		}
-		var stale []string
+		removed = nil
 		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
+			var row dropped
+			if err := rows.Scan(&row.id, &row.state); err != nil {
 				_ = rows.Close()
 				return err
 			}
-			if !declared[id] {
-				stale = append(stale, id)
+			if !declared[string(row.id)] {
+				removed = append(removed, row)
 			}
 		}
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		for _, id := range stale {
+		for _, row := range removed {
 			if _, err := tx.ExecContext(ctx,
-				"UPDATE connections SET enabled = 0, state = 'disabled', reason = 'removed from host configuration', revision = revision + 1, updated_at = ? WHERE id = ?",
-				s.stamp(), id); err != nil {
+				"UPDATE connections SET enabled = 0, state = 'disabled', reason = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
+				reasonRemovedFromHost, s.stamp(), row.id); err != nil {
 				return err
 			}
 		}
@@ -275,6 +280,10 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	})
 	if err != nil {
 		return err
+	}
+	for _, row := range removed {
+		log.Warn("a host-declared connection was removed from the host configuration and is disabled", logx.Integration, string(row.id))
+		s.announce(ctx, row.id, row.state, Disabled, reasonRemovedFromHost)
 	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reload != nil {
 		return s.reg.sync.Reload(ctx, s)
@@ -316,6 +325,7 @@ func (s *Store) disableUnknownKinds(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+const reasonRemovedFromHost = "removed from host configuration"
 
 func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.HostConnection) error {
 	def, ok := s.reg.Lookup(Kind(hc.Kind))
@@ -1481,6 +1491,9 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		}
 		if currentRevision != revision {
 			return &Conflict{ID: id, Revision: revision}
+		}
+		if previous == Disabled {
+			return nil
 		}
 		var results []Result
 		if resultsJSON != "" {

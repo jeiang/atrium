@@ -211,6 +211,9 @@ func TestDraftSendOverXOAUTH2RefreshesTheTokenOnlyAtAuth(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id FROM drafts WHERE account = 'oauth' AND status = 'draft'").Scan(&id); err != nil {
 		t.Fatalf("the agent did not save a draft: %v", err)
 	}
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = unixepoch() WHERE checked_at IS NULL"); err != nil {
+		t.Fatal(err)
+	}
 	base := startServeIn(t, dir)
 
 	jar, _ := cookiejar.New(nil)

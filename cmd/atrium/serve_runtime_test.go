@@ -134,6 +134,9 @@ func TestServeRuntimeStartsEachMonitorOnce(t *testing.T) {
 		t.Fatal("a backup into a missing directory succeeded")
 	}
 	embedder.setStatus(http.StatusInternalServerError)
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 90000 WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
 	embedNotices := titledNotices(t, d, "atrium: Embedding ")
 	if n := titledNotices(t, d, "atrium: backup is stale"); n != 0 {
 		t.Fatalf("%d stale backup notices before serve, want 0", n)
