@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	UndoDelete  = "task_delete"
-	UndoRestore = "task_restore"
+	UndoDelete   = "task_delete"
+	UndoRestore  = "task_restore"
+	UndoReinsert = "task_reinsert"
 )
 
 type Service struct {
@@ -68,6 +69,12 @@ type undoRestore struct {
 	Task tasks.Task `json:"task"`
 }
 
+type undoReinsert struct {
+	Op         string     `json:"op"`
+	Task       tasks.Task `json:"task"`
+	RemindedTS *float64   `json:"reminded_ts"`
+}
+
 func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
 	var head struct {
 		Op string `json:"op"`
@@ -94,6 +101,20 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 			return nil, err
 		}
 		return map[string]any{"restored": u.Task.ID}, nil
+	case UndoReinsert:
+		var u undoReinsert
+		if err := json.Unmarshal(payload, &u); err != nil {
+			return nil, ledger.Refused("task undo payload is invalid")
+		}
+		u.Task.RemindedTS = u.RemindedTS
+		restored, err := tasks.Reinsert(ctx, q, u.Task)
+		if err != nil {
+			return nil, err
+		}
+		if !restored {
+			return nil, ledger.Refused(fmt.Sprintf("task %d already exists", u.Task.ID))
+		}
+		return map[string]any{"reinserted": u.Task.ID}, nil
 	}
 	return nil, ledger.Refused(fmt.Sprintf("unknown task undo %q", head.Op))
 }

@@ -737,7 +737,7 @@ func (s *Store) capabilities(ctx context.Context, q db.Querier, id ID) ([]Capabi
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []CapabilityView
+	out := []CapabilityView{}
 	for rows.Next() {
 		var (
 			c      CapabilityView
@@ -760,7 +760,7 @@ func (s *Store) credentials(ctx context.Context, q db.Querier, id ID, withValues
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []CredentialView
+	out := []CredentialView{}
 	for rows.Next() {
 		var (
 			c       CredentialView

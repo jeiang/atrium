@@ -98,6 +98,12 @@ func (rd *Renderer) contribute(ctx context.Context, f *tpl.Frame) {
 	}
 }
 
+func (rd *Renderer) PendingCount(ctx context.Context) int {
+	var f tpl.Frame
+	rd.contribute(ctx, &f)
+	return f.PendingCount
+}
+
 const (
 	themeCookie = "atrium_theme"
 	railCookie  = "atrium_rail"

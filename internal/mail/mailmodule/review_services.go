@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
@@ -57,7 +58,7 @@ func ReviewServices(o ReviewOptions) func(*web.Deps) reviewpages.Services {
 		pipeline := &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled}
 		var mailService *mailapp.Service
 		if o.Application != nil {
-			mailService = o.Application(d).WithSender(draftStore)
+			mailService = o.Application(d).WithSender(draftStore).WithCommitments(commitmentsapp.New(d.DB, effects, now))
 		}
 		return reviewpages.Services{
 			Mail:   mailService,

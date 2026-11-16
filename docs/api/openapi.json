@@ -363,7 +363,8 @@
           {
             "properties": {
               "data": {
-                "type": "object"
+                "contentMediaType": "application/json",
+                "type": "string"
               },
               "event": {
                 "type": "string"
@@ -380,21 +381,25 @@
       "AppEventChange": {
         "properties": {
           "data": {
-            "properties": {
-              "revision": {
-                "format": "int64",
-                "maximum": 9007199254740991,
-                "type": "integer"
+            "contentMediaType": "application/json",
+            "contentSchema": {
+              "properties": {
+                "revision": {
+                  "format": "int64",
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                },
+                "topic": {
+                  "type": "string"
+                }
               },
-              "topic": {
-                "type": "string"
-              }
+              "required": [
+                "topic",
+                "revision"
+              ],
+              "type": "object"
             },
-            "required": [
-              "topic",
-              "revision"
-            ],
-            "type": "object"
+            "type": "string"
           },
           "event": {
             "const": "change",
@@ -410,32 +415,36 @@
       "AppEventSync": {
         "properties": {
           "data": {
-            "properties": {
-              "topics": {
-                "items": {
-                  "properties": {
-                    "revision": {
-                      "format": "int64",
-                      "maximum": 9007199254740991,
-                      "type": "integer"
+            "contentMediaType": "application/json",
+            "contentSchema": {
+              "properties": {
+                "topics": {
+                  "items": {
+                    "properties": {
+                      "revision": {
+                        "format": "int64",
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      "topic": {
+                        "type": "string"
+                      }
                     },
-                    "topic": {
-                      "type": "string"
-                    }
+                    "required": [
+                      "topic",
+                      "revision"
+                    ],
+                    "type": "object"
                   },
-                  "required": [
-                    "topic",
-                    "revision"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              }
+                  "type": "array"
+                }
+              },
+              "required": [
+                "topics"
+              ],
+              "type": "object"
             },
-            "required": [
-              "topics"
-            ],
-            "type": "object"
+            "type": "string"
           },
           "event": {
             "const": "sync",
@@ -1252,6 +1261,33 @@
           },
           "data": {
             "$ref": "#/components/schemas/Candidates"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ChangeCommitmentChanged": {
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CommitmentChanged"
           },
           "effect_ids": {
             "items": {
@@ -2300,6 +2336,299 @@
           "owner",
           "status"
         ],
+        "type": "object"
+      },
+      "CommitmentChanged": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/CommitmentItem"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "status"
+        ],
+        "type": "object"
+      },
+      "CommitmentCounts": {
+        "properties": {
+          "todo": {
+            "$ref": "#/components/schemas/CommitmentStatusCounts"
+          },
+          "waiting": {
+            "$ref": "#/components/schemas/CommitmentStatusCounts"
+          }
+        },
+        "required": [
+          "todo",
+          "waiting"
+        ],
+        "type": "object"
+      },
+      "CommitmentItem": {
+        "properties": {
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "counterpart": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_ts": {
+            "type": "number"
+          },
+          "done_ts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "due": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/TaskLink"
+            },
+            "type": "array"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "owner": {
+            "enum": [
+              "me",
+              "them"
+            ],
+            "type": "string"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ref": {
+            "type": "string"
+          },
+          "remind_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "side": {
+            "enum": [
+              "todo",
+              "waiting"
+            ],
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "task",
+              "commitment"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "done",
+              "dismissed"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_ts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ref",
+          "source",
+          "id",
+          "side",
+          "title",
+          "notes",
+          "status",
+          "owner",
+          "created_ts",
+          "links",
+          "actions"
+        ],
+        "type": "object"
+      },
+      "CommitmentLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "thread",
+              "project",
+              "person",
+              "record",
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "type": "object"
+      },
+      "CommitmentPage": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/CommitmentCounts"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CommitmentItem"
+            },
+            "type": "array"
+          },
+          "marks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "marks",
+          "counts"
+        ],
+        "type": "object"
+      },
+      "CommitmentResponse": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/CommitmentItem"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "type": "object"
+      },
+      "CommitmentStatusCounts": {
+        "properties": {
+          "dismissed": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "done": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "open": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "open",
+          "done",
+          "dismissed"
+        ],
+        "type": "object"
+      },
+      "CommitmentUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "clear": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "due": {
+            "type": "string"
+          },
+          "link": {
+            "$ref": "#/components/schemas/CommitmentLinkRequest"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "remind_at": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_ts": {
+            "type": "number"
+          }
+        },
         "type": "object"
       },
       "ComposerView": {
@@ -9814,6 +10143,138 @@
         ],
         "type": "object"
       },
+      "QueueCounts": {
+        "properties": {
+          "ask": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "attention": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "draft": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "proposal": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ask",
+          "proposal",
+          "draft",
+          "attention"
+        ],
+        "type": "object"
+      },
+      "QueueItem": {
+        "properties": {
+          "arrived_at": {
+            "type": "number"
+          },
+          "due": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ask",
+              "proposal",
+              "draft",
+              "attention"
+            ],
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/QueueSource"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "waiting_for": {
+            "enum": [
+              "answer",
+              "permission",
+              "approval",
+              "send",
+              "resolve",
+              "review",
+              "due"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "summary",
+          "source",
+          "arrived_at",
+          "waiting_for",
+          "module"
+        ],
+        "type": "object"
+      },
+      "QueuePage": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/QueueCounts"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "counts"
+        ],
+        "type": "object"
+      },
+      "QueueSource": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id"
+        ],
+        "type": "object"
+      },
       "Queued": {
         "properties": {
           "created_at": {
@@ -9896,6 +10357,36 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/CommandStatus"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadCommitmentPage": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CommitmentPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadCommitmentResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CommitmentResponse"
           },
           "revision": {
             "type": "string"
@@ -10312,6 +10803,36 @@
         ],
         "type": "object"
       },
+      "ReadQueueItem": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QueueItem"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadQueuePage": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QueuePage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadRuleVocabulary": {
         "properties": {
           "data": {
@@ -10361,6 +10882,21 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/TaskPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadTaskResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TaskResponse"
           },
           "revision": {
             "type": "string"
@@ -12666,10 +13202,19 @@
             "maximum": 9007199254740991,
             "type": "integer"
           },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/TaskLink"
+            },
+            "type": "array"
+          },
           "notes": {
             "type": "string"
           },
           "priority": {
+            "type": "string"
+          },
+          "ref": {
             "type": "string"
           },
           "remind_at": {
@@ -12689,6 +13234,11 @@
             "type": "string"
           },
           "status": {
+            "enum": [
+              "open",
+              "done",
+              "dismissed"
+            ],
             "type": "string"
           },
           "title": {
@@ -12700,6 +13250,7 @@
         },
         "required": [
           "id",
+          "ref",
           "title",
           "notes",
           "status",
@@ -12707,7 +13258,8 @@
           "source_kind",
           "source_id",
           "created_ts",
-          "updated_ts"
+          "updated_ts",
+          "links"
         ],
         "type": "object"
       },
@@ -12716,6 +13268,9 @@
         "properties": {
           "due": {
             "type": "string"
+          },
+          "link": {
+            "$ref": "#/components/schemas/TaskLinkRequest"
           },
           "notes": {
             "type": "string"
@@ -12740,6 +13295,9 @@
           "status": {
             "type": "string"
           },
+          "task": {
+            "$ref": "#/components/schemas/Task"
+          },
           "task_id": {
             "format": "int64",
             "maximum": 9007199254740991,
@@ -12751,8 +13309,81 @@
         ],
         "type": "object"
       },
+      "TaskCounts": {
+        "properties": {
+          "dismissed": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "done": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "open": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "open",
+          "done",
+          "dismissed"
+        ],
+        "type": "object"
+      },
+      "TaskLink": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "type": "object"
+      },
+      "TaskLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "thread",
+              "project",
+              "person",
+              "record",
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "type": "object"
+      },
       "TaskPage": {
         "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/TaskCounts"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/Task"
@@ -12778,15 +13409,36 @@
         },
         "required": [
           "items",
-          "marks"
+          "marks",
+          "counts"
+        ],
+        "type": "object"
+      },
+      "TaskResponse": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/Task"
+          }
+        },
+        "required": [
+          "task"
         ],
         "type": "object"
       },
       "TaskUpdateRequest": {
         "additionalProperties": false,
         "properties": {
+          "clear": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "due": {
             "type": "string"
+          },
+          "link": {
+            "$ref": "#/components/schemas/TaskLinkRequest"
           },
           "notes": {
             "type": "string"
@@ -12799,6 +13451,9 @@
           },
           "title": {
             "type": "string"
+          },
+          "updated_ts": {
+            "type": "number"
           }
         },
         "type": "object"
@@ -16320,6 +16975,1167 @@
           "activity"
         ],
         "x-atrium-area": "activity",
+        "x-atrium-module": "core"
+      }
+    },
+    "/commitments": {
+      "get": {
+        "description": "To do and Waiting in one list: tasks and the commitments from mail the operator owes (`side` todo), and the commitments other people owe the operator (`side` waiting, `owner` them). An item's `ref` is `task:<id>` or `commitment:<id>`, the same id `/queue` uses. Tasks live in the assistant module and commitments in the mail module; the items of a module that is off are left out. Order: todo, then waiting; within each, open, then done, then dismissed; then items with a due date by due date, then items without one; ties by creation time, source and id. `counts` ignore `side`, `status` and the page but apply the other filters. `due_from` and `due_to` are inclusive dates (YYYY-MM-DD) compared with the first ten characters of `due` and leave out items without a due date. `link` is `<kind>:<id>`: tasks match their link, commitments match their `message` or reminder `proposal`. `q` matches a task's title and notes and a commitment's text. `actions` lists the verbs the item accepts; a commitment accepts only status changes. Refetch on an app event `change` for the topic `tasks` (tasks) or `mail` (commitments from mail).",
+        "operationId": "commitments.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "side",
+            "schema": {
+              "enum": [
+                "todo",
+                "waiting"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "open",
+                "done",
+                "dismissed"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_from",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_to",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "link",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadCommitmentPage"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "core"
+      }
+    },
+    "/commitments/{ref}": {
+      "delete": {
+        "description": "Delete a task by `ref`. A commitment from mail accepts only done, dismiss and reopen; edit and delete answer conflict with reason `read_only`. Refetch on an app event `change` for the topic `tasks` (tasks) or `mail` (commitments from mail).",
+        "operationId": "commitments.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCommitmentChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "core"
+      },
+      "get": {
+        "description": "One To do or Waiting item by `ref`. Refetch on an app event `change` for the topic `tasks` (tasks) or `mail` (commitments from mail).",
+        "operationId": "commitments.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadCommitmentResponse"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "core"
+      },
+      "patch": {
+        "description": "Edit a task by `ref`, as `PATCH /tasks/{task_id}` does. A commitment from mail accepts only done, dismiss and reopen; edit and delete answer conflict with reason `read_only`. Refetch on an app event `change` for the topic `tasks` (tasks) or `mail` (commitments from mail).",
+        "operationId": "commitments.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitmentUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCommitmentChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "core"
+      }
+    },
+    "/commitments/{ref}/dismiss": {
+      "post": {
+        "operationId": "commitments.dismiss",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCommitmentChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "core"
+      }
+    },
+    "/commitments/{ref}/done": {
+      "post": {
+        "operationId": "commitments.done",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCommitmentChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "core"
+      }
+    },
+    "/commitments/{ref}/reopen": {
+      "post": {
+        "operationId": "commitments.reopen",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCommitmentChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
         "x-atrium-module": "core"
       }
     },
@@ -24635,7 +26451,8 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/mail/commitments/{commitment_id}/done": {
@@ -24799,7 +26616,8 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/mail/live": {
@@ -37704,6 +39522,301 @@
         "x-atrium-module": "core"
       }
     },
+    "/queue": {
+      "get": {
+        "description": "The one inbox: everything that waits for the operator, in one order with one count. `total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `cursor` and `limit` are. Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
+        "operationId": "review.queue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "enum": [
+                "ask",
+                "proposal",
+                "draft",
+                "attention"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadQueuePage"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "review"
+        ],
+        "x-atrium-area": "review",
+        "x-atrium-module": "core"
+      }
+    },
+    "/queue/{item_id}": {
+      "get": {
+        "description": "One queue item by `id`. `proposal:<proposal_id>` and `draft:<draft_id>` are the items behind `/proposals/{proposal_id}` and `/drafts/{draft_id}`. Not found means the item no longer waits for the operator; read the proposal or draft for its outcome. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
+        "operationId": "review.queue.item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadQueueItem"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "review"
+        ],
+        "x-atrium-area": "review",
+        "x-atrium-module": "core"
+      }
+    },
     "/review/items": {
       "get": {
         "operationId": "attention.read",
@@ -41023,6 +43136,7 @@
     },
     "/tasks": {
       "get": {
+        "description": "The task list of the Plan and Tasks pages. Order: open, then done, then dismissed; within each, tasks with a due date by due date, then tasks without one; ties by creation time and id. `counts` ignore `status` and the page but apply the other filters. `due_from` and `due_to` are inclusive dates (YYYY-MM-DD) compared with the first ten characters of `due` and leave out tasks without a due date. `link` is `<kind>:<id>` and keeps the tasks linked to that subject. `q` matches title and notes. Refetch on the `tasks` topic.",
         "operationId": "tasks.list",
         "parameters": [
           {
@@ -41031,8 +43145,37 @@
             "schema": {
               "enum": [
                 "open",
-                "done"
+                "done",
+                "dismissed"
               ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_from",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "due_to",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "link",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
               "type": "string"
             }
           },
@@ -41129,6 +43272,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           },
           "429": {
             "content": {
@@ -41336,6 +43489,297 @@
       }
     },
     "/tasks/{task_id}": {
+      "delete": {
+        "operationId": "tasks.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeTaskChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
+      },
+      "get": {
+        "operationId": "tasks.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadTaskResponse"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "assistant"
+      },
       "patch": {
         "operationId": "tasks.update",
         "parameters": [
@@ -41509,9 +43953,337 @@
         "x-atrium-undoable": true
       }
     },
+    "/tasks/{task_id}/dismiss": {
+      "post": {
+        "operationId": "tasks.dismiss",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeTaskChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
+      }
+    },
     "/tasks/{task_id}/done": {
       "post": {
         "operationId": "tasks.done",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeTaskChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
+      }
+    },
+    "/tasks/{task_id}/reopen": {
+      "post": {
+        "operationId": "tasks.reopen",
         "parameters": [
           {
             "in": "path",

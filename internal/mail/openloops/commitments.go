@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -233,4 +234,46 @@ func SetCommitmentStatus(ctx context.Context, q db.Querier, id int64, status str
 		return false, fmt.Errorf("%w: unknown status %s", httpx.ErrPayload, strconv.Quote(status))
 	}
 	return affectedOne(q.ExecContext(ctx, "UPDATE commitments SET status = ? WHERE id = ?", status, id))
+}
+
+type CommitmentRow struct {
+	ID          int64
+	MessageID   int64
+	Text        string
+	Owner       string
+	Due         *string
+	Status      string
+	ProposalID  *int64
+	CreatedTS   float64
+	Subject     *string
+	Counterpart *string
+}
+
+const commitmentRowSelect = "SELECT c.id, c.message_id, c.text, c.owner, c.due, c.status, c.proposal_id, c.created_ts, m.subject, " +
+	"CASE WHEN m.id IS NULL THEN NULL WHEN m.sent = 1 THEN json_extract(m.to_addrs, '$[0]') ELSE NULLIF(m.from_addr, '') END " +
+	"FROM commitments c LEFT JOIN messages m ON m.id = c.message_id"
+
+func scanCommitmentRow(r interface{ Scan(...any) error }) (CommitmentRow, error) {
+	var c CommitmentRow
+	err := r.Scan(&c.ID, &c.MessageID, &c.Text, &c.Owner, &c.Due, &c.Status, &c.ProposalID, &c.CreatedTS, &c.Subject, &c.Counterpart)
+	return c, err
+}
+
+func CommitmentRows(ctx context.Context, q db.Querier) ([]CommitmentRow, error) {
+	rows, err := q.QueryContext(ctx, commitmentRowSelect+" ORDER BY c.id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (CommitmentRow, error) { return scanCommitmentRow(r) })
+}
+
+func GetCommitment(ctx context.Context, q db.Querier, id int64) (*CommitmentRow, error) {
+	c, err := scanCommitmentRow(q.QueryRowContext(ctx, commitmentRowSelect+" WHERE c.id = ?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
 }

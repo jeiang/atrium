@@ -181,7 +181,7 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
-		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
+		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService, commitmentToolService),
 		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(opsToolService),
 	} {
 		for _, t := range tools {
