@@ -213,7 +213,14 @@ export function inline(source: string): Inline[] {
       const end = source.indexOf(run, index + run.length);
       if (end > 0) {
         flush();
-        out.push({ t: 'code', v: source.slice(index + run.length, end).replace(/\n/g, ' ').trim() || ' ' });
+        out.push({
+          t: 'code',
+          v:
+            source
+              .slice(index + run.length, end)
+              .replace(/\n/g, ' ')
+              .trim() || ' ',
+        });
         index = end + run.length;
         continue;
       }

@@ -13,9 +13,21 @@ import { readEventStream } from '../../contract/sse';
 import { applyRunEvent } from '../../shared/assistant/toolcalls';
 import type { ToolCall } from '../../shared/assistant/types';
 
-export type Segment = { kind: 'text'; text: string } | { kind: 'tools'; ids: string[] } | { kind: 'user'; text: string };
+export type Segment =
+  | { kind: 'text'; text: string }
+  | { kind: 'tools'; ids: string[] }
+  | { kind: 'user'; text: string };
 
-export type StreamStatus = 'connecting' | 'live' | 'retrying' | 'busy' | 'parked' | 'done' | 'failed' | 'stopped' | 'expired';
+export type StreamStatus =
+  | 'connecting'
+  | 'live'
+  | 'retrying'
+  | 'busy'
+  | 'parked'
+  | 'done'
+  | 'failed'
+  | 'stopped'
+  | 'expired';
 
 export const APPLY_MEASURE = 'atrium-run-apply';
 const MAX_WAIT = 15_000;
@@ -32,6 +44,7 @@ export class RunStream {
   #failures = 0;
   #queue: RunStreamEvent[] = [];
   #frame = 0;
+  #follow = 0;
   #timer = 0;
   #abort: AbortController | undefined;
   #ended = $state(false);
@@ -49,8 +62,13 @@ export class RunStream {
     return !this.#ended;
   }
 
+  get resumable(): boolean {
+    return this.#ended && this.status === 'parked';
+  }
+
   start(): void {
     this.#ended = false;
+    this.status = 'connecting';
     void this.#connect();
   }
 
@@ -65,15 +83,17 @@ export class RunStream {
   }
 
   async #connect(): Promise<void> {
-    this.#abort = new AbortController();
+    const abort = new AbortController();
+    this.#abort = abort;
     const headers: Record<string, string> = { Accept: 'text/event-stream' };
     if (this.#lastId > 0) headers['Last-Event-ID'] = String(this.#lastId);
     let terminal = false;
     try {
       const res = await webFetch(`/threads/${this.thread}/runs/${this.run}/events`, {
         headers,
-        signal: this.#abort.signal,
+        signal: abort.signal,
       });
+      if (this.#ended || abort.signal.aborted) return;
       if (res.status === 204) {
         this.#end('done');
         return;
@@ -118,9 +138,9 @@ export class RunStream {
         },
       });
     } catch {
-      if (this.#ended || this.#abort?.signal.aborted) return;
+      if (this.#ended || abort.signal.aborted) return;
     }
-    if (this.#ended || terminal) return;
+    if (this.#ended || terminal || abort.signal.aborted) return;
     this.status = 'retrying';
     this.#again();
   }
@@ -175,8 +195,13 @@ export class RunStream {
     }
     this.calls = calls;
     flushSync();
-    this.#onapply();
     performance.measure(APPLY_MEASURE, { start: started, end: performance.now() });
+    if (!this.#follow) {
+      this.#follow = requestAnimationFrame(() => {
+        this.#follow = 0;
+        this.#onapply();
+      });
+    }
     if (ended) this.#end(ended);
   }
 

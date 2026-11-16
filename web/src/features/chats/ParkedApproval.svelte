@@ -1,7 +1,7 @@
 <script lang="ts" module>
+  import { SvelteMap } from 'svelte/reactivity';
   import { ok, reviewApprove, reviewDismiss, reviewProposal, reviewUndo, reviewUndoable } from '../../contract';
   import { queryClient } from '../../shared/query';
-  import { SvelteMap } from 'svelte/reactivity';
   import { toast } from '../../shared/ui/toast.svelte';
 
   const deferred = new SvelteMap<number, number>();
@@ -21,10 +21,10 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query';
   import ApprovalCard from '../../shared/assistant/ApprovalCard.svelte';
+  import { proposalToApproval } from '../../shared/assistant/proposalApproval';
   import { UNDO_MS } from '../../shared/assistant/ReceiptLine.svelte';
   import type { Decision } from '../../shared/assistant/types';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { toApproval } from './approval';
 
   interface Props {
     id: number;
@@ -41,7 +41,7 @@
     meta: { topics: ['review'] },
   }));
 
-  const approval = $derived(proposal.data ? toApproval(proposal.data, thread) : undefined);
+  const approval = $derived(proposal.data ? proposalToApproval(proposal.data, thread) : undefined);
 
   async function onApprove(): Promise<void> {
     ok(await reviewApprove(id, {}));

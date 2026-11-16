@@ -213,6 +213,7 @@
     margin-block-start: auto;
     padding-block: var(--s-3);
     background-image: linear-gradient(to bottom, transparent, var(--paper) var(--s-4));
+    border-radius: var(--r-md);
   }
 
   .chat__jump {

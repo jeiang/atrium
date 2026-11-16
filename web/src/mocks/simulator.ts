@@ -48,63 +48,66 @@ export function findRunScript(thread: number, run: number): RunScript | undefine
   return [...runScripts, ...extraRunScripts].find((script) => script.thread === thread && script.run === run);
 }
 
-export const simulatorHandlers = [
-  http.get(`*${API_BASE}/threads/:thread/runs/:run/events`, ({ request, params }) => {
-    const script = findRunScript(Number(params.thread), Number(params.run));
-    if (!script) return problem(404, 'not_found', 'This run does not exist.');
+export function simulateRun(request: Request, thread: number, run: number): Response {
+  const script = findRunScript(thread, run);
+  if (!script) return problem(404, 'not_found', 'This run does not exist.');
 
-    const url = new URL(request.url);
-    const fault = url.searchParams.get('fault') ?? '';
-    if (fault === 'busy') return problem(429, 'rate_limited', 'Too many open streams.');
-    if (fault === 'expired') {
-      return problem(410, 'stream_expired', 'This stream is no longer kept.', { run_id: script.run });
-    }
+  const url = new URL(request.url);
+  const fault = url.searchParams.get('fault') ?? '';
+  if (fault === 'busy') return problem(429, 'rate_limited', 'Too many open streams.');
+  if (fault === 'expired') {
+    return problem(410, 'stream_expired', 'This stream is no longer kept.', { run_id: script.run });
+  }
 
-    const header = request.headers.get('Last-Event-ID');
-    const cursor = parseCursor(header ?? url.searchParams.get('after'));
-    const total = script.events.filter((event) => 'id' in event && event.id !== undefined).length;
-    if (cursor === undefined || cursor > total) return problem(400, 'bad_request', 'The cursor is not valid.');
-    if (!script.parked && cursor >= total) return new HttpResponse(null, { status: 204 });
+  const header = request.headers.get('Last-Event-ID');
+  const cursor = parseCursor(header ?? url.searchParams.get('after'));
+  const total = script.events.filter((event) => 'id' in event && event.id !== undefined).length;
+  if (cursor === undefined || cursor > total) return problem(400, 'bad_request', 'The cursor is not valid.');
+  if (!script.parked && cursor >= total) return new HttpResponse(null, { status: 204 });
 
-    const speed = Number(url.searchParams.get('speed') ?? '1');
-    const step = speed > 0 ? STEP_MS / speed : 0;
-    const drop = /^drop:([1-9][0-9]*)$/.exec(fault);
-    const dropAfter = drop ? Number(drop[1]) : Number.POSITIVE_INFINITY;
-    const from =
-      cursor === 0 ? 0 : script.events.findIndex((event) => 'id' in event && event.id === String(cursor)) + 1;
-    const pending = script.events.slice(from);
+  const speed = Number(url.searchParams.get('speed') ?? '1');
+  const step = speed > 0 ? STEP_MS / speed : 0;
+  const drop = /^drop:([1-9][0-9]*)$/.exec(fault);
+  const dropAfter = drop ? Number(drop[1]) : Number.POSITIVE_INFINITY;
+  const from = cursor === 0 ? 0 : script.events.findIndex((event) => 'id' in event && event.id === String(cursor)) + 1;
+  const pending = script.events.slice(from);
 
-    let sent = -1;
-    const body = new ReadableStream<Uint8Array>(
-      {
-        async pull(controller) {
-          if (sent === -1) {
-            controller.enqueue(encoder.encode('retry: 1000\n\n'));
-            sent = 0;
-            return;
-          }
-          const event = pending[sent];
-          if (!event) {
-            controller.enqueue(encoder.encode(frame({ event: 'done', data: { state: terminalState(script) } })));
-            controller.close();
-            return;
-          }
-          await sleep(step, request.signal);
-          if (request.signal.aborted) return;
-          if (sent >= dropAfter) {
-            controller.close();
-            return;
-          }
-          controller.enqueue(encoder.encode(frame(event)));
-          sent++;
-        },
+  let sent = -1;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        if (sent === -1) {
+          controller.enqueue(encoder.encode('retry: 1000\n\n'));
+          sent = 0;
+          return;
+        }
+        const event = pending[sent];
+        if (!event) {
+          controller.enqueue(encoder.encode(frame({ event: 'done', data: { state: terminalState(script) } })));
+          controller.close();
+          return;
+        }
+        await sleep(step, request.signal);
+        if (request.signal.aborted) return;
+        if (sent >= dropAfter) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(encoder.encode(frame(event)));
+        sent++;
       },
-      { highWaterMark: 0 },
-    );
+    },
+    { highWaterMark: 0 },
+  );
 
-    return new HttpResponse(body, {
-      status: 200,
-      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },
-    });
-  }),
+  return new HttpResponse(body, {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },
+  });
+}
+
+export const simulatorHandlers = [
+  http.get(`*${API_BASE}/threads/:thread/runs/:run/events`, ({ request, params }) =>
+    simulateRun(request, Number(params.thread), Number(params.run)),
+  ),
 ];

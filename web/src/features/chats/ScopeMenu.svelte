@@ -26,9 +26,7 @@
 
   const current = $derived(options?.models.find((entry) => entry.id === model));
   const price = $derived(current ? `$${current.rates.output} per million output tokens` : '');
-  const label = $derived(
-    `${current?.name ?? model} · ${effort}${staged ? `, from the next message, ${price}` : ''}`,
-  );
+  const label = $derived(`${current?.name ?? model} · ${effort}${staged ? `, from the next message, ${price}` : ''}`);
   const items = $derived<MenuItem[]>([
     ...(options?.models ?? []).map(
       (entry): MenuItem => ({

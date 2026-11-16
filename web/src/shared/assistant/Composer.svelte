@@ -124,9 +124,9 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      'text text'
-      'scope actions'
-      'error error';
+      "text text"
+      "scope actions"
+      "error error";
     align-items: end;
     gap: var(--s-2);
     padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
@@ -196,15 +196,17 @@
     .composer {
       grid-template-columns: auto minmax(0, 1fr) auto;
       grid-template-areas:
-        'text text actions'
-        'error error error';
-      padding: var(--s-1) var(--s-1) var(--s-1) var(--s-2);
+        "text text actions"
+        "error error error";
+      row-gap: 0;
+      column-gap: var(--s-1);
+      padding: 2px 2px 2px var(--s-2);
     }
 
     .composer--scoped {
       grid-template-areas:
-        'scope text actions'
-        'error error error';
+        "scope text actions"
+        "error error error";
     }
 
     .composer__text {

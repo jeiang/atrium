@@ -6,19 +6,31 @@
   const tree = $derived(parse(text));
 </script>
 
-{#snippet inlines(list: Inline[])}
+{#snippet inlines(
+    list: Inline[],
+  )}
   {#each list as node, index (index)}
-    {#if node.t === 'text'}{node.v}{:else if node.t === 'code'}<code>{node.v}</code>{:else if node.t === 'br'}<br />{:else if node.t === 'strong'}<strong
-        >{@render inlines(node.c)}</strong
-      >{:else if node.t === 'em'}<em>{@render inlines(node.c)}</em>{:else if node.t === 'del'}<del
-        >{@render inlines(node.c)}</del
-      >{:else if node.t === 'link'}<a class="link" href={node.href} target="_blank" rel="noopener noreferrer"
-        >{@render inlines(node.c)}</a
-      >{/if}
+    {#if node.t === 'text'}
+      {node.v}
+    {:else if node.t === 'code'}
+      <code>{node.v}</code>
+    {:else if node.t === 'br'}
+      <br>
+    {:else if node.t === 'strong'}
+      <strong>{@render inlines(node.c)}</strong>
+    {:else if node.t === 'em'}
+      <em>{@render inlines(node.c)}</em>
+    {:else if node.t === 'del'}
+      <del>{@render inlines(node.c)}</del>
+    {:else if node.t === 'link'}
+      <a class="link" href={node.href} target="_blank" rel="noopener noreferrer">{@render inlines(node.c)}</a>
+    {/if}
   {/each}
 {/snippet}
 
-{#snippet blocks(list: Block[])}
+{#snippet blocks(
+    list: Block[],
+  )}
   {#each list as block, index (index)}
     {#if block.t === 'p'}
       <p>{@render inlines(block.c)}</p>
@@ -31,15 +43,19 @@
     {:else if block.t === 'list'}
       {#if block.ordered}
         <ol start={block.start}>
-          {#each block.items as entry, position (position)}<li>{@render blocks(entry)}</li>{/each}
+          {#each block.items as entry, position (position)}
+            <li>{@render blocks(entry)}</li>
+          {/each}
         </ol>
       {:else}
         <ul>
-          {#each block.items as entry, position (position)}<li>{@render blocks(entry)}</li>{/each}
+          {#each block.items as entry, position (position)}
+            <li>{@render blocks(entry)}</li>
+          {/each}
         </ul>
       {/if}
     {:else if block.t === 'hr'}
-      <hr />
+      <hr>
     {:else}
       <div class="md-table">
         <table>
@@ -54,9 +70,9 @@
             {#each block.rows as row, line (line)}
               <tr>
                 {#each block.head as _, column (column)}
-                  <td class={block.align[column] ? `md-${block.align[column]}` : undefined}
-                    >{@render inlines(row[column] ?? [])}</td
-                  >
+                  <td class={block.align[column] ? `md-${block.align[column]}` : undefined}>
+                    {@render inlines(row[column] ?? [])}
+                  </td>
                 {/each}
               </tr>
             {/each}

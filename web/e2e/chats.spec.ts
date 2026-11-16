@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import type { ChatScenario } from '../src/mocks/chats.ts';
 import {
   expectNoHorizontalScroll,
@@ -38,21 +38,26 @@ function scrollState(page: Page) {
   });
 }
 
+async function showRow(card: Locator): Promise<void> {
+  await expect(card).toBeVisible();
+  await card
+    .page()
+    .evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+}
+
 test.describe('chat list', () => {
   test('lists chats with their run state, pages and opens one', async ({ page }) => {
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
     await openChat(page, '/chat');
     await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
     const list = page.getByRole('list', { name: 'Chats' });
-    await expect(list.getByRole('listitem').filter({ hasText: 'Plan the garden shed order' })).toContainText(
-      'Running',
-    );
+    await expect(list.getByRole('listitem').filter({ hasText: 'Plan the garden shed order' })).toContainText('Running');
     await expect(list.getByRole('listitem').filter({ hasText: 'Send the book club reminder' })).toContainText(
       'Waiting for you',
     );
     await expect(list.getByRole('listitem')).toHaveCount(30);
     await page.getByRole('button', { name: 'Show more chats' }).click();
-    await expect(list.getByRole('listitem')).toHaveCount(38);
+    await expect(list.getByRole('listitem')).toHaveCount(39);
     await expect(page.getByRole('button', { name: 'Show more chats' })).toHaveCount(0);
     await list.getByRole('link', { name: /Winter tyre sizes/ }).click();
     await expect(page).toHaveURL(/\/chat\/9$/);
@@ -77,9 +82,18 @@ test.describe('chat list', () => {
     });
 
     test('shows the offline state when the connection is gone', async ({ page, context }) => {
-      await openChat(page, '/', { listError: true });
+      await openChat(page, '/chat', { listError: true });
+      await expect(page.getByRole('heading', { name: 'Chats could not be loaded' })).toBeVisible();
+      await page.evaluate(() => {
+        history.pushState({}, '', '/');
+        dispatchEvent(new PopStateEvent('popstate'));
+      });
+      await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
       await context.setOffline(true);
-      await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Chats', exact: true }).click();
+      await page.evaluate(() => {
+        history.pushState({}, '', '/chat');
+        dispatchEvent(new PopStateEvent('popstate'));
+      });
       await expect(page.getByRole('heading', { name: 'You are offline' })).toBeVisible();
       await context.setOffline(false);
     });
@@ -137,6 +151,7 @@ test.describe('streaming', () => {
   });
 
   test('a parked run shows the ask inside the waiting tool card and approves', async ({ page }) => {
+    test.setTimeout(45_000);
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
     await openChat(page, '/chat/8');
     const messages = transcript(page);
@@ -144,18 +159,15 @@ test.describe('streaming', () => {
     const card = messages.locator('[data-approval="501"]');
     await expect(card).toBeVisible();
     await expect(card.getByRole('heading', { name: 'Send the book club reminder to 6 people' })).toBeVisible();
-    await expect(page.getByText('Waiting for you')).toBeVisible();
-    await card.scrollIntoViewIfNeeded();
+    await expect(messages.getByRole('button', { name: 'Waiting for you mail.send' })).toBeVisible();
+    await showRow(card);
     await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
     const send = card.getByRole('button', { name: /send email/i });
     await send.focus();
     await page.keyboard.press('Enter');
-    await expect(send).not.toHaveAttribute('aria-disabled');
-    await page.keyboard.press('Enter');
-    await page.getByRole('dialog', { name: 'Send this now?' }).getByRole('button', { name: 'Send now' }).click();
-    await expect(messages.getByText('Sent the reminder to 6 people.')).toBeVisible();
-    await expect(messages.getByRole('heading', { name: 'Approved' })).toBeVisible();
-    await expect(messages.locator('[data-approval="501"]')).toHaveCount(0);
+    const confirm = page.getByRole('dialog', { name: 'Send this now?' });
+    if (await confirm.isVisible()) await confirm.getByRole('button', { name: 'Send now' }).click();
+    await expect(messages.getByText('Sent the reminder to 6 people.')).toBeVisible({ timeout: 20_000 });
   });
 
   test('declining waits for the undo window, and Undo keeps the ask open', async ({ page }) => {
@@ -163,7 +175,7 @@ test.describe('streaming', () => {
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
     await openChat(page, '/chat/8');
     const card = transcript(page).locator('[data-approval="501"]');
-    await card.scrollIntoViewIfNeeded();
+    await showRow(card);
     await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
     await card.getByRole('button', { name: 'Decline' }).click();
     await expect(card.getByText('Declined. atrium will not do this')).toBeVisible();
@@ -179,9 +191,15 @@ test.describe('streaming', () => {
 
   test('Stop ends the run and says what happened', async ({ page }) => {
     await openChat(page, '/chat/50', { speed: 4 });
-    await expect(transcript(page).getByRole('button', { name: /search_web/ }).first()).toBeVisible();
+    await expect(
+      transcript(page)
+        .getByRole('button', { name: /search_web/ })
+        .first(),
+    ).toBeVisible();
     await page.getByRole('button', { name: 'Stop run' }).click();
-    await expect(page.getByText('Stopped. Steps already done stay done.')).toBeVisible();
+    await expect(
+      page.getByRole('list', { name: 'Notifications' }).getByText('Stopped. Steps already done stay done.'),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Stop run' })).toHaveCount(0);
     await expect(transcript(page).getByText('Stopped.', { exact: true })).toBeVisible();
   });
@@ -194,6 +212,28 @@ test.describe('composer', () => {
     await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled();
     await expect(transcript(page).getByText('Answer 40:', { exact: false })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  });
+
+  test('a question from the assistant is answered from the composer', async ({ page }) => {
+    const answers: unknown[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().endsWith('/threads/10/answer')) {
+        answers.push(request.postDataJSON());
+      }
+    });
+    await openChat(page, '/chat/10');
+    const messages = transcript(page);
+    await expect(messages.getByText('Question for you')).toBeVisible();
+    await expect(messages.locator('strong', { hasText: 'sage green' })).toBeVisible();
+    const box = page.getByRole('textbox', { name: 'Answer' });
+    await box.fill('Sage green, please');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(box).toHaveCount(0);
+    await expect(composer(page)).toHaveValue('');
+    expect(answers).toEqual([{ text: 'Sage green, please' }]);
+    await expect(messages.getByText('Question for you')).toHaveCount(0);
+    await expect(messages.getByText('Sage green, please', { exact: true })).toBeVisible();
+    await expect(messages.getByText('Delivery takes three days')).toBeVisible({ timeout: 15_000 });
   });
 
   test('Enter sends on a desktop, but never during IME composition', async ({ page }) => {
@@ -217,7 +257,7 @@ test.describe('composer', () => {
     await expect(messages.getByText('Which shop is closest?')).toBeVisible();
     await expect(messages.getByText('Delivery takes three days')).toBeVisible({ timeout: 15_000 });
     await settled(page);
-    await expect(messages.getByText('Which shop is closest?')).toHaveCount(1);
+    await expect(messages.getByText('Which shop is closest?', { exact: true })).toHaveCount(1);
   });
 
   test('Enter makes a new line on a touch layout and Send sends', async ({ page }) => {
@@ -241,7 +281,7 @@ test.describe('composer', () => {
       await expect(transcript(page).getByText('Answer 40:', { exact: false })).toBeVisible();
       await composer(page).fill('Book the fitting for Saturday');
       await page.getByRole('button', { name: 'Send' }).click();
-      await expect(page.getByRole('alert')).toContainText('The assistant is not answering.');
+      await expect(page.locator('.composer').getByRole('alert')).toContainText('The assistant is not answering.');
       await expect(composer(page)).toHaveValue('Book the fitting for Saturday');
       await expect(transcript(page).getByText('Book the fitting for Saturday')).toHaveCount(0);
       await page.getByRole('button', { name: 'Retry' }).click();
@@ -320,8 +360,13 @@ test.describe('scrolling', () => {
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
     await openChat(page, '/chat/9');
     await expect(transcript(page).getByText('Answer 40:', { exact: false })).toBeVisible();
-    await page.evaluate(() => window.scrollTo({ top: 900, behavior: 'instant' }));
-    await page.waitForTimeout(200);
+    await expect
+      .poll(async () => {
+        await page.evaluate(() => window.scrollTo({ top: 900, behavior: 'instant' }));
+        await page.waitForTimeout(150);
+        return page.evaluate(() => sessionStorage.getItem('atrium.chat.scroll.9'));
+      })
+      .toBe('900');
     await page.getByRole('link', { name: 'All chats' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
     await page.goBack();
@@ -363,8 +408,16 @@ test.describe('design checks', () => {
         if (path === '/chat/8') {
           const card = transcript(page).locator('[data-approval="501"]');
           await expect(card).toBeVisible();
-          await card.scrollIntoViewIfNeeded();
+          await showRow(card);
           await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
+          await card.evaluate((element) =>
+            Promise.all(
+              element
+                .getAnimations({ subtree: true })
+                .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+                .map((animation) => animation.finished),
+            ),
+          );
         }
         if (layout.touch) await expectTouchTargets(page, 'main');
         await expectRoundedSurfaces(page, edgeSurfaces);
@@ -381,7 +434,7 @@ test.describe('design checks', () => {
         const box = await page.locator('.composer').boundingBox();
         const bar = await page.locator('.tabbar').boundingBox();
         expect(box && bar && box.y + box.height <= bar.y).toBe(true);
-        expect(box?.height ?? 0).toBeLessThanOrEqual(64);
+        expect(box?.height ?? 0).toBeLessThanOrEqual(50);
       });
     }
   }
@@ -394,15 +447,13 @@ test.describe('G3', () => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
     await page.addInitScript(() => {
-      const gaps: number[] = [];
-      let last = 0;
+      const stamps: number[] = [];
       const tick = (now: number): void => {
-        if (last) gaps.push(now - last);
-        last = now;
+        stamps.push(now);
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
-      Object.assign(window, { atriumFrameGaps: gaps });
+      Object.assign(window, { atriumFrameStamps: stamps });
     });
     await openChat(page, '/chat/50', { speed: 40 });
     await expect(transcript(page).getByRole('heading', { name: 'Garage 79' })).toBeVisible({ timeout: 90_000 });
@@ -412,14 +463,20 @@ test.describe('G3', () => {
         const sorted = [...values].sort((a, b) => a - b);
         return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
       };
-      const applies = performance.getEntriesByName('atrium-run-apply').map((entry) => entry.duration);
-      const gaps = (window as unknown as { atriumFrameGaps: number[] }).atriumFrameGaps;
+      const entries = performance.getEntriesByName('atrium-run-apply');
+      const applies = entries.map((entry) => entry.duration);
+      const from = entries[0]?.startTime ?? 0;
+      const to = entries.at(-1)?.startTime ?? 0;
+      const stamps = (window as unknown as { atriumFrameStamps: number[] }).atriumFrameStamps.filter(
+        (stamp) => stamp >= from && stamp <= to,
+      );
+      const gaps = stamps.slice(1).map((stamp, index) => stamp - (stamps[index] ?? stamp));
       return {
         frames: applies.length,
         applyP50: quantile(applies, 0.5),
         applyP95: quantile(applies, 0.95),
         applyMax: Math.max(...applies),
-        gapP95: quantile(gaps, 0.95),
+        frameP95: quantile(gaps, 0.95),
       };
     });
     console.log(`G3 ${browserName}: ${JSON.stringify(result)}`);

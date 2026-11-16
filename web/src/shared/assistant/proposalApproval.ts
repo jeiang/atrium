@@ -1,9 +1,9 @@
 import type { ActionPayload, ProposalDetail } from '../../contract';
-import type { Approval, ApprovalChange, Arg } from '../../shared/assistant/types';
+import type { Approval, ApprovalChange, Arg } from './types';
 
 const audienceLabels = ['to', 'recipient', 'recipients', 'attendees', 'with'];
 
-export function toApproval(proposal: ProposalDetail, threadTitle: string): Approval {
+export function proposalToApproval(proposal: ProposalDetail, threadTitle: string): Approval {
   const payload = proposal.payload;
   const action = payload.kind === 'action' ? (payload as ActionPayload) : undefined;
   const args: Arg[] = action?.args ?? [];

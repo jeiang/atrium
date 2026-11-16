@@ -27,7 +27,8 @@
   const rows = $derived(threads.data?.pages.flatMap((page) => page.items) ?? []);
 
   function state(thread: ListedThread): { label: string; tone: 'accent' | 'warn' } | undefined {
-    if (thread.run_state === 'running' || thread.run_state === 'interrupted') return { label: 'Running', tone: 'accent' };
+    if (thread.run_state === 'running' || thread.run_state === 'interrupted')
+      return { label: 'Running', tone: 'accent' };
     if (thread.run_state === 'parked') return { label: 'Waiting for you', tone: 'warn' };
     return undefined;
   }
@@ -45,15 +46,18 @@
   {#snippet actions()}
     <a class="btn btn--primary" href={p('/chat/new')}><Icon name="plus" />New chat</a>
   {/snippet}
-  {#if threads.isPending}
+  {#if !network.online && rows.length === 0}
+    <ViewState kind="offline" title="You are offline" level={2}>
+      Chats load again when the connection returns.
+      {#snippet action()}
+        <Button onclick={onRetry}>Try again</Button>
+      {/snippet}
+    </ViewState>
+  {:else if threads.isPending}
     <div class="chats-skeleton"><ViewState kind="loading" title="Loading chats" /></div>
   {:else if threads.isError && rows.length === 0}
-    <ViewState
-      kind={network.online ? 'error' : 'offline'}
-      title={network.online ? 'Chats could not be loaded' : 'You are offline'}
-      level={2}
-    >
-      {network.online ? threads.error.message : 'Chats load again when the connection returns.'}
+    <ViewState kind="error" title="Chats could not be loaded" level={2}>
+      {threads.error.message}
       {#snippet action()}
         <Button onclick={onRetry}>Try again</Button>
       {/snippet}
@@ -68,7 +72,7 @@
   {:else}
     <List label="Chats" class="chats-list">
       {#each rows as thread (thread.id)}
-        {@const mark = state(thread)}
+        {const mark = $derived(state(thread))}
         <ListRow
           title={thread.title || 'Untitled chat'}
           meta={formatDayTime(thread.updated_at)}

@@ -13,7 +13,7 @@ import type {
 } from '../contract';
 import { API_BASE } from '../contract';
 import { extraRunScripts, type RunScript } from './runs';
-import { findRunScript } from './simulator';
+import { findRunScript, simulateRun } from './simulator';
 
 export interface ChatScenario {
   speed?: number;
@@ -30,6 +30,7 @@ interface MockThread {
   active: Run | null;
   queued: { id: number; text: string; created_at: number }[];
   cost: number;
+  question?: { run_id: number; text: string } | null;
 }
 
 const BASE = Date.UTC(2026, 10, 16, 9, 0) / 1000;
@@ -54,7 +55,13 @@ function model(id: string, name: string, efforts: string[], output: number): Mod
     context_window: 200_000,
     max_output: 64_000,
     thinking: [],
-    rates: { input: output / 5, output, cache_read: output / 50, cache_write_5m: output / 4, cache_write_1h: output / 2.5 },
+    rates: {
+      input: output / 5,
+      output,
+      cache_read: output / 50,
+      cache_write_5m: output / 4,
+      cache_write_1h: output / 2.5,
+    },
     forced_tools: false,
     run_cap_usd: 5,
   };
@@ -79,7 +86,15 @@ function numbered(events: Omit<RunStreamEvent, 'id'>[]): RunStreamEvent[] {
 function start(thread: number, run: number, title: string): Omit<RunStreamEvent, 'id'> {
   return {
     event: 'run_start',
-    data: { run_id: run, thread_id: thread, thread_kind: 'chat', role: null, title, effort: 'high', parent_run_id: null },
+    data: {
+      run_id: run,
+      thread_id: thread,
+      thread_kind: 'chat',
+      role: null,
+      title,
+      effort: 'high',
+      parent_run_id: null,
+    },
   };
 }
 
@@ -135,6 +150,16 @@ function g3Script(): RunScript {
 }
 
 extraRunScripts.push(g3Script());
+extraRunScripts.push({
+  thread: 10,
+  run: 104,
+  label: 'Asks',
+  parked: true,
+  events: numbered([
+    start(10, 104, 'Pick the shed paint'),
+    { event: 'text', data: { run_id: 104, text: 'Two paints suit cedar: sage green and warm cream.' } },
+  ]),
+});
 
 function thread(id: number, title: string, minutesAgo: number): Thread {
   const at = BASE - minutesAgo * 60;
@@ -167,7 +192,11 @@ function history(count: number): TranscriptItem[] {
   for (let turn = 1; turn <= count; turn++) {
     out.push(item(turn * 2 - 1, 'user', `Question ${turn}: which tyre size fits the small car?`));
     out.push(
-      item(turn * 2, 'assistant', `Answer ${turn}: the manual lists **175/65 R14** for winter use.\n\nCheck the sidewall first.`),
+      item(
+        turn * 2,
+        'assistant',
+        `Answer ${turn}: the manual lists **175/65 R14** for winter use.\n\nCheck the sidewall first.`,
+      ),
     );
   }
   return out;
@@ -197,6 +226,14 @@ function seed(): Map<number, MockThread> {
   });
   add({ thread: thread(9, 'Winter tyre sizes', 90), items: history(40), active: null, queued: [], cost: 0.31 });
   add({
+    thread: thread(10, 'Pick the shed paint', 45),
+    items: [item(1, 'user', 'Choose a paint for the shed.', { run_id: 104 })],
+    active: runOf(104, 'parked'),
+    queued: [],
+    cost: 0.02,
+    question: { run_id: 104, text: 'Which do you prefer, **sage green** or **warm cream**?' },
+  });
+  add({
     thread: thread(G3_THREAD, 'Compare the winter tyre quotes', 5),
     items: [item(1, 'user', 'Compare every winter tyre quote I saved.', { run_id: G3_RUN })],
     active: runOf(G3_RUN, 'running'),
@@ -206,7 +243,10 @@ function seed(): Map<number, MockThread> {
   for (let index = 0; index < 34; index++) {
     add({
       thread: thread(300 + index, `Notes on the allotment, week ${index + 1}`, 600 + index * 240),
-      items: [item(1, 'user', `Summarise week ${index + 1} at the allotment.`), item(2, 'assistant', 'Beans did well.')],
+      items: [
+        item(1, 'user', `Summarise week ${index + 1} at the allotment.`),
+        item(2, 'assistant', 'Beans did well.'),
+      ],
       active: null,
       queued: [],
       cost: 0.01,
@@ -347,7 +387,13 @@ function startReply(value: MockThread, text: string): number {
 }
 
 function configuration(): ModelConfiguration {
-  const defaults = { model: 'sonnet-5.5', effort: 'high', context_limit: 200_000, thinking: 'adaptive', web_search: true };
+  const defaults = {
+    model: 'sonnet-5.5',
+    effort: 'high',
+    context_limit: 200_000,
+    thinking: 'adaptive',
+    web_search: true,
+  };
   return {
     models,
     defaults,
@@ -420,7 +466,11 @@ export const chatHandlers = [
     const text = body.text?.trim() ?? '';
     if (!text) return problem(422, 'invalid', 'Write a message first.');
     const created: MockThread = {
-      thread: { ...thread(nextThread++, text.slice(0, 48), 0), model: body.model ?? 'sonnet-5.5', effort: body.effort ?? 'high' },
+      thread: {
+        ...thread(nextThread++, text.slice(0, 48), 0),
+        model: body.model ?? 'sonnet-5.5',
+        effort: body.effort ?? 'high',
+      },
       items: [],
       active: null,
       queued: [],
@@ -449,7 +499,7 @@ export const chatHandlers = [
       cost_usd: value.cost,
       meter: { tokens: 1200, compact_at: 150_000, limit: 200_000, share: 0.006 },
       next_cursor: first && older.length > page.length ? String(first.seq) : null,
-      question: null,
+      question: value.question ?? null,
     };
     return HttpResponse.json(body);
   }),
@@ -463,6 +513,14 @@ export const chatHandlers = [
       value.queued.push(queued);
       return HttpResponse.json({ queued_id: queued.id }, { status: 202 });
     }
+    return HttpResponse.json({ run_id: startReply(value, text) }, { status: 202 });
+  }),
+  http.post(`*${API_BASE}/threads/:thread/answer`, async ({ request, params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value?.question) return problem(409, 'not_answerable', 'There is no question to answer.');
+    const { text } = (await request.json()) as { text: string };
+    value.question = null;
+    value.active = null;
     return HttpResponse.json({ run_id: startReply(value, text) }, { status: 202 });
   }),
   http.post(`*${API_BASE}/threads/:thread/stop`, ({ params }) => {
@@ -502,11 +560,21 @@ export const chatHandlers = [
     url.searchParams.set('speed', String(state.speed ?? 4));
     if (fault) url.searchParams.set('fault', fault);
     if (fault === 'expired') finish(threadId, run, 'done');
-    const response = await fetch(url, { headers: request.headers, signal: request.signal });
-    if (response.status !== 200 || !response.body) return response;
-    return new HttpResponse(response.body.pipeThrough(watch(threadId, run)), {
+    const response = simulateRun(new Request(url, { headers: request.headers, signal: request.signal }), threadId, run);
+    if (response.status === 204) {
+      finish(threadId, run, 'done');
+      return new HttpResponse(null, { status: 204 });
+    }
+    if (response.status !== 200 || !response.body) {
+      return new HttpResponse(await response.text(), {
+        status: response.status,
+        headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'application/json' },
+      });
+    }
+    const relay = response.body.pipeThrough(watch(threadId, run));
+    return new HttpResponse(relay, {
       status: 200,
-      headers: response.headers,
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },
     });
   }),
 ];

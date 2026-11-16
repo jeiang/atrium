@@ -13,6 +13,7 @@
     ApiError,
     assistantComposerOptions,
     assistantMessageSend,
+    assistantRunAnswer,
     assistantRunStop,
     assistantThreadOptions,
     assistantThreadStart,
@@ -28,8 +29,8 @@
   import { queryClient } from '../../shared/query';
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
-  import ViewState from '../../shared/ui/ViewState.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
+  import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
   import Markdown from './Markdown.svelte';
   import { network } from './network.svelte';
@@ -88,7 +89,6 @@
       .filter(
         (stream) =>
           stream.active ||
-          stream.status === 'parked' ||
           activeRun?.id === stream.run ||
           !items.some((entry) => entry.run_id === stream.run && entry.kind !== 'user'),
       )
@@ -98,7 +98,9 @@
   const visible = $derived(
     items.filter((entry) => entry.kind === 'user' || entry.run_id == null || !liveRuns.has(entry.run_id)),
   );
+  const userTexts = $derived(new Set(visible.filter((entry) => entry.kind === 'user').map((entry) => entry.text)));
   const queued = $derived(first?.queued ?? []);
+  const question = $derived(first?.question ?? undefined);
   const waiting = $derived(
     optimistic.filter(
       (entry) =>
@@ -139,7 +141,7 @@
     if (id === undefined) return;
     const existing = streams.get(run);
     if (existing) {
-      if (resume && !existing.active) existing.start();
+      if (resume && existing.resumable) existing.start();
       return;
     }
     const stream = new RunStream(id, run, {
@@ -182,9 +184,10 @@
     if (!first || restored) return;
     restored = true;
     const saved = Number(sessionStorage.getItem(storageKey));
-    const popped = performance.now() - poppedAt < 1500;
+    const back = performance.now() - poppedAt < 1500 && saved > 0;
+    following = !back;
     void tick().then(() => {
-      if (popped && saved > 0) {
+      if (back) {
         window.scrollTo({ top: saved, behavior: 'instant' });
         following = atBottom();
       } else {
@@ -206,12 +209,17 @@
   $effect(() => {
     if (!dock || !root) return;
     const target = root;
+    let frame = 0;
     const observer = new ResizeObserver(([entry]) => {
-      const height = entry?.borderBoxSize[0]?.blockSize ?? 0;
-      target.style.setProperty('--chat-dock', `${Math.ceil(height)}px`);
+      const height = Math.ceil(entry?.borderBoxSize[0]?.blockSize ?? 0);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => target.style.setProperty('--chat-dock', `${height}px`));
     });
     observer.observe(dock);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   });
 
   function toolCalls(steps: Step[] | null): ToolCall[] {
@@ -259,6 +267,20 @@
       return;
     }
     const key = ++sentCount;
+    if (question) {
+      optimistic.push({ key, text, after: lastSeq });
+      following = true;
+      try {
+        const started = ok(await assistantRunAnswer(id, { text }));
+        follow(started.run_id, true);
+        void queryClient.invalidateQueries({ queryKey: ['thread', id] });
+        void queryClient.invalidateQueries({ queryKey: ['threads'] });
+      } catch (error) {
+        optimistic = optimistic.filter((entry) => entry.key !== key);
+        throw new Error(message(error));
+      }
+      return;
+    }
     try {
       if (staged) {
         ok(await assistantThreadOptions(id, staged));
@@ -320,21 +342,29 @@
   }
 </script>
 
-{#snippet bubble(text: string, note?: string)}
+{#snippet bubble(
+    text: string,
+    note?: string,
+  )}
   <li class="turn turn--you">
     <div class="bubble">
       <p class="bubble__text">{text}</p>
-      {#if note}<span class="bubble__note">{note}</span>{/if}
+      {#if note}
+        <span class="bubble__note">{note}</span>
+      {/if}
     </div>
   </li>
 {/snippet}
 
-{#snippet tools(calls: ToolCall[], run?: number)}
+{#snippet tools(
+    calls: ToolCall[],
+    run?: number,
+  )}
   <div class="tools">
     {#each calls as call (call.id)}
       <ToolCard {call}>
         {#snippet approval()}
-          {@const ask = run === undefined ? undefined : proposalFor(run)}
+          {const ask = $derived(run === undefined ? undefined : proposalFor(run))}
           {#if ask?.proposal_id && run !== undefined && calls.find((entry) => entry.state === 'waiting') === call}
             <ParkedApproval id={ask.proposal_id} {run} thread={title} ondecided={onDecided} />
           {/if}
@@ -385,7 +415,7 @@
         {#if entry.kind === 'user'}
           {@render bubble(entry.text)}
         {:else if entry.kind === 'activity'}
-          {@const calls = toolCalls(entry.steps)}
+          {const calls = $derived(toolCalls(entry.steps))}
           {#if calls.length > 0}
             <li class="turn">{@render tools(calls)}</li>
           {/if}
@@ -397,7 +427,9 @@
           <li class="turn turn--divider">Earlier messages were summarized</li>
         {:else if entry.text}
           <li class="turn">
-            {#if entry.kind === 'draft'}<span class="eyebrow">Draft</span>{/if}
+            {#if entry.kind === 'draft'}
+              <span class="eyebrow">Draft</span>
+            {/if}
             <Markdown text={entry.text} />
           </li>
         {/if}
@@ -405,19 +437,27 @@
       {#each shown as stream (stream.run)}
         {#each stream.segments as segment, index (index)}
           {#if segment.kind === 'user'}
-            {@render bubble(segment.text)}
+            {#if !userTexts.has(segment.text)}
+              {@render bubble(segment.text)}
+            {/if}
           {:else if segment.kind === 'text'}
             <li class="turn"><Markdown text={segment.text} /></li>
           {:else}
-            {@const calls = stream.calls.filter((call) => segment.ids.includes(call.id))}
+            {const calls = $derived(stream.calls.filter((call) => segment.ids.includes(call.id)))}
             <li class="turn">{@render tools(calls, stream.run)}</li>
           {/if}
         {/each}
-        {@const status = statusOf(stream)}
+        {const status = $derived(statusOf(stream))}
         {#if status}
           <li class="turn turn--status"><StatusSlot text={status.text} tone={status.tone} /></li>
         {/if}
       {/each}
+      {#if question}
+        <li class="turn turn--question">
+          <span class="eyebrow">Question for you</span>
+          <Markdown text={question.text} />
+        </li>
+      {/if}
       {#each queued as entry (entry.id)}
         {@render bubble(entry.text, 'Queued')}
       {/each}
@@ -429,15 +469,13 @@
 
   <div class="chat__dock" bind:this={dock}>
     {#if !following && (unseen || running)}
-      <button type="button" class="chat__jump" onclick={onJump}>
-        <Icon name="chevron" />Jump to latest
-      </button>
+      <button type="button" class="chat__jump" onclick={onJump}><Icon name="chevron" />Jump to latest</button>
     {/if}
     {#if !invalid}
       <Composer
         bind:value={draft}
-        label={id === undefined ? 'New chat message' : 'Reply'}
-        placeholder={id === undefined ? 'Ask for something' : 'Reply, or ask for something new'}
+        label={id === undefined ? 'New chat message' : question ? 'Answer' : 'Reply'}
+        placeholder={id === undefined ? 'Ask for something' : question ? 'Answer the question' : 'Reply or ask'}
         disabled={!ready}
         {running}
         {stopping}
