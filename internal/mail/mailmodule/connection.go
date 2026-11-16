@@ -10,10 +10,10 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
+	"github.com/jeiang/atrium/internal/apps/mail/smtp"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/mail/gmailauth"
-	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
 func Connections() []connections.Definition {

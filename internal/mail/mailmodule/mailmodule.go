@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/drafts"
 	"github.com/jeiang/atrium/internal/apps/mail/executors"
 	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/apps/mail/live"
@@ -28,7 +29,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/attentionsources"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"

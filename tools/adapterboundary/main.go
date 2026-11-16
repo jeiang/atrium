@@ -111,7 +111,7 @@ const (
 
 var mailUnits = []string{"internal/mail", "internal/apps/mail"}
 
-var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live"}
+var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live", "internal/apps/mail/drafts", "internal/apps/mail/smtp"}
 
 const (
 	mailGate     = "internal/apps/mail"

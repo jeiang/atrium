@@ -53,7 +53,7 @@ var pinnedNames = map[string]string{
 	atrium + "inference.Status":                        "InferenceStatus",
 	atrium + "inference.Summary":                       "InferenceSummary",
 	atrium + "assistant/memory.Line":                   "MemoryLine",
-	atrium + "mail/replay.Line":                        "ReplayLine",
+	atrium + "apps/mail/replay.Line":                   "ReplayLine",
 	atrium + "assistant/threads.Listed":                "ThreadListing",
 	atrium + "attention.Result":                        "AttentionResult",
 	atrium + "tasks.Link":                              "TaskLink",
