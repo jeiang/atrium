@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -44,9 +43,7 @@ func TestSchedulerRunsCatalogJobsFromEveryOwner(t *testing.T) {
 	dir, api, f := moduleFixture(t, flags)
 	asstWarm(t)
 	d := asstDB(t, dir)
-	if r := runSettings(t, "set", "agent_schedule_daily_nudges", "daily 07:10"); r.code != cli.ExitOK {
-		t.Fatalf("set the nudges schedule: exit %d stderr %q", r.code, r.stderr)
-	}
+	asstExec(t, d, "INSERT INTO settings (key, value) VALUES ('agent_schedule_daily_nudges', 'daily 07:10')")
 	schedulerSeed(t, f, d)
 	schedulerSeededOnce(t, d)
 	if _, schedule, _ := schedulerJob(t, d, "daily-nudges"); schedule != "daily 07:10" {

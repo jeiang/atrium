@@ -127,7 +127,9 @@ func TestSchedulesUsageAPI(t *testing.T) {
 	if invalid.json["error"].(map[string]any)["fields"] == nil {
 		t.Fatalf("missing fields: %s", invalid.body)
 	}
-	expectAPI(t, s.do(http.MethodPatch, jobURL, token, map[string]any{"prompt": "Do something else"}), 400, "bad_request")
+	if prompted := s.do(http.MethodPatch, jobURL, token, map[string]any{"prompt": "Do something else"}); prompted.status != 200 || prompted.json["job"].(map[string]any)["prompt"] != "Do something else" {
+		t.Fatalf("patch prompt: %d %s", prompted.status, prompted.body)
+	}
 	expectAPI(t, s.do(http.MethodPatch, jobURL, token, map[string]any{}), 422, "invalid")
 	expectAPI(t, s.do(http.MethodPut, jobURL+"/enabled", token, map[string]any{}), 422, "invalid")
 

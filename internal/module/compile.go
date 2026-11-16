@@ -315,7 +315,7 @@ func compileSettings(decls []Declaration, jobs []scheduler.Definition) (*setting
 		hosts = append(hosts, FlagHostDef(d.Name))
 	}
 	if len(jobs) > 0 {
-		for _, def := range scheduler.Settings(jobs) {
+		for _, def := range scheduler.Settings() {
 			owner[def.Key] = def.Module
 			defs = append(defs, def)
 		}
