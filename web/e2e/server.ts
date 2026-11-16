@@ -6,13 +6,18 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { brotliCompressSync, constants } from 'node:zlib';
 
 export const policy = [
-  "default-src 'self'",
+  "default-src 'none'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  "style-src 'self'",
+  "img-src 'self' data: blob:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+  "manifest-src 'self'",
+  "worker-src 'self'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "worker-src 'self'",
+  "base-uri 'none'",
   "require-trusted-types-for 'script'",
   'trusted-types atrium-md atrium-sw svelte-trusted-html default',
 ].join('; ');
@@ -37,12 +42,15 @@ async function file(root: string, pathname: string): Promise<string | undefined>
   return undefined;
 }
 
-export async function serve(dist: string, brotli = false): Promise<{ url: string; server: Server }> {
+export async function serve(
+  dist: string,
+  { brotli = false, base = '/' }: { brotli?: boolean; base?: string } = {},
+): Promise<{ url: string; server: Server }> {
   const root = resolve(dist);
   const packed = new Map<string, Buffer>();
   const server = createServer(async (req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-    const path = await file(root, pathname);
+    const path = pathname.startsWith(base) ? await file(root, `/${pathname.slice(base.length)}`) : undefined;
     if (!path) {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
       return;

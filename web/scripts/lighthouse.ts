@@ -28,6 +28,7 @@ const budgetFile = 'web/budgets.json';
 const runs = 5;
 const budgets: Budgets = JSON.parse(readFileSync(new URL('../budgets.json', import.meta.url), 'utf8')).lighthouse;
 const dist = process.argv[2] ?? 'dist';
+const base = '/next/';
 
 const score = (category: string) => (lhr: Result) => lhr.categories[category]?.score ?? 0;
 const metric = (audit: string) => (lhr: Result) => lhr.audits[audit]?.numericValue ?? Number.POSITIVE_INFINITY;
@@ -55,12 +56,12 @@ await once(probe.listen(0, '127.0.0.1'), 'listening');
 const { port } = probe.address() as AddressInfo;
 probe.close();
 
-const { url, server } = await serve(dist, true);
+const { url, server } = await serve(dist, { brotli: true, base });
 const browser = await chromium.launch({ channel: 'chromium', args: [`--remote-debugging-port=${port}`] });
 const results: Result[] = [];
 try {
   for (let run = 0; run < runs; run++) {
-    const outcome = await lighthouse(`${url}/`, {
+    const outcome = await lighthouse(`${url}${base}`, {
       port,
       logLevel: 'error',
       output: 'json',
@@ -79,7 +80,7 @@ try {
 const median = (values: number[]): number => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
 const failures: string[] = [];
 console.log(
-  `web-lighthouse: ${dist} at /, brotli served, Lighthouse ${results[0]?.lighthouseVersion} mobile preset with simulated throttling, median of ${runs}`,
+  `web-lighthouse: ${dist} at ${base}, brotli served, Lighthouse ${results[0]?.lighthouseVersion} mobile preset with simulated throttling, median of ${runs}`,
 );
 console.log(`${'item'.padEnd(22)}  ${'median'.padStart(8)}  ${'budget'.padStart(8)}  runs`);
 for (const measure of measures) {
