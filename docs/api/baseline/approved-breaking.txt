@@ -1,1 +1,2 @@
 # <oasdiff change id> <METHOD> <path> <ruling or decision that approves it>
+response-body-any-of-added GET /events document corrected to match the wire since v3.0.0
