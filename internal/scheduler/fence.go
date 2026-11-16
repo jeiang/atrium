@@ -15,10 +15,11 @@ type Running struct {
 }
 
 func (e *Running) Error() string {
+	held := e.Unwrap().Error()
 	if e.RunID == 0 {
-		return fmt.Sprintf("scheduler: job %d is already running", e.JobID)
+		return held
 	}
-	return fmt.Sprintf("scheduler: job %d is already running (run %d)", e.JobID, e.RunID)
+	return fmt.Sprintf("%s (run %d)", held, e.RunID)
 }
 
 func (e *Running) Unwrap() error { return &db.LockBusy{Resource: jobResource(e.JobID)} }
@@ -55,7 +56,7 @@ func (s *Scheduler) enterWait(ctx context.Context, jobID int64, wait time.Durati
 		if busy == nil {
 			return nil
 		}
-		if !time.Now().Before(deadline) {
+		if wait > 0 && !time.Now().Before(deadline) {
 			return busy
 		}
 		select {
