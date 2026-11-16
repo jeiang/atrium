@@ -89,7 +89,10 @@ export default defineConfig(({ mode }) => ({
         : {
             output: {
               codeSplitting: {
-                groups: [{ name: 'boot', tags: ['$initial'], test: /[\\/](node_modules|src[\\/](?!main\.ts))/ }],
+                groups: [
+                  { name: 'boot', tags: ['$initial'], test: /[\\/](node_modules|src[\\/](?!main\.ts))/ },
+                  { name: 'shared', test: /[\\/]src[\\/]shared[\\/]/, minShareCount: 2 },
+                ],
               },
             },
           },
