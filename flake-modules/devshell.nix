@@ -54,7 +54,6 @@
         ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
       env =
         {
-          ATRIUM_DEV_SHELL = "1";
           CGO_ENABLED = "1";
           GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
           CGO_CFLAGS = "${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
@@ -76,7 +75,9 @@
         unset GOROOT GOPATH
         root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
         npmRoot=$root/web linkNodeModulesHook >/dev/null
+        case "''${ATRIUM_WEB_ASSETS:-}" in */web/dist) unset ATRIUM_WEB_ASSETS ;; esac
         export ATRIUM_WEB_ASSETS=''${ATRIUM_WEB_ASSETS:-$root/web/dist}
+        export ATRIUM_DEV_ROOT=$root
         [ -e "$root/internal/web/static/assets.json" ] || just --justfile "$root/justfile" static-assets
         [ -e "$root/internal/web/app/dist/index.html" ] || just --justfile "$root/justfile" web-stub
       '';

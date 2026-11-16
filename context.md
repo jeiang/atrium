@@ -13,13 +13,13 @@ claims about the running application. Operator contracts are in
   with embedded assets, SQLCipher state, and a NixOS module. The host supplies
   external services, reverse proxy configuration, credentials, persistence,
   and off-host backups. Updating this repository does not update a host's pin.
-- The application joins mail, calendar, contacts, Notion, media, notifications,
+- The application joins mail, calendar, contacts, media, notifications,
   and read-only Grafana access with assistant chat, files, projects,
   knowledge, tasks, scheduled work, and research children. Skills and code
   execution are not active assistant capabilities.
 - Today is home at `/chat`. Its initial response includes Needs you, the agenda,
   and recent activity. A new home message starts a thread. Review holds
-  decisions and history; Library holds knowledge, wiki, files, rules, and
+  decisions and history; Library holds knowledge, files, rules, and
   schedules. Projects group threads and can restrict their content to a
   private project. Draft and proposal cards in chat use the same send and
   approval services as their dedicated views. The `/chat/agenda` fragment
@@ -96,8 +96,9 @@ claims about the running application. Operator contracts are in
   and `messages`; those records stay out of the profile. Dreaming is capped
   at `dreaming_max_cost_usd` ($0.30) per night and `dreaming_monthly_usd` ($3)
   per calendar month. At the monthly cap it does not run and raises an
-  attention item. The Notion wiki is read-only for the operator. Sync and
-  the Wiki view remain; the agent has no Notion tools.
+  attention item. Notion, its wiki view and the one-shot `kb import` are
+  removed; records imported from Notion keep their `notion:` origin and stay
+  readable and searchable.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
 
@@ -271,9 +272,7 @@ claims about the running application. Operator contracts are in
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
-  index when complete. The rebuild loop runs for every install, so a
-  Notion-only install keeps its index fresh, and Notion document embeddings
-  use the same compiled body limit as mail. Knowledge records are
+  index when complete. The rebuild loop runs for every install. Knowledge records are
   embedded into the same generation-numbered index (title, aliases and body,
   same limit); the core loop drains pending records when an embed endpoint is
   set, and a retracted record leaves the index. Each embedded row stores the
@@ -295,7 +294,7 @@ claims about the running application. Operator contracts are in
   records a stored row that fails these rules as failing without sending a
   request. Credential slots must belong to the
   connection kind, and credential values remain write-only.
-- Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
+- Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token) and EZTV (no credential) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the
@@ -316,7 +315,7 @@ claims about the running application. Operator contracts are in
 ### State, backups, settings, and keys
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
-  `files/`; the Notion wiki also has external state. The database alone is
+  `files/`. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
   and `atrium restore` (with a `--verify` dry run) restores them. Restore
   stages the archive, refuses a newer schema, checks it for tampering, and
@@ -324,8 +323,8 @@ claims about the running application. Operator contracts are in
   archive made under an earlier key opens with `--key-file`. Install takes
   the serve exclusion, and an existing database that cannot be opened is
   replaced only with `--replace-unopenable`, which keeps it aside.
-  `atrium backup` and `atrium db backup` write one `operation_audit` row
-  (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
+  `atrium backup` writes one `operation_audit` row
+  (`maintenance.backup`; destination, encryption and
   file count only) to the source database, including refused destinations; a
   completed `atrium restore` writes one `maintenance.restore` row to the
   restored database. A refused or failed restore writes nothing, since it
@@ -407,12 +406,28 @@ claims about the running application. Operator contracts are in
   `db rekey` on a missing database path fail without creating a file.
 - The `*.sql` files in `internal/db/schema/` are the frozen v3 baseline,
   migration 1; every later schema change is a new additive migration in
-  `internal/db/migrate.go`. A CLI e2e checks the canonical schema dump in
-  `testdata/schema/baseline.v3.txt` and the migration-1 golden database,
-  then compares the migrated fixture with a fresh keyed database. A database
-  at an unknown future schema version is refused
+  `internal/db/migrate.go`, except that a migration may drop a table no code
+  reads. A fresh database is the baseline followed by every migration.
+  Migration 2 drops the unread tables `nightly_observations`,
+  `agent_profile`, `notion_pages`, `notion_sources`, `notion_state`,
+  `notion_fts`, `wiki_pages`, every Notion vector generation
+  `embed_notion_<N>`, `action_links`, `rebalance_candidates`, `pass_runs`,
+  `pass_run_alerts` and `snoozes`, with their indexes, revision triggers
+  and FTS5 and vec0 shadow tables; their rows are discarded. `skills`,
+  `export_pages` and `attention_snoozes` stay; `skills` and
+  `effect_import_refs` are read by nothing and are candidates for a later
+  drop.
+  A CLI e2e checks the canonical schema dump in
+  `testdata/schema/baseline.v3.txt` and the migration-1 golden database
+  (`world.db`), migrates each previous version's golden database
+  (`world.db` for migration 2, `schema-v3-N.db` for migration N+1) and
+  compares it with a fresh keyed database, and requires
+  `schema-v3-N.db` for the newest version N to match a fresh database. A
+  database at an unknown future schema version is refused
   before any write. A binary downgrade does not reverse a migration and can
-  require restoring an earlier database, losing later writes.
+  require restoring an earlier database, losing later writes: a release
+  older than migration 2 refuses a database at version 2, so after that
+  upgrade recovery is rolling forward or restoring the pre-upgrade backup.
   A database with tables but no v3 marker is refused before any write. v2
   data reaches v3 only through release `v3.0.0`, the last release that
   carries the v2 importer: import there, then upgrade.
@@ -531,10 +546,7 @@ claims about the running application. Operator contracts are in
   consecutive unattended threadless unconfigured skips with the same error
   coalesce into the newest run's row, which keeps the first start time, so
   an audit row never names a later run of another job.
-  The Notion mirror is the model-free `notion/notion-sync` serve job
-  (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
-  on shutdown). Its CLI shares the `notion-sync` resource and claim;
-  unconfigured skips record no pass row. Nightly
+  Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
   executes; immediately before a child runs, on the first pass or in
@@ -582,7 +594,7 @@ claims about the running application. Operator contracts are in
   declared, and a job whose needed module is off
   records `skipped_module`. Core (settings, secrets, `db`,
   `serve`, the About, review and activity pages) is always on; mail,
-  calendar, contacts, Notion, media, assistant, notifications and Grafana each
+  calendar, contacts, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
   read-only. A module is on only when its flag is true
@@ -673,6 +685,12 @@ claims about the running application. Operator contracts are in
   notification delivery. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
+  Pass staleness (the `passes` readiness check, `atrium_job_stale`,
+  `atrium_job_last_success_timestamp_seconds` and the one stale notice per
+  episode) reads the scheduler's `job_runs`: a pass is stale when its last
+  finished run failed or its last success is older than its limit, and a
+  pass with no finished run is never stale. Migration 2 dropped the old
+  `pass_runs` and `pass_run_alerts` tables.
   The host owns the scrape job and the traces endpoint.
 
 ### Media agent
@@ -847,19 +865,17 @@ claims about the running application. Operator contracts are in
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium effects
   resolve <id>` or the Activity page.
-- The knowledge export is export-only: a built-in job renders live,
-  non-expired records into the Notion page named by
-  `export_notion_parent` and overwrites the pages it created; a target with no
-  destination is skipped. The Notion controls are a standalone section on the
-  Export settings page, the Obsidian folder has its own section, and the parent
-  page accepts a pasted page URL or id stored as the normalized id. Each
-  external write records an effect first; Notion mutations are not retried,
-  and an unknown outcome blocks the target until `atrium effects resolve
-  <id>`. Pages the export did not create are never touched, and edits made in
-  Notion are overwritten on the next run. The Obsidian export likewise
-  writes and removes only the files it tracks. Private records are exported
-  only with consent recorded for that exact destination; changing the
-  destination clears the consent.
+- The knowledge export is export-only and has one destination, a Markdown
+  folder declared by the host (`export.export_obsidian_dir`). The daily
+  `knowledge-export` job renders live, non-expired records into it and
+  writes and removes only the files it tracks. With no folder set, or a
+  folder it cannot create or write, the run fails and is recorded as a
+  failed job; it never reports success with nothing written. Mapping rows
+  of the removed Notion target are ignored. Each file write records an
+  effect first, and an unknown outcome blocks the export until `atrium
+  effects resolve <id>`. Edits made in the folder are overwritten on the
+  next run. Private records are exported only with consent recorded for
+  that exact folder; changing the folder clears the consent.
 - Draft edits carry an optional expected revision: stale edits are refused without overwriting newer content. The HTML form sends it automatically; API and tool callers may supply `revision`.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
@@ -916,7 +932,8 @@ claims about the running application. Operator contracts are in
   `GET /api/v1/review/items` and the `attention` tool; Needs you shows
   proposals only. No worker run starts automatically and nothing
   restarts or changes a host.
-- The Notion page view is read-only. Approvals are only for
+- Proposals of removed kinds, such as `notion_link` and `notion_edit` from
+  v2, stay readable and dismissable. Approvals are only for
   external or costly actions.
 - Threads carry marks, recorded with `threads.tainted_at` as the first
   mark time. The set is a bitmask: `untrusted` (someone else wrote the
@@ -1144,7 +1161,12 @@ claims about the running application. Operator contracts are in
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
   catalog (`atrium catalog openapi --output docs/api`, drift-checked by
   `--check`). Approval-only operations count as reached through
-  `review.approve` and are listed separately in `reach.json`. The run event
+  `review.approve` and are listed separately in `reach.json`. The
+  `openapi-diff` check (oasdiff, a Go tool dependency) fails on a breaking
+  change against the deployed baseline in `docs/api/baseline/` unless
+  `approved-breaking.txt` lists it; the baseline is `v3.3.0`. A nightly
+  Schemathesis workflow runs the `GET` operations of `/api/v1` against a
+  throwaway server and opens or updates one issue on failure. The run event
   stream is documented in `docs/api/run-stream.md` (heartbeats,
   `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
   retention, `tool_done.results` with web search sources, live-only
@@ -1167,9 +1189,37 @@ claims about the running application. Operator contracts are in
   `GET /connections/schema` (kinds and per-connection fields with secret
   and host-owned flags, no credential values) and `GET /files` (the
   thread and project file library, newest first, keyset cursor). `GET
-  /home` carries a `weather` card (current, today, hourly) or null when no
-  location is set or the weather connection is off; the forecast call is
-  capped at 3 seconds and a failure only drops the card.
+  /home` always carries a `weather` card with a `state`: `off` (no weather
+  connection, or its forecast capability disabled), `unconfigured` (no
+  location), `loading` (no reading yet), `failed` (no reading, last fetch
+  failed; `failure` is `unreachable`, `timeout`, `no_match`, `bad_reply` or
+  `unavailable`), `stale` (the last reading is shown but the refresh after
+  it failed, or it is older than 60 minutes) or `ok`, plus `fetched_at` and
+  the reading (location, current, today, hourly). `/home` never calls the
+  weather service: it serves the last reading held in memory per database
+  (`weather.LastFor`) and starts a background refresh when the reading is
+  15 minutes old (a failed fetch is retried after 60 seconds). A finished
+  refresh bumps the `assistant` app-event topic so the client refetches. A
+  location change discards the held reading, so the next `/home` answers
+  `loading` and refreshes for the new place.
+- The embedded web client is served at `/next/` on every listener, the
+  emergency listener included, beside the server-rendered UI; nothing links
+  to it yet, and `/next` redirects there. A `/next/...` GET that accepts HTML
+  and names no embedded file gets the client's `index.html` (`no-cache`).
+  Files under `/next/assets/` are content-hashed and cached for a year as
+  immutable; an unknown one is 404, never the document. Precompressed `.br`
+  and `.gz` variants are chosen by `Accept-Encoding` with the negotiation and
+  content-hash ETags of `/static/`. The document and its files are public,
+  like `/static/`, because they hold no data; data comes only from
+  `/web/v1`, which keeps its sign-in rules, and Host validation still
+  applies. Responses under `/next/` carry their own CSP: `default-src
+  'none'`, `'self'` sources only, no inline script or style, and
+  `require-trusted-types-for 'script'; trusted-types atrium-md atrium-sw
+  svelte-trusted-html`. Every other path keeps the server-rendered UI's
+  policy unchanged. A service worker served from `/next/` gets no
+  `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
+  and it never controls the old UI's pages, while it does see every request
+  a `/next/` page makes, `/web/v1` writes included.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open
@@ -1217,11 +1267,11 @@ claims about the running application. Operator contracts are in
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
-- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build, but nothing serves it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).

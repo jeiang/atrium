@@ -16,7 +16,6 @@ const (
 	Core          = "core"
 	Mail          = "mail"
 	Calendar      = "calendar"
-	Notion        = "notion"
 	Media         = "media"
 	Assistant     = "assistant"
 	Notifications = "notifications"

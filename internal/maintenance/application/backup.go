@@ -2,22 +2,17 @@ package application
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/backup"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/passrun"
 )
 
 const (
-	BackupName   application.Name = "maintenance.backup"
-	DBBackupName application.Name = "maintenance.db-backup"
-	RestoreName  application.Name = "maintenance.restore"
+	BackupName  application.Name = "maintenance.backup"
+	RestoreName application.Name = "maintenance.restore"
 )
 
 type BackupInput struct {
@@ -50,10 +45,6 @@ func DescribeBackup() application.Definition {
 	return application.Describe[BackupInput, Backup](BackupName, application.Command, []application.Authority{application.Operator, application.System}, application.NoEffect, true)
 }
 
-func DescribeDBBackup() application.Definition {
-	return application.Describe[BackupInput, Backup](DBBackupName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
-}
-
 func DescribeRestore() application.Definition {
 	return application.Describe[RestoreInput, Restored](RestoreName, application.Command, []application.Authority{application.Bootstrap}, application.LocalUndoable, true)
 }
@@ -84,57 +75,7 @@ func (s *Service) Backup(ctx context.Context, in BackupInput) (application.Chang
 	return application.Change[Backup]{Data: Backup{Dest: in.Dest, Encryption: encryption(key), Files: count}, AuditID: id}, nil
 }
 
-func (s *Service) DBBackup(ctx context.Context, in BackupInput) (application.Change[Backup], error) {
-	cfg, err := s.database()
-	if err != nil {
-		return application.Change[Backup]{}, err
-	}
-	key, err := s.key(ctx)
-	if err != nil {
-		return application.Change[Backup]{}, err
-	}
-	d, err := db.Connect(cfg.DBPath, db.WithKey(key))
-	if err != nil {
-		return application.Change[Backup]{}, err
-	}
-	defer func() { _ = d.Close() }()
-	if err := db.RequireV3(ctx, d.Read); err != nil {
-		return application.Change[Backup]{}, err
-	}
-	id, err := s.settle(ctx, d, DBBackupName, backupTarget(in.Dest), map[string]any{"encrypted": !key.IsZero()}, copyDatabase(ctx, d, cfg, key, in.Dest))
-	if err != nil {
-		return application.Change[Backup]{}, err
-	}
-	return application.Change[Backup]{Data: Backup{Dest: in.Dest, Encryption: encryption(key)}, AuditID: id}, nil
-}
-
 func backupTarget(path string) string { return "backup:" + filepath.Base(path) }
-
-func copyDatabase(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest string) error {
-	if err := backup.RefuseDestination(cfg, dest); err != nil {
-		return err
-	}
-	locks, err := db.ResourceLocks(ctx, cfg.DBPath, []string{passrun.Backup}, db.ShortLockWait)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = locks.Close() }()
-	if _, err := os.Lstat(dest); err == nil {
-		return &backup.Refusal{Err: fmt.Errorf("backup destination %s already exists", dest)}
-	}
-	staged, err := db.Stage(dest, 0o600)
-	if err != nil {
-		return err
-	}
-	defer staged.Discard()
-	if err := d.BackupTo(ctx, staged.Path(), key); err != nil {
-		return err
-	}
-	if err := db.Verify(ctx, staged.Path(), key, nil); err != nil {
-		return fmt.Errorf("backup verification: %w", err)
-	}
-	return staged.PublishLink()
-}
 
 func (s *Service) Restore(ctx context.Context, in RestoreInput) (application.Change[Restored], error) {
 	cfg, err := s.config()

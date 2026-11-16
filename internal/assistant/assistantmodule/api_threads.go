@@ -431,7 +431,7 @@ type apiHome struct {
 	About    *asstapp.About       `json:"about"`
 	Defaults threads.Options      `json:"defaults"`
 	Composer asstapp.ComposerView `json:"composer"`
-	Weather  *asstapp.HomeWeather `json:"weather"`
+	Weather  asstapp.HomeWeather  `json:"weather"`
 }
 
 type apiAgenda struct {
@@ -764,10 +764,8 @@ func apiBindings(p *apiPages) []application.Binding {
 				out := apiHome{Threads: h.Threads, Q: h.Q, View: h.View, Welcome: h.Welcome, Date: h.Date, Digest: h.Digest,
 					Agenda: h.Agenda, About: h.About, Defaults: h.Defaults, Composer: h.Composer, Weather: svc.HomeWeather(ctx)}
 				rev := read.Revision
-				if out.Weather != nil {
-					card, _ := json.Marshal(out.Weather)
-					rev = application.Revision(fmt.Sprintf("%x", sha256.Sum256(append([]byte(rev), card...))))
-				}
+				card, _ := json.Marshal(out.Weather)
+				rev = application.Revision(fmt.Sprintf("%x", sha256.Sum256(append([]byte(rev), card...))))
 				return application.Read[apiHome]{Revision: rev, Data: out}, nil
 			}),
 		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", ID: "assistant.agenda"}, "GET /agenda",

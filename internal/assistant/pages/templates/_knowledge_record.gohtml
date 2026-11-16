@@ -23,8 +23,7 @@
       {{if $d.Source}}
       <p class="text-xs text-muted-foreground">
         Source:
-        {{if $d.Source.NotionID}}<a class="underline-offset-4 hover:underline" href="/notion/{{urlencode $d.Source.NotionID}}">{{$d.Source.Origin}}</a>
-        {{else if $d.Source.ThreadID}}<a class="underline-offset-4 hover:underline" href="/chat/{{$d.Source.ThreadID}}{{if $d.Source.Seq}}#m{{$d.Source.Seq}}{{end}}">thread {{$d.Source.ThreadID}}{{if $d.Source.Seq}} message {{$d.Source.Seq}}{{end}}</a>
+        {{if $d.Source.ThreadID}}<a class="underline-offset-4 hover:underline" href="/chat/{{$d.Source.ThreadID}}{{if $d.Source.Seq}}#m{{$d.Source.Seq}}{{end}}">thread {{$d.Source.ThreadID}}{{if $d.Source.Seq}} message {{$d.Source.Seq}}{{end}}</a>
         {{else}}{{$d.Source.Origin}}{{end}}
       </p>
       {{end}}

@@ -19,7 +19,7 @@ const (
 
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, staticPrefix) {
+		if strings.HasPrefix(r.URL.Path, staticPrefix) || strings.HasPrefix(r.URL.Path, nextPrefix) {
 			next.ServeHTTP(w, r)
 			return
 		}

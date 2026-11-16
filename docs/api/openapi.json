@@ -1429,33 +1429,6 @@
         ],
         "type": "object"
       },
-      "ChangeImportStats": {
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ImportStats"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "maximum": 9007199254740991,
-              "type": "integer"
-            },
-            "type": "array"
-          },
-          "undoable": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
       "ChangeIssued": {
         "properties": {
           "audit_id": {
@@ -2113,33 +2086,6 @@
           },
           "data": {
             "$ref": "#/components/schemas/Stats"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "maximum": 9007199254740991,
-              "type": "integer"
-            },
-            "type": "array"
-          },
-          "undoable": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "ChangeSyncResult": {
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/SyncResult"
           },
           "effect_ids": {
             "items": {
@@ -3079,36 +3025,6 @@
             "type": "boolean"
           }
         },
-        "type": "object"
-      },
-      "Detail": {
-        "properties": {
-          "page": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/NotionView"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "related": {
-            "items": {
-              "$ref": "#/components/schemas/Related"
-            },
-            "type": "array"
-          },
-          "titles": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "titles"
-        ],
         "type": "object"
       },
       "DeviceRegistration": {
@@ -4209,83 +4125,6 @@
         ],
         "type": "object"
       },
-      "Hit": {
-        "properties": {
-          "folder": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "lexical_rank": {
-            "anyOf": [
-              {
-                "maximum": 9007199254740991,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "path": {
-            "items": {
-              "$ref": "#/components/schemas/PathPart"
-            },
-            "type": "array"
-          },
-          "private": {
-            "type": "boolean"
-          },
-          "score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "semantic_rank": {
-            "anyOf": [
-              {
-                "maximum": 9007199254740991,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "snippet": {
-            "type": "string"
-          },
-          "snippet_parts": {
-            "items": {
-              "$ref": "#/components/schemas/Part"
-            },
-            "type": "array"
-          },
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "url",
-          "path",
-          "private",
-          "folder",
-          "snippet",
-          "snippet_parts"
-        ],
-        "type": "object"
-      },
       "Home": {
         "properties": {
           "about": {
@@ -4336,14 +4175,7 @@
             "type": "string"
           },
           "weather": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HomeWeather"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/HomeWeather"
           },
           "welcome": {
             "type": "boolean"
@@ -4358,14 +4190,49 @@
           "digest",
           "agenda",
           "defaults",
-          "composer"
+          "composer",
+          "weather"
         ],
         "type": "object"
       },
       "HomeWeather": {
         "properties": {
           "current": {
-            "$ref": "#/components/schemas/Current"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Current"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unreachable",
+                  "timeout",
+                  "no_match",
+                  "bad_reply",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "hours": {
             "items": {
@@ -4374,10 +4241,35 @@
             "type": "array"
           },
           "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "off",
+              "unconfigured",
+              "loading",
+              "failed",
+              "stale",
+              "ok"
+            ],
             "type": "string"
           },
           "timezone": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "today": {
             "anyOf": [
@@ -4391,9 +4283,7 @@
           }
         },
         "required": [
-          "location",
-          "timezone",
-          "current",
+          "state",
           "hours"
         ],
         "type": "object"
@@ -4447,67 +4337,6 @@
           "email",
           "name",
           "api_version"
-        ],
-        "type": "object"
-      },
-      "ImportStats": {
-        "properties": {
-          "changed_in_atrium": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "dry_run": {
-            "type": "boolean"
-          },
-          "failed_items": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "missing": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "notes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "notion": {
-            "$ref": "#/components/schemas/SourceCounts"
-          },
-          "observations": {
-            "$ref": "#/components/schemas/SourceCounts"
-          },
-          "pii": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "private": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "profile": {
-            "$ref": "#/components/schemas/SourceCounts"
-          }
-        },
-        "required": [
-          "dry_run",
-          "profile",
-          "observations",
-          "notion",
-          "pii",
-          "private",
-          "notes",
-          "changed_in_atrium",
-          "missing",
-          "failed_items"
         ],
         "type": "object"
       },
@@ -4984,15 +4813,6 @@
           "at",
           "tool"
         ],
-        "type": "object"
-      },
-      "KnowledgeImportRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "dry_run": {
-            "type": "boolean"
-          }
-        },
         "type": "object"
       },
       "KnowledgeMatchingRequest": {
@@ -8270,107 +8090,6 @@
         ],
         "type": "object"
       },
-      "NotionListed": {
-        "properties": {
-          "edited_ts": {
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "path": {
-            "items": {
-              "$ref": "#/components/schemas/PathPart"
-            },
-            "type": "array"
-          },
-          "private": {
-            "type": "boolean"
-          },
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "url",
-          "path",
-          "private",
-          "edited_ts"
-        ],
-        "type": "object"
-      },
-      "NotionResult": {
-        "properties": {
-          "hits": {
-            "items": {
-              "$ref": "#/components/schemas/Hit"
-            },
-            "type": "array"
-          },
-          "semantic": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "hits",
-          "semantic"
-        ],
-        "type": "object"
-      },
-      "NotionView": {
-        "properties": {
-          "edited_ts": {
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "in_trash": {
-            "type": "boolean"
-          },
-          "markdown": {
-            "type": "string"
-          },
-          "path": {
-            "items": {
-              "$ref": "#/components/schemas/PathPart"
-            },
-            "type": "array"
-          },
-          "private": {
-            "type": "boolean"
-          },
-          "properties": {
-            "items": {
-              "$ref": "#/components/schemas/PropertyRow"
-            },
-            "type": "array"
-          },
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "url",
-          "path",
-          "private",
-          "edited_ts",
-          "properties",
-          "markdown",
-          "in_trash"
-        ],
-        "type": "object"
-      },
       "OAuthSetup": {
         "properties": {
           "capabilities": {
@@ -8552,32 +8271,6 @@
           "last_event",
           "last_event_description",
           "last_event_ts"
-        ],
-        "type": "object"
-      },
-      "Part": {
-        "properties": {
-          "Highlighted": {
-            "type": "boolean"
-          },
-          "Text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "Text",
-          "Highlighted"
-        ],
-        "type": "object"
-      },
-      "PathPart": {
-        "properties": {
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "title"
         ],
         "type": "object"
       },
@@ -9760,21 +9453,6 @@
         "properties": {},
         "type": "object"
       },
-      "PropertyRow": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "value"
-        ],
-        "type": "object"
-      },
       "ProposalChange": {
         "discriminator": {
           "mapping": {
@@ -10255,21 +9933,6 @@
         ],
         "type": "object"
       },
-      "ReadDetail": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/Detail"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
       "ReadEvents": {
         "properties": {
           "data": {
@@ -10555,21 +10218,6 @@
         ],
         "type": "object"
       },
-      "ReadNotionResult": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/NotionResult"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
       "ReadOAuthSetup": {
         "properties": {
           "data": {
@@ -10720,21 +10368,6 @@
         ],
         "type": "object"
       },
-      "ReadWikiPages": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/WikiPages"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
       "RegisteredDevice": {
         "properties": {
           "id": {
@@ -10745,44 +10378,6 @@
         },
         "required": [
           "id"
-        ],
-        "type": "object"
-      },
-      "Related": {
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "linked": {
-            "type": "boolean"
-          },
-          "path": {
-            "items": {
-              "$ref": "#/components/schemas/PathPart"
-            },
-            "type": "array"
-          },
-          "private": {
-            "type": "boolean"
-          },
-          "score": {
-            "type": "number"
-          },
-          "title": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "url",
-          "path",
-          "private",
-          "linked",
-          "score"
         ],
         "type": "object"
       },
@@ -12787,33 +12382,6 @@
         ],
         "type": "object"
       },
-      "SourceCounts": {
-        "properties": {
-          "created": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "failed": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "kept": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "updated": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "created",
-          "updated",
-          "kept",
-          "failed"
-        ],
-        "type": "object"
-      },
       "Started": {
         "properties": {
           "run_id": {
@@ -13026,72 +12594,6 @@
             "type": "array"
           }
         },
-        "type": "object"
-      },
-      "SyncResult": {
-        "properties": {
-          "embedded": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "failed": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "live": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "new": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "pages": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "private": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "seconds": {
-            "type": "number"
-          },
-          "sources": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "trashed": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "unchanged": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "updated": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "sources",
-          "pages",
-          "new",
-          "updated",
-          "unchanged",
-          "trashed",
-          "failed",
-          "embedded",
-          "seconds",
-          "live",
-          "private"
-        ],
         "type": "object"
       },
       "Table": {
@@ -14075,20 +13577,6 @@
         "required": [
           "method",
           "url"
-        ],
-        "type": "object"
-      },
-      "WikiPages": {
-        "properties": {
-          "pages": {
-            "items": {
-              "$ref": "#/components/schemas/NotionListed"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "pages"
         ],
         "type": "object"
       },
@@ -22641,170 +22129,6 @@
         "x-atrium-undoable": true
       }
     },
-    "/knowledge/import": {
-      "post": {
-        "operationId": "knowledge.import",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/KnowledgeImportRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChangeImportStats"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "knowledge"
-        ],
-        "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
-      }
-    },
     "/knowledge/profile": {
       "get": {
         "operationId": "knowledge.profile",
@@ -31075,160 +30399,6 @@
               }
             },
             "description": "OK",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "settings"
-        ],
-        "x-atrium-area": "settings",
-        "x-atrium-module": "core"
-      }
-    },
-    "/maintenance/db-backups": {
-      "post": {
-        "operationId": "maintenance.db-backup",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChangeBackupCreated"
-                }
-              }
-            },
-            "description": "Created",
             "headers": {
               "Atrium-Command-Id": {
                 "schema": {
@@ -46947,582 +46117,6 @@
         ],
         "x-atrium-area": "usage",
         "x-atrium-module": "assistant"
-      }
-    },
-    "/wiki": {
-      "get": {
-        "operationId": "wiki.search",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "q",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "private",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "format": "int64",
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReadNotionResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "wiki"
-        ],
-        "x-atrium-area": "wiki",
-        "x-atrium-module": "notion"
-      }
-    },
-    "/wiki/pages": {
-      "get": {
-        "operationId": "wiki.list",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "q",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReadWikiPages"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "wiki"
-        ],
-        "x-atrium-area": "wiki",
-        "x-atrium-module": "notion"
-      }
-    },
-    "/wiki/sync": {
-      "post": {
-        "operationId": "wiki.sync",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChangeSyncResult"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "wiki"
-        ],
-        "x-atrium-area": "wiki",
-        "x-atrium-module": "notion"
-      }
-    },
-    "/wiki/{page_id}": {
-      "get": {
-        "operationId": "wiki.detail",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "page_id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "related",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReadDetail"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "wiki"
-        ],
-        "x-atrium-area": "wiki",
-        "x-atrium-module": "notion"
       }
     }
   },

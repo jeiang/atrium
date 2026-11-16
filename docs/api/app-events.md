@@ -21,7 +21,6 @@ A revision is a counter the database advances on every write to a table of that 
 | `assistant`, `knowledge`, `tasks` | the assistant module is on |
 | `mail` | the mail module is on |
 | `calendar` | the calendar module is on |
-| `notion` | the Notion module is on |
 | `media` | the media module is on |
 | `notify` | the notifications module is on |
 

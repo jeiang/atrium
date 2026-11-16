@@ -40,10 +40,6 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 	}
 	client := &http.Client{Jar: jar}
 	cases := []settingsFieldCase{
-		{"/settings/notion", "/settings/groups/notion/wiki", "wiki_root", "0123456789abcdef0123456789abcdef"},
-		{"/settings/notion", "/settings/groups/notion/wiki", "sensitivity_property", "sensitivity_level"},
-		{"/settings/notion", "/settings/groups/notion/wiki", "notion_private_value", "confidential"},
-		{"/settings/notion", "/settings/groups/notion/wiki", "wiki_log_title", "Wiki Log 2"},
 		{"/settings/calendar", "/settings/sections/calendar", "calendar_account", "home"},
 		{"/settings/calendar", "/settings/sections/calendar", "icloud_apple_id", "operator@icloud.invalid"},
 		{"/settings/calendar", "/settings/sections/calendar", "icloud_calendar", "Home"},
@@ -94,7 +90,6 @@ func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 		{"/settings/groups/core/budget", "monthly_budget_usd", "0", "must be greater than 0"},
 		{"/settings/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
 		{"/settings/sections/calendar", "work_days", "funday", "must be day names"},
-		{"/settings/groups/notion/wiki", "wiki_root", "nope", "must be a Notion page id"},
 	} {
 		status, body, _ := fetch(t, client, http.MethodPost, base+c.action, url.Values{c.key: {c.value}})
 		if status != http.StatusUnprocessableEntity || !strings.Contains(body, c.want) {

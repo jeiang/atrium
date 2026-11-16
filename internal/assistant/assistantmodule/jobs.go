@@ -64,7 +64,7 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 		return jobworker.Result{}, err
 	})
 	knowledgeExport := assistantJob(assistant.KnowledgeExportName, scheduler.JobBuiltin,
-		"Daily: project the knowledge base into the configured export targets (no model run).",
+		"Daily: write the knowledge base to the Markdown export folder (no model run).",
 		"daily 03:30", assistant.KeyKnowledgeExport, 30*time.Minute, scheduler.ModelFree)
 	knowledgeExport.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 		_, err := kbapp.New(e.Service.DB, e.Service.Runner.Ledger, e.Now).WithEnv(e.Service.Env).Export(ctx, kbapp.ExportInput{})

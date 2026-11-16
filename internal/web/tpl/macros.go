@@ -18,7 +18,7 @@ func safeURL(v any) template.URL {
 		scheme = raw[:i]
 	}
 	switch strings.ToLower(scheme) {
-	case "", "http", "https", "mailto", "tel", "notion":
+	case "", "http", "https", "mailto", "tel":
 		return template.URL(raw)
 	}
 	return "#"
