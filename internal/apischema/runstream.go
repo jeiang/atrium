@@ -17,6 +17,8 @@ func (w *walker) runStreamEvent() object {
 	id := w.integer(true)
 	nullable := func(s object) object { return object{"anyOf": []any{s, object{"type": "null"}}} }
 	text := []streamField{{"text", str}}
+	results := object{"type": "array", "items": object{"type": "object", "required": []any{"url", "title"}, "properties": object{"url": str, "title": str}}}
+	optional := map[[2]string]bool{{"tool_done", "results"}: true}
 	events := []struct {
 		name    string
 		durable bool
@@ -26,7 +28,8 @@ func (w *walker) runStreamEvent() object {
 		{"thinking", true, text},
 		{"text", true, text},
 		{"tool_start", true, []streamField{{"id", str}, {"name", str}, {"args", str}}},
-		{"tool_done", true, []streamField{{"id", str}, {"ok", object{"type": "boolean"}}, {"preview", str}}},
+		{"tool_progress", false, []streamField{{"run_id", id}, {"id", str}, {"text", str}}},
+		{"tool_done", true, []streamField{{"id", str}, {"ok", object{"type": "boolean"}}, {"preview", str}, {"results", results}}},
 		{"user", true, []streamField{{"text", str}, {"queue_id", id}}},
 		{"plan", true, []streamField{{"items", object{"type": "array", "items": object{"type": "object", "required": []any{"text", "done"}, "properties": object{"text": str, "done": object{"type": "boolean"}}}}}}},
 		{"run_done", true, []streamField{{"state", str}, {"error", nullable(str)}}},
@@ -45,7 +48,9 @@ func (w *walker) runStreamEvent() object {
 		}
 		for _, f := range e.fields {
 			props[f.name] = f.schema
-			required = append(required, f.name)
+			if !optional[[2]string{e.name, f.name}] {
+				required = append(required, f.name)
+			}
 		}
 		frame := object{
 			"event": object{"type": "string", "const": e.name},

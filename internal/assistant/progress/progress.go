@@ -17,16 +17,19 @@ import (
 )
 
 const (
-	RunStart  = "run_start"
-	Thinking  = "thinking"
-	Text      = "text"
-	ToolStart = "tool_start"
-	ToolDone  = "tool_done"
-	User      = "user"
-	Plan      = "plan"
-	Files     = "files"
-	RunDone   = "run_done"
+	RunStart     = "run_start"
+	Thinking     = "thinking"
+	Text         = "text"
+	ToolStart    = "tool_start"
+	ToolProgress = "tool_progress"
+	ToolDone     = "tool_done"
+	User         = "user"
+	Plan         = "plan"
+	Files        = "files"
+	RunDone      = "run_done"
 )
+
+const SearchWebTool = "search_web"
 
 const (
 	FlushSeconds = 0.2
@@ -64,11 +67,72 @@ func PreviewOf(content any) string {
 	return textx.Clip(text, PreviewChars-1) + "…"
 }
 
+type Result struct {
+	URL   string
+	Title string
+}
+
+func NewResult(url, title string) (Result, bool) {
+	if url == "" {
+		return Result{}, false
+	}
+	if title == "" {
+		title = url
+	}
+	return Result{URL: url, Title: title}, true
+}
+
+func ResultsOf(list []any) []Result {
+	var out []Result
+	for _, raw := range list {
+		entry, _ := raw.(map[string]any)
+		url, _ := entry["url"].(string)
+		title, _ := entry["title"].(string)
+		if r, ok := NewResult(url, title); ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func ToolResults(name string, content any) []Result {
+	text, ok := content.(string)
+	if name != SearchWebTool || !ok {
+		return nil
+	}
+	decoded, err := jsonx.Loads([]byte(text))
+	if err != nil {
+		return nil
+	}
+	fields, _ := decoded.(map[string]any)
+	list, _ := fields["sources"].([]any)
+	return ResultsOf(list)
+}
+
+func ResultsData(results []Result) []any {
+	out := make([]any, len(results))
+	for i, r := range results {
+		out[i] = map[string]any{"url": r.URL, "title": r.Title}
+	}
+	return out
+}
+
 type Event struct {
 	ID    int64           `json:"id"`
 	RunID int64           `json:"run_id"`
 	Kind  string          `json:"kind"`
 	Data  json.RawMessage `json:"data"`
+}
+
+type parentTool struct {
+	runID int64
+	id    string
+}
+
+type parentToolKey struct{}
+
+func WithTool(ctx context.Context, runID int64, id string) context.Context {
+	return context.WithValue(ctx, parentToolKey{}, parentTool{runID: runID, id: id})
 }
 
 type Writer struct {
@@ -80,19 +144,29 @@ type Writer struct {
 	flushedAt float64
 	checkedAt float64
 	stop      <-chan struct{}
+	parent    parentTool
 }
 
-func NewWriter(q db.Querier, runID int64, now func() float64, stop <-chan struct{}) *Writer {
-	return &Writer{q: q, runID: runID, now: now, stop: stop}
+func NewWriter(ctx context.Context, q db.Querier, runID int64, now func() float64, stop <-chan struct{}) *Writer {
+	parent, _ := ctx.Value(parentToolKey{}).(parentTool)
+	return &Writer{q: q, runID: runID, now: now, stop: stop, parent: parent}
 }
 
 func (w *Writer) Event(ctx context.Context, kind string, data map[string]any) error {
 	if err := w.Flush(ctx); err != nil {
 		return err
 	}
-	return Write(ctx, w.q, func(tx *sql.Tx) error {
+	if err := Write(ctx, w.q, func(tx *sql.Tx) error {
 		return Append(ctx, tx, w.runID, Payload{Kind: kind, Data: data, Time: w.now()})
-	})
+	}); err != nil {
+		return err
+	}
+	if kind != ToolStart || w.parent.id == "" {
+		return nil
+	}
+	name, _ := data["name"].(string)
+	args, _ := data["args"].(string)
+	return Publish(ctx, w.q, w.parent.runID, ToolProgress, map[string]any{"id": w.parent.id, "text": strings.TrimSpace(name + " " + args)})
 }
 
 func (w *Writer) Delta(ctx context.Context, kind, text string) error {
@@ -159,7 +233,13 @@ func (w *Writer) Observe(ctx context.Context, ev anthropic.Event) error {
 			err = w.Event(ctx, ToolStart, map[string]any{"id": e.ID, "name": e.Name, "args": args})
 		}
 	case anthropic.ToolDoneEvent:
-		err = w.Event(ctx, ToolDone, map[string]any{"id": e.ID, "ok": e.OK, "preview": e.Preview})
+		results := []Result{}
+		for _, r := range e.Results {
+			if found, ok := NewResult(r.URL, r.Title); ok {
+				results = append(results, found)
+			}
+		}
+		err = w.Event(ctx, ToolDone, map[string]any{"id": e.ID, "ok": e.OK, "preview": e.Preview, "results": ResultsData(results)})
 	}
 	if err != nil {
 		return err

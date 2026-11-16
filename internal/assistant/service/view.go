@@ -350,24 +350,8 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 				if found.Name == loopResearch || found.Name == loopWebSearch {
 					found.ChildThreadID = get(detail, "child_thread_id", nil)
 				}
-				if found.Name == loopWebSearch {
-					if list, ok := get(detail, "sources", nil).([]any); ok {
-						for _, raw := range list {
-							source, ok := raw.(map[string]any)
-							if !ok {
-								continue
-							}
-							url := text(source, "url")
-							if url == "" {
-								continue
-							}
-							title := text(source, "title")
-							if title == "" {
-								title = url
-							}
-							found.Results = append(found.Results, SearchResult{URL: url, Title: title})
-						}
-					}
+				for _, r := range progress.ToolResults(found.Name, content) {
+					found.Results = append(found.Results, SearchResult{URL: r.URL, Title: r.Title})
 				}
 				if found.Name == draftCreate {
 					if id, ok := draftKey(get(detail, "draft_id", nil)); ok {
@@ -386,18 +370,9 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 			case b.Kind == block.WebSearchResult:
 				content := b.Get("content")
 				results := []SearchResult{}
-				if list, ok := content.([]any); ok {
-					for _, r := range list {
-						d, ok := r.(map[string]any)
-						if !ok || !jsonx.Truthy(get(d, "url", nil)) {
-							continue
-						}
-						title := get(d, "title", nil)
-						if !jsonx.Truthy(title) {
-							title = get(d, "url", nil)
-						}
-						results = append(results, SearchResult{URL: get(d, "url", nil), Title: title})
-					}
+				list, _ := content.([]any)
+				for _, r := range progress.ResultsOf(list) {
+					results = append(results, SearchResult{URL: r.URL, Title: r.Title})
 				}
 				if found := uses[b.Get("tool_use_id")]; found != nil {
 					found.Result = new(fmt.Sprintf("%d results", len(results)))
@@ -422,7 +397,7 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 
 const (
 	loopResearch  = "research"
-	loopWebSearch = "search_web"
+	loopWebSearch = progress.SearchWebTool
 )
 
 func fallbackNote(block map[string]any) string {
