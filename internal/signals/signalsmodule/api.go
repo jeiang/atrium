@@ -115,21 +115,21 @@ func apiRoutes(d *web.Deps, service *Service) []application.Binding {
 			return application.Read[MailCommitmentsPage]{Revision: servedRevision(CommitmentsName, page), Data: page}, err
 		}),
 		api.Command(d, DescribeLoopSnooze(), application.APIShape{Area: area, Errors: []application.Code{application.NotFound}}, "POST /mail/loops/{loop_id}/snooze", func(ctx context.Context, in MailLoopSnooze) (application.Change[MailLoopSnoozed], error) {
-			r, err := svc().LoopSnooze(ctx, LoopSnoozeInput{ID: in.ID, Days: in.Days})
+			r, err := svc().LoopSnooze(ctx, LoopSnoozeInput(in))
 			return application.Change[MailLoopSnoozed]{Data: MailLoopSnoozed{Days: r.Data.Days}, AuditID: r.AuditID}, err
 		}),
 		api.Command(d, DescribeLoopDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/loops/{loop_id}/dismiss", func(ctx context.Context, in MailLoopRef) (application.Change[struct{}], error) {
-			return svc().LoopDismiss(ctx, LoopInput{ID: in.ID})
+			return svc().LoopDismiss(ctx, LoopInput(in))
 		}),
 		api.Command(d, DescribeLoopsDismissMatching(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}}, "POST /mail/loops/dismiss", func(ctx context.Context, in MailLoopsDismiss) (application.Change[MailLoopsDismissed], error) {
-			r, err := svc().LoopsDismissMatching(ctx, LoopsDismissMatchingInput{State: in.State})
+			r, err := svc().LoopsDismissMatching(ctx, LoopsDismissMatchingInput(in))
 			return application.Change[MailLoopsDismissed]{Data: MailLoopsDismissed{Count: r.Data.Count}, AuditID: r.AuditID}, err
 		}),
 		api.Command(d, DescribeCommitmentDone(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound, application.Conflict}}, "POST /mail/commitments/{commitment_id}/done", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
-			return svc().CommitmentDone(modules(ctx), CommitmentInput{ID: in.ID})
+			return svc().CommitmentDone(modules(ctx), CommitmentInput(in))
 		}),
 		api.Command(d, DescribeCommitmentDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound, application.Conflict}}, "POST /mail/commitments/{commitment_id}/dismiss", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
-			return svc().CommitmentDismiss(modules(ctx), CommitmentInput{ID: in.ID})
+			return svc().CommitmentDismiss(modules(ctx), CommitmentInput(in))
 		}),
 	}
 }
