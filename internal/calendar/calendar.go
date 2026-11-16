@@ -18,8 +18,6 @@ import (
 const (
 	ICloud        = "icloud"
 	Google        = "google"
-	CalDAVURL     = "https://caldav.icloud.com/"
-	CardDAVURL    = "https://contacts.icloud.com/"
 	TokenURI      = "https://oauth2.googleapis.com/token"
 	Scope         = "https://www.googleapis.com/auth/calendar.events"
 	remoteTimeout = 60 * time.Second
@@ -60,13 +58,9 @@ func ParseFilter(value string) (Filter, error) {
 type Endpoints struct {
 	Token     string
 	GoogleAPI string
-	CalDAV    string
-	CardDAV   string
 }
 
 const (
-	CalDAVEnv      = "ATRIUM_CALENDAR_CALDAV_URL"
-	CardDAVEnv     = "ATRIUM_CALENDAR_CARDDAV_URL"
 	GoogleTokenEnv = "ATRIUM_CALENDAR_GOOGLE_TOKEN_URL"
 	GoogleAPIEnv   = "ATRIUM_CALENDAR_GOOGLE_API_URL"
 )
@@ -83,8 +77,6 @@ func EndpointsFrom(env config.Env) Endpoints {
 	return Endpoints{
 		Token:     pick(GoogleTokenEnv, TokenURI),
 		GoogleAPI: pick(GoogleAPIEnv, ""),
-		CalDAV:    pick(CalDAVEnv, CalDAVURL),
-		CardDAV:   pick(CardDAVEnv, CardDAVURL),
 	}
 }
 

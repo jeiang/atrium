@@ -24,7 +24,7 @@ summary; the sections below cover the console work atrium cannot do for you.
 | Ship24 | `service/ship24` | Bearer API key | Live package tracking | Free plan registers 10 shipments a month; polling, no webhooks |
 | Google Calendar and Gmail | `google` | OAuth web client | Calendar events and Gmail over IMAP and SMTP | See [Google](#google) |
 | Mail account | `mail` | App-specific password, app password or XOAUTH2 | IMAP and SMTP for one `mail/<id>` account | See [Google](#google) and [iCloud](#icloud) |
-| iCloud calendar and contacts | `icloud` | The iCloud mail account's app-specific password | CalDAV and CardDAV | See [iCloud](#icloud) |
+| iCloud calendar and contacts | `icloud` | The iCloud mail account's app-specific password | CalDAV for calendar and CardDAV for contacts, one row for both | See [iCloud](#icloud) |
 | EZTV | `service/eztv` | None | Media channel episode lists | Public API; only torrents tagged media are written |
 | Web fetch | `service/webfetch` | None | Egress probe for `web_fetch` | Test fetches the configured probe URL |
 | Web push | `service/webpush` | VAPID private key | Push notifications to subscribed devices | |
@@ -91,7 +91,10 @@ SMTP, CalDAV and CardDAV is an app-specific password:
 - Atrium can accept, test and store it, but cannot create it.
 
 Mail accounts come from `mailAccounts`; calendar and contacts reuse an iCloud
-mail account for their CalDAV and CardDAV login. The Calendar section on the
+mail account for their CalDAV and CardDAV login through one shared `icloud`
+connection that neither module owns: turning calendar or contacts off leaves it
+enabled for the other, and a rejected password marks both capabilities for one
+repair. The Calendar section on the
 Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
 `default_event_minutes`, `work_hours` and `work_days`.
 

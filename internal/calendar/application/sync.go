@@ -26,11 +26,11 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[dav
 		if err != nil {
 			return nil, err
 		}
-		if err := calendar.MirrorConfigured(ctx, set, set.CalendarDir); err != nil {
+		if err := davmirror.Configured(ctx, set.Login, set.CalendarDir); err != nil {
 			return nil, err
 		}
 		return func(ctx context.Context) (davmirror.Stats, error) {
-			return calendar.SyncCalendarMirror(ctx, s.env, set)
+			return davmirror.SyncCalendars(ctx, s.env, set.Login, set.CalendarDir)
 		}, nil
 	})
 	if errors.As(err, new(config.NotConfigured)) || err == nil && stats.Written == 0 && stats.Removed == 0 {

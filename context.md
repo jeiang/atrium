@@ -729,7 +729,13 @@ claims about the running application. Operator contracts are in
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
-  atrium's own read-only CalDAV/CardDAV sync. A disabled
+  atrium's own read-only CalDAV/CardDAV sync. The DAV login, discovery and
+  mirror sync are platform code (`internal/davmirror`, which imports no unit),
+  and `icloud` is a platform connection kind like `google`: one
+  `icloud/<account>` row and the iCloud mail account's password serve the
+  `caldav` capability for calendar and the `carddav` capability for contacts.
+  Turning either module off leaves the row enabled and the other module
+  syncing; contacts import no other unit. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
   calendar-candidate stage and notification sends are skipped (the mail pause

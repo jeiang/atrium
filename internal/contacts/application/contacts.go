@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
-	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/davmirror"
 )
@@ -112,7 +111,7 @@ func (s *Service) Lookup(ctx context.Context, in LookupInput) (application.Read[
 }
 
 func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[SyncResult], error) {
-	set, err := calendar.LoadSettings(ctx, s.db.Read)
+	login, err := davmirror.LoadLogin(ctx, s.db.Read)
 	if err != nil {
 		s.audit(ctx, SyncName, state.Failed, map[string]any{})
 		return application.Change[SyncResult]{}, err
@@ -129,10 +128,10 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[Syn
 		s.audit(ctx, SyncName, state.Refused, map[string]any{"reason": "not_configured"})
 		return application.Change[SyncResult]{}, config.NotConfigured(contacts.DirKey + " is not set")
 	}
-	err = calendar.MirrorConfigured(ctx, set, src.Dir)
+	err = davmirror.Configured(ctx, login, src.Dir)
 	var stats davmirror.Stats
 	if err == nil {
-		stats, err = calendar.SyncContactsMirror(ctx, s.env, set, src.Dir)
+		stats, err = davmirror.SyncContacts(ctx, s.env, login, src.Dir)
 	}
 	if err != nil {
 		outcome := state.Failed
