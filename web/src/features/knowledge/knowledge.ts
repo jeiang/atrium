@@ -14,8 +14,13 @@ import {
   knowledgeInstructions,
   knowledgeLink,
   knowledgeLinks,
+  knowledgeMap,
   knowledgeRestore,
   knowledgeRetract,
+  knowledgeSpaceCreate,
+  knowledgeSpaceDetail,
+  knowledgeSpaceEdit,
+  knowledgeSpaceList,
   knowledgeSubject,
   knowledgeSubjects,
   knowledgeUnlink,
@@ -187,4 +192,117 @@ export async function handleUndoEffects(effects: readonly number[]): Promise<voi
 
 export function refreshKnowledge(client: QueryClient): Promise<void> {
   return client.invalidateQueries({ queryKey: ['knowledge'] });
+}
+
+export function useMap(id: () => number | undefined) {
+  return createQuery(() => {
+    const record = id();
+    return {
+      queryKey: ['knowledge', 'map', record],
+      queryFn: async ({ signal }) => ok(await knowledgeMap(record as number, { depth: 1 }, { signal })).data,
+      enabled: record !== undefined,
+      meta: { topics: TOPICS },
+    };
+  });
+}
+
+export function useSpaces() {
+  return createInfiniteQuery(() => ({
+    queryKey: ['knowledge', 'spaces'],
+    queryFn: async ({ pageParam, signal }) =>
+      ok(await knowledgeSpaceList({ cursor: pageParam || undefined, limit: PAGE }, { signal })),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+    meta: { topics: TOPICS },
+  }));
+}
+
+export function useSpace(id: () => number | undefined) {
+  return createQuery(() => {
+    const space = id();
+    return {
+      queryKey: ['knowledge', 'space', space],
+      queryFn: async ({ signal }) => ok(await knowledgeSpaceDetail(space as number, { signal })),
+      enabled: space !== undefined,
+      meta: { topics: LINK_TOPICS },
+    };
+  });
+}
+
+export async function findSubjects(query: string, signal: AbortSignal): Promise<ListOption[]> {
+  const text = query.trim();
+  if (!text) return [];
+  const found = ok(await knowledgeSubjects({ q: text, limit: 10 }, { signal })).data;
+  return found.items.map((row) => ({ value: String(row.id), label: row.title, detail: KINDS[row.kind] ?? row.kind }));
+}
+
+export const EFFORTS: readonly { value: string; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra high' },
+  { value: 'max', label: 'Maximum' },
+];
+
+export async function handleCreateSpace(fields: { name: string; effort: string; private: boolean }): Promise<number> {
+  return ok(await knowledgeSpaceCreate(fields, oneGesture())).id;
+}
+
+export async function handleRenameSpace(id: number, name: string): Promise<void> {
+  ok(await knowledgeSpaceEdit(id, { name }, oneGesture()));
+}
+
+export async function handleAddToSpace(
+  record: number,
+  space: number,
+  relation: KnowledgeLinkRequestRelation,
+): Promise<ChangeKnowledgeLink> {
+  return ok(await knowledgeLink(record, { target_kind: 'space', target_id: String(space), relation }, oneGesture()));
+}
+
+export function failureText(error: unknown, offline: string): string {
+  if (error instanceof TypeError) return offline;
+  if (error instanceof ApiError && error.status === 403) return 'You can read this but not change it.';
+  return error instanceof Error ? error.message : 'Something went wrong.';
+}
+
+let mapOpenedFrom: number | undefined;
+let mapClosedOn: number | undefined;
+
+export function noteMapOpened(id: number): void {
+  mapOpenedFrom = id;
+}
+
+export function openedFromSubject(id: number): boolean {
+  return mapOpenedFrom === id;
+}
+
+export function noteMapClosed(id: number): void {
+  mapOpenedFrom = undefined;
+  mapClosedOn = id;
+}
+
+export function takeMapClosed(id: number): boolean {
+  if (mapClosedOn !== id) return false;
+  mapClosedOn = undefined;
+  return true;
+}
+
+export function typingTarget(event: KeyboardEvent): boolean {
+  const target = event.target;
+  if (event.isComposing || event.keyCode === 229) return true;
+  if (!(target instanceof Element)) return false;
+  return (
+    target.closest(
+      'input:not([type="radio"], [type="checkbox"], [type="button"]), textarea, select, [contenteditable]:not([contenteditable="false"])',
+    ) !== null
+  );
+}
+
+export function plainKey(event: KeyboardEvent): boolean {
+  return !event.metaKey && !event.ctrlKey && !event.altKey && !event.defaultPrevented && !typingTarget(event);
+}
+
+export function dialogOpen(): boolean {
+  return document.querySelector('dialog[open]') !== null;
 }

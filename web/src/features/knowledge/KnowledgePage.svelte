@@ -5,6 +5,7 @@
   import Page from '../../shared/ui/Page.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { isActive, p, route } from '../../shell/router';
+  import InstructionsEditor from './InstructionsEditor.svelte';
   import { useInstructions, useSubjects } from './knowledge';
   import SubjectList from './SubjectList.svelte';
   import SubjectPage from './SubjectPage.svelte';
@@ -71,7 +72,11 @@
       The address does not name a knowledge page. Pick a subject instead.
     </ViewState>
   {:else if shown !== undefined}
-    <SubjectPage id={shown} {phone} standing={standing || shown === instructions.data?.record.id} />
+    {#if standing || shown === instructions.data?.record.id}
+      <InstructionsEditor {phone} />
+    {:else}
+      <SubjectPage id={shown} {phone} />
+    {/if}
   {:else if offline}
     <ViewState kind="offline" title="You are offline" level={2}>
       Knowledge loads when the connection returns.

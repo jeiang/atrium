@@ -14,6 +14,7 @@ const unavailable = () => ({ default: Unavailable });
 
 const placeholder = () => import('./PlaceholderPage.svelte').catch(unavailable);
 const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgePage.svelte').catch(unavailable));
+const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
 
 export const { p, navigate, isActive, route } = createRouter(
   {
@@ -46,8 +47,8 @@ export const { p, navigate, isActive, route } = createRouter(
       '/': knowledge,
       '/subjects': knowledge,
       '/instructions': knowledge,
-      '/map': placeholder,
-      '/spaces': placeholder,
+      '/map': () => import('../features/knowledge/MapPage.svelte').catch(unavailable),
+      '/spaces': { '/': spaces, '/:space': spaces },
       '/:id': knowledge,
       meta: { title: 'Knowledge' },
     },
