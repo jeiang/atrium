@@ -918,8 +918,7 @@
           }
         },
         "required": [
-          "name",
-          "agent"
+          "name"
         ],
         "type": "object"
       },

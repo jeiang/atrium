@@ -36,7 +36,7 @@ type Token struct {
 type BearerIssueInput struct {
 	Name      string     `json:"name"`
 	ExpiresAt *time.Time `json:"expires_at"`
-	Agent     bool       `json:"agent"`
+	Agent     bool       `json:"agent,omitempty"`
 }
 
 type Issued struct {
