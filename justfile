@@ -148,14 +148,14 @@ css mode="watch":
   done
 
 settingsgen:
-  go run -tags modernc ./tools/settingsgen docs/config
+  go run ./tools/settingsgen docs/config
 
 settingsgen-check:
   #!/usr/bin/env bash
   set -euo pipefail
   out=$(mktemp -d)
   trap 'rm -rf "$out"' EXIT
-  go run -tags modernc ./tools/settingsgen "$out"
+  go run ./tools/settingsgen "$out"
   diff -r docs/config "$out"
 
 go-test *args="./...":

@@ -85,7 +85,7 @@ settings the operator edits in the UI or pins from the host.
   existing error classes rather than recreating them.
 - SQLite writes use `DB.Write` and `WithTx`. `DB.Read` is query-only; queries
   inside a transaction use that transaction.
-- The shipped database engine is SQLCipher selected by the `libsqlite3` build tag; the dev shell sets it through `GOFLAGS`. Builds without that tag or `modernc` fail on purpose. Keys travel only in the `key=x'<hex>'` URI parameter built by `internal/db`; the `modernc` driver has no cipher and must refuse a key. With a key configured, never open or create a plaintext database; the guard in `internal/db` refuses a plaintext header, a missing cipher engine and a wrong key.
+- The database engine is SQLCipher selected by the `libsqlite3` build tag; the dev shell sets it through `GOFLAGS`. A build without that tag fails on purpose, and no second driver exists. Keys travel only in the `key=x'<hex>'` URI parameter built by `internal/db`. With a key configured, never open or create a plaintext database; the guard in `internal/db` refuses a plaintext header, a missing cipher engine and a wrong key.
 - Application calendar boundaries use `config.Location`, not process
   `time.Local`.
 - Stage web assets through the existing build. Do not commit
@@ -93,8 +93,8 @@ settings the operator edits in the UI or pins from the host.
 - UI: avoid unnecessary secondary labels and descriptions. Let the layout
   do the explaining. No helper text that restates a control, no
   parenthetical notes repeated on every option.
-- Dependency changes must update the vendor hashes in `nix/go-package.nix`
-  and `flake-modules/go-checks.nix`.
+- Dependency changes must update `vendorHash` in `nix/go-src.nix`, which
+  `nix/go-package.nix` and `flake-modules/go-checks.nix` share.
 
 ## Safety and compatibility
 
