@@ -90,10 +90,21 @@ func TestDraftSendOnceAndLoops(t *testing.T) {
 	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/loops/dismiss", token, map[string]any{"state": "waiting_on_them"}), http.StatusOK); got["count"] != float64(1) {
 		t.Fatalf("dismiss waiting loops: %v", got)
 	}
-	apiData(t, s.do(http.MethodPost, "/api/v1/mail/commitments/1/done", token, nil), http.StatusOK)
-	if done := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/mail/commitments?view=done", token, nil), http.StatusOK)); len(done) != 1 || scalar("SELECT status FROM commitments WHERE id = 1") != "done" {
-		t.Fatalf("done commitments: %v", done)
+	marked := s.do(http.MethodPost, "/api/v1/mail/commitments/1/done", token, nil)
+	apiData(t, marked, http.StatusOK)
+	markedEffects, _ := marked.json["effect_ids"].([]any)
+	if done := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/mail/commitments?view=done", token, nil), http.StatusOK)); len(done) != 1 || scalar("SELECT status FROM commitments WHERE id = 1") != "done" || len(markedEffects) != 1 {
+		t.Fatalf("done commitments: %v, effects %s", done, marked.body)
 	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/commitments/1/dismiss", token, nil), http.StatusConflict, "conflict")
+	if undo := s.do(http.MethodPost, fmt.Sprintf("/api/v1/undo/write:%d", number(t, markedEffects[0])), token, nil); undo.status != http.StatusOK || scalar("SELECT status FROM commitments WHERE id = 1") != "open" {
+		t.Fatalf("undo commitment done: %d %s", undo.status, undo.body)
+	}
+	apiData(t, s.do(http.MethodPost, "/api/v1/mail/commitments/1/dismiss", token, nil), http.StatusOK)
+	if got := scalar("SELECT status FROM commitments WHERE id = 1") + " " + scalar("SELECT CAST(COUNT(*) AS TEXT) FROM operation_audit WHERE operation = 'mail.commitment-dismiss' AND target = 'commitment:1' AND outcome = 'ok'"); got != "dismissed 1" {
+		t.Fatalf("dismissed commitment: %s", got)
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/commitments/999/done", token, nil), http.StatusNotFound, "not_found")
 	apiData(t, s.do(http.MethodPost, "/api/v1/mail/packages/1/dismiss", token, nil), http.StatusOK)
 	if active := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/mail/packages?active=true", token, nil), http.StatusOK)); len(active) != 0 {
 		t.Fatalf("active packages after dismissing: %v", active)

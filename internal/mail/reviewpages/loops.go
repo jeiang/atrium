@@ -127,10 +127,10 @@ func (s *service) commitmentUpdate(w http.ResponseWriter, r *http.Request) {
 	switch web.PathParam(r, "outcome") {
 	case "done":
 		title = "Marked done"
-		_, err = s.mail.CommitmentDone(r.Context(), mailapp.CommitmentInput{ID: id})
+		_, err = s.mail.CommitmentDone(s.modules(r.Context()), mailapp.CommitmentInput{ID: id})
 	case "dismiss":
 		title = "Dismissed"
-		_, err = s.mail.CommitmentDismiss(r.Context(), mailapp.CommitmentInput{ID: id})
+		_, err = s.mail.CommitmentDismiss(s.modules(r.Context()), mailapp.CommitmentInput{ID: id})
 	default:
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return

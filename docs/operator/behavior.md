@@ -321,7 +321,10 @@ the commitments from mail that you owe (To do), and the commitments other
 people owe you (Waiting). An item's `ref` is `task:<id>` or `commitment:<id>`,
 the same id the one inbox uses. Tasks disappear while the assistant is off and
 commitments while mail is off. Done, dismiss and reopen work on both and can be
-undone; a reopened commitment is not proposed as a reminder again. A commitment
+undone; a reopened commitment is not proposed as a reminder again. Only an open
+item can be completed or dismissed; the request is refused otherwise. The Done
+and Dismiss buttons on the open loops page and `/api/v1/mail/commitments` use
+the same verbs, so they can be undone too. A commitment
 from mail cannot be edited or deleted, because the next mail scan would bring it
 back. The assistant lists both with `commitment_list` (commitments only in
 chat, scheduled and subagent runs), and in chat it can edit, complete or

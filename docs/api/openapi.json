@@ -26368,7 +26368,8 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/mail/commitments/{commitment_id}/done": {
@@ -26532,7 +26533,8 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/mail/live": {

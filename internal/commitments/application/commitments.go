@@ -524,11 +524,19 @@ func (s *Service) settle(ctx context.Context, ref string, effectIDs []int64, aud
 }
 
 func (s *Service) Done(ctx context.Context, in RefInput) (application.Change[Changed], error) {
-	return s.transition(ctx, DoneName, in, ActionDone, "done", openloops.Done, openloops.Open)
+	return s.DoneAs(ctx, DoneName, in)
+}
+
+func (s *Service) DoneAs(ctx context.Context, name application.Name, in RefInput) (application.Change[Changed], error) {
+	return s.transition(ctx, name, in, ActionDone, "done", openloops.Done, openloops.Open)
 }
 
 func (s *Service) Dismiss(ctx context.Context, in RefInput) (application.Change[Changed], error) {
-	return s.transition(ctx, DismissName, in, ActionDismiss, "dismissed", openloops.Dismissed, openloops.Open)
+	return s.DismissAs(ctx, DismissName, in)
+}
+
+func (s *Service) DismissAs(ctx context.Context, name application.Name, in RefInput) (application.Change[Changed], error) {
+	return s.transition(ctx, name, in, ActionDismiss, "dismissed", openloops.Dismissed, openloops.Open)
 }
 
 func (s *Service) Reopen(ctx context.Context, in RefInput) (application.Change[Changed], error) {

@@ -51,11 +51,15 @@ func newService(o Options, d *web.Deps) *service {
 	return &service{mail: built.Mail, deps: d, review: built.Review}
 }
 
-func (s *service) needs(ctx context.Context) (int, error) {
+func (s *service) modules(ctx context.Context) context.Context {
 	if module.SetFrom(ctx) == nil {
-		ctx = module.WithSet(ctx, module.SetFrom(s.deps.Ctx))
+		return module.WithSet(ctx, module.SetFrom(s.deps.Ctx))
 	}
-	return s.review.NeedsCount(ctx)
+	return ctx
+}
+
+func (s *service) needs(ctx context.Context) (int, error) {
+	return s.review.NeedsCount(s.modules(ctx))
 }
 
 func Module(o Options) web.Module {

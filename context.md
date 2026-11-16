@@ -138,7 +138,9 @@ claims about the running application. Operator contracts are in
   reads, creates, edits, completes, reopens, dismisses and deletes tasks.
   Every write returns the task with its links and one ledger effect that
   `POST /undo/write:<effect>` reverses; delete hard-deletes and its undo
-  reinserts the same row. An edit may carry `updated_ts` and is refused with
+  reinserts the same row. Done, dismiss and reopen answer conflict when the
+  task is not in a status the verb leaves: only an open task can be completed
+  or dismissed. An edit may carry `updated_ts` and is refused with
   a `stale` conflict when the task changed since. A task has at most one link
   (`source_kind`/`source_id`): thread, project, person (an email address),
   record or message; legacy `proposal` links are read-only. Links resolve to
@@ -164,7 +166,11 @@ claims about the running application. Operator contracts are in
   re-insert a deleted row. `commitment_list` replaces the old `task_list`
   and mail `commitments` tools; it lists commitments only in chat, cron and
   subagent runs. `task_update` and `task_close` take a task ref and refuse a
-  commitment ref. `/tasks` and `/mail/commitments` stay as they were.
+  commitment ref. `/tasks` and `/mail/commitments` keep their paths and
+  response shapes; `POST /mail/commitments/{id}/done|dismiss` and the open
+  loops page's buttons run the same commitment verbs, so they also write the
+  undoable `commitment_status` effect and answer conflict on a commitment
+  that is not open.
 - Open loops come from mail the operator actually needs to answer: the
   latest message must not be bulk or automated (List-Id, List-Unsubscribe,
   Precedence bulk/list/junk, Auto-Submitted, a bulk Gmail category, an
