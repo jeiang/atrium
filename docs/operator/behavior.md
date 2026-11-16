@@ -425,6 +425,16 @@ dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.
 
+Standing instructions are one pinned knowledge page, created at service start
+and opened with `GET /api/v1/knowledge/instructions`. The operator edits it with
+the knowledge edit verb; its history shows each change, who made it and the
+previous text, and undo restores the previous text. Its text follows the
+compiled base prompt in chat, cron and nightly requests. It is not part of the
+profile or retrieval, the assistant cannot change it, and it cannot be purged.
+A custom system prompt stored by an earlier version is carried into the page
+once. Subagent roles are fixed in code; the `/subagents` routes and the
+`agent subagents` commands are gone.
+
 The knowledge export is one-way and writes one Markdown folder, set by the
 host. It overwrites only the files it tracks and never touches other files;
 edits made in the folder are overwritten on the next run. The daily

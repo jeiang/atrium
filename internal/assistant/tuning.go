@@ -45,13 +45,11 @@ const (
 	TuningAgentRecallPageChars    = 8000
 	TuningAgentRecallMaxPageChars = 16000
 
-	TuningAgentSubagentMaxSteps         = 12
-	TuningAgentSubagentMaxConcurrent    = 2
-	TuningAgentSubagentDigestChars      = 6000
-	TuningAgentSubagentDescriptionChars = 160
-	TuningAgentSubagentPromptChars      = 4000
-	TuningAgentSubagentTaskChars        = 4000
-	TuningAgentSubagentContextIDs       = 20
+	TuningAgentSubagentMaxSteps      = 12
+	TuningAgentSubagentMaxConcurrent = 2
+	TuningAgentSubagentDigestChars   = 6000
+	TuningAgentSubagentTaskChars     = 4000
+	TuningAgentSubagentContextIDs    = 20
 
 	TuningAgentWebSearchMaxUses = 5
 

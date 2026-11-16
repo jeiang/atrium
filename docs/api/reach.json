@@ -115,6 +115,7 @@
         "knowledge.create",
         "knowledge.detail",
         "knowledge.edit",
+        "knowledge.instructions",
         "knowledge.link",
         "knowledge.links",
         "knowledge.list",
@@ -128,8 +129,8 @@
         "knowledge.subjects",
         "knowledge.unlink"
       ],
-      "required": 23,
-      "bound": 23
+      "required": 24,
+      "bound": 24
     },
     {
       "area": "mail",
@@ -275,10 +276,6 @@
       "area": "settings",
       "operations": [
         "assistant.defaults-set",
-        "assistant.subagent.delete",
-        "assistant.subagent.enabled",
-        "assistant.subagent.list",
-        "assistant.subagent.set",
         "auth.bearer-issue",
         "auth.bearer-list",
         "auth.bearer-revoke",
@@ -295,8 +292,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 20,
-      "bound": 20
+      "required": 16,
+      "bound": 16
     },
     {
       "area": "tasks",
@@ -389,7 +386,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 206,
-  "total_bound": 206,
+  "total_required": 203,
+  "total_bound": 203,
   "total_approval_reached": 11
 }

@@ -33,7 +33,7 @@ func (r profileRow) visible(projectID int64) bool {
 }
 
 func profileRows(ctx context.Context, q db.Querier, projectID int64, all bool) ([]profileRow, error) {
-	query := "SELECT " + columns + ", COALESCE(p.private, 0)" + fromClause() + " WHERE r.pinned = 1 AND r.retracted_at IS NULL"
+	query := "SELECT " + columns + ", COALESCE(p.private, 0)" + fromClause() + " WHERE r.pinned = 1 AND r.retracted_at IS NULL AND " + notInstructions("r")
 	args := []any{}
 	if !all {
 		clause, pargs := privateClause("r", projectID)

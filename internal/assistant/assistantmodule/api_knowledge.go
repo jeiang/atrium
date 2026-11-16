@@ -103,10 +103,12 @@ type KnowledgeRecord struct {
 }
 
 type KnowledgeHistory struct {
-	ID       int64      `json:"id"`
-	At       time.Time  `json:"at"`
-	Tool     string     `json:"tool"`
-	UndoneAt *time.Time `json:"undone_at" api:"nullable"`
+	ID           int64      `json:"id"`
+	At           time.Time  `json:"at"`
+	Tool         string     `json:"tool"`
+	By           string     `json:"by"`
+	PreviousBody *string    `json:"previous_body" api:"nullable"`
+	UndoneAt     *time.Time `json:"undone_at" api:"nullable"`
 }
 
 type KnowledgeDetail struct {
@@ -344,21 +346,12 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 		api.Query(d, kbapp.DescribeDetail(), application.APIShape{Area: area, Errors: missing},
 			"GET /knowledge/{record_id}", func(ctx context.Context, in KnowledgeIDRequest) (application.Read[KnowledgeDetail], error) {
 				read, err := svc().Detail(ctx, kbapp.DetailInput{ID: in.ID})
-				if err != nil {
-					return application.Read[KnowledgeDetail]{}, err
-				}
-				out := KnowledgeDetail{Record: knowledgeRecord(read.Data.Record), SameRun: make([]KnowledgeRow, len(read.Data.SameRun)), History: make([]KnowledgeHistory, len(read.Data.History))}
-				for i, r := range read.Data.SameRun {
-					out.SameRun[i] = knowledgeRow(r)
-				}
-				for i, h := range read.Data.History {
-					out.History[i] = KnowledgeHistory{ID: h.ID, At: seconds(h.TS), Tool: h.Tool}
-					if h.UndoneAt != nil {
-						at := seconds(*h.UndoneAt)
-						out.History[i].UndoneAt = &at
-					}
-				}
-				return application.Read[KnowledgeDetail]{Revision: read.Revision, Data: out}, nil
+				return knowledgeDetail(read, err)
+			}),
+		api.Query(d, kbapp.DescribeInstructions(), application.APIShape{Area: area, Errors: missing},
+			"GET /knowledge/instructions", func(ctx context.Context, _ struct{}) (application.Read[KnowledgeDetail], error) {
+				read, err := svc().Instructions(ctx)
+				return knowledgeDetail(read, err)
 			}),
 		api.Query(d, kbapp.DescribeSubjects(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}},
 			"GET /knowledge/subjects", func(ctx context.Context, in KnowledgeSubjectsRequest) (application.Read[KnowledgeSubjects], error) {
@@ -643,4 +636,22 @@ func knowledgeBatch(c application.Change[kbapp.BatchResult], err error) (applica
 	}
 	return application.Change[KnowledgeBatch]{Data: KnowledgeBatch{Committed: items(c.Data.Committed), Refused: items(c.Data.Refused), Failed: items(c.Data.Failed)},
 		EffectIDs: c.EffectIDs, AuditID: c.AuditID}, nil
+}
+
+func knowledgeDetail(read application.Read[kbapp.Detail], err error) (application.Read[KnowledgeDetail], error) {
+	if err != nil {
+		return application.Read[KnowledgeDetail]{}, err
+	}
+	out := KnowledgeDetail{Record: knowledgeRecord(read.Data.Record), SameRun: make([]KnowledgeRow, len(read.Data.SameRun)), History: make([]KnowledgeHistory, len(read.Data.History))}
+	for i, r := range read.Data.SameRun {
+		out.SameRun[i] = knowledgeRow(r)
+	}
+	for i, h := range read.Data.History {
+		out.History[i] = KnowledgeHistory{ID: h.ID, At: seconds(h.TS), Tool: h.Tool, By: h.By, PreviousBody: h.PreviousBody}
+		if h.UndoneAt != nil {
+			at := seconds(*h.UndoneAt)
+			out.History[i].UndoneAt = &at
+		}
+	}
+	return application.Read[KnowledgeDetail]{Revision: read.Revision, Data: out}, nil
 }

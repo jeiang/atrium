@@ -35,11 +35,21 @@ claims about the running application. Operator contracts are in
   does not delete its data.
 
 ### Prompts, history, retrieval, and knowledge
-- The system prompt and subagent rules (`prompt_system`, `prompt_subagent`)
-  are operator settings over built-in defaults, set with `atrium settings
-  set`; no settings page offers them, so the settings API refuses them. The
-  untrusted-data preamble is fixed in code and always comes first. Edits
-  apply to every thread's next request.
+- The base system prompt and the subagent rules are compiled into the
+  binary. The operator's standing instructions are one pinned knowledge
+  page (origin `atrium:instructions`, title "Standing instructions") that
+  the assistant module creates at service start; `GET /knowledge/instructions`
+  opens it, the knowledge edit verb changes it, its history lists each
+  change with its author and previous text, and undo restores the previous
+  text. Chat, cron and nightly requests carry its body after the base prompt
+  while it is live and non-empty; subagent and worker requests do not. The
+  page stays out of the profile and retrieval, the assistant cannot edit or
+  retract it, and nobody can purge it. A non-default stored `prompt_system`
+  value is carried into the page once, with one settings audit row; the
+  retired `prompt_system` and `prompt_subagent` rows stay in the settings
+  table unread. Subagent roles (`calendar`, `mail`, `observability`) are
+  declared in code with fixed tools; there is no role CRUD. The
+  untrusted-data preamble is fixed in code and always comes first.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
   `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left

@@ -293,7 +293,7 @@ func TestPrivateProjectKnowledgeStaysInItsProject(t *testing.T) {
 	}
 	var recordID int64
 	var recordProject *int64
-	if err := d.Read.QueryRow("SELECT id, project_id FROM kb_records").Scan(&recordID, &recordProject); err != nil || recordProject == nil || *recordProject != projectID {
+	if err := d.Read.QueryRow("SELECT id, project_id FROM kb_records WHERE origin IS NULL").Scan(&recordID, &recordProject); err != nil || recordProject == nil || *recordProject != projectID {
 		t.Fatalf("record project = %v, %v; want %d", recordProject, err, projectID)
 	}
 

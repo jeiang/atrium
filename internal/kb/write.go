@@ -165,6 +165,8 @@ func duplicate(ctx context.Context, q db.Querier, scope string, project int64, n
 
 func refused(r Record, verb string) error {
 	switch {
+	case r.StandingInstructions():
+		return tool.Error(fmt.Sprintf("%s holds the operator's standing instructions and cannot be %s", Cite(r.ID), verb))
 	case r.Confirmed():
 		return tool.Error(fmt.Sprintf("%s is confirmed by the operator and cannot be %s", Cite(r.ID), verb))
 	case r.Retracted():

@@ -234,6 +234,9 @@ func PurgeTx(ctx context.Context, tx *sql.Tx, id int64) (ledger.Result, error) {
 	if rec == nil {
 		return ledger.Result{}, Refused(fmt.Sprintf("%s is unknown", Cite(id)))
 	}
+	if rec.StandingInstructions() {
+		return ledger.Result{}, Refused(fmt.Sprintf("%s holds the standing instructions and cannot be purged; edit or retract it instead", Cite(id)))
+	}
 	if err := embed.DeleteKB(ctx, tx, id); err != nil {
 		return ledger.Result{}, err
 	}

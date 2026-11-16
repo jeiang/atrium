@@ -19,11 +19,12 @@ import (
 )
 
 const (
-	ListName    application.Name = "knowledge.list"
-	DetailName  application.Name = "knowledge.detail"
-	ProfileName application.Name = "knowledge.profile"
-	SearchName  application.Name = "knowledge.search"
-	GetName     application.Name = "knowledge.get"
+	ListName         application.Name = "knowledge.list"
+	DetailName       application.Name = "knowledge.detail"
+	InstructionsName application.Name = "knowledge.instructions"
+	ProfileName      application.Name = "knowledge.profile"
+	SearchName       application.Name = "knowledge.search"
+	GetName          application.Name = "knowledge.get"
 )
 
 const (
@@ -77,10 +78,12 @@ type Record struct {
 }
 
 type HistoryRow struct {
-	ID       int64
-	TS       float64
-	Tool     string
-	UndoneAt *float64
+	ID           int64
+	TS           float64
+	Tool         string
+	By           string
+	PreviousBody *string
+	UndoneAt     *float64
 }
 
 type ListInput struct {
@@ -159,6 +162,11 @@ func DescribeList() application.Definition {
 
 func DescribeDetail() application.Definition {
 	return application.Describe[DetailInput, Detail](DetailName, application.Query,
+		[]application.Authority{application.Operator}, application.NoEffect, false)
+}
+
+func DescribeInstructions() application.Definition {
+	return application.Describe[struct{}, Detail](InstructionsName, application.Query,
 		[]application.Authority{application.Operator}, application.NoEffect, false)
 }
 
@@ -252,33 +260,57 @@ func load(ctx context.Context, q db.Querier, id int64) (kb.Record, error) {
 
 func (s *Service) Detail(ctx context.Context, in DetailInput) (application.Read[Detail], error) {
 	var out Detail
-	rev, err := s.snapshot(ctx, string(DetailName), pageScopes, in, func(q db.Querier) error {
-		rec, err := load(ctx, q, in.ID)
-		if err != nil {
-			return err
-		}
-		runID := int64(0)
-		if rec.SourceRunID != nil {
-			runID = *rec.SourceRunID
-		}
-		same, err := kb.SameRun(ctx, q, runID, rec.ID)
-		if err != nil {
-			return err
-		}
-		history, err := kb.History(ctx, q, rec.ID)
-		if err != nil {
-			return err
-		}
-		out = Detail{Record: recordOf(rec), SameRun: rowsOf(same), History: make([]HistoryRow, len(history))}
-		for i, h := range history {
-			out.History[i] = HistoryRow{ID: h.ID, TS: h.TS, Tool: h.Tool, UndoneAt: h.UndoneAt}
-		}
-		return nil
+	rev, err := s.snapshot(ctx, string(DetailName), pageScopes, in, func(q db.Querier) (err error) {
+		out, err = detailOf(ctx, q, in.ID)
+		return err
 	})
 	if err != nil {
 		return application.Read[Detail]{}, err
 	}
 	return application.Read[Detail]{Revision: rev, Data: out}, nil
+}
+
+func (s *Service) Instructions(ctx context.Context) (application.Read[Detail], error) {
+	var out Detail
+	rev, err := s.snapshot(ctx, string(InstructionsName), pageScopes, struct{}{}, func(q db.Querier) error {
+		id, err := kb.InstructionsID(ctx, q)
+		if err != nil {
+			return err
+		}
+		if id == 0 {
+			return notFound("the standing instructions page does not exist yet; it is created when the service starts")
+		}
+		out, err = detailOf(ctx, q, id)
+		return err
+	})
+	if err != nil {
+		return application.Read[Detail]{}, err
+	}
+	return application.Read[Detail]{Revision: rev, Data: out}, nil
+}
+
+func detailOf(ctx context.Context, q db.Querier, id int64) (Detail, error) {
+	rec, err := load(ctx, q, id)
+	if err != nil {
+		return Detail{}, err
+	}
+	runID := int64(0)
+	if rec.SourceRunID != nil {
+		runID = *rec.SourceRunID
+	}
+	same, err := kb.SameRun(ctx, q, runID, rec.ID)
+	if err != nil {
+		return Detail{}, err
+	}
+	history, err := kb.History(ctx, q, rec.ID)
+	if err != nil {
+		return Detail{}, err
+	}
+	out := Detail{Record: recordOf(rec), SameRun: rowsOf(same), History: make([]HistoryRow, len(history))}
+	for i, h := range history {
+		out.History[i] = HistoryRow{ID: h.ID, TS: h.TS, Tool: h.Tool, By: h.By, PreviousBody: h.PreviousBody, UndoneAt: h.UndoneAt}
+	}
+	return out, nil
 }
 
 func (s *Service) Profile(ctx context.Context) (application.Read[Profile], error) {

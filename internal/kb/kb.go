@@ -267,10 +267,12 @@ func SameRun(ctx context.Context, q db.Querier, runID, exclude int64) ([]Record,
 }
 
 type WriteRow struct {
-	ID       int64
-	TS       float64
-	Tool     string
-	UndoneAt *float64
+	ID           int64
+	TS           float64
+	Tool         string
+	By           string
+	PreviousBody *string
+	UndoneAt     *float64
 }
 
 func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
@@ -280,9 +282,25 @@ func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
 	}
 	out := make([]WriteRow, len(found))
 	for i, w := range found {
-		out[i] = WriteRow{ID: w.ID, TS: w.TS, Tool: w.Tool, UndoneAt: w.UndoneAt}
+		out[i] = WriteRow{ID: w.ID, TS: w.TS, Tool: w.Tool, By: author(w.Origin), UndoneAt: w.UndoneAt}
+		var before struct {
+			Body *string `json:"body"`
+		}
+		if len(w.Before) > 0 && json.Unmarshal(w.Before, &before) == nil {
+			out[i].PreviousBody = before.Body
+		}
 	}
 	return out, nil
+}
+
+func author(origin string) string {
+	switch origin {
+	case "local":
+		return WriterOperator
+	case "agent":
+		return "assistant"
+	}
+	return origin
 }
 
 type ExportFilter struct {
