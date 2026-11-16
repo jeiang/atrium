@@ -132,7 +132,18 @@ claims about the running application. Operator contracts are in
   Tasks are a core store with open, done and dismissed status, a
   due date, reminder time, priority and an optional source; the assistant can
   list, add, update, complete and propose tasks, and the reminder job inserts
-  a task.
+  a task. The operator API (`/api/v1/tasks` and `/web/v1/tasks`) lists,
+  reads, creates, edits, completes, reopens, dismisses and deletes tasks.
+  Every write returns the task with its links and one ledger effect that
+  `POST /undo/write:<effect>` reverses; delete hard-deletes and its undo
+  reinserts the same row. An edit may carry `updated_ts` and is refused with
+  a `stale` conflict when the task changed since. A task has at most one link
+  (`source_kind`/`source_id`): thread, project, person (an email address),
+  record or message; legacy `proposal` links are read-only. Links resolve to
+  a title, or null when the target is gone. The list orders open, done, then
+  dismissed, each by due date with undated tasks last, filters by status, due
+  window, link and text, and returns counts by status. Changing `remind_at`
+  re-arms the reminder.
 - Open loops come from mail the operator actually needs to answer: the
   latest message must not be bulk or automated (List-Id, List-Unsubscribe,
   Precedence bulk/list/junk, Auto-Submitted, a bulk Gmail category, an

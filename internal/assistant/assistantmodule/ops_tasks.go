@@ -14,7 +14,8 @@ func taskToolService(tc *tool.Context) *tasksapp.Service {
 
 func (m Module) taskOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
-			tasksapp.DescribeList(), tasksapp.DescribeAdd(), tasksapp.DescribeUpdate(), tasksapp.DescribeDone(), tasksapp.DescribeRemind(), tasksapp.DescribeProposeReminder(),
+			tasksapp.DescribeList(), tasksapp.DescribeGet(), tasksapp.DescribeAdd(), tasksapp.DescribeUpdate(), tasksapp.DescribeDone(),
+			tasksapp.DescribeReopen(), tasksapp.DescribeDismiss(), tasksapp.DescribeDelete(), tasksapp.DescribeRemind(), tasksapp.DescribeProposeReminder(),
 		}, append(m.taskRoutes(nil), []application.Binding{
 			{Kind: application.Tool, Target: "task_list", Uses: []application.Name{tasksapp.ListName}},
 			{Kind: application.Tool, Target: "task_add", Uses: []application.Name{tasksapp.AddName}},

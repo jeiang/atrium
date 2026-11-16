@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
@@ -16,11 +17,22 @@ import (
 )
 
 const (
-	ListName   application.Name = "tasks.list"
-	AddName    application.Name = "tasks.add"
-	UpdateName application.Name = "tasks.update"
-	DoneName   application.Name = "tasks.done"
-	RemindName application.Name = "tasks.remind"
+	ListName    application.Name = "tasks.list"
+	GetName     application.Name = "tasks.get"
+	AddName     application.Name = "tasks.add"
+	UpdateName  application.Name = "tasks.update"
+	DoneName    application.Name = "tasks.done"
+	ReopenName  application.Name = "tasks.reopen"
+	DismissName application.Name = "tasks.dismiss"
+	DeleteName  application.Name = "tasks.delete"
+	RemindName  application.Name = "tasks.remind"
+)
+
+const (
+	ClearNotes    = "notes"
+	ClearDue      = "due"
+	ClearRemindAt = "remind_at"
+	ClearLink     = "link"
 )
 
 type Source struct {
@@ -31,13 +43,27 @@ type Source struct {
 
 type ListInput struct {
 	Status string
+	Filter tasks.Filter
 	Limit  int
-	After  *tasks.ListKey
+	After  *tasks.PageKey
+	Links  bool
 }
 
 type List struct {
-	Tasks []tasks.Task
-	Marks tool.Marks
+	Tasks  []tasks.Task
+	Marks  tool.Marks
+	Counts tasks.Counts
+	Links  map[int64][]tasks.Link
+}
+
+type View struct {
+	Task  tasks.Task
+	Links []tasks.Link
+}
+
+type LinkInput struct {
+	Kind string
+	ID   string
 }
 
 type AddInput struct {
@@ -47,16 +73,20 @@ type AddInput struct {
 	Due      *string
 	RemindAt *float64
 	Priority string
+	Link     *LinkInput
 }
 
 type UpdateInput struct {
-	Source   Source
-	ID       int64
-	Title    *string
-	Notes    *string
-	Due      *string
-	RemindAt *float64
-	Priority *string
+	Source    Source
+	ID        int64
+	Title     *string
+	Notes     *string
+	Due       *string
+	RemindAt  *float64
+	Priority  *string
+	Link      *LinkInput
+	Clear     []string
+	UpdatedTS *float64
 }
 
 type IDInput struct {
@@ -67,6 +97,36 @@ type IDInput struct {
 type Changed struct {
 	TaskID int64
 	Status string
+	Task   *tasks.Task
+	Links  []tasks.Link
+}
+
+type snapshot struct {
+	task  *tasks.Task
+	links []tasks.Link
+}
+
+func (p *snapshot) take(ctx context.Context, tx *sql.Tx, id int64, deleted *tasks.Task) error {
+	t := deleted
+	if t == nil {
+		var err error
+		if t, err = tasks.Get(ctx, tx, id); err != nil || t == nil {
+			return err
+		}
+	}
+	links, err := linksOf(ctx, tx, *t)
+	if err != nil {
+		return err
+	}
+	p.task, p.links = t, links
+	return nil
+}
+
+func (p snapshot) fill(out application.Change[Changed], err error) (application.Change[Changed], error) {
+	if err == nil && p.task != nil {
+		out.Data.Task, out.Data.Links, out.Data.Status = p.task, p.links, p.task.Status
+	}
+	return out, err
 }
 
 type RemindInput struct{}
@@ -79,35 +139,52 @@ func DescribeList() application.Definition {
 	return application.Describe[ListInput, List](ListName, application.Query, []application.Authority{application.Agent, application.Operator}, application.NoEffect, false)
 }
 
+func DescribeGet() application.Definition {
+	return application.Describe[IDInput, View](GetName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
+}
+
 func describeAgent[I any](name application.Name) application.Definition {
 	return application.Describe[I, Changed](name, application.Command, []application.Authority{application.Agent, application.Approved, application.Operator}, application.LocalUndoable, true)
 }
 
-func DescribeAdd() application.Definition    { return describeAgent[AddInput](AddName) }
-func DescribeUpdate() application.Definition { return describeAgent[UpdateInput](UpdateName) }
-func DescribeDone() application.Definition   { return describeAgent[IDInput](DoneName) }
+func describeOperator(name application.Name) application.Definition {
+	return application.Describe[IDInput, Changed](name, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
+}
+
+func DescribeAdd() application.Definition     { return describeAgent[AddInput](AddName) }
+func DescribeUpdate() application.Definition  { return describeAgent[UpdateInput](UpdateName) }
+func DescribeDone() application.Definition    { return describeAgent[IDInput](DoneName) }
+func DescribeReopen() application.Definition  { return describeOperator(ReopenName) }
+func DescribeDismiss() application.Definition { return describeOperator(DismissName) }
+func DescribeDelete() application.Definition  { return describeOperator(DeleteName) }
 
 func DescribeRemind() application.Definition {
 	return application.Describe[RemindInput, Reminded](RemindName, application.Command, []application.Authority{application.System}, application.External, true)
 }
 
+var readScopes = []string{state.Tasks, state.Assistant, state.Knowledge, state.Mail, state.Review}
+
 func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List], error) {
 	if in.Limit <= 0 {
 		in.Limit = 50
 	}
-	if in.Limit > 200 {
-		in.Limit = 200
+	if in.Limit > 201 {
+		in.Limit = 201
 	}
 	tx, err := s.db.Read.BeginTx(ctx, nil)
 	if err != nil {
 		return application.Read[List]{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	counters, err := s.state.Read(ctx, tx, []string{state.Tasks, state.Assistant})
+	counters, err := s.state.Read(ctx, tx, readScopes)
 	if err != nil {
 		return application.Read[List]{}, err
 	}
-	found, err := tasks.List(ctx, tx, in.Status, in.Limit, in.After)
+	found, err := tasks.Page(ctx, tx, in.Filter, in.Status, in.Limit, in.After)
+	if err != nil {
+		return application.Read[List]{}, err
+	}
+	counts, err := tasks.CountByStatus(ctx, tx, in.Filter)
 	if err != nil {
 		return application.Read[List]{}, err
 	}
@@ -119,9 +196,45 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 	if err != nil {
 		return application.Read[List]{}, err
 	}
+	out := List{Tasks: found, Marks: marks, Counts: counts}
+	if in.Links {
+		out.Links = make(map[int64][]tasks.Link, len(found))
+		for _, task := range found {
+			if out.Links[task.ID], err = linksOf(ctx, tx, task); err != nil {
+				return application.Read[List]{}, err
+			}
+		}
+	}
 	return application.Read[List]{
 		Revision: application.Revision(state.Revision(string(ListName), counters, in, "agent")),
-		Data:     List{Tasks: found, Marks: marks},
+		Data:     out,
+	}, nil
+}
+
+func (s *Service) Get(ctx context.Context, in IDInput) (application.Read[View], error) {
+	tx, err := s.db.Read.BeginTx(ctx, nil)
+	if err != nil {
+		return application.Read[View]{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	counters, err := s.state.Read(ctx, tx, readScopes)
+	if err != nil {
+		return application.Read[View]{}, err
+	}
+	task, err := tasks.Get(ctx, tx, in.ID)
+	if err != nil {
+		return application.Read[View]{}, err
+	}
+	if task == nil {
+		return application.Read[View]{}, unknownTask()
+	}
+	links, err := linksOf(ctx, tx, *task)
+	if err != nil {
+		return application.Read[View]{}, err
+	}
+	return application.Read[View]{
+		Revision: application.Revision(state.Revision(string(GetName), counters, in.ID, "operator")),
+		Data:     View{Task: *task, Links: links},
 	}, nil
 }
 
@@ -144,8 +257,15 @@ func (s *Service) command(ctx context.Context, name application.Name, id int64, 
 	})
 	if err != nil {
 		var e *application.Error
-		if errors.As(err, &e) && e.Code == application.NotFound {
-			if _, aerr := s.audit(ctx, nil, name, id, state.NotFound, 0); aerr != nil {
+		if errors.As(err, &e) {
+			outcome := state.Invalid
+			switch e.Code {
+			case application.NotFound:
+				outcome = state.NotFound
+			case application.Conflict:
+				outcome = state.Conflict
+			}
+			if _, aerr := s.audit(ctx, nil, name, id, outcome, 0); aerr != nil {
 				return application.Change[Changed]{}, errors.Join(err, aerr)
 			}
 		}
@@ -156,6 +276,10 @@ func (s *Service) command(ctx context.Context, name application.Name, id int64, 
 
 func unknownTask() error {
 	return &application.Error{Code: application.NotFound, Message: "unknown task"}
+}
+
+func wrongStatus(status, verb string) error {
+	return &application.Error{Code: application.Conflict, Message: "a " + status + " task cannot be " + verb}
 }
 
 func (src Source) effect(operation, target string) ledger.New {
@@ -180,14 +304,25 @@ func (s *Service) Add(ctx context.Context, in AddInput) (application.Change[Chan
 	n := in.Source.effect("task_add", "task:new")
 	n.Action = summary
 	now := s.now()
-	return s.command(ctx, AddName, 0, n, func(ctx context.Context, tx *sql.Tx) (int64, ledger.Result, error) {
+	var snap snapshot
+	out, err := s.command(ctx, AddName, 0, n, func(ctx context.Context, tx *sql.Tx) (int64, ledger.Result, error) {
+		if in.Link != nil {
+			if err := checkLink(ctx, tx, *in.Link); err != nil {
+				return 0, ledger.Result{}, err
+			}
+			spec.SourceKind, spec.SourceID = in.Link.Kind, in.Link.ID
+		}
 		id, err := tasks.Add(ctx, tx, now, spec)
 		if err != nil {
+			return 0, ledger.Result{}, err
+		}
+		if err := snap.take(ctx, tx, id, nil); err != nil {
 			return 0, ledger.Result{}, err
 		}
 		return id, ledger.Result{State: ledger.Done, Target: "task:" + tasks.IDString(id), After: summary,
 			Undo: mustJSON(undoDelete{Op: UndoDelete, ID: id})}, nil
 	})
+	return snap.fill(out, err)
 }
 
 func keep(next *string, previous string) string {
@@ -198,8 +333,15 @@ func keep(next *string, previous string) string {
 }
 
 func (s *Service) Update(ctx context.Context, in UpdateInput) (application.Change[Changed], error) {
+	for _, field := range in.Clear {
+		if !slices.Contains([]string{ClearNotes, ClearDue, ClearRemindAt, ClearLink}, field) {
+			return application.Change[Changed]{}, &application.Error{Code: application.Invalid, Message: "clear names an unknown field",
+				Fields: []application.Field{{Name: "clear", Code: "invalid", Message: "clear accepts notes, due, remind_at and link"}}}
+		}
+	}
 	now := s.now()
-	return s.command(ctx, UpdateName, in.ID, in.Source.effect("task_update", "task:"+tasks.IDString(in.ID)), func(ctx context.Context, tx *sql.Tx) (int64, ledger.Result, error) {
+	var snap snapshot
+	out, err := s.command(ctx, UpdateName, in.ID, in.Source.effect("task_update", "task:"+tasks.IDString(in.ID)), func(ctx context.Context, tx *sql.Tx) (int64, ledger.Result, error) {
 		previous, err := tasks.Get(ctx, tx, in.ID)
 		if err != nil {
 			return 0, ledger.Result{}, err
@@ -207,25 +349,51 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (application.Chang
 		if previous == nil {
 			return 0, ledger.Result{}, unknownTask()
 		}
+		if in.UpdatedTS != nil && *in.UpdatedTS != previous.UpdatedTS {
+			return 0, ledger.Result{}, &application.Error{Code: application.Conflict, Reason: "stale", Message: "The task changed since it was read."}
+		}
 		spec := tasks.Spec{Title: keep(in.Title, previous.Title), Notes: keep(in.Notes, previous.Notes),
-			Due: previous.Due, RemindAt: previous.RemindAt, Priority: keep(in.Priority, previous.Priority)}
+			Due: previous.Due, RemindAt: previous.RemindAt, Priority: keep(in.Priority, previous.Priority),
+			SourceKind: previous.SourceKind, SourceID: previous.SourceID}
 		if in.Due != nil && *in.Due != "" {
 			spec.Due = in.Due
 		}
 		if in.RemindAt != nil {
 			spec.RemindAt = in.RemindAt
 		}
+		if in.Link != nil {
+			if err := checkLink(ctx, tx, *in.Link); err != nil {
+				return 0, ledger.Result{}, err
+			}
+			spec.SourceKind, spec.SourceID = in.Link.Kind, in.Link.ID
+		}
+		for _, field := range in.Clear {
+			switch field {
+			case ClearNotes:
+				spec.Notes = ""
+			case ClearDue:
+				spec.Due = nil
+			case ClearRemindAt:
+				spec.RemindAt = nil
+			case ClearLink:
+				spec.SourceKind, spec.SourceID = "", ""
+			}
+		}
 		if _, err := tasks.Update(ctx, tx, now, in.ID, spec); err != nil {
+			return 0, ledger.Result{}, err
+		}
+		if err := snap.take(ctx, tx, in.ID, nil); err != nil {
 			return 0, ledger.Result{}, err
 		}
 		return in.ID, ledger.Result{State: ledger.Done, Before: mustJSON(map[string]any{"task": previous}),
 			After: mustJSON(map[string]any{"title": spec.Title}), Undo: mustJSON(undoRestore{Op: UndoRestore, Task: *previous})}, nil
 	})
+	return snap.fill(out, err)
 }
 
-func (s *Service) Done(ctx context.Context, in IDInput) (application.Change[Changed], error) {
-	now := s.now()
-	changed, err := s.command(ctx, DoneName, in.ID, in.Source.effect("task_done", "task:"+tasks.IDString(in.ID)), func(ctx context.Context, tx *sql.Tx) (int64, ledger.Result, error) {
+func (s *Service) transition(ctx context.Context, name application.Name, operation string, in IDInput, apply func(context.Context, *sql.Tx, tasks.Task) error) (application.Change[Changed], error) {
+	var snap snapshot
+	out, err := s.command(ctx, name, in.ID, in.Source.effect(operation, "task:"+tasks.IDString(in.ID)), func(ctx context.Context, tx *sql.Tx) (int64, ledger.Result, error) {
 		previous, err := tasks.Get(ctx, tx, in.ID)
 		if err != nil {
 			return 0, ledger.Result{}, err
@@ -233,14 +401,70 @@ func (s *Service) Done(ctx context.Context, in IDInput) (application.Change[Chan
 		if previous == nil {
 			return 0, ledger.Result{}, unknownTask()
 		}
-		if _, err := tasks.Done(ctx, tx, now, in.ID); err != nil {
+		if err := apply(ctx, tx, *previous); err != nil {
+			return 0, ledger.Result{}, err
+		}
+		if err := snap.take(ctx, tx, in.ID, nil); err != nil {
 			return 0, ledger.Result{}, err
 		}
 		return in.ID, ledger.Result{State: ledger.Done, Before: mustJSON(map[string]any{"status": previous.Status}),
-			After: mustJSON(map[string]any{"status": tasks.StatusDone}), Undo: mustJSON(undoRestore{Op: UndoRestore, Task: *previous})}, nil
+			After: mustJSON(map[string]any{"status": snap.task.Status}), Undo: mustJSON(undoRestore{Op: UndoRestore, Task: *previous})}, nil
+	})
+	return snap.fill(out, err)
+}
+
+func (s *Service) Done(ctx context.Context, in IDInput) (application.Change[Changed], error) {
+	now := s.now()
+	changed, err := s.transition(ctx, DoneName, "task_done", in, func(ctx context.Context, tx *sql.Tx, _ tasks.Task) error {
+		_, err := tasks.Done(ctx, tx, now, in.ID)
+		return err
 	})
 	changed.Data.Status = tasks.StatusDone
 	return changed, err
+}
+
+func (s *Service) Reopen(ctx context.Context, in IDInput) (application.Change[Changed], error) {
+	now := s.now()
+	return s.transition(ctx, ReopenName, "task_reopen", in, func(ctx context.Context, tx *sql.Tx, previous tasks.Task) error {
+		if previous.Status == tasks.StatusOpen {
+			return wrongStatus(previous.Status, "reopened")
+		}
+		_, err := tasks.Reopen(ctx, tx, now, in.ID)
+		return err
+	})
+}
+
+func (s *Service) Dismiss(ctx context.Context, in IDInput) (application.Change[Changed], error) {
+	now := s.now()
+	return s.transition(ctx, DismissName, "task_dismiss", in, func(ctx context.Context, tx *sql.Tx, previous tasks.Task) error {
+		if previous.Status != tasks.StatusOpen {
+			return wrongStatus(previous.Status, "dismissed")
+		}
+		_, err := tasks.Dismiss(ctx, tx, now, in.ID)
+		return err
+	})
+}
+
+func (s *Service) Delete(ctx context.Context, in IDInput) (application.Change[Changed], error) {
+	var snap snapshot
+	out, err := s.command(ctx, DeleteName, in.ID, in.Source.effect("task_delete", "task:"+tasks.IDString(in.ID)), func(ctx context.Context, tx *sql.Tx) (int64, ledger.Result, error) {
+		previous, err := tasks.Get(ctx, tx, in.ID)
+		if err != nil {
+			return 0, ledger.Result{}, err
+		}
+		if previous == nil {
+			return 0, ledger.Result{}, unknownTask()
+		}
+		if err := snap.take(ctx, tx, in.ID, previous); err != nil {
+			return 0, ledger.Result{}, err
+		}
+		if _, err := tasks.Delete(ctx, tx, in.ID); err != nil {
+			return 0, ledger.Result{}, err
+		}
+		return in.ID, ledger.Result{State: ledger.Done, Before: mustJSON(map[string]any{"task": previous}),
+			After: mustJSON(map[string]any{"deleted": in.ID}), Undo: mustJSON(undoReinsert{Op: UndoReinsert, Task: *previous, RemindedTS: previous.RemindedTS})}, nil
+	})
+	return snap.fill(out, err)
 }
 
 func (s *Service) Remind(ctx context.Context, _ RemindInput) (application.Change[Reminded], error) {
@@ -278,7 +502,7 @@ func validateUndo(name string) func(json.RawMessage) error {
 
 func Undo() []ledger.UndoDefinition {
 	var out []ledger.UndoDefinition
-	for _, name := range []string{UndoDelete, UndoRestore} {
+	for _, name := range []string{UndoDelete, UndoRestore, UndoReinsert} {
 		out = append(out, ledger.UndoDefinition{Operation: name, Undoer: ledger.Undoer{
 			Validate: validateUndo(name),
 			Local: func(ctx context.Context, tx *sql.Tx, payload json.RawMessage) (ledger.Result, error) {

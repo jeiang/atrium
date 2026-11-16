@@ -295,6 +295,15 @@ items such as commitments, tasks and open loops. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
 `GET /api/v1/queue`. The Needs you page still lists only proposals and drafts.
 
+Tasks can be created, edited, completed, reopened, dismissed and deleted from
+`/api/v1/tasks`. Each of these can be undone: the response names one effect,
+and `POST /api/v1/undo/write:<effect>` reverses it. Delete removes the task at
+once, so clients confirm it first; its undo, also in Activity, restores the
+task with the same id. A task links to at most one thread, project, person,
+record or message. A link to something that no longer exists shows no title.
+Moving a task's reminder time to a new moment sends the reminder again; other
+edits do not.
+
 Assistant runs use the Anthropic connection and a static supported-model
 catalog. A missing key or refused budget prevents a paid start before a new
 thread exists. Unknown models fail closed. Model-free jobs do not require a

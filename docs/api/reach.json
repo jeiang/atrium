@@ -300,12 +300,16 @@
       "area": "tasks",
       "operations": [
         "tasks.add",
+        "tasks.delete",
+        "tasks.dismiss",
         "tasks.done",
+        "tasks.get",
         "tasks.list",
+        "tasks.reopen",
         "tasks.update"
       ],
-      "required": 4,
-      "bound": 4
+      "required": 8,
+      "bound": 8
     },
     {
       "area": "threads",
@@ -398,7 +402,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 208,
-  "total_bound": 208,
+  "total_required": 212,
+  "total_bound": 212,
   "total_approval_reached": 11
 }

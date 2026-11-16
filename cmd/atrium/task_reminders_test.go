@@ -131,4 +131,23 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	insert("Future task", now+3600, false)
 	due()
 	runNone()
+	token := localAPIToken(t, "reminders")
+	edit := func(body map[string]any) {
+		t.Helper()
+		base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stop()
+		site := &apiSite{t: t, base: base}
+		apiData(t, site.do(http.MethodPatch, "/api/v1/tasks/1", token, body), http.StatusOK)
+	}
+	edit(map[string]any{"title": "Pay the rent today"})
+	due()
+	runNone()
+	edit(map[string]any{"remind_at": now - 0.5})
+	due()
+	if p := runOnce(); !strings.Contains(fmt.Sprint(p["title"]), "Pay the rent today") {
+		t.Fatalf("edited reminder payload = %v", p)
+	}
 }
