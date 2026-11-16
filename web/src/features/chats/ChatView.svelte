@@ -123,6 +123,8 @@
   }
 
   let lastY = 0;
+  // Set by downward operator input; only that may turn following back on at the bottom.
+  let seeking = false;
 
   function toBottom(): void {
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
@@ -177,10 +179,53 @@
 
   $effect(() => {
     lastY = window.scrollY;
+    let touchY = 0;
+    // True when an element under the input can still move that way itself, so the page will not scroll.
+    const inner = (target: EventTarget | null, up: boolean): boolean => {
+      for (let node = target instanceof Element ? target : null; node && node !== document.body; node = node.parentElement) {
+        const overflow = getComputedStyle(node).overflowY;
+        if (overflow !== 'auto' && overflow !== 'scroll') continue;
+        if (up ? node.scrollTop > 0 : node.scrollTop + node.clientHeight < node.scrollHeight) return true;
+      }
+      return false;
+    };
+    const operator = (up: boolean, target: EventTarget | null): void => {
+      if (inner(target, up)) return;
+      if (up) {
+        seeking = false;
+        if (window.scrollY > 0) following = false;
+      } else {
+        seeking = true;
+      }
+    };
+    const onWheel = (event: WheelEvent): void => {
+      if (event.deltaY) operator(event.deltaY < 0, event.target);
+    };
+    const onTouchStart = (event: TouchEvent): void => {
+      touchY = event.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (event: TouchEvent): void => {
+      const y = event.touches[0]?.clientY ?? touchY;
+      if (y !== touchY) operator(y > touchY, event.target);
+      touchY = y;
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) return;
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) operator(true, target);
+      else if (['ArrowDown', 'PageDown', 'End', ' '].includes(event.key)) operator(false, target);
+    };
+    // A press beside the content box lands on the page scrollbar; the drag direction then decides.
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.clientX >= document.documentElement.clientWidth) seeking = true;
+    };
     const onScroll = (): void => {
       const y = window.scrollY;
-      if (atBottom()) following = true;
-      else if (y < lastY) following = false;
+      if (y < lastY && !atBottom()) following = false;
+      else if (seeking && atBottom()) {
+        following = true;
+        seeking = false;
+      }
       lastY = y;
       if (following) unseen = false;
       if (scrollFrame) return;
@@ -189,8 +234,18 @@
         sessionStorage.setItem(storageKey, String(Math.round(window.scrollY)));
       });
     };
+    addEventListener('wheel', onWheel, { passive: true });
+    addEventListener('touchstart', onTouchStart, { passive: true });
+    addEventListener('touchmove', onTouchMove, { passive: true });
+    addEventListener('keydown', onKey);
+    addEventListener('pointerdown', onPointerDown, { passive: true });
     addEventListener('scroll', onScroll, { passive: true });
     return () => {
+      removeEventListener('wheel', onWheel);
+      removeEventListener('touchstart', onTouchStart);
+      removeEventListener('touchmove', onTouchMove);
+      removeEventListener('keydown', onKey);
+      removeEventListener('pointerdown', onPointerDown);
       removeEventListener('scroll', onScroll);
       cancelAnimationFrame(scrollFrame);
     };
