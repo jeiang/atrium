@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import lighthouse from 'lighthouse';
 import type { Result } from 'lighthouse/types/lh.js';
 import { chromium } from 'playwright-core';
+import { fakeApi, signedInApi } from '../e2e/api.ts';
 import { serve } from '../e2e/server.ts';
 
 interface Budgets {
@@ -56,7 +57,7 @@ await once(probe.listen(0, '127.0.0.1'), 'listening');
 const { port } = probe.address() as AddressInfo;
 probe.close();
 
-const { url, server } = await serve(dist, { brotli: true, base });
+const { url, server } = await serve(dist, { brotli: true, base, handle: fakeApi(signedInApi()) });
 const browser = await chromium.launch({ channel: 'chromium', args: [`--remote-debugging-port=${port}`] });
 const results: Result[] = [];
 try {
@@ -80,7 +81,7 @@ try {
 const median = (values: number[]): number => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
 const failures: string[] = [];
 console.log(
-  `web-lighthouse: ${dist} at ${base}, brotli served, Lighthouse ${results[0]?.lighthouseVersion} mobile preset with simulated throttling, median of ${runs}`,
+  `web-lighthouse: ${dist} at ${base} signed in on Home, brotli served, Lighthouse ${results[0]?.lighthouseVersion} mobile preset with simulated throttling, median of ${runs}`,
 );
 console.log(`${'item'.padEnd(22)}  ${'median'.padStart(8)}  ${'budget'.padStart(8)}  runs`);
 for (const measure of measures) {

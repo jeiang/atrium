@@ -1,0 +1,38 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .inbox {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: var(--s-6);
+    align-items: start;
+  }
+
+  .inbox__what {
+    font-weight: 600;
+  }
+
+  .inbox__pane,
+  .deck,
+  .inbox-card {
+    display: grid;
+    gap: var(--s-4);
+    min-inline-size: 0;
+  }
+
+  .inbox-card__loading {
+    min-block-size: 30rem;
+  }
+
+  .deck__back {
+    justify-self: start;
+  }
+
+  @media (--touch) {
+    .deck__back {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: var(--target);
+    }
+  }
+}

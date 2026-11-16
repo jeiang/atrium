@@ -1481,6 +1481,31 @@ claims about the running application. Operator contracts are in
   `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
   and it never controls the old UI's pages, while it does see every request
   a `/next/` page makes, `/web/v1` writes included.
+- The `/next/` client registers `/next/sw.js` (scope `/next/`, production
+  build only, through the `atrium-sw` Trusted Types policy). The worker
+  precaches the shell and every hashed asset, lazy route chunks included,
+  answers `/next/assets/` cache-first and `/next/` navigations network-first
+  with a 3 s timeout and the cached shell as fallback, and passes everything
+  else through untouched, so `/web/v1`, `/api/v1`, streams, `/login` and
+  `/auth/` never reach its cache. Caches are named `next-shell-<build>`, not
+  `atrium-`, because the old UI worker deletes `atrium-*` caches. A new
+  worker waits; it activates at once only when the open page's own scripts
+  are in its precache list, otherwise on the next in-app navigation, which
+  becomes a full load. Activation deletes older `next-shell-*` caches.
+- Read models from queries that declare `meta.topics` or `meta.persist: true`
+  are kept for 7 days in the IndexedDB database `atrium-read-cache`, keyed to
+  the signed-in subject, with the session's identity but never its CSRF
+  token. Keys starting with `session`, `settings`, `connections`, `auth`,
+  `tokens` or `secrets` are never kept. Sign-out, a 401, a different subject,
+  a changed API contract hash or 7 days without a verified session delete
+  it; storage errors mean no cache. Offline means atrium itself did not
+  answer: the last request or stream to it failed, and the next response
+  clears it. `navigator.onLine` is never trusted; its `online` and `offline`
+  events only probe the session at once, and while atrium is unreachable
+  the client probes on its own every 2 s doubling to 60 s, because
+  a VPN or LAN can reach atrium while the browser reports offline. While
+  offline, writes refuse at once and are never queued. A lazy page missing
+  from the device shows "Not available" instead of failing.
 - The one inbox is `GET /queue` (both prefixes): parked `ask_operator`
   questions and permission requests (`ask`), pending and outcome-unknown
   proposals (`proposal`), drafts to send or resolve (`draft`), and
@@ -1564,6 +1589,7 @@ claims about the running application. Operator contracts are in
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+- **New web client shell:** `/next/` opens with a frame prerendered in its HTML, then signs in through `GET /web/v1/session` only: a 401 with `login_url` sends the browser there once with a same-origin `next`, a 401 without it shows what to do, and a 503 or a network failure offers a retry. Signed in, it shows Home, Plan, Knowledge, Apps and Assistant in a rail (Inbox with the `needs_you` count, enabled apps under Apps, and Chats, Settings and Sign out behind the avatar), or Home, Decide, Chats and Spaces in a phone tab bar. Modules turned off hide their entries. One tab per browser holds the `/web/v1/events` stream and shares its notices with the others. Pages not yet built link to the same place in the server-rendered UI, which stays the default.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).

@@ -11,7 +11,7 @@ import {
 } from './checks.ts';
 import { expect, galleryLayouts, layouts, test } from './fixtures.ts';
 
-const edgeSurfaces = ['header.bar', 'dialog.sheet'];
+const edgeSurfaces = ['.rail', '.tabbar', 'dialog.sheet'];
 
 async function gotoGallery(page: Page): Promise<void> {
   test.slow();

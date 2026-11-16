@@ -22,5 +22,6 @@
     "orval.config.ts",
     "playwright.config.ts",
     "e2e/**/*.ts"
-  ]
+  ],
+  "exclude": ["src/worker"]
 }

@@ -115,6 +115,12 @@ administrator role or remote emergency bypass.
   comes from `/web/v1`, which keeps the rules above. Host validation applies.
   Responses under `/next/` carry a stricter CSP with Trusted Types; the
   server-rendered pages keep their CSP unchanged.
+- The `/next/` client keeps its shell and the last data it read for 7 days,
+  so it opens without a connection and shows that data with its age and a
+  notice that nothing can be sent. It never sends or queues a change while
+  offline. Signing out or a lapsed session deletes the stored data. The
+  account menu item "Don't keep data on this device" deletes it at once and
+  stops keeping it on that browser.
 
 Public requests are limited in process by token buckets owned by each listener:
 10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`

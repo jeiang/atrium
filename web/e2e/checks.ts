@@ -23,7 +23,7 @@ const interactive = [
 
 export async function gotoShell(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await expect(page.getByText('Signed in as Operator')).toBeVisible({ timeout: 0 });
+  await expect(page.getByRole('button', { name: 'Account: Operator' })).toBeVisible({ timeout: 0 });
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -55,6 +55,7 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
           rect.width > 0 &&
           rect.height > 0 &&
           style.visibility !== 'hidden' &&
+          style.clipPath !== 'inset(50%)' &&
           !el.closest('[inert]') &&
           el.checkVisibility()
         );
@@ -107,106 +108,121 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
   expect(failures, `strict touch rule: every control owns a ${target}x${target} px square`).toEqual([]);
 }
 
+const shellEdges = ['.rail', '.tabbar'];
+
 export async function expectRoundedSurfaces(page: Page, windowEdge: readonly string[] = []): Promise<void> {
-  const failures = await page.evaluate((allowed) => {
-    const describe = (el: Element): string => {
-      const id = el.id ? `#${el.id}` : '';
-      const cls = [...el.classList].map((name) => `.${name}`).join('');
-      const text = (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
-      return `${el.tagName.toLowerCase()}${id}${cls}${text ? ` "${text}"` : ''}`;
-    };
-    const painted = (color: string): boolean => !/^(transparent|rgba\(.*,\s*0\)|.* \/ 0\))$/.test(color);
-    const backdrop = (el: Element): string => {
-      for (let node = el.parentElement; node; node = node.parentElement) {
-        const color = getComputedStyle(node).backgroundColor;
-        if (painted(color)) return color;
-      }
-      return getComputedStyle(document.body).backgroundColor;
-    };
-    const tags = new Set(['IMG', 'VIDEO', 'CANVAS', 'PROGRESS', 'METER', 'KBD', 'PRE', 'BLOCKQUOTE']);
-    const isSurface = (el: Element, style: CSSStyleDeclaration): boolean => {
-      const sides = ['Top', 'Right', 'Bottom', 'Left'].filter(
-        (side) =>
-          Number.parseFloat(style.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
-          style.getPropertyValue(`border-${side.toLowerCase()}-style`) !== 'none',
-      );
-      return (
-        (painted(style.backgroundColor) && style.backgroundColor !== backdrop(el)) ||
-        sides.length >= 2 ||
-        (style.boxShadow !== 'none' && !style.boxShadow.includes('inset')) ||
-        style.backgroundImage !== 'none' ||
-        tags.has(el.tagName) ||
-        (el.tagName === 'CODE' && !el.closest('pre'))
-      );
-    };
-    const corners = [
-      { prop: 'border-top-left-radius', x: 'left', y: 'top' },
-      { prop: 'border-top-right-radius', x: 'right', y: 'top' },
-      { prop: 'border-bottom-right-radius', x: 'right', y: 'bottom' },
-      { prop: 'border-bottom-left-radius', x: 'left', y: 'bottom' },
-    ] as const;
-    const rounded = (style: CSSStyleDeclaration): boolean =>
-      corners.some(({ prop }) => Number.parseFloat(style.getPropertyValue(prop)) > 0);
-    const width = document.documentElement.clientWidth;
-    const height = document.documentElement.clientHeight;
-    const pageHeight = document.documentElement.scrollHeight;
-    const pinned = (el: Element): boolean => {
-      for (let node: Element | null = el; node; node = node.parentElement) {
-        if (node.matches(':modal, :popover-open') || /fixed|sticky/.test(getComputedStyle(node).position)) return true;
-      }
-      return false;
-    };
-    const found: string[] = [];
-    for (const el of document.querySelectorAll('body *')) {
-      const style = getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      if (rect.width < 2 || rect.height < 2 || style.visibility === 'hidden' || !isSurface(el, style)) continue;
-      const [top, bottom] = pinned(el) ? [0, height] : [-scrollY, pageHeight - scrollY];
-      for (const corner of corners) {
-        if (Number.parseFloat(style.getPropertyValue(corner.prop)) > 0) continue;
-        const x = rect[corner.x];
-        const y = rect[corner.y];
-        const where = `${corner.y}-${corner.x}`;
-        if (x <= 0.5 || x >= width - 0.5 || y <= top + 0.5 || y >= bottom - 0.5) {
-          if (!allowed.some((selector) => el.matches(selector))) {
-            found.push(`${describe(el)}: square ${where} corner on the window edge, not an allowed edge surface`);
-          }
-          continue;
+  const failures = await page.evaluate(
+    (allowed) => {
+      const describe = (el: Element): string => {
+        const id = el.id ? `#${el.id}` : '';
+        const cls = [...el.classList].map((name) => `.${name}`).join('');
+        const text = (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+        return `${el.tagName.toLowerCase()}${id}${cls}${text ? ` "${text}"` : ''}`;
+      };
+      const painted = (color: string): boolean => !/^(transparent|rgba\(.*,\s*0\)|.* \/ 0\))$/.test(color);
+      const backdrop = (el: Element): string => {
+        for (let node = el.parentElement; node; node = node.parentElement) {
+          const color = getComputedStyle(node).backgroundColor;
+          if (painted(color)) return color;
         }
-        let frame: Element | null = el.parentElement;
-        while (frame && frame !== document.body && !rounded(getComputedStyle(frame))) frame = frame.parentElement;
-        const clips = frame && frame !== document.body && getComputedStyle(frame).overflow !== 'visible';
-        if (clips) continue;
-        found.push(
-          frame && frame !== document.body
-            ? `${describe(el)}: square ${where} corner inside ${describe(frame)}, which does not clip it`
-            : `${describe(el)}: square ${where} corner`,
+        return getComputedStyle(document.body).backgroundColor;
+      };
+      const tags = new Set(['IMG', 'VIDEO', 'CANVAS', 'PROGRESS', 'METER', 'KBD', 'PRE', 'BLOCKQUOTE']);
+      const isSurface = (el: Element, style: CSSStyleDeclaration): boolean => {
+        const sides = ['Top', 'Right', 'Bottom', 'Left'].filter(
+          (side) =>
+            Number.parseFloat(style.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
+            style.getPropertyValue(`border-${side.toLowerCase()}-style`) !== 'none',
         );
-      }
-    }
-    for (const host of document.querySelectorAll('body *')) {
-      const box = host.getBoundingClientRect();
-      if (box.width < 2 || box.height < 2) continue;
-      for (const pseudo of ['::before', '::after'] as const) {
-        const style = getComputedStyle(host, pseudo);
-        if (style.content === 'none' || style.content === 'normal' || style.display === 'none') continue;
-        if (rounded(style) || !isSurface(host, style)) continue;
-        let frame: Element | null = host;
-        while (frame && frame !== document.body) {
-          const frameStyle = getComputedStyle(frame);
-          if (rounded(frameStyle) && frameStyle.overflow !== 'visible') break;
-          frame = frame.parentElement;
+        return (
+          (painted(style.backgroundColor) && style.backgroundColor !== backdrop(el)) ||
+          sides.length >= 2 ||
+          (style.boxShadow !== 'none' && !style.boxShadow.includes('inset')) ||
+          style.backgroundImage !== 'none' ||
+          tags.has(el.tagName) ||
+          (el.tagName === 'CODE' && !el.closest('pre'))
+        );
+      };
+      const corners = [
+        { prop: 'border-top-left-radius', x: 'left', y: 'top' },
+        { prop: 'border-top-right-radius', x: 'right', y: 'top' },
+        { prop: 'border-bottom-right-radius', x: 'right', y: 'bottom' },
+        { prop: 'border-bottom-left-radius', x: 'left', y: 'bottom' },
+      ] as const;
+      const rounded = (style: CSSStyleDeclaration): boolean =>
+        corners.some(({ prop }) => Number.parseFloat(style.getPropertyValue(prop)) > 0);
+      const width = document.documentElement.clientWidth;
+      const height = document.documentElement.clientHeight;
+      const pageHeight = document.documentElement.scrollHeight;
+      const pinned = (el: Element): boolean => {
+        for (let node: Element | null = el; node; node = node.parentElement) {
+          if (node.matches(':modal, :popover-open') || /fixed|sticky/.test(getComputedStyle(node).position))
+            return true;
         }
-        if (frame && frame !== document.body) continue;
-        found.push(`${describe(host)}${pseudo}: square corners and no rounded clipping frame`);
+        return false;
+      };
+      const found: string[] = [];
+      for (const el of document.querySelectorAll('body *')) {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2 || style.visibility === 'hidden' || !isSurface(el, style)) continue;
+        const [top, bottom] = pinned(el) ? [0, height] : [-scrollY, pageHeight - scrollY];
+        for (const corner of corners) {
+          if (Number.parseFloat(style.getPropertyValue(corner.prop)) > 0) continue;
+          const x = rect[corner.x];
+          const y = rect[corner.y];
+          const where = `${corner.y}-${corner.x}`;
+          if (x <= 0.5 || x >= width - 0.5 || y <= top + 0.5 || y >= bottom - 0.5) {
+            if (!allowed.some((selector) => el.matches(selector))) {
+              found.push(`${describe(el)}: square ${where} corner on the window edge, not an allowed edge surface`);
+            }
+            continue;
+          }
+          let frame: Element | null = el.parentElement;
+          while (frame && frame !== document.body && !rounded(getComputedStyle(frame))) frame = frame.parentElement;
+          const clips = frame && frame !== document.body && getComputedStyle(frame).overflow !== 'visible';
+          if (clips) continue;
+          found.push(
+            frame && frame !== document.body
+              ? `${describe(el)}: square ${where} corner inside ${describe(frame)}, which does not clip it`
+              : `${describe(el)}: square ${where} corner`,
+          );
+        }
       }
-    }
-    return found;
-  }, windowEdge);
+      for (const host of document.querySelectorAll('body *')) {
+        const box = host.getBoundingClientRect();
+        if (box.width < 2 || box.height < 2) continue;
+        for (const pseudo of ['::before', '::after'] as const) {
+          const style = getComputedStyle(host, pseudo);
+          if (style.content === 'none' || style.content === 'normal' || style.display === 'none') continue;
+          if (rounded(style) || !isSurface(host, style)) continue;
+          let frame: Element | null = host;
+          while (frame && frame !== document.body) {
+            const frameStyle = getComputedStyle(frame);
+            if (rounded(frameStyle) && frameStyle.overflow !== 'visible') break;
+            frame = frame.parentElement;
+          }
+          if (frame && frame !== document.body) continue;
+          found.push(`${describe(host)}${pseudo}: square corners and no rounded clipping frame`);
+        }
+      }
+      return found;
+    },
+    [...shellEdges, ...windowEdge],
+  );
   expect(failures, 'every bordered or filled surface has rounded corners').toEqual([]);
 }
 
 export async function expectNoSeriousAxeFindings(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      !document.querySelector('[data-arming]') &&
+      document
+        .getAnimations()
+        .every(
+          (animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity,
+        ),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
     .analyze();

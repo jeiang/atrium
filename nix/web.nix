@@ -133,7 +133,12 @@ in {
     e2e = pname: args:
       check {
         inherit pname;
-        env = browserEnv // {ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";};
+        env =
+          browserEnv
+          // {
+            ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";
+            ATRIUM_WEB_DIST = "${atrium-web}";
+          };
         command = "npm run e2e -- --reporter=line${args}";
       };
   in
