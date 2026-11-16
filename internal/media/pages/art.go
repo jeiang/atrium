@@ -15,14 +15,11 @@ const (
 	artPlaceholderSVG   = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 3"><rect width="2" height="3" fill="#80808033"/></svg>`
 	artImageCache       = "private, max-age=86400"
 	artPlaceholderCache = "private, max-age=600"
-	thumbPendingCache   = "private, max-age=60"
-	placeholderNoStore  = "no-store"
 )
 
 func (s *service) registerFiles(r chi.Router) {
 	r.Get("/apps/media/art/season/{name}/{number}", s.serveSeasonArt)
 	r.Get("/apps/media/art/{kind}/{name}", s.serveArt)
-	r.Get("/apps/media/thumb/*", s.serveThumb)
 	r.Get(mediaapp.FilePrefix+"*", s.serveFile)
 	r.Head(mediaapp.FilePrefix+"*", s.serveFile)
 }
@@ -74,33 +71,6 @@ func (s *service) serveSeasonArt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.serveArtOf(w, r, mediaapp.ArtInput{Kind: mediaapp.KindSeason, Name: web.PathParam(r, "name"), Season: number})
-}
-
-func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
-	stream, err := s.app.Thumbnail(r.Context(), mediaapp.ThumbnailInput{
-		Rel: web.PathParam(r, "*"), Method: r.Method, IfNoneMatch: r.Header.Get("If-None-Match"), IfModifiedSince: r.Header.Get("If-Modified-Since"),
-	})
-	if err != nil {
-		switch application.Classify(err).Code {
-		case application.NotFound:
-			writeArtPlaceholder(w, thumbPendingCache)
-			return
-		case application.Unavailable, application.NotConfigured:
-			writeArtPlaceholder(w, placeholderNoStore)
-			return
-		}
-		panic(err)
-	}
-	defer func() { _ = stream.Body.Close() }()
-	for name, values := range stream.Header {
-		w.Header()[name] = values
-	}
-	w.Header().Set("Cache-Control", artImageCache)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(stream.Status)
-	if r.Method != http.MethodHead {
-		_, _ = io.Copy(w, stream.Body)
-	}
 }
 
 func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {

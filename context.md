@@ -695,18 +695,17 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
-- The library catalogue, `media_library_search`, library pages, episode
-  thumbnails and the `media-thumbnails` job read from the agent. The host key
+- The library catalogue, `media_library_search` and library pages read from
+  the agent. The host key
   `media_root` is refused at startup (exit 78) and at Nix evaluation, naming
   `services.atrium.mediaAgent.roots`. The media module requires the
   `service/media-agent` connection. One catalogue per process is refreshed by
   the noncritical `media-catalogue` service every minute and after each
   filing (complete scan snapshots only; 30 s bound). A failed refresh keeps
   the previous catalogue and marks it stale; with no catalogue yet, library
-  reads answer 503 rather than an empty library. The agent generates and
-  caches thumbnails and remembers a failed thumbnail for seven days;
-  `/apps/media/thumb/*` relays them behind login and shows the placeholder
-  when the agent has none or is unavailable.
+  reads answer 503 rather than an empty library. There are no episode
+  thumbnails; `mediaAgent.capabilities` still accepts `"thumbnail"` and
+  ignores it for one release.
 - VPN library links come from one host key, `media.media_vpn_base_url`
   (https origin; http only on loopback), as `<base>/library/{movies,tv}/<path>`,
   served by the agent's `[vpn]` listener: GET and HEAD only on those two
@@ -715,7 +714,7 @@ claims about the running application. Operator contracts are in
   refused. Signed public links are unchanged.
 - Bearer media file reads resolve opaque ids through catalogue detail before
   streaming through the agent. GET and HEAD content support byte ranges
-  without opening library paths in main; thumbnails, artwork and path-free
+  without opening library paths in main; artwork and path-free
   filing inspection are API resources. Torrent adds accept the JSON magnet
   form or multipart magnet or torrent input under shared upload admission
   and the torrent size cap.

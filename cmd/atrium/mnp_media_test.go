@@ -585,7 +585,7 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	expect("outside movies and tv", mnpSign(key, "downloads/secret.mkv", far), http.StatusNotFound)
 	expect("parent of the root", mnpSign(key, "movies/../../atrium.db", far), http.StatusNotFound)
 	sig := mnpSign(key, movie, far)
-	expect("signature on another route", "/apps/media/thumb/"+mnpQuote(movie)+sig[strings.Index(sig, "?"):], http.StatusForbidden)
+	expect("signature on another route", "/apps/media/library"+sig[strings.Index(sig, "?"):], http.StatusForbidden)
 }
 
 func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {

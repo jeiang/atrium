@@ -61,6 +61,7 @@ var Retired = []RetiredKey{
 	{Module: "mail", Key: "rebalance_run_gap_seconds"},
 	{Module: "mail", Key: "rebalance_runs_required"},
 	{Module: "mail", Key: "rebalance_top_terms"},
+	{Module: "assistant", Key: "agent_schedule_media_thumbnails"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {
