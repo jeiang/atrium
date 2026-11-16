@@ -28,7 +28,6 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/tool"
@@ -58,7 +57,6 @@ type Runner struct {
 	Registry *registry.Registry
 	Source   registry.Source
 	Ledger   *ledger.Store
-	MailOpen mail.OpenFunc
 	Profile  func(ctx context.Context, q db.Querier, projectID int64) (string, error)
 }
 
@@ -385,7 +383,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	writer := progress.NewWriter(ctx, d.Write, runID, now, o.Stop)
 	tc := &tool.Context{
 		DB: d, Cfg: cfg, Env: env, Kind: kind, ThreadID: thread.ID, RunID: runID, AllowedURLs: allowed,
-		Embed: o.Embed, Now: now, Client: client, Progress: writer, Ledger: r.Ledger, MailOpen: r.MailOpen, Sources: o.Limits.Sources,
+		Embed: o.Embed, Now: now, Client: client, Progress: writer, Ledger: r.Ledger, Sources: o.Limits.Sources,
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,

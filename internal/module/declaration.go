@@ -11,8 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/runtime"
@@ -84,8 +82,7 @@ type EffectDeps struct {
 	DB        *db.DB
 	Ledger    *ledger.Store
 	Env       config.Env
-	Open      mail.OpenFunc
-	Syncer    *mailsync.Syncer
+	Cfg       config.Config
 	Now       func() float64
 	Resume    func(context.Context, int64) error
 	Tools     registry.Source

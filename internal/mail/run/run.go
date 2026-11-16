@@ -89,11 +89,11 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 	}
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
 	cat := module.SetFrom(ctx).Catalog()
-	store, err := cat.Ledger(d, env, open, now)
+	store, err := cat.Ledger(d, env, cfg, now)
 	if err != nil {
 		return nil, err
 	}
-	registry, err := cat.Proposals(module.EffectDeps{DB: d, Ledger: store, Open: open, Syncer: syncer, Now: now, Env: env, Approvals: cat.Approvals()})
+	registry, err := cat.Proposals(module.EffectDeps{DB: d, Ledger: store, Cfg: cfg, Now: now, Env: env, Approvals: cat.Approvals()})
 	if err != nil {
 		return nil, err
 	}

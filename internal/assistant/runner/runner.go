@@ -15,12 +15,11 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func New(tools registry.Source, store *ledger.Store, open mail.OpenFunc) (*loop.Runner, error) {
-	r := &loop.Runner{Ledger: store, MailOpen: open, Profile: kb.ProfileBlock}
+func New(tools registry.Source, store *ledger.Store) (*loop.Runner, error) {
+	r := &loop.Runner{Ledger: store, Profile: kb.ProfileBlock}
 	child := func(ctx context.Context, tc *tool.Context) *asstapp.Service {
 		return asstapp.New(tc.DB, tc.Env, tc.Now).WithRuns(func() *service.Service {
 			svc := service.New(ctx, tc.DB, tc.Cfg, tc.Env, r)

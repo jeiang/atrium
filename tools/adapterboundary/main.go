@@ -80,6 +80,19 @@ var allowed = map[string]bool{
 	"internal/assistant/registry": true,
 }
 
+var platform = map[string]bool{
+	"internal/module":    true,
+	"internal/tool":      true,
+	"internal/ledger":    true,
+	"internal/proposals": true,
+}
+
+var units = []string{"internal/mail", "internal/media", "internal/calendar", "internal/contacts"}
+
+var platformPending = map[string]bool{
+	"internal/module/flag.go\tinternal/mail/accounts": true,
+}
+
 func main() {
 	edges, err := scan()
 	if err != nil {
@@ -87,7 +100,7 @@ func main() {
 		os.Exit(1)
 	}
 	for _, e := range edges {
-		fmt.Fprintln(os.Stderr, "adapter imports a forbidden package:", e)
+		fmt.Fprintln(os.Stderr, e)
 	}
 	if len(edges) > 0 {
 		os.Exit(1)
@@ -109,7 +122,9 @@ func scan() ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if !isAdapter(file, src) {
+		platformFile := platform[path.Dir(file)]
+		adapterFile := isAdapter(file, src)
+		if !platformFile && !adapterFile {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
@@ -121,8 +136,11 @@ func scan() ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if forbidden(imp) {
-				edges = append(edges, file+"\t"+imp)
+			if adapterFile && forbidden(imp) {
+				edges = append(edges, "adapter imports a forbidden package: "+file+"\t"+imp)
+			}
+			if platformFile && unitImport(file, imp) {
+				edges = append(edges, "platform package imports a unit: "+file+"\t"+imp)
 			}
 		}
 		return nil
@@ -139,6 +157,19 @@ func isAdapter(file string, src []byte) bool {
 	}
 	for _, a := range adapters {
 		if matches(a.pattern, file) && (a.marker == "" || bytes.Contains(src, []byte(a.marker))) {
+			return true
+		}
+	}
+	return false
+}
+
+func unitImport(file, imp string) bool {
+	rel, ok := strings.CutPrefix(imp, module+"/")
+	if !ok || platformPending[file+"\t"+rel] {
+		return false
+	}
+	for _, unit := range units {
+		if rel == unit || strings.HasPrefix(rel, unit+"/") {
 			return true
 		}
 	}

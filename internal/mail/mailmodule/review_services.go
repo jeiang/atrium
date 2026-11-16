@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
@@ -38,14 +37,13 @@ func ReviewServices(o ReviewOptions) func(*web.Deps) reviewpages.Services {
 			open = o.Clients(d.Cfg)
 		}
 		now := mail.WallClock
-		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
 		cat := module.SetFrom(d.Ctx).Catalog()
-		effects, err := cat.Ledger(d.DB, d.Env, open, now)
+		effects, err := cat.Ledger(d.DB, d.Env, d.Cfg, now)
 		if err != nil {
 			panic(err)
 		}
 		d.DrainOnStop(effects.Drain)
-		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
+		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Cfg: d.Cfg, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
 			if d.ResumeRun == nil {
 				return proposals.ProposalError("the assistant module is not running")
 			}
