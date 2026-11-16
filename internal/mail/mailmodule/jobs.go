@@ -24,7 +24,7 @@ func (m Module) syncJob(env config.Env) scheduler.Definition {
 		Module: module.Mail, Key: run.SyncJobKey, Name: passrun.Sync, Kind: scheduler.JobBuiltin,
 		Prompt: "Every 15 minutes: sync the mailboxes, then route, flag and file mail under the mail safety gate (no assistant run).",
 		Every:  15 * time.Minute, InitialDelay: 2 * time.Minute, Timeout: 20 * time.Minute,
-		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, RunsWhilePaused: true,
+		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, RunsWhilePaused: true, Protected: true,
 		Resources: []string{mail.PassResource}, Needs: []string{module.Mail},
 		Run: func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 			d, cfg, err := m.Resources(ctx)
@@ -94,7 +94,7 @@ func trackingJob(deps jobworker.Dependencies) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Mail, Key: module.Mail + "/" + tracking.JobPackageTracking, Name: tracking.JobPackageTracking, Kind: scheduler.JobBuiltin,
 		Prompt:   "Hourly: refresh active Ship24 package trackers (no model run).",
-		Schedule: "0 * * * *", ScheduleSetting: tracking.KeySchedulePackageTracking, Persistent: true, Timeout: 15 * time.Minute,
+		Schedule: "0 * * * *", CarriedSetting: tracking.KeySchedulePackageTracking, Persistent: true, Timeout: 15 * time.Minute,
 		Spend: scheduler.ModelFree, Needs: []string{module.Mail},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			_, err := mailapp.New(e.Service.DB, e.Service.Cfg, e.Service.Env, e.Now).PollTrackers(ctx, struct{}{})

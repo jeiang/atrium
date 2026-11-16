@@ -30,7 +30,11 @@ func describe(job *asstapp.ScheduleJob) map[string]any {
 	if job.NextDue != nil {
 		due = *job.NextDue
 	}
-	return map[string]any{"id": job.ID, "name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.Enabled, "next_due": due, "created_by": job.CreatedBy}
+	out := map[string]any{"id": job.ID, "name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.Enabled, "next_due": due, "created_by": job.CreatedBy}
+	if job.CreatedBy == asstapp.SourceOperator {
+		out["read_only"] = true
+	}
+	return out
 }
 
 func source(tc *tool.Context) *asstapp.ScheduleSource {
@@ -157,7 +161,7 @@ func Tools(svc Service) []tool.Tool {
 		},
 		{
 			Name:        "schedule_list",
-			Description: "List scheduled runs with their next due time.",
+			Description: "List scheduled runs with their next due time. Schedules the operator made are listed read-only (created_by operator, read_only true): report them, but do not try to change, cancel, enable or disable them.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`),
 			Handler:     list(svc),
 			Effect:      tool.Read,
