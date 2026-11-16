@@ -12,7 +12,9 @@ import (
 	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -36,7 +38,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Requires:   Requirements(),
 		Host:       contacts.HostSettings(),
 		Jobs:       []scheduler.Definition{CardDAVJob(m.Jobs)},
-		Commands:   []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(openSync(mc.Env))}}},
+		Commands:   []*cli.Command{{Name: "contacts", Commands: []*cli.Command{jobcmd.Delegating(syncCommand(openSync(mc.Env)), unit.Contacts+"/"+passrun.CardDAV)}}},
 		Tools:      ToolDefinitions(),
 		Operations: operations,
 		Bindings:   bindings,

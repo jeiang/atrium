@@ -15,7 +15,7 @@ func memoryWorkJob(deps jobworker.Dependencies) scheduler.Definition {
 	return scheduler.Definition{
 		Module: unit.Assistant, Key: unit.Assistant + "/" + assistant.MemoryWorkName, Name: assistant.MemoryWorkName,
 		Kind: scheduler.JobBuiltin, Prompt: "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).",
-		Schedule: "*/2 * * * *", ScheduleSetting: assistant.KeyMemoryWork, Persistent: true, Timeout: 15 * time.Minute,
+		Schedule: "*/2 * * * *", CarriedSetting: assistant.KeyMemoryWork, Persistent: true, Timeout: 15 * time.Minute,
 		Spend: scheduler.ConditionalSpends, Needs: []string{unit.Assistant},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			svc := asstapp.New(e.Service.DB, e.Service.Env, e.Now).WithMemoryModel(e.Service.ResolveClient, e.Service.Inference)

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
@@ -20,10 +21,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/schedulecmd"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
@@ -141,7 +142,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), memorycmd.Command(memoryCLIService(mc.Env, m.Now))},
+		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), schedulecmd.Command(scheduleCLIService(mc.Env, m.Now))},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
@@ -177,7 +178,7 @@ func AttentionSources(env config.Env) []attention.Source {
 
 func SettingGroups() []settings.Group {
 	return []settings.Group{
-		{Name: "spending", Title: "Spending", Keys: append([]string{inference.ThreadCapKey}, append(runCaps(), assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD}},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 			memory.ModelKey, memory.EffortKey,
@@ -198,13 +199,4 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 		}
 	}
 	return append(defs, research.Definition(), lookup.Definition(), websearch.Definition(), report.Definition())
-}
-
-func runCaps() []string {
-	models := pricing.Models()
-	keys := make([]string, len(models))
-	for i, m := range models {
-		keys[i] = inference.RunCapKey(m.ID)
-	}
-	return keys
 }

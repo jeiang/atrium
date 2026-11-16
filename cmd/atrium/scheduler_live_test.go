@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -72,8 +73,8 @@ func TestAgentTickLeavesAnotherProcessLiveRunOnTheJobThread(t *testing.T) {
 	tick := func(what string) {
 		t.Helper()
 		next, stderr := tickProcess(t)
-		if code := exitCode(next.Wait()); code != 0 {
-			t.Fatalf("%s tick exit %d: %s", what, code, stderr)
+		if code := exitCode(next.Wait()); code != cli.ExitTempFail {
+			t.Fatalf("%s tick beside serve exit %d, want the refusal: %s", what, code, stderr)
 		}
 	}
 
