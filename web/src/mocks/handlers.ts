@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
+import { type HomeScenario, homeHandlers } from './home';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -10,6 +11,7 @@ export interface MockScenario {
   needsYou?: number;
   modules?: Record<string, ModuleStateState>;
   mail?: { mode: string; paused: boolean };
+  home?: HomeScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
@@ -130,4 +132,5 @@ export const handlers = [
     });
   }),
   ...simulatorHandlers,
+  ...homeHandlers(scenario),
 ];

@@ -453,6 +453,12 @@
     color: var(--ink-3);
   }
 
+  .digest__more a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--row);
+  }
+
   .weather {
     display: grid;
     gap: var(--s-3);
@@ -493,6 +499,50 @@
   .weather__plan {
     margin: 0;
     color: var(--ink-2);
+  }
+
+  .composer {
+    display: flex;
+    gap: var(--s-2);
+    align-items: flex-end;
+    padding: var(--s-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    background: var(--leaf);
+    box-shadow: var(--shadow-1);
+  }
+
+  .composer:focus-within {
+    border-color: var(--moss);
+  }
+
+  .composer__text {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: var(--target);
+    max-block-size: 9rem;
+    margin: 0;
+    padding: var(--s-2) var(--s-3);
+    border: 0;
+    border-radius: var(--r-sm);
+    font: inherit;
+    font-size: var(--t-input);
+    line-height: var(--lh-body);
+    color: var(--ink);
+    background: transparent;
+    resize: none;
+    field-sizing: content;
+  }
+
+  .composer__text::placeholder {
+    color: var(--ink-2);
+    opacity: 1;
+  }
+
+  .composer__send {
+    flex: none;
+    inline-size: var(--target);
+    block-size: var(--target);
   }
 
   .status-slot {
@@ -545,6 +595,7 @@
     .sources span,
     .digest__list > li,
     .digest__list a,
+    .digest__more a,
     .status-slot {
       min-block-size: var(--target);
     }
