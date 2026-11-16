@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
@@ -132,7 +133,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, agentOpen(m.Open), subagentCLIService(mc.Env, mc.Tools, m.Now), agentTick(m.Open)), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
+		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), subagentCLIService(mc.Env, mc.Tools, m.Now), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
 		Leaves:   map[string]module.Leaf{"kb import": {Always: true}},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {

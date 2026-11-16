@@ -463,9 +463,23 @@ claims about the running application. Operator contracts are in
   remains explicit and keeps its inbox record.
 
 ### Modules, scheduling, and observability
-- `serve` runs supervised mail watches and scheduled work; `agent tick` is
-  a one-shot pass. The NixOS module ships `atrium.service`, the optional
-  `atrium-media-agent.service` and no atrium timers.
+- `serve` runs supervised mail watches and scheduled work and is the only
+  executor of declared jobs while it is up; `agent tick` is a one-shot pass
+  that refuses (75) when another process holds the serve lock. The NixOS
+  module ships `atrium.service`, the optional `atrium-media-agent.service`
+  and no atrium timers. `atrium job run <key>` (`internal/scheduler/jobcmd`)
+  inserts a `job_runs` row with status `requested`; serve's scheduler polls
+  for requested rows every 250 ms after its start-up recovery, claims one by
+  turning the row `running` under a `manual/<serve owner>` claim (manual
+  semantics: no backoff or coalescing), and marks a request it cannot take
+  `refused` with the running run's id. The CLI waits on the row, prints it as
+  JSON, withdraws an untaken or refused request, exits 69
+  (`cli.ExitUnavailable`) when `db.OtherServe` finds no serve, and a canceled
+  wait leaves the run in serve. A request older than a minute is refused.
+  `jobcmd.Delegating` wraps `sync`, `calendar sync`, `calendar candidates`,
+  `contacts sync` and `media poll|sweep`: with serve up they hand their
+  declared job to serve (input flags such as `--account` refuse), without it
+  they run in process as before.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -534,7 +548,11 @@ claims about the running application. Operator contracts are in
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.
-  The claim transaction records a per-claim owner on the job, the running
+  An in-process fence (`scheduler/fence.go`, one entry per job id for the
+  whole process) is taken before the resource locks by the tick, recovery,
+  requested-run pickup and `RunNow`; a second claim in the same process is
+  refused with `*scheduler.Running` (the running run's id; it unwraps to
+  `*db.LockBusy`). The claim transaction records a per-claim owner on the job, the running
   run and a `job_resource_leases` row for every resource (sorted raw keys,
   `job/<id>` included); the lease lasts 90 seconds and the running job
   renews it every 20 seconds in one transaction that checks the job's

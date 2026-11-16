@@ -15,6 +15,8 @@ const (
 	StatusSkippedModule       Status = "skipped_module"
 	StatusSkippedUnconfigured Status = "skipped_unconfigured"
 	StatusMissed              Status = "missed_coalesced"
+	StatusRequested           Status = "requested"
+	StatusRefused             Status = "refused"
 	workerLost                       = "worker lost"
 )
 

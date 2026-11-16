@@ -25,10 +25,12 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -85,7 +87,7 @@ func ProposeKinds() []proposals.Definition {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := m.mailCommands(mc.Env)
 	cmds := []*cli.Command{
-		mailCmds.SyncCommand(),
+		jobcmd.Delegating(mailCmds.SyncCommand(), run.SyncJobKey, "account"),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),

@@ -15,7 +15,21 @@ All configured public, emergency, and ops sockets must bind before readiness.
 A failed bind closes the sockets already opened. A listener failure while
 running stops the other listeners and produces a failed exit. A second serve
 on the same database is refused by its serve lock. `serve` runs scheduled work
-and mail watches; `agent tick` is a one-shot pass over due work. It exits 0
+and mail watches, and it is the only process that runs a declared job while it
+is up. `atrium job run <module>/<name>` asks the running serve to run a declared
+job now and prints the run record as JSON (`run`, `job`, `status`, `owner`,
+`error`). It exits 0 when the run ended in a non-error status, 1 when it ended
+`error`, 75 when the job was already running (the message names the running
+run) or serve did not take the request within 30 seconds, and 69 when no serve
+holds the database's serve lock; then nothing runs. Interrupting the wait
+leaves a started run running in serve.
+
+While serve is up, the one-shot commands `sync`, `calendar sync`,
+`calendar candidates`, `contacts sync`, `media poll` and `media sweep` hand
+their declared job to serve the same way and print its run record instead of
+their statistics. `sync --account` and `agent tick` refuse with exit 75 and
+name `atrium job run`. With no serve running they run in the calling process
+as before. `agent tick` is then a one-shot pass over due work. It exits 0
 when it finished work or nothing was due, 75 when every due job was locked by
 another invocation and nothing started, and 1 on an error.
 

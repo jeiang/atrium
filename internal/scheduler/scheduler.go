@@ -120,13 +120,19 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 		if s.stopping() {
 			return nil
 		}
+		if s.enter(job.ID) != nil {
+			s.busy.Add(1)
+			continue
+		}
 		resources := claimResources(s.jobs, job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
+			s.leave(job.ID)
 			s.busy.Add(1)
 			continue
 		}
 		if err != nil {
+			s.leave(job.ID)
 			return err
 		}
 		claim, skip, err := claimJob(ctx, s.db, job.ID, resources, stamp, s.owner(), admit)
@@ -135,6 +141,7 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 		}
 		if err != nil || claim == nil {
 			_ = locks.Close()
+			s.leave(job.ID)
 		}
 		if err != nil {
 			return err
@@ -147,6 +154,7 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 			}
 		}
 		if claim != nil {
+			s.hold(job.ID, claim.JobRunID)
 			s.start(ctx, *claim, locks, s.work(claim.Job))
 		}
 	}
@@ -170,23 +178,31 @@ func (s *Scheduler) recoverRuns(ctx context.Context) error {
 			}
 			continue
 		}
+		if s.enter(p.job.ID) != nil {
+			s.busy.Add(1)
+			continue
+		}
 		resources := claimResources(s.jobs, p.job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
+			s.leave(p.job.ID)
 			s.busy.Add(1)
 			continue
 		}
 		if err != nil {
+			s.leave(p.job.ID)
 			return err
 		}
 		claim, err := takeOver(ctx, s.db, p, resources, now, s.owner())
 		if err != nil || claim == nil {
 			_ = locks.Close()
+			s.leave(p.job.ID)
 		}
 		if err != nil {
 			return err
 		}
 		if claim != nil {
+			s.hold(p.job.ID, claim.JobRunID)
 			s.start(ctx, *claim, locks, s.recovery)
 		}
 	}
@@ -217,6 +233,7 @@ func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, f
 	s.wg.Go(func() {
 		defer release()
 		defer s.finished(job)
+		defer s.leave(claim.Job.ID)
 		defer func() { _ = locks.Close() }()
 		_ = s.execute(db.WithHeld(job, locks), claim, fn)
 	})
@@ -511,6 +528,7 @@ func (s *Scheduler) Run(ctx context.Context, stop <-chan struct{}) error {
 		if ok && !recovered {
 			recovered = true
 			s.recovered(nil)
+			s.wg.Go(func() { s.serveRequests(ctx) })
 		}
 		s.beat()
 		s.wait(ctx)
