@@ -29,6 +29,7 @@
     "@playwright/test": "1.63.0",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@types/node": "24.19.2",
+    "lighthouse": "13.6.0",
     "msw": "3.0.4",
     "orval": "8.47.0",
     "playwright-core": "1.63.0",

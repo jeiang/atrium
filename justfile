@@ -1,5 +1,5 @@
-dev := if env("ATRIUM_DEV_SHELL", "") == "1" { "" } else { "nix develop -c" }
-reexec := 'if [ -z "${ATRIUM_DEV_SHELL:-}" ]; then exec nix develop -c bash "$0"; fi'
+dev := if env("ATRIUM_DEV_ROOT", "") == justfile_directory() { "" } else { "nix develop -c" }
+reexec := 'if [ "${ATRIUM_DEV_ROOT:-}" != "' + justfile_directory() + '" ]; then exec nix develop -c bash "$0"; fi'
 
 default:
   @just --list
@@ -96,17 +96,26 @@ fast-check extraArgs="":
 assets: static-assets web-assets
 
 static-assets:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
   rm -rf internal/web/static
   cp -R "${ATRIUM_STATIC_ASSETS:?set by the dev shell}" internal/web/static
   chmod -R u+w internal/web/static
 
 web-assets:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
   [ "${ATRIUM_WEB_ASSETS:?set by the dev shell}" != "{{justfile_directory()}}/web/dist" ] || (cd web && npm run build)
   rm -rf internal/web/app/dist
   cp -R "$ATRIUM_WEB_ASSETS" internal/web/app/dist
   chmod -R u+w internal/web/app/dist
 
 web-stub:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
   rm -rf internal/web/app/dist
   cp -R "${ATRIUM_WEB_STUB:?set by the dev shell}" internal/web/app/dist
   chmod -R u+w internal/web/app/dist
@@ -114,6 +123,7 @@ web-stub:
 css mode="watch":
   #!/usr/bin/env bash
   set -euo pipefail
+  {{reexec}}
   [ -e internal/web/static/assets.json ] || just static-assets
   mkdir -p internal/web/assets/node_modules/basecoat-css
   tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C internal/web/assets/node_modules/basecoat-css
@@ -173,6 +183,14 @@ web-lint:
 [positional-arguments]
 web-test *args:
   {{dev}} bash -c 'cd web && npm run build:mock && npm run e2e -- "$@"' web-test "$@"
+
+# Build the production client and check its brotli sizes against web/budgets.json
+web-size:
+  {{dev}} bash -c 'cd web && npm run build && node scripts/size.ts dist'
+
+# Build the production client and check its Lighthouse scores and metrics against web/budgets.json
+web-lighthouse:
+  {{dev}} bash -c 'cd web && npm run build && node scripts/lighthouse.ts dist'
 
 settingsgen:
   go run ./tools/settingsgen docs/config
