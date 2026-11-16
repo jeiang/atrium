@@ -520,6 +520,19 @@
     assert cfg.renderedHost.connections."mail/icloud".config.preset == "icloud";
     assert cfg.renderedHost.connections."mail/icloud".config.enabled == "true";
     assert cfg.renderedHost.connections."mail/icloud".credential_files."mail/icloud/password" == "\${CREDENTIALS_DIRECTORY}/mail-account-icloud";
+    assert let
+      entered = host {
+        web.allowedHost = "atrium.example.org";
+        mailAccounts.home = {
+          preset = "icloud";
+          login = "operator@icloud.example";
+        };
+      };
+    in
+      failing entered
+      == []
+      && entered.config.services.atrium.renderedHost.connections."mail/home".credential_files == {}
+      && !(lib.hasInfix "mail-account-home" entered.config.systemd.units."atrium.service".text);
     assert cfg.renderedHost.connections."service/oidc".config.api_client_id == "api-client";
     assert cfg.renderedHost.connections."service/oidc".credential_files.client_secret == "\${CREDENTIALS_DIRECTORY}/connection-service-oidc-client_secret";
     assert cfg.initialTimezone != null; true;

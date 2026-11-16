@@ -113,7 +113,7 @@ func TestOfferedSettingsPatchOnBothSurfacesWithIfMatch(t *testing.T) {
 			if f.Group == "" {
 				t.Errorf("schema field %s has no placement group", f.Key)
 			}
-			if f.Restart != (strings.HasSuffix(f.Key, "_enabled") || f.Key == "tz") {
+			if f.Restart != (f.Key == "tz") {
 				t.Errorf("schema field %s restart = %v", f.Key, f.Restart)
 			}
 			if slices.ContainsFunc(retiredToConstants, func(r settings.RetiredKey) bool { return r.Key == f.Key }) {

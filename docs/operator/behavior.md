@@ -258,7 +258,10 @@ The Connections page shows configuration, credential presence, and observed
 health. Credentials are write-only. Database credentials require encryption;
 host file credentials stay files. Host-declared connections cannot be edited as
 operator-owned rows. Mail accounts have stable ids; account creation tests
-before saving, and deployment-pinned accounts cannot be removed.
+before saving, and deployment-pinned accounts cannot be removed. A host file
+credential replaces a value entered in the UI for the same slot at the next
+process start. A deployment-pinned mail account declared without a password
+file takes its password from the UI, and that value stays.
 
 A stored credential never follows a connection to a different endpoint. A
 URL/host change must replace every retained credential in that request, or the
@@ -392,12 +395,26 @@ failing, disabled or needs reauth; the module's settings header names the
 connection and its state, and the line clears once a check passes. A failed
 Test does not hold mail.
 
-Module flags are restart-only. Change `<name>_enabled` through `atrium settings
-set` or host configuration, then restart serve. Settings pages show module
-state and a restart notice when the stored flag differs; they do not toggle
-flags. The settings API returns 409 for a flag because it is not an offered
-setting. Saving a working connection or completing OAuth consent does not turn
-its module flag on.
+Apps are the units with a flag the operator switches: mail, calendar, media
+and Grafana ("Server ops"). `GET /apps` (both `/api/v1` and `/web/v1`,
+operator only) lists each app with its flag, module state and reason, pin
+source, the units it depends on and the unmet ones, the units that depend on
+it, its connection needs, its nav entries and the settings revision.
+`PUT /apps/{id}/enabled` with `{"enabled": true|false}` and an optional
+`If-Match` revision writes `<name>_enabled` through the settings write, so the
+settings audit row is written and the change applies live: routes, tools,
+jobs, nav and the connection rows only that app needs follow without a
+restart. It refuses with 409 and a reason: `core_unit` for the assistant,
+contacts and notifications, `pinned` for a host-declared flag,
+`dependency_off` when turning on an app whose dependency is off,
+`dependent_on` when turning off an app another enabled unit needs, and
+`needs_settings` or `unavailable` from the module guard. An unknown id is 404
+and a stale `If-Match` is 412 with the current `revision`. No assistant tool
+switches an app; the system prompt names the apps that are off.
+`atrium settings set <name>_enabled` still works and a running serve picks it
+up within a few seconds. The settings API keeps refusing flags with 409
+because they are not offered settings. Saving a working connection or
+completing OAuth consent does not turn its module flag on.
 
 Weather is its own app, switched by `weather_enabled`. The first start of a
 version with the Weather app turns it on once when the assistant is on and
