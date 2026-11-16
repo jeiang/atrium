@@ -86,6 +86,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	readModelOps, readModelBindings := m.readModelOperations()
 	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
+	operations = append(operations, webusage.DescribeRoutes())
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "usage routes", Uses: []application.Name{webusage.RoutesName}})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanDeletionsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)

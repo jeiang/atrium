@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -124,6 +125,16 @@ func compareBool(a, b bool) int {
 	default:
 		return 1
 	}
+}
+
+const RoutesName application.Name = "usage.routes"
+
+type RoutesInput struct {
+	Days int `json:"days"`
+}
+
+func DescribeRoutes() application.Definition {
+	return application.Describe[RoutesInput, []Route](RoutesName, application.Query, []application.Authority{application.Bootstrap}, application.NoEffect, false)
 }
 
 type Route struct {

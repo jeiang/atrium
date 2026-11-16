@@ -409,7 +409,7 @@ func TestMeConditionalAndErrorMembers(t *testing.T) {
 	s := newAPISite(t)
 	owner := s.token("owner")
 	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
-	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.json["api_version"] != float64(1) || len(me.json) != 4 {
+	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.json["api_version"] != float64(1) || me.json["agent"] != false || len(me.json) != 5 {
 		t.Fatalf("me: %d %s", me.status, me.body)
 	}
 	tag := me.header.Get("ETag")
