@@ -4,6 +4,7 @@
   import { schemeOptions } from './fixtures';
   import Actions from './sections/Actions.svelte';
   import Approvals from './sections/Approvals.svelte';
+  import Apps from './sections/Apps.svelte';
   import Assistant from './sections/Assistant.svelte';
   import AssistantSettings from './sections/AssistantSettings.svelte';
   import Collections from './sections/Collections.svelte';
@@ -42,6 +43,7 @@
   <Settings />
   <Overlays />
   <Connections />
+  <Apps />
   <Widgets />
   <Approvals />
   <Tools />

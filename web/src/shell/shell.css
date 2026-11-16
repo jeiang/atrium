@@ -382,6 +382,10 @@
     display: none;
   }
 
+  .pause-slot {
+    margin-block-end: var(--s-4);
+  }
+
   .offline-status {
     display: flex;
     flex-wrap: wrap;

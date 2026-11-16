@@ -1,25 +1,19 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
   import { Router } from 'sv-router';
+  import { ApiError, automationResume, ok } from '../contract';
   import { announce } from '../shared/announce.svelte';
   import { device } from '../shared/device.svelte';
   import LiveRegion from '../shared/LiveRegion.svelte';
+  import Button from '../shared/ui/Button.svelte';
   import Icon from '../shared/ui/Icon.svelte';
+  import Notice from '../shared/ui/Notice.svelte';
   import Toaster from '../shared/ui/Toaster.svelte';
   import { toast } from '../shared/ui/toast.svelte';
   import AccountMenu from './AccountMenu.svelte';
   import { useShell } from './frame';
-  import {
-    appsDestination,
-    chats,
-    type DestinationPath,
-    destinations,
-    home,
-    inbox,
-    mailStatus,
-    moduleOn,
-    shownApps,
-  } from './nav';
+  import { openApps, useApps } from './manifest';
+  import { appsDestination, chats, type DestinationPath, destinations, home, inbox, mailStatus, moduleOn } from './nav';
   import OfflineStatus from './OfflineStatus.svelte';
   import { isActive, navigate, p, route, routeTitle } from './router';
   import SessionState, { stateTitle } from './SessionState.svelte';
@@ -34,7 +28,10 @@
 
   const frame = $derived(signedIn ? shell.data : undefined);
   const waiting = $derived(frame?.needs_you ?? 0);
-  const appRows = $derived(shownApps(frame));
+  const apps = useApps(() => signedIn !== undefined);
+  const appRows = $derived(signedIn ? openApps(apps.data) : []);
+  const paused = $derived(frame?.pause?.paused === true);
+  let resuming = $state(false);
   const mailMeta = $derived(mailStatus(frame));
   const visible = $derived(destinations.filter((item) => moduleOn(frame, item.module)));
 
@@ -56,7 +53,11 @@
     };
   });
 
-  const title = $derived(signedIn ? routeTitle() : stateTitle(session.view));
+  const title = $derived(
+    signedIn
+      ? routeTitle((id) => apps.data?.find((app) => app.id === id && app.enabled)?.name)
+      : stateTitle(session.view),
+  );
 
   let lastPath: string | undefined;
   $effect(() => {
@@ -80,12 +81,31 @@
 
   const current = (path: DestinationPath): 'page' | undefined =>
     (path === '/' ? isActive('/') : isActive.startsWith(path)) ? 'page' : undefined;
-  const spacesCurrent = $derived(
+  const appsCurrent = $derived(
     !isActive('/') && !isActive.startsWith('/inbox') && !isActive.startsWith('/chat') && !isActive('/search')
       ? 'page'
       : undefined,
   );
   const shortcut = navigator.userAgent.includes('Mac') ? '⌘K' : 'Ctrl K';
+
+  async function onResume(): Promise<void> {
+    if (resuming) return;
+    resuming = true;
+    try {
+      ok(await automationResume({ headers: { 'Idempotency-Key': crypto.randomUUID() } }));
+      announce('Automation resumed');
+    } catch (error) {
+      toast(
+        error instanceof ApiError
+          ? error.message
+          : 'The outcome is unknown. atrium reloaded the pause state and did not try again.',
+        { tone: 'error' },
+      );
+    } finally {
+      resuming = false;
+      void client.invalidateQueries({ queryKey: ['shell'] });
+    }
+  }
 
   function onShortcut(event: KeyboardEvent): void {
     if (!signedIn || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey)) return;
@@ -143,7 +163,7 @@
                     href={p('/apps/:app', { params: { app: app.id } })}
                     aria-current={isActive('/apps/:app', { app: app.id }) ? 'page' : undefined}
                   >
-                    <Icon name={app.icon} /><span class="rail-link__text">{app.title}</span>
+                    <span class="rail-link__text">{app.name}</span>
                     {#if app.id === 'mail' && mailMeta}
                       <span class="rail-link__meta">{mailMeta}</span>
                     {/if}
@@ -183,6 +203,16 @@
         <OfflineStatus {cached} />
       {/if}
     </div>
+    {#if signedIn && paused}
+      <div class="pause-slot">
+        <Notice tone="warn" title="Automation paused">
+          {frame?.pause?.reason || 'Scheduled work is skipped until you resume.'}
+          {#snippet action()}
+            <Button variant="secondary" pending={resuming} onclick={onResume}>Resume</Button>
+          {/snippet}
+        </Notice>
+      </div>
+    {/if}
     {#if signedIn && shell.isPending}
       <p class="frame-note">Loading atrium. Home, your plan and the inbox appear here in a moment.</p>
     {:else if signedIn}
@@ -201,7 +231,7 @@
       {/if}
     </a>
     <a href={p('/chat')} aria-current={current('/chat')}><Icon name={chats.icon} /><span>{chats.label}</span></a>
-    <a href={p('/spaces')} aria-current={spacesCurrent}><Icon name="apps" /><span>Spaces</span></a>
+    <a href={p('/apps')} aria-current={appsCurrent}><Icon name="apps" /><span>Apps</span></a>
   </nav>
 </div>
 <svelte:window onkeydown={onShortcut} />

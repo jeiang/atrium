@@ -26,7 +26,7 @@ export const routes = [
   { path: '/', title: 'Home' },
   { path: '/inbox', title: 'Inbox' },
   { path: '/apps', title: 'Apps' },
-  { path: '/spaces', title: 'Spaces' },
+  { path: '/apps/directory', title: 'All apps' },
   { path: '/settings', title: 'Settings' },
 ] as const;
 
