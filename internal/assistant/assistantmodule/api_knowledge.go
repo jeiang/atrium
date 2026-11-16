@@ -155,6 +155,8 @@ type KnowledgeBatch struct {
 
 type knowledgeCursor struct {
 	UpdatedAt float64 `json:"u"`
+	CreatedAt float64 `json:"c,omitempty"`
+	Title     string  `json:"t,omitempty"`
 	ID        int64   `json:"id"`
 }
 
@@ -162,6 +164,7 @@ type KnowledgeSubjectsRequest struct {
 	Query  string     `query:"q" json:"-"`
 	Kind   string     `query:"kind" json:"-" api:"enum=fact|lesson|wiki"`
 	Scope  string     `query:"scope" json:"-" api:"enum=work|personal"`
+	Sort   string     `query:"sort" json:"-" api:"enum=changed|title|created"`
 	Cursor api.Cursor `query:"cursor" json:"-"`
 	Limit  api.Limit  `query:"limit" json:"-"`
 }
@@ -357,13 +360,13 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Query(d, kbapp.DescribeSubjects(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}},
 			"GET /knowledge/subjects", func(ctx context.Context, in KnowledgeSubjectsRequest) (application.Read[KnowledgeSubjects], error) {
-				list := kbapp.SubjectsInput{Query: in.Query, Kind: in.Kind, Scope: in.Scope, Limit: int(in.Limit) + 1}
+				list := kbapp.SubjectsInput{Query: in.Query, Kind: in.Kind, Scope: in.Scope, Sort: in.Sort, Limit: int(in.Limit) + 1}
 				if in.Cursor.Set() {
 					var last knowledgeCursor
 					if err := in.Cursor.Last(&last); err != nil {
 						return application.Read[KnowledgeSubjects]{}, err
 					}
-					list.After = &kb.ListKey{UpdatedAt: last.UpdatedAt, ID: last.ID}
+					list.After = &kb.ListKey{UpdatedAt: last.UpdatedAt, CreatedAt: last.CreatedAt, Title: last.Title, ID: last.ID}
 				}
 				read, err := svc().Subjects(ctx, list)
 				if err != nil {
@@ -374,7 +377,7 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 				if len(rows) > int(in.Limit) {
 					rows = rows[:in.Limit]
 					last := rows[len(rows)-1]
-					page.NextCursor = in.Cursor.Next(knowledgeCursor{UpdatedAt: last.Updated, ID: last.ID})
+					page.NextCursor = in.Cursor.Next(knowledgeCursor{UpdatedAt: last.Updated, CreatedAt: last.Created, Title: last.Title, ID: last.ID})
 				}
 				for _, r := range rows {
 					page.Items = append(page.Items, KnowledgeSubjectRow{ID: r.ID, Title: r.Title, Kind: r.Kind, Scope: r.Scope, Private: r.Private,

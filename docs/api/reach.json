@@ -17,10 +17,11 @@
       "area": "composer",
       "operations": [
         "assistant.configuration",
+        "assistant.subagent_roles",
         "assistant.thread.options"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 3,
+      "bound": 3
     },
     {
       "area": "devices",
@@ -307,6 +308,7 @@
         "commitments.get",
         "commitments.list",
         "commitments.reopen",
+        "commitments.snooze",
         "commitments.update",
         "tasks.add",
         "tasks.delete",
@@ -317,8 +319,8 @@
         "tasks.reopen",
         "tasks.update"
       ],
-      "required": 15,
-      "bound": 15
+      "required": 16,
+      "bound": 16
     },
     {
       "area": "threads",
@@ -401,7 +403,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 225,
-  "total_bound": 225,
+  "total_required": 227,
+  "total_bound": 227,
   "total_approval_reached": 11
 }

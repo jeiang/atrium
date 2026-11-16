@@ -2694,6 +2694,9 @@
             ],
             "type": "string"
           },
+          "snoozed_until": {
+            "type": "number"
+          },
           "source": {
             "enum": [
               "task",
@@ -2804,6 +2807,18 @@
         },
         "required": [
           "item"
+        ],
+        "type": "object"
+      },
+      "CommitmentSnoozeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "until": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "until"
         ],
         "type": "object"
       },
@@ -4680,7 +4695,9 @@
               "message",
               "record",
               "task",
-              "file"
+              "file",
+              "space",
+              "contact"
             ],
             "type": "string"
           }
@@ -4831,6 +4848,9 @@
           "private": {
             "type": "boolean"
           },
+          "ref": {
+            "type": "string"
+          },
           "snippet": {
             "type": "string"
           },
@@ -4843,7 +4863,9 @@
               "message",
               "record",
               "task",
-              "file"
+              "file",
+              "space",
+              "contact"
             ],
             "type": "string"
           },
@@ -4900,6 +4922,9 @@
                 "type": "null"
               }
             ]
+          },
+          "needs_you": {
+            "$ref": "#/components/schemas/NeedsYou"
           },
           "q": {
             "type": "string"
@@ -5334,6 +5359,11 @@
           },
           "kind": {
             "type": "string"
+          },
+          "loop_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
           },
           "source_id": {
             "type": "string"
@@ -9219,6 +9249,29 @@
         ],
         "type": "object"
       },
+      "NeedsYou": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/QueueCounts"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "counts",
+          "items"
+        ],
+        "type": "object"
+      },
       "NewThread": {
         "additionalProperties": false,
         "properties": {
@@ -9591,7 +9644,9 @@
               "message",
               "record",
               "task",
-              "file"
+              "file",
+              "space",
+              "contact"
             ],
             "type": "string"
           }
@@ -10922,6 +10977,11 @@
               "attention"
             ],
             "type": "string"
+          },
+          "loop_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
           },
           "module": {
             "type": "string"
@@ -14129,8 +14189,7 @@
           }
         },
         "required": [
-          "name",
-          "effort"
+          "name"
         ],
         "type": "object"
       },
@@ -14883,6 +14942,50 @@
         "required": [
           "stopped",
           "run_id"
+        ],
+        "type": "object"
+      },
+      "SubagentRole": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "prompt",
+          "effort",
+          "tools"
+        ],
+        "type": "object"
+      },
+      "SubagentRoleList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SubagentRole"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -17296,6 +17399,129 @@
           "settings"
         ],
         "x-atrium-area": "settings",
+        "x-atrium-module": "assistant"
+      }
+    },
+    "/assistant/subagent-roles": {
+      "get": {
+        "description": "The subagent roles the assistant can start, as declared in code: name, description, prompt, effort and tools. Read-only.",
+        "operationId": "assistant.subagent_roles",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubagentRoleList"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "composer"
+        ],
+        "x-atrium-area": "composer",
         "x-atrium-module": "assistant"
       }
     },
@@ -20172,6 +20398,179 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCommitmentChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "tasks"
+        ],
+        "x-atrium-area": "tasks",
+        "x-atrium-module": "core"
+      }
+    },
+    "/commitments/{ref}/snooze": {
+      "post": {
+        "description": "Snooze an open task or commitment by `ref` until `until` (Unix seconds, in the future). The item leaves `/queue` until then and shows `snoozed_until` in `/commitments`. Undoable. Refetch on an app event `change` for the topic `tasks` (tasks) or `mail` (commitments from mail).",
+        "operationId": "commitments.snooze",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitmentSnoozeRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
@@ -27351,6 +27750,13 @@
           },
           {
             "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "Idempotency-Key",
             "schema": {
               "maxLength": 255,
@@ -28749,6 +29155,18 @@
               "enum": [
                 "work",
                 "personal"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "enum": [
+                "changed",
+                "title",
+                "created"
               ],
               "type": "string"
             }
