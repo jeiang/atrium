@@ -100,8 +100,9 @@
       openapi-diff = goCheck "openapi-diff" [pkgs.jq] "bash tools/openapi-diff/openapi-diff.sh";
 
       ownership = goCheck "ownership" [] ''
+        export GOFLAGS="$GOFLAGS -tags=${tags}"
         go run ./tools/tableownership
-        GOFLAGS="$GOFLAGS -tags=${tags}" go run ./tools/registrationownership
+        go run ./tools/registrationownership
         go run ./tools/adapterboundary
       '';
 
