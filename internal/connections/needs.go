@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -287,8 +288,12 @@ func (e *Unmet) Error() string {
 	return text
 }
 
-func Unavailable(ctx context.Context, q db.Querier, id ID, capability, reason string) *Unmet {
-	out := &Unmet{Connection: id, Capability: capability, Reason: reason}
+func Unavailable(ctx context.Context, q db.Querier, id ID, capability string, cause error) *Unmet {
+	out := &Unmet{Connection: id, Capability: capability, Reason: cause.Error()}
+	fallback := RepairUnreachable
+	if errors.As(cause, new(config.NotConfigured)) {
+		fallback = RepairConfig
+	}
 	v, err := ReadView(ctx, q, id)
 	if err != nil {
 		out.Repair = RepairID(id, RepairConfig)
@@ -300,7 +305,7 @@ func Unavailable(ctx context.Context, q db.Querier, id ID, capability, reason st
 	case class != "":
 		out.Repair = RepairID(id, class)
 	default:
-		out.Repair = RepairID(id, RepairUnreachable)
+		out.Repair = RepairID(id, fallback)
 	}
 	return out
 }

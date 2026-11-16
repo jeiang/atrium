@@ -574,7 +574,7 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 	if err != nil {
 		var missing config.NotConfigured
 		if errors.As(err, &missing) {
-			return PollResult{Unmet: connections.Unavailable(ctx, d.Read, ConnectionID, "api", missing.Error())}, nil
+			return PollResult{Unmet: connections.Unavailable(ctx, d.Read, ConnectionID, "api", missing)}, nil
 		}
 		return PollResult{}, err
 	}
@@ -615,7 +615,7 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 		}
 	}
 	if failed > 0 && failed == out.Checked {
-		out.Unmet = connections.Unavailable(ctx, d.Read, ConnectionID, "api", "every tracker request failed: "+lastErr.Error())
+		out.Unmet = connections.Unavailable(ctx, d.Read, ConnectionID, "api", fmt.Errorf("every tracker request failed: %w", lastErr))
 	}
 	return out, nil
 }

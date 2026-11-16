@@ -51,16 +51,21 @@ type capabilityModel struct {
 	Repairs []capabilityRepair `json:"repairs"`
 }
 
-func (s *connectionSite) dependencies() capabilityModel {
-	s.t.Helper()
-	s.page()
-	code, body, _ := fetch(s.t, s.client, http.MethodGet, s.base+"/api/v1/connections/dependencies", nil)
-	if code != http.StatusOK {
-		s.t.Fatalf("GET /api/v1/connections/dependencies: %d %.600s", code, body)
+func capabilityAPI(t *testing.T, base, token, path string) string {
+	t.Helper()
+	got := (&apiSite{t: t, base: base}).do(http.MethodGet, "/api/v1"+path, token, nil)
+	if got.status != http.StatusOK {
+		t.Fatalf("GET /api/v1%s: %d %.600s", path, got.status, got.body)
 	}
+	return got.body
+}
+
+func capabilityDependencies(t *testing.T, base, token string) capabilityModel {
+	t.Helper()
+	body := capabilityAPI(t, base, token, "/connections/dependencies")
 	var reply struct{ Data capabilityModel }
 	if err := json.Unmarshal([]byte(body), &reply); err != nil {
-		s.t.Fatalf("dependencies body %.600s: %v", body, err)
+		t.Fatalf("dependencies body %.600s: %v", body, err)
 	}
 	return reply.Data
 }
@@ -121,7 +126,11 @@ capabilities = ["viewer"]
 credential_files = { viewer_token = %q }
 `, c.id, c.label, c.url, key)
 	}
-	return hostConnectionConfig(t, dir, "host-grafana-pair.toml", table)
+	path := filepath.Join(dir, "host-grafana-pair.toml")
+	if err := os.WriteFile(path, []byte(table), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *testing.T) {
@@ -132,6 +141,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaPairHost(t, dir, first.URL, second.URL))
+	token := localAPIToken(t, "capabilities")
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	defer func() { s.stop() }()
@@ -139,7 +149,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 		return connectionState(t, dir, "service/grafana") == "failing" && connectionState(t, dir, "service/grafana-b") == "ok"
 	})
 
-	model := s.dependencies()
+	model := capabilityDependencies(t, s.base, token)
 	viewer := model.need(t, "grafana", "viewer")
 	if viewer.Connection != "service/grafana-b" || !viewer.Met || viewer.Availability != "available" || viewer.Soft ||
 		!slices.Equal(viewer.Candidates, []string{"service/grafana", "service/grafana-b"}) {
@@ -157,10 +167,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 		t.Fatalf("first connection notices %q, want one failing notice without affected features", bodies)
 	}
 
-	code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/api/v1/connections", nil)
-	if code != http.StatusOK {
-		t.Fatalf("GET /api/v1/connections: %d %.300s", code, body)
-	}
+	body := capabilityAPI(t, s.base, token, "/connections")
 	var listed struct {
 		Data struct {
 			Connections []struct {
@@ -195,7 +202,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 	if len(bodies) != 1 || !strings.Contains(bodies[0], "; affects server health, server tools") {
 		t.Fatalf("second connection notices %q, want one failing notice naming the affected features", bodies)
 	}
-	model = s.dependencies()
+	model = capabilityDependencies(t, s.base, token)
 	viewer = model.need(t, "grafana", "viewer")
 	if viewer.Connection != "service/grafana" || viewer.Met || viewer.Availability != "unavailable" || viewer.Repair != "connection:service/grafana:unreachable" {
 		t.Fatalf("grafana viewer with both connections failing = %+v, want the first, unavailable", viewer)
@@ -210,7 +217,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 	if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitOK {
 		t.Fatalf("recovered first connection test: exit %d %s", got.code, got.stderr)
 	}
-	model = s.dependencies()
+	model = capabilityDependencies(t, s.base, token)
 	if viewer = model.need(t, "grafana", "viewer"); viewer.Connection != "service/grafana" || !viewer.Met {
 		t.Fatalf("grafana viewer after the first recovered = %+v", viewer)
 	}
@@ -262,12 +269,13 @@ func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *test
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
 
+	token := localAPIToken(t, "capabilities")
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	b := mnpNewBrowser(t, s.base)
 	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK)
 	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}}, http.StatusOK)
-	model := s.dependencies()
+	model := capabilityDependencies(t, s.base, token)
 	indexer := model.need(t, "media", "indexer")
 	if indexer.Kind != "service/eztv" || indexer.Connection != "service/eztv" || !indexer.Soft || !slices.Contains(indexer.Features, "media channels") {
 		t.Fatalf("media indexer need = %+v", indexer)

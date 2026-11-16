@@ -427,9 +427,9 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 	}
 	switch {
 	case polled > 0 && feedFailed == polled:
-		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindEZTV), "indexer", "every channel feed failed: "+feedErr.Error())
+		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindEZTV), "indexer", fmt.Errorf("every channel feed failed: %w", feedErr))
 	case addFailed > 0 && len(result.Added) == 0:
-		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindQbittorrent), "api", "every add failed: "+addErr.Error())
+		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindQbittorrent), "api", fmt.Errorf("every add failed: %w", addErr))
 	}
 	return result, nil
 }
