@@ -3,7 +3,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -200,5 +202,74 @@ func TestConnectionsTestAllChecksSilentlyAndNeedsAnIDOrAll(t *testing.T) {
 	}
 	if one := runApp(t, "connections", "test", "service/webpush"); one.code != cli.ExitOK || push.count() != 1 {
 		t.Fatalf("connections test service/webpush: exit %d, %d pushes", one.code, push.count())
+	}
+}
+
+func refusingIMAP(t *testing.T) {
+	t.Helper()
+	ca := smtpCert(t)
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", smtpTLSConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = c.Close() }()
+				_, _ = c.Write([]byte("* OK [CAPABILITY IMAP4rev1 AUTH=PLAIN] ready\r\n"))
+				r := bufio.NewReader(c)
+				for {
+					line, err := r.ReadString('\n')
+					if err != nil {
+						return
+					}
+					tag, command, _ := strings.Cut(strings.TrimSpace(line), " ")
+					switch verb, _, _ := strings.Cut(strings.ToUpper(command), " "); verb {
+					case "LOGIN", "AUTHENTICATE":
+						_, _ = c.Write([]byte(tag + " NO [AUTHENTICATIONFAILED] Authentication failed.\r\n"))
+					case "LOGOUT":
+						_, _ = c.Write([]byte("* BYE\r\n" + tag + " OK\r\n"))
+						return
+					default:
+						_, _ = c.Write([]byte(tag + " OK\r\n"))
+					}
+				}
+			}()
+		}
+	}()
+	t.Setenv("ATRIUM_IMAP_ADDR", ln.Addr().String())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+}
+
+func TestARefusedIMAPLoginNeedsReauthOnceAtRuntimeAndInTheCheck(t *testing.T) {
+	dir, embed := keyedMailFixture(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed, filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@home.test", "app-pass", false}))
+	refusingIMAP(t)
+	strictSMTPRig(t, map[string]string{"me@home.test": "app-pass"})
+	if got := runApp(t, "connections", "list"); got.code != cli.ExitOK {
+		t.Fatalf("connections list: exit %d stderr %q", got.code, got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	if _, err := d.Write.Exec(`UPDATE connections SET state = 'ok', reason = 'seeded', checked_at = ?, results_json = '[{"capability":"imap","state":"ok"},{"capability":"smtp","state":"ok"}]' WHERE id = 'mail/home'`, float64(time.Now().Unix())); err != nil {
+		t.Fatal(err)
+	}
+	label, _, _ := runtimeRow(t, dir, "mail/home")
+	notices := connectionNotices(t, dir, label)
+
+	base, _ := startServeLogged(t, dir)
+	token := localAPIToken(t, "api")
+	s := &apiSite{t: t, base: base}
+	s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "home"})
+	waitUntil(t, 10*time.Second, "the refused login to need reauth", func() bool { return connectionState(t, dir, "mail/home") == "needs_reauth" })
+	if got := runApp(t, "connections", "test", "mail/home"); !strings.Contains(got.stdout, "mail/home\tneeds_reauth") {
+		t.Fatalf("connections test mail/home: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if n := connectionNotices(t, dir, label) - notices; n != 1 {
+		t.Fatalf("%d notices for one refused login, want 1", n)
 	}
 }

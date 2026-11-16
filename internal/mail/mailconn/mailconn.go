@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
@@ -68,7 +70,11 @@ func Password(lease *connections.Lease, account string) (string, error) {
 
 func IMAPOutcome(err error) connections.Result {
 	if err != nil {
-		return connections.Result{Capability: CapabilityIMAP, State: connections.Failing, Reason: err.Error()}
+		state := connections.Failing
+		if errors.Is(err, mail.ErrLoginRefused) {
+			state = connections.NeedsReauth
+		}
+		return connections.Result{Capability: CapabilityIMAP, State: state, Reason: err.Error()}
 	}
 	return connections.Result{Capability: CapabilityIMAP, State: connections.OK, Reason: "IMAP login works"}
 }

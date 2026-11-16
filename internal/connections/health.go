@@ -101,8 +101,13 @@ type outcome struct {
 	ID       ID
 	Revision int64
 	OK       bool
+}
+
+type RuntimeReport struct {
+	ID       ID
+	revision int64
 	store    *Store
-	result   *Result
+	result   Result
 }
 
 type observedKey struct {
@@ -120,6 +125,7 @@ var (
 	outcomes  = make(chan outcome, 64)
 	succeeded sync.Map
 	observed  sync.Map
+	reporters sync.Map
 )
 
 // Outcomes reports runtime requests that suggest the connection's health
@@ -140,8 +146,18 @@ func report(id ID, revision int64, ok bool) {
 	}
 }
 
+func Reports(d *db.DB) (<-chan RuntimeReport, func()) {
+	ch := make(chan RuntimeReport, 64)
+	reporters.Store(d, ch)
+	return ch, func() { reporters.CompareAndDelete(d, ch) }
+}
+
 func (l *Lease) Report(r Result) {
 	if l.store == nil || l.store.d == nil || r.Capability == "" {
+		return
+	}
+	ch, ok := reporters.Load(l.store.d)
+	if !ok {
 		return
 	}
 	key := observedKey{store: l.store, id: l.id, capability: r.Capability}
@@ -152,24 +168,21 @@ func (l *Lease) Report(r Result) {
 		}
 	}
 	select {
-	case outcomes <- outcome{ID: l.id, Revision: l.revision, OK: r.State == OK, store: l.store, result: &r}:
+	case ch.(chan RuntimeReport) <- RuntimeReport{ID: l.id, revision: l.revision, store: l.store, result: r}:
 		observed.Store(key, observation{state: r.State, at: now})
 	default:
 	}
 }
 
-func (o outcome) Record(ctx context.Context) (bool, error) {
-	if o.result == nil {
-		return false, nil
+func (r RuntimeReport) Record(ctx context.Context) error {
+	current, err := r.store.Get(ctx, r.ID)
+	if err != nil || !changes(current, r.result) {
+		return err
 	}
-	current, err := o.store.Get(ctx, o.ID)
-	if err != nil || !changes(current, *o.result) {
-		return true, err
+	if err := r.store.Observe(ctx, r.ID, r.revision, r.result); err != nil && !errors.As(err, new(*Conflict)) {
+		return err
 	}
-	if err := o.store.Observe(ctx, o.ID, o.Revision, *o.result); err != nil && !errors.As(err, new(*Conflict)) {
-		return true, err
-	}
-	return true, nil
+	return nil
 }
 
 func changes(current View, r Result) bool {

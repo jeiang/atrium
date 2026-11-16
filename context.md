@@ -315,14 +315,18 @@ claims about the running application. Operator contracts are in
   observations do not change a disabled row.
 - In `serve`, IMAP dials (TCP, TLS, greeting, login), SMTP sessions and
   iCloud mirror syncs report their outcome per capability through
-  `Lease.Report`, a non-blocking send to the connection outcome channel
-  (same state at most once a minute per connection and capability). The
-  health watch records it with `Store.Observe` only when the capability's
-  state class (ok or expiring, failing or needs-reauth) changes, so these
-  outcomes never run inside a mail write and never fail one. Login
-  refusals (SMTP 530-535, DAV 401/403) record needs-reauth; connection,
-  TLS and server errors record failing; per-message errors and unknown
-  SMTP outcomes record nothing. These kinds have no grace window.
+  `Lease.Report`, a non-blocking send to the health watch registered for
+  the same database (`connections.Reports`); with no watch, as in a
+  one-shot CLI command, the outcome is dropped. The same state is sent at
+  most once a minute per connection and capability. The health watch
+  records it with `Store.Observe` only when the capability's state class
+  (ok or expiring, failing or needs-reauth) changes, so these outcomes
+  never run inside a mail write and never fail one. Login refusals (IMAP
+  `NO` to LOGIN or AUTHENTICATE, marked `mail.ErrLoginRefused` and shared
+  with the scheduled check's classifier; SMTP 530-535; DAV 401/403) record
+  needs-reauth; connection, TLS and server errors record failing;
+  per-message errors and unknown SMTP outcomes record nothing. These kinds
+  have no grace window.
   `connections test --all` uses the silent checks; `connections test <id>`
   keeps the explicit test.
 - qBittorrent and the embedding endpoint have a 6-hour grace window,

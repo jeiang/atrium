@@ -143,7 +143,9 @@ func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
 		t.Errorf("%d stale alerts recorded while notifications are off", n)
 	}
 	if n := rows("notifications"); n != 0 {
-		t.Errorf("%d notifications recorded while notifications are off", n)
+		var titles string
+		_ = d.Read.QueryRow("SELECT group_concat(title || ': ' || body, ' | ') FROM notifications").Scan(&titles)
+		t.Errorf("%d notifications recorded while notifications are off: %s", n, titles)
 	}
 	if n := push.count(); n != 0 {
 		t.Fatalf("%d pushes sent while notifications are off", n)

@@ -202,9 +202,11 @@ the silent check of every configured connection instead, so it sends no push;
 giving both an id and `--all`, or neither, is a usage error.
 
 Mail and iCloud connections also learn from real use while `serve` runs. An
-IMAP session that cannot connect or log in marks the mail connection's `imap`
-capability failing. An SMTP session that cannot connect or greet marks `smtp`
-failing, and a refused login (codes 530 to 535) marks it as needing reauth. A
+IMAP session that cannot connect marks the mail connection's `imap`
+capability failing, and a login the server refuses marks it as needing reauth,
+as the scheduled check does. An SMTP session that cannot connect or greet marks
+`smtp` failing, and a refused login (codes 530 to 535) marks it as needing
+reauth. A
 contacts or calendar mirror sync that the server refuses (401 or 403) marks
 `carddav` or `caldav` as needing reauth, and a server error, network error or
 TLS error marks it failing. A later session or sync that works marks the
