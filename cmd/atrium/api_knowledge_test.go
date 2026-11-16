@@ -21,6 +21,7 @@ func localAPISite(t *testing.T) (*apiSite, string, *db.DB) {
 		t.Fatal(err)
 	}
 	t.Cleanup(stop)
+	settleBootChecks(t, dir, db.Key{})
 	return &apiSite{t: t, base: base}, token, d
 }
 

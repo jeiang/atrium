@@ -85,6 +85,7 @@ func startAPISite(t *testing.T, dir string, api *modelLog, extra ...string) *api
 		t.Fatalf("serve listens on %s, want %s", served, base)
 	}
 	t.Cleanup(stop)
+	settleBootChecks(t, dir, db.Key{})
 	return &apiSite{t: t, base: base, dir: dir, idp: idp, api: api}
 }
 
