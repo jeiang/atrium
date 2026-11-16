@@ -43,6 +43,7 @@ import (
 	webfetchtools "github.com/jeiang/atrium/internal/assistant/tools/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/attention"
+	"github.com/jeiang/atrium/internal/ledger"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -143,7 +144,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
 				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
-				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger)),
+				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoTaskSnooze, d.Now)}),
 				Resolve:   export.Resolve(d.Ledger),
 			}
 		},

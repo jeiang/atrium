@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/attention"
+	"github.com/jeiang/atrium/internal/ledger"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -166,7 +167,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			effects := module.Effects{
 				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
-				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, d.Open), live.Undo(d.Open, d.DB), openloops.Undo()),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, d.Open), live.Undo(d.Open, d.DB), openloops.Undo(), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoCommitmentSnooze, d.Now)}),
 				Resolve:   live.Resolve(),
 			}
 			if d.Syncer != nil {

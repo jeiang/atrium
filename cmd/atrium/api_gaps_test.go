@@ -1,0 +1,165 @@
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+)
+
+func undoableWrite(t *testing.T, s *apiSite, token string, got apiReply, status int) {
+	t.Helper()
+	apiData(t, got, status)
+	effects, _ := got.json["effect_ids"].([]any)
+	if len(effects) == 0 || got.json["undoable"] != true {
+		t.Fatalf("write is not reported undoable: %s", got.body)
+	}
+	if undo := s.do(http.MethodPost, fmt.Sprintf("/api/v1/undo/write:%d", number(t, effects[len(effects)-1])), token, nil); undo.status != http.StatusOK {
+		t.Fatalf("undo of a write reported undoable: %d %s", undo.status, undo.body)
+	}
+}
+
+func TestKnowledgeWritesReportUndoable(t *testing.T) {
+	s, token, d := localAPISite(t)
+	if _, err := d.Write.Exec("INSERT INTO projects (id, name, instructions, effort, context_limit, private, created_at, updated_at) VALUES (7, 'Harbor', '', 'high', 200000, 0, 0, 0)"); err != nil {
+		t.Fatal(err)
+	}
+	created := apiData(t, s.do(http.MethodPost, "/api/v1/knowledge", token, map[string]any{"title": "Boiler code", "body": "The code is 4417.", "scope": "work"}), http.StatusCreated)
+	record := fmt.Sprintf("/api/v1/knowledge/%d", number(t, created["id"]))
+	undoableWrite(t, s, token, s.do(http.MethodPatch, record, token, map[string]any{"body": "The code is 9001."}), http.StatusOK)
+	for _, action := range []string{"confirm", "retract"} {
+		undoableWrite(t, s, token, s.do(http.MethodPost, record+"/"+action, token, nil), http.StatusOK)
+	}
+	apiData(t, s.do(http.MethodPost, record+"/retract", token, nil), http.StatusOK)
+	undoableWrite(t, s, token, s.do(http.MethodPost, record+"/restore", token, nil), http.StatusOK)
+	link := s.do(http.MethodPost, record+"/links", token, map[string]any{"target_kind": "space", "target_id": "7", "relation": "part_of"})
+	undoableWrite(t, s, token, link, http.StatusCreated)
+}
+
+func subjectTitles(t *testing.T, s *apiSite, token, path string) ([]string, string) {
+	t.Helper()
+	data := apiData(t, s.do(http.MethodGet, path, token, nil), http.StatusOK)
+	var titles []string
+	for _, item := range apiItems(t, data) {
+		titles = append(titles, item.(map[string]any)["title"].(string))
+	}
+	next, _ := data["next_cursor"].(string)
+	return titles, next
+}
+
+func TestKnowledgeSubjectsSort(t *testing.T) {
+	s, token, d := localAPISite(t)
+	for _, row := range []struct {
+		title            string
+		created, updated int
+	}{{"banana", 10, 40}, {"Apple", 30, 10}, {"cherry", 20, 30}, {"apple pie", 40, 20}} {
+		if _, err := d.Write.Exec("INSERT INTO kb_records (title, body, scope, writer, created_at, updated_at) VALUES (?, 'body', 'work', 'operator', ?, ?)", row.title, row.created, row.updated); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for sort, want := range map[string]string{
+		"":        "banana cherry apple pie Apple",
+		"changed": "banana cherry apple pie Apple",
+		"title":   "Apple apple pie banana cherry",
+		"created": "apple pie Apple cherry banana",
+	} {
+		first, next := subjectTitles(t, s, token, "/api/v1/knowledge/subjects?limit=3&sort="+sort)
+		rest, last := subjectTitles(t, s, token, "/api/v1/knowledge/subjects?limit=3&sort="+sort+"&cursor="+url.QueryEscape(next))
+		if got := strings.Join(append(first, rest...), " "); got != want || next == "" || last != "" {
+			t.Errorf("sort %q: %q, want %q", sort, got, want)
+		}
+		if sort == "title" {
+			expectAPI(t, s.do(http.MethodGet, "/api/v1/knowledge/subjects?limit=3&sort=created&cursor="+url.QueryEscape(next), token, nil), http.StatusBadRequest, "bad_cursor")
+		}
+	}
+	expectField(t, s.do(http.MethodGet, "/api/v1/knowledge/subjects?sort=size", token, nil), "sort")
+}
+
+func queueItem(t *testing.T, s *apiSite, token, id string) map[string]any {
+	t.Helper()
+	for _, item := range apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/queue", token, nil), http.StatusOK)) {
+		if m := item.(map[string]any); m["id"] == id {
+			return m
+		}
+	}
+	return nil
+}
+
+func TestQueueLoopItemCarriesLoopID(t *testing.T) {
+	s, token, d := localAPISite(t)
+	if _, err := d.Write.Exec("INSERT INTO open_loops (rowid, thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) VALUES (41, 'thread-a', 'work', 'owe_reply', 9, 100, 'ana@example.com', 'Lease renewal', 100)"); err != nil {
+		t.Fatal(err)
+	}
+	item := queueItem(t, s, token, "loop:thread-a")
+	if item == nil || item["loop_id"] != float64(41) {
+		t.Fatalf("queue loop item: %v", item)
+	}
+	if got := s.do(http.MethodPost, fmt.Sprintf("/api/v1/mail/loops/%d/dismiss", number(t, item["loop_id"])), token, nil); got.status != http.StatusOK {
+		t.Fatalf("dismiss by loop_id: %d %s", got.status, got.body)
+	}
+	if again := queueItem(t, s, token, "loop:thread-a"); again != nil {
+		t.Fatalf("dismissed loop still queued: %v", again)
+	}
+}
+
+func TestAssistantSubagentRolesRead(t *testing.T) {
+	s, token, _ := localAPISite(t)
+	items := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/assistant/subagent-roles", token, nil), http.StatusOK))
+	mail := spaceItem(t, items, "name", "mail")
+	if len(items) < 2 || mail == nil || mail["effort"] != "medium" || mail["description"] == "" || len(mail["tools"].([]any)) == 0 {
+		t.Fatalf("subagent roles: %v", items)
+	}
+	expectConditional(t, s, token, "/api/v1/assistant/subagent-roles")
+	if got := s.do(http.MethodPost, "/api/v1/assistant/subagent-roles", token, nil); got.status != http.StatusMethodNotAllowed && got.status != http.StatusNotFound {
+		t.Fatalf("roles accepted a write: %d", got.status)
+	}
+}
+
+func TestMailSearchLeavesOutDisabledAccounts(t *testing.T) {
+	s, token, d := localAPISite(t)
+	for _, stmt := range []string{
+		"INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, date_ts, first_seen) VALUES (1, 'icloud', 1, 1, 1, 'kept@test', 'kept', 'Harbor fares', 'pat@example.com', 100, 0)",
+		"INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, date_ts, first_seen) VALUES (2, 'retired', 1, 1, 2, 'gone@test', 'gone', 'Harbor tickets', 'sam@example.com', 200, 0)",
+	} {
+		if _, err := d.Write.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{"/api/v1/mail/messages", "/api/v1/mail/messages?q=harbor", "/web/v1/mail/messages?q=harbor"} {
+		items := apiItems(t, apiData(t, s.do(http.MethodGet, path, token, nil), http.StatusOK))
+		if len(items) != 1 || items[0].(map[string]any)["account"] != "icloud" {
+			t.Fatalf("%s: %v", path, items)
+		}
+	}
+	if items := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages?account=retired", token, nil), http.StatusOK)); len(items) != 0 {
+		t.Fatalf("a disabled account's mail is searchable: %v", items)
+	}
+}
+
+func TestCommitmentSnoozeHidesFromQueueAndUndoes(t *testing.T) {
+	s, token, d := localAPISite(t)
+	if _, err := d.Write.Exec("INSERT INTO tasks (id, title, notes, status, priority, due, created_ts, updated_ts) VALUES (5, 'Pay rent', '', 'open', 'normal', '2020-01-01', 0, 0)"); err != nil {
+		t.Fatal(err)
+	}
+	if queueItem(t, s, token, "task:5") == nil {
+		t.Fatal("overdue task not queued")
+	}
+	until := float64(time.Now().Add(48 * time.Hour).Unix())
+	snoozed := s.do(http.MethodPost, "/api/v1/commitments/task:5/snooze", token, map[string]any{"until": until})
+	if item := apiData(t, snoozed, http.StatusOK)["item"].(map[string]any); item["snoozed_until"] != until {
+		t.Fatalf("snooze: %s", snoozed.body)
+	}
+	if queueItem(t, s, token, "task:5") != nil {
+		t.Fatal("snoozed task still queued")
+	}
+	if item := apiData(t, s.do(http.MethodGet, "/api/v1/commitments/task:5", token, nil), http.StatusOK)["item"].(map[string]any); item["snoozed_until"] != until {
+		t.Fatalf("commitment read lacks snoozed_until: %v", item)
+	}
+	expectField(t, s.do(http.MethodPost, "/api/v1/commitments/task:5/snooze", token, map[string]any{"until": 1}), "until")
+	undoableWrite(t, s, token, snoozed, http.StatusOK)
+	if queueItem(t, s, token, "task:5") == nil {
+		t.Fatal("undone snooze left the task hidden")
+	}
+}

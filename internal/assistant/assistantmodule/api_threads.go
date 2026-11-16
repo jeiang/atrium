@@ -745,6 +745,10 @@ func apiBindings(p *apiPages) []application.Binding {
 			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.ModelConfiguration], error) {
 				return svc.Configuration(ctx, asstapp.ConfigurationInput{})
 			}),
+		apiQuery(p, asstapp.DescribeSubagentRoles(), application.APIShape{Area: "composer", Description: "The subagent roles the assistant can start, as declared in code: name, description, prompt, effort and tools. Read-only."}, "GET /assistant/subagent-roles",
+			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.SubagentRoleList], error) {
+				return svc.ListSubagentRoles(ctx)
+			}),
 		apiCommand(p, asstapp.DescribeDefaultsSet(), application.APIShape{Area: "settings", Errors: errs(application.Invalid)}, "PUT /assistant/defaults",
 			func(ctx context.Context, svc *asstapp.Service, in apiDefaultsRequest) (application.Change[asstapp.DefaultsChanged], error) {
 				return svc.DefaultsSet(ctx, asstapp.DefaultsSetInput{Model: in.Model, Effort: in.Effort, ContextLimit: strconv.FormatInt(in.ContextLimit, 10)})
