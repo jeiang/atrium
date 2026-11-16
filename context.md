@@ -1143,7 +1143,12 @@ claims about the running application. Operator contracts are in
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
   catalog (`atrium catalog openapi --output docs/api`, drift-checked by
   `--check`). Approval-only operations count as reached through
-  `review.approve` and are listed separately in `reach.json`. The run event
+  `review.approve` and are listed separately in `reach.json`. The
+  `openapi-diff` check (oasdiff, a Go tool dependency) fails on a breaking
+  change against the deployed baseline in `docs/api/baseline/` unless
+  `approved-breaking.txt` lists it; the baseline is `v3.3.0`. A nightly
+  Schemathesis workflow runs the `GET` operations of `/api/v1` against a
+  throwaway server and opens or updates one issue on failure. The run event
   stream is documented in `docs/api/run-stream.md` (heartbeats,
   `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
   retention, `tool_done.results` with web search sources, live-only
