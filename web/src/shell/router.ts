@@ -9,6 +9,7 @@ declare module 'sv-router' {
 }
 
 const placeholder = () => import('./PlaceholderPage.svelte');
+const knowledge = () => import('../features/knowledge/KnowledgePage.svelte');
 
 export const { p, navigate, isActive, route } = createRouter(
   {
@@ -27,7 +28,15 @@ export const { p, navigate, isActive, route } = createRouter(
       meta: { title: 'Chats' },
     },
     '/plan': { '/': placeholder, meta: { title: 'Plan' } },
-    '/knowledge': { '/': placeholder, meta: { title: 'Knowledge' } },
+    '/knowledge': {
+      '/': knowledge,
+      '/subjects': knowledge,
+      '/instructions': knowledge,
+      '/:id': knowledge,
+      meta: { title: 'Knowledge' },
+    },
+    '/tasks': { '/:id': placeholder, meta: { title: 'Plan' } },
+    '/search': { '/': () => import('../features/search/SearchPage.svelte'), meta: { title: 'Search' } },
     '/apps': {
       '/': () => import('./AppsPage.svelte'),
       '/:app': () => import('./AppPage.svelte'),

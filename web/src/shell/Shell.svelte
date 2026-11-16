@@ -19,7 +19,7 @@
     moduleOn,
     shownApps,
   } from './nav';
-  import { isActive, p, route, routeTitle } from './router';
+  import { isActive, navigate, p, route, routeTitle } from './router';
   import SessionState, { stateTitle } from './SessionState.svelte';
   import { session } from './session.svelte';
 
@@ -77,14 +77,39 @@
   const current = (path: DestinationPath): 'page' | undefined =>
     (path === '/' ? isActive('/') : isActive.startsWith(path)) ? 'page' : undefined;
   const spacesCurrent = $derived(
-    !isActive('/') && !isActive.startsWith('/inbox') && !isActive.startsWith('/chat') ? 'page' : undefined,
+    !isActive('/') && !isActive.startsWith('/inbox') && !isActive.startsWith('/chat') && !isActive('/search')
+      ? 'page'
+      : undefined,
   );
+  const shortcut = navigator.userAgent.includes('Mac') ? '⌘K' : 'Ctrl K';
+
+  function onShortcut(event: KeyboardEvent): void {
+    if (!signedIn || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey)) return;
+    if (event.key.toLowerCase() !== 'k') return;
+    event.preventDefault();
+    const input = document.querySelector<HTMLInputElement>('[data-search-input]');
+    if (input) {
+      input.focus();
+      input.select();
+      return;
+    }
+    void navigate('/search');
+  }
 </script>
 
 <a class="skip" href="#main">Skip to content</a>
 <div class="frame">
   <nav class="rail" aria-label="Main">
     <a class="brand" href={p('/')}><Icon name="home" /><span>atrium</span></a>
+    <a
+      class="rail-link rail-search"
+      href={p('/search')}
+      aria-current={isActive('/search') ? 'page' : undefined}
+      aria-keyshortcuts="Meta+K Control+K"
+    >
+      <Icon name="search" /><span class="rail-link__text">Search</span>
+      <kbd class="rail-search__key" aria-hidden="true">{shortcut}</kbd>
+    </a>
     <ul class="rail__list">
       <li>
         <a class="rail-link" href={p('/')} aria-current={current('/')}>
@@ -134,6 +159,13 @@
   </nav>
   <header class="topbar">
     <a class="brand" href={p('/')}><Icon name="home" /><span>atrium</span></a>
+    <a
+      class="topbar__search"
+      href={p('/search')}
+      aria-label="Search"
+      aria-current={isActive('/search') ? 'page' : undefined}
+      aria-keyshortcuts="Meta+K Control+K"><Icon name="search" /></a
+    >
     <div class="topbar__account">
       {#if signedIn}
         <AccountMenu session={signedIn} version={frame?.version} placement="topbar" />
@@ -162,5 +194,6 @@
     <a href={p('/spaces')} aria-current={spacesCurrent}><Icon name="apps" /><span>Spaces</span></a>
   </nav>
 </div>
+<svelte:window onkeydown={onShortcut} />
 <LiveRegion />
 <Toaster />

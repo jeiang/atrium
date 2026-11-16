@@ -4,6 +4,8 @@ import { API_BASE } from '../contract';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxCount, inboxHandlers } from './inbox';
+import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
+import { type SearchScenario, searchHandlers } from './search';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -16,13 +18,15 @@ export interface MockScenario {
   inbox?: InboxScenario;
   chat?: ChatScenario;
   home?: HomeScenario;
+  knowledge?: KnowledgeScenario;
+  search?: SearchScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
 export const MOCK_EVENTS = 'atrium-mock-events';
 const CSRF = 'mock-csrf-token';
 const MODULES = ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'];
-const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant'];
+const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant', 'knowledge', 'tasks'];
 const encoder = new TextEncoder();
 
 function scenario(): MockScenario {
@@ -53,7 +57,7 @@ function unauthenticated(proxy = false): Response {
 function session(state: MockScenario): WebSession {
   return {
     auth_mode: state.signOut === false ? 'proxy' : 'oidc',
-    identity: { subject: 'operator', email: 'operator@example.test', name: 'Operator' },
+    identity: { subject: 'operator', email: 'operator@example.test', name: 'Operator', agent: false },
     csrf_token: CSRF,
     sign_out: state.signOut === false ? null : { method: 'POST', url: `${API_BASE}/session/logout` },
   };
@@ -139,5 +143,7 @@ export const handlers = [
   ...homeHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,
+  ...knowledgeHandlers,
+  ...searchHandlers,
   ...inboxHandlers,
 ];
