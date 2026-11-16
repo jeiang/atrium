@@ -165,7 +165,7 @@ func (s *Service) Test(ctx context.Context, in TestInput) (application.Change[[]
 	var out []View
 	auditID, err := s.command(ctx, TestName, ids, func(commit connections.Commit) error {
 		var err error
-		out, err = s.pass(ctx, ids, false, commit)
+		out, err = s.pass(ctx, ids, in.All, commit)
 		return err
 	})
 	return application.Change[[]View]{Data: out, AuditID: auditID}, err

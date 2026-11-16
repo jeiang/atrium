@@ -101,11 +101,25 @@ type outcome struct {
 	ID       ID
 	Revision int64
 	OK       bool
+	store    *Store
+	result   *Result
+}
+
+type observedKey struct {
+	store      *Store
+	id         ID
+	capability string
+}
+
+type observation struct {
+	state State
+	at    int64
 }
 
 var (
 	outcomes  = make(chan outcome, 64)
 	succeeded sync.Map
+	observed  sync.Map
 )
 
 // Outcomes reports runtime requests that suggest the connection's health
@@ -124,6 +138,56 @@ func report(id ID, revision int64, ok bool) {
 	case outcomes <- outcome{ID: id, Revision: revision, OK: ok}:
 	default:
 	}
+}
+
+func (l *Lease) Report(r Result) {
+	if l.store == nil || l.store.d == nil || r.Capability == "" {
+		return
+	}
+	key := observedKey{store: l.store, id: l.id, capability: r.Capability}
+	now := time.Now().UnixNano()
+	if last, seen := observed.Load(key); seen {
+		if prev := last.(observation); prev.state == r.State && now-prev.at < int64(time.Minute) {
+			return
+		}
+	}
+	select {
+	case outcomes <- outcome{ID: l.id, Revision: l.revision, OK: r.State == OK, store: l.store, result: &r}:
+		observed.Store(key, observation{state: r.State, at: now})
+	default:
+	}
+}
+
+func (o outcome) Record(ctx context.Context) (bool, error) {
+	if o.result == nil {
+		return false, nil
+	}
+	current, err := o.store.Get(ctx, o.ID)
+	if err != nil || !changes(current, *o.result) {
+		return true, err
+	}
+	if err := o.store.Observe(ctx, o.ID, o.Revision, *o.result); err != nil && !errors.As(err, new(*Conflict)) {
+		return true, err
+	}
+	return true, nil
+}
+
+func changes(current View, r Result) bool {
+	if current.State == Unconfigured || current.State == Disabled {
+		return false
+	}
+	for _, p := range current.Results {
+		if p.Capability == r.Capability {
+			return !same(p.State, r.State)
+		}
+	}
+	return r.State != OK
+}
+
+func same(a, b State) bool {
+	healthy := func(s State) bool { return s == OK || s == Expiring }
+	failed := func(s State) bool { return s == Failing || s == NeedsReauth }
+	return a == b || healthy(a) && healthy(b) || failed(a) && failed(b)
 }
 
 type reporter struct {

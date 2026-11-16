@@ -196,8 +196,24 @@ were added or whose host declaration changed since their last check, and
 prints `no connection to check` when there are none. Each checked connection
 prints its id, state (or `away until <time UTC>`) and reason. The command
 exits 1 when a checked connection is failing, in its window or not, or needs
-reauth. `connections test` keeps the explicit test, which may have visible
-side effects such as a diagnostic push.
+reauth. `connections test <id>` keeps the explicit test, which may have
+visible side effects such as a diagnostic push. `connections test --all` runs
+the silent check of every configured connection instead, so it sends no push;
+giving both an id and `--all`, or neither, is a usage error.
+
+Mail and iCloud connections also learn from real use while `serve` runs. An
+IMAP session that cannot connect or log in marks the mail connection's `imap`
+capability failing. An SMTP session that cannot connect or greet marks `smtp`
+failing, and a refused login (codes 530 to 535) marks it as needing reauth. A
+contacts or calendar mirror sync that the server refuses (401 or 403) marks
+`carddav` or `caldav` as needing reauth, and a server error, network error or
+TLS error marks it failing. A later session or sync that works marks the
+capability ok again. These four have no grace window, so the first failure
+notifies at once and the recovery notifies once. Errors about one message,
+such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
+not change the connection. Only a change of state class is written: a repeated
+failure or a repeated success writes nothing and sends no notice. A one-shot
+CLI command does not record these outcomes.
 
 A connection that lacks what it needs checks as `unconfigured`, not `ok` or
 `failing`: Anthropic without an API key, web push without a subject or VAPID

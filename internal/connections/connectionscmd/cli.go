@@ -15,7 +15,7 @@ func Command(open connectionsapp.Open) *cli.Command {
 		Name: "connections",
 		Commands: []*cli.Command{
 			{Name: "list", Help: "list connections with their capabilities, credential presence and health", Setup: s.list},
-			{Name: "test", Help: "test one connection or every configured connection and save the outcome", Setup: s.test},
+			{Name: "test", Help: "test one connection, with its side effects, or check every configured connection without them, and save the outcome", Setup: s.test},
 			{Name: "check", Help: "check configured connections without test side effects and save the outcome", Setup: s.check},
 		},
 	}
@@ -47,8 +47,8 @@ func (s *service) list(a *cli.Args) cli.Handler {
 }
 
 func (s *service) test(a *cli.Args) cli.Handler {
-	id := a.Arg("id", cli.Opt{Help: "connection id"})
-	all := a.Bool("all", cli.Opt{Help: "test every configured connection"})
+	id := a.OptionalArg("id", cli.Opt{Help: "connection id"})
+	all := a.Bool("all", cli.Opt{Help: "check every configured connection without test side effects instead of testing one"})
 	jsonOut := a.Bool("json", cli.Opt{Help: "print JSON"})
 	return func(e *cli.Env) int {
 		if (*id == "") == !*all {

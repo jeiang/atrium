@@ -67,6 +67,12 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 		case <-ticker.C:
 			observe(connectionsapp.ObserveHealthInput{})
 		case seen := <-connections.Outcomes():
+			if recorded, err := seen.Record(ctx); recorded {
+				if err != nil && ctx.Err() == nil {
+					log.Warn("connection outcome not recorded", logx.Integration, string(seen.ID), logx.Err, err.Error())
+				}
+				continue
+			}
 			observe(connectionsapp.ObserveHealthInput{ID: seen.ID, Recovered: seen.OK})
 		}
 	}

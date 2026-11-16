@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
 const Kind connections.Kind = "mail"
@@ -63,6 +64,28 @@ func Password(lease *connections.Lease, account string) (string, error) {
 		return "", err
 	}
 	return config.NormalizePassword(value), nil
+}
+
+func IMAPOutcome(err error) connections.Result {
+	if err != nil {
+		return connections.Result{Capability: CapabilityIMAP, State: connections.Failing, Reason: err.Error()}
+	}
+	return connections.Result{Capability: CapabilityIMAP, State: connections.OK, Reason: "IMAP login works"}
+}
+
+func SMTPOutcome(err error) (connections.Result, bool) {
+	if err == nil {
+		return connections.Result{Capability: CapabilitySMTP, State: connections.OK, Reason: "SMTP send works"}, true
+	}
+	failed, credentials := smtp.SessionFailure(err)
+	if !failed {
+		return connections.Result{}, false
+	}
+	state := connections.Failing
+	if credentials {
+		state = connections.NeedsReauth
+	}
+	return connections.Result{Capability: CapabilitySMTP, State: state, Reason: err.Error()}, true
 }
 
 func AccountSync() *connections.AccountSync {
