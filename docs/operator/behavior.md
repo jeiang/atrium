@@ -293,6 +293,35 @@ return 409 `module_disabled` before starting their work. Review and Activity kee
 historical proposals and effects visible; owning-module checks still apply to
 approval, undo, and other mutations.
 
+## Automation pause
+
+One pause stops all unattended work. The operator sets it with
+`atrium live pause` or `POST /api/v1/automation/pause` (optional `reason`) and
+clears it with `atrium live resume` or `POST /api/v1/automation/resume`;
+`GET /api/v1/automation/pause` and the `pause` field of `GET /api/v1/shell`
+show whether it is on, who set it, from where, since when and why. The older
+`POST /api/v1/mail/live/pause` and `/resume` act on the same pause. Agents
+cannot pause or resume.
+
+The pause is a `pause` file beside the database, so a pause set from a
+separate CLI process reaches a running serve: each automatic mail write and
+each run-now request checks it at once, and the scheduler applies it at its
+next tick (30 seconds). While paused:
+
+- Scheduled jobs are skipped and recorded as `skipped_pause`, except backups,
+  the CalDAV and CardDAV mirrors, and the mail sync and scan passes. Those
+  passes still read mail, but make no automatic mailbox writes.
+- A run-now request for any other job (package tracking, the media sweep,
+  calendar candidates) is refused.
+- Assistant jobs, schedules and the Grafana sampler do not run; chat stays
+  available, and the assistant's direct mailbox writes are refused.
+- Operator sends and approved proposals still work: pause blocks automatic
+  work, not consent.
+
+Resume releases everything at once. A write skipped while paused is done once
+on the next pass, and a write with an unknown outcome stays blocked until the
+operator resolves it.
+
 ## Mail modes and safety
 
 Mail sync and routing are application workflows, not decisions to run made by

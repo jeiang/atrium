@@ -737,7 +737,7 @@ claims about the running application. Operator contracts are in
   atrium's own read-only CalDAV/CardDAV sync. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
-  calendar-candidate stage and notification sends are skipped (the mail pause
+  calendar-candidate stage and notification sends are skipped (the pause
   controls stay available), and its tables remain.
   On its first start the application seeds the module flags. A database
   that already holds operator data (settings, secrets, accounts, threads or
@@ -789,6 +789,26 @@ claims about the running application. Operator contracts are in
   after the publish lock and write connection are released; a failed
   starter marks its module unavailable with the error, is logged once per
   failure and is retried at the next publication.
+- One platform pause (`internal/pause`) covers all unattended work. Its state
+  is the `pause` file beside the database: the file's existence is the
+  pause, and its JSON body records who (`by`, `source`), when (`since`) and
+  an optional `reason`; an empty file written by an older binary reads as
+  paused since its modification time, and an older binary honors the new
+  file. Every check reads the file, so a pause set by a separate CLI process
+  stops a running `serve`: scheduled admission at its next tick (30 s),
+  run-now requests and each automatic mail write at once. A due job is
+  skipped as `skipped_pause` unless it runs while paused (backups, the mail
+  sync and scan passes, whose automatic writes the gate still refuses, and
+  the CalDAV/CardDAV mirrors); run-now of any other job is refused (409
+  `refused`). Chat stays available; the assistant's direct mailbox writes
+  are refused while paused. Mail's write gate delegates only its pause
+  check. `GET /automation/pause`, `POST /automation/pause` (optional
+  `reason`) and `POST /automation/resume` are operator-only on both
+  prefixes and never agent tools; the two commands are audited as
+  `automation.pause` and `automation.resume`, bump the `automation` event
+  topic and send the pause notice, and `GET /shell` carries the same state
+  as `pause`. `POST /api/v1/mail/live/pause` and `/resume` and `atrium live
+  pause|resume` are aliases of the same pause with unchanged shapes.
 - Module ownership is checked at build time. `tools/tableownership` keeps
   each table's SQL inside its owning module, and `tools/registrationownership`
   keeps every registration in the module catalog: it type-checks the
@@ -1343,7 +1363,8 @@ claims about the running application. Operator contracts are in
   the web session key on `/web/v1`, and each server instance owns its
   counts. Static assets are served from content-hashed immutable URLs.
 - Client read models (both prefixes): `GET /shell` (navigation, sections
-  and tabs, Needs you count, mail mode and pause, module states, version),
+  and tabs, Needs you count, mail mode, the platform `pause` state (paused,
+  by, source, since, reason), module states, version),
   `GET /about` (version, VCS build when stamped, schema version, modules),
   `GET /settings/schema` (offered settings per page with type, choices,
   bounds, default, source, editable, secret; secret values are never sent),

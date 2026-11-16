@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/mail/tracking"
@@ -116,10 +117,10 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	if state["paused"] != true || state["by"] != nil || state["since"] == nil {
 		t.Fatalf("pause state from the old file: %v", state)
 	}
-	if shell := apiData(t, s.do(http.MethodGet, "/api/v1/shell", token, nil), http.StatusOK); fmt.Sprint(shell["pause"].(map[string]any)["paused"]) != "true" {
-		t.Fatalf("shell pause field: %v", shell["pause"])
+	if shell := strictJSON[coremodule.Shell](t, "/shell", s.do(http.MethodGet, "/api/v1/shell", token, nil)); !shell.Pause.Paused || shell.Pause.Since == nil {
+		t.Fatalf("shell pause field: %+v", shell.Pause)
 	}
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/packages/poll", token, map[string]any{}), http.StatusConflict, "refused")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/packages/poll", token, nil), http.StatusConflict, "refused")
 
 	tick := time.Duration(scheduler.TuningAgentSchedulerTickSeconds) * time.Second
 	due := func() {
@@ -141,7 +142,7 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("a separate pause wrote no file: %v", err)
 	}
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/packages/poll", token, map[string]any{}), http.StatusConflict, "refused")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/packages/poll", token, nil), http.StatusConflict, "refused")
 	due()
 	waitUntil(t, tick+15*time.Second, "the running serve to skip the due jobs", schedulerTerminal(d, tracking.JobPackageTracking, assistant.NightlyName))
 	for _, name := range []string{tracking.JobPackageTracking, assistant.NightlyName} {
