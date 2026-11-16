@@ -142,10 +142,10 @@ func (r *Registry) Needs() []Need {
 	return slices.Clone(r.needs)
 }
 
-func (r *Registry) Activate(active func(module string) bool) {
+func (r *Registry) Activate(active, on func(module string) bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.active = active
+	r.active, r.on = active, on
 }
 
 func (r *Registry) isActive(module string) bool {
@@ -153,6 +153,25 @@ func (r *Registry) isActive(module string) bool {
 	active := r.active
 	r.mu.RUnlock()
 	return active == nil || active(module)
+}
+
+func (r *Registry) isOn(module string) bool {
+	r.mu.RLock()
+	on := r.on
+	r.mu.RUnlock()
+	return on == nil || on(module)
+}
+
+func (r *Registry) idle(deps []Dependent) bool {
+	if len(deps) == 0 {
+		return false
+	}
+	for _, d := range deps {
+		if r.isOn(d.Module) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Registry) dependents(v View) []Dependent {

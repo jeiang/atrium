@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"slices"
 	"sync"
 	"time"
 
@@ -70,11 +69,7 @@ func (s *Service) Recheck(ctx context.Context, in RecheckInput) (View, error) {
 	if !view.Enabled {
 		return View{}, refuse(string(in.ID) + " is disabled; only the operator can turn it on")
 	}
-	deps, err := s.store.Dependencies(ctx)
-	if err != nil {
-		return View{}, err
-	}
-	if !slices.ContainsFunc(deps.Needs, func(b connections.Binding) bool { return b.Active && slices.Contains(b.Candidates, in.ID) }) {
+	if len(view.Dependents) == 0 || view.Idle != "" {
 		return View{}, refuse(string(in.ID) + " serves no need of an app that is on")
 	}
 	if view.State == connections.NeedsReauth && !credentialChangedSince(view) {
@@ -129,4 +124,17 @@ func Class(state State) string {
 		return "untested"
 	}
 	return ""
+}
+
+const (
+	StatusToolName  application.Name = "connections.dependency_status"
+	RecheckToolName application.Name = "connections.dependency_recheck"
+)
+
+func DescribeStatusTool() application.Definition {
+	return application.Describe[DependenciesInput, Dependencies](StatusToolName, application.Query, []application.Authority{application.Agent}, application.NoEffect, false)
+}
+
+func DescribeRecheckTool() application.Definition {
+	return application.Describe[RecheckInput, View](RecheckToolName, application.Command, []application.Authority{application.Agent}, application.NoEffect, false)
 }

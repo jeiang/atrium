@@ -20,18 +20,6 @@ type Refusal struct {
 
 func (e *Refusal) Error() string { return "connections: " + string(e.ID) + " " + e.Reason }
 
-func idle(deps []Dependent) bool {
-	if len(deps) == 0 {
-		return false
-	}
-	for _, d := range deps {
-		if d.Active {
-			return false
-		}
-	}
-	return true
-}
-
 func (r *Registry) TouchUnits() {
 	if r == nil {
 		return
@@ -61,7 +49,7 @@ func (s *Store) SyncUnits(ctx context.Context) error {
 		if !builtinIDs[string(v.ID)] || v.ConfigSource != SourceOperator || len(v.Dependents) == 0 {
 			continue
 		}
-		off := idle(v.Dependents)
+		off := s.reg.idle(v.Dependents)
 		var res sql.Result
 		switch {
 		case off && v.Enabled:
@@ -112,7 +100,7 @@ func (s *Store) SetEnabled(ctx context.Context, id ID, enabled bool, commits ...
 		if _, ok := s.reg.Lookup(current.Kind); !ok {
 			return View{}, &Refusal{ID: id, Reason: "has a kind this version does not support"}
 		}
-		if current.Reason == ReasonUnitOff && idle(current.Dependents) {
+		if current.Reason == ReasonUnitOff && s.reg.idle(current.Dependents) {
 			return View{}, &Refusal{ID: id, Reason: "is off because its app is off; turn the app on instead"}
 		}
 	}
