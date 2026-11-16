@@ -195,11 +195,13 @@ func MarksOf(records []Record) tool.Marks {
 }
 
 type ListFilter struct {
-	Query string
-	Scope string
-	State string
-	Limit int
-	After *ListKey
+	Query  string
+	Titles bool
+	Scope  string
+	Kind   string
+	State  string
+	Limit  int
+	After  *ListKey
 }
 
 type ListKey struct {
@@ -210,16 +212,26 @@ type ListKey struct {
 func List(ctx context.Context, q db.Querier, f ListFilter) ([]Record, error) {
 	where := "1 = 1"
 	var args []any
-	if f.Query != "" {
+	switch {
+	case f.Query != "" && f.Titles:
+		where += " AND (r.title LIKE ? OR r.aliases LIKE ?)"
+		like := "%" + f.Query + "%"
+		args = append(args, like, like)
+	case f.Query != "":
 		where += " AND (r.title LIKE ? OR r.body LIKE ? OR r.aliases LIKE ?)"
 		like := "%" + f.Query + "%"
 		args = append(args, like, like, like)
+	}
+	if f.Kind != "" {
+		where += " AND " + kindWhere(f.Kind)
 	}
 	if f.Scope != "" {
 		where += " AND r.scope = ?"
 		args = append(args, f.Scope)
 	}
 	switch f.State {
+	case "live":
+		where += " AND r.retracted_at IS NULL"
 	case "unconfirmed":
 		where += " AND r.confirmed_at IS NULL AND r.retracted_at IS NULL"
 	case "pinned":

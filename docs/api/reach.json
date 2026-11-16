@@ -116,14 +116,17 @@
         "knowledge.detail",
         "knowledge.edit",
         "knowledge.list",
+        "knowledge.map",
         "knowledge.profile",
         "knowledge.purge",
         "knowledge.restore",
         "knowledge.retract",
-        "knowledge.retract-run"
+        "knowledge.retract-run",
+        "knowledge.subject",
+        "knowledge.subjects"
       ],
-      "required": 17,
-      "bound": 17
+      "required": 20,
+      "bound": 20
     },
     {
       "area": "mail",
@@ -383,7 +386,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 200,
-  "total_bound": 200,
+  "total_required": 203,
+  "total_bound": 203,
   "total_approval_reached": 11
 }

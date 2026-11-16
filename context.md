@@ -99,6 +99,19 @@ claims about the running application. Operator contracts are in
   attention item. Notion, its wiki view and the one-shot `kb import` are
   removed; records imported from Notion keep their `notion:` origin and stay
   readable and searchable.
+- Knowledge opens on a subject page. Every live record is a subject;
+  its kind comes from existing data (`lesson` for a `Lesson: ` title,
+  `wiki` for a `notion:` origin, otherwise `fact`). Its facts are the
+  records, retracted ones marked superseded, whose title, aliases or body
+  contain its title or an alias of at least three characters, the
+  retrieval exact-match rule; at most 200 are returned. The page text is
+  the stored body, split into heading sections of paragraph, item,
+  numbered, quote and code blocks, never HTML. Related subjects are the
+  live records the body mentions and records from the same run. The map
+  is the subject's live neighborhood one or two steps out over mentions
+  and same-run edges, capped at 50 nodes with a `truncated` flag. These
+  operator reads show private records with their flag, like the record
+  list, and change nothing the assistant retrieves.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
 

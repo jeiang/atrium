@@ -154,6 +154,105 @@ type knowledgeCursor struct {
 	ID        int64   `json:"id"`
 }
 
+type KnowledgeSubjectsRequest struct {
+	Query  string     `query:"q" json:"-"`
+	Kind   string     `query:"kind" json:"-" api:"enum=fact|lesson|wiki"`
+	Scope  string     `query:"scope" json:"-" api:"enum=work|personal"`
+	Cursor api.Cursor `query:"cursor" json:"-"`
+	Limit  api.Limit  `query:"limit" json:"-"`
+}
+
+type KnowledgeSubjectRow struct {
+	ID        int64     `json:"id"`
+	Title     string    `json:"title"`
+	Kind      string    `json:"kind"`
+	Scope     string    `json:"scope"`
+	Private   bool      `json:"private"`
+	Confirmed bool      `json:"confirmed"`
+	Pinned    bool      `json:"pinned"`
+	Facts     int       `json:"facts"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type KnowledgeSubjects struct {
+	Items      []KnowledgeSubjectRow `json:"items"`
+	NextCursor *string               `json:"next_cursor" api:"nullable"`
+}
+
+type KnowledgeBlock struct {
+	Kind string `json:"kind" api:"enum=paragraph|item|numbered|quote|code"`
+	Text string `json:"text"`
+}
+
+type KnowledgeSection struct {
+	Heading string           `json:"heading"`
+	Level   int              `json:"level"`
+	Blocks  []KnowledgeBlock `json:"blocks"`
+}
+
+type KnowledgeFact struct {
+	ID           int64            `json:"id"`
+	Title        string           `json:"title"`
+	Value        string           `json:"value"`
+	Kind         string           `json:"kind"`
+	Scope        string           `json:"scope"`
+	Private      bool             `json:"private"`
+	Marks        []string         `json:"marks"`
+	Writer       string           `json:"writer"`
+	Source       *KnowledgeSource `json:"source" api:"nullable"`
+	Confirmed    bool             `json:"confirmed"`
+	Superseded   bool             `json:"superseded"`
+	SupersededAt *time.Time       `json:"superseded_at" api:"nullable"`
+	LearnedAt    time.Time        `json:"learned_at"`
+	UpdatedAt    time.Time        `json:"updated_at"`
+}
+
+type KnowledgeRelated struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	Kind     string `json:"kind"`
+	Relation string `json:"relation"`
+}
+
+type KnowledgeSubjectPage struct {
+	Subject        KnowledgeRecord    `json:"subject"`
+	Kind           string             `json:"kind"`
+	CreatedAt      time.Time          `json:"created_at"`
+	Sections       []KnowledgeSection `json:"sections"`
+	Facts          []KnowledgeFact    `json:"facts"`
+	FactsTruncated bool               `json:"facts_truncated"`
+	Related        []KnowledgeRelated `json:"related"`
+}
+
+type KnowledgeMapRequest struct {
+	ID    int64  `path:"record_id" json:"-"`
+	Depth *int64 `query:"depth" json:"-" api:"min=1,max=2"`
+}
+
+type KnowledgeMapNode struct {
+	ID        int64  `json:"id"`
+	Title     string `json:"title"`
+	Kind      string `json:"kind"`
+	Scope     string `json:"scope"`
+	Private   bool   `json:"private"`
+	Confirmed bool   `json:"confirmed"`
+	Depth     int    `json:"depth"`
+}
+
+type KnowledgeMapEdge struct {
+	From int64  `json:"from"`
+	To   int64  `json:"to"`
+	Kind string `json:"kind"`
+}
+
+type KnowledgeMap struct {
+	Center    int64              `json:"center"`
+	Nodes     []KnowledgeMapNode `json:"nodes"`
+	Edges     []KnowledgeMapEdge `json:"edges"`
+	Cap       int                `json:"cap"`
+	Truncated bool               `json:"truncated"`
+}
+
 func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 	svc := func() *kbapp.Service { return m.knowledgeService(d) }
 	const area application.Area = "knowledge"
@@ -217,6 +316,61 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 					}
 				}
 				return application.Read[KnowledgeDetail]{Revision: read.Revision, Data: out}, nil
+			}),
+		api.Query(d, kbapp.DescribeSubjects(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}},
+			"GET /knowledge/subjects", func(ctx context.Context, in KnowledgeSubjectsRequest) (application.Read[KnowledgeSubjects], error) {
+				list := kbapp.SubjectsInput{Query: in.Query, Kind: in.Kind, Scope: in.Scope, Limit: int(in.Limit) + 1}
+				if in.Cursor.Set() {
+					var last knowledgeCursor
+					if err := in.Cursor.Last(&last); err != nil {
+						return application.Read[KnowledgeSubjects]{}, err
+					}
+					list.After = &kb.ListKey{UpdatedAt: last.UpdatedAt, ID: last.ID}
+				}
+				read, err := svc().Subjects(ctx, list)
+				if err != nil {
+					return application.Read[KnowledgeSubjects]{}, err
+				}
+				rows := read.Data.Rows
+				page := KnowledgeSubjects{Items: []KnowledgeSubjectRow{}}
+				if len(rows) > int(in.Limit) {
+					rows = rows[:in.Limit]
+					last := rows[len(rows)-1]
+					page.NextCursor = in.Cursor.Next(knowledgeCursor{UpdatedAt: last.Updated, ID: last.ID})
+				}
+				for _, r := range rows {
+					page.Items = append(page.Items, KnowledgeSubjectRow{ID: r.ID, Title: r.Title, Kind: r.Kind, Scope: r.Scope, Private: r.Private,
+						Confirmed: r.Confirmed, Pinned: r.Pinned, Facts: r.Facts, UpdatedAt: seconds(r.Updated)})
+				}
+				return application.Read[KnowledgeSubjects]{Revision: read.Revision, Data: page}, nil
+			}),
+		api.Query(d, kbapp.DescribeSubject(), application.APIShape{Area: area, Errors: missing},
+			"GET /knowledge/{record_id}/page", func(ctx context.Context, in KnowledgeIDRequest) (application.Read[KnowledgeSubjectPage], error) {
+				read, err := svc().Subject(ctx, kbapp.SubjectInput{ID: in.ID})
+				if err != nil {
+					return application.Read[KnowledgeSubjectPage]{}, err
+				}
+				return application.Read[KnowledgeSubjectPage]{Revision: read.Revision, Data: knowledgeSubjectPage(read.Data)}, nil
+			}),
+		api.Query(d, kbapp.DescribeMap(), application.APIShape{Area: area, Errors: missing},
+			"GET /knowledge/{record_id}/map", func(ctx context.Context, in KnowledgeMapRequest) (application.Read[KnowledgeMap], error) {
+				input := kbapp.MapInput{ID: in.ID}
+				if in.Depth != nil {
+					input.Depth = int(*in.Depth)
+				}
+				read, err := svc().Map(ctx, input)
+				if err != nil {
+					return application.Read[KnowledgeMap]{}, err
+				}
+				m := read.Data
+				out := KnowledgeMap{Center: m.Center, Nodes: make([]KnowledgeMapNode, len(m.Nodes)), Edges: make([]KnowledgeMapEdge, len(m.Edges)), Cap: m.Cap, Truncated: m.Truncated}
+				for i, n := range m.Nodes {
+					out.Nodes[i] = KnowledgeMapNode{ID: n.ID, Title: n.Title, Kind: n.Kind, Scope: n.Scope, Private: n.Private, Confirmed: n.Confirmed, Depth: n.Depth}
+				}
+				for i, e := range m.Edges {
+					out.Edges[i] = KnowledgeMapEdge{From: e.From, To: e.To, Kind: e.Kind}
+				}
+				return application.Read[KnowledgeMap]{Revision: read.Revision, Data: out}, nil
 			}),
 		api.Command(d, kbapp.DescribeCreate(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: []application.Code{application.Invalid}},
 			"POST /knowledge", func(ctx context.Context, in KnowledgeFields) (application.Change[KnowledgeChanged], error) {
@@ -294,6 +448,31 @@ func knowledgeRecord(r kbapp.Record) KnowledgeRecord {
 		Marks: strs(r.MarkNames), Writer: r.Writer, Pinned: r.Pinned, Confirmed: r.Confirmed, Retracted: r.Retracted, UpdatedAt: seconds(r.UpdatedAt)}
 	if s := r.Source; s != nil {
 		out.Source = &KnowledgeSource{ThreadID: s.ThreadID, Seq: s.Seq, RunID: s.RunID, Origin: s.Origin, NotionID: s.NotionID}
+	}
+	return out
+}
+
+func knowledgeSubjectPage(p kbapp.SubjectPage) KnowledgeSubjectPage {
+	out := KnowledgeSubjectPage{Subject: knowledgeRecord(p.Subject), Kind: p.Kind, CreatedAt: seconds(p.CreatedAt),
+		Sections: make([]KnowledgeSection, len(p.Sections)), Facts: make([]KnowledgeFact, len(p.Facts)),
+		FactsTruncated: p.FactsTruncated, Related: make([]KnowledgeRelated, len(p.Related))}
+	for i, s := range p.Sections {
+		out.Sections[i] = KnowledgeSection{Heading: s.Heading, Level: s.Level, Blocks: make([]KnowledgeBlock, len(s.Blocks))}
+		for j, b := range s.Blocks {
+			out.Sections[i].Blocks[j] = KnowledgeBlock{Kind: b.Kind, Text: b.Text}
+		}
+	}
+	for i, f := range p.Facts {
+		r := knowledgeRecord(f.Record)
+		out.Facts[i] = KnowledgeFact{ID: r.ID, Title: r.Title, Value: r.Body, Kind: f.Kind, Scope: r.Scope, Private: r.Private, Marks: r.Marks,
+			Writer: r.Writer, Source: r.Source, Confirmed: r.Confirmed, Superseded: r.Retracted, LearnedAt: seconds(f.CreatedAt), UpdatedAt: r.UpdatedAt}
+		if f.Retracted != nil {
+			at := seconds(*f.Retracted)
+			out.Facts[i].SupersededAt = &at
+		}
+	}
+	for i, r := range p.Related {
+		out.Related[i] = KnowledgeRelated{ID: r.ID, Title: r.Title, Kind: r.Kind, Relation: r.Relation}
 	}
 	return out
 }
