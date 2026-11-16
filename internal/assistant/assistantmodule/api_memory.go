@@ -118,5 +118,9 @@ func memoryAPIBindings(p *apiPages) []application.Binding {
 			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.Usage], error) {
 				return svc.Usage(ctx, asstapp.UsageInput{})
 			}),
+		apiQuery(p, asstapp.DescribeSpend(), application.APIShape{Area: "usage"}, "GET /spend",
+			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.Spend], error) {
+				return svc.Spend(ctx, asstapp.SpendInput{})
+			}),
 	}
 }

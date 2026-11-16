@@ -8,6 +8,7 @@ import (
 	"time"
 
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 
 	"github.com/go-chi/chi/v5"
 
@@ -188,6 +189,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			dbcmd.BackupCommand(maintenance),
 			dbcmd.RestoreCommand(maintenance),
 			catalogCommand(mc),
+			jobcmd.Command(),
 		},
 	}
 }

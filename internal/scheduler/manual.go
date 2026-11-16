@@ -24,16 +24,21 @@ func RunNow(ctx context.Context, d *db.DB, dbPath, tz string, def Definition, wa
 	if err != nil {
 		return Result{}, err
 	}
+	if busy := s.enterWait(ctx, job.ID, wait); busy != nil {
+		return Result{}, busy
+	}
+	defer s.leave(job.ID)
 	resources := claimResources(s.jobs, job)
 	locks, err := db.ResourceLocks(ctx, dbPath, resources, wait)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = locks.Close() }()
-	claim, err := claimManual(ctx, d, job.ID, resources, s.now(), s.owner())
+	claim, err := claimManual(ctx, d, job.ID, 0, resources, s.now(), s.owner())
 	if err != nil {
 		return Result{}, err
 	}
+	s.hold(job.ID, claim.JobRunID)
 	var result Result
 	var runErr error
 	ran := false
@@ -81,7 +86,7 @@ func manualJob(ctx context.Context, s *Scheduler, tz string, def Definition) (Jo
 	return *job, nil
 }
 
-func claimManual(ctx context.Context, d *db.DB, jobID int64, resources []string, now float64, owner string) (*Claim, error) {
+func claimManual(ctx context.Context, d *db.DB, jobID, requested int64, resources []string, now float64, owner string) (*Claim, error) {
 	var claim *Claim
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "UPDATE job_runs SET status = ?, ended_at = ?, error = ? WHERE job_id = ? AND status = ? AND ended_at IS NULL "+
@@ -100,14 +105,26 @@ func claimManual(ctx context.Context, d *db.DB, jobID int64, resources []string,
 		if err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, "INSERT INTO job_runs (job_id, due_at, started_at, heartbeat_at, owner, status) VALUES (?, ?, ?, ?, ?, ?)",
-			job.ID, now, now, now, owner, StatusRunning)
-		if err != nil {
-			return err
-		}
-		runID, err := res.LastInsertId()
-		if err != nil {
-			return err
+		var runID int64
+		if requested == 0 {
+			res, err := tx.ExecContext(ctx, "INSERT INTO job_runs (job_id, due_at, started_at, heartbeat_at, owner, status) VALUES (?, ?, ?, ?, ?, ?)",
+				job.ID, now, now, now, owner, StatusRunning)
+			if err != nil {
+				return err
+			}
+			if runID, err = res.LastInsertId(); err != nil {
+				return err
+			}
+		} else {
+			ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE job_runs SET started_at = ?, heartbeat_at = ?, owner = ?, status = ? WHERE id = ? AND job_id = ? AND status = ?",
+				now, now, owner, StatusRunning, requested, job.ID, StatusRequested))
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return errRequestGone
+			}
+			runID = requested
 		}
 		if _, err := tx.ExecContext(ctx, "UPDATE jobs SET lease_owner = ?, lease_until = ?, last_run_id = ? WHERE id = ?",
 			owner, leaseUntil(now), runID, job.ID); err != nil {

@@ -235,6 +235,12 @@ type AuditRow struct {
 	CommandID   *string
 }
 
+func Audited(ctx context.Context, q db.Querier, operation, target string) (bool, error) {
+	var done bool
+	err := q.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM operation_audit WHERE operation = ? AND target = ?)", operation, target).Scan(&done)
+	return done, err
+}
+
 func (s *Store) AuditBefore(ctx context.Context, beforeTS float64, beforeID int64, limit int) ([]AuditRow, error) {
 	where, args := "", []any{}
 	if beforeID > 0 {

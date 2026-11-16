@@ -253,14 +253,16 @@
     {
       "area": "schedules",
       "operations": [
+        "assistant.schedule.add",
         "assistant.schedule.cancel",
         "assistant.schedule.enabled",
         "assistant.schedule.history",
         "assistant.schedule.list",
+        "assistant.schedule.run_now",
         "assistant.schedule.update"
       ],
-      "required": 5,
-      "bound": 5
+      "required": 7,
+      "bound": 7
     },
     {
       "area": "search",
@@ -282,6 +284,7 @@
         "auth.identity",
         "core.about",
         "maintenance.backup",
+        "maintenance.backup.list",
         "maintenance.check",
         "maintenance.verify-archive",
         "settings.read",
@@ -291,8 +294,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 16,
-      "bound": 16
+      "required": 17,
+      "bound": 17
     },
     {
       "area": "tasks",
@@ -344,10 +347,11 @@
     {
       "area": "usage",
       "operations": [
+        "assistant.spend",
         "assistant.usage"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     }
   ],
   "approval_reached": [
@@ -396,7 +400,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 220,
-  "total_bound": 220,
+  "total_required": 224,
+  "total_bound": 224,
   "total_approval_reached": 11
 }
