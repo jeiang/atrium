@@ -71,6 +71,7 @@ func TestInboxPageAndAPIShareBounds(t *testing.T) {
 	owner := site.token("owner")
 	d := mustConnect(t, filepath.Join(site.dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
+	clearBootNotices(t, d)
 	for i := 1; i <= 120; i++ {
 		if _, err := d.Write.Exec("INSERT INTO notifications (ts,title,body,channel,delivered) VALUES (?,?,?,'assistant',0)", i, fmt.Sprintf("Bounded notice %03d", i), "bounded body"); err != nil {
 			t.Fatal(err)

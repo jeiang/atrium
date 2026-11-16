@@ -269,6 +269,9 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 	} else {
 		refused, err = smtp.Send(ctx, host, config.Credential, d.Account, msg, recipients)
 	}
+	if result, ok := mailconn.SMTPOutcome(err); ok && ctx.Err() == nil {
+		lease.Report(result)
+	}
 	return msg, refused, err
 }
 

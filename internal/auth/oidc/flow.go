@@ -174,6 +174,7 @@ type Session struct {
 	Subject string
 	Email   string
 	Name    string
+	Agent   bool
 }
 
 type Grant struct {

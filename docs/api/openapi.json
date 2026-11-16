@@ -906,6 +906,9 @@
       "BearerIssueInput": {
         "additionalProperties": false,
         "properties": {
+          "agent": {
+            "type": "boolean"
+          },
           "expires_at": {
             "format": "date-time",
             "type": "string"
@@ -2515,6 +2518,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "grace_until": {
+            "format": "date-time",
+            "type": "string"
+          },
           "reason": {
             "type": "string"
           },
@@ -2599,6 +2606,10 @@
             "type": "boolean"
           },
           "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "grace_until": {
             "format": "date-time",
             "type": "string"
           },
@@ -4318,6 +4329,9 @@
       },
       "Identity": {
         "properties": {
+          "agent": {
+            "type": "boolean"
+          },
           "api_version": {
             "maximum": 9007199254740991,
             "type": "integer"
@@ -4336,6 +4350,7 @@
           "subject",
           "email",
           "name",
+          "agent",
           "api_version"
         ],
         "type": "object"
@@ -9176,6 +9191,9 @@
       },
       "Principal": {
         "properties": {
+          "agent": {
+            "type": "boolean"
+          },
           "email": {
             "type": "string"
           },
@@ -9189,7 +9207,8 @@
         "required": [
           "subject",
           "email",
-          "name"
+          "name",
+          "agent"
         ],
         "type": "object"
       },
@@ -13102,6 +13121,9 @@
       },
       "Token": {
         "properties": {
+          "agent": {
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -13159,7 +13181,8 @@
           "kind",
           "name",
           "subject",
-          "created_at"
+          "created_at",
+          "agent"
         ],
         "type": "object"
       },

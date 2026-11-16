@@ -16,6 +16,7 @@ import (
 const (
 	ClientHeader = "Atrium-Client"
 	ClientWeb    = "web"
+	AgentHeader  = "Atrium-Agent"
 
 	WebSessionPath = WebPrefix + "/session"
 	WebLogoutPath  = WebPrefix + "/session/logout"

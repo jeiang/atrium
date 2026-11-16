@@ -44,6 +44,12 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 		}
 	}
 	stopServe()
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = unixepoch() WHERE checked_at IS NULL"); err != nil {
+		t.Fatal(err)
+	}
+	for len(push.arrived) > 0 {
+		<-push.arrived
+	}
 	now := float64(time.Now().Unix())
 	tasks := 0
 	insert := func(title string, remindAt float64, done bool) {

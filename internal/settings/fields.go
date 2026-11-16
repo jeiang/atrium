@@ -57,13 +57,14 @@ type GroupView struct {
 }
 
 type ModuleView struct {
-	Name    string `json:"name"`
-	Title   string `json:"title"`
-	On      bool   `json:"on"`
-	Running bool   `json:"running"`
-	Reason  string `json:"reason"`
-	Error   string `json:"error"`
-	Pinned  string `json:"pinned"`
+	Name     string `json:"name"`
+	Title    string `json:"title"`
+	On       bool   `json:"on"`
+	Running  bool   `json:"running"`
+	Reason   string `json:"reason"`
+	Degraded string `json:"degraded"`
+	Error    string `json:"error"`
+	Pinned   string `json:"pinned"`
 }
 
 func (r *Registry) Fields(keys []string) ([]Field, error) {

@@ -42,8 +42,12 @@ func validate(c connections.Candidate) error {
 
 func test(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {
 	key, err := lease.Credential("api_key")
-	if err != nil {
-		return []connections.Result{{Capability: "models", State: connections.Failing, Reason: "the connection has no API key"}}, nil
+	var missing connections.MissingCredential
+	switch {
+	case errors.As(err, &missing):
+		return []connections.Result{{Capability: "models", State: connections.Unconfigured, Reason: "the connection has no API key"}}, nil
+	case err != nil:
+		return []connections.Result{{Capability: "models", State: connections.Failing, Reason: err.Error()}}, nil
 	}
 	client, err := lease.HTTP("url")
 	if err != nil {

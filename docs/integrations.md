@@ -144,9 +144,14 @@ uses fixed-schema Haiku requests through the `service/anthropic` connection.
 
 ## qBittorrent
 
-Create an API key in qBittorrent 5.2 or newer and paste it. Without a key,
-requests go unauthenticated. Test fails on a server older than 5.2, which has
-no API keys.
+Create an API key in qBittorrent 5.2 or newer and paste it, or declare
+`credential_files.api_key` on the host connection. Every request carries the
+key as a Bearer token, so there is no session to expire. Without a key,
+requests go unauthenticated, which works only while qBittorrent bypasses
+authentication for atrium's address. A refused request marks the connection
+`needs_reauth`: "qBittorrent requires an API key" when none is configured,
+"qBittorrent refused the API key" when the key is wrong. Test fails on a
+server older than 5.2, which has no API keys.
 
 ## TMDB
 

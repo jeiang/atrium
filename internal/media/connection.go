@@ -28,6 +28,7 @@ func Connections() []connections.Definition {
 			Kind:            KindQbittorrent,
 			CredentialSlots: []string{"api_key"},
 			Validate:        validateQbitConnection,
+			Grace:           connections.UnreachableGrace,
 			Test:            testQbitConnection,
 		},
 		{
@@ -88,7 +89,7 @@ func testQbitConnection(ctx context.Context, lease *connections.Lease, _ []conne
 	version := strings.TrimSpace(string(body))
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		return []connections.Result{{Capability: "api", State: connections.NeedsReauth, Reason: fmt.Sprintf("qBittorrent answered %d", resp.StatusCode)}}, nil
+		return []connections.Result{{Capability: "api", State: connections.NeedsReauth, Reason: qbitRefusal(token)}}, nil
 	case resp.StatusCode != http.StatusOK:
 		return []connections.Result{{Capability: "api", State: connections.Failing, Reason: fmt.Sprintf("qBittorrent answered %d", resp.StatusCode)}}, nil
 	case token != "" && !apiKeys(version):

@@ -30,11 +30,13 @@ type Token struct {
 	ExpiresAt  *time.Time `json:"expires_at"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
+	Agent      bool       `json:"agent"`
 }
 
 type BearerIssueInput struct {
 	Name      string     `json:"name"`
 	ExpiresAt *time.Time `json:"expires_at"`
+	Agent     bool       `json:"agent,omitempty"`
 }
 
 type Issued struct {
@@ -83,7 +85,7 @@ func (s *Service) BearerIssue(ctx context.Context, in BearerIssueInput) (applica
 	if p, ok := PrincipalOf(ctx); ok && p.Expires != nil && (in.ExpiresAt == nil || in.ExpiresAt.After(*p.Expires)) {
 		err = errOutlivesIssuer
 	} else {
-		issued, err = s.bearers.Issue(ctx, in.Name, in.ExpiresAt, func(ctx context.Context, tx *sql.Tx, tok bearer.Token) error {
+		issued, err = s.bearers.Issue(ctx, in.Name, in.ExpiresAt, in.Agent, func(ctx context.Context, tx *sql.Tx, tok bearer.Token) error {
 			var err error
 			if err := history(ctx, tx, "auth_token.issue", tok); err != nil {
 				return err
@@ -160,5 +162,5 @@ func history(ctx context.Context, tx *sql.Tx, key string, tok bearer.Token) erro
 }
 
 func token(tok bearer.Token) Token {
-	return Token{ID: tok.ID, Kind: tok.Kind, Name: tok.Name, Subject: tok.Subject, CreatedAt: tok.CreatedAt, ExpiresAt: tok.ExpiresAt, LastUsedAt: tok.LastUsedAt, RevokedAt: tok.RevokedAt}
+	return Token{ID: tok.ID, Kind: tok.Kind, Name: tok.Name, Subject: tok.Subject, CreatedAt: tok.CreatedAt, ExpiresAt: tok.ExpiresAt, LastUsedAt: tok.LastUsedAt, RevokedAt: tok.RevokedAt, Agent: tok.Agent}
 }
