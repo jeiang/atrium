@@ -1,6 +1,5 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
-  import { device } from '../shared/device.svelte';
   import { loadSession } from './session.svelte';
 
   interface Props {
@@ -61,12 +60,8 @@
 </script>
 
 <div class="offline-status">
-  {#if !device.online && device.offlineHint}
-    <p>Offline.{shown} Nothing can be sent until you reconnect.</p>
-  {:else}
-    <p>Cannot reach atrium.{shown}</p>
-    <button class="offline-status__retry" type="button" aria-busy={retrying} disabled={retrying} onclick={onRetry}>
-      Try again
-    </button>
-  {/if}
+  <p>Cannot reach atrium.{shown} Nothing can be sent until it answers.</p>
+  <button class="offline-status__retry" type="button" aria-busy={retrying} disabled={retrying} onclick={onRetry}>
+    Try again
+  </button>
 </div>

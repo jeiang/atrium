@@ -329,13 +329,13 @@ test.describe('the read cache', () => {
     await expect(status).toContainText('Cannot reach atrium. Showing data from 3 hours ago.');
     await expect(inboxCount(page)).toContainText('3');
     await context.setOffline(true);
-    await expect(page.getByRole('status').filter({ hasText: 'Offline.' })).toHaveText(
-      'Offline. Showing data from 3 hours ago. Nothing can be sent until you reconnect.',
+    await expect(status).toContainText(
+      'Cannot reach atrium. Showing data from 3 hours ago. Nothing can be sent until it answers.',
     );
     site.api.needsYou = 5;
     site.down(false);
     await context.setOffline(false);
-    await expect(page.getByRole('status').filter({ hasText: /Offline|Cannot reach/ })).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toHaveCount(0);
     await expect(inboxCount(page)).toContainText('5');
     await expect.poll(() => site.api.calls.includes('GET /events')).toBe(true);
   });
@@ -424,12 +424,12 @@ test.describe('the read cache', () => {
   test('an offline sign-out is refused and never sent later', async ({ page, site, context }) => {
     await signedIn(page, `${site.url}/next/`);
     await context.setOffline(true);
-    await expect(page.getByRole('status').filter({ hasText: 'Offline.' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toBeVisible();
     await openAccount(page);
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page.getByText('You are offline. Nothing was sent.').first()).toBeVisible();
     await context.setOffline(false);
-    await expect(page.getByRole('status').filter({ hasText: 'Offline.' })).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toHaveCount(0);
     await page.waitForTimeout(1_500);
     expect(site.api.logouts).toBe(0);
     expect(site.api.calls.filter((call) => call.startsWith('POST'))).toEqual([]);

@@ -1189,8 +1189,8 @@ claims about the running application. Operator contracts are in
   a changed API contract hash or 7 days without a verified session delete
   it; storage errors mean no cache. Offline means atrium itself did not
   answer: the last request or stream to it failed, and the next response
-  clears it. `navigator.onLine` is only a hint (the wording of the notice,
-  and the `online` and `offline` events probe the session at once), because
+  clears it. `navigator.onLine` is never trusted; its `online` and `offline`
+  events only probe the session at once, because
   a VPN or LAN can reach atrium while the browser reports offline. While
   offline, writes refuse at once and are never queued. A lazy page missing
   from the device shows "Not available" instead of failing.

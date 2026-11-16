@@ -12,7 +12,7 @@ function storedForget(): boolean {
   }
 }
 
-export const device = $state({ online: true, offlineHint: !navigator.onLine, forget: storedForget() });
+export const device = $state({ online: true, forget: storedForget() });
 
 setPersistence(!device.forget);
 if (device.forget) void wipe();
@@ -41,14 +41,8 @@ onReachability((ok) => {
   if (ok) void queryClient.refetchQueries({ type: 'active' });
 });
 
-addEventListener('online', () => {
-  device.offlineHint = false;
-  probe();
-});
-addEventListener('offline', () => {
-  device.offlineHint = true;
-  probe();
-});
+addEventListener('online', probe);
+addEventListener('offline', probe);
 addEventListener('storage', (event) => {
   if (event.key === FORGET_KEY) applyForget(event.newValue === '1');
 });
