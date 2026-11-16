@@ -156,14 +156,19 @@ func TestMailSearchLeavesOutDisabledAccounts(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, path := range []string{"/api/v1/mail/messages", "/api/v1/mail/messages?limit=10"} {
-		items := apiItems(t, apiBody(t, s.do(http.MethodGet, path, token, nil), http.StatusOK))
-		if len(items) != 1 || items[0].(map[string]any)["account"] != "icloud" {
-			t.Fatalf("%s: %v", path, items)
+	accounts := func(path string) string {
+		t.Helper()
+		var names []string
+		for _, item := range apiItems(t, apiBody(t, s.do(http.MethodGet, path, token, nil), http.StatusOK)) {
+			names = append(names, item.(map[string]any)["account"].(string))
 		}
+		return strings.Join(names, ",")
 	}
-	if items := apiItems(t, apiBody(t, s.do(http.MethodGet, "/api/v1/mail/messages?account=retired", token, nil), http.StatusOK)); len(items) != 0 {
-		t.Fatalf("a disabled account's mail is searchable: %v", items)
+	if got := accounts("/api/v1/mail/messages"); got != "retired,icloud" {
+		t.Fatalf("an enabled or unconfigured account's mail is missing: %q", got)
+	}
+	if got := s.do(http.MethodPatch, "/api/v1/mail/accounts/icloud", token, map[string]any{"enabled": false}); got.status != http.StatusConflict {
+		t.Fatalf("deployment account disabled through the API: %d %s", got.status, got.body)
 	}
 }
 

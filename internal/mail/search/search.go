@@ -43,7 +43,7 @@ type Filters struct {
 	HasAttachment bool     `json:"has_attachment"`
 	Unread        bool     `json:"unread"`
 	Flagged       bool     `json:"flagged"`
-	Accounts      []string `json:"accounts,omitempty"`
+	Disabled      []string `json:"disabled,omitempty"`
 }
 
 func Text(value string) *string {
@@ -76,9 +76,9 @@ func filterSQL(f Filters) (string, []any) {
 		clauses = append(clauses, "m.account = ?")
 		params = append(params, *f.Account)
 	}
-	if f.Accounts != nil {
-		clauses = append(clauses, "m.account IN (SELECT value FROM json_each(?))")
-		raw, _ := json.Marshal(f.Accounts)
+	if len(f.Disabled) > 0 {
+		clauses = append(clauses, "m.account NOT IN (SELECT value FROM json_each(?))")
+		raw, _ := json.Marshal(f.Disabled)
 		params = append(params, string(raw))
 	}
 	if f.Folder != nil {
