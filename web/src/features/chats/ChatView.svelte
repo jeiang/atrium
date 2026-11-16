@@ -125,7 +125,8 @@
   let lastY = 0;
 
   function toBottom(): void {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+    const top = document.documentElement.scrollHeight - window.innerHeight;
+    if (Math.abs(window.scrollY - top) > 1) window.scrollTo({ top, behavior: 'instant' });
     lastY = window.scrollY;
   }
 
@@ -179,8 +180,9 @@
     lastY = window.scrollY;
     const onScroll = (): void => {
       const y = window.scrollY;
-      if (atBottom()) following = true;
-      else if (y < lastY) following = false;
+      const bottom = atBottom();
+      if (bottom && y > lastY) following = true;
+      else if (!bottom && y < lastY) following = false;
       lastY = y;
       if (following) unseen = false;
       if (scrollFrame) return;
@@ -189,9 +191,15 @@
         sessionStorage.setItem(storageKey, String(Math.round(window.scrollY)));
       });
     };
+    const onWheel = (event: WheelEvent): void => {
+      if (event.deltaY >= 0 || dock?.contains(event.target as Node)) return;
+      if (document.documentElement.scrollHeight > window.innerHeight) following = false;
+    };
     addEventListener('scroll', onScroll, { passive: true });
+    addEventListener('wheel', onWheel, { passive: true });
     return () => {
       removeEventListener('scroll', onScroll);
+      removeEventListener('wheel', onWheel);
       cancelAnimationFrame(scrollFrame);
     };
   });
