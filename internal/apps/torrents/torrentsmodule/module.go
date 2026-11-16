@@ -47,7 +47,6 @@ func operations() ([]application.Definition, []application.Binding) {
 			torrentsapp.DescribeSelectFiles(),
 			torrentsapp.DescribeControl(),
 		}, []application.Binding{
-			{Kind: application.HTML, Target: "GET /apps/media/torrents", Uses: []application.Name{torrentsapp.DownloadsName}},
 			{Kind: application.Tool, Target: torrenttools.NameDownloads, Uses: []application.Name{torrentsapp.DownloadsName}},
 			{Kind: application.HTML, Target: "GET /apps/media/torrents/{hash}/files", Uses: []application.Name{torrentsapp.TorrentFilesName}},
 			{Kind: application.HTML, Target: "POST /apps/media/torrents/{hash}/files", Uses: []application.Name{torrentsapp.SelectFilesName, torrentsapp.TorrentFilesName}},
@@ -78,9 +77,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		},
 		Pages: []web.Page{{
 			Module: pages.Module(pages.Options{
-				Service:   m.pageService,
-				Routes:    func(d *web.Deps, s *torrentsapp.Service) { routes(d, s) },
-				Consumers: m.App.Consumers(),
+				Service: m.pageService,
+				Routes:  func(d *web.Deps, s *torrentsapp.Service) { routes(d, s) },
 			}),
 			Templates: pages.Templates(),
 		}},

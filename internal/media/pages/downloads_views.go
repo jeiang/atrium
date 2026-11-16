@@ -1,10 +1,36 @@
 package pages
 
 import (
+	"fmt"
+	"math"
+	"strconv"
+
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 )
 
-const dlDownloadsPage = "/apps/media/downloads"
+const (
+	dlModeMedia     = "media"
+	dlModePlain     = "plain"
+	dlPollSeconds   = 5
+	dlInfiniteETA   = 8640000
+	dlDownloadsPage = "/apps/media/downloads"
+)
+
+type TorrentView struct {
+	Hash    string `json:"hash"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Label   string `json:"label"`
+	Size    string `json:"size"`
+	Down    string `json:"down"`
+	Up      string `json:"up"`
+	ETA     string `json:"eta"`
+	Percent int64  `json:"percent"`
+	Filed   bool   `json:"filed"`
+	Ignored bool   `json:"ignored"`
+	Active  bool   `json:"active"`
+}
 
 type QueueFile struct {
 	Rel     string `json:"rel"`
@@ -30,10 +56,85 @@ type QueueView struct {
 	Error     string      `json:"error"`
 }
 
+type torrentsView struct {
+	Torrents []TorrentView `json:"torrents"`
+	Error    string        `json:"error"`
+	Active   bool          `json:"active"`
+	Poll     int           `json:"poll"`
+}
+
 type downloadsView struct {
-	Queue      []QueueView `json:"queue"`
-	QueueError string      `json:"queue_error"`
-	Kinds      []string    `json:"kinds"`
+	Torrents   []TorrentView `json:"torrents"`
+	Error      string        `json:"error"`
+	Active     bool          `json:"active"`
+	Poll       int           `json:"poll"`
+	Queue      []QueueView   `json:"queue"`
+	QueueError string        `json:"queue_error"`
+	Kinds      []string      `json:"kinds"`
+}
+
+func dlHumanSize(n *int64) string {
+	size := 0.0
+	if n != nil {
+		size = float64(*n)
+	}
+	return dlHumanSizeFloat(size)
+}
+
+func dlHumanSizeFloat(n float64) string {
+	for _, unit := range []string{"B", "KB", "MB", "GB"} {
+		if n < 1024 || unit == "GB" {
+			if unit == "B" {
+				return strconv.FormatFloat(n, 'f', 0, 64) + " " + unit
+			}
+			return strconv.FormatFloat(n, 'f', 1, 64) + " " + unit
+		}
+		n /= 1024
+	}
+	return strconv.FormatFloat(n, 'f', 1, 64) + " GB"
+}
+
+func dlHumanETA(seconds *int64) string {
+	if seconds == nil || *seconds <= 0 || *seconds >= dlInfiniteETA {
+		return ""
+	}
+	s := *seconds
+	switch {
+	case s < 60:
+		return strconv.FormatInt(s, 10) + "s"
+	case s < 3600:
+		return strconv.FormatInt(s/60, 10) + "m"
+	}
+	return fmt.Sprintf("%dh %02dm", s/3600, s%3600/60)
+}
+
+func dlSpeedText(n *int64) string {
+	if n == nil || *n == 0 {
+		return ""
+	}
+	return dlHumanSize(n) + "/s"
+}
+
+func torrentView(t contract.Torrent) TorrentView {
+	state := t.State
+	if state == "" {
+		state = "unknown"
+	}
+	label, ok := contract.StateLabels[state]
+	if !ok {
+		label = state
+	}
+	kind := dlModePlain
+	if t.HasTag(mediaapp.TagMedia) {
+		kind = dlModeMedia
+	}
+	return TorrentView{
+		Hash: t.Hash, Name: t.Name, Kind: kind, Label: label, Size: dlHumanSize(t.Size),
+		Down: dlSpeedText(t.DLSpeed), Up: dlSpeedText(t.UpSpeed), ETA: dlHumanETA(t.ETA),
+		Percent: int64(math.Round(t.Progress * 100)),
+		Filed:   t.HasTag(mediaapp.TagFiled), Ignored: t.HasTag(mediaapp.TagIgnored),
+		Active: t.Active(),
+	}
 }
 
 func queueView(v mediaapp.View) QueueView {

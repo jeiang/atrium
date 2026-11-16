@@ -1,11 +1,12 @@
 package pages
 
 import (
+	"context"
 	"embed"
-	"fmt"
 	"io/fs"
 	"math"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,8 +14,10 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	torrentsapp "github.com/jeiang/atrium/internal/apps/torrents/application"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -25,9 +28,7 @@ var templates embed.FS
 const (
 	modeMedia     = "media"
 	modePlain     = "plain"
-	pollSeconds   = 5
-	infiniteETA   = 8640000
-	DownloadsPage = "/apps/media/downloads"
+	downloadsPage = "/apps/media/downloads"
 )
 
 var addModes = []string{modeMedia, modePlain}
@@ -41,44 +42,26 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Service   func(*web.Deps) *torrentsapp.Service
-	Routes    func(*web.Deps, *torrentsapp.Service)
-	Consumers []contract.Consumer
+	Service func(*web.Deps) *torrentsapp.Service
+	Routes  func(*web.Deps, *torrentsapp.Service)
 }
 
 type service struct {
-	deps      *web.Deps
-	app       *torrentsapp.Service
-	consumers []contract.Consumer
+	deps *web.Deps
+	app  *torrentsapp.Service
 }
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		s := &service{deps: d, app: o.Service(d), consumers: o.Consumers}
+		s := &service{deps: d, app: o.Service(d)}
 		if o.Routes != nil {
 			o.Routes(d, s.app)
 		}
-		r.Get("/apps/media/torrents", s.torrentsGet)
 		r.Get("/apps/media/torrents/{hash}/files", s.filesGet)
 		r.Post("/apps/media/torrents/{hash}/files", s.filesToggle)
 		r.Get("/apps/media/add", s.addGet)
 		r.Post("/apps/media/add", s.addPost)
 	}
-}
-
-type TorrentView struct {
-	Hash    string `json:"hash"`
-	Name    string `json:"name"`
-	Kind    string `json:"kind"`
-	Label   string `json:"label"`
-	Size    string `json:"size"`
-	Down    string `json:"down"`
-	Up      string `json:"up"`
-	ETA     string `json:"eta"`
-	Percent int64  `json:"percent"`
-	Filed   bool   `json:"filed"`
-	Ignored bool   `json:"ignored"`
-	Active  bool   `json:"active"`
 }
 
 type FileView struct {
@@ -87,13 +70,6 @@ type FileView struct {
 	Name     string `json:"name"`
 	SizeText string `json:"size_text"`
 	Percent  int64  `json:"percent"`
-}
-
-type torrentsView struct {
-	Torrents []TorrentView `json:"torrents"`
-	Error    string        `json:"error"`
-	Active   bool          `json:"active"`
-	Poll     int           `json:"poll"`
 }
 
 type filesView struct {
@@ -116,37 +92,8 @@ func check(err error) {
 	}
 }
 
-func (s *service) pageOut(w http.ResponseWriter, r *http.Request, status int, page, name string, data any, toast *tpl.Toast) {
-	f, err := s.deps.Render.Frame(r, page, data)
-	check(err)
-	f.Toast = toast
-	check(s.deps.Render.Page(w, r, status, name, f))
-}
-
 func (s *service) fragmentOut(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
 	check(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: toast}))
-}
-
-func (s *service) torrentsGet(w http.ResponseWriter, r *http.Request) {
-	read, err := s.app.Downloads(r.Context(), torrentsapp.DownloadsInput{})
-	if err != nil {
-		web.Fail(w, r, err, func(status int) {
-			s.fragmentOut(w, r, status, "_media_torrents.gohtml", torrentsView{Torrents: []TorrentView{}, Error: application.Classify(err).Error(), Poll: pollSeconds}, nil)
-		})
-		return
-	}
-	rows := []TorrentView{}
-	active := false
-	for _, t := range read.Data.Torrents {
-		row := s.torrentView(t)
-		active = active || row.Active
-		rows = append(rows, row)
-	}
-	view := torrentsView{Torrents: rows, Active: active, Poll: pollSeconds}
-	if read.Data.TorrentsError != nil {
-		view.Error = read.Data.TorrentsError.Error()
-	}
-	s.fragmentOut(w, r, http.StatusOK, "_media_torrents.gohtml", view, nil)
 }
 
 func (s *service) filesError(w http.ResponseWriter, r *http.Request, hash string, err error) {
@@ -169,7 +116,10 @@ func (s *service) files(w http.ResponseWriter, r *http.Request, hash string, toa
 	}
 	views := make([]FileView, len(read.Data.Files))
 	for i, f := range read.Data.Files {
-		views[i] = fileView(f)
+		views[i] = FileView{
+			Index: f.Index, Wanted: f.Priority != contract.PrioritySkip, Name: f.Name,
+			SizeText: humanSize(f.Size), Percent: int64(math.Round(f.Progress * 100)),
+		}
 	}
 	s.fragmentOut(w, r, http.StatusOK, "_media_files.gohtml", filesView{Hash: hash, TorrentName: read.Data.Torrent.Name, Files: views}, toast)
 }
@@ -178,26 +128,25 @@ func (s *service) filesGet(w http.ResponseWriter, r *http.Request) {
 	s.files(w, r, web.PathParam(r, "hash"), nil)
 }
 
+func formInt(form url.Values, name string, errs *[]web.FieldError) int64 {
+	raw, found := web.Value(form, name)
+	if !found || raw == "" {
+		*errs = append(*errs, web.Missing("body", name))
+		return 0
+	}
+	n, ok := laxInt64(raw)
+	if !ok {
+		*errs = append(*errs, web.BadInt("body", name, raw))
+	}
+	return n
+}
+
 func (s *service) filesToggle(w http.ResponseWriter, r *http.Request) {
 	hash := web.PathParam(r, "hash")
 	form := web.FormValues(r)
 	var errs []web.FieldError
-	var index int64
-	if raw, found := web.Value(form, "index"); !found || raw == "" {
-		errs = append(errs, web.Missing("body", "index"))
-	} else if n, ok := laxInt64(raw); ok {
-		index = n
-	} else {
-		errs = append(errs, web.BadInt("body", "index", raw))
-	}
-	var wanted int64
-	if raw, found := web.Value(form, "wanted"); !found || raw == "" {
-		errs = append(errs, web.Missing("body", "wanted"))
-	} else if n, ok := laxInt64(raw); ok {
-		wanted = n
-	} else {
-		errs = append(errs, web.BadInt("body", "wanted", raw))
-	}
+	index := formInt(form, "index", &errs)
+	wanted := formInt(form, "wanted", &errs)
 	if len(errs) > 0 {
 		web.Unprocessable(w, errs...)
 		return
@@ -210,7 +159,10 @@ func (s *service) filesToggle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) addPage(w http.ResponseWriter, r *http.Request, view addView, status int, toast *tpl.Toast) {
-	s.pageOut(w, r, status, "media_add", "media_add.gohtml", view, toast)
+	f, err := s.deps.Render.Frame(r, "media_add", view)
+	check(err)
+	f.Toast = toast
+	check(s.deps.Render.Page(w, r, status, "media_add.gohtml", f))
 }
 
 func (s *service) addGet(w http.ResponseWriter, r *http.Request) {
@@ -248,7 +200,35 @@ func (s *service) addPost(w http.ResponseWriter, r *http.Request) {
 	if mode == modeMedia {
 		detail = "Video and subtitle files are selected once metadata arrives; it will be filed from Downloads when complete."
 	}
-	s.addPage(w, r, addView{AddMode: mode}, http.StatusOK, &tpl.Toast{Category: "success", Title: "Added " + added.Data.Shown, Description: detail})
+	toast := &tpl.Toast{Category: "success", Title: "Added " + added.Data.Shown, Description: detail}
+	if land(w, r, toast) {
+		return
+	}
+	s.addPage(w, r, addView{AddMode: modeMedia}, http.StatusOK, toast)
+}
+
+func land(w http.ResponseWriter, r *http.Request, toast *tpl.Toast) bool {
+	if !module.IsEnabled(r.Context(), unit.Media) {
+		return false
+	}
+	rctx := chi.RouteContext(r.Context())
+	if rctx == nil {
+		return false
+	}
+	root, ok := rctx.Routes.(http.Handler)
+	if !ok {
+		return false
+	}
+	ctx := context.WithValue(web.WithToast(r.Context(), toast), chi.RouteCtxKey, (*chi.Context)(nil))
+	next := r.Clone(ctx)
+	next.Method = http.MethodGet
+	next.URL = &url.URL{Path: downloadsPage}
+	next.RequestURI = downloadsPage
+	next.Body, next.ContentLength, next.Form, next.PostForm, next.MultipartForm = http.NoBody, 0, nil, nil, nil
+	next.Header = r.Header.Clone()
+	next.Header.Del("Content-Type")
+	root.ServeHTTP(w, next)
+	return true
 }
 
 func backendStatus(status int) int {
@@ -257,38 +237,6 @@ func backendStatus(status int) int {
 		return status
 	}
 	return http.StatusBadGateway
-}
-
-func (s *service) torrentView(t contract.Torrent) TorrentView {
-	state := t.State
-	if state == "" {
-		state = "unknown"
-	}
-	label, ok := contract.StateLabels[state]
-	if !ok {
-		label = state
-	}
-	kind := modePlain
-	if t.HasTag(contract.TagLegacy) {
-		kind = modeMedia
-	}
-	view := TorrentView{
-		Hash: t.Hash, Name: t.Name, Kind: kind, Label: label, Size: humanSize(t.Size),
-		Down: speedText(t.DLSpeed), Up: speedText(t.UpSpeed), ETA: humanETA(t.ETA),
-		Percent: int64(math.Round(t.Progress * 100)), Active: t.Active(),
-	}
-	for _, c := range s.consumers {
-		view.Filed = view.Filed || t.HasTag(c.Consumed)
-		view.Ignored = view.Ignored || (c.Skipped != "" && t.HasTag(c.Skipped))
-	}
-	return view
-}
-
-func fileView(f contract.TorrentFile) FileView {
-	return FileView{
-		Index: f.Index, Wanted: f.Priority != contract.PrioritySkip, Name: f.Name,
-		SizeText: humanSize(f.Size), Percent: int64(math.Round(f.Progress * 100)),
-	}
 }
 
 func humanSize(n *int64) string {
@@ -306,27 +254,6 @@ func humanSize(n *int64) string {
 		size /= 1024
 	}
 	return strconv.FormatFloat(size, 'f', 1, 64) + " GB"
-}
-
-func humanETA(seconds *int64) string {
-	if seconds == nil || *seconds <= 0 || *seconds >= infiniteETA {
-		return ""
-	}
-	s := *seconds
-	switch {
-	case s < 60:
-		return strconv.FormatInt(s, 10) + "s"
-	case s < 3600:
-		return strconv.FormatInt(s/60, 10) + "m"
-	}
-	return fmt.Sprintf("%dh %02dm", s/3600, s%3600/60)
-}
-
-func speedText(n *int64) string {
-	if n == nil || *n == 0 {
-		return ""
-	}
-	return humanSize(n) + "/s"
 }
 
 func laxInt64(s string) (int64, bool) {

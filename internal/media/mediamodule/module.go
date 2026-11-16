@@ -44,7 +44,9 @@ func (m Module) ToolDefinitions() []module.ToolDefinition {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	var operations []application.Definition
 	var bindings []application.Binding
-	ops, binds := channelOperations()
+	ops, binds := queueOperations()
+	operations, bindings = append(operations, ops...), append(bindings, binds...)
+	ops, binds = channelOperations()
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
 	ops, binds = libraryOperations()
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
@@ -93,7 +95,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}},
 		Groups:   SettingGroups(),
 		Commands: []*cli.Command{jobcmd.DelegatingSubs(mediaCommand(mc.Env, m.Now, m.Torrents), map[string]string{"poll": unit.Media + "/" + media.JobChannels, "sweep": unit.Media + "/" + media.JobSweep})},
-		Tools:    ToolDefinitions(),
+		Tools:    m.ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			return module.Effects{
 				Undo:    media.Undo(d.Ledger, d.Env),

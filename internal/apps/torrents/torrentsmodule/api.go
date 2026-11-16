@@ -53,6 +53,7 @@ type MediaSelectInput struct {
 type TorrentControlInput struct {
 	Hash        string `path:"hash" json:"-"`
 	Action      string `json:"action"`
+	DeleteFiles bool   `json:"delete_files,omitempty"`
 }
 type TorrentControlled struct {
 	Hash   string `json:"hash"`

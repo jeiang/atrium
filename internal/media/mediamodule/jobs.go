@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
