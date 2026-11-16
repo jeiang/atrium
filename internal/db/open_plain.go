@@ -1,5 +1,5 @@
-//go:build !modernc && !libsqlite3
+//go:build !libsqlite3
 
 package db
 
-import _ "build_needs_tags_libsqlite3_or_modernc"
+import _ "build_needs_tag_libsqlite3"

@@ -1,5 +1,3 @@
-//go:build !modernc
-
 package db
 
 import (
@@ -35,7 +33,7 @@ func busyWaitSQL(d time.Duration) string {
 	return fmt.Sprintf("SELECT atrium_busy_timeout(%d)", d.Milliseconds())
 }
 
-func dsn(path string, immediate bool, key Key) (string, error) {
+func dsn(path string, immediate bool, key Key) string {
 	var params []string
 	if immediate {
 		params = append(params, "_txlock=immediate")
@@ -47,7 +45,7 @@ func dsn(path string, immediate bool, key Key) (string, error) {
 	if len(params) > 0 {
 		s += "?" + strings.Join(params, "&")
 	}
-	return s, nil
+	return s
 }
 
 func isBusy(err error) bool {
@@ -60,7 +58,7 @@ func IsConstraint(err error) bool {
 	return errors.As(err, &e) && e.Code == sqlite3.ErrConstraint
 }
 
-func backupConns(ctx context.Context, src, dst *sql.DB, _ string) error {
+func backupConns(ctx context.Context, src, dst *sql.DB) error {
 	sc, err := src.Conn(ctx)
 	if err != nil {
 		return err
@@ -90,13 +88,10 @@ func backupConns(ctx context.Context, src, dst *sql.DB, _ string) error {
 	})
 }
 
-func readOnlyDSN(path string, key Key) (string, error) {
-	s, err := dsn(path, false, key)
-	if err != nil {
-		return "", err
-	}
+func readOnlyDSN(path string, key Key) string {
+	s := dsn(path, false, key)
 	if strings.Contains(s, "?") {
-		return s + "&mode=ro", nil
+		return s + "&mode=ro"
 	}
-	return s + "?mode=ro", nil
+	return s + "?mode=ro"
 }
