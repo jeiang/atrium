@@ -164,14 +164,15 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 		t.Fatalf("second library page: %+v", second)
 	}
 
+	awaitWeather(t, s, weather.StateOK)
 	home := both("/home")
 	var card struct {
-		Weather *asstapp.HomeWeather `json:"weather"`
+		Weather asstapp.HomeWeather `json:"weather"`
 	}
-	if err := json.Unmarshal([]byte(home.body), &card); err != nil || card.Weather == nil {
+	if err := json.Unmarshal([]byte(home.body), &card); err != nil {
 		t.Fatalf("home has no weather card: %v %.600s", err, home.body)
 	}
-	if w := card.Weather; w.Location != "Lowmarsh" || w.Current.Temperature != 31.5 || w.Current.Condition != "Partly cloudy" || w.Today == nil || w.Today.High != 33 || len(w.Hours) != 2 {
+	if w := card.Weather; w.State != weather.StateOK || w.Location == nil || *w.Location != "Lowmarsh" || w.Current == nil || w.Current.Temperature != 31.5 || w.Current.Condition != "Partly cloudy" || w.Today == nil || w.Today.High != 33 || len(w.Hours) != 2 {
 		t.Fatalf("weather card: %+v", w)
 	}
 
@@ -181,14 +182,5 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 				t.Fatalf("a read model returned a secret value %q: %.300s", leak, body)
 			}
 		}
-	}
-}
-
-func TestHomeWeatherAbsentWithoutALocation(t *testing.T) {
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	s := startAPISite(t, dir, api)
-	home := s.do(http.MethodGet, "/api/v1/home", s.token("owner"), nil)
-	if home.status != http.StatusOK || !strings.Contains(home.body, `"weather":null`) {
-		t.Fatalf("home with weather off: %d %.600s", home.status, home.body)
 	}
 }

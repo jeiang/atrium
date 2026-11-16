@@ -12,6 +12,7 @@
       (root + "/tools/registrationownership")
       (root + "/tools/adapterboundary")
       (root + "/tools/e2e-loopback")
+      (root + "/tools/openapi-diff")
       (root + "/docs/config")
       (root + "/docs/api")
       (root + "/docs/tools.md")
@@ -32,7 +33,7 @@
     {{end}}'';
 in {
   inherit src noticesTemplate;
-  vendorHash = "sha256-2oUFfmb7A4sKjhhe99nvfYM9mnx45u5GtcmgnQRn21M=";
+  vendorHash = "sha256-jWB5qjr4TGx7fOm6wgqrKsSa9Zxhn8QoWUr0BJkjmp0=";
   licenseCheck = ''GOOS=linux GOARCH=amd64 go-licenses check ./... --disallowed_types=forbidden,unknown'';
   licenseReport = file: ''
     GOOS=linux GOARCH=amd64 go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --template ${noticesTemplate} >${file}

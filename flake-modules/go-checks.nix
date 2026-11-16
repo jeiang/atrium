@@ -96,6 +96,8 @@
         go run -tags ${tags} ./cmd/atrium catalog operations --require-api >/dev/null
       '';
 
+      openapi-diff = goCheck "openapi-diff" [pkgs.jq] "bash tools/openapi-diff/openapi-diff.sh";
+
       ownership = goCheck "ownership" [] ''
         go run ./tools/tableownership
         GOFLAGS="$GOFLAGS -tags=${tags}" go run ./tools/registrationownership

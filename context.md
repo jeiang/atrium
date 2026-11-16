@@ -1263,7 +1263,12 @@ claims about the running application. Operator contracts are in
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
   catalog (`atrium catalog openapi --output docs/api`, drift-checked by
   `--check`). Approval-only operations count as reached through
-  `review.approve` and are listed separately in `reach.json`. The run event
+  `review.approve` and are listed separately in `reach.json`. The
+  `openapi-diff` check (oasdiff, a Go tool dependency) fails on a breaking
+  change against the deployed baseline in `docs/api/baseline/` unless
+  `approved-breaking.txt` lists it; the baseline is `v3.3.0`. A nightly
+  Schemathesis workflow runs the `GET` operations of `/api/v1` against a
+  throwaway server and opens or updates one issue on failure. The run event
   stream is documented in `docs/api/run-stream.md` (heartbeats,
   `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
   retention, `tool_done.results` with web search sources, live-only
@@ -1286,9 +1291,37 @@ claims about the running application. Operator contracts are in
   `GET /connections/schema` (kinds and per-connection fields with secret
   and host-owned flags, no credential values) and `GET /files` (the
   thread and space file library, newest first, keyset cursor). `GET
-  /home` carries a `weather` card (current, today, hourly) or null when no
-  location is set or the weather connection is off; the forecast call is
-  capped at 3 seconds and a failure only drops the card.
+  /home` always carries a `weather` card with a `state`: `off` (no weather
+  connection, or its forecast capability disabled), `unconfigured` (no
+  location), `loading` (no reading yet), `failed` (no reading, last fetch
+  failed; `failure` is `unreachable`, `timeout`, `no_match`, `bad_reply` or
+  `unavailable`), `stale` (the last reading is shown but the refresh after
+  it failed, or it is older than 60 minutes) or `ok`, plus `fetched_at` and
+  the reading (location, current, today, hourly). `/home` never calls the
+  weather service: it serves the last reading held in memory per database
+  (`weather.LastFor`) and starts a background refresh when the reading is
+  15 minutes old (a failed fetch is retried after 60 seconds). A finished
+  refresh bumps the `assistant` app-event topic so the client refetches. A
+  location change discards the held reading, so the next `/home` answers
+  `loading` and refreshes for the new place.
+- The embedded web client is served at `/next/` on every listener, the
+  emergency listener included, beside the server-rendered UI; nothing links
+  to it yet, and `/next` redirects there. A `/next/...` GET that accepts HTML
+  and names no embedded file gets the client's `index.html` (`no-cache`).
+  Files under `/next/assets/` are content-hashed and cached for a year as
+  immutable; an unknown one is 404, never the document. Precompressed `.br`
+  and `.gz` variants are chosen by `Accept-Encoding` with the negotiation and
+  content-hash ETags of `/static/`. The document and its files are public,
+  like `/static/`, because they hold no data; data comes only from
+  `/web/v1`, which keeps its sign-in rules, and Host validation still
+  applies. Responses under `/next/` carry their own CSP: `default-src
+  'none'`, `'self'` sources only, no inline script or style, and
+  `require-trusted-types-for 'script'; trusted-types atrium-md atrium-sw
+  svelte-trusted-html`. Every other path keeps the server-rendered UI's
+  policy unchanged. A service worker served from `/next/` gets no
+  `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
+  and it never controls the old UI's pages, while it does see every request
+  a `/next/` page makes, `/web/v1` writes included.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open
@@ -1355,7 +1388,7 @@ claims about the running application. Operator contracts are in
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** became **spaces** in Knowledge. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
-- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build, but nothing serves it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).

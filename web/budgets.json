@@ -1,0 +1,20 @@
+{
+  "size": {
+    "shellHtml": 4000,
+    "firstLoadJs": 100000,
+    "routeChunk": 40000,
+    "totalJs": 400000,
+    "firstLoadCss": 20000,
+    "totalCss": 35000,
+    "fonts": 180000
+  },
+  "lighthouse": {
+    "performance": 0.9,
+    "accessibility": 0.95,
+    "bestPractices": 0.95,
+    "lcpMs": 1800,
+    "tbtMs": 150,
+    "cls": 0.05,
+    "otherOrigins": 0
+  }
+}
