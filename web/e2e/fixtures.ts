@@ -15,6 +15,12 @@ export const layouts: readonly Layout[] = [
   { name: 'desktop', width: 1440, height: 900, touch: false },
 ];
 
+export const galleryLayouts: readonly Layout[] = [
+  { name: 'small phone', width: 360, height: 740, touch: true },
+  ...layouts,
+  { name: 'large phone', width: 430, height: 932, touch: true },
+];
+
 export const routes = [
   { path: '/', title: 'Today' },
   { path: '/apps', title: 'Apps' },

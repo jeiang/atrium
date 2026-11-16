@@ -49,8 +49,10 @@ export default defineConfig(({ mode }) => ({
     transformer: 'lightningcss',
     lightningcss: { drafts: { customMedia: true } },
   },
+  base: mode === 'mock' ? '/' : '/next/',
   build: {
     outDir: mode === 'mock' ? 'dist-mock' : 'dist',
     target: 'baseline-widely-available',
+    manifest: true,
   },
 }));

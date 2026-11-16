@@ -1235,6 +1235,24 @@ claims about the running application. Operator contracts are in
   /home` carries a `weather` card (current, today, hourly) or null when no
   location is set or the weather connection is off; the forecast call is
   capped at 3 seconds and a failure only drops the card.
+- The embedded web client is served at `/next/` on every listener, the
+  emergency listener included, beside the server-rendered UI; nothing links
+  to it yet, and `/next` redirects there. A `/next/...` GET that accepts HTML
+  and names no embedded file gets the client's `index.html` (`no-cache`).
+  Files under `/next/assets/` are content-hashed and cached for a year as
+  immutable; an unknown one is 404, never the document. Precompressed `.br`
+  and `.gz` variants are chosen by `Accept-Encoding` with the negotiation and
+  content-hash ETags of `/static/`. The document and its files are public,
+  like `/static/`, because they hold no data; data comes only from
+  `/web/v1`, which keeps its sign-in rules, and Host validation still
+  applies. Responses under `/next/` carry their own CSP: `default-src
+  'none'`, `'self'` sources only, no inline script or style, and
+  `require-trusted-types-for 'script'; trusted-types atrium-md atrium-sw
+  svelte-trusted-html`. Every other path keeps the server-rendered UI's
+  policy unchanged. A service worker served from `/next/` gets no
+  `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
+  and it never controls the old UI's pages, while it does see every request
+  a `/next/` page makes, `/web/v1` writes included.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open
@@ -1286,7 +1304,7 @@ claims about the running application. Operator contracts are in
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
-- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build, but nothing serves it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
