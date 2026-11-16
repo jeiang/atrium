@@ -192,6 +192,16 @@ test.describe('approval cards on a desktop', () => {
     await expect(card.getByRole('button', { name: 'File 3 messages' })).toBeVisible();
   });
 
+  test('the More menu in an approval card picks an action and returns focus', async ({ page }) => {
+    await gotoGallery(page);
+    const card = await showCard(page, 'a-move');
+    const trigger = card.getByRole('button', { name: 'More' });
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Why am I seeing this' }).click();
+    await expect(log(page)).toHaveText('more why');
+    await expect(trigger).toBeFocused();
+  });
+
   test('a send counts down for 10 seconds with Undo before it acts', async ({ page }) => {
     test.setTimeout(45_000);
     await gotoGallery(page);
