@@ -99,7 +99,6 @@ Operator settings are stored in the database and edited in the application. They
 | `agent_subagent_max_cost_usd` | float | `0.25` | ui |
 | `budget_chat_share` | float | `1` | ui |
 | `budget_unattended_share` | float | `0.8` | ui |
-| `cache_ttl_chat` | enum (5m, 1h) | `5m` | ui |
 | `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui |
 | `default_effort` | enum (low, medium, high, xhigh, max) | `xhigh` | ui |
 | `default_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui |
@@ -110,7 +109,6 @@ Operator settings are stored in the database and edited in the application. They
 | `monthly_budget_usd` | float | `150` | ui |
 | `ops_worker_max_run_usd` | float | `0.10` | ui |
 | `ops_worker_monthly_usd` | float | `5` | ui |
-| `prompt_subagent` | string | none | ui |
 | `prompt_system` | string | none | ui |
 | `thread_cost_cap_usd` | float | `10` | ui |
 | `weather_latitude` | float | none | ui |
@@ -162,13 +160,11 @@ Operator settings are stored in the database and edited in the application. They
 | `mail_mode` | string | `shadow` | advanced |
 | `mail_ship24_destination_country` | string | none | ui |
 | `mail_ship24_destination_postcode` | string | none | ui |
-| `mail_ship24_monthly_quota` | int | `10` | advanced |
 | `openloops_remind_ahead_days` | int | `1` | ui |
 | `openloops_remind_hour` | int | `9` | ui |
 | `openloops_snooze_default_days` | int | `3` | ui |
 | `openloops_waiting_after_days` | int | `3` | ui |
 | `uncertain_dest` | string | `Misc` | ui |
-| `watches_carrier_domains` | string | `ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de` | ui |
 | `write_cap` | int | `100` | ui |
 
 ### media
@@ -177,21 +173,6 @@ Operator settings are stored in the database and edited in the application. They
 | --- | --- | --- | --- |
 | `link_key` | string | none | secret |
 | `media_link_ttl_seconds` | int | `43200` | ui |
-
-### memory
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `memory_effort` | string | `low` | ui |
-| `memory_model` | string | `claude-haiku-5-5` | ui |
-| `memory_verbatim_tokens` | int | `16000` | advanced |
-
-### notify
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `notify_nightly_cap` | int | `1` | ui |
-| `notify_per_run_cap` | int | `3` | ui |
 
 ### permissions
 
@@ -221,12 +202,6 @@ Operator settings are stored in the database and edited in the application. They
 | `permission_people_untrusted_isolated` | enum (allow, ask, deny) | `ask` | ui |
 | `permission_people_untrusted_kinds` | enum (ask, deny) | `ask` | ui |
 | `permission_people_untrusted_knowledge` | enum (ask, deny) | `ask` | ui |
-
-### web
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `snooze_choices` | string | `1,3,7,14` | ui |
 
 ### web_search
 

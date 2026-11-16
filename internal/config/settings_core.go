@@ -26,8 +26,11 @@ func HostSettings() []settings.HostDef {
 func Settings() []settings.Def {
 	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
-			Key: KeyTZ, Module: coreModule, Type: settings.String, Default: Timezone,
-			Check: checkZone}),
+			Key: KeyTZ, Label: "Time zone", Module: coreModule, Type: settings.String, Default: Timezone,
+			Help: "Sets the day and month boundaries for schedules, calendar days and work hours, open loop reminders, package and mail reports, notifications, " +
+				"the Obsidian export and the attention view. Those read the zone once at start, so restart atrium to apply a change; " +
+				"budget months and classification counts read it live.",
+			Restart: true, Check: checkZone}),
 	}
 }
 

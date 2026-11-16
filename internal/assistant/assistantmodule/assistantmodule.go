@@ -55,6 +55,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/runtime"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
@@ -171,6 +172,7 @@ func SettingGroups() []settings.Group {
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 		}},
+		{Name: "schedules", Title: "Schedules", Keys: []string{digest.NotifyKey, scheduler.KeyMinInterval}},
 	}
 }
 

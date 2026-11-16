@@ -35,14 +35,14 @@ claims about the running application. Operator contracts are in
   does not delete its data.
 
 ### Prompts, history, retrieval, and knowledge
-- The system prompt and subagent rules (`prompt_system`, `prompt_subagent`)
-  are operator settings over built-in defaults, set with `atrium settings
-  set`; no settings page offers them, so the settings API refuses them. The
-  untrusted-data preamble is fixed in code and always comes first. Edits
+- The system prompt (`prompt_system`) is an operator setting over the
+  built-in default, set with `atrium settings set`; no settings page offers
+  it, so the settings API refuses it. The subagent rules are fixed in code.
+  The untrusted-data preamble is fixed in code and always comes first. Edits
   apply to every thread's next request.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
-  `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
+  `memory.TuningMemoryVerbatimTokens` (16,000, at most a quarter of the context left
   after the tools and system prompt) verbatim, tool calls and results
   included; each operator message ends with its run's start time in the
   configured time zone. Older messages come first as memory-tree lines,
@@ -479,6 +479,17 @@ claims about the running application. Operator contracts are in
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
   application instance gets its own settings registry from the compiled
   module declaration catalog, and every command reads the same stored operator values.
+  Each settings schema field carries `group`, its placement in the new
+  interface (from `internal/settings/placement.go`), and `restart`, true when
+  a change applies only after serve restarts: the `<name>_enabled` module
+  flags and `tz`. `tz` (Settings › General) sets the day and month
+  boundaries for schedules, calendar days and work hours, open loop
+  reminders, package and mail reports, notifications, the Obsidian export
+  and the attention view; serve reads it once at start. Budget months and
+  classification counts read it live. `digest_notify` and
+  `agent_schedule_min_interval_seconds` (assistant group `schedules`) apply
+  live; the minimum interval is checked when a schedule is created or
+  changed.
   `atrium settings`, `atrium secrets`, the settings group and section forms
   and the assistant permission form run the same `settings.*` operations: a
   value refused as invalid exits 2 on the command line (unknown keys, an
