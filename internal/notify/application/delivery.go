@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -116,22 +115,16 @@ func (s *Service) Send(ctx context.Context, in SendInput) (application.Change[De
 		var used int
 		err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE run_id = ?", inv.RunID).Scan(&used)
 		if err == nil {
-			key := notify.KeyPerRunCap
+			limit := notify.TuningPerRunCap
 			if *in.RunKind == tool.Nightly {
-				key = notify.KeyNightlyCap
+				limit = notify.TuningNightlyCap
 			}
-			resolved, e := settings.From(ctx).Resolve(ctx, s.db.Read, key)
-			err = e
-			if err == nil {
-				limit, e := resolved.Int()
-				err = e
-				if err == nil && int64(used) >= limit {
-					plural := "s"
-					if limit == 1 {
-						plural = ""
-					}
-					err = tool.Error(fmt.Sprintf("at most %d notification%s per run", limit, plural))
+			if used >= limit {
+				plural := "s"
+				if limit == 1 {
+					plural = ""
 				}
+				err = tool.Error(fmt.Sprintf("at most %d notification%s per run", limit, plural))
 			}
 		}
 		if err != nil {

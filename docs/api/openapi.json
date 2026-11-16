@@ -870,6 +870,9 @@
           "problem": {
             "type": "string"
           },
+          "prunable": {
+            "type": "boolean"
+          },
           "size_bytes": {
             "format": "int64",
             "maximum": 9007199254740991,
@@ -880,6 +883,7 @@
           "name",
           "size_bytes",
           "modified_at",
+          "prunable",
           "format"
         ],
         "type": "object"
@@ -923,12 +927,17 @@
           "total": {
             "maximum": 9007199254740991,
             "type": "integer"
+          },
+          "unexamined": {
+            "maximum": 9007199254740991,
+            "type": "integer"
           }
         },
         "required": [
           "location",
           "items",
-          "total"
+          "total",
+          "unexamined"
         ],
         "type": "object"
       },
@@ -13462,6 +13471,12 @@
           "editable": {
             "type": "boolean"
           },
+          "group": {
+            "type": "string"
+          },
+          "help": {
+            "type": "string"
+          },
           "key": {
             "type": "string"
           },
@@ -13486,6 +13501,9 @@
           },
           "pin_source": {
             "type": "string"
+          },
+          "restart": {
+            "type": "boolean"
           },
           "secret": {
             "type": "boolean"
@@ -13530,7 +13548,9 @@
           "choices",
           "class",
           "editable",
-          "secret"
+          "secret",
+          "group",
+          "restart"
         ],
         "type": "object"
       },
