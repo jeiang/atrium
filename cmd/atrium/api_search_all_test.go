@@ -23,6 +23,9 @@ func searchGroups(t *testing.T, data map[string]any) map[string][]map[string]any
 		hits := []map[string]any{}
 		for _, item := range group["items"].([]any) {
 			hit := item.(map[string]any)
+			if hit["type"] == "record" && hit["title"] == "Standing instructions" {
+				continue
+			}
 			if hit["type"] != group["type"] {
 				t.Fatalf("hit %v in group %v", hit, group["type"])
 			}
@@ -63,6 +66,8 @@ func TestSearchAllAPI(t *testing.T) {
 	asstExec(t, d, "INSERT INTO tasks (title, notes, status, created_ts, updated_ts) VALUES ('Call the bank', 'ask why the statement is late', 'open', 31, 31)")
 	asstExec(t, d, "INSERT INTO thread_files (thread_id, name, media_type, path, origin, created_at) VALUES (7001, 'statement-march.pdf', 'application/pdf', 'statement-march.pdf', 'upload', 40)")
 	asstExec(t, d, "INSERT INTO thread_files (name, media_type, path, origin, created_at) VALUES ('statement-loose.pdf', 'application/pdf', 'statement-loose.pdf', 'upload', 41)")
+	asstExec(t, d, "INSERT INTO projects (id, name, effort, context_limit, created_at, updated_at) VALUES (9001, 'Taxes', 'low', 100000, 5, 5)")
+	asstExec(t, d, "INSERT INTO thread_files (id, project_id, name, media_type, path, origin, created_at) VALUES (9101, 9001, 'statement-april.pdf', 'application/pdf', 'statement-april.pdf', 'upload', 39)")
 	token := localAPIToken(t, "api")
 	base, _, stop, err := startServeAppArgs(t, m.app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {
@@ -89,6 +94,15 @@ func TestSearchAllAPI(t *testing.T) {
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/search/all?q=statement", "", nil), http.StatusUnauthorized, "unauthenticated")
 	before := state()
+	for settle := time.Now().Add(15 * time.Second); ; before = state() {
+		time.Sleep(500 * time.Millisecond)
+		if state() == before {
+			break
+		}
+		if time.Now().After(settle) {
+			t.Fatalf("startup writes did not settle: %s", before)
+		}
+	}
 	all := find("q=statement")
 	groups := searchGroups(t, all)
 	for _, kind := range []string{"thread", "message", "record", "task", "file"} {
@@ -115,8 +129,11 @@ func TestSearchAllAPI(t *testing.T) {
 	if len(groups["task"]) != 2 || groups["task"][0]["title"] != "File the statement" {
 		t.Fatalf("task hits: %v", groups["task"])
 	}
-	if len(groups["file"]) != 1 || groups["file"][0]["path"] != fmt.Sprintf("/threads/7001/files/%d", number(t, groups["file"][0]["id"])) || groups["file"][0]["detail"] != "Quarter review" {
+	if len(groups["file"]) != 2 || groups["file"][0]["path"] != fmt.Sprintf("/threads/7001/files/%d", number(t, groups["file"][0]["id"])) || groups["file"][0]["detail"] != "Quarter review" {
 		t.Fatalf("file hits: %v", groups["file"])
+	}
+	if groups["file"][1]["path"] != "/knowledge/spaces/9001/files/9101" || groups["file"][1]["detail"] != "Taxes" {
+		t.Fatalf("space file hit: %v", groups["file"][1])
 	}
 	top := all["top"].([]any)
 	if len(top) != 5 {

@@ -104,7 +104,7 @@ func findFiles(ctx context.Context, env search.Env, q search.Query) (search.Page
 		if f.ThreadID != 0 {
 			h.Detail, h.Path = f.ThreadTitle, "/threads/"+strconv.FormatInt(f.ThreadID, 10)+"/files/"+strconv.FormatInt(f.ID, 10)
 		} else {
-			h.Detail, h.Path = f.ProjectName, "/projects/"+strconv.FormatInt(f.ProjectID, 10)+"/files/"+strconv.FormatInt(f.ID, 10)
+			h.Detail, h.Path = f.ProjectName, "/knowledge/spaces/"+strconv.FormatInt(f.ProjectID, 10)+"/files/"+strconv.FormatInt(f.ID, 10)
 		}
 		page.Hits = append(page.Hits, h)
 	}
