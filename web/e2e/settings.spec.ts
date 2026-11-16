@@ -192,7 +192,7 @@ test.describe('settings on a desktop', () => {
 
   test('backups are listed, made and verified', async ({ page }) => {
     await gotoShell(page, '/settings/backups');
-    const list = page.getByRole('list', { name: 'Backups' });
+    const list = page.getByRole('list', { name: 'Backups', exact: true });
     await expect(list.getByRole('listitem')).toHaveCount(3);
     await expect(list.getByRole('listitem').nth(2)).toContainText('Made by an older atrium');
     await list
@@ -221,7 +221,7 @@ test.describe('settings on a desktop', () => {
     await useScenario(page, { settings: { backups: 'verify-fail' } });
     await gotoShell(page, '/settings/backups');
     await page
-      .getByRole('list', { name: 'Backups' })
+      .getByRole('list', { name: 'Backups', exact: true })
       .getByRole('button', { name: /Verify/ })
       .first()
       .click();
@@ -235,7 +235,7 @@ test.describe('settings on a desktop', () => {
     await expect(page.getByRole('heading', { level: 3, name: 'Kept' })).toBeVisible();
     await expect(kept.getByRole('listitem')).toHaveCount(1);
     await expect(kept.getByRole('listitem')).toContainText('before-moving-house.tar.age');
-    await expect(page.getByRole('list', { name: 'Backups' })).not.toContainText('before-moving-house');
+    await expect(page.getByRole('list', { name: 'Backups', exact: true })).not.toContainText('before-moving-house');
     await expect(page.getByText(/not examined/)).toHaveCount(0);
   });
 
@@ -307,7 +307,7 @@ test.describe('settings design checks', () => {
 
       test('the backups page passes checks', async ({ page }) => {
         await gotoShell(page, '/settings/backups');
-        await expect(page.getByRole('list', { name: 'Backups' })).toBeVisible();
+        await expect(page.getByRole('list', { name: 'Backups', exact: true })).toBeVisible();
         await expectNoHorizontalScroll(page);
         if (layout.touch) await expectTouchTargets(page);
         await expectNoSeriousAxeFindings(page);
