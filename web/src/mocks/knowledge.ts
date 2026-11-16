@@ -5,9 +5,12 @@ import type {
   KnowledgeHistory,
   KnowledgeLink,
   KnowledgeLinkEnd,
+  KnowledgeMap,
   KnowledgeRecord,
   KnowledgeSubjectPage,
   KnowledgeSubjectRow,
+  Space,
+  SpacePage,
 } from '../contract';
 import { API_BASE } from '../contract';
 
@@ -49,6 +52,15 @@ interface MockEffect {
   undo: () => void;
   done: boolean;
 }
+
+interface MockSpace {
+  space: Space;
+  threads: SpacePage['threads'];
+  tasks: SpacePage['tasks'];
+  files: SpacePage['files'];
+}
+
+const MAP_CAP = 50;
 
 const SCENARIO_KEY = 'atrium.mock';
 const log = globalThis as typeof globalThis & {
@@ -172,6 +184,14 @@ function seed(): { records: MockRecord[]; links: MockLink[]; history: Record<num
       updated_at: iso(8, 9),
       created_at: iso(4, 9),
     }),
+    record({
+      id: 25,
+      title: 'Old compost plan',
+      kind: 'wiki',
+      retracted: true,
+      body: 'Bins by the gate. Replaced by the north fence plan.',
+      updated_at: iso(5, 9),
+    }),
   ];
   for (let n = 0; n < 56; n++) {
     records.push(
@@ -185,6 +205,15 @@ function seed(): { records: MockRecord[]; links: MockLink[]; history: Record<num
       }),
     );
   }
+  const many: MockLink[] = Array.from({ length: 20 }, (_, n) => ({
+    id: 100 + n,
+    source: 100 + n,
+    target: { kind: 'record', id: '22' },
+    relation: 'part_of',
+    writer: 'assistant',
+    created_at: iso(1, 6),
+    removed: false,
+  }));
   return {
     records,
     links: [
@@ -215,8 +244,47 @@ function seed(): { records: MockRecord[]; links: MockLink[]; history: Record<num
         created_at: iso(8, 9),
         removed: false,
       },
+      {
+        id: 74,
+        source: 21,
+        target: { kind: 'record', id: '24' },
+        relation: 'see_also',
+        writer: 'operator',
+        created_at: iso(9, 9),
+        removed: false,
+      },
+      {
+        id: 75,
+        source: 21,
+        target: { kind: 'record', id: '25' },
+        relation: 'see_also',
+        writer: 'operator',
+        created_at: iso(5, 9),
+        removed: false,
+      },
+      {
+        id: 76,
+        source: 22,
+        target: { kind: 'space', id: '5' },
+        relation: 'part_of',
+        writer: 'operator',
+        created_at: iso(6, 10),
+        removed: false,
+      },
+      ...many,
     ],
     history: {
+      1: [
+        {
+          id: 811,
+          at: iso(1, 8),
+          tool: 'knowledge.edit',
+          by: 'operator',
+          previous_body: 'Write in plain words.',
+          undone_at: null,
+        },
+        { id: 810, at: iso(1, 7), tool: 'knowledge.create', by: 'assistant', previous_body: null, undone_at: null },
+      ],
       21: [
         {
           id: 801,
@@ -232,10 +300,62 @@ function seed(): { records: MockRecord[]; links: MockLink[]; history: Record<num
   };
 }
 
+function secs(day: number, hour: number): number {
+  return Date.UTC(2026, 10, day, hour, 15) / 1000;
+}
+
+function space(fields: Partial<Space> & Pick<Space, 'id' | 'name'>): Space {
+  return {
+    archived: false,
+    context_limit: 0,
+    created_at: secs(3, 9),
+    effort: 'xhigh',
+    instructions: '',
+    last_activity: null,
+    private: false,
+    thread_count: 0,
+    updated_at: secs(3, 9),
+    ...fields,
+  };
+}
+
+function seedSpaces(): MockSpace[] {
+  return [
+    {
+      space: space({
+        id: 5,
+        name: 'Shared garden',
+        instructions: 'Keep plans **short**. Ask Ilse before changing the bed layout.',
+        thread_count: 1,
+        last_activity: secs(14, 10),
+      }),
+      threads: [
+        { id: 401, title: 'Planning the raised beds', archived: false, pinned: false, updated_at: secs(14, 10) },
+      ],
+      tasks: [{ id: 7, title: 'Order raised bed timber', status: 'open', due: '2026-12-01' }],
+      files: [
+        {
+          id: 602,
+          name: 'garden-seeds.csv',
+          bytes: 4096,
+          created_at: secs(10, 9),
+          media_type: 'text/csv',
+          origin: 'upload',
+          path: 'garden-seeds.csv',
+          tokens: 900,
+        },
+      ],
+    },
+    { space: space({ id: 6, name: 'Studio move', private: true }), threads: [], tasks: [], files: [] },
+  ];
+}
+
 let store = seed();
+let spaces = seedSpaces();
 let effects: MockEffect[] = [];
 let nextLink = 200;
 let nextEffect = 900;
+let nextSpace = 10;
 let seededFor = '';
 
 function scenario(): KnowledgeScenario {
@@ -243,6 +363,7 @@ function scenario(): KnowledgeScenario {
   if (raw !== seededFor) {
     seededFor = raw;
     store = seed();
+    spaces = seedSpaces();
     effects = [];
   }
   try {
@@ -285,6 +406,16 @@ function end(kind: KnowledgeLinkEnd['kind'], id: string): KnowledgeLinkEnd {
       record_kind: item?.kind,
     };
   }
+  if (kind === 'space') {
+    const found = spaces.find((item) => item.space.id === Number(id));
+    return {
+      kind,
+      id,
+      title: found?.space.name ?? 'Missing space',
+      state: !found ? 'missing' : found.space.archived ? 'archived' : 'live',
+      address: `/knowledge/spaces/${id}`,
+    };
+  }
   const task = TASKS[id];
   return {
     kind,
@@ -292,6 +423,68 @@ function end(kind: KnowledgeLinkEnd['kind'], id: string): KnowledgeLinkEnd {
     title: task?.title ?? 'Missing task',
     state: task?.state ?? 'missing',
     address: `/tasks/${id}`,
+  };
+}
+
+function neighborhood(center: MockRecord): KnowledgeMap {
+  const live = (id: number): MockRecord | undefined => {
+    const item = find(id);
+    return item && !item.retracted ? item : undefined;
+  };
+  const edges = store.links
+    .filter((link) => !link.removed && link.target.kind === 'record')
+    .filter((link) => link.source === center.id || link.target.id === String(center.id))
+    .filter((link) => live(link.source) && live(Number(link.target.id)))
+    .map((link) => ({ from: link.source, to: Number(link.target.id), kind: link.relation }));
+  const ids = [...new Set(edges.flatMap((edge) => [edge.from, edge.to]).filter((id) => id !== center.id))];
+  const kept = ids.slice(0, MAP_CAP - 1);
+  const node = (item: MockRecord, depth: number) => ({
+    id: item.id,
+    title: item.title,
+    kind: item.kind,
+    scope: item.scope,
+    private: item.private,
+    confirmed: item.confirmed,
+    depth,
+  });
+  return {
+    center: center.id,
+    nodes: [node(center, 0), ...kept.map((id) => node(find(id) as MockRecord, 1))],
+    edges: edges.filter((edge) => kept.includes(edge.from) || kept.includes(edge.to)),
+    cap: MAP_CAP,
+    truncated: ids.length > kept.length,
+  };
+}
+
+function spacePage(found: MockSpace): SpacePage {
+  const records = store.links
+    .filter((link) => !link.removed && link.target.kind === 'space' && link.target.id === String(found.space.id))
+    .map((link) => {
+      const item = find(link.source);
+      return {
+        link_id: link.id,
+        relation: link.relation,
+        id: link.source,
+        title: item?.title ?? 'Missing page',
+        kind: item?.kind ?? 'wiki',
+        state: (!item ? 'missing' : item.retracted ? 'retracted' : 'live') as SpacePage['records'][number]['state'],
+        address: `/knowledge/${link.source}`,
+        created_at: Date.parse(link.created_at) / 1000,
+      };
+    });
+  return {
+    space: found.space,
+    sections: [],
+    files: found.files,
+    threads: found.threads,
+    tasks: found.tasks,
+    records,
+    counts: {
+      records: records.length,
+      threads: found.threads.length,
+      tasks: found.tasks.length,
+      files: found.files.length,
+    },
   };
 }
 
@@ -401,6 +594,55 @@ log.atriumKnowledge = {
 };
 
 export const knowledgeHandlers = [
+  http.get(`*${API_BASE}/knowledge/spaces`, async ({ request }) => {
+    const stop = await gate();
+    if (stop) return stop;
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get('limit') ?? '50');
+    const offset = Number(url.searchParams.get('cursor') ?? '0');
+    const all = scenario().empty ? [] : spaces.map((item) => item.space);
+    const next = offset + limit < all.length ? String(offset + limit) : null;
+    return HttpResponse.json({ items: all.slice(offset, offset + limit), next_cursor: next });
+  }),
+  http.post(`*${API_BASE}/knowledge/spaces`, async ({ request }) => {
+    const body = (await remember(request)) as { name: string; effort: string; private?: boolean };
+    const id = nextSpace++;
+    spaces.push({
+      space: space({
+        id,
+        name: body.name,
+        effort: body.effort,
+        private: body.private ?? false,
+        created_at: Date.now() / 1000,
+        updated_at: Date.now() / 1000,
+      }),
+      threads: [],
+      tasks: [],
+      files: [],
+    });
+    return HttpResponse.json({ id }, { status: 201 });
+  }),
+  http.get(`*${API_BASE}/knowledge/spaces/:space`, async ({ params }) => {
+    const stop = await gate();
+    if (stop) return stop;
+    const found = spaces.find((item) => item.space.id === Number(params.space));
+    if (!found) return refusal(404, 'not_found', 'No such space.');
+    return HttpResponse.json(spacePage(found));
+  }),
+  http.patch(`*${API_BASE}/knowledge/spaces/:space`, async ({ params, request }) => {
+    const body = (await remember(request)) as { name?: string };
+    const found = spaces.find((item) => item.space.id === Number(params.space));
+    if (!found) return refusal(404, 'not_found', 'No such space.');
+    found.space = { ...found.space, name: body.name ?? found.space.name, updated_at: Date.now() / 1000 };
+    return HttpResponse.json({ id: found.space.id });
+  }),
+  http.get(`*${API_BASE}/knowledge/:id/map`, async ({ params }) => {
+    const stop = await gate();
+    if (stop) return stop;
+    const item = find(params.id);
+    if (!item) return refusal(404, 'not_found', 'No such knowledge record.');
+    return HttpResponse.json({ revision: 1, data: neighborhood(item) });
+  }),
   http.get(`*${API_BASE}/knowledge/subjects`, async ({ request }) => {
     const stop = await gate();
     if (stop) return stop;
@@ -516,7 +758,11 @@ export const knowledgeHandlers = [
     return HttpResponse.json({ data: wire(link), effect_ids: ids });
   }),
   http.post(`*${API_BASE}/knowledge/:id/links`, async ({ params, request }) => {
-    const body = (await remember(request)) as { target_kind: 'record' | 'task'; target_id: string; relation: string };
+    const body = (await remember(request)) as {
+      target_kind: 'record' | 'task' | 'space';
+      target_id: string;
+      relation: string;
+    };
     const id = Number(params.id);
     if (!find(id)) return refusal(404, 'not_found', 'No such knowledge record.');
     const existing = store.links.find(

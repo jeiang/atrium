@@ -1,5 +1,6 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
+  import { on } from 'svelte/events';
   import { ApiError, type KnowledgeFact, type KnowledgeHistory, type KnowledgeLink } from '../../contract';
   import { announce } from '../../shared/announce.svelte';
   import { formatClock, formatDay, formatDayTime, plural } from '../../shared/assistant/format';
@@ -13,9 +14,10 @@
   import TextField from '../../shared/ui/TextField.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { p } from '../../shell/router';
+  import { navigate, p } from '../../shell/router';
   import Markdown from '../chats/Markdown.svelte';
   import {
+    dialogOpen,
     handleConfirm,
     handleRemoveLink,
     handleRestore,
@@ -25,8 +27,11 @@
     isStale,
     KINDS,
     liveLinks,
+    noteMapOpened,
+    plainKey,
     refreshKnowledge,
     relationLabel,
+    takeMapClosed,
     useHistory,
     useLinks,
     useSubject,
@@ -37,10 +42,9 @@
   interface Props {
     id: number;
     phone: boolean;
-    standing?: boolean;
   }
 
-  let { id, phone, standing = false }: Props = $props();
+  let { id, phone }: Props = $props();
 
   const client = useQueryClient();
   const page = useSubject(() => id);
@@ -58,6 +62,7 @@
   let busy = $state<string>();
   let removing = $state<number>();
   let linking = $state(false);
+  let mapButton = $state<HTMLButtonElement>();
 
   const data = $derived(page.data);
   const subject = $derived(data?.subject);
@@ -73,6 +78,26 @@
     saveError = undefined;
     saveState = 'idle';
   });
+
+  $effect(() => {
+    if (!data || !mapButton || !takeMapClosed(id)) return;
+    const button = mapButton;
+    const timer = setTimeout(() => button.focus());
+    return () => clearTimeout(timer);
+  });
+
+  $effect(() =>
+    on(window, 'keydown', (event) => {
+      if (event.key.toLowerCase() !== 'm' || !plainKey(event) || editing || !data || dialogOpen()) return;
+      event.preventDefault();
+      onMap();
+    }),
+  );
+
+  function onMap(): void {
+    noteMapOpened(id);
+    void navigate('/knowledge/map', { search: { subject: String(id) } });
+  }
 
   function stateTag(record: { confirmed: boolean; retracted?: boolean; superseded?: boolean }): {
     label: string;
@@ -102,6 +127,8 @@
   function endHref(end: KnowledgeLink['target']): string | undefined {
     if (end.kind === 'record') return p('/knowledge/:id', { params: { id: end.id } });
     if (end.kind === 'task') return p('/tasks/:id', { params: { id: end.id } });
+    if (end.kind === 'space' && end.state !== 'missing')
+      return p('/knowledge/spaces/:space', { params: { space: end.id } });
     return undefined;
   }
 
@@ -369,34 +396,37 @@
   <article class="kpage" data-retracted={subject.retracted || undefined}>
     <div class="kpage__main">
       <header class="kpage__head">
-        <p class="eyebrow">
-          {standing ? 'Standing instructions' : (KINDS[data.kind] ?? data.kind)}
-        </p>
+        <p class="eyebrow">{KINDS[data.kind] ?? data.kind}</p>
         <h1 class="page-title">{subject.title || 'Untitled'}</h1>
         <div class="kpage__tags">
           <Badge tone={stateTag(subject).tone}>{stateTag(subject).label}</Badge>
-          {#if subject.pinned || standing}
+          {#if subject.pinned}
             <Badge tone="accent">Pinned</Badge>
           {/if}
           {#if subject.private}
             <Badge>Private</Badge>
           {/if}
         </div>
-        {#if standing}
-          <p class="page-lede">The assistant reads this page on every run.</p>
-        {/if}
         {#if subject.aliases.length > 0}
           <p class="kpage__aliases">Also known as {subject.aliases.join(', ')}</p>
         {/if}
-        {#if !editing && !subject.retracted}
+        {#if !editing}
           <div class="kpage__actions">
-            <Button icon="tool" onclick={onEdit}>Edit</Button>
-            {#if !subject.confirmed}
-              <Button variant="primary" icon="check" pending={busy === 'confirm'} onclick={handleConfirmPage}
-                >Confirm</Button
-              >
+            {#if !subject.retracted}
+              <Button icon="tool" onclick={onEdit}>Edit</Button>
+              {#if !subject.confirmed}
+                <Button variant="primary" icon="check" pending={busy === 'confirm'} onclick={handleConfirmPage}
+                  >Confirm</Button
+                >
+              {/if}
+              <Button variant="quiet" pending={busy === 'retract'} onclick={handleRetractPage}>Retract</Button>
             {/if}
-            <Button variant="quiet" pending={busy === 'retract'} onclick={handleRetractPage}>Retract</Button>
+            <Button variant="quiet" icon="knowledge" aria-keyshortcuts="M" bind:element={mapButton} onclick={onMap}
+              >Map
+              {#if !phone}
+                &nbsp;<kbd class="kpage__kbd">M</kbd>
+              {/if}</Button
+            >
             {#if saveState === 'saved' && savedAt}
               <p class="kpage__saved" role="status">Saved at {savedAt}</p>
             {/if}

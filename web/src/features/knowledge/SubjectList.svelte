@@ -88,6 +88,7 @@
           <Badge tone="accent">Pinned</Badge>
         {/snippet}
       </ListRow>
+      <ListRow title="Spaces" meta="Subjects, chats and files by project" href={p('/knowledge/spaces')} />
     </List>
   {/if}
   <div class="subjects__region" aria-busy={subjects.isFetching || undefined}>
