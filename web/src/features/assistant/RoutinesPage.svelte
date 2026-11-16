@@ -2,6 +2,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import { assistantScheduleAdd, ok } from '../../contract';
   import { unreachable } from '../../shared/device.svelte';
+  import SettingsForm from '../../shared/settings/SettingsForm.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Dialog from '../../shared/ui/Dialog.svelte';
@@ -19,7 +20,6 @@
   import AssistantNav from './AssistantNav.svelte';
   import { failure, fieldErrors, gesture, type Outcome, refresh, runStatus, useSchedules } from './assistant';
   import ScheduleDetail from './ScheduleDetail.svelte';
-  import SettingsGroupForm from './SettingsGroupForm.svelte';
   import { GRAMMAR } from './schedules';
   import './assistant.css';
 
@@ -137,14 +137,7 @@
           </List>
         {/if}
       </Section>
-      <SettingsGroupForm
-        id="routine-settings"
-        title="Routine settings"
-        groups={['assistant.routines']}
-        saveLabel="Save routine settings"
-        savedText="The next scheduled or nightly run uses them."
-        empty="atrium offers no routine settings right now."
-      />
+      <SettingsForm id="routine-settings" title="Routine settings" groups={['assistant.routines']} />
     {/if}
   </div>
 </Page>

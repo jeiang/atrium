@@ -2,6 +2,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import { assistantDefaultsSet, ok } from '../../contract';
   import { unreachable } from '../../shared/device.svelte';
+  import SettingsForm from '../../shared/settings/SettingsForm.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
   import Page from '../../shared/ui/Page.svelte';
@@ -12,7 +13,6 @@
   import { p } from '../../shell/router';
   import AssistantNav from './AssistantNav.svelte';
   import { failure, fieldErrors, gesture, type Outcome, refresh, useConfiguration, useRoles } from './assistant';
-  import SettingsGroupForm from './SettingsGroupForm.svelte';
   import './assistant.css';
 
   const client = useQueryClient();
@@ -150,14 +150,7 @@
       </div>
     </Section>
 
-    <SettingsGroupForm
-      id="helpers"
-      title="Helpers"
-      groups={['assistant.behavior', 'assistant.helpers']}
-      saveLabel="Save helper settings"
-      savedText="The next research or web search run uses them."
-      empty="atrium offers no helper settings right now."
-    />
+    <SettingsForm id="helpers" title="Helpers" groups={['assistant.behavior', 'assistant.helpers']} />
 
     <Section id="roles" title="Research roles">
       <p class="asst-text">The helpers the assistant can start, as declared in atrium. You cannot change them here.</p>

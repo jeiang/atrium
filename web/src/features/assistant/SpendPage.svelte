@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { SpendCap, SpendSlice } from '../../contract';
   import { unreachable } from '../../shared/device.svelte';
+  import SettingsForm from '../../shared/settings/SettingsForm.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import DataTable, { type Column } from '../../shared/ui/DataTable.svelte';
   import List from '../../shared/ui/List.svelte';
@@ -14,7 +15,6 @@
   import { p } from '../../shell/router';
   import AssistantNav from './AssistantNav.svelte';
   import { classWords, dateTime, dayOf, kindWords, money, percent, useSpend, words } from './assistant';
-  import SettingsGroupForm from './SettingsGroupForm.svelte';
   import './assistant.css';
 
   const ROUTINE_SCOPES = ['dreaming_run', 'dreaming_month', 'ops_run', 'ops_month'];
@@ -204,14 +204,7 @@
       </Section>
     {/if}
 
-    <SettingsGroupForm
-      id="caps"
-      title="Budget and caps"
-      groups={['assistant.spend']}
-      saveLabel="Save spending limits"
-      savedText="atrium checks the next request against the new limits."
-      empty="atrium offers no spending settings right now."
-    />
+    <SettingsForm id="caps" title="Budget and caps" groups={['assistant.spend']} />
 
     {#if routineCaps.length > 0}
       <Section id="routine-caps" title="Routine caps">

@@ -9,12 +9,9 @@ import {
   ok,
   reviewPermissions,
   reviewProposals,
-  type SettingsSchemaField,
-  settingsSchema,
 } from '../../contract';
 import { refusedOffline } from '../../shared/device.svelte';
 
-const SETTINGS_TOPICS = ['settings'] as const;
 const SPEND_TOPICS = ['assistant', 'settings'] as const;
 const JOB_TOPICS = ['jobs'] as const;
 const PERMISSION_TOPICS = ['settings', 'review'] as const;
@@ -30,31 +27,6 @@ export interface Outcome {
   tone: Tone;
   title: string;
   text: string;
-}
-
-export interface GroupedSettings {
-  revision: string;
-  fields: SettingsSchemaField[];
-}
-
-export function revisionOf(etag: string | null): string {
-  return etag?.replace(/^W\//, '').replaceAll('"', '') ?? '';
-}
-
-export function useSettingsGroup(groupsOf: () => readonly string[]) {
-  return createQuery(() => ({
-    queryKey: ['assistant', 'settings', ...groupsOf()],
-    queryFn: async ({ signal }): Promise<GroupedSettings> => {
-      const groups = groupsOf();
-      const response = await settingsSchema({ signal });
-      const schema = ok(response);
-      const fields = schema.pages
-        .flatMap((page) => page.fields)
-        .filter((field) => groups.includes(field.group) && !field.secret);
-      return { revision: revisionOf(response.headers.get('ETag')), fields };
-    },
-    meta: { topics: SETTINGS_TOPICS },
-  }));
 }
 
 export function useConfiguration() {
