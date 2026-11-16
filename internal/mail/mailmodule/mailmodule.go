@@ -20,17 +20,21 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/executors"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailconn"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -73,12 +77,23 @@ func SettingGroups() []settings.Group {
 	}
 }
 
-func ToolDefinitions() []module.ToolDefinition {
-	return mailtools.Definitions(mailToolService)
+func (m Module) opener(cfg config.Config) mail.OpenFunc {
+	if m.Clients == nil {
+		return imapclient.Opener(cfg)
+	}
+	return m.Clients(cfg)
 }
 
-func ProposeKinds() []proposals.Definition {
-	return mailtools.Proposals(mailToolService)
+func (m Module) toolService(tc *tool.Context) *mailapp.Service {
+	return mailapp.NewDrafts(tc.DB, tc.Cfg, tc.Env, tc.Now, tc.Ledger).WithOpen(m.opener(tc.Cfg))
+}
+
+func (m Module) ToolDefinitions() []module.ToolDefinition {
+	return mailtools.Definitions(m.toolService)
+}
+
+func (m Module) ProposeKinds() []proposals.Definition {
+	return mailtools.Proposals(m.toolService)
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -160,20 +175,18 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			"live status": {Always: true},
 			"replay":      {Always: true},
 		},
-		Tools:        ToolDefinitions(),
-		ProposeKinds: ProposeKinds(),
+		Tools:        m.ToolDefinitions(),
+		ProposeKinds: m.ProposeKinds(),
 		Effects: func(d module.EffectDeps) module.Effects {
-			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: d.Open, Now: d.Now}
+			open := m.opener(d.Cfg)
+			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: open, Now: d.Now}
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
-			effects := module.Effects{
+			return module.Effects{
 				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
-				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, d.Open), live.Undo(d.Open, d.DB), openloops.Undo(), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoCommitmentSnooze, d.Now)}),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo(), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoCommitmentSnooze, d.Now)}),
 				Resolve:   live.Resolve(),
+				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),
 			}
-			if d.Syncer != nil {
-				effects.Sync = executors.SyncAfter(d.Syncer, d.Open)
-			}
-			return effects
 		},
 		Connections: slices.Concat(Connections(), tracking.Connections()),
 		AccountSync: mailconn.AccountSync(),

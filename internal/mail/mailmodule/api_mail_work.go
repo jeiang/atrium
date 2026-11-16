@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
@@ -229,11 +228,7 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 	svc := func() *mailapp.Service { return service }
 	passes := mailPasses{d: d, m: m}
 	if d != nil {
-		open := imapclient.Opener(d.Cfg)
-		if m.Clients != nil {
-			open = m.Clients(d.Cfg)
-		}
-		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, mail.WallClock)
+		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, d.Cfg, mail.WallClock)
 		if err != nil {
 			panic(err)
 		}

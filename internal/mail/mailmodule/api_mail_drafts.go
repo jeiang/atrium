@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
@@ -108,11 +107,8 @@ func draftFailure(err error, reason string, effects []int64) error {
 func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 	s := &draftAPI{}
 	if d != nil {
-		open := imapclient.Opener(d.Cfg)
-		if m.Clients != nil {
-			open = m.Clients(d.Cfg)
-		}
-		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, mail.WallClock)
+		open := m.opener(d.Cfg)
+		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, d.Cfg, mail.WallClock)
 		if err != nil {
 			panic(err)
 		}

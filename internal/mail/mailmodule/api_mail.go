@@ -260,12 +260,12 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 		open := imapclient.Opener(d.Cfg)
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: mail.WallClock}
 		cat := module.SetFrom(d.Ctx).Catalog()
-		store, err := cat.Ledger(d.DB, d.Env, open, mail.WallClock)
+		store, err := cat.Ledger(d.DB, d.Env, d.Cfg, mail.WallClock)
 		if err != nil {
 			panic(err)
 		}
 		d.DrainOnStop(store.Drain)
-		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: store, Env: d.Env, Open: open, Syncer: syncer, Now: mail.WallClock, Approvals: cat.Approvals()})
+		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: store, Env: d.Env, Cfg: d.Cfg, Now: mail.WallClock, Approvals: cat.Approvals()})
 		if err != nil {
 			panic(err)
 		}
