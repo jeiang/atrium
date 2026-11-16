@@ -88,12 +88,12 @@
     aria-haspopup="menu"
     aria-expanded={open}
     aria-controls={id}
-    aria-label={`Account: ${name}`}
     onclick={onToggle}
     onkeydown={onKeydown}
   >
     <span class="avatar" aria-hidden="true">{initials || '?'}</span>
-    <span class="account__name">{name}</span>
+    <span class="account__name" aria-hidden="true">{name}</span>
+    <span class="visually-hidden">Account: {name}</span>
   </button>
   <div class="account__popup" {id} hidden={!open}>
     <p class="account__who">
