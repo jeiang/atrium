@@ -839,7 +839,7 @@ claims about the running application. Operator contracts are in
   failed job; it never reports success with nothing written. Mapping rows
   of the removed Notion target are ignored. Each file write records an
   effect first, and an unknown outcome blocks the export until `atrium
-  writes resolve <id>`. Edits made in the folder are overwritten on the
+  effects resolve <id>`. Edits made in the folder are overwritten on the
   next run. Private records are exported only with consent recorded for
   that exact folder; changing the folder clears the consent.
 - Draft edits carry an optional expected revision: stale edits are refused without overwriting newer content. The HTML form sends it automatically; API and tool callers may supply `revision`.
