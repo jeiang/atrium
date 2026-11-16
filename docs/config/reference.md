@@ -41,7 +41,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `mail_enabled` | bool | `false` | `ATRIUM_CORE_MAIL_ENABLED` |
 | `media_enabled` | bool | `false` | `ATRIUM_CORE_MEDIA_ENABLED` |
 | `notifications_enabled` | bool | `false` | `ATRIUM_CORE_NOTIFICATIONS_ENABLED` |
-| `notion_enabled` | bool | `false` | `ATRIUM_CORE_NOTION_ENABLED` |
 | `ops_listen` | string | `127.0.0.1:9180` | `ATRIUM_CORE_OPS_LISTEN` |
 | `ops_pprof` | bool | `false` | `ATRIUM_CORE_OPS_PPROF` |
 | `otel_traces_endpoint` | string | none | `ATRIUM_CORE_OTEL_TRACES_ENDPOINT` |
@@ -160,17 +159,12 @@ Operator settings are stored in the database and edited in the application. They
 | `mail_enabled` | bool | `false` | ui |
 | `media_enabled` | bool | `false` | ui |
 | `notifications_enabled` | bool | `false` | ui |
-| `notion_enabled` | bool | `false` | ui |
 | `tz` | string | `America/Port_of_Spain` | ui |
 
 ### export
 
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
-| `export_notion_enabled` | bool | `false` | ui |
-| `export_notion_kinds` | string | `pii,messages,personal` | ui |
-| `export_notion_parent` | string | none | ui |
-| `export_notion_private_to` | string | none | ui |
 | `export_obsidian_kinds` | string | `pii,messages,personal` | ui |
 | `export_obsidian_private_to` | string | none | ui |
 
@@ -211,15 +205,6 @@ Operator settings are stored in the database and edited in the application. They
 | --- | --- | --- | --- |
 | `notify_nightly_cap` | int | `1` | ui |
 | `notify_per_run_cap` | int | `3` | ui |
-
-### notion
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `notion_private_value` | string | `private` | ui |
-| `sensitivity_property` | string | `sensitivity` | ui |
-| `wiki_log_title` | string | `Wiki Log` | ui |
-| `wiki_root` | string | none | ui |
 
 ### permissions
 

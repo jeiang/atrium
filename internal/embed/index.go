@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
 	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
-	notionembedding "github.com/jeiang/atrium/internal/notion/embedding"
 )
 
 const (
@@ -31,10 +30,6 @@ type Index struct {
 
 func (i Index) MessageTable() string {
 	return fmt.Sprintf("embed_message_%d", i.Generation)
-}
-
-func (i Index) NotionTable() string {
-	return fmt.Sprintf("embed_notion_%d", i.Generation)
 }
 
 func (i Index) KBTable() string {
@@ -130,9 +125,6 @@ func (b *Build) Discard(ctx context.Context) error {
 		if err := mailembedding.ClearIn(ctx, tx, b.MessageTable()); err != nil {
 			return err
 		}
-		if err := notionembedding.ClearIn(ctx, tx, b.NotionTable()); err != nil {
-			return err
-		}
 		if err := kbembedding.ClearIn(ctx, tx, b.KBTable()); err != nil {
 			return err
 		}
@@ -151,10 +143,6 @@ func (i Index) Adopt(ctx context.Context, d *db.DB, url, model string) error {
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	rowQuerier
-}
-
-func DeleteNotion(ctx context.Context, q execer, rid int64) error {
-	return deleteNotion(ctx, q, rid, StateActive, StateBuilding)
 }
 
 func DeleteKB(ctx context.Context, q execer, id int64) error {
@@ -197,26 +185,6 @@ func DeleteMessages(ctx context.Context, q execer, ids []int64) error {
 	return nil
 }
 
-func StaleNotion(ctx context.Context, q execer, rid int64) error {
-	return deleteNotion(ctx, q, rid, StateBuilding)
-}
-
-func deleteNotion(ctx context.Context, q execer, rid int64, states ...string) error {
-	for _, state := range states {
-		i, ok, err := lookup(ctx, q, state)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			continue
-		}
-		if _, err := q.ExecContext(ctx, "DELETE FROM "+i.NotionTable()+" WHERE rowid = ?", rid); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func Create(ctx context.Context, d *db.DB, url, model string, dim int) (*Build, error) {
 	i := Index{State: StateBuilding, URL: url, Model: model, Dimension: dim}
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -225,7 +193,6 @@ func Create(ctx context.Context, d *db.DB, url, model string, dim int) (*Build, 
 		}
 		for _, stmt := range []string{
 			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(account TEXT PARTITION KEY, embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.MessageTable(), dim),
-			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(visibility TEXT PARTITION KEY, embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.NotionTable(), dim),
 			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.KBTable(), dim),
 		} {
 			if _, err := tx.ExecContext(ctx, stmt); err != nil {
@@ -243,7 +210,7 @@ func Create(ctx context.Context, d *db.DB, url, model string, dim int) (*Build, 
 }
 
 func drop(ctx context.Context, tx *sql.Tx, i Index) error {
-	for _, stmt := range []string{"DROP TABLE IF EXISTS " + i.MessageTable(), "DROP TABLE IF EXISTS " + i.NotionTable(), "DROP TABLE IF EXISTS " + i.KBTable()} {
+	for _, stmt := range []string{"DROP TABLE IF EXISTS " + i.MessageTable(), "DROP TABLE IF EXISTS " + i.KBTable()} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
@@ -257,13 +224,9 @@ func counts(ctx context.Context, q db.Querier, i Index) (done, total int, err er
 	if err != nil {
 		return 0, 0, err
 	}
-	notionDone, notionTotal, err := notionembedding.Counts(ctx, q, i.NotionTable())
-	if err != nil {
-		return 0, 0, err
-	}
 	kbDone, kbTotal, err := kbembedding.Counts(ctx, q, i.KBTable())
 	if err != nil {
 		return 0, 0, err
 	}
-	return messageDone + notionDone + kbDone, messageTotal + notionTotal + kbTotal, nil
+	return messageDone + kbDone, messageTotal + kbTotal, nil
 }

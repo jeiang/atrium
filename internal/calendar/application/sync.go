@@ -20,7 +20,7 @@ const SyncName application.Name = "calendar.sync"
 type SyncInput struct{}
 
 func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[davmirror.Stats], error) {
-	stats, err := davmirror.Pass(ctx, s.db, passrun.CalDAV, func(ctx context.Context, d *db.DB) (func(context.Context) (davmirror.Stats, error), error) {
+	stats, err := davmirror.Pass(ctx, s.db, func(ctx context.Context, d *db.DB) (func(context.Context) (davmirror.Stats, error), error) {
 		set, err := calendar.LoadSettings(ctx, d.Read)
 		if err != nil {
 			return nil, err

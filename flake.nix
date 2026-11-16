@@ -1,5 +1,5 @@
 {
-  description = "atrium: a personal mail, calendar, Notion and media assistant";
+  description = "atrium: a personal mail, calendar and media assistant";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";

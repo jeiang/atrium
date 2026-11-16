@@ -238,7 +238,7 @@
     {{end}}
     <header class="flex flex-col gap-2 p-4 pb-3">
       <div class="flex flex-wrap items-center gap-2" data-card-body>
-        <span class="badge" data-variant="secondary">{{icon (or $p.KindIcon (lbl "kind_icon" $p.Kind "list-checks"))}}{{or $p.KindLabel (lbl "kind" $p.Kind "")}}</span>
+        <span class="badge" data-variant="secondary">{{icon (or $p.KindIcon "list-checks")}}{{or $p.KindLabel $p.Kind}}</span>
         {{if $p.Account}}<span class="badge" data-variant="outline">{{str $p.Account}}</span>{{end}}
         {{template "status_badge" $p.Status}}
         <span class="ml-auto text-xs text-muted-foreground">#{{$p.ID}} · {{template "when" (dict "epoch" $p.CreatedTS)}}</span>
