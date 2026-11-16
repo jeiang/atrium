@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -86,11 +87,10 @@ func TestAHostMailAccountWithoutAPasswordFileKeepsThePasswordEnteredByTheOperato
 	}
 	s := &apiSite{t: t, base: base}
 	offered := map[string]bool{}
-	schema := apiData(t, s.do(http.MethodGet, "/api/v1/connections/schema", token, nil), http.StatusOK)
-	for _, c := range schema["connections"].([]any) {
-		for _, field := range c.(map[string]any)["fields"].([]any) {
-			if field.(map[string]any)["secret"] == true {
-				offered[fmt.Sprint(c.(map[string]any)["id"], " ", field.(map[string]any)["name"])] = true
+	for _, c := range strictJSON[connectionsapp.ConnectionsSchema](t, "/connections/schema", s.do(http.MethodGet, "/api/v1/connections/schema", token, nil)).Connections {
+		for _, field := range c.Fields {
+			if field.Secret {
+				offered[string(c.ID)+" "+field.Name] = true
 			}
 		}
 	}
