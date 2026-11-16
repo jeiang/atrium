@@ -3,10 +3,6 @@ export const API_BASE = '/web/v1';
 const UNSAFE: Record<string, true> = { POST: true, PUT: true, PATCH: true, DELETE: true };
 const NON_JSON_SUCCESS = ['application/octet-stream', 'text/event-stream'];
 
-export function apiUrl(path: string): string {
-  return API_BASE + path;
-}
-
 export async function atriumFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Atrium-Client', 'web');
@@ -14,7 +10,7 @@ export async function atriumFetch<T>(url: string, init: RequestInit = {}): Promi
   if (typeof init.body === 'string' && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const method = (init.method ?? 'GET').toUpperCase();
   if (UNSAFE[method] && !headers.has('Idempotency-Key')) headers.set('Idempotency-Key', crypto.randomUUID());
-  const res = await fetch(apiUrl(url), { ...init, headers, credentials: 'same-origin' });
+  const res = await fetch(API_BASE + url, { ...init, headers, credentials: 'same-origin' });
   const type = res.headers.get('Content-Type') ?? '';
   let data: unknown;
   if (res.status === 204 || res.status === 304) {
