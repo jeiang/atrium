@@ -100,6 +100,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, searchOps...), append(bindings, searchBindings...)
 	pauseOps, pauseBindings := pauseOperations()
 	operations, bindings = append(operations, pauseOps...), append(bindings, pauseBindings...)
+	appsOps, appsBindings := m.appsOperations()
+	operations, bindings = append(operations, appsOps...), append(bindings, appsBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -171,6 +173,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				commandRoutes(d)
 				eventRoutes(d)
 				pauseRoutes(d)
+				m.appsRoutes(d)
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
@@ -255,6 +258,13 @@ func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
 				return err
 			}
 			return watchConnections(ctx, d)
+		}},
+		{Name: "module-flags", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return followFlags(ctx, d, mc.Follow)
 		}},
 	}
 }
