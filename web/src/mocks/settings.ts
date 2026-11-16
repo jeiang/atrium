@@ -12,7 +12,7 @@ export interface SettingsScenario {
   elsewhere?: Record<string, string>;
   refuse?: Record<string, string>;
   plant?: boolean;
-  backups?: 'none' | 'fail' | 'verify-fail';
+  backups?: 'none' | 'unconfigured' | 'fail' | 'verify-fail';
 }
 
 export interface SettingsRequest {
@@ -48,7 +48,7 @@ function seedBackups(): BackupEntry[] {
     header: problem ? null : { created_at: at(days), schema: 4, encryption: { encrypted: true, key_id: 'k1' }, files: 3 },
     ...(problem ? { problem } : {}),
   });
-  return [entry(0.2, 48_211_000), entry(1.2, 47_904_000), entry(2.2, 47_650_000, 'header unreadable: unexpected EOF')];
+  return [entry(0.2, 48_211_000), entry(1.2, 47_904_000), entry(2.2, 47_650_000, 'old_format')];
 }
 
 function seed(state: SettingsScenario): Store {
@@ -56,7 +56,7 @@ function seed(state: SettingsScenario): Store {
     values: { mail_enabled: 'true', assistant_enabled: 'true', notifications_enabled: 'true', ...state.stored },
     revision: 11,
     elsewhereUsed: false,
-    backups: state.backups === 'none' ? [] : seedBackups(),
+    backups: state.backups === 'none' || state.backups === 'unconfigured' ? [] : seedBackups(),
   };
 }
 
@@ -254,7 +254,11 @@ export function settingsHandlers(read: () => { settings?: SettingsScenario }) {
       return HttpResponse.json({
         revision: String(store.backups.length),
         data: {
-          location: { state: 'set', host_key: 'backup_dir', nix_option: 'services.atrium.backup.dir' },
+          location: {
+            state: state.backups === 'unconfigured' ? 'unconfigured' : 'ready',
+            host_key: 'core.backup_directory',
+            nix_option: 'services.atrium.backup.directory',
+          },
           items: store.backups,
           total: store.backups.length,
         },
@@ -281,6 +285,9 @@ export function settingsHandlers(read: () => { settings?: SettingsScenario }) {
           knn: [],
           files: 3,
         },
+        audit_id: 800 + store.backups.length,
+        effect_ids: [],
+        undoable: false,
       });
     }),
     http.post(`*${API_BASE}/maintenance/backups`, async ({ request }) => {
@@ -297,7 +304,12 @@ export function settingsHandlers(read: () => { settings?: SettingsScenario }) {
       };
       store.backups = [entry, ...store.backups];
       publish('settings');
-      return HttpResponse.json({ data: { name: entry.name, encryption: { encrypted: true, key_id: 'k1' }, files: 3 } });
+      return HttpResponse.json({
+        data: { name: entry.name, encryption: { encrypted: true, key_id: 'k1' }, files: 3 },
+        audit_id: 700 + store.backups.length,
+        effect_ids: [],
+        undoable: false,
+      });
     }),
   ];
 }
