@@ -8,6 +8,7 @@ import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inbo
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
 import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
 import { type SearchScenario, searchHandlers } from './search';
+import { type SettingsScenario, settingsHandlers } from './settings';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -20,6 +21,7 @@ export interface MockScenario {
   inbox?: InboxScenario;
   chat?: ChatScenario;
   connections?: ConnectionsScenario;
+  settings?: SettingsScenario;
   home?: HomeScenario;
   unreachable?: boolean;
   plan?: PlanScenario;
@@ -162,6 +164,7 @@ export const handlers = [
   ...homeHandlers(scenario),
   ...inboxAskHandlers,
   ...planHandlers,
+  ...settingsHandlers(scenario),
   ...connectionHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,
