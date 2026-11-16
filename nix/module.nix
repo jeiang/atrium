@@ -464,6 +464,7 @@
           ++ lib.concatMap (mode: ["--auth" (lib.escapeShellArg mode)]) (lib.splitString "+" cfg.web.auth)
           ++ lib.optionals needsPublicHost ["--allowed-host" (lib.escapeShellArg cfg.web.allowedHost)]
           ++ lib.optionals cfg.web.emergency.enable ["--emergency-host" "127.0.0.1" "--emergency-port" (lib.escapeShellArg (toString cfg.web.emergency.port))]);
+        ExecStartPre = "-${lib.getExe cfg.package} connections check --changed";
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;

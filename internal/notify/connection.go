@@ -20,6 +20,13 @@ func Connections() []connections.Definition {
 	}}
 }
 
+func keyState(err error) connections.State {
+	if missing := new(connections.MissingCredential); errors.As(err, missing) {
+		return connections.Unconfigured
+	}
+	return connections.Failing
+}
+
 func silentPushConnection(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {
 	subject := strings.TrimSpace(connectionConfig(lease)["subject"])
 	if subject == "" {
@@ -29,7 +36,7 @@ func silentPushConnection(ctx context.Context, lease *connections.Lease, _ []con
 		return []connections.Result{{Capability: "delivery", State: connections.Failing, Reason: err.Error()}}, nil
 	}
 	if _, err := vapidKeys(lease); err != nil {
-		return []connections.Result{{Capability: "delivery", State: connections.Failing, Reason: err.Error()}}, nil
+		return []connections.Result{{Capability: "delivery", State: keyState(err), Reason: err.Error()}}, nil
 	}
 	d := lease.DB()
 	if d == nil {
@@ -74,7 +81,7 @@ func testPushConnection(ctx context.Context, lease *connections.Lease, _ []conne
 		return []connections.Result{{Capability: "delivery", State: connections.Failing, Reason: err.Error()}}, nil
 	}
 	if _, err := vapidKeys(lease); err != nil {
-		return []connections.Result{{Capability: "delivery", State: connections.Failing, Reason: err.Error()}}, nil
+		return []connections.Result{{Capability: "delivery", State: keyState(err), Reason: err.Error()}}, nil
 	}
 	d := lease.DB()
 	if d == nil {

@@ -411,7 +411,7 @@ func TestServeQuietWatchPassesLeaveNoOperationAudit(t *testing.T) {
 	declareJobsAndParkThem(t, d)
 	_, logs, _ := startServeWith(t, m.dir, true)
 	waitWatching(t, m.fake)
-	effects := m.count(t, "SELECT COUNT(*) FROM effects")
+	effects := m.count(t, "SELECT COUNT(*) FROM effects WHERE operation <> 'notify_inbox'")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	for wake := 1; wake <= 3; wake++ {
@@ -423,7 +423,7 @@ func TestServeQuietWatchPassesLeaveNoOperationAudit(t *testing.T) {
 			return strings.Count(logs.String(), "icloud: 0 new, 0 gone") > passes && m.fake.Idling() == 1
 		})
 	}
-	if n := m.count(t, "SELECT COUNT(*) FROM effects"); n != effects {
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE operation <> 'notify_inbox'"); n != effects {
 		t.Fatalf("the quiet watch passes recorded %d effects, want %d", n, effects)
 	}
 	if n := m.count(t, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.sync'"); n != 0 {

@@ -97,10 +97,10 @@ func notifyPushRig(t *testing.T, dir string) (*notifyPush, pushBrowser) {
 
 func notifyCounts(t *testing.T, d *db.DB) (notifications, effects int) {
 	t.Helper()
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications").Scan(&notifications); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE COALESCE(channel, '') <> 'system'").Scan(&notifications); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation = 'notify_inbox' AND direction = 'forward'").Scan(&effects); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation = 'notify_inbox' AND direction = 'forward' AND json_extract(action_json, '$.channel') IS NOT 'system'").Scan(&effects); err != nil {
 		t.Fatal(err)
 	}
 	return notifications, effects
@@ -131,7 +131,7 @@ func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
 		t.Fatalf("after a failed push: %d notifications, %d effects; want one of each", notifications, effects)
 	}
 	var state, origin string
-	if err := d.Read.QueryRow("SELECT state, origin FROM effects WHERE operation = 'notify_inbox'").Scan(&state, &origin); err != nil {
+	if err := d.Read.QueryRow("SELECT state, origin FROM effects WHERE operation = 'notify_inbox' AND json_extract(action_json, '$.channel') IS NOT 'system'").Scan(&state, &origin); err != nil {
 		t.Fatal(err)
 	}
 	if state != "done" || origin != "notify" {
@@ -140,7 +140,7 @@ func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
 	var id int64
 	var delivered bool
 	var failure string
-	if err := d.Read.QueryRow("SELECT id, delivered, COALESCE(error, '') FROM notifications").Scan(&id, &delivered, &failure); err != nil {
+	if err := d.Read.QueryRow("SELECT id, delivered, COALESCE(error, '') FROM notifications WHERE COALESCE(channel, '') <> 'system'").Scan(&id, &delivered, &failure); err != nil {
 		t.Fatal(err)
 	}
 	if delivered || !strings.Contains(failure, "web push 500") {
@@ -209,12 +209,12 @@ func TestNotificationLostPushResponseLeavesTheInboxDone(t *testing.T) {
 		t.Fatalf("after a dropped push response: %d notifications, %d effects; want one of each", notifications, effects)
 	}
 	var state string
-	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'notify_inbox'").Scan(&state); err != nil || state != "done" {
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'notify_inbox' AND json_extract(action_json, '$.channel') IS NOT 'system'").Scan(&state); err != nil || state != "done" {
 		t.Fatalf("inbox effect = %q, %v; want done", state, err)
 	}
 	var delivered bool
 	var failure string
-	if err := d.Read.QueryRow("SELECT delivered, COALESCE(error, '') FROM notifications").Scan(&delivered, &failure); err != nil {
+	if err := d.Read.QueryRow("SELECT delivered, COALESCE(error, '') FROM notifications WHERE COALESCE(channel, '') <> 'system'").Scan(&delivered, &failure); err != nil {
 		t.Fatal(err)
 	}
 	if delivered || !strings.Contains(failure, "web push unreachable") {
@@ -232,6 +232,10 @@ func TestNotificationCancelledPushKeepsTheInboxEffect(t *testing.T) {
 	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	browser.store(t, d)
 	runJob(t, f, d, "task-reminders")
+	runApp(t, "connections", "test", "--all", "")
+	for len(push.arrived) > 0 {
+		<-push.arrived
+	}
 
 	push.answer(http.StatusCreated, false, true)
 	now := float64(time.Now().Unix())
@@ -259,7 +263,7 @@ func TestNotificationCancelledPushKeepsTheInboxEffect(t *testing.T) {
 		t.Fatalf("after a cancelled push: %d notifications, %d effects; want one of each", notifications, effects)
 	}
 	var state string
-	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'notify_inbox'").Scan(&state); err != nil || state != "done" {
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'notify_inbox' AND json_extract(action_json, '$.channel') IS NOT 'system'").Scan(&state); err != nil || state != "done" {
 		t.Fatalf("inbox effect = %q, %v; want done", state, err)
 	}
 	var reminded *float64

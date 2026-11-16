@@ -265,10 +265,12 @@ claims about the running application. Operator contracts are in
   OpenAI-compatible endpoint, local or hosted, with a CA bundle, proxy and
   host-file bearer. The endpoint package carries the resolved embed model,
   compiled body-character and batch constants and the dimension through the
-  request context. Each connection's Test records whether it works, and mail
-  is held in needs-settings only while an explicit Test of the current
-  embedding configuration fails; automatic health checks and runtime failures
-  update the connection's health without changing that hold. Connected content sent to a hosted model leaves
+  request context. Each connection's Test, boot check and daily sweep record
+  whether it works. Mail needs `service/embedding` configured; its health is
+  a soft need: while the connection is failing, unconfigured, disabled or
+  needs reauth, the mail settings header says why semantic features are
+  degraded, mail stays on, and the line clears when a check passes. No Test
+  result holds mail. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
@@ -294,6 +296,49 @@ claims about the running application. Operator contracts are in
   records a stored row that fails these rules as failing without sending a
   request. Credential slots must belong to the
   connection kind, and credential values remain write-only.
+- The health watch checks, at start and then hourly, every enabled
+  connection that was never checked (new or host-changed rows first) or
+  was last checked more than 24 hours ago by wall clock, so restarts do
+  not reset the schedule; at start it also rechecks failing and
+  needs-reauth rows. Runtime request failures trigger a check (at most
+  one per 5 minutes) in every state except disabled; a success while
+  failing triggers a recovery check. A first failing result notifies once,
+  also after a host change. A host-declared row dropped from the host file
+  is disabled with its credentials kept and announced once; runtime
+  observations do not change a disabled row.
+- In `serve`, IMAP dials (TCP, TLS, greeting, login), SMTP sessions and
+  iCloud mirror syncs report their outcome per capability through
+  `Lease.Report`, a non-blocking send to the health watch registered for
+  the same database (`connections.Reports`); with no watch, as in a
+  one-shot CLI command, the outcome is dropped. The same state is sent at
+  most once a minute per connection and capability. The health watch
+  records it with `Store.Observe` only when the capability's state class
+  (ok or expiring, failing or needs-reauth) changes, so these outcomes
+  never run inside a mail write and never fail one. Login refusals (IMAP
+  `NO` to LOGIN or AUTHENTICATE, marked `mail.ErrLoginRefused` and shared
+  with the scheduled check's classifier; SMTP 530-535; DAV 401/403) record
+  needs-reauth; connection, TLS and server errors record failing;
+  per-message errors and unknown SMTP outcomes record nothing. These kinds
+  have no grace window.
+  `connections test --all` uses the silent checks; `connections test <id>`
+  keeps the explicit test.
+- qBittorrent and the embedding endpoint have a 6-hour grace window,
+  compiled into their connection kinds. A failure right after an `ok` or
+  `expiring` state stores `failing` with the window end in its result;
+  reads show `away until <time UTC>` (CLI, Connections page, module
+  settings header) and add `grace_until` to the connection read model.
+  Inside the window no notice is sent, and recovery is silent. The first
+  check after the window that still fails shows plain `failing` and
+  notifies once; the hourly watch rechecks such rows. A failure from any
+  other state, including a host change, gets no window. Other kinds have
+  none.
+- `atrium connections check` runs the silent check of every configured
+  connection, and `--changed` only those never checked since they were
+  added or their host declaration changed. It exits non-zero when a
+  checked connection is failing (in its window or not) or needs reauth.
+  The NixOS unit runs `connections check --changed` as `ExecStartPre`
+  with failure ignored, so a deploy reports changed connections in the
+  unit journal before serve starts.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token) and EZTV (no credential) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
@@ -302,7 +347,9 @@ claims about the running application. Operator contracts are in
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
   `weather_longitude` and `weather_location_name`), validated in range and
-  read-only when the host file declares them. The Integrations page also has a Google OAuth wizard:
+  read-only when the host file declares them. Without a location name or
+  both coordinates, the weather connection checks as `unconfigured` and
+  probes nothing. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier
@@ -417,6 +464,8 @@ claims about the running application. Operator contracts are in
   `export_pages` and `attention_snoozes` stay; `skills` and
   `effect_import_refs` are read by nothing and are candidates for a later
   drop.
+  Migration 3 adds the `usage_counters` table and an `agent` column
+  (default 0) on `auth_bearers` and `auth_sessions`, with no row rewrite.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
@@ -580,7 +629,11 @@ claims about the running application. Operator contracts are in
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
   read-only. A module is on only when its flag is true
-  and its required settings are met (an `needs-settings` state otherwise);
+  and its required settings are met (an `needs-settings` state otherwise).
+  A soft need never holds a module: mail on `service/embedding`, the
+  assistant on `service/anthropic` and notifications on `service/webpush`
+  show the connection's state (for example `unconfigured`) on the module's
+  settings header while it is not healthy;
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
@@ -664,7 +717,20 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery. The ops listener also serves
+  notification delivery, and `atrium_scheduler_job_runs_total{scheduled_job,status}`,
+  which counts finished runs from the stored run history at scrape time, so it
+  survives restarts; operator schedules share the label `operator_schedule`,
+  consecutive identical skips stored as one run count once, and within one
+  process the value never falls below what it last reported. Requests are
+  also counted per day, surface (`page`, `api`, `web`), method, route
+  pattern (`unmatched` for unknown paths, static files and `/healthz` skipped)
+  and agent mark in `usage_counters`: batched in memory, saved every minute
+  and at shutdown in one transaction that prunes days older than 400, exported
+  as `atrium_http_route_requests_total{surface,method,route,agent}` from the
+  saved rows, and listed by `atrium usage routes`. A request is agent traffic
+  when its bearer token was issued with `--agent`, or it sends
+  `Atrium-Agent: 1`, which under OIDC also marks the session row for good; the
+  mark grants nothing and shows in the token list and `/web/v1/session`. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   Pass staleness (the `passes` readiness check, `atrium_job_stale`,

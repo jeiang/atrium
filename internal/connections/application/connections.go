@@ -18,6 +18,7 @@ const (
 	DisconnectName    application.Name = "connections.disconnect"
 	TestName          application.Name = "connections.test"
 	ObserveHealthName application.Name = "connections.observe-health"
+	CheckName         application.Name = "connections.check"
 )
 
 type ID = connections.ID
@@ -43,8 +44,12 @@ type TestInput struct {
 	All bool
 }
 type ObserveHealthInput struct {
-	ID    ID
-	Stale bool
+	ID        ID
+	Recovered bool
+	Start     bool
+}
+type CheckInput struct {
+	Changed bool
 }
 
 func DescribeList() application.Definition {
@@ -64,6 +69,9 @@ func DescribeTest() application.Definition {
 }
 func DescribeObserveHealth() application.Definition {
 	return application.Describe[ObserveHealthInput, struct{}](ObserveHealthName, application.Command, []application.Authority{application.System}, application.NoEffect, true)
+}
+func DescribeCheck() application.Definition {
+	return application.Describe[CheckInput, []View](CheckName, application.Command, []application.Authority{application.System}, application.NoEffect, true)
 }
 
 func (s *Service) List(ctx context.Context, in ListInput) (application.Read[[]View], error) {
@@ -149,7 +157,7 @@ func (s *Service) Test(ctx context.Context, in TestInput) (application.Change[[]
 		}
 		ids = nil
 		for _, v := range views {
-			if v.Enabled && v.State != connections.Unconfigured && v.State != connections.Disabled {
+			if checkable(v) {
 				ids = append(ids, v.ID)
 			}
 		}
@@ -157,7 +165,7 @@ func (s *Service) Test(ctx context.Context, in TestInput) (application.Change[[]
 	var out []View
 	auditID, err := s.command(ctx, TestName, ids, func(commit connections.Commit) error {
 		var err error
-		out, err = s.pass(ctx, ids, false, commit)
+		out, err = s.pass(ctx, ids, in.All, commit)
 		return err
 	})
 	return application.Change[[]View]{Data: out, AuditID: auditID}, err
@@ -168,17 +176,18 @@ func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (app
 	if err != nil {
 		return application.Change[struct{}]{}, err
 	}
-	var ids []ID
+	var ids, checked []ID
 	for _, v := range views {
-		if in.ID != "" {
-			if v.ID != in.ID || !recheckable(v) {
-				continue
-			}
-		} else if !v.Enabled || v.State == connections.Unconfigured || v.State == connections.Disabled || in.Stale && v.CheckedAt == nil {
+		if !checkable(v) || in.ID != "" && !wanted(v, in) || in.ID == "" && !due(v, in.Start) {
 			continue
 		}
-		ids = append(ids, v.ID)
+		if v.CheckedAt == nil {
+			ids = append(ids, v.ID)
+		} else {
+			checked = append(checked, v.ID)
+		}
 	}
+	ids = append(ids, checked...)
 	if len(ids) == 0 {
 		return application.Change[struct{}]{}, nil
 	}
@@ -187,6 +196,29 @@ func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (app
 		return err
 	})
 	return application.Change[struct{}]{AuditID: auditID}, err
+}
+
+func (s *Service) Check(ctx context.Context, in CheckInput) (application.Change[[]View], error) {
+	views, err := s.store.List(ctx)
+	if err != nil {
+		return application.Change[[]View]{}, err
+	}
+	var ids []ID
+	for _, v := range views {
+		if checkable(v) && (!in.Changed || v.CheckedAt == nil) {
+			ids = append(ids, v.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return application.Change[[]View]{Data: []View{}}, nil
+	}
+	var out []View
+	auditID, err := s.command(ctx, CheckName, ids, func(commit connections.Commit) error {
+		var err error
+		out, err = s.pass(ctx, ids, true, commit)
+		return err
+	})
+	return application.Change[[]View]{Data: out, AuditID: auditID}, err
 }
 
 func (s *Service) pass(ctx context.Context, ids []ID, silent bool, commit connections.Commit) ([]View, error) {
@@ -219,17 +251,31 @@ func (s *Service) pass(ctx context.Context, ids []ID, silent bool, commit connec
 			return out, err
 		}
 		changed = nextChanged
-		if !silent {
-			out = append(out, view)
-		}
+		out = append(out, view)
 	}
 	return out, nil
 }
 
-func recheckable(v View) bool {
-	switch v.State {
-	case connections.Failing, connections.NeedsReauth, connections.Disabled, connections.Unconfigured:
+const sweepInterval = 24 * time.Hour
+
+func checkable(v View) bool {
+	return v.Enabled && v.State != connections.Unconfigured && v.State != connections.Disabled
+}
+
+func wanted(v View, in ObserveHealthInput) bool {
+	if v.ID != in.ID {
 		return false
 	}
-	return v.CheckedAt != nil && time.Since(*v.CheckedAt) >= 5*time.Minute
+	if in.Recovered {
+		return (v.State == connections.Failing || v.State == connections.NeedsReauth) && olderThan(v, time.Minute)
+	}
+	return olderThan(v, 5*time.Minute)
+}
+
+func olderThan(v View, age time.Duration) bool {
+	return v.CheckedAt == nil || time.Since(*v.CheckedAt) >= age
+}
+
+func due(v View, start bool) bool {
+	return olderThan(v, sweepInterval) || v.GraceLapsed() || start && (v.State == connections.Failing || v.State == connections.NeedsReauth)
 }
