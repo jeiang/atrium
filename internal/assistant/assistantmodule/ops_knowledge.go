@@ -23,10 +23,12 @@ func knowledgeToolService(tc *tool.Context) *kbapp.Service {
 
 func (m Module) knowledgeOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
-			kbapp.DescribeList(), kbapp.DescribeDetail(), kbapp.DescribeProfile(), kbapp.DescribeSearch(), kbapp.DescribeGet(),
+			kbapp.DescribeList(), kbapp.DescribeDetail(), kbapp.DescribeInstructions(), kbapp.DescribeProfile(), kbapp.DescribeSearch(), kbapp.DescribeGet(),
 			kbapp.DescribeCreate(), kbapp.DescribeEdit(), kbapp.DescribeConfirm(), kbapp.DescribeRetract(), kbapp.DescribeRestore(),
 			kbapp.DescribePurge(), kbapp.DescribeRetractRun(), kbapp.DescribeConfirmSelected(), kbapp.DescribeConfirmMatching(),
 			kbapp.DescribeAgentWrite(), kbapp.DescribeAgentRetract(), kbapp.DescribeExport(),
+			kbapp.DescribeSubjects(), kbapp.DescribeSubject(), kbapp.DescribeMap(),
+			kbapp.DescribeLinks(), kbapp.DescribeLink(), kbapp.DescribeUnlink(),
 		}, append(m.knowledgeRoutes(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /library/knowledge", Uses: []application.Name{kbapp.ListName}},
 			{Kind: application.HTML, Target: "GET /library/knowledge/{record_id}", Uses: []application.Name{kbapp.DetailName}},

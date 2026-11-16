@@ -263,7 +263,7 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 		p.refuseProjectFiles(w, r, projectID, err.Error())
 		return
 	}
-	_, err = p.assistant().ProjectFileUpload(detached(r), asstapp.ProjectUploadInput{ProjectID: projectID, Uploads: uploads})
+	_, err = p.assistant().SpaceFileUpload(detached(r), asstapp.SpaceUploadInput{ProjectID: projectID, Uploads: uploads})
 	p.projectFilesChanged(w, r, projectID, err)
 }
 
@@ -296,6 +296,6 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := p.assistant().ProjectFileDelete(detached(r), in)
+	_, err := p.assistant().SpaceFileDelete(detached(r), in)
 	p.projectFilesChanged(w, r, in.ProjectID, err)
 }

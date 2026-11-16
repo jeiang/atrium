@@ -95,6 +95,24 @@ func Get(ctx context.Context, q db.Querier, id int64) (*Task, error) {
 	return &t, nil
 }
 
+func Find(ctx context.Context, q db.Querier, text string, limit, offset int) ([]Task, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM tasks WHERE instr(lower(title), lower(?1)) > 0 OR instr(lower(notes), lower(?1)) > 0 "+
+		"ORDER BY instr(lower(title), lower(?1)) > 0 DESC, updated_ts DESC, id DESC LIMIT ?2 OFFSET ?3", text, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Task, error) { return scan(r) })
+}
+
+func OfSource(ctx context.Context, q db.Querier, kind, id string) ([]Task, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM tasks WHERE source_kind = ? AND source_id = ? "+
+		"ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(remind_at, 1e18), created_ts, id", kind, id)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Task, error) { return scan(r) })
+}
+
 func Update(ctx context.Context, q db.Querier, now float64, id int64, s Spec) (bool, error) {
 	res, err := q.ExecContext(ctx,
 		"UPDATE tasks SET title = ?, notes = ?, due = ?, remind_at = ?, priority = ?, source_kind = ?, source_id = ?, "+
