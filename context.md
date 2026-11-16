@@ -35,9 +35,11 @@ claims about the running application. Operator contracts are in
   does not delete its data.
 
 ### Prompts, history, retrieval, and knowledge
-- The system prompt and subagent rules are operator-editable settings over
-  built-in defaults; the untrusted-data preamble is fixed in code and always
-  comes first. Edits apply to every thread's next request.
+- The system prompt and subagent rules (`prompt_system`, `prompt_subagent`)
+  are operator settings over built-in defaults, set with `atrium settings
+  set`; no settings page offers them, so the settings API refuses them. The
+  untrusted-data preamble is fixed in code and always comes first. Edits
+  apply to every thread's next request.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
   `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
@@ -800,8 +802,8 @@ claims about the running application. Operator contracts are in
   attempt unknown after 120 seconds without renewal. An unknown outcome
   blocks the target until the operator resolves it and is never retried. An
   undo is its own effect row. `atrium effects list|show|resolve|undo` inspects
-  and settles effects; `atrium writes` and `atrium live` are domain-filtered
-  views of the same rows.
+  and settles effects; `atrium live` is a domain-filtered view of the same
+  rows.
   Undo and resolve handlers come from the compiled module catalog at every
   entry point, including mail proposal effects and media effects; the effect
   state and the relevant write gate still determine whether an undo can run.
@@ -836,16 +838,16 @@ claims about the running application. Operator contracts are in
   is empty.
 - Calendar writes record an effect in the ledger before the external call. A
   write whose outcome is unknown stays blocked; further writes to the same
-  calendar are refused until the operator resolves it with `atrium writes
+  calendar are refused until the operator resolves it with `atrium effects
   resolve <id>` or the Activity page.
 - The knowledge export is export-only: a built-in job renders live,
   non-expired records into the Notion page named by
   `export_notion_parent` and overwrites the pages it created; a target with no
   destination is skipped. The Notion controls are a standalone section on the
-  Integrations page, the Obsidian folder has its own section, and the parent
+  Export settings page, the Obsidian folder has its own section, and the parent
   page accepts a pasted page URL or id stored as the normalized id. Each
   external write records an effect first; Notion mutations are not retried,
-  and an unknown outcome blocks the target until `atrium writes resolve
+  and an unknown outcome blocks the target until `atrium effects resolve
   <id>`. Pages the export did not create are never touched, and edits made in
   Notion are overwritten on the next run. The Obsidian export likewise
   writes and removes only the files it tracks. Private records are exported
@@ -903,8 +905,9 @@ claims about the running application. Operator contracts are in
   `/settings/usage`, which clears once the budget has room; a source cap
   refusal records no deferral. The sampler resolves a finding once its
   fact is back to normal; resolved findings are pruned after 30 days.
-  Findings of severity warning or critical appear in the attention view
-  and on Needs you. No worker run starts automatically and nothing
+  Findings of severity warning or critical are attention items, returned by
+  `GET /api/v1/review/items` and the `attention` tool; Needs you shows
+  proposals only. No worker run starts automatically and nothing
   restarts or changes a host.
 - The Notion page view is read-only, and `notion_link` and `notion_edit`
   proposals from v2 stay readable and dismissable. Approvals are only for
@@ -1104,7 +1107,7 @@ claims about the running application. Operator contracts are in
   and `/threads/{id}` answer the same way; each transcript page (`limit`,
   `cursor`) has its own tag, and a new message, run or card changes it. These reads
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
-  and `atrium writes list` go through the `review.*` operations in
+  go through the `review.*` operations in
   `internal/review/application`.
 - Every `/api/v1` route is a typed binding mounted through `internal/api`.
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
@@ -1141,7 +1144,7 @@ claims about the running application. Operator contracts are in
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

@@ -138,6 +138,10 @@ settings the operator edits in the UI or pins from the host.
   v2 data is no longer imported by current releases. Release `v3.0.0` is
   the last that carries `atrium db import-v2`; restore a v2 database into
   that release, then upgrade.
+- Renaming a setting key rewrites its stored rows and breaks host files that
+  pin the old name, so it is a row rewrite: it needs explicit approval and
+  validation on a database copy. Retire an old key through
+  `internal/settings/retired.go` rather than dropping it silently.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names (`atrium.service`), environment variable names, and
