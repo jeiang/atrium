@@ -117,7 +117,7 @@
       ...(tracked ? { trackVisibility: true, delay: 100 } : {}),
     };
     const observer = new IntersectionObserver((entries) => {
-      if (confirming) return;
+      if (confirming || row?.querySelector(':popover-open')) return;
       for (const entry of entries) {
         const visible = (entry as IntersectionObserverEntry & { isVisible?: boolean }).isVisible;
         rowClear = entry.isIntersecting && (!tracked || visible !== false);
