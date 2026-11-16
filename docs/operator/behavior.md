@@ -299,6 +299,40 @@ announce it. Connection notices open the Connections settings page,
 connection and no other connection serves them; the title is unchanged, and
 recovery sends the same single notice as before.
 
+A built-in connection that atrium creates itself (Open-Meteo, Web fetch, TMDB,
+EZTV, Embedding) follows the apps that need it while it is still
+operator-owned. When every app that needs it is off, it is disabled with the
+reason `its app is off`; when one of those apps is turned on again, it is
+enabled as `untested` with its results cleared and tested on the next pass. A
+connection the operator or the host file created is never written this way.
+While no app that is on needs it, its view shows `idle: "its app is off"` and it
+gets no scheduled test, no state-change notice, and no repair; it keeps its
+enabled flag, credentials, and last state, and normal checks resume when an app
+that needs it is on. Neither path deletes a row or a credential, and neither
+sends a notice. An app counts as on when its switch is on, even while it waits
+for a setting or a failing connection, so that connection keeps being checked
+and reported.
+
+`POST /api/v1/connections/{kind}/{name}/disable` (`connections.disable`) turns
+an operator-owned connection off with the reason `turned off by the operator`;
+`.../enable` (`connections.enable`) turns it back on as `untested`, or
+`unconfigured` when it was never configured. Both are operator-only, take no
+body, return the connection view, and succeed without a change when the row is
+already in that state. A host-declared connection, a connection whose kind
+this version does not support, and a built-in connection that is off because
+its apps are off are refused (`409 refused`). No assistant tool can turn a
+connection on or off.
+
+The assistant has two connection tools. `dependencies_status` (every run kind)
+lists each app need with its connection, state, failure class, features and
+repair, each open repair with its severity and fix link, and credential expiry
+dates; it never returns credentials, configuration or provider error text.
+`dependency_recheck` (chat and scheduled runs only) runs the operator's Test
+for one connection and returns its new state. It is refused for a disabled
+connection, for one no app that is on needs, for one in needs-reauth whose
+credential has not changed since the last check, and more than once per
+connection every 5 minutes.
+
 Every enabled connection row is owned by exactly one side: the host file owns
 the connections it declares, and the Connections page owns the rest. The ops
 listener's `/readyz` runs a non-critical `connection owners` check that
