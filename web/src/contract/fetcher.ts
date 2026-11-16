@@ -15,6 +15,12 @@ function reach(ok: boolean): void {
   reached?.(ok);
 }
 
+let leaving = new AbortController();
+globalThis.addEventListener?.('beforeunload', () => {
+  leaving.abort();
+  leaving = new AbortController();
+});
+
 export const OFFLINE_MESSAGE = 'Cannot reach atrium. Nothing was sent.';
 
 export function setCsrfToken(token: string | undefined): void {
@@ -47,10 +53,11 @@ export async function webFetch(url: string, init: RequestInit = {}): Promise<Res
     if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
   }
   let res: Response;
+  const signal = init.signal ? AbortSignal.any([init.signal, leaving.signal]) : leaving.signal;
   try {
-    res = await fetch(API_BASE + url, { ...init, headers, credentials: 'same-origin' });
+    res = await fetch(API_BASE + url, { ...init, signal, headers, credentials: 'same-origin' });
   } catch (error) {
-    if (!init.signal?.aborted) reach(false);
+    if (!signal.aborted) reach(false);
     throw error;
   }
   reach(true);

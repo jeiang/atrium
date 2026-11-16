@@ -70,6 +70,7 @@
   let receipt = $state<{ decision: Decision; title: string; at: Date; note?: string; undoUntil?: number }>();
   let armTimer: number | undefined;
   let countTimer: number | undefined;
+  let confirmedAt = 0;
 
   const mode = $derived<Presentation>(presentation === 'auto' ? (touch ? 'hold' : 'click') : presentation);
   const away = $derived(!cardSeen || (!rowClear && !confirming));
@@ -125,6 +126,10 @@
   });
 
   $effect(() => {
+    if (!confirming) confirmedAt = performance.now();
+  });
+
+  $effect(() => {
     if (!row) return;
     const tracked = 'isVisible' in IntersectionObserverEntry.prototype;
     const options = {
@@ -135,6 +140,7 @@
     const observer = new IntersectionObserver((entries) => {
       if (confirming || row?.querySelector(':popover-open')) return;
       for (const entry of entries) {
+        if (entry.time < confirmedAt) continue;
         const visible = (entry as IntersectionObserverEntry & { isVisible?: boolean }).isVisible;
         rowClear = entry.isIntersecting && (!tracked || visible !== false);
       }
