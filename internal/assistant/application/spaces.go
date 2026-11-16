@@ -22,7 +22,6 @@ const (
 	SpaceDetailName  application.Name = "knowledge.space.detail"
 	SpaceListName    application.Name = "knowledge.space.list"
 	unknownSpace                      = "unknown space"
-	spaceTaskLink                     = "project"
 )
 
 type Space struct {
@@ -236,7 +235,7 @@ func spaceDetail(ctx context.Context, q db.Querier, found projects.Project) (Spa
 	for _, t := range threads {
 		out.Threads = append(out.Threads, SpaceThread{ID: t.ID, Title: t.Title, Archived: bool(t.Archived), Pinned: bool(t.Pinned), UpdatedAt: t.UpdatedAt})
 	}
-	linked, err := tasks.OfSource(ctx, q, spaceTaskLink, id)
+	linked, err := tasks.OfSource(ctx, q, tasks.LinkProject, id)
 	if err != nil {
 		return out, err
 	}

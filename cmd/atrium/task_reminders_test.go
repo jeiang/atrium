@@ -57,7 +57,7 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 		tasks++
 		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("add%d", tasks), "task_add", map[string]any{"title": title, "remind_at": remindAt})))
 		if done {
-			api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("done%d", tasks), "task_done", map[string]any{"id": tasks})))
+			api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("done%d", tasks), "task_close", map[string]any{"ref": fmt.Sprintf("task:%d", tasks)})))
 		}
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("added")))
 		if ran := runApp(t, "agent", "run", "--kind", "chat", "--text", "add a task"); ran.code != cli.ExitOK {
@@ -93,31 +93,48 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	healthNotice := func(p map[string]any) bool {
+		body := fmt.Sprint(p["body"])
+		return strings.Contains(body, ": failing") || strings.Contains(body, ": needs_reauth")
+	}
 	runOnce := func() map[string]any {
 		t.Helper()
 		cancel, done := start()
-		select {
-		case p := <-push.arrived:
-			time.Sleep(300 * time.Millisecond)
-			cancel()
-			<-done
-			return browser.decrypt(t, p.body)
-		case <-time.After(5 * time.Second):
-			cancel()
-			ran := <-done
-			t.Fatalf("no reminder was posted: exit %d stderr %s", ran.code, ran.stderr)
-			return nil
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case p := <-push.arrived:
+				payload := browser.decrypt(t, p.body)
+				if healthNotice(payload) {
+					continue
+				}
+				time.Sleep(300 * time.Millisecond)
+				cancel()
+				<-done
+				return payload
+			case <-deadline:
+				cancel()
+				ran := <-done
+				t.Fatalf("no reminder was posted: exit %d stderr %s", ran.code, ran.stderr)
+				return nil
+			}
 		}
 	}
 	runNone := func() {
 		t.Helper()
 		cancel, done := start()
-		select {
-		case p := <-push.arrived:
-			cancel()
-			<-done
-			t.Fatalf("unexpected reminder: %v", browser.decrypt(t, p.body))
-		case <-time.After(2 * time.Second):
+		deadline := time.After(2 * time.Second)
+		for waiting := true; waiting; {
+			select {
+			case p := <-push.arrived:
+				if payload := browser.decrypt(t, p.body); !healthNotice(payload) {
+					cancel()
+					<-done
+					t.Fatalf("unexpected reminder: %v", payload)
+				}
+			case <-deadline:
+				waiting = false
+			}
 		}
 		cancel()
 		<-done
@@ -137,4 +154,23 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	insert("Future task", now+3600, false)
 	due()
 	runNone()
+	token := localAPIToken(t, "reminders")
+	edit := func(body map[string]any) {
+		t.Helper()
+		base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stop()
+		site := &apiSite{t: t, base: base}
+		apiData(t, site.do(http.MethodPatch, "/api/v1/tasks/1", token, body), http.StatusOK)
+	}
+	edit(map[string]any{"title": "Pay the rent today"})
+	due()
+	runNone()
+	edit(map[string]any{"remind_at": now - 0.5})
+	due()
+	if p := runOnce(); !strings.Contains(fmt.Sprint(p["title"]), "Pay the rent today") {
+		t.Fatalf("edited reminder payload = %v", p)
+	}
 }

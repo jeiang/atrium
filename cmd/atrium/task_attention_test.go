@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -64,22 +65,22 @@ func TestTaskAttentionSource(t *testing.T) {
 	if strings.Contains(body, "Renew the licence") {
 		t.Fatalf("dismissed task is listed: %s", body)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "task_list", map[string]any{"status": "dismissed"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "commitment_list", map[string]any{"status": "dismissed"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("listed")))
 	if ran := runApp(t, "agent", "run", "--text", "dismissed tasks"); ran.code != cli.ExitOK {
-		t.Fatalf("task_list run: %d %s", ran.code, ran.stderr)
+		t.Fatalf("commitment_list run: %d %s", ran.code, ran.stderr)
 	}
 	var listed string
 	if err := d.Read.QueryRow("SELECT group_concat(content_json) FROM thread_messages WHERE thread_id = (SELECT MAX(id) FROM threads) AND role = 'user'").Scan(&listed); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(listed, "Renew the licence") || strings.Contains(listed, "Pay the invoice") {
-		t.Fatalf("task_list of dismissed tasks: %s", listed)
+		t.Fatalf("commitment_list of dismissed tasks: %s", listed)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("d1", "task_done", map[string]any{"id": id})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("d1", "task_close", map[string]any{"ref": "task:" + strconv.FormatInt(id, 10)})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
 	if ran := runApp(t, "agent", "run", "--text", "complete"); ran.code != cli.ExitOK {
-		t.Fatalf("task_done run: %d %s", ran.code, ran.stderr)
+		t.Fatalf("task_close run: %d %s", ran.code, ran.stderr)
 	}
 	body = runAttention()
 	if strings.Contains(body, "Pay the invoice") {

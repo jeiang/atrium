@@ -96,7 +96,7 @@ claims about the running application. Operator contracts are in
   scheduled threads, skipping private projects, plus a compact live-record
   index). It splits unmarked and marked sources into separate threads and
   runs Haiku write steps with `kb_search`, `kb_get`, `kb_write`, `kb_retract`,
-  `task_add`, and `task_list`.
+  `task_add`, and `commitment_list` (tasks only in a nightly run).
   The morning digest runs in code after the nightly run and posts a card of at most ten lines into the
   day's Today thread; with `digest_notify` on it also pushes the lines.
   Titles appear only for unmarked sources; marked items and records show
@@ -184,8 +184,45 @@ claims about the running application. Operator contracts are in
   and upcoming. The cron-only `attention` tool and the daily digest read it.
   Tasks are a core store with open, done and dismissed status, a
   due date, reminder time, priority and an optional source; the assistant can
-  list, add, update, complete and propose tasks, and the reminder job inserts
-  a task.
+  list (`commitment_list`), add (`task_add`), update (`task_update`), complete
+  or dismiss (`task_close`, chat only) and propose tasks, and the reminder job inserts
+  a task. The operator API (`/api/v1/tasks` and `/web/v1/tasks`) lists,
+  reads, creates, edits, completes, reopens, dismisses and deletes tasks.
+  Every write returns the task with its links and one ledger effect that
+  `POST /undo/write:<effect>` reverses; delete hard-deletes and its undo
+  reinserts the same row. Done, dismiss and reopen answer conflict when the
+  task is not in a status the verb leaves: only an open task can be completed
+  or dismissed. An edit may carry `updated_ts` and is refused with
+  a `stale` conflict when the task changed since. A task has at most one link
+  (`source_kind`/`source_id`): thread, project, person (an email address),
+  record or message; legacy `proposal` links are read-only. Links resolve to
+  a title, or null when the target is gone. The list orders open, done, then
+  dismissed, each by due date with undated tasks last, filters by status, due
+  window, link and text, and returns counts by status. Changing `remind_at`
+  re-arms the reminder.
+- To do and Waiting share one commitment resource, `GET /commitments` and
+  `GET /commitments/{ref}` (core routes, both prefixes), over the existing
+  `tasks` and `commitments` tables with no row move: an item's `ref` is
+  `task:<id>` or `commitment:<id>`, the same id `/queue` uses. Side `todo`
+  holds tasks and owner-`me` commitments, side `waiting` owner-`them`
+  commitments. Tasks are hidden when the assistant module is off and
+  commitments when mail is off. Items carry `owner`, `counterpart` (the
+  other address on the source message), links (a commitment links its
+  message and its reminder proposal, never the body) and `actions`. The
+  verbs `POST /commitments/{ref}/done|dismiss|reopen` write the owning
+  table with one undoable ledger effect: a task through the task verbs, a
+  commitment through the `commitment_status` effect, which restores the
+  previous status on undo. Reopen keeps the commitment's reminder proposal
+  id, so the reminder pass does not propose it again. `PATCH` and `DELETE`
+  on a commitment answer conflict `read_only`, because extraction would
+  re-insert a deleted row. `commitment_list` replaces the old `task_list`
+  and mail `commitments` tools; it lists commitments only in chat, cron and
+  subagent runs. `task_update` and `task_close` take a task ref and refuse a
+  commitment ref. `/tasks` and `/mail/commitments` keep their paths and
+  response shapes; `POST /mail/commitments/{id}/done|dismiss` and the open
+  loops page's buttons run the same commitment verbs, so they also write the
+  undoable `commitment_status` effect and answer conflict on a commitment
+  that is not open.
 - Open loops come from mail the operator actually needs to answer: the
   latest message must not be bulk or automated (List-Id, List-Unsubscribe,
   Precedence bulk/list/junk, Auto-Submitted, a bulk Gmail category, an
@@ -1049,12 +1086,13 @@ claims about the running application. Operator contracts are in
   `contacts_lookup` returns name and organisation and marks nothing;
   emails, phones and dates come back only through `include` and mark
   `pii`. Empty results of `mail_search`, `calendar_list`, `file_search`,
-  `search_threads`, `packages`, `open_loops`, `commitments`,
+  `search_threads`, `packages`, `open_loops`,
   `upcoming_birthdays` and `attention` mark nothing. `mail_read` marks
   `pii` for headers and `messages`/`untrusted` for a body or attachment
   names; `mail_search` marks `pii` for addresses and
-  `messages`/`untrusted` for subjects and snippets; `open_loops`,
-  `commitments` and `packages` mark the fields they return the same way.
+  `messages`/`untrusted` for subjects and snippets; `open_loops` and
+  `packages` mark the fields they return the same way; `commitment_list`
+  adds `messages` and `untrusted` for commitments and `pii` for a counterpart.
   A non-empty `calendar_list` marks `messages` and `untrusted`; `find_slot`
   marks `messages`. `file_read` and a non-empty `file_search` mark
   `messages` and `untrusted`. `search_threads` and `zoom` mark `messages`
@@ -1070,7 +1108,7 @@ claims about the running application. Operator contracts are in
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,
-  `plan` declares none. `task_list` and `schedule_list` declare all four as their
+  `plan` declares none. `commitment_list` and `schedule_list` declare all four as their
   bound and return the marks of the threads that wrote the listed rows;
   they mark nothing when those threads were clean. A cron thread starts with
   the marks of the thread that wrote its schedule unless the operator wrote
@@ -1322,6 +1360,22 @@ claims about the running application. Operator contracts are in
   `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
   and it never controls the old UI's pages, while it does see every request
   a `/next/` page makes, `/web/v1` writes included.
+- The one inbox is `GET /queue` (both prefixes): parked `ask_operator`
+  questions and permission requests (`ask`), pending and outcome-unknown
+  proposals (`proposal`), drafts to send or resolve (`draft`), and
+  overdue, due-soon and needs-decision attention items (`attention`;
+  waiting-on-them loops and packages are left out). Order: asks oldest
+  first, then items with a due time by due, then the rest oldest first,
+  ties on id. A module that is off hides only its own items. `total` and
+  `counts` ignore the filter and page and are the Needs you count of
+  `/shell` and the web badge, computed by the same function
+  (`reviewapp.Service.NeedsCount`). Item ids are
+  `<source type>:<source id>`; `GET /queue/{item_id}` returns one item, so
+  `proposal:<id>` and `draft:<id>` resolve the old proposal and draft
+  addresses. `GET /pending` keeps its older proposals-plus-drafts count.
+  Operations may carry an OpenAPI `description`
+  (`application.APIShape.Description`); the queue's lists the topics to
+  refetch on.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open
