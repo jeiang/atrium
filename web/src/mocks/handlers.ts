@@ -89,7 +89,6 @@ function shell(state: MockScenario): Shell {
     settings_url: '/settings',
     needs_you: state.needsYou ?? inboxCount(),
     notify_failing: [],
-    pause: { paused: false },
     mail: state.mail ?? { mode: 'live', paused: false },
     pause: { paused: false },
     modules: MODULES.map((name) => ({ name, state: state.modules?.[name] ?? 'enabled' })),
