@@ -10,7 +10,9 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
+	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func (o Options) LiveCommand() *cli.Command {
@@ -130,24 +132,24 @@ func listActions(x *exec, limit int, kind string) error {
 }
 
 func undoAction(x *exec, id int64) error {
-	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Undo(x.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
+	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Kinds: []review.Contribution{{Module: unit.Mail, Category: unit.Mail, Kinds: review.Kinds{Actions: x.Live.ReviewActions()}}}}).Undo(x.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
 	if e := (*application.Error)(nil); errors.As(err, &e) && e.Code == application.NotFound {
 		return fmt.Errorf("unknown action %d", id)
 	}
 	if err != nil {
 		return err
 	}
-	result := done.Data.Mail
+	result := done.Data.Action
 	x.JSON(undoJSON{ID: result.ID, Undone: result.Undone, Detail: result.Detail, SyncError: result.SyncError})
 	return nil
 }
 
 func resolveAction(x *exec, id int64, outcome string) error {
-	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}, Outcome: outcome})
+	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Kinds: []review.Contribution{{Module: unit.Mail, Category: unit.Mail, Kinds: review.Kinds{Actions: x.Live.ReviewActions()}}}}).Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}, Outcome: outcome})
 	if err != nil {
 		return err
 	}
-	x.JSON(map[string]any{"id": done.Data.Mail.ID, "outcome": done.Data.Mail.Outcome})
+	x.JSON(map[string]any{"id": done.Data.Action.ID, "outcome": done.Data.Action.Outcome})
 	return nil
 }
 

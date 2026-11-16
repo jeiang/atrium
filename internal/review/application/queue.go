@@ -14,11 +14,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/textx"
-	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -247,17 +245,22 @@ func (s *Service) queueItems(ctx context.Context, q db.Querier, now float64) ([]
 			rank: rankWaiting, at: p.CreatedTS})
 	}
 
-	needs, err := drafts.Needs(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	for _, d := range needs {
-		item := QueueItem{Kind: QueueDraft, Title: cmp.Or(d.Subject, "(no subject)"), Summary: "To " + d.To, Source: QueueSource{Type: "draft", ID: strconv.FormatInt(d.ID, 10)},
-			ArrivedAt: d.CreatedAt, WaitingFor: WaitingSend, Module: unit.Mail, rank: rankWaiting, at: d.CreatedAt}
-		if d.Status == drafts.Unknown {
-			item.WaitingFor, item.Summary = WaitingResolve, "Send outcome unknown. To "+d.To
+	for _, c := range s.kinds {
+		if c.Kinds.Needs == nil || !snap.Visible(c.Module) {
+			continue
 		}
-		add(item)
+		needs, err := c.Kinds.Needs(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range needs {
+			item := QueueItem{Kind: QueueDraft, Title: cmp.Or(d.Subject, "(no subject)"), Summary: "To " + d.To, Source: QueueSource{Type: "draft", ID: strconv.FormatInt(d.ID, 10)},
+				ArrivedAt: d.CreatedAt, WaitingFor: WaitingSend, Module: c.Module, rank: rankWaiting, at: d.CreatedAt}
+			if d.Unknown {
+				item.WaitingFor, item.Summary = WaitingResolve, "Send outcome unknown. To "+d.To
+			}
+			add(item)
+		}
 	}
 
 	for _, owned := range snap.AttentionByModule() {

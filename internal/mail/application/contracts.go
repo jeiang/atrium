@@ -32,6 +32,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
@@ -166,4 +167,8 @@ func PassLocks(ctx context.Context, dbPath string) (context.Context, *db.LockSet
 
 func (s *Service) ManualScans(ctx context.Context, at float64) (map[string]any, error) {
 	return scans.Manual(ctx, s.db, s.cfg, s.Scans(at))
+}
+
+func ReviewDraft(row DraftRow, unexpected []string) review.Draft {
+	return drafts.ReviewDraft(row, unexpected)
 }

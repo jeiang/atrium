@@ -699,8 +699,14 @@ claims about the running application. Operator contracts are in
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
-  metrics, checks, proposals, effect handlers and scheduled jobs; module
-  enablement gates the applicable runtime projections. Each owner declares
+  metrics, checks, proposals, effect handlers, review kinds and scheduled
+  jobs; module enablement gates the applicable runtime projections. The
+  review hub (`/review`, `/proposals/*`, `/activity*`, the queue) lives in
+  `internal/review`, which imports no unit: mail contributes its mode,
+  drafts and live actions and the `mail` activity category, and the
+  assistant contributes ops findings, through `ReviewKinds` and
+  `ActivityCategory`. With mail off its drafts leave the hub, while its past
+  live actions stay in Activity. Each owner declares
   its built-in jobs (assistant six, calendar candidates, media three, mail
   package tracking, Grafana ops sampler); compiling the catalog checks their
   owner, keys, names, schedules and policies and derives the schedule

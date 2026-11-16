@@ -1,17 +1,18 @@
-package reviewpages
+package hub
 
 import (
 	"net/http"
 
+	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
 type needsData struct {
-	Proposals  []ProposalView      `json:"proposals"`
-	Blocked    []ProposalView      `json:"blocked"`
-	Drafts     []DraftView         `json:"drafts"`
-	Findings   []reviewapp.Finding `json:"findings"`
-	Configured map[string]bool     `json:"configured"`
+	Proposals  []ProposalView   `json:"proposals"`
+	Blocked    []ProposalView   `json:"blocked"`
+	Drafts     []DraftView      `json:"drafts"`
+	Findings   []review.Finding `json:"findings"`
+	Configured map[string]bool  `json:"configured"`
 }
 
 func (s *service) needsPage(w http.ResponseWriter, r *http.Request) {

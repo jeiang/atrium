@@ -456,7 +456,9 @@ waiting on, permission requests, pending proposals and those with an unknown
 outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
 items such as commitments, tasks and open loops. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
-`GET /api/v1/queue`. The Needs you page still lists only proposals and drafts.
+`GET /api/v1/queue`. The Needs you page still lists only proposals and drafts;
+with mail off it and `GET /api/v1/pending` list no drafts, and Activity keeps
+showing past mail actions.
 
 Tasks can be created, edited, completed, reopened, dismissed and deleted from
 `/api/v1/tasks`. Each of these can be undone: the response names one effect,
