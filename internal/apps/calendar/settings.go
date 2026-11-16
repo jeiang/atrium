@@ -6,6 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
@@ -40,6 +41,7 @@ type Settings struct {
 	davmirror.Login
 	ICloudCalendar string
 	CalendarDir    string
+	ContactsDir    string
 	MaxEvents      int
 	MaxOccurrences int
 	DefaultMinutes int
@@ -70,6 +72,11 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 		},
 		func() error { return text(ICloudCalendarKey, &out.ICloudCalendar) },
 		func() error { out.CalendarDir = config.From(ctx).HostValue(CalendarDirKey); return nil },
+		func() error {
+			var err error
+			out.ContactsDir, err = contacts.Dir(ctx, q)
+			return err
+		},
 		func() error { return whole(DefaultMinutesKey, &out.DefaultMinutes) },
 	} {
 		if err := step(); err != nil {

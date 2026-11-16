@@ -24,7 +24,7 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 	"3) Stalled: items from open_loops or commitment_list (status=open) that have been open for more than 14 days. " +
 	"4) Owed replies: open_loops state=owe_reply. " +
 	"5) Commitments due in the next 7 days or overdue: commitment_list side=todo status=open, compared with today's date. " +
-	"6) Next week: upcoming_birthdays days=7 and the calendar for the next 7 days. " +
+	"6) Next week: calendar_list from today to 7 days ahead, which includes the Birthdays calendar. " +
 	"7) Packages in transit: packages active_only=true. " +
 	"8) Knowledge: call kb_search for records written or retracted this week and list them. " +
 	"Call the attention tool for the cross-queue view (overdue, due soon, needs decision, waiting on them, upcoming) and use it for sections 2-7. " +

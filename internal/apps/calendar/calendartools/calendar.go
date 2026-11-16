@@ -71,6 +71,9 @@ func listed(read calapp.Listing) tool.Marked {
 	if read.Untrusted {
 		marks |= tool.Untrusted
 	}
+	if read.PII {
+		marks |= tool.PII
+	}
 	return tool.Marked{Value: read.Value, Marks: marks}
 }
 
@@ -171,15 +174,16 @@ func baseTools() []tool.Tool {
 	return []tool.Tool{
 		{
 			Name: "calendar_list",
-			Description: "List calendar events between start and end (end exclusive), merged from the iCloud calendar mirror and " +
-				"the primary Google calendar, recurring events expanded. Optional calendar filters: 'icloud' for every " +
-				"mirrored iCloud calendar, 'google' for Google, or a calendar name; empty lists both. Returns uid, calendar, " +
+			Description: "List calendar events between start and end (end exclusive), merged from the iCloud calendar mirror, " +
+				"the primary Google calendar and the read-only Birthdays calendar (all-day entries from contact birthdays), " +
+				"recurring events expanded. Optional calendar filters: 'icloud' for every mirrored iCloud calendar, 'google' " +
+				"for Google, 'birthdays' for Birthdays, or a calendar name; empty lists all. Returns uid, calendar, " +
 				"start, end, title, location.",
 			InputSchema: schema(`"start":{"type":"string","description":"`+timeNote+`"},"end":{"type":"string","description":"`+timeNote+`"},"calendar":{"type":"string"}`, `["start","end"]`),
 			Handler:     list,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Marks:       tool.Messages | tool.Untrusted,
+			Marks:       tool.Messages | tool.Untrusted | tool.PII,
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{
