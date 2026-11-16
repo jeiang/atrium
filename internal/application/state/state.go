@@ -21,7 +21,6 @@ import (
 
 const (
 	Knowledge   = "knowledge"
-	Notion      = "notion"
 	Tasks       = "tasks"
 	Review      = "review"
 	Effects     = "effects"
@@ -38,7 +37,7 @@ const (
 	Auth        = "auth"
 )
 
-var scopes = []string{Knowledge, Notion, Tasks, Review, Effects, Calendar, Assistant, Jobs, Media, Mail, Settings, Connections, Notify, Attention, Ops, Auth}
+var scopes = []string{Knowledge, Tasks, Review, Effects, Calendar, Assistant, Jobs, Media, Mail, Settings, Connections, Notify, Attention, Ops, Auth}
 
 type Outcome string
 

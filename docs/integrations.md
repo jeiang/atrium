@@ -17,7 +17,6 @@ summary; the sections below cover the console work atrium cannot do for you.
 | Anthropic | `anthropic` | Console API key | Assistant model calls | Key is workspace-bound; use one workspace per instance with a monthly spend limit |
 | Grafana | `grafana` | Service account token | Read-only dashboard and datasource queries | Viewer role is enough; optional token expiry |
 | Embedding endpoint | `service/embedding` | Optional host-file bearer | Embeddings for mail search and routing | A hosted endpoint sends mail content off this host |
-| Notion | `service/notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | A connection on `/settings/connections`; share the pages with the integration; a personal token acts as the user and lasts at most a year |
 | qBittorrent | `service/qbittorrent` | API key | Media torrent and library operations | A connection on `/settings/connections`; API keys need qBittorrent 5.2 or newer |
 | TMDB | `service/tmdb` | API read access token | Media metadata | A connection on `/settings/connections`; read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
@@ -90,40 +89,15 @@ mail account for their CalDAV and CardDAV login. The Calendar section on the
 Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
 `default_event_minutes`, `work_hours` and `work_days`.
 
-## Notion
+## Knowledge export
 
-Atrium uses read, update and insert content, and no comments or users.
-
-- **Internal integration token** (the default): static, no expiry, and the
-  integration sees only the pages shared with it through **Add connections**.
-- **Personal access token**: acts as the user, needs no sharing step, lasts
-  at most a year, and cannot list users.
-- **Public OAuth**: user-tied with a page picker and rotating refresh pairs;
-  every self-hoster must register their own public connection. Atrium does
-  not implement this yet.
-
-Create the internal integration at
-[notion.so/my-integrations](https://www.notion.so/my-integrations), share the
-wiki pages with it, then paste its token on the Notion connection on
-`/settings/connections`. The connection is `service/notion`: the host declares
-it under `connections."service/notion"` with `config.api` (default
-`https://api.notion.com`), optional `transport.ca_file` and `transport.proxy`,
-and the `token` credential slot, which may be a host credential file. The
-Notion settings page (`/settings/notion`) edits `wiki_root`,
-`sensitivity_property`, `notion_private_value` and `wiki_log_title`.
-
-The knowledge base is projected into Notion by the `knowledge-export` job; the
-wiki pages above are not touched. The **Export knowledge to Notion** section on
-the Export settings page (`/settings/export`) sets the export: paste the parent
-page's URL or id (`export_notion_parent`, stored as the normalized page id),
-choose what to include (`export_notion_kinds`) and turn on Include private
-records to store the same destination in `export_notion_private_to`. The
-export overwrites its own pages on every run and trashes the page of a record
-that is retracted or leaves the export set; edits made in Notion are lost. A
-write with an unknown outcome blocks the export until it is resolved. The
-**Obsidian export** section writes a vault folder instead (`export_obsidian_dir`,
-normally declared by the host); its private switch stores the folder path in
-`export_obsidian_private_to`.
+The knowledge base is projected into a Markdown folder by the
+`knowledge-export` job. The **Obsidian export** section on the Export settings
+page (`/settings/export`) shows the folder (`export_obsidian_dir`, normally
+declared by the host); its private switch stores the folder path in
+`export_obsidian_private_to`. The export overwrites the files it tracks on every
+run and removes the file of a record that is retracted or leaves the export
+set. A write with an unknown outcome blocks the export until it is resolved.
 
 ## Grafana
 

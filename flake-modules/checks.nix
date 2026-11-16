@@ -75,12 +75,6 @@
           capabilities = ["api"];
           credentialFiles.api_key = "/run/secrets/qbittorrent-api-key";
         };
-        "service/notion" = {
-          kind = "service/notion";
-          config.api = "https://api.notion.com";
-          capabilities = ["api"];
-          credentialFiles.token = "/run/secrets/notion-token";
-        };
         "service/embedding" = {
           kind = "service/embedding";
           config = {
@@ -115,11 +109,12 @@
     tuningKeyRefused = assert refusedWith "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat" {host.assistant.max_steps_chat = 1;}; true;
     cutoverHostRefused = assert refusedWith "connections.\"service/embedding\".credential_files.bearer" {host.mail.mail_embed_key = "/run/x";}; true;
     databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
-    secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connections.\"service/qbittorrent\".credential_files.api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connections.\"service/notion\".credential_files.token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "connections.\"service/anthropic\".credential_files.api_key" {secretFiles."anthropic.anthropic_api_key" = "/run/x";}; assert refusedWith "connections.\"service/oidc\".credential_files.client_secret" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "atrium settings set monthly_budget_usd" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
+    secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connections.\"service/qbittorrent\".credential_files.api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connections.\"service/anthropic\".credential_files.api_key" {secretFiles."anthropic.anthropic_api_key" = "/run/x";}; assert refusedWith "connections.\"service/oidc\".credential_files.client_secret" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "atrium settings set monthly_budget_usd" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
     chatEndpointRefused = assert refusedWith "services.atrium.modelServerUnits" {modelServerUnits = ["llama.service"];}; assert refusedWith "mail.mail_chat_url is the service/anthropic connection" {host.mail.mail_chat_url = "http://127.0.0.1:8187/v1";}; assert refusedWith "mail.mail_chat_key is the service/anthropic connection" {host.mail.mail_chat_key_file = "/run/x";}; assert refusedWith "secretFiles.\"mail.mail_chat_key\" is the service/anthropic connection" {secretFiles."mail.mail_chat_key" = "/run/x";}; true;
     embeddingDependencyKept = assert builtins.all (name: let t = unitText name; in lib.hasInfix "After=" t && lib.hasInfix "llama-embed.service" t) appUnits; true;
     opsPortRefused = assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {web.emergency.port = 9180;}; assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {host.core.ops_listen = "127.0.0.1:8480";}; assert !(refusedWith "services.atrium.host.core.ops_listen" {host.core.ops_listen = "off";}); true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
+    notionConnectionRefused = assert refusedWith "the Notion integration was removed" {connections."service/notion" = {kind = "service/notion";};}; true;
     mediaAgentRefused = let
       agentWith = extra: {
         media.enable = true;
@@ -284,7 +279,6 @@
     credentialLines = [
       "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key"
       "LoadCredential=media.link_key:/run/secrets/media-link-key"
-      "LoadCredential=connection-service-notion-token:/run/secrets/notion-token"
       "LoadCredential=db-key:/run/secrets/db-key"
       "LoadCredential=connection-service-qbittorrent-api_key:/run/secrets/qbittorrent-api-key"
       "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"
@@ -536,7 +530,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
+        module = assert exampleEvaluates && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && notionConnectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;
@@ -587,7 +581,6 @@
             mkdir -p "$CREDENTIALS_DIRECTORY"
             head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/action_links.action_link_key"
             head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/media.link_key"
-            printf 'notion-token\n' >"$CREDENTIALS_DIRECTORY/connection-service-notion-token"
             head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/db-key"
             printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
             printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"

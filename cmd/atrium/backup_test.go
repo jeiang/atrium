@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,10 +17,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
-	"github.com/jeiang/atrium/internal/embed"
 )
 
 func backupEnv(t *testing.T, dir string) {
@@ -30,31 +27,6 @@ func backupEnv(t *testing.T, dir string) {
 	setEnv(t, "ATRIUM_DB_KEY", "")
 	setEnv(t, "ATRIUM_CONFIG", "")
 	setEnv(t, "CREDENTIALS_DIRECTORY", "")
-}
-
-func seedBackupDB(t *testing.T, path string, key db.Key) {
-	t.Helper()
-	d, err := db.Connect(path, db.WithKey(key))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
-	if err := db.Migrate(t.Context(), d, path); err != nil {
-		t.Fatal(err)
-	}
-	vector := make([]float64, config.EmbedDim)
-	vector[0] = 1
-	for _, stmt := range []string{
-		"INSERT INTO notion_pages (rid, id, title, path, url, markdown) VALUES (1, 'p1', 'Alpha page', 'Root', 'https://notion.example/p1', 'alpha beta gamma')",
-		"INSERT INTO notion_fts (rowid, title, path, body) VALUES (1, 'Alpha page', 'Root', 'alpha beta gamma')",
-	} {
-		if _, err := d.Write.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := d.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func writeStateFiles(t *testing.T, dir string, files map[string]string) {
@@ -112,7 +84,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBackupDB(t, live, key)
+	seedKBRecord(t, live, key)
 	state := filepath.Join(dir, "state")
 	const secretText = "quarterly numbers: confidential"
 	writeStateFiles(t, state, map[string]string{
@@ -136,6 +108,9 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := writer.Write.Exec("CREATE TABLE churn (a)"); err != nil {
+		t.Fatal(err)
+	}
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 	wg.Add(1)
@@ -147,7 +122,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 				return
 			default:
 			}
-			_, _ = writer.Write.Exec("INSERT INTO notion_pages (rid, id, title, path, url, markdown) VALUES (?, ?, 't', 'Root', 'u', 'm')", 1000+i, fmt.Sprintf("c%d", i))
+			_, _ = writer.Write.Exec("INSERT INTO churn VALUES (?)", i)
 		}
 	}()
 	got := runProcess(t, "backup "+archive, env...)
@@ -200,7 +175,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 
 	before := dirListing(t, state)
 	verify := runProcess(t, "restore --verify "+archive, env...)
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "knn embed_notion_0: ok\n", "files: 3\n", "nothing was written"} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 kb_fts: 1\n", "vec0 embed_kb_0: 1\n", "knn embed_kb_0: ok\n", "files: 3\n", "nothing was written"} {
 		if verify.code != cli.ExitOK || !strings.Contains(verify.stdout, want) {
 			t.Errorf("restore --verify exited %d with stdout %q, stderr %q; want %q", verify.code, verify.stdout, verify.stderr, want)
 		}
@@ -236,7 +211,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec("UPDATE notion_pages SET title = 'Alpha page' WHERE rid = 1"); err != nil {
+	if _, err := tx.Exec("UPDATE kb_records SET title = 'Alpha page' WHERE id = 1"); err != nil {
 		t.Fatal(err)
 	}
 	if busy := runProcess(t, "restore "+archive, env...); busy.code != cli.ExitError || !strings.Contains(busy.stderr, "restore refused") {
@@ -252,7 +227,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := damaged.Write.Exec("DELETE FROM notion_pages WHERE rid = 1"); err != nil {
+	if _, err := damaged.Write.Exec("DELETE FROM kb_records WHERE id = 1"); err != nil {
 		t.Fatal(err)
 	}
 	_ = damaged.Close()
@@ -278,9 +253,9 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var pages int
-	if err := intact.Read.QueryRow("SELECT count(*) FROM notion_pages WHERE rid = 1").Scan(&pages); err != nil || pages != 0 {
-		t.Errorf("a failed swap changed the live database: %d, %v", pages, err)
+	var records int
+	if err := intact.Read.QueryRow("SELECT count(*) FROM kb_records WHERE id = 1").Scan(&records); err != nil || records != 0 {
+		t.Errorf("a failed swap changed the live database: %d, %v", records, err)
 	}
 	_ = intact.Close()
 	for _, c := range collisions {
@@ -312,8 +287,8 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := previous.Read.QueryRow("SELECT count(*) FROM notion_pages WHERE rid = 1").Scan(&pages); err != nil || pages != 0 {
-		t.Errorf("the kept database does not hold the pre-restore state: %d, %v", pages, err)
+	if err := previous.Read.QueryRow("SELECT count(*) FROM kb_records WHERE id = 1").Scan(&records); err != nil || records != 0 {
+		t.Errorf("the kept database does not hold the pre-restore state: %d, %v", records, err)
 	}
 	_ = previous.Close()
 	for _, kept := range append(keptFiles, keptDB[0], keptDB[0]+"-wal", keptDB[0]+"-shm") {
@@ -332,7 +307,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if left, _ := filepath.Glob(filepath.Join(state, ".atrium-restore-*")); len(left) != 0 {
 		t.Errorf("restore left %v", left)
 	}
-	if knn := runProcess(t, "db check", env...); knn.code != cli.ExitOK || !strings.Contains(knn.stdout, "vec0 embed_notion_0: 1\n") {
+	if knn := runProcess(t, "db check", env...); knn.code != cli.ExitOK || !strings.Contains(knn.stdout, "vec0 embed_kb_0: 1\n") {
 		t.Errorf("db check after restore exited %d with stdout %q, stderr %q", knn.code, knn.stdout, knn.stderr)
 	}
 	restored, err := db.Connect(live, db.WithKey(key))
@@ -340,8 +315,8 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	var title string
-	if err := restored.Read.QueryRow("SELECT title FROM notion_pages WHERE rid = 1").Scan(&title); err != nil || title != "Alpha page" {
-		t.Errorf("restored page = %q, %v", title, err)
+	if err := restored.Read.QueryRow("SELECT title FROM kb_records WHERE id = 1").Scan(&title); err != nil || title != "Alpha page" {
+		t.Errorf("restored record = %q, %v", title, err)
 	}
 	_ = restored.Close()
 
@@ -350,7 +325,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBackupDB(t, other3, third)
+	seedKBRecord(t, other3, third)
 	thirdEnv := []string{"ATRIUM_DB=" + other3, "ATRIUM_DB_KEY=" + rightKeyHex}
 	if refused := runProcess(t, "restore "+archive, thirdEnv...); refused.code != cli.ExitError || !strings.Contains(refused.stderr, "cannot be opened and locked") {
 		t.Errorf("restore over an unopenable database exited %d, stderr %q", refused.code, refused.stderr)

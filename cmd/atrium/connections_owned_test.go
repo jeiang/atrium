@@ -113,29 +113,29 @@ func TestARemovedHostConnectionStaysDisabled(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(`[connections."service/notion"]
-kind = "service/notion"
-label = "Notion"
-config = { api = "http://127.0.0.1:9" }
+	write(`[connections."service/qbittorrent"]
+kind = "service/qbittorrent"
+label = "qBittorrent"
+config = { url = "http://127.0.0.1:9" }
 capabilities = ["api"]
 `)
 	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	if source, _, _, _ := connectionRow(t, dir, "service/notion"); source != "host" {
+	if source, _, _, _ := connectionRow(t, dir, "service/qbittorrent"); source != "host" {
 		t.Fatalf("the declared connection is %s, not host", source)
 	}
 	s.stop()
 	write("")
 	s.start()
 
-	if _, enabled, state, _ := connectionRow(t, dir, "service/notion"); enabled != 0 || state != "disabled" {
+	if _, enabled, state, _ := connectionRow(t, dir, "service/qbittorrent"); enabled != 0 || state != "disabled" {
 		t.Fatalf("the removed connection is enabled=%d state=%s", enabled, state)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
-	_, err := connections.OpenRead(context.Background(), d.Read, config.Host{}, connections.ID("service/notion"))
+	_, err := connections.OpenRead(context.Background(), d.Read, config.Host{}, connections.ID("service/qbittorrent"))
 	var disabled connections.DisabledConnection
 	if !errors.As(err, &disabled) {
 		t.Errorf("a disabled connection opened: %v", err)

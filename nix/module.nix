@@ -384,7 +384,8 @@
 
   connectionErrors = lib.flatten (lib.mapAttrsToList (id: c:
     lib.optional (id == "") "services.atrium.connections has an empty id"
-    ++ lib.optional (c.kind == "") "services.atrium.connections.\"${id}\" needs a kind")
+    ++ lib.optional (c.kind == "") "services.atrium.connections.\"${id}\" needs a kind"
+    ++ lib.optional (c.kind == "service/notion") "services.atrium.connections.\"${id}\": the Notion integration was removed; delete this connection and its token secret")
   cfg.connections);
 
   runPropertyNames = lib.attrNames hardening;
@@ -580,7 +581,7 @@ in {
         options = {
           kind = mkOption {
             type = types.str;
-            description = "Connection kind, such as service/qbittorrent or service/notion.";
+            description = "Connection kind, such as service/qbittorrent or service/grafana.";
           };
           label = mkOption {
             type = types.str;

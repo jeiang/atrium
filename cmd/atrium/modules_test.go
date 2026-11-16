@@ -49,7 +49,6 @@ var moduleCases = []moduleCase{
 		command: []string{"rules", "export"}, output: nonEmpty},
 	{module: module.Calendar, tool: "calendar_list", table: "agent_events",
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
-	{module: module.Notion, table: "notion_pages", method: "GET", path: "/library/wiki", status: http.StatusOK},
 	{module: module.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
 	{module: module.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,

@@ -21,7 +21,6 @@ import (
 	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
 	"github.com/jeiang/atrium/internal/logx"
 	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
-	notionembedding "github.com/jeiang/atrium/internal/notion/embedding"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/textutil"
 )
@@ -46,13 +45,6 @@ func DocumentText(ctx context.Context, subject, name, addr, body string) string 
 		from = name + " <" + addr + ">"
 	}
 	return "title: " + subject + " | text: From: " + from + "\n\n" + textutil.Clip(body, endpoint.From(ctx).EmbedBodyChars)
-}
-
-func NotionDocumentText(ctx context.Context, title, path, markdown string) string {
-	if title == "" {
-		title = "none"
-	}
-	return "title: " + title + " | text: " + path + "\n\n" + textutil.Clip(markdown, endpoint.From(ctx).EmbedBodyChars)
 }
 
 func KBDocumentText(ctx context.Context, title, aliases, body string) string {
@@ -188,27 +180,6 @@ var messageSource = source[mailembedding.Message]{
 	id:     func(m mailembedding.Message) int64 { return m.ID },
 	partition: func(m mailembedding.Message) string {
 		return m.Account
-	},
-}
-
-var notionSource = source[notionembedding.Page]{
-	compare: true,
-	missing: func(i Index) string { return "rid NOT IN (SELECT rowid FROM " + i.NotionTable() + ")" },
-	load:    notionembedding.Pending,
-	reload:  notionembedding.Load,
-	document: func(ctx context.Context, p notionembedding.Page) string {
-		return NotionDocumentText(ctx, p.Title, p.Path, p.Markdown)
-	},
-	hash:   func(p notionembedding.Page) string { return p.EmbeddedHash },
-	table:  func(i Index) string { return i.NotionTable() },
-	insert: "INSERT INTO %s (rowid, visibility, embedding) VALUES (?, ?, ?)",
-	mark:   notionembedding.Mark,
-	id:     func(p notionembedding.Page) int64 { return p.RID },
-	partition: func(p notionembedding.Page) string {
-		if p.Private != 0 {
-			return VisibilityPrivate
-		}
-		return VisibilityPublic
 	},
 }
 
@@ -351,20 +322,12 @@ func Reindex(ctx context.Context, d *db.DB, url string) (int, error) {
 	return Pending(ctx, d, url, nil)
 }
 
-func NotionPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (int, error) {
-	return drain(ctx, d, url, notionSource, texts)
-}
-
 func KBPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (int, error) {
 	return drain(ctx, d, url, kbSource, texts)
 }
 
 func Fill(ctx context.Context, d *db.DB, url string, idx Index, texts TextsFunc) (int, error) {
 	n, err := fill(ctx, d, url, idx, messageSource, messageSource.missing(idx), false, texts)
-	if err != nil || n > 0 {
-		return n, err
-	}
-	n, err = fill(ctx, d, url, idx, notionSource, notionSource.missing(idx), false, texts)
 	if err != nil || n > 0 {
 		return n, err
 	}

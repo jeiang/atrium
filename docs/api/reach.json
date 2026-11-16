@@ -113,7 +113,6 @@
         "knowledge.create",
         "knowledge.detail",
         "knowledge.edit",
-        "knowledge.import",
         "knowledge.list",
         "knowledge.profile",
         "knowledge.purge",
@@ -121,8 +120,8 @@
         "knowledge.retract",
         "knowledge.retract-run"
       ],
-      "required": 18,
-      "bound": 18
+      "required": 17,
+      "bound": 17
     },
     {
       "area": "mail",
@@ -339,17 +338,6 @@
       ],
       "required": 1,
       "bound": 1
-    },
-    {
-      "area": "wiki",
-      "operations": [
-        "wiki.detail",
-        "wiki.list",
-        "wiki.search",
-        "wiki.sync"
-      ],
-      "required": 4,
-      "bound": 4
     }
   ],
   "approval_reached": [
@@ -398,7 +386,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 208,
-  "total_bound": 208,
+  "total_required": 203,
+  "total_bound": 203,
   "total_approval_reached": 11
 }

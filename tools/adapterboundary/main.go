@@ -31,10 +31,7 @@ var adapters = []adapter{
 	{pattern: "internal/assistant/memory/memorycmd/*"},
 	{pattern: "internal/assistant/webfetch/tool.go"},
 	{pattern: "internal/assistant/subagents/*/*", marker: "tool.Tool{"},
-	{pattern: "internal/kb/kbcmd/*"},
 	{pattern: "internal/kb/export/job.go"},
-	{pattern: "internal/notion/command.go"},
-	{pattern: "internal/notion/pages/*"},
 	{pattern: "internal/mail/pages/*"},
 	{pattern: "internal/mail/reviewpages/*"},
 	{pattern: "internal/mail/accountpages/*"},
@@ -83,7 +80,6 @@ var allowed = map[string]bool{
 	"internal/jsonx":              true,
 	"internal/numx":               true,
 	"internal/urlx":               true,
-	"internal/notionid":           true,
 	"internal/assistant/registry": true,
 }
 
