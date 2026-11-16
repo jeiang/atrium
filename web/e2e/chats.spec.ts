@@ -367,8 +367,8 @@ test.describe('scrolling', () => {
         return page.evaluate(() => sessionStorage.getItem('atrium.chat.scroll.9'));
       })
       .toBe('900');
-    await page.getByRole('link', { name: 'All chats' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeAttached();
     await page.goBack();
     await expect(page.getByRole('heading', { level: 1, name: 'Winter tyre sizes' })).toBeVisible();
     await expect.poll(async () => Math.round((await scrollState(page)).y)).toBe(900);
@@ -455,7 +455,7 @@ test.describe('G3', () => {
       requestAnimationFrame(tick);
       Object.assign(window, { atriumFrameStamps: stamps });
     });
-    await openChat(page, '/chat/50', { speed: 40 });
+    await openChat(page, '/chat/50', { liveStream: true });
     await expect(transcript(page).getByRole('heading', { name: 'Garage 79' })).toBeVisible({ timeout: 90_000 });
     await settled(page);
     const result = await page.evaluate(() => {

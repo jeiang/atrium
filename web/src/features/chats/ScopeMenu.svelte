@@ -56,7 +56,7 @@
   }
 </script>
 
-<div class="scope" class:scope--staged={staged}>
+<div class="scope-menu" class:scope-menu--staged={staged}>
   <Menu
     label={phone ? `Model: ${label}` : label}
     {items}
@@ -69,12 +69,12 @@
 </div>
 
 <style>
-  .scope {
+  .scope-menu {
     display: flex;
     min-width: 0;
   }
 
-  .scope--staged :global(.btn) {
+  .scope-menu--staged :global(.btn) {
     box-shadow: inset 0 0 0 1px var(--honey-line);
   }
 </style>

@@ -164,8 +164,12 @@
   });
 
   $effect(() => {
+    let lastY = window.scrollY;
     const onScroll = (): void => {
-      following = atBottom();
+      const y = window.scrollY;
+      if (atBottom()) following = true;
+      else if (y < lastY) following = false;
+      lastY = y;
       if (following) unseen = false;
       if (scrollFrame) return;
       scrollFrame = requestAnimationFrame(() => {
