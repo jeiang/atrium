@@ -77,6 +77,14 @@ func listed(read calapp.Listing) tool.Marked {
 	return tool.Marked{Value: read.Value, Marks: marks}
 }
 
+func refuseBirthday(_ context.Context, _ *tool.Context, args tool.Args) error {
+	uid, _ := args["uid"].(string)
+	if err := calapp.RefuseReadOnly(uid); err != nil {
+		return tool.Fail(err)
+	}
+	return nil
+}
+
 func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	start, err := requiredText(args, "start")
 	if err != nil {
@@ -206,7 +214,7 @@ func baseTools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
-			Approval:  &tool.Approval{Apply: remove, Label: "Delete calendar event", Icon: "trash-2", Module: unit.Calendar, Detail: "uid"},
+			Approval:  &tool.Approval{Apply: remove, Check: refuseBirthday, Label: "Delete calendar event", Icon: "trash-2", Module: unit.Calendar, Detail: "uid"},
 		}),
 		{
 			Name: "event_propose",

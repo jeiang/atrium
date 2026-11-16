@@ -105,6 +105,8 @@ func outcomeOf(err error) state.Outcome {
 	return state.Failed
 }
 
+func RefuseReadOnly(uid string) error { return classify(calendar.RefuseBirthday(uid)) }
+
 func classify(err error) error {
 	var known *application.Error
 	var missing calendar.NotConfigured

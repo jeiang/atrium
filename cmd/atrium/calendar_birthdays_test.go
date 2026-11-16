@@ -76,12 +76,13 @@ func TestBirthdaysCalendarIsDerivedFromContactDates(t *testing.T) {
 	seedSettings(t, map[string]string{"tz": loc.String()})
 	birthdayContacts(t, dir, today)
 	anaTitle := fmt.Sprintf("Birthday: Ana Example (turns %d)", today.Year()-1990)
-	start := warm(t, api)
+	warm(t, api)
+	api.Push(asstReply("tools"))
 	tools := offeredTools(t, api, runApp(t, "agent", "run", "--text", "tools"))
 	if slices.Contains(tools, "upcoming_birthdays") || !slices.Contains(tools, "calendar_list") {
 		t.Fatalf("offered tools = %v", tools)
 	}
-	start = len(api.Requests())
+	start := len(api.Requests())
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "contacts_lookup", map[string]any{"query": "Ana", "include": []any{"dates"}})),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "calendar_list", map[string]any{
@@ -101,12 +102,12 @@ func TestBirthdaysCalendarIsDerivedFromContactDates(t *testing.T) {
 		t.Fatalf("%d model requests, want 5", len(requests))
 	}
 	last := requests[4]
-	if text, failed := birthdayResult(t, last, "c1"); failed || !strings.Contains(text, `"kind":"birthday"`) || !strings.Contains(text, `"year":1990`) {
+	if text, failed := birthdayResult(t, last, "c1"); failed || !strings.Contains(text, `"kind": "birthday"`) || !strings.Contains(text, `"year": 1990`) {
 		t.Errorf("contacts_lookup dates = %s", text)
 	}
 	text, failed := birthdayResult(t, last, "l1")
 	if failed || !strings.Contains(text, anaTitle) || !strings.Contains(text, "Birthday: Cleo Soon (turns") ||
-		!strings.Contains(text, `"calendar":"birthdays"`) || strings.Contains(text, "Dee Wed") {
+		!strings.Contains(text, `"calendar": "birthdays"`) || strings.Contains(text, "Dee Wed") {
 		t.Errorf("calendar_list birthdays = %s", text)
 	}
 	for _, id := range []string{"u1", "d1"} {
@@ -163,7 +164,7 @@ func TestBirthdaysLeaveTodayWithCalendarOff(t *testing.T) {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	requests := api.Requests()[start:]
-	if text, failed := birthdayResult(t, requests[len(requests)-1], "c1"); failed || !strings.Contains(text, `"kind":"birthday"`) {
+	if text, failed := birthdayResult(t, requests[len(requests)-1], "c1"); failed || !strings.Contains(text, `"kind": "birthday"`) {
 		t.Errorf("contacts_lookup dates with calendar off = %s", text)
 	}
 	s, token := birthdayServe(t, f)
