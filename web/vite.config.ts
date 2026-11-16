@@ -52,5 +52,6 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'mock' ? 'dist-mock' : 'dist',
     target: 'baseline-widely-available',
+    manifest: true,
   },
 }));
