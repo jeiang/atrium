@@ -131,12 +131,11 @@ and archives made under it cannot be opened.
 | `media.group` | string | `"media"` | Default library/agent group, not a supplementary application group. |
 | `mediaAgent.enable` | boolean | `false` | Adds the agent unit/user/group and generates `service/media-agent`. |
 | `mediaAgent.package` | package | `services.atrium.package` | Package used for `atrium media-agent`. |
-| `mediaAgent.ffmpegPackage` | package | `pkgs.ffmpeg-headless` | Supplies ffmpeg and ffprobe on the agent's path. |
 | `mediaAgent.user` | string | `"atrium-media-agent"` | Agent system user; must differ from the application user. |
 | `mediaAgent.group` | string | `media.group` | Agent primary group and library group; new library folders use mode 2775 under umask 0002. |
 | `mediaAgent.listen` | string | `"127.0.0.1:8482"` | Loopback control IP and port; also the allowed control Host and generated connection URL. |
 | `mediaAgent.bearerFile` | null or string | `null` | Absolute file holding at least 32 bearer bytes; required when enabling the agent. Delivered to both units. |
-| `mediaAgent.capabilities` | list of `"scan"`, `"thumbnail"`, `"file"`, `"stream"` | All four | Enabled capabilities on the generated connection. |
+| `mediaAgent.capabilities` | list of `"scan"`, `"file"`, `"stream"` | All three | Enabled capabilities on the generated connection. `"thumbnail"` is still accepted and ignored; it will be removed in a later release, so drop it from host configuration. |
 | `mediaAgent.roots.movies` | string | Required | Absolute movies root. |
 | `mediaAgent.roots.tv` | string | Required | Absolute TV root. |
 | `mediaAgent.roots.downloads` | string | Required | Download root used as hardlink source; the agent does not write it. |
@@ -151,7 +150,7 @@ there is no cross-device copy fallback.
 
 The agent's primary and supplementary groups must not include the application
 group, which can read application state. The application unit and `atrium-run`
-get `InaccessiblePaths=-<library-parent>` and no media group or ffmpeg path.
+get `InaccessiblePaths=-<library-parent>` and no media group.
 The agent gets the parent as its one explicit `ReadWritePaths` entry so filing
 can link/rename across roots in one mount. Backup/export destinations must not
 overlap that inaccessible parent. Setting an explicit `service/media-agent`
@@ -258,7 +257,7 @@ with `WatchdogSec=1min`, `TimeoutStopSec=150s`, `KillMode=mixed`, SIGTERM,
 `RestartPreventExitStatus=78`. It has no reload action; SIGHUP drains and exits
 nonzero. State is `/var/lib/atrium-media-agent` and cache is
 `/var/cache/atrium-media-agent`, both mode 0700. Receipt state must persist and
-be backed up separately from expendable thumbnails.
+be backed up; the cache directory is expendable.
 
 Agent hardening includes `NoNewPrivileges`, `ProtectSystem=strict`,
 `ProtectHome`, `PrivateTmp`, `PrivateDevices`, kernel tunable/module/log,
@@ -338,6 +337,8 @@ retarget other references to them. Use `unitNames` for current units.
 The removed `web.local.enable`/`.port`, `modelServerUnits`, and
 `backup.onCalendar` options have explicit evaluation errors naming
 `web.emergency.*`, `embeddingServerUnits`, and `backup.schedule` respectively.
+The removed `mediaAgent.ffmpegPackage` option has an evaluation error; the
+agent no longer runs ffmpeg.
 There is no `settings`, `mediaRoot`, or `web.local.port` input in this option
 reference. Legacy service credential keys are not accepted app signing files.
 

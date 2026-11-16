@@ -421,7 +421,7 @@ func TestLegacyFilingUndoIsRefused(t *testing.T) {
 	if err := store.Settle(ctx, ticket, ledger.Result{State: ledger.Done}, nil); err != nil {
 		t.Fatal(err)
 	}
-	undo, _ := json.Marshal(map[string]any{"op": media.UndoFilePlace, "step": map[string]any{"src": filepath.Join(root, "import", "Old.2001", "Old.2001.mkv"), "dst": dst, "rel": "movies/Old (2001)/Old (2001).mkv"}})
+	undo, _ := json.Marshal(map[string]any{"op": "media_file_place", "step": map[string]any{"src": filepath.Join(root, "import", "Old.2001", "Old.2001.mkv"), "dst": dst, "rel": "movies/Old (2001)/Old (2001).mkv"}})
 	if _, err := d.Write.Exec("UPDATE effects SET undo_json = ? WHERE id = ?", string(undo), ticket.ID); err != nil {
 		t.Fatal(err)
 	}

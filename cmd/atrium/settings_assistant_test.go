@@ -85,7 +85,7 @@ func TestOwnerScheduleSettingRoundTripsThroughTheScheduledPage(t *testing.T) {
 	}
 	w := asstBrowse(t, startServeIn(t, dir))
 	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "package-tracking", "*/45 * * * *", "calendar-candidates", "ops-sampler", "media-thumbnails")
+	w.want(code, http.StatusOK, page, "package-tracking", "*/45 * * * *", "calendar-candidates", "ops-sampler")
 
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var id, n int64

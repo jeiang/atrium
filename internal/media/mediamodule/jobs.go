@@ -34,11 +34,6 @@ func sweepJob(ctx context.Context, svc *mediaapp.Service) (any, error) {
 	return nil, nil
 }
 
-func thumbnails(ctx context.Context, svc *mediaapp.Service) (any, error) {
-	_, err := svc.Thumbnails(ctx, mediaapp.ThumbnailsInput{})
-	return nil, err
-}
-
 func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, shutdown scheduler.ShutdownPolicy, run mediacmd.Job) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Media, Key: module.Media + "/" + name, Name: name, Kind: scheduler.JobBuiltin, Prompt: prompt,
@@ -63,7 +58,5 @@ func mediaJobs(deps jobworker.Dependencies) []scheduler.Definition {
 			"*/30 * * * *", media.KeyScheduleChannels, 15*time.Minute, "media-control", scheduler.ShutdownDrain, mediacmd.Poll),
 		mediaJob(deps, media.JobSweep, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).",
 			"*/10 * * * *", media.KeyScheduleSweep, 15*time.Minute, "media-control", scheduler.ShutdownDrain, sweepJob),
-		mediaJob(deps, media.JobThumbnails, "Daily: generate missing episode thumbnails for the media library (no model run).",
-			"daily 04:00", media.KeyScheduleThumbnails, 2*time.Hour, "media-thumbnails", scheduler.ShutdownCancel, thumbnails),
 	}
 }

@@ -389,7 +389,7 @@ not the MIME boundary.
 Media is at `/apps/media`. The application reads the library and files media
 only through `service/media-agent`. With the local NixOS agent, the main
 application and `atrium-run` cannot access the media parent. Only the agent has
-that filesystem access, the library group, and ffmpeg/ffprobe.
+that filesystem access and the library group.
 
 The agent control listener checks bearer and Host. The module binds control to
 loopback. Its optional TLS VPN listener instead checks peer CIDRs at accept
@@ -418,10 +418,8 @@ are refused inputs.
   group-readable, with directories group-writable; otherwise the agent refuses
   them and does not change download inodes.
 - A failed catalog refresh retains the old snapshot marked stale. Until one
-  exists, library reads return 503 rather than an empty library. Thumbnails
-  are generated and cached by the agent. A video ffmpeg cannot read is
-  remembered for seven days and answers 404; an agent-side failure answers 503
-  and is retried on the next request.
+  exists, library reads return 503 rather than an empty library. Show pages
+  list episodes without thumbnails; posters and season art come from TMDB.
 - Signed public file links expire and still check Host. Content supports
   GET/HEAD and ranges. Relays do not recompress media; a broken stream aborts
   the connection instead of presenting truncated content as complete. API

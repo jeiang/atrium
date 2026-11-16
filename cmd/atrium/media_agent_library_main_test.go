@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
 )
@@ -161,74 +159,5 @@ func TestLibraryWithoutAnyCatalogueIsUnavailable(t *testing.T) {
 	}
 	if code, body, _ := w.get("/apps/media/library/movie/"+url.PathEscape(libraryMovie), false); code != http.StatusServiceUnavailable {
 		t.Fatalf("movie with an unreachable agent = %d, want 503: %.300s", code, body)
-	}
-}
-
-func TestThumbnailRouteUsesTheAgent(t *testing.T) {
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	bin := fakeFFmpeg(t, fakeThumbnailer)
-	agent := libraryAgent(t, dir, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	writeMediaFile(t, filepath.Join(agent.roots["tv"], libraryShow, "Season 01", "Lanterns - S01E02.mkv"), "episode two")
-
-	d := asstDB(t, dir)
-	declareJobsAndParkThem(t, d)
-	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, media.JobThumbnails)
-	if got := runApp(t, "agent", "tick"); got.code != cli.ExitOK {
-		t.Fatalf("agent tick: %d %s", got.code, got.stderr)
-	}
-	var details string
-	if err := d.Read.QueryRow("SELECT details_json FROM operation_audit WHERE operation = 'media.thumbnails' ORDER BY id DESC LIMIT 1").Scan(&details); err != nil {
-		t.Fatal(err)
-	}
-	var pass struct{ Generated, Remaining int }
-	if err := json.Unmarshal([]byte(details), &pass); err != nil || pass.Generated != 2 || pass.Remaining != 0 || runCount(t, bin) != 2 {
-		t.Fatalf("thumbnail pass %s runs=%d: %v", details, runCount(t, bin), err)
-	}
-
-	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	logs := &lockedBuffer{}
-	base, _, stop, err := startServeAppArgs(t, defaultApp(t), logs, "--auth", "proxy", "--allowed-host", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("%v: %s", err, logs.String())
-	}
-	t.Cleanup(stop)
-	get := func(target string, groups string) (int, string, string) {
-		t.Helper()
-		req, err := http.NewRequest(http.MethodGet, base+target, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if groups != "" {
-			req.Header.Set("Remote-Groups", groups)
-		}
-		resp, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return resp.StatusCode, resp.Header.Get("Content-Type"), string(body)
-	}
-	const group = "atrium_access"
-	thumb := "/apps/media/thumb/" + strings.ReplaceAll(url.PathEscape(libraryEpisode), "%2F", "/")
-	if code, kind, body := get(thumb, group); code != http.StatusOK || kind != "image/jpeg" || body != fakeJPEG || runCount(t, bin) != 2 {
-		t.Fatalf("thumbnail = %d %q %q runs=%d", code, kind, body, runCount(t, bin))
-	}
-	if code, kind, body := get("/apps/media/thumb/tv/"+libraryShow+"/missing.mkv", group); code != http.StatusOK || kind != "image/svg+xml" {
-		t.Fatalf("missing thumbnail = %d %q %.100s", code, kind, body)
-	}
-	if code, kind, _ := get("/apps/media/thumb/downloads/x.mkv", group); code != http.StatusOK || kind != "image/svg+xml" {
-		t.Fatalf("thumbnail outside the library = %d %q", code, kind)
-	}
-	if code, kind, _ := get(thumb+"?exp=4000000000&sig=AAAA", ""); code == http.StatusOK || kind == "image/jpeg" {
-		t.Fatalf("a signed query opened the thumbnail without login: %d %q", code, kind)
-	}
-
-	agent.terminate(t)
-	if code, kind, _ := get(thumb, group); code != http.StatusOK || kind != "image/svg+xml" {
-		t.Fatalf("thumbnail with the agent stopped = %d %q", code, kind)
 	}
 }

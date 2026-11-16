@@ -214,7 +214,15 @@
         web.allowedHost = "atrium.example.org";
         mediaAgent = agentBase // {listen = "[::1]:8482";};
       })
-      == []; true;
+      == [];
+      assert let
+        legacy = host {
+          web.allowedHost = "atrium.example.org";
+          media.enable = true;
+          mediaAgent = agentBase // {capabilities = ["scan" "thumbnail" "file" "stream"];};
+        };
+      in
+        failing legacy == [] && legacy.config.services.atrium.renderedHost.connections."service/media-agent".capabilities == ["scan" "file" "stream"]; true;
     emergencyOptionsRefused = assert refusedWith "services.atrium.web.emergency.enable" {
       web = {
         allowedHost = "atrium.example.org";
@@ -377,7 +385,8 @@
       agentCfg = cfg.renderedMediaAgent;
       conn = cfg.renderedHost.connections."service/media-agent";
     in
-      assert builtins.all (text: lib.hasInfix text t) ["ffmpeg-headless" " media-agent --config "];
+      assert lib.hasInfix " media-agent --config " t;
+      assert !(lib.hasInfix "ffmpeg" t);
       assert hasLines "atrium-media-agent.service" [
         "Type=notify"
         "WatchdogSec=1min"
@@ -442,7 +451,7 @@
       assert !(defaults.config.systemd.units ? "atrium-media-agent.service");
       assert conn.kind == "service/media-agent";
       assert conn.config == {url = "http://127.0.0.1:8482";};
-      assert conn.capabilities == ["scan" "thumbnail" "file" "stream"];
+      assert conn.capabilities == ["scan" "file" "stream"];
       assert conn.credential_files == {bearer = "\${CREDENTIALS_DIRECTORY}/connection-service-media-agent-bearer";};
       assert cfg.renderedHost.media.media_vpn_base_url == "https://media.mesh.example:8483";
       assert nixos.config.networking.firewall.interfaces.wt0.allowedTCPPorts == [8483];
