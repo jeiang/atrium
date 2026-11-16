@@ -529,7 +529,7 @@
   in {
     checks =
       {
-        inherit (self'.packages) atrium-static atrium-docs;
+        inherit (self'.packages) atrium-static atrium-docs atrium-web atrium-web-mock;
 
         statix = pkgs.runCommand "statix-check" {nativeBuildInputs = [pkgs.statix];} ''
           statix check ${self}

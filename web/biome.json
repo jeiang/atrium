@@ -1,6 +1,6 @@
 {
   "files": {
-    "includes": ["**", "!src/contract/gen", "!dist", "!dist-mock", "!.npm-cache"]
+    "includes": ["**", "!src/contract/gen", "!src/tokens/gen", "!dist", "!dist-mock", "!.npm-cache"]
   },
   "formatter": {
     "indentStyle": "space",
