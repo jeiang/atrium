@@ -764,6 +764,10 @@ are refused inputs.
   add is refused once the torrent is filed. The first start of this release
   turns Torrents on when Library is on and Torrents has no stored choice and
   no pin; otherwise Torrents stays off until enabled.
+  Library depends on Torrents: the app switch refuses to turn Torrents off
+  while Library is on (`dependent_on`) and to turn Library on while Torrents
+  is off (`dependency_off`). When Torrents is unavailable, `/settings/media`
+  shows Library as unavailable with "Torrents is unavailable:" and its reason.
 - Tool renames: `media_downloads` is now `downloads` and `media_add_magnet` is
   now `download_add`; `download_control` (pause, resume, remove) is new. The
   old `tools.tool_media_downloads_enabled` and

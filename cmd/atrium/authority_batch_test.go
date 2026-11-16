@@ -577,14 +577,14 @@ func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
 		t.Fatalf("%d model requests, want 2", len(requests))
 	}
 	if result := toolResultFor(t, requests[1], "d1"); result["is_error"] == true {
-		t.Fatalf("media_add_magnet failed: %v", result)
+		t.Fatalf("download_add failed: %v", result)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var id int64
-	if err := d.Read.QueryRow("SELECT MAX(id) FROM proposals WHERE kind = 'media_add_magnet'").Scan(&id); err != nil {
+	if err := d.Read.QueryRow("SELECT MAX(id) FROM proposals WHERE kind = 'download_add'").Scan(&id); err != nil {
 		t.Fatalf("proposal: %v", err)
 	}
-	if ran := runApp(t, "settings", "set", "tool_media_add_magnet_enabled", "false"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "settings", "set", "tool_download_add_enabled", "false"); ran.code != cli.ExitOK {
 		t.Fatalf("disable the tool: %d %s", ran.code, ran.stderr)
 	}
 	if ran := runApp(t, "proposals", "approve", fmt.Sprint(id)); ran.code == cli.ExitOK {
@@ -594,7 +594,7 @@ func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT status, COALESCE(result, '') FROM proposals WHERE id = ?", id).Scan(&status, &result); err != nil {
 		t.Fatal(err)
 	}
-	if status != "failed" || !strings.Contains(result, "media_add_magnet is not allowed in this thread by the permission table") {
+	if status != "failed" || !strings.Contains(result, "download_add is not allowed in this thread by the permission table") {
 		t.Errorf("proposal = %s %s, want a failed re-authorization", status, result)
 	}
 	if adds := qb.count("add"); adds != 0 {
