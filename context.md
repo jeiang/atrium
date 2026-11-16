@@ -812,7 +812,8 @@ claims about the running application. Operator contracts are in
   connection they need is unavailable and the run did no work:
   `mail/package_tracking` (Ship24 absent while packages wait, or every
   tracker request failed) and `media/channels` (every EZTV feed failed, or
-  every qBittorrent add failed with nothing added). The run error names
+  every qBittorrent add failed with nothing added; a magnet with no v1 hash
+  is recorded on its release and is not an add failure). The run error names
   the capability, the connection and the repair id. These rows do not
   coalesce. The `packages poll` CLI and the channels poll API keep their
   results.
@@ -1054,7 +1055,12 @@ claims about the running application. Operator contracts are in
   group-readable (directories also group-writable and searchable), or the
   agent refuses it. Crash recovery only inspects receipts; identical replay
   returns the terminal result and never resumes.
-- Main files media through the agent. The downloads queue maps each tagged
+- Main files media through the agent. Torrents (`internal/apps/torrents`)
+  owns qBittorrent: one intake gates every write by actor (operator any
+  torrent; agent and job only `atrium` or `media` tagged; no tag removal; a
+  job removes only `filed`, stopped torrents) and stamps `atrium` on every
+  add. Library consumes it through `internal/apps/torrents/contract`.
+  The downloads queue maps each tagged
   torrent's qBittorrent content path to the agent `downloads` root by the
   `media_download_path_prefix` string prefix (no main-side stat). Filing
   re-checks the torrent (hash, `media` tag, complete, unchanged path),

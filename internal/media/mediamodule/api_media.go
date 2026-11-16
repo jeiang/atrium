@@ -16,6 +16,17 @@ type MediaPageInput struct {
 	Limit  api.Limit  `query:"limit" json:"-"`
 	Cursor api.Cursor `query:"cursor" json:"-"`
 }
+type MediaQueueItem struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Torrent bool   `json:"torrent"`
+	Error   string `json:"error,omitempty"`
+}
+type MediaQueue struct {
+	Items []MediaQueueItem `json:"items"`
+	Next  *string          `json:"next,omitempty"`
+	Error string           `json:"error,omitempty"`
+}
 type MediaChannels struct {
 	Items []media.Channel `json:"items"`
 	Next  *string         `json:"next,omitempty"`
@@ -92,6 +103,31 @@ func mediaCursorError() error {
 
 func mediaRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 	routes := []application.Binding{
+		api.Query(d, mediaapp.DescribeQueue(), mediaShape[MediaQueue](), "GET /media/queue", func(ctx context.Context, in MediaPageInput) (application.Read[MediaQueue], error) {
+			r, e := s.Queue(ctx, mediaapp.QueueInput{})
+			if e != nil {
+				return application.Read[MediaQueue]{}, e
+			}
+			sort.Slice(r.Data.Queue, func(i, j int) bool { return r.Data.Queue[i].Item.ID < r.Data.Queue[j].Item.ID })
+			last := ""
+			if in.Cursor.Set() {
+				if e := in.Cursor.Last(&last); e != nil {
+					return application.Read[MediaQueue]{}, mediaCursorError()
+				}
+			}
+			out := MediaQueue{Items: []MediaQueueItem{}, Error: r.Data.QueueError}
+			for _, w := range r.Data.Queue {
+				if w.Item.ID <= last {
+					continue
+				}
+				if len(out.Items) == int(in.Limit) {
+					out.Next = in.Cursor.Next(out.Items[len(out.Items)-1].ID)
+					break
+				}
+				out.Items = append(out.Items, MediaQueueItem{ID: w.Item.ID, Name: w.Item.Name, Torrent: w.Item.Torrent, Error: w.Item.Error})
+			}
+			return mediaRead(r, out), nil
+		}),
 		api.Query(d, mediaapp.DescribeChannels(), mediaShape[MediaChannels](), "GET /media/channels", func(ctx context.Context, in MediaPageInput) (application.Read[MediaChannels], error) {
 			r, e := s.Channels(ctx, mediaapp.ChannelsInput{})
 			if e != nil {

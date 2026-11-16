@@ -566,7 +566,7 @@ func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
 	const hash = "dddddddddddddddddddddddddddddddddddddddd"
 	magnet := mediaMagnet(hash, "Lanterns.S01E12")
 	api.Push(
-		anthropictest.Reply("tool_use", anthropictest.ToolUse("d1", "media_add_magnet", map[string]any{"magnet": magnet})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("d1", "download_add", map[string]any{"magnet": magnet})),
 		anthropictest.Reply("end_turn", anthropictest.Text("asked")),
 	)
 	if ran := runApp(t, "agent", "run", "--text", "add "+magnet); ran.code != cli.ExitOK {

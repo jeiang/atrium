@@ -190,7 +190,7 @@ func TestApprovedMediaAddIsUndoneWithItsProposal(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	id := proposalID(t, toolResult(t, "media_add_magnet", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E10")}))
+	id := proposalID(t, toolResult(t, "download_add", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E10")}))
 	if adds := qb.count("add"); adds != 0 {
 		t.Fatalf("asking reached qBittorrent: %d adds", adds)
 	}
@@ -231,7 +231,7 @@ func TestRecoveredProposalWithRecordedWorkCannotBeApprovedAgain(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	id := proposalID(t, toolResult(t, "media_add_magnet", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E11")}))
+	id := proposalID(t, toolResult(t, "download_add", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E11")}))
 	if got := runApp(t, "proposals", "approve", id); got.code != cli.ExitOK {
 		t.Fatalf("approve: %d %q %q", got.code, got.stdout, got.stderr)
 	}

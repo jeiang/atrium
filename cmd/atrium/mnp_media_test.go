@@ -629,9 +629,9 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 	mnpMediaRoot(t, toolDir)
 	toolQB, toolURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, toolDir, toolURL, "", "", ""))
-	result := unescape(toolResult(t, "media_add_magnet", map[string]any{"magnet": v2only}))
+	result := unescape(toolResult(t, "download_add", map[string]any{"magnet": v2only}))
 	if !strings.Contains(result, `"code":"invalid"`) || !strings.Contains(result, "magnet") {
-		t.Fatalf("media_add_magnet with a v2-only magnet = %s, want an invalid tool error", result)
+		t.Fatalf("download_add with a v2-only magnet = %s, want an invalid tool error", result)
 	}
 	if adds := toolQB.count("add"); adds != 0 {
 		t.Fatalf("the refused tool add reached qBittorrent: %d adds", adds)
