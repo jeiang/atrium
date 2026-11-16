@@ -1,40 +1,53 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
   import { blockNavigation } from 'sv-router';
-  import { tick, untrack } from 'svelte';
+  import { type Snippet, tick, untrack } from 'svelte';
   import { ApiError, ok, type SettingsSchemaField, settingsPatch } from '../../contract';
-  import { announce } from '../../shared/announce.svelte';
-  import { formatClock } from '../../shared/assistant/format';
-  import { refusedOffline } from '../../shared/device.svelte';
-  import Button from '../../shared/ui/Button.svelte';
-  import Dialog from '../../shared/ui/Dialog.svelte';
-  import Notice from '../../shared/ui/Notice.svelte';
-  import { useShell } from '../../shell/frame';
-  import { p } from '../../shell/router';
-  import type { SettingsGroup } from './placement';
+  import { announce } from '../announce.svelte';
+  import { formatClock } from '../assistant/format';
+  import { refusedOffline, unreachable } from '../device.svelte';
+  import Button from '../ui/Button.svelte';
+  import Dialog from '../ui/Dialog.svelte';
+  import Notice from '../ui/Notice.svelte';
+  import Skeleton from '../ui/Skeleton.svelte';
+  import ViewState from '../ui/ViewState.svelte';
   import SettingControl from './SettingControl.svelte';
-  import { checkValue, labelOf, refreshSettings, type SettingsValues } from './settings';
+  import { checkValue, refreshSettings, useSettingsSchema, useSettingsValues } from './settings';
+  import './settings.css';
 
   interface Props {
-    group: SettingsGroup;
-    fields: readonly SettingsSchemaField[];
-    values: SettingsValues;
+    groups: readonly string[];
+    title: string;
+    id?: string;
     focus?: string;
+    view?: boolean;
     locked?: string;
-    phone: boolean;
-    onreload: () => void;
+    phone?: boolean;
+    head?: Snippet;
+    intro?: Snippet;
   }
 
-  let { group, fields, values, focus, locked, phone, onreload }: Props = $props();
+  let { groups, title, id, focus, view = false, locked, phone = false, head, intro }: Props = $props();
 
   type Result = { tone: 'ok' | 'warn' | 'error'; title: string; text: string };
 
   const client = useQueryClient();
-  const shell = useShell();
-  const view = $derived(group.id === 'apps');
-  const writable = $derived(fields.filter((field) => !view && field.editable && values.items[field.key]?.source !== 'pin'));
+  const schema = useSettingsSchema();
+  const values = useSettingsValues();
+  const offline = $derived(unreachable(schema) || unreachable(values));
+  const failed = $derived((schema.isError && !schema.data) || (values.isError && !values.data));
+  const scope = $derived(groups.join(' '));
+  const fields = $derived(
+    groups.flatMap((group) =>
+      (schema.data?.pages ?? []).flatMap((page) => page.fields.filter((field) => field.group === group)),
+    ),
+  );
+  const items = $derived(values.data?.items ?? {});
+  const writable = $derived(
+    view ? [] : fields.filter((field) => field.editable && items[field.key]?.source !== 'pin'),
+  );
   const base = $derived(
-    Object.fromEntries(fields.map((field) => [field.key, field.secret ? '' : (values.items[field.key]?.value ?? '')])),
+    Object.fromEntries(fields.map((field) => [field.key, field.secret ? '' : (items[field.key]?.value ?? '')])),
   );
 
   let draft = $state<Record<string, string>>({});
@@ -50,13 +63,17 @@
   let settle: ((leave: boolean) => void) | undefined;
   let notice = $state<HTMLElement>();
 
-  const changed = $derived(writable.filter((field) => (draft[field.key] ?? '').trim() !== (origin[field.key] ?? '').trim()));
+  const changed = $derived(
+    writable.filter((field) => (draft[field.key] ?? '').trim() !== (origin[field.key] ?? '').trim()),
+  );
   const dirty = $derived(changed.length > 0);
 
   $effect(() => {
-    const revision = values.revision;
-    const key = group.id;
+    const revision = values.data?.revision;
+    const key = scope;
+    const ready = schema.data !== undefined;
     untrack(() => {
+      if (revision === undefined || !ready) return;
       if (shown !== key) {
         draft = { ...base };
         origin = { ...base };
@@ -84,7 +101,7 @@
 
   $effect(() => {
     const key = focus;
-    if (!key || shown !== group.id) return;
+    if (!key || shown !== scope) return;
     void tick().then(() => {
       const row = document.getElementById(`setting-${key}`);
       if (!row) return;
@@ -131,8 +148,13 @@
     answer(false);
   }
 
+  function onRetry(): void {
+    if (schema.isError) void schema.refetch();
+    if (values.isError) void values.refetch();
+  }
+
   function names(list: readonly SettingsSchemaField[]): string {
-    const labels = list.map((field) => labelOf(field));
+    const labels = list.map((field) => field.label);
     if (labels.length <= 1) return labels.join('');
     return `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}`;
   }
@@ -153,7 +175,7 @@
       return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
     }
     if (error instanceof ApiError && error.status === 412) {
-      onreload();
+      void values.refetch();
       return {
         tone: 'warn',
         title: 'The settings changed elsewhere',
@@ -171,7 +193,7 @@
       }
       return { tone: 'error', title: `atrium refused ${what}`, text: `${error.message} Nothing was saved.` };
     }
-    onreload();
+    void values.refetch();
     return {
       tone: 'error',
       title: 'The outcome is unknown',
@@ -181,7 +203,8 @@
 
   async function onSave(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (!dirty || pending || locked) return;
+    const revision = values.data?.revision;
+    if (!dirty || pending || locked || revision === undefined) return;
     const local: Record<string, string> = {};
     for (const field of changed) {
       const message = checkValue(field, draft[field.key] ?? '');
@@ -203,7 +226,7 @@
     pending = true;
     result = undefined;
     try {
-      const headers = { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `W/"${values.revision}"` };
+      const headers = { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `W/"${revision}"` };
       ok(
         await settingsPatch(
           { ...(Object.keys(set).length > 0 ? { set } : {}), ...(unset.length > 0 ? { unset } : {}) },
@@ -239,17 +262,18 @@
   }
 
   async function onReset(field: SettingsSchemaField): Promise<void> {
-    if (pending || resetting || locked) return;
+    const revision = values.data?.revision;
+    if (pending || resetting || locked || revision === undefined) return;
     resetting = field.key;
     draft[field.key] = origin[field.key] ?? '';
     result = undefined;
     try {
-      const headers = { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `W/"${values.revision}"` };
+      const headers = { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `W/"${revision}"` };
       ok(await settingsPatch({ unset: [field.key] }, { headers }));
       result = {
         tone: 'ok',
         title: `Reset at ${formatClock(new Date())}`,
-        text: `${labelOf(field)} is back to its default.${field.restart ? ' Restart atrium to apply it.' : ''}`,
+        text: `${field.label} is back to its default.${field.restart ? ' Restart atrium to apply it.' : ''}`,
       };
       announce(result.title);
       refreshSettings(client);
@@ -261,66 +285,49 @@
   }
 </script>
 
-<form class="settings-group" novalidate onsubmit={onSave} aria-labelledby="settings-group-title">
-  <div class="settings-group__head">
-    {#if phone}
-      <a class="link settings-group__back" href={p('/settings')}>All settings</a>
-    {/if}
-    <h2 class="settings-group__title" id="settings-group-title">{group.title}</h2>
+<form class="settings-form" {id} novalidate onsubmit={onSave} aria-labelledby="{id ?? 'settings-form'}-title">
+  <div class="settings-form__head">
+    {@render head?.()}
+    <h2 class="settings-form__title" id="{id ?? 'settings-form'}-title">{title}</h2>
   </div>
-  {#if group.id === 'settings.general'}
-    <div class="setting">
-      <div class="setting__readonly">
-        <span class="setting__label">Weather location</span>
-        <a class="link" href={p('/settings/connections/:kind/:name', { params: { kind: 'service', name: 'weather' } })}>
-          Set on the weather connection
-        </a>
-      </div>
-    </div>
-  {:else if group.id === 'connections'}
-    <div class="setting">
-      <div class="setting__readonly">
-        <span class="setting__label">Accounts and keys</span>
-        <a class="link" href={p('/settings/connections')}>Open the connection list</a>
-      </div>
-    </div>
-  {:else if group.id === 'apps.mail'}
-    <div class="setting" id="setting-mail_mode" data-key="mail_mode" tabindex="-1">
-      <div class="setting__readonly">
-        <span class="setting__label">Mail mode</span>
-        <span class="setting__value">
-          {#if shell.data?.mail}
-            {shell.data.mail.mode === 'live' ? 'Live' : 'Practice (shadow)'}{shell.data.mail.paused ? ', paused' : ''}
-          {:else}
-            Not known
-          {/if}
-        </span>
-        <span class="meta setting__pin">
-          Changed on the host with <code>atrium settings set mail_mode live</code> or <code>shadow</code>
-        </span>
-      </div>
-    </div>
+  {@render intro?.()}
+  {#if offline}
+    <ViewState kind="offline" title="Cannot reach atrium">
+      These settings load when atrium answers again. Nothing was changed.
+    </ViewState>
+  {:else if failed}
+    <ViewState kind="error" title="These settings did not load">
+      {schema.error?.message ?? values.error?.message}
+      {#snippet action()}
+        <Button variant="secondary" onclick={onRetry}>Retry</Button>
+      {/snippet}
+    </ViewState>
+  {:else if !schema.data || !values.data}
+    <Skeleton lines={4} label="Loading the settings" />
+  {:else if fields.length === 0}
+    <ViewState kind="empty" title="No settings here">atrium offers no settings for this page.</ViewState>
+  {:else}
+    {#each fields as field (field.key)}
+      <SettingControl
+        {field}
+        setting={items[field.key]}
+        bind:value={draft[field.key]}
+        error={errors[field.key]}
+        elsewhere={marks[field.key]}
+        {locked}
+        {view}
+        resetting={resetting === field.key}
+        onreset={onReset}
+      />
+    {/each}
   {/if}
-  {#each fields as field (field.key)}
-    <SettingControl
-      {field}
-      setting={values.items[field.key]}
-      bind:value={draft[field.key]}
-      error={errors[field.key]}
-      elsewhere={marks[field.key]}
-      {locked}
-      {view}
-      resetting={resetting === field.key}
-      onreset={onReset}
-    />
-  {/each}
-  <div class="settings-group__result" tabindex="-1" bind:this={notice}>
+  <div class="settings-form__result" tabindex="-1" bind:this={notice}>
     {#if result}
       <Notice tone={result.tone} variant="inline" title={result.title}>{result.text}</Notice>
     {/if}
   </div>
   {#if writable.length > 0 && (dirty || pending)}
-    <div class="settings-group__bar">
+    <div class="settings-form__bar">
       <span class="meta">Unsaved changes</span>
       <Button type="submit" variant="primary" {pending} disabled={locked !== undefined} reason={locked}>Save</Button>
       <Button variant="quiet" disabled={pending} onclick={onDiscard}>Discard</Button>
@@ -329,7 +336,7 @@
 </form>
 
 <Dialog bind:open={leaving} title="Leave without saving?" initialFocus="cancel" sheet={phone} onclose={onLeaveClosed}>
-  <p>Your changes to {group.title} are not saved. Leaving discards them.</p>
+  <p>Your changes to {title} are not saved. Leaving discards them.</p>
   {#snippet actions()}
     <Button variant="quiet" data-cancel onclick={onKeep}>Keep editing</Button>
     <Button variant="danger" onclick={onLeave}>Discard changes</Button>
