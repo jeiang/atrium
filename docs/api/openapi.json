@@ -4398,6 +4398,29 @@
         ],
         "type": "object"
       },
+      "Headroom": {
+        "properties": {
+          "ceiling_usd": {
+            "type": "number"
+          },
+          "class": {
+            "type": "string"
+          },
+          "headroom_usd": {
+            "type": "number"
+          },
+          "refused": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "class",
+          "ceiling_usd",
+          "headroom_usd",
+          "refused"
+        ],
+        "type": "object"
+      },
       "History": {
         "properties": {
           "leaf": {
@@ -13030,6 +13053,243 @@
           "key",
           "title",
           "url"
+        ],
+        "type": "object"
+      },
+      "Spend": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/InferenceStatus"
+          },
+          "by_class": {
+            "items": {
+              "$ref": "#/components/schemas/SpendSlice"
+            },
+            "type": "array"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/SpendDay"
+            },
+            "type": "array"
+          },
+          "by_kind": {
+            "items": {
+              "$ref": "#/components/schemas/SpendSlice"
+            },
+            "type": "array"
+          },
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/SpendSlice"
+            },
+            "type": "array"
+          },
+          "caps": {
+            "items": {
+              "$ref": "#/components/schemas/SpendCap"
+            },
+            "type": "array"
+          },
+          "headroom": {
+            "items": {
+              "$ref": "#/components/schemas/Headroom"
+            },
+            "type": "array"
+          },
+          "month": {
+            "type": "string"
+          },
+          "month_start": {
+            "type": "number"
+          },
+          "next_month": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string"
+          },
+          "top_runs": {
+            "items": {
+              "$ref": "#/components/schemas/SpendRun"
+            },
+            "type": "array"
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "month",
+          "month_start",
+          "next_month",
+          "budget",
+          "state",
+          "headroom",
+          "caps",
+          "by_class",
+          "by_kind",
+          "by_model",
+          "by_day",
+          "top_runs",
+          "topics"
+        ],
+        "type": "object"
+      },
+      "SpendCap": {
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "scope",
+          "unit",
+          "value",
+          "source",
+          "editable"
+        ],
+        "type": "object"
+      },
+      "SpendDay": {
+        "properties": {
+          "calls": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "committed_usd": {
+            "type": "number"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "calls",
+          "cost_usd",
+          "committed_usd"
+        ],
+        "type": "object"
+      },
+      "SpendRun": {
+        "properties": {
+          "calls": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "committed_usd": {
+            "type": "number"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "run_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "number"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "run_id",
+          "kind",
+          "model",
+          "started_at",
+          "calls",
+          "cost_usd",
+          "committed_usd"
+        ],
+        "type": "object"
+      },
+      "SpendSlice": {
+        "properties": {
+          "calls": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "committed_usd": {
+            "type": "number"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "calls",
+          "cost_usd",
+          "committed_usd"
         ],
         "type": "object"
       },
@@ -42926,6 +43186,128 @@
         ],
         "x-atrium-area": "home",
         "x-atrium-module": "core"
+      }
+    },
+    "/spend": {
+      "get": {
+        "operationId": "assistant.spend",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Spend"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "usage"
+        ],
+        "x-atrium-area": "usage",
+        "x-atrium-module": "assistant"
       }
     },
     "/subagents": {

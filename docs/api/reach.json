@@ -346,10 +346,11 @@
     {
       "area": "usage",
       "operations": [
+        "assistant.spend",
         "assistant.usage"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     }
   ],
   "approval_reached": [
@@ -398,7 +399,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 215,
-  "total_bound": 215,
+  "total_required": 216,
+  "total_bound": 216,
   "total_approval_reached": 11
 }

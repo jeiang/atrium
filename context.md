@@ -246,15 +246,33 @@ claims about the running application. Operator contracts are in
   carry into the new month until they settle or expire. A memory job refused
   by the monthly budget stays queued until the first of the next month, a
   thread-cap refusal retries with the normal backoff, and only a run-cap
-  refusal fails the job. When the budget is
-  exhausted,
-  scheduled jobs that need no model call still run. Each model has its own run
-  cost cap, checked against the next request written cold at the thread's
-  cache lifetime, as is a $10 thread cost cap over all runs of a thread and
-  its subagent threads, lowered by the cost cap chosen in the composer when
-  the thread was created. A run's spend includes its subagent runs, and every
-  subagent request is also checked against each parent run's cap. An
-  Anthropic spend-cap 429 stops the run as a budget stop.
+  refusal fails the job. When the budget is exhausted, scheduled jobs that
+  need no model call still run. One run cost cap, `max_run_cost_usd`
+  (default $10), applies to every catalog model; it replaced the per-model
+  `max_run_cost_usd_haiku_5_5`, `_sonnet_5_5` and `_opus_5_5` ($2, $6, $10),
+  which are retired: stored rows are ignored and an environment pin is logged
+  and ignored. The cap is checked against the next request written cold at
+  the thread's cache lifetime, as is a $10 thread cost cap over all runs of a
+  thread and its subagent threads, lowered by the cost cap chosen in the
+  composer when the thread was created. A run's spend includes its subagent
+  runs, and every subagent request is also checked against each parent run's
+  cap. Admission checks, in order, the run cap of the run and each ancestor,
+  the thread cap, a caller's source monthly cap, then the monthly budget
+  share of the request's class; a refusal happens before any provider call.
+  An Anthropic spend-cap 429 stops the run as a budget stop.
+  `GET /spend` (`assistant.spend`, both prefixes) is the Spend page model:
+  the month's budget status, per-class headroom (chat, scheduled,
+  classification) and a `state` of `ok`, `near` (scheduled work refused) or
+  `exhausted` (chat refused), the caps in force with value, source and
+  whether the page edits them (`monthly_budget_usd`, `max_run_cost_usd`,
+  written through the settings operations), the month's committed and
+  settled spend by budget class, by usage kind (`chat`, `cron`, `nightly`
+  dreaming, `worker` server ops, `subagent` research and web search,
+  `classification`, `memory`) and by model, a day series in the configured
+  time zone, and the ten largest runs with thread and job ids. Money is
+  USD numbers as in `GET /usage`. Its revision follows the `assistant` and
+  `settings` topics listed in `topics`, so it answers 304 until a run
+  records cost or a setting changes. `GET /usage` stays.
   Starting a thread and sending a message go through one pipeline for the
   chat page, `/api/v1` and `atrium agent run`: the assistant module must be
   on and the Anthropic connection configured before a run starts (else
