@@ -15,7 +15,7 @@
     inherit (goSrc) src;
     stageAssets = ''
       cp -r --no-preserve=mode ${self'.packages.atrium-static} internal/web/static
-      cp -r --no-preserve=mode ${self'.packages.atrium-web} internal/web/app/dist
+      cp -r --no-preserve=mode ${self'.packages.atrium-web.stub} internal/web/app/dist
     '';
     base = pkgs.buildGo126Module.override {inherit go;} {
       pname = "atrium-go";

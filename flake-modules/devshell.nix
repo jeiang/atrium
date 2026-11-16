@@ -62,6 +62,7 @@
           ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
           ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";
           npmDeps = "${webNodeModules}";
+          ATRIUM_WEB_STUB = "${self'.packages.atrium-web.stub}";
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           ATRIUM_MUSL_CC = "${pkgs.pkgsStatic.stdenv.cc}/bin/${pkgs.pkgsStatic.stdenv.cc.targetPrefix}cc";
@@ -73,7 +74,8 @@
         root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
         npmRoot=$root/web linkNodeModulesHook >/dev/null
         export ATRIUM_WEB_ASSETS=''${ATRIUM_WEB_ASSETS:-$root/web/dist}
-        [ -e "$root/internal/web/static/assets.json" ] && [ -e "$root/internal/web/app/dist/index.html" ] || just --justfile "$root/justfile" assets >&2
+        [ -e "$root/internal/web/static/assets.json" ] || just --justfile "$root/justfile" static-assets
+        [ -e "$root/internal/web/app/dist/index.html" ] || just --justfile "$root/justfile" web-stub
       '';
     };
   };

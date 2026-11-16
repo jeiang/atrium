@@ -93,19 +93,28 @@ check extraArgs="":
 fast-check extraArgs="":
   nix run nixpkgs#nix-fast-build -- --flake '.#checks' --skip-cached --no-nom {{extraArgs}}
 
-assets:
+assets: static-assets web-assets
+
+static-assets:
   rm -rf internal/web/static
   cp -R "${ATRIUM_STATIC_ASSETS:?set by the dev shell}" internal/web/static
   chmod -R u+w internal/web/static
+
+web-assets:
   [ "${ATRIUM_WEB_ASSETS:?set by the dev shell}" != "{{justfile_directory()}}/web/dist" ] || (cd web && npm run build)
   rm -rf internal/web/app/dist
   cp -R "$ATRIUM_WEB_ASSETS" internal/web/app/dist
   chmod -R u+w internal/web/app/dist
 
+web-stub:
+  rm -rf internal/web/app/dist
+  cp -R "${ATRIUM_WEB_STUB:?set by the dev shell}" internal/web/app/dist
+  chmod -R u+w internal/web/app/dist
+
 css mode="watch":
   #!/usr/bin/env bash
   set -euo pipefail
-  [ -e internal/web/static/assets.json ] || just assets
+  [ -e internal/web/static/assets.json ] || just static-assets
   mkdir -p internal/web/assets/node_modules/basecoat-css
   tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C internal/web/assets/node_modules/basecoat-css
   root=$PWD

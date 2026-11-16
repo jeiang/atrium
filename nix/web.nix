@@ -4,6 +4,7 @@
   importNpmLock,
   nodejs_24,
   brotli,
+  writeTextDir,
 }: let
   root = ../.;
   src = lib.fileset.toSource {
@@ -21,6 +22,10 @@
     ];
   };
   npmDeps = importNpmLock {npmRoot = root + "/web";};
+  stub = writeTextDir "index.html" ''
+    <!doctype html>
+    <title>atrium</title>
+  '';
   build = {
     pname,
     script,
@@ -52,6 +57,7 @@
         test -s $out/index.html
         runHook postInstall
       '';
+      passthru = {inherit stub;};
       meta.license = lib.licenses.mit;
     };
 in {
