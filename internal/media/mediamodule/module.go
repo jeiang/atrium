@@ -98,7 +98,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Tools:    m.ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			return module.Effects{
-				Undo:    media.Undo(d.Ledger, d.Env),
+				Undo:    mediaapp.Undo(d.Ledger, d.Env),
 				Resolve: media.Resolve(d.Ledger),
 			}
 		},

@@ -373,9 +373,9 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 				t.Fatalf("GET %s = %d, want %d", path, status, want)
 			}
 		}
-		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/settings/media", nil)
+		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/settings/torrents", nil)
 		if status != http.StatusOK || !strings.Contains(body, "Unavailable") || !strings.Contains(body, "data-unavailable") || !strings.Contains(body, "expires_at") || strings.Contains(body, "data-restart") {
-			t.Fatalf("media settings page = %d, want the unavailable state and its reason: %s", status, body)
+			t.Fatalf("torrents settings page = %d, want the unavailable state and its reason: %s", status, body)
 		}
 	})
 	t.Run("core", func(t *testing.T) {
