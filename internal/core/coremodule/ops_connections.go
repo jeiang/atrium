@@ -24,10 +24,11 @@ func connectionsOperations() ([]application.Definition, []application.Binding) {
 
 func connectionsDeclared() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
-			connectionsapp.DescribeList(), connectionsapp.DescribeOAuthSetup(), connectionsapp.DescribeTestSave(), connectionsapp.DescribeSaveFields(), connectionsapp.DescribeDisconnect(), connectionsapp.DescribeOAuthConfigure(), connectionsapp.DescribeOAuthStart(), connectionsapp.DescribeOAuthComplete(), connectionsapp.DescribeTest(), connectionsapp.DescribeObserveHealth(),
+			connectionsapp.DescribeList(), connectionsapp.DescribeOAuthSetup(), connectionsapp.DescribeTestSave(), connectionsapp.DescribeSaveFields(), connectionsapp.DescribeDisconnect(), connectionsapp.DescribeOAuthConfigure(), connectionsapp.DescribeOAuthStart(), connectionsapp.DescribeOAuthComplete(), connectionsapp.DescribeTest(), connectionsapp.DescribeObserveHealth(), connectionsapp.DescribeCheck(),
 		}, []application.Binding{
 			{Kind: application.CLI, Target: "connections list", Uses: []application.Name{connectionsapp.ListName}},
 			{Kind: application.CLI, Target: "connections test", Uses: []application.Name{connectionsapp.TestName}},
+			{Kind: application.CLI, Target: "connections check", Uses: []application.Name{connectionsapp.CheckName}},
 			{Kind: application.HTML, Target: "GET /settings/connections", Uses: []application.Name{connectionsapp.ListName}},
 			{Kind: application.HTML, Target: "POST /settings/connections/test", Uses: []application.Name{connectionsapp.TestSaveName, connectionsapp.ListName}},
 			{Kind: application.HTML, Target: "POST /settings/connections/disconnect", Uses: []application.Name{connectionsapp.DisconnectName}},
@@ -56,8 +57,10 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 			log.Warn("connection health check failed", logx.Err, err.Error())
 		}
 	}
-	observe(connectionsapp.ObserveHealthInput{Stale: true})
-	ticker := time.NewTicker(24 * time.Hour)
+	reports, stop := connections.Reports(d)
+	defer stop()
+	observe(connectionsapp.ObserveHealthInput{Start: true})
+	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
@@ -65,8 +68,12 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 			return ctx.Err()
 		case <-ticker.C:
 			observe(connectionsapp.ObserveHealthInput{})
-		case failed := <-connections.Failed():
-			observe(connectionsapp.ObserveHealthInput{ID: failed.ID})
+		case seen := <-connections.Outcomes():
+			observe(connectionsapp.ObserveHealthInput{ID: seen.ID, Recovered: seen.OK})
+		case r := <-reports:
+			if err := r.Record(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("connection outcome not recorded", logx.Integration, string(r.ID), logx.Err, err.Error())
+			}
 		}
 	}
 }

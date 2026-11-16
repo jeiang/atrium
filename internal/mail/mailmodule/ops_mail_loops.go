@@ -22,7 +22,6 @@ func mailLoopOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /watches", Uses: []application.Name{mailapp.PackagesName}},
 			{Kind: application.HTML, Target: "POST /watches/packages/{package_id}/dismiss", Uses: []application.Name{mailapp.PackageDismissName, mailapp.PackagesName}},
 			{Kind: application.Tool, Target: "open_loops", Uses: []application.Name{mailapp.OpenLoopsName}},
-			{Kind: application.Tool, Target: "commitments", Uses: []application.Name{mailapp.CommitmentsName}},
 			{Kind: application.Tool, Target: "packages", Uses: []application.Name{mailapp.PackagesName}},
 			{Kind: application.Tool, Target: "upcoming_birthdays", Uses: []application.Name{mailapp.UpcomingBirthdaysName}},
 			{Kind: application.Tool, Target: "track_package", Uses: []application.Name{mailapp.ProposeTrackingName}},

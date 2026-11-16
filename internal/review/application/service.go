@@ -63,6 +63,8 @@ func Describe() []application.Definition {
 		application.Describe[DismissInput, Decision](DismissName, application.Command, []application.Authority{application.Operator, application.PublicCapability}, application.NoEffect, true),
 		application.Describe[UndoInput, UndoResult](UndoName, application.Command, operator, application.Conditional, true),
 		application.Describe[ResolveInput, ResolveResult](ResolveName, application.Command, operator, application.NoEffect, true),
+		application.Describe[QueueInput, Queue](QueueName, application.Query, operator, application.NoEffect, false),
+		application.Describe[QueueItemInput, QueueItem](QueueItemName, application.Query, operator, application.NoEffect, false),
 	}
 }
 

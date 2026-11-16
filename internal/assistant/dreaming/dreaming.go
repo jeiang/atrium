@@ -36,7 +36,7 @@ const systemExtra = "Dreaming step. You consolidate the last day into the knowle
 	"When a signal shows a mistake (an undone write, a dismissed proposal, a failed run, a denied permission request), write a lesson record titled `Lesson: <short rule>` with the tool names as aliases and source.thread_id set to the thread where it happened. " +
 	"End with a short list of what you wrote."
 
-var allowedTools = []string{"kb_search", "kb_get", "kb_write", "kb_retract", "task_add", "task_list"}
+var allowedTools = []string{"kb_search", "kb_get", "kb_write", "kb_retract", "task_add", "commitment_list"}
 
 type gatheredThread struct {
 	id    int64

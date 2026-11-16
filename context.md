@@ -85,7 +85,7 @@ claims about the running application. Operator contracts are in
   scheduled threads, skipping private projects, plus a compact live-record
   index). It splits unmarked and marked sources into separate threads and
   runs Haiku write steps with `kb_search`, `kb_get`, `kb_write`, `kb_retract`,
-  `task_add`, and `task_list`.
+  `task_add`, and `commitment_list` (tasks only in a nightly run).
   The morning digest runs in code after the nightly run and posts a card of at most ten lines into the
   day's Today thread; with `digest_notify` on it also pushes the lines.
   Titles appear only for unmarked sources; marked items and records show
@@ -132,8 +132,45 @@ claims about the running application. Operator contracts are in
   and upcoming. The cron-only `attention` tool and the daily digest read it.
   Tasks are a core store with open, done and dismissed status, a
   due date, reminder time, priority and an optional source; the assistant can
-  list, add, update, complete and propose tasks, and the reminder job inserts
-  a task.
+  list (`commitment_list`), add (`task_add`), update (`task_update`), complete
+  or dismiss (`task_close`, chat only) and propose tasks, and the reminder job inserts
+  a task. The operator API (`/api/v1/tasks` and `/web/v1/tasks`) lists,
+  reads, creates, edits, completes, reopens, dismisses and deletes tasks.
+  Every write returns the task with its links and one ledger effect that
+  `POST /undo/write:<effect>` reverses; delete hard-deletes and its undo
+  reinserts the same row. Done, dismiss and reopen answer conflict when the
+  task is not in a status the verb leaves: only an open task can be completed
+  or dismissed. An edit may carry `updated_ts` and is refused with
+  a `stale` conflict when the task changed since. A task has at most one link
+  (`source_kind`/`source_id`): thread, project, person (an email address),
+  record or message; legacy `proposal` links are read-only. Links resolve to
+  a title, or null when the target is gone. The list orders open, done, then
+  dismissed, each by due date with undated tasks last, filters by status, due
+  window, link and text, and returns counts by status. Changing `remind_at`
+  re-arms the reminder.
+- To do and Waiting share one commitment resource, `GET /commitments` and
+  `GET /commitments/{ref}` (core routes, both prefixes), over the existing
+  `tasks` and `commitments` tables with no row move: an item's `ref` is
+  `task:<id>` or `commitment:<id>`, the same id `/queue` uses. Side `todo`
+  holds tasks and owner-`me` commitments, side `waiting` owner-`them`
+  commitments. Tasks are hidden when the assistant module is off and
+  commitments when mail is off. Items carry `owner`, `counterpart` (the
+  other address on the source message), links (a commitment links its
+  message and its reminder proposal, never the body) and `actions`. The
+  verbs `POST /commitments/{ref}/done|dismiss|reopen` write the owning
+  table with one undoable ledger effect: a task through the task verbs, a
+  commitment through the `commitment_status` effect, which restores the
+  previous status on undo. Reopen keeps the commitment's reminder proposal
+  id, so the reminder pass does not propose it again. `PATCH` and `DELETE`
+  on a commitment answer conflict `read_only`, because extraction would
+  re-insert a deleted row. `commitment_list` replaces the old `task_list`
+  and mail `commitments` tools; it lists commitments only in chat, cron and
+  subagent runs. `task_update` and `task_close` take a task ref and refuse a
+  commitment ref. `/tasks` and `/mail/commitments` keep their paths and
+  response shapes; `POST /mail/commitments/{id}/done|dismiss` and the open
+  loops page's buttons run the same commitment verbs, so they also write the
+  undoable `commitment_status` effect and answer conflict on a commitment
+  that is not open.
 - Open loops come from mail the operator actually needs to answer: the
   latest message must not be bulk or automated (List-Id, List-Unsubscribe,
   Precedence bulk/list/junk, Auto-Submitted, a bulk Gmail category, an
@@ -265,10 +302,12 @@ claims about the running application. Operator contracts are in
   OpenAI-compatible endpoint, local or hosted, with a CA bundle, proxy and
   host-file bearer. The endpoint package carries the resolved embed model,
   compiled body-character and batch constants and the dimension through the
-  request context. Each connection's Test records whether it works, and mail
-  is held in needs-settings only while an explicit Test of the current
-  embedding configuration fails; automatic health checks and runtime failures
-  update the connection's health without changing that hold. Connected content sent to a hosted model leaves
+  request context. Each connection's Test, boot check and daily sweep record
+  whether it works. Mail needs `service/embedding` configured; its health is
+  a soft need: while the connection is failing, unconfigured, disabled or
+  needs reauth, the mail settings header says why semantic features are
+  degraded, mail stays on, and the line clears when a check passes. No Test
+  result holds mail. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
@@ -294,6 +333,49 @@ claims about the running application. Operator contracts are in
   records a stored row that fails these rules as failing without sending a
   request. Credential slots must belong to the
   connection kind, and credential values remain write-only.
+- The health watch checks, at start and then hourly, every enabled
+  connection that was never checked (new or host-changed rows first) or
+  was last checked more than 24 hours ago by wall clock, so restarts do
+  not reset the schedule; at start it also rechecks failing and
+  needs-reauth rows. Runtime request failures trigger a check (at most
+  one per 5 minutes) in every state except disabled; a success while
+  failing triggers a recovery check. A first failing result notifies once,
+  also after a host change. A host-declared row dropped from the host file
+  is disabled with its credentials kept and announced once; runtime
+  observations do not change a disabled row.
+- In `serve`, IMAP dials (TCP, TLS, greeting, login), SMTP sessions and
+  iCloud mirror syncs report their outcome per capability through
+  `Lease.Report`, a non-blocking send to the health watch registered for
+  the same database (`connections.Reports`); with no watch, as in a
+  one-shot CLI command, the outcome is dropped. The same state is sent at
+  most once a minute per connection and capability. The health watch
+  records it with `Store.Observe` only when the capability's state class
+  (ok or expiring, failing or needs-reauth) changes, so these outcomes
+  never run inside a mail write and never fail one. Login refusals (IMAP
+  `NO` to LOGIN or AUTHENTICATE, marked `mail.ErrLoginRefused` and shared
+  with the scheduled check's classifier; SMTP 530-535; DAV 401/403) record
+  needs-reauth; connection, TLS and server errors record failing;
+  per-message errors and unknown SMTP outcomes record nothing. These kinds
+  have no grace window.
+  `connections test --all` uses the silent checks; `connections test <id>`
+  keeps the explicit test.
+- qBittorrent and the embedding endpoint have a 6-hour grace window,
+  compiled into their connection kinds. A failure right after an `ok` or
+  `expiring` state stores `failing` with the window end in its result;
+  reads show `away until <time UTC>` (CLI, Connections page, module
+  settings header) and add `grace_until` to the connection read model.
+  Inside the window no notice is sent, and recovery is silent. The first
+  check after the window that still fails shows plain `failing` and
+  notifies once; the hourly watch rechecks such rows. A failure from any
+  other state, including a host change, gets no window. Other kinds have
+  none.
+- `atrium connections check` runs the silent check of every configured
+  connection, and `--changed` only those never checked since they were
+  added or their host declaration changed. It exits non-zero when a
+  checked connection is failing (in its window or not) or needs reauth.
+  The NixOS unit runs `connections check --changed` as `ExecStartPre`
+  with failure ignored, so a deploy reports changed connections in the
+  unit journal before serve starts.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token) and EZTV (no credential) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
@@ -302,7 +384,9 @@ claims about the running application. Operator contracts are in
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
   `weather_longitude` and `weather_location_name`), validated in range and
-  read-only when the host file declares them. The Integrations page also has a Google OAuth wizard:
+  read-only when the host file declares them. Without a location name or
+  both coordinates, the weather connection checks as `unconfigured` and
+  probes nothing. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier
@@ -417,6 +501,8 @@ claims about the running application. Operator contracts are in
   `export_pages` and `attention_snoozes` stay; `skills` and
   `effect_import_refs` are read by nothing and are candidates for a later
   drop.
+  Migration 3 adds the `usage_counters` table and an `agent` column
+  (default 0) on `auth_bearers` and `auth_sessions`, with no row rewrite.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
@@ -598,7 +684,11 @@ claims about the running application. Operator contracts are in
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
   read-only. A module is on only when its flag is true
-  and its required settings are met (an `needs-settings` state otherwise);
+  and its required settings are met (an `needs-settings` state otherwise).
+  A soft need never holds a module: mail on `service/embedding`, the
+  assistant on `service/anthropic` and notifications on `service/webpush`
+  show the connection's state (for example `unconfigured`) on the module's
+  settings header while it is not healthy;
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
@@ -682,7 +772,20 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery. The ops listener also serves
+  notification delivery, and `atrium_scheduler_job_runs_total{scheduled_job,status}`,
+  which counts finished runs from the stored run history at scrape time, so it
+  survives restarts; operator schedules share the label `operator_schedule`,
+  consecutive identical skips stored as one run count once, and within one
+  process the value never falls below what it last reported. Requests are
+  also counted per day, surface (`page`, `api`, `web`), method, route
+  pattern (`unmatched` for unknown paths, static files and `/healthz` skipped)
+  and agent mark in `usage_counters`: batched in memory, saved every minute
+  and at shutdown in one transaction that prunes days older than 400, exported
+  as `atrium_http_route_requests_total{surface,method,route,agent}` from the
+  saved rows, and listed by `atrium usage routes`. A request is agent traffic
+  when its bearer token was issued with `--agent`, or it sends
+  `Atrium-Agent: 1`, which under OIDC also marks the session row for good; the
+  mark grants nothing and shows in the token list and `/web/v1/session`. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   Pass staleness (the `passes` readiness check, `atrium_job_stale`,
@@ -947,12 +1050,13 @@ claims about the running application. Operator contracts are in
   `contacts_lookup` returns name and organisation and marks nothing;
   emails, phones and dates come back only through `include` and mark
   `pii`. Empty results of `mail_search`, `calendar_list`, `file_search`,
-  `search_threads`, `packages`, `open_loops`, `commitments`,
+  `search_threads`, `packages`, `open_loops`,
   `upcoming_birthdays` and `attention` mark nothing. `mail_read` marks
   `pii` for headers and `messages`/`untrusted` for a body or attachment
   names; `mail_search` marks `pii` for addresses and
-  `messages`/`untrusted` for subjects and snippets; `open_loops`,
-  `commitments` and `packages` mark the fields they return the same way.
+  `messages`/`untrusted` for subjects and snippets; `open_loops` and
+  `packages` mark the fields they return the same way; `commitment_list`
+  adds `messages` and `untrusted` for commitments and `pii` for a counterpart.
   A non-empty `calendar_list` marks `messages` and `untrusted`; `find_slot`
   marks `messages`. `file_read` and a non-empty `file_search` mark
   `messages` and `untrusted`. `search_threads` and `zoom` mark `messages`
@@ -968,7 +1072,7 @@ claims about the running application. Operator contracts are in
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,
-  `plan` declares none. `task_list` and `schedule_list` declare all four as their
+  `plan` declares none. `commitment_list` and `schedule_list` declare all four as their
   bound and return the marks of the threads that wrote the listed rows;
   they mark nothing when those threads were clean. A cron thread starts with
   the marks of the thread that wrote its schedule unless the operator wrote
@@ -1220,6 +1324,22 @@ claims about the running application. Operator contracts are in
   `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
   and it never controls the old UI's pages, while it does see every request
   a `/next/` page makes, `/web/v1` writes included.
+- The one inbox is `GET /queue` (both prefixes): parked `ask_operator`
+  questions and permission requests (`ask`), pending and outcome-unknown
+  proposals (`proposal`), drafts to send or resolve (`draft`), and
+  overdue, due-soon and needs-decision attention items (`attention`;
+  waiting-on-them loops and packages are left out). Order: asks oldest
+  first, then items with a due time by due, then the rest oldest first,
+  ties on id. A module that is off hides only its own items. `total` and
+  `counts` ignore the filter and page and are the Needs you count of
+  `/shell` and the web badge, computed by the same function
+  (`reviewapp.Service.NeedsCount`). Item ids are
+  `<source type>:<source id>`; `GET /queue/{item_id}` returns one item, so
+  `proposal:<id>` and `draft:<id>` resolve the old proposal and draft
+  addresses. `GET /pending` keeps its older proposals-plus-drafts count.
+  Operations may carry an OpenAPI `description`
+  (`application.APIShape.Description`); the queue's lists the topics to
+  refetch on.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open

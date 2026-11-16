@@ -46,18 +46,23 @@ func insertSession(ctx context.Context, tx *sql.Tx, s sessionInsert) error {
 	return err
 }
 
-const sessionColumns = "id, subject, email, name, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified"
+const sessionColumns = "id, subject, email, name, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, agent"
 
 func (s *Service) loadRow(ctx context.Context, hash string) (row, error) {
 	var r row
 	var verified int
 	err := s.d.Read.QueryRowContext(ctx, "SELECT "+sessionColumns+" FROM auth_sessions WHERE token_hash = ?", hash).
-		Scan(&r.id, &r.Subject, &r.Email, &r.Name, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified)
+		Scan(&r.id, &r.Subject, &r.Email, &r.Name, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.Agent)
 	r.emailVerified = verified == 1
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNoSession
 	}
 	return r, err
+}
+
+func (s *Service) MarkAgent(ctx context.Context, token string) error {
+	_, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET agent = 1 WHERE token_hash = ? AND agent = 0", digest(token))
+	return err
 }
 
 type timing struct{ idle, recheck time.Duration }

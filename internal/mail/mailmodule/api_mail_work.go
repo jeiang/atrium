@@ -8,11 +8,13 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
@@ -227,7 +229,22 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 	svc := func() *mailapp.Service { return service }
 	passes := mailPasses{d: d, m: m}
 	if d != nil {
-		service = mailPageService(d)
+		open := imapclient.Opener(d.Cfg)
+		if m.Clients != nil {
+			open = m.Clients(d.Cfg)
+		}
+		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, mail.WallClock)
+		if err != nil {
+			panic(err)
+		}
+		d.DrainOnStop(effects.Drain)
+		service = mailPageService(d).WithCommitments(commitmentsapp.New(d.DB, effects, mail.WallClock))
+	}
+	modules := func(ctx context.Context) context.Context {
+		if module.SetFrom(ctx) == nil {
+			return module.WithSet(ctx, module.SetFrom(d.Ctx))
+		}
+		return ctx
 	}
 	const area = "mail"
 	return []application.Binding{
@@ -281,11 +298,11 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			r, err := svc().LoopsDismissMatching(ctx, mailapp.LoopsDismissMatchingInput{State: in.State})
 			return application.Change[MailLoopsDismissed]{Data: MailLoopsDismissed{Count: r.Data.Count}, AuditID: r.AuditID}, err
 		}),
-		api.Command(d, mailapp.DescribeCommitmentDone(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/commitments/{commitment_id}/done", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
-			return svc().CommitmentDone(ctx, mailapp.CommitmentInput{ID: in.ID})
+		api.Command(d, mailapp.DescribeCommitmentDone(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound, application.Conflict}}, "POST /mail/commitments/{commitment_id}/done", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
+			return svc().CommitmentDone(modules(ctx), mailapp.CommitmentInput{ID: in.ID})
 		}),
-		api.Command(d, mailapp.DescribeCommitmentDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/commitments/{commitment_id}/dismiss", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
-			return svc().CommitmentDismiss(ctx, mailapp.CommitmentInput{ID: in.ID})
+		api.Command(d, mailapp.DescribeCommitmentDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound, application.Conflict}}, "POST /mail/commitments/{commitment_id}/dismiss", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
+			return svc().CommitmentDismiss(modules(ctx), mailapp.CommitmentInput{ID: in.ID})
 		}),
 		api.Command(d, mailapp.DescribePackageDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/packages/{package_id}/dismiss", func(ctx context.Context, in MailPackageRef) (application.Change[struct{}], error) {
 			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})

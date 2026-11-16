@@ -25,10 +25,6 @@ var openLoopsSchema = json.RawMessage(`{"type":"object","properties":{"state":{"
 	enum(mailapp.LoopStates[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
 	`"additionalProperties":false}`)
 
-var commitmentsSchema = json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","enum":` +
-	enum(mailapp.CommitmentStatuses[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
-	`"additionalProperties":false}`)
-
 func openLoopTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	return []tool.Tool{
 		{
@@ -42,19 +38,6 @@ func openLoopTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 			Effect:    tool.Read,
 			Annotated: true,
 			Marks:     tool.PII | tool.Messages | tool.Untrusted,
-			Contexts:  loopKinds,
-		},
-		{
-			Name: "commitments",
-			Description: "List explicit commitments and deadlines extracted from mail (owner 'me' = the operator promised, " +
-				"'them' = the other party). due is an explicit date or null. Status defaults to all.",
-			InputSchema: commitmentsSchema,
-			Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-				return commitments(ctx, tc, args, svc)
-			},
-			Effect:    tool.Read,
-			Annotated: true,
-			Marks:     tool.Messages | tool.Untrusted,
 			Contexts:  loopKinds,
 		},
 	}
@@ -106,47 +89,4 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*
 		loops[i] = map[string]any{"state": l.State, "message_id": l.LastMessageID, "counterpart": l.Counterpart, "subject": tool.Clip(l.Subject, 200), "days_open": l.Days, "since": localTime(l.Since, loc).Format("2006-01-02T15:04"), "account": l.Account}
 	}
 	return tool.Marked{Value: map[string]any{"loops": loops, "note": "owe_reply: the last message in the thread is theirs and awaits the operator; waiting_on_them: the operator wrote last."}, Marks: marks}, nil
-}
-
-func commitments(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
-	status, err := oneOf(args, "status", mailapp.CommitmentStatuses[:])
-	if err != nil {
-		return nil, err
-	}
-	limit, err := loopsLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
-	if err != nil {
-		return nil, err
-	}
-	read, err := svc(tc).Commitments(ctx, mailapp.CommitmentsInput{Status: status, Limit: int(limit)})
-	if err != nil {
-		return nil, err
-	}
-	items := read.Data.Commitments
-	out := make([]any, len(items))
-	marks := tool.Marks(0)
-	for i, c := range items {
-		subject := ""
-		if c.Subject != nil {
-			subject = *c.Subject
-		}
-		if c.Text != "" || subject != "" {
-			marks |= tool.Messages | tool.Untrusted
-		}
-		out[i] = map[string]any{"text": c.Text, "owner": c.Owner, "due": nilString(c.Due), "status": c.Status, "message_id": c.MessageID, "subject": tool.Clip(subject, 200), "reminder_proposal_id": nilInt(c.ProposalID)}
-	}
-	return tool.Marked{Value: map[string]any{"commitments": out}, Marks: marks}, nil
-}
-
-func nilString(p *string) any {
-	if p == nil {
-		return nil
-	}
-	return *p
-}
-
-func nilInt(p *int64) any {
-	if p == nil {
-		return nil
-	}
-	return *p
 }
