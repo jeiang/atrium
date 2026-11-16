@@ -20,7 +20,13 @@ import (
 	"github.com/jeiang/atrium/internal/unit"
 )
 
-const feedReadersWant = ``
+const feedReadersWant = `1|Power bill 1|none|
+2|Power bill 2|none|
+91|Invitation: Dentist appointment|proposed|calendar invitation
+calendar_event|calendar|pending|Add to calendar: Dentist appointment (2027-10-20 14:00)|{"calendar":"icloud","spec":{"uid":"dentist-20271020@clinic.example","title":"Dentist appointment","start":"2027-10-20T14:00:00+00:00","end":"2027-10-20T15:00:00+00:00","all_day":false,"location":"Clinic Room 2","notes":"Routine check-up"},"source":{"from":"calendar@clinic.example","invitation":true,"message_id":91,"subject":"Invitation: Dentist appointment"}}|{"calendar":"icloud","title":"Dentist appointment","start":"2027-10-20T14:00:00+00:00","end":"2027-10-20T15:00:00+00:00","all_day":false,"location":"Clinic Room 2","notes":"Routine check-up","source":{"from":"calendar@clinic.example","invitation":true,"message_id":91,"subject":"Invitation: Dentist appointment"}}
+calendar candidates: exit 0 candidates 2 proposed 0
+Message ids: <icloud> (calendar=icloud), <gmail> (calendar=google)
+`
 
 func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 	t.Parallel()
@@ -81,7 +87,7 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 			for i, v := range vals {
 				parts[i] = v.String
 			}
-			return strings.Join(parts, " | "), nil
+			return strings.Join(parts, "|"), nil
 		})
 		if err != nil {
 			t.Fatal(err)
