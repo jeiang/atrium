@@ -16,7 +16,6 @@
   <ul class="flex flex-col gap-3" role="list" aria-label="{{$s.Dir}} episodes">
     {{range $s.Episodes}}
     <li class="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center">
-      <img class="aspect-video w-full rounded-md bg-muted object-cover sm:w-40" src="/apps/media/thumb/{{urlencode .Rel}}" alt="" loading="lazy">
       <div class="flex min-w-0 flex-1 flex-col gap-2">
         <span class="text-sm font-medium">{{if not (isnil .Episode)}}Episode {{.Episode}}{{else}}{{.Name}}{{end}}</span>
         <span class="break-all font-mono text-xs text-muted-foreground">{{.Name}} · {{printf "%.1f" (fdiv .Size 1e9)}} GB</span>

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
@@ -134,7 +135,7 @@ func (s *Service) Read(ctx context.Context, in ReadInput) (application.Read[Sett
 		}
 		out.Fields = views
 	}
-	revision, err := s.revision(ctx, string(ReadName), in)
+	revision, err := s.Revision(ctx, nil)
 	if err != nil {
 		return application.Read[Settings]{}, err
 	}
@@ -212,6 +213,92 @@ func (s *Service) Set(ctx context.Context, in SetInput) (application.Change[Chan
 		return application.Change[Changed]{}, err
 	}
 	return application.Change[Changed]{Data: Changed{Keys: keys}, AuditID: id}, nil
+}
+
+type PatchInput struct {
+	Values   []Value
+	IfMatch  string
+	Validate func(context.Context, db.Querier, map[string]string) error
+}
+
+type Patched struct {
+	Keys     []string             `json:"keys"`
+	Revision application.Revision `json:"revision"`
+}
+
+func (s *Service) Revision(ctx context.Context, q db.Querier) (application.Revision, error) {
+	counters, err := s.state.Read(ctx, q, []string{state.Settings})
+	if err != nil {
+		return "", err
+	}
+	return application.Revision(state.Revision(string(ReadName), counters, nil, "")), nil
+}
+
+func (s *Service) current(ctx context.Context, q db.Querier, ifMatch string) error {
+	if strings.TrimSpace(ifMatch) == "" {
+		return nil
+	}
+	revision, err := s.Revision(ctx, q)
+	if err != nil {
+		return err
+	}
+	for tag := range strings.SplitSeq(ifMatch, ",") {
+		tag = strings.TrimSpace(tag)
+		if tag == "*" || strings.Trim(strings.TrimPrefix(tag, "W/"), `"`) == string(revision) {
+			return nil
+		}
+	}
+	return &application.Error{Code: application.Precondition, Message: "The settings changed since they were read; reload them and try again."}
+}
+
+func (s *Service) Patch(ctx context.Context, in PatchInput) (application.Change[Patched], error) {
+	keys := make([]string, 0, len(in.Values))
+	for _, v := range in.Values {
+		keys = append(keys, v.Key)
+	}
+	if err := s.current(ctx, nil, in.IfMatch); err != nil {
+		details, marshalErr := detailsOf(keys)
+		if marshalErr != nil {
+			return application.Change[Patched]{}, marshalErr
+		}
+		return application.Change[Patched]{}, s.refuse(ctx, SetName, targetOf(keys), details, err)
+	}
+	values, err := s.validated(ctx, SetInput{Values: in.Values, Validate: in.Validate})
+	if err != nil {
+		return application.Change[Patched]{}, err
+	}
+	keys = keys[:0]
+	changes := make([]settings.Change, 0, len(values))
+	for _, v := range values {
+		keys = append(keys, v.Key)
+		changes = append(changes, settings.Change{Key: v.Key, Value: v.Value, Unset: v.Unset})
+	}
+	id, err := s.command(ctx, SetName, targetOf(keys), keys, func(tx *sql.Tx) (bool, error) {
+		if err := s.current(ctx, tx, in.IfMatch); err != nil {
+			return false, err
+		}
+		for _, v := range values {
+			if s.operatorKeys {
+				if _, err := operatorKey(ctx, v.Key, true); err != nil {
+					return false, err
+				}
+			}
+			if !v.Unset && s.guard != nil {
+				if err := s.guard(ctx, tx, v.Key, v.Value); err != nil {
+					return false, refusedError{err: err}
+				}
+			}
+		}
+		return len(changes) > 0, settings.From(ctx).SetAll(ctx, tx, changes)
+	})
+	if err != nil {
+		return application.Change[Patched]{}, err
+	}
+	revision, err := s.Revision(ctx, nil)
+	if err != nil {
+		return application.Change[Patched]{}, err
+	}
+	return application.Change[Patched]{Data: Patched{Keys: keys, Revision: revision}, AuditID: id}, nil
 }
 
 func (s *Service) validated(ctx context.Context, in SetInput) ([]Value, error) {

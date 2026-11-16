@@ -112,7 +112,7 @@ func (w *webPush) Send(ctx context.Context, device Device, wake Wakeup) (out Del
 	if !wake.FullText {
 		title, body = privateTitle, privateBody
 	}
-	payload, err := json.Marshal(pushPayload{Title: title, Body: body, URL: wake.URL, Actions: pushActions(wake.Actions)})
+	payload, err := json.Marshal(pushPayload{Title: title, Body: body, URL: wake.URL})
 	if err != nil {
 		return Delivery{}, err
 	}

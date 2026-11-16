@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -49,7 +48,6 @@ type Agent struct {
 	quarantined []string
 	imports     importSnapshots
 	library     librarySnapshots
-	thumbs      *thumbnailer
 	work        context.Context
 	stopWork    context.CancelFunc
 	filings     sync.WaitGroup
@@ -104,8 +102,6 @@ func New(c Config) (*Agent, error) {
 		_ = a.state.close()
 		return nil, err
 	}
-	a.thumbs = newThumbnailer()
-	pruneThumbnails(filepath.Join(c.CacheDirectory, "thumbs"))
 	a.work, a.stopWork = context.WithCancel(context.Background())
 	a.settled.Store(true)
 	return a, nil
@@ -309,9 +305,5 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (a *Agent) capabilities() []string {
-	c := []string{protocol.CapabilityFile, protocol.CapabilityScan, protocol.CapabilityStream}
-	if a.thumbs != nil {
-		c = append(c, protocol.CapabilityThumbnail)
-	}
-	return c
+	return []string{protocol.CapabilityFile, protocol.CapabilityScan, protocol.CapabilityStream}
 }

@@ -34,7 +34,6 @@ type Runtime struct {
 	Reads   *reviewapp.Service
 	Review  func() *reviewapp.Service
 	Scanner func(func() float64) *mailapp.Service
-	Namer   func(context.Context) (mailapp.Namer, error)
 }
 
 func (o Options) now() float64 {
@@ -134,14 +133,7 @@ func Command(o Options) *cli.Command {
 				if !scanner.ScansEnabled(x.Ctx) {
 					return nil
 				}
-				if x.Namer == nil {
-					return errors.New("proposal scans are not bound to a classifier")
-				}
-				namer, err := x.Namer(x.Ctx)
-				if err != nil {
-					return err
-				}
-				out, err := scanner.WithNamer(namer).ManualScans(x.Ctx, x.Now())
+				out, err := scanner.ManualScans(x.Ctx, x.Now())
 				if err != nil {
 					return err
 				}

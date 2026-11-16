@@ -28,7 +28,6 @@ type Kind struct {
 	Icon     string
 	Picker   bool
 	Groups   bool
-	Group    bool
 	Messages bool
 	CountKey string
 	Approval bool

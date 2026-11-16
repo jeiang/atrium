@@ -50,7 +50,6 @@ func libraryOperations() ([]application.Definition, []application.Binding) {
 			mediaapp.DescribeLibrary(),
 			mediaapp.DescribeLibraryDetail(),
 			mediaapp.DescribeArt(),
-			mediaapp.DescribeThumbnail(),
 			mediaapp.DescribeFile(),
 		}, []application.Binding{
 			{Kind: application.HTML, Target: "GET /apps/media/library", Uses: []application.Name{mediaapp.LibraryName}},
@@ -59,7 +58,6 @@ func libraryOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /apps/media/library/tv/{name}", Uses: []application.Name{mediaapp.LibraryDetailName}},
 			{Kind: application.HTML, Target: "GET /apps/media/art/season/{name}/{number}", Uses: []application.Name{mediaapp.ArtName}},
 			{Kind: application.HTML, Target: "GET /apps/media/art/{kind}/{name}", Uses: []application.Name{mediaapp.ArtName}},
-			{Kind: application.HTML, Target: "GET /apps/media/thumb/*", Uses: []application.Name{mediaapp.ThumbnailName}},
 			{Kind: application.HTML, Target: "GET /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
 			{Kind: application.HTML, Target: "HEAD /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
 		}
@@ -71,7 +69,6 @@ func filingOperations() ([]application.Definition, []application.Binding) {
 			mediaapp.DescribeFileItem(),
 			mediaapp.DescribeIgnore(),
 			mediaapp.DescribeSweep(),
-			mediaapp.DescribeThumbnails(),
 			mediaapp.DescribeFilingInspect(),
 		}, []application.Binding{
 			{Kind: application.HTML, Target: "POST /apps/media/file", Uses: []application.Name{mediaapp.FilingPreviewName, mediaapp.FileItemName, mediaapp.DownloadsName}},
@@ -79,6 +76,5 @@ func filingOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.CLI, Target: "media sweep", Uses: []application.Name{mediaapp.SweepName}},
 			{Kind: application.CLI, Target: "media inspect-filing", Uses: []application.Name{mediaapp.FilingInspectName}},
 			{Kind: application.Job, Target: "media/media-sweep", Uses: []application.Name{mediaapp.SweepName}},
-			{Kind: application.Job, Target: "media/media-thumbnails", Uses: []application.Name{mediaapp.ThumbnailsName}},
 		}
 }

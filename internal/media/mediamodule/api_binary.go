@@ -79,13 +79,7 @@ func mediaBinaryRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 			return mediaRelay(s.OperatorFile(ctx, mediaapp.FileInput{Rel: rel, Method: method, Range: in.Range, IfRange: in.IfRange, IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince}))
 		}))
 	}
-	routes = append(routes, api.Query(d, mediaapp.DescribeThumbnail(), mediaBinaryShape(), "GET /media/files/{file_id}/thumbnail", func(ctx context.Context, in MediaContentInput) (application.Read[api.Binary], error) {
-		rel, err := mediaDecode(in.ID)
-		if err != nil {
-			return application.Read[api.Binary]{}, err
-		}
-		return mediaRelay(s.Thumbnail(ctx, mediaapp.ThumbnailInput{Rel: rel, Method: http.MethodGet, IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince}))
-	}), api.Query(d, mediaapp.DescribeArt(), mediaBinaryShape(), "GET /media/art/{kind}/{id}", func(ctx context.Context, in MediaArtInput) (application.Read[api.Binary], error) {
+	routes = append(routes, api.Query(d, mediaapp.DescribeArt(), mediaBinaryShape(), "GET /media/art/{kind}/{id}", func(ctx context.Context, in MediaArtInput) (application.Read[api.Binary], error) {
 		name, err := mediaDecode(in.ID)
 		if err != nil {
 			return application.Read[api.Binary]{}, err

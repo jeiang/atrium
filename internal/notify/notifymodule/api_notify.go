@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/notify"
@@ -69,23 +68,11 @@ type NotificationSettings struct {
 	Channels []notify.Channel            `json:"channels"`
 	Error    string                      `json:"error"`
 	Push     notifyapp.PushConfiguration `json:"push"`
-	Phone    PhoneSettings               `json:"phone"`
-}
-
-type PhoneSettings struct {
-	Enabled     bool                `json:"enabled"`
-	Kinds       []notifyapp.KindRow `json:"kinds"`
-	Outstanding int                 `json:"outstanding"`
 }
 
 type ChannelContent struct {
 	Channel string `path:"channel" json:"-"`
 	Content string `json:"content"`
-}
-
-type PhonePolicy struct {
-	Enabled bool     `json:"enabled,omitempty"`
-	Kinds   []string `json:"kinds,omitempty"`
 }
 
 func notificationRoutes(d *web.Deps, svc *notifyapp.Service) []application.Binding {
@@ -142,7 +129,6 @@ func notificationRoutes(d *web.Deps, svc *notifyapp.Service) []application.Bindi
 				c := read.Data
 				return application.Read[NotificationSettings]{Data: NotificationSettings{
 					Channels: c.Channels, Error: c.Error, Push: c.Push,
-					Phone: PhoneSettings{Enabled: c.Phone.Enabled, Kinds: c.Phone.Kinds, Outstanding: c.Phone.Outstanding},
 				}, Revision: read.Revision}, nil
 			}),
 		api.Command(d, defs[notifyapp.ChannelContentName], shape("devices", nil, http.StatusNoContent, application.Refused), "PUT /notifications/channels/{channel}",
@@ -163,23 +149,6 @@ func notificationRoutes(d *web.Deps, svc *notifyapp.Service) []application.Bindi
 				change, err := svc.Test(ctx, in)
 				t := change.Data
 				return application.Change[DeviceTestResult]{Data: DeviceTestResult{Sent: t.Sent, Failure: t.Failure, Outcome: t.Outcome}, AuditID: change.AuditID}, err
-			}),
-		api.Command(d, defs[notifyapp.PhonePolicyName], shape("permissions", nil, http.StatusNoContent, application.Invalid), "PUT /permissions/phone",
-			func(ctx context.Context, in PhonePolicy) (application.Change[notifyapp.Empty], error) {
-				var fields []application.Field
-				for _, kind := range in.Kinds {
-					if policy.WebOnly[kind] {
-						fields = append(fields, application.Field{Name: "kinds", Code: "web_only", Message: kind + " can only be decided on the web."})
-					}
-				}
-				if fields != nil {
-					return application.Change[notifyapp.Empty]{}, &application.Error{Code: application.Invalid, Message: "Some kinds cannot be decided from a phone.", Fields: fields}
-				}
-				return svc.PhonePolicy(ctx, notifyapp.PhonePolicyInput{Enabled: in.Enabled, Kinds: in.Kinds})
-			}),
-		api.Command(d, defs[notifyapp.RevokeLinksName], shape("permissions", nil, http.StatusNoContent), "POST /permissions/phone/revoke-links",
-			func(ctx context.Context, in notifyapp.Empty) (application.Change[notifyapp.Empty], error) {
-				return svc.RevokeLinks(ctx, in)
 			}),
 	}
 }

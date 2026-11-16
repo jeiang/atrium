@@ -86,6 +86,16 @@
             },
             "type": "array"
           },
+          "change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalChange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "kind": {
             "const": "action",
             "type": "string"
@@ -109,39 +119,8 @@
           "label",
           "args",
           "preview",
+          "change",
           "result"
-        ],
-        "type": "object"
-      },
-      "ActionRef": {
-        "properties": {
-          "decision": {
-            "type": "string"
-          },
-          "expires_at": {
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "target_id": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "target_id",
-          "decision",
-          "label"
         ],
         "type": "object"
       },
@@ -324,6 +303,148 @@
         },
         "required": [
           "text"
+        ],
+        "type": "object"
+      },
+      "AppAbout": {
+        "properties": {
+          "api_version": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "build": {
+            "type": "string"
+          },
+          "go_version": {
+            "type": "string"
+          },
+          "modules": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleState"
+            },
+            "type": "array"
+          },
+          "schema_version": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "go_version",
+          "api_version",
+          "schema_version",
+          "modules"
+        ],
+        "type": "object"
+      },
+      "AppEvent": {
+        "anyOf": [
+          {
+            "discriminator": {
+              "mapping": {
+                "change": "#/components/schemas/AppEventChange",
+                "sync": "#/components/schemas/AppEventSync"
+              },
+              "propertyName": "event"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AppEventSync"
+              },
+              {
+                "$ref": "#/components/schemas/AppEventChange"
+              }
+            ]
+          },
+          {
+            "properties": {
+              "data": {
+                "type": "object"
+              },
+              "event": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "event",
+              "data"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AppEventChange": {
+        "properties": {
+          "data": {
+            "properties": {
+              "revision": {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "topic": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "topic",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "event": {
+            "const": "change",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AppEventSync": {
+        "properties": {
+          "data": {
+            "properties": {
+              "topics": {
+                "items": {
+                  "properties": {
+                    "revision": {
+                      "format": "int64",
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    "topic": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "topic",
+                    "revision"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "topics"
+            ],
+            "type": "object"
+          },
+          "event": {
+            "const": "sync",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "data"
         ],
         "type": "object"
       },
@@ -1055,6 +1176,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1079,6 +1203,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1103,6 +1230,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1127,6 +1257,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1151,6 +1284,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1175,6 +1311,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1199,6 +1338,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1223,6 +1365,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1247,6 +1392,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1271,6 +1419,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1295,6 +1446,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1319,6 +1473,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1343,6 +1500,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1367,6 +1527,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1391,6 +1554,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1415,6 +1581,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1439,6 +1608,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1463,6 +1635,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1487,6 +1662,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1511,6 +1689,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1535,6 +1716,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1559,6 +1743,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1583,6 +1770,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1607,6 +1797,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1631,6 +1824,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1655,6 +1851,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1679,6 +1878,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1703,6 +1905,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1727,6 +1932,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1751,6 +1959,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1775,6 +1986,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1799,6 +2013,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1823,6 +2040,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1847,6 +2067,36 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ChangeSettingsPatched": {
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SettingsPatched"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1871,6 +2121,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1895,6 +2148,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1919,6 +2175,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -2231,6 +2490,38 @@
         ],
         "type": "object"
       },
+      "ConnectionField": {
+        "properties": {
+          "host_owned": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "text",
+              "url",
+              "secret"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "secret",
+          "host_owned",
+          "present"
+        ],
+        "type": "object"
+      },
       "ConnectionFields": {
         "additionalProperties": false,
         "properties": {
@@ -2248,6 +2539,24 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ConnectionKindSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionField"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "fields"
+        ],
         "type": "object"
       },
       "ConnectionResult": {
@@ -2270,6 +2579,32 @@
         "required": [
           "capability",
           "state"
+        ],
+        "type": "object"
+      },
+      "ConnectionSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionField"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "fields"
         ],
         "type": "object"
       },
@@ -2376,6 +2711,27 @@
           }
         },
         "required": [
+          "connections"
+        ],
+        "type": "object"
+      },
+      "ConnectionsSchema": {
+        "properties": {
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionSchema"
+            },
+            "type": "array"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionKindSchema"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kinds",
           "connections"
         ],
         "type": "object"
@@ -2552,6 +2908,54 @@
         ],
         "type": "object"
       },
+      "Current": {
+        "properties": {
+          "apparent_c": {
+            "type": "number"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "humidity": {
+            "type": "number"
+          },
+          "is_day": {
+            "type": "boolean"
+          },
+          "precipitation_mm": {
+            "type": "number"
+          },
+          "temperature_c": {
+            "type": "number"
+          },
+          "time": {
+            "type": "string"
+          },
+          "weather_code": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "wind_direction": {
+            "type": "number"
+          },
+          "wind_kmh": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "temperature_c",
+          "apparent_c",
+          "humidity",
+          "precipitation_mm",
+          "weather_code",
+          "condition",
+          "wind_kmh",
+          "wind_direction",
+          "is_day"
+        ],
+        "type": "object"
+      },
       "DatabaseCheck": {
         "properties": {
           "encryption": {
@@ -2575,6 +2979,44 @@
           "opened",
           "intact",
           "tables"
+        ],
+        "type": "object"
+      },
+      "Day": {
+        "properties": {
+          "condition": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "high_c": {
+            "type": "number"
+          },
+          "low_c": {
+            "type": "number"
+          },
+          "precipitation_probability": {
+            "type": "number"
+          },
+          "sunrise": {
+            "type": "string"
+          },
+          "sunset": {
+            "type": "string"
+          },
+          "weather_code": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "high_c",
+          "low_c",
+          "precipitation_probability",
+          "weather_code",
+          "condition"
         ],
         "type": "object"
       },
@@ -3264,12 +3706,14 @@
                       "auth_unavailable",
                       "bad_cursor",
                       "bad_request",
+                      "bearer_refused",
                       "budget_exceeded",
                       "canceled",
                       "command_interrupted",
                       "command_result_withheld",
                       "conflict",
                       "cross_origin",
+                      "csrf_failed",
                       "effect_partial",
                       "effect_unknown",
                       "forbidden",
@@ -3285,6 +3729,7 @@
                       "not_configured",
                       "not_found",
                       "nothing_to_edit",
+                      "precondition_failed",
                       "project_archived",
                       "rate_limited",
                       "read_only_thread",
@@ -3890,6 +4335,16 @@
           "view": {
             "type": "string"
           },
+          "weather": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeWeather"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "welcome": {
             "type": "boolean"
           }
@@ -3904,6 +4359,70 @@
           "agenda",
           "defaults",
           "composer"
+        ],
+        "type": "object"
+      },
+      "HomeWeather": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/Current"
+          },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/Hour"
+            },
+            "type": "array"
+          },
+          "location": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Day"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "location",
+          "timezone",
+          "current",
+          "hours"
+        ],
+        "type": "object"
+      },
+      "Hour": {
+        "properties": {
+          "condition": {
+            "type": "string"
+          },
+          "precipitation_probability": {
+            "type": "number"
+          },
+          "temperature_c": {
+            "type": "number"
+          },
+          "time": {
+            "type": "string"
+          },
+          "weather_code": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "time",
+          "temperature_c",
+          "precipitation_probability",
+          "weather_code",
+          "condition"
         ],
         "type": "object"
       },
@@ -4768,6 +5287,53 @@
         },
         "type": "object"
       },
+      "LibraryEntry": {
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "project_name": {
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "thread_title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "bytes",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "ListEffect": {
         "properties": {
           "items": {
@@ -4797,6 +5363,30 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/FileSummary"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListLibraryEntry": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryEntry"
             },
             "type": "array"
           },
@@ -7449,6 +8039,30 @@
         ],
         "type": "object"
       },
+      "ModuleState": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "enabled",
+              "off",
+              "needs-settings",
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "state"
+        ],
+        "type": "object"
+      },
       "MoveRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7518,12 +8132,6 @@
       },
       "Notification": {
         "properties": {
-          "actions": {
-            "items": {
-              "$ref": "#/components/schemas/ActionRef"
-            },
-            "type": "array"
-          },
           "body": {
             "type": "string"
           },
@@ -7617,8 +8225,7 @@
           "title",
           "body",
           "channel",
-          "delivered",
-          "actions"
+          "delivered"
         ],
         "type": "object"
       },
@@ -7641,25 +8248,6 @@
         ],
         "type": "object"
       },
-      "NotificationKindRow": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "on": {
-            "type": "boolean"
-          },
-          "web_only": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "on",
-          "web_only"
-        ],
-        "type": "object"
-      },
       "NotificationSettings": {
         "properties": {
           "channels": {
@@ -7671,9 +8259,6 @@
           "error": {
             "type": "string"
           },
-          "phone": {
-            "$ref": "#/components/schemas/PhoneSettings"
-          },
           "push": {
             "$ref": "#/components/schemas/PushConfiguration"
           }
@@ -7681,8 +8266,7 @@
         "required": [
           "channels",
           "error",
-          "push",
-          "phone"
+          "push"
         ],
         "type": "object"
       },
@@ -8216,44 +8800,6 @@
         ],
         "type": "object"
       },
-      "PhonePolicy": {
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "kinds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "PhoneSettings": {
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "kinds": {
-            "items": {
-              "$ref": "#/components/schemas/NotificationKindRow"
-            },
-            "type": "array"
-          },
-          "outstanding": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "enabled",
-          "kinds",
-          "outstanding"
-        ],
-        "type": "object"
-      },
       "PinRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8373,6 +8919,464 @@
         ],
         "type": "object"
       },
+      "PreviewCalendarEvent": {
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "calendar": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_event",
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "source": {},
+          "start": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "calendar",
+          "title",
+          "start",
+          "end",
+          "all_day",
+          "location",
+          "notes",
+          "source"
+        ],
+        "type": "object"
+      },
+      "PreviewCalendarReply": {
+        "properties": {
+          "calendar": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_rsvp",
+            "type": "string"
+          },
+          "response": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "calendar",
+          "uid",
+          "response"
+        ],
+        "type": "object"
+      },
+      "PreviewCalendarUpdate": {
+        "properties": {
+          "calendar": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_update",
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "calendar",
+          "uid",
+          "title",
+          "start",
+          "end",
+          "location"
+        ],
+        "type": "object"
+      },
+      "PreviewCondition": {
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "required": [
+          "field",
+          "op",
+          "value"
+        ],
+        "type": "object"
+      },
+      "PreviewCount": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "count"
+        ],
+        "type": "object"
+      },
+      "PreviewDeletionRule": {
+        "properties": {
+          "backlog": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "deletion_rule",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMessage"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/PreviewRule"
+          },
+          "senders": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewCount"
+            },
+            "type": "array"
+          },
+          "subjects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "rule",
+          "backlog",
+          "subjects",
+          "senders",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewFolderMerge": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/components/schemas/PreviewGroup"
+          },
+          "into": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "rebalance_merge",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewSource"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "sources",
+          "into",
+          "group"
+        ],
+        "type": "object"
+      },
+      "PreviewFolderSplit": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewGroup"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "rebalance_split",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "groups"
+        ],
+        "type": "object"
+      },
+      "PreviewGroup": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMessage"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "senders": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewCount"
+            },
+            "type": "array"
+          },
+          "subjects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "count",
+          "senders",
+          "terms",
+          "subjects",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewInboxBacklog": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewGroup"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "inbox_backlog",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "groups"
+        ],
+        "type": "object"
+      },
+      "PreviewLabelMerge": {
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "from_count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "into": {
+            "type": "string"
+          },
+          "into_count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "gmail_label_merge",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMessage"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "from",
+          "into",
+          "from_count",
+          "into_count",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewMailTriage": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "mail_triage",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewTriageItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "count",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewMessage": {
+        "properties": {
+          "date_ts": {
+            "type": "number"
+          },
+          "from_addr": {
+            "type": "string"
+          },
+          "from_name": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "from_name",
+          "from_addr",
+          "date_ts"
+        ],
+        "type": "object"
+      },
+      "PreviewReminder": {
+        "properties": {
+          "commitment_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "due": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "reminder",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "remind_at": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "commitment_id",
+          "text",
+          "due",
+          "owner",
+          "message_id",
+          "tz",
+          "remind_at",
+          "subject"
+        ],
+        "type": "object"
+      },
+      "PreviewRule": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "when": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewCondition"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "account",
+          "when"
+        ],
+        "type": "object"
+      },
       "PreviewSample": {
         "properties": {
           "account": {
@@ -8407,6 +9411,92 @@
           "from_name",
           "folder",
           "date_ts"
+        ],
+        "type": "object"
+      },
+      "PreviewSource": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "folder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "count"
+        ],
+        "type": "object"
+      },
+      "PreviewToolCall": {
+        "properties": {
+          "args": {},
+          "kind": {
+            "const": "tool_call",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "tool",
+          "args"
+        ],
+        "type": "object"
+      },
+      "PreviewTriageItem": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "date_ts": {
+            "type": "number"
+          },
+          "from_addr": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "from_addr",
+          "date_ts",
+          "action",
+          "label"
+        ],
+        "type": "object"
+      },
+      "Principal": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "email",
+          "name"
         ],
         "type": "object"
       },
@@ -8684,6 +9774,59 @@
           "value"
         ],
         "type": "object"
+      },
+      "ProposalChange": {
+        "discriminator": {
+          "mapping": {
+            "calendar_event": "#/components/schemas/PreviewCalendarEvent",
+            "calendar_rsvp": "#/components/schemas/PreviewCalendarReply",
+            "calendar_update": "#/components/schemas/PreviewCalendarUpdate",
+            "deletion_rule": "#/components/schemas/PreviewDeletionRule",
+            "gmail_label_merge": "#/components/schemas/PreviewLabelMerge",
+            "inbox_backlog": "#/components/schemas/PreviewInboxBacklog",
+            "mail_triage": "#/components/schemas/PreviewMailTriage",
+            "rebalance_merge": "#/components/schemas/PreviewFolderMerge",
+            "rebalance_split": "#/components/schemas/PreviewFolderSplit",
+            "reminder": "#/components/schemas/PreviewReminder",
+            "tool_call": "#/components/schemas/PreviewToolCall"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PreviewCalendarEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewCalendarReply"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewCalendarUpdate"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewDeletionRule"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewLabelMerge"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewInboxBacklog"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewMailTriage"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewFolderMerge"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewFolderSplit"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewReminder"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewToolCall"
+          }
+        ]
       },
       "ProposalDetail": {
         "properties": {
@@ -9502,6 +10645,21 @@
         ],
         "type": "object"
       },
+      "ReadRuleVocabulary": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RuleVocabulary"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadSecrets": {
         "properties": {
           "data": {
@@ -10034,6 +11192,108 @@
         },
         "required": [
           "moved"
+        ],
+        "type": "object"
+      },
+      "RuleVocabulary": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVocabularyAction"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVocabularyField"
+            },
+            "type": "array"
+          },
+          "ops": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVocabularyOp"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "fields",
+          "ops",
+          "actions"
+        ],
+        "type": "object"
+      },
+      "RuleVocabularyAction": {
+        "properties": {
+          "destination": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "destination"
+        ],
+        "type": "object"
+      },
+      "RuleVocabularyField": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "list": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "list",
+          "ops"
+        ],
+        "type": "object"
+      },
+      "RuleVocabularyOp": {
+        "properties": {
+          "hint": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "enum": [
+              "none",
+              "text",
+              "list",
+              "days"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "hint",
+          "value"
         ],
         "type": "object"
       },
@@ -11083,6 +12343,21 @@
         ],
         "type": "object"
       },
+      "SettingChoice": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "type": "object"
+      },
       "SettingSet": {
         "additionalProperties": false,
         "properties": {
@@ -11113,6 +12388,359 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "SettingsPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "set": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "unset": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SettingsPatched": {
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "keys",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "SettingsSchema": {
+        "properties": {
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsSchemaPage"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pages"
+        ],
+        "type": "object"
+      },
+      "SettingsSchemaField": {
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/SettingChoice"
+            },
+            "type": "array"
+          },
+          "class": {
+            "type": "string"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "max": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "min": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "module": {
+            "type": "string"
+          },
+          "multi": {
+            "type": "boolean"
+          },
+          "pin_source": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "enum": [
+              "string",
+              "int",
+              "float",
+              "bool",
+              "enum"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "module",
+          "type",
+          "multi",
+          "choices",
+          "class",
+          "editable",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "SettingsSchemaPage": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsSchemaField"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "group",
+              "section",
+              "module"
+            ],
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "module",
+          "name",
+          "title",
+          "url",
+          "fields"
+        ],
+        "type": "object"
+      },
+      "Shell": {
+        "properties": {
+          "brand_url": {
+            "type": "string"
+          },
+          "footer": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ShellGroup"
+            },
+            "type": "array"
+          },
+          "mail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShellMail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modules": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleState"
+            },
+            "type": "array"
+          },
+          "needs_you": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "notify_failing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ShellSection"
+            },
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "settings_url": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "groups",
+          "sections",
+          "settings",
+          "settings_url",
+          "footer",
+          "brand_url",
+          "needs_you",
+          "notify_failing",
+          "modules",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ShellGroup": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "items"
+        ],
+        "type": "object"
+      },
+      "ShellLink": {
+        "properties": {
+          "icon": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url",
+          "page"
+        ],
+        "type": "object"
+      },
+      "ShellMail": {
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "paused": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode",
+          "paused"
+        ],
+        "type": "object"
+      },
+      "ShellSection": {
+        "properties": {
+          "badge": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tabs": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "icon",
+          "url",
+          "badge",
+          "tabs"
         ],
         "type": "object"
       },
@@ -12384,6 +14012,72 @@
         ],
         "type": "object"
       },
+      "WebSession": {
+        "properties": {
+          "auth_mode": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/Principal"
+          },
+          "sign_out": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebSignOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "auth_mode",
+          "identity",
+          "csrf_token",
+          "sign_out"
+        ],
+        "type": "object"
+      },
+      "WebSignIn": {
+        "properties": {
+          "csrf_token": {
+            "type": "string"
+          },
+          "login_url": {
+            "type": "string"
+          },
+          "modes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "modes",
+          "csrf_token"
+        ],
+        "type": "object"
+      },
+      "WebSignOut": {
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "url"
+        ],
+        "type": "object"
+      },
       "WikiPages": {
         "properties": {
           "pages": {
@@ -12474,8 +14168,15 @@
     },
     "securitySchemes": {
       "bearer": {
+        "description": "Applies to /api/v1 only.",
         "scheme": "bearer",
         "type": "http"
+      },
+      "webSession": {
+        "description": "Applies to /web/v1 only. The identity is the web sign-in: the OIDC session cookie (`__Host-atrium_session`, or `atrium_session` without HTTPS), a proxy identity from a trusted peer, or the loopback local identity. Every request sends `Atrium-Client: web` (binary content reads may omit it) and no `Authorization` header; `Sec-Fetch-Site`, when sent, is `same-origin`. Unsafe requests also send `X-CSRF-Token` with the `csrf_token` from `GET /web/v1/session` and an `Origin` equal to the host.",
+        "in": "cookie",
+        "name": "__Host-atrium_session",
+        "type": "apiKey"
       }
     }
   },
@@ -12486,6 +14187,128 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/about": {
+      "get": {
+        "operationId": "core.about",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAbout"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core"
+      }
+    },
     "/activity": {
       "get": {
         "operationId": "review.activity",
@@ -12937,7 +14760,8 @@
           "proposals"
         ],
         "x-atrium-area": "proposals",
-        "x-atrium-module": "core"
+        "x-atrium-module": "core",
+        "x-atrium-undoable": true
       }
     },
     "/approvals/{proposal_id}/deny": {
@@ -15904,6 +17728,129 @@
         "x-atrium-module": "core"
       }
     },
+    "/connections/schema": {
+      "get": {
+        "operationId": "connections.schema",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionsSchema"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "integrations"
+        ],
+        "x-atrium-area": "integrations",
+        "x-atrium-module": "core",
+        "x-atrium-operation": "connections.list"
+      }
+    },
     "/connections/{kind}/{name}": {
       "delete": {
         "operationId": "connections.disconnect",
@@ -17837,7 +19784,8 @@
           "drafts"
         ],
         "x-atrium-area": "drafts",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/drafts/{draft_id}/discard": {
@@ -19015,6 +20963,258 @@
         "x-atrium-operation": "review.undo"
       }
     },
+    "/events": {
+      "get": {
+        "operationId": "state.events",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppEvent"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {}
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "home"
+        ],
+        "x-atrium-area": "home",
+        "x-atrium-module": "core",
+        "x-atrium-stream-event": {
+          "$ref": "#/components/schemas/AppEvent"
+        }
+      }
+    },
+    "/files": {
+      "get": {
+        "operationId": "assistant.file.library",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListLibraryEntry"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "x-atrium-area": "files",
+        "x-atrium-module": "assistant",
+        "x-atrium-operation": "assistant.file.list"
+      }
+    },
     "/home": {
       "get": {
         "operationId": "assistant.home",
@@ -20107,7 +22307,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/confirm": {
@@ -20271,7 +22472,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/confirm-matching": {
@@ -20435,7 +22637,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/import": {
@@ -20885,7 +23088,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}": {
@@ -21341,7 +23545,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}/confirm": {
@@ -21504,7 +23709,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}/restore": {
@@ -21667,7 +23873,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}/retract": {
@@ -21830,7 +24037,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/mail/accounts": {
@@ -25619,7 +27827,8 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/mail/packages": {
@@ -27313,6 +29522,129 @@
         "x-atrium-module": "mail"
       }
     },
+    "/mail/rules/vocabulary": {
+      "get": {
+        "operationId": "mail.rules-vocabulary",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadRuleVocabulary"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail",
+        "x-atrium-operation": "mail.rules"
+      }
+    },
     "/mail/rules/{rule_id}": {
       "delete": {
         "operationId": "mail.rule-delete",
@@ -27648,314 +29980,6 @@
     "/mail/scans/deletions": {
       "post": {
         "operationId": "mail.scan-deletions",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChangeMailScanned"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "mail"
-        ],
-        "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
-      }
-    },
-    "/mail/scans/gmail-labels": {
-      "post": {
-        "operationId": "mail.scan-gmail-labels",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChangeMailScanned"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "mail"
-        ],
-        "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
-      }
-    },
-    "/mail/scans/rebalance": {
-      "post": {
-        "operationId": "mail.scan-rebalance",
         "parameters": [
           {
             "in": "header",
@@ -29940,7 +31964,8 @@
           "media"
         ],
         "x-atrium-area": "media",
-        "x-atrium-module": "media"
+        "x-atrium-module": "media",
+        "x-atrium-undoable": true
       }
     },
     "/media/channels/poll": {
@@ -30419,7 +32444,8 @@
           "media"
         ],
         "x-atrium-area": "media",
-        "x-atrium-module": "media"
+        "x-atrium-module": "media",
+        "x-atrium-undoable": true
       }
     },
     "/media/files/{file_id}/content": {
@@ -30893,189 +32919,6 @@
         "x-atrium-area": "media",
         "x-atrium-module": "media",
         "x-atrium-operation": "media.library-detail"
-      }
-    },
-    "/media/files/{file_id}/thumbnail": {
-      "get": {
-        "operationId": "media.thumbnail",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "file_id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "Range",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-Range",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-Modified-Since",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "206": {
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "416": {
-            "description": "Range Not Satisfiable"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "media"
-        ],
-        "x-atrium-area": "media",
-        "x-atrium-module": "media"
       }
     },
     "/media/filing-effects/{effect_id}": {
@@ -34512,310 +36355,6 @@
         "x-atrium-module": "core"
       }
     },
-    "/permissions/phone": {
-      "put": {
-        "operationId": "notifications.phone-policy",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PhonePolicy"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "No Content",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "permissions"
-        ],
-        "x-atrium-area": "permissions",
-        "x-atrium-module": "notifications"
-      }
-    },
-    "/permissions/phone/revoke-links": {
-      "post": {
-        "operationId": "notifications.revoke-links",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "permissions"
-        ],
-        "x-atrium-area": "permissions",
-        "x-atrium-module": "notifications"
-      }
-    },
     "/projects": {
       "get": {
         "operationId": "assistant.project.list",
@@ -37398,7 +38937,8 @@
           "schedules"
         ],
         "x-atrium-area": "schedules",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       },
       "patch": {
         "operationId": "assistant.schedule.update",
@@ -37570,7 +39110,8 @@
           "schedules"
         ],
         "x-atrium-area": "schedules",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/schedules/{job_id}/enabled": {
@@ -38083,6 +39624,205 @@
         "x-atrium-module": "assistant"
       }
     },
+    "/session": {
+      "get": {
+        "operationId": "web.session",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebSession"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "properties": {
+                        "sign_in": {
+                          "$ref": "#/components/schemas/WebSignIn"
+                        }
+                      },
+                      "required": [
+                        "sign_in"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Not signed in. `sign_in` says how to start."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "/web/v1"
+          }
+        ],
+        "summary": "Who is signed in, the CSRF token, and how to sign out.",
+        "tags": [
+          "session"
+        ],
+        "x-atrium-surface": "web"
+      }
+    },
+    "/session/logout": {
+      "post": {
+        "operationId": "web.session.logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "properties": {
+                        "sign_in": {
+                          "$ref": "#/components/schemas/WebSignIn"
+                        }
+                      },
+                      "required": [
+                        "sign_in"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Not signed in. `sign_in` says how to start."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "/web/v1"
+          }
+        ],
+        "summary": "End the OIDC session for the web client and the server-rendered pages. Present only in OIDC sign-in.",
+        "tags": [
+          "session"
+        ],
+        "x-atrium-surface": "web"
+      }
+    },
     "/settings": {
       "get": {
         "operationId": "settings.read",
@@ -38228,6 +39968,309 @@
         ],
         "x-atrium-area": "settings",
         "x-atrium-module": "core"
+      },
+      "patch": {
+        "operationId": "settings.patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeSettingsPatched"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core",
+        "x-atrium-operation": "settings.set"
+      }
+    },
+    "/settings/schema": {
+      "get": {
+        "operationId": "settings.schema",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSchema"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core",
+        "x-atrium-operation": "settings.read"
       }
     },
     "/settings/secrets": {
@@ -39013,6 +41056,128 @@
           "settings"
         ],
         "x-atrium-area": "settings",
+        "x-atrium-module": "core"
+      }
+    },
+    "/shell": {
+      "get": {
+        "operationId": "core.shell",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shell"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "home"
+        ],
+        "x-atrium-area": "home",
         "x-atrium-module": "core"
       }
     },
@@ -39973,7 +42138,8 @@
           "tasks"
         ],
         "x-atrium-area": "tasks",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/tasks/{task_id}": {
@@ -40146,7 +42312,8 @@
           "tasks"
         ],
         "x-atrium-area": "tasks",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/tasks/{task_id}/done": {
@@ -40309,7 +42476,8 @@
           "tasks"
         ],
         "x-atrium-area": "tasks",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/threads": {
@@ -45361,11 +47529,19 @@
   "security": [
     {
       "bearer": []
+    },
+    {
+      "webSession": []
     }
   ],
   "servers": [
     {
+      "description": "Native clients. Bearer token only; session cookies and proxy headers are ignored.",
       "url": "/api/v1"
+    },
+    {
+      "description": "The embedded web client. Web session only; a request with an Authorization header is refused.",
+      "url": "/web/v1"
     }
   ]
 }

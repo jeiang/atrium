@@ -12,12 +12,10 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
-	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	authapp "github.com/jeiang/atrium/internal/auth/application"
@@ -44,7 +42,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
@@ -64,7 +61,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/writes/writescmd"
 )
 
 type Module struct {
@@ -74,21 +70,6 @@ type Module struct {
 	Now       func() float64
 	Resources module.Resources
 	Jobs      jobworker.Dependencies
-}
-
-func (m Module) namer(env config.Env) func(context.Context, *db.DB, config.Config) (rebalance.Namer, error) {
-	return func(ctx context.Context, d *db.DB, cfg config.Config) (rebalance.Namer, error) {
-		if m.Jobs.Classifier == nil {
-			return nil, errors.New("proposal scans are not bound to a classifier")
-		}
-		svc := service.New(ctx, d, cfg, env, nil)
-		svc.Now = m.Now
-		c, err := m.Jobs.Classifier(ctx, svc)
-		if err != nil {
-			return nil, err
-		}
-		return rebalance.SuggestName(c), nil
-	}
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -101,12 +82,16 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
 	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	readModelOps, readModelBindings := m.readModelOperations()
+	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
-	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanRebalanceName, mailapp.ScanDeletionsName, mailapp.ScanGmailLabelsName}, Composite: true})
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanDeletionsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
 	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
+	eventOps, eventBindings := eventOperations()
+	operations, bindings = append(operations, eventOps...), append(bindings, eventBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -154,9 +139,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
 			}},
-			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Phone: actionlink.Handler, Routes: func(d *web.Deps, svc *reviewapp.Service) {
+			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Routes: func(d *web.Deps, svc *reviewapp.Service) {
 				reviewRoutes(d, func() *reviewapp.Service { return svc })
-			}}), Templates: reviewpages.Templates(), Public: actionlinkPublic, Nav: []web.NavItem{
+			}}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
@@ -167,9 +152,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: func(_ chi.Router, d *web.Deps) {
 				authRoutes(d)
 				commandRoutes(d)
+				eventRoutes(d)
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
+				m.readModelRoutes(d)
 			}},
 		},
 		Groups:     SettingGroups(),
@@ -178,9 +165,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Services:   m.services(mc),
 		Recover:    recoverProposals,
 		Commands: []*cli.Command{
-			writescmd.Command(writescmd.Options{Now: m.Now, Open: openLedger}),
 			ledgercmd.Command(ledgercmd.Options{Now: m.Now, Open: openLedger}),
-			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}.session}),
+			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}.session}),
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),

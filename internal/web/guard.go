@@ -74,6 +74,7 @@ type Guard struct {
 	errPage  ErrorPage
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
+	streams  *streamCounts
 }
 
 func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
@@ -91,7 +92,7 @@ func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify}
+	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), streams: newStreamCounts(), public: public, classify: classify}
 }
 
 func hostname(value string) string {
@@ -208,7 +209,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			r = r.WithContext(withIdentity(r.Context(), who, audit.UI))
 			r = r.WithContext(g.sessionAccess(r, who, token))
 		}
-		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {
+		if isUnsafe(r.Method) {
 			limit := defaultBodyCap
 			if g.bodyCap != nil {
 				var err error

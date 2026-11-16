@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -88,6 +89,11 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 			if err != nil {
 				web.APIFail(w, retryableOwnerRefusal(err))
 				return
+			}
+			if len(change.EffectIDs) > 0 {
+				if undoable, err := ledger.EffectsUndoable(ctx, d.DB.Read, change.EffectIDs); err == nil {
+					change.Undoable = &undoable
+				}
 			}
 			write(w, shape, reflect.TypeFor[O](), change.Data, change)
 		})

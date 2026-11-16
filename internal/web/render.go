@@ -83,15 +83,19 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		Rail:        cookieValue(r, railCookie, false) == "1",
 		Data:        data,
 	}
+	rd.contribute(r.Context(), f)
+	return f, nil
+}
+
+func (rd *Renderer) contribute(ctx context.Context, f *tpl.Frame) {
 	rd.mu.Lock()
 	contributions := append([]FrameFunc(nil), rd.frame...)
 	rd.mu.Unlock()
 	for _, fn := range contributions {
-		if err := fn(r.Context(), f); err != nil {
+		if err := fn(ctx, f); err != nil {
 			log.Error("frame contribution failed", "err", err.Error())
 		}
 	}
-	return f, nil
 }
 
 const (
@@ -123,6 +127,7 @@ type navView struct {
 	groups                []tpl.NavGroup
 	settings, footer      []tpl.NavItem
 	tabs, pages           []tpl.NavItem
+	sections              map[string][]tpl.NavItem
 	settingsURL, brandURL string
 }
 
@@ -194,6 +199,7 @@ func (rd *Renderer) navFor(page string) navView {
 	if len(entries) > 0 {
 		v.groups = append(v.groups, tpl.NavGroup{Items: entries})
 	}
+	v.sections = sections
 	sort.SliceStable(v.settings, func(i, j int) bool {
 		return v.settings[i].Order < v.settings[j].Order
 	})

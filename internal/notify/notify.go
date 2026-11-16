@@ -27,38 +27,19 @@ var (
 )
 
 type Notification struct {
-	ID         int64       `json:"id"`
-	TS         float64     `json:"ts"`
-	Title      string      `json:"title"`
-	Body       string      `json:"body"`
-	ThreadID   *int64      `json:"thread_id"`
-	RunID      *int64      `json:"run_id"`
-	ThreadLink *string     `json:"thread_link"`
-	Channel    string      `json:"channel"`
-	Delivered  store.Flag  `json:"delivered"`
-	Error      *string     `json:"error"`
-	Priority   *int64      `json:"priority"`
-	Actions    []ActionRef `json:"actions"`
-	ReadAt     *float64    `json:"read_at"`
+	ID         int64      `json:"id"`
+	TS         float64    `json:"ts"`
+	Title      string     `json:"title"`
+	Body       string     `json:"body"`
+	ThreadID   *int64     `json:"thread_id"`
+	RunID      *int64     `json:"run_id"`
+	ThreadLink *string    `json:"thread_link"`
+	Channel    string     `json:"channel"`
+	Delivered  store.Flag `json:"delivered"`
+	Error      *string    `json:"error"`
+	Priority   *int64     `json:"priority"`
+	ReadAt     *float64   `json:"read_at"`
 }
-
-type Action struct {
-	Action string `json:"action"`
-	Label  string `json:"label"`
-	URL    string `json:"url"`
-	Method string `json:"method,omitempty"`
-}
-
-type ActionRef struct {
-	ID        string   `json:"id"`
-	Kind      string   `json:"kind"`
-	TargetID  int64    `json:"target_id"`
-	Decision  string   `json:"decision"`
-	ExpiresAt *float64 `json:"expires_at,omitempty"`
-	Label     string   `json:"label"`
-}
-
-type Presenter func(ctx context.Context, d *db.DB, refs []ActionRef, now float64) ([]Action, error)
 
 type Message struct {
 	Title, Body string
@@ -70,8 +51,6 @@ type Message struct {
 	Channel     string
 	Click       string
 	Priority    int
-	Actions     []Action
-	Refs        []ActionRef
 	Occurrence  string
 	Mark        func(context.Context, *sql.Tx) error
 }
@@ -113,7 +92,6 @@ func isDigits(s string) bool {
 type delivery struct {
 	channel, title, body, click string
 	priority                    int
-	actions                     []Action
 }
 
 func deliver(ctx context.Context, d *db.DB, id int64, m delivery, link string) (bool, string, error) {
@@ -125,13 +103,13 @@ func deliver(ctx context.Context, d *db.DB, id int64, m delivery, link string) (
 	return delivered, failure, err
 }
 
-func Resend(ctx context.Context, d *db.DB, id int64, present Presenter) (Sent, error) {
-	var title, body, actions string
+func Resend(ctx context.Context, d *db.DB, id int64) (Sent, error) {
+	var title, body string
 	var link, channel, click *string
 	var priority *int64
 	var delivered bool
-	err := d.Read.QueryRowContext(ctx, "SELECT title, body, thread_link, channel, click, priority, delivered, actions_json FROM notifications WHERE id = ?", id).
-		Scan(&title, &body, &link, &channel, &click, &priority, &delivered, &actions)
+	err := d.Read.QueryRowContext(ctx, "SELECT title, body, thread_link, channel, click, priority, delivered FROM notifications WHERE id = ?", id).
+		Scan(&title, &body, &link, &channel, &click, &priority, &delivered)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sent{}, sql.ErrNoRows
 	}
@@ -150,19 +128,6 @@ func Resend(ctx context.Context, d *db.DB, id int64, present Presenter) (Sent, e
 	}
 	if err := ledger.CheckAdmission(ctx); err != nil {
 		return Sent{}, err
-	}
-	var refs []ActionRef
-	if err := json.Unmarshal([]byte(actions), &refs); err != nil {
-		return Sent{}, err
-	}
-	n, err := deviceCount(ctx, d.Read)
-	if err != nil {
-		return Sent{}, err
-	}
-	if n > 0 && len(refs) > 0 && present != nil {
-		if m.actions, err = present(ctx, d, refs, stamp()); err != nil {
-			return Sent{}, err
-		}
 	}
 	ok, failure, err := deliver(ctx, d, id, m, deref(link))
 	if err != nil {
@@ -243,14 +208,6 @@ func Send(ctx context.Context, d *db.DB, m Message) (Sent, error) {
 		occurrence = "notify:" + ledger.NewKey()
 	}
 	target := "notify:" + occurrence
-	refs := m.Refs
-	if refs == nil {
-		refs = []ActionRef{}
-	}
-	actions, err := json.Marshal(refs)
-	if err != nil {
-		return Sent{}, err
-	}
 	action, err := json.Marshal(map[string]any{
 		"title": title, "body": body, "channel": channel, "click": m.Click, "priority": m.Priority,
 	})
@@ -264,8 +221,8 @@ func Send(ctx context.Context, d *db.DB, m Message) (Sent, error) {
 		Action:    action,
 		Resources: []ledger.Resource{{Key: target, RetainOnDone: true}},
 	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-		res, err := tx.ExecContext(ctx, "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link, channel, click, priority, actions_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			now(), title, body, nullID(m.ThreadID), nullID(m.RunID), linkValue, nullable(m.Channel), nullable(m.Click), nullID(int64(m.Priority)), string(actions))
+		res, err := tx.ExecContext(ctx, "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link, channel, click, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			now(), title, body, nullID(m.ThreadID), nullID(m.RunID), linkValue, nullable(m.Channel), nullable(m.Click), nullID(int64(m.Priority)))
 		if err != nil {
 			return ledger.Result{}, err
 		}
@@ -291,7 +248,7 @@ func Send(ctx context.Context, d *db.DB, m Message) (Sent, error) {
 		}
 		return Sent{}, err
 	}
-	delivered, failure, err := deliver(ctx, d, id, delivery{channel: channel, title: title, body: body, click: m.Click, priority: m.Priority, actions: m.Actions}, link)
+	delivered, failure, err := deliver(ctx, d, id, delivery{channel: channel, title: title, body: body, click: m.Click, priority: m.Priority}, link)
 	if err != nil {
 		return Sent{}, err
 	}
@@ -336,7 +293,7 @@ func Recent(ctx context.Context, q db.Querier, limit int) ([]Notification, error
 }
 
 func RecentBefore(ctx context.Context, q db.Querier, before int64, limit int) ([]Notification, error) {
-	query, args := "SELECT id, ts, title, body, thread_id, run_id, thread_link, COALESCE(channel, ''), delivered, error, priority, actions_json, read_at FROM notifications", []any{}
+	query, args := "SELECT id, ts, title, body, thread_id, run_id, thread_link, COALESCE(channel, ''), delivered, error, priority, read_at FROM notifications", []any{}
 	if before > 0 {
 		query += " WHERE id < ?"
 		args = append(args, before)
@@ -350,11 +307,7 @@ func RecentBefore(ctx context.Context, q db.Querier, before int64, limit int) ([
 		var threadID, runID sql.NullInt64
 		var link, failure sql.NullString
 		var delivered int64
-		var actions string
-		if err := r.Scan(&n.ID, &n.TS, &n.Title, &n.Body, &threadID, &runID, &link, &n.Channel, &delivered, &failure, &n.Priority, &actions, &n.ReadAt); err != nil {
-			return n, err
-		}
-		if err := json.Unmarshal([]byte(actions), &n.Actions); err != nil {
+		if err := r.Scan(&n.ID, &n.TS, &n.Title, &n.Body, &threadID, &runID, &link, &n.Channel, &delivered, &failure, &n.Priority, &n.ReadAt); err != nil {
 			return n, err
 		}
 		n.Delivered = store.Flag(delivered != 0)

@@ -16,8 +16,6 @@ func notificationOperations() ([]application.Definition, []application.Binding) 
 		{Kind: application.HTML, Target: "POST /settings/notifications/push/{id}/remove", Uses: uses(notifyapp.UnsubscribeName)},
 		{Kind: application.HTML, Target: "POST /settings/notifications/push/test", Uses: uses(notifyapp.TestName)},
 		{Kind: application.HTML, Target: "POST /inbox/{id}/resend", Uses: uses(notifyapp.ResendName)},
-		{Kind: application.HTML, Target: "POST /settings/phone-actions", Uses: uses(notifyapp.PhonePolicyName)},
-		{Kind: application.HTML, Target: "POST /settings/phone-actions/revoke", Uses: uses(notifyapp.RevokeLinksName)},
 		{Kind: application.Tool, Target: "notify", Uses: uses(notifyapp.SendName)},
 		{Kind: application.Service, Target: "notifications-monitor", Uses: uses(notifyapp.SendName)},
 	}...)

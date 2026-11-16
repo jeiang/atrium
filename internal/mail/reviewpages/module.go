@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -15,7 +14,6 @@ import (
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/module"
-	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -34,7 +32,6 @@ func Templates() fs.FS {
 
 type Options struct {
 	Compose func(*web.Deps) Services
-	Phone   func(func(context.Context, string, float64) (*proposalsapp.Proposal, error), func() float64) http.HandlerFunc
 	Routes  func(*web.Deps, *reviewapp.Service)
 }
 
@@ -46,15 +43,12 @@ type Services struct {
 type service struct {
 	mail   *mailapp.Service
 	deps   *web.Deps
-	now    func() float64
 	review *reviewapp.Service
 }
 
-func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
-
 func newService(o Options, d *web.Deps) *service {
 	built := o.Compose(d)
-	return &service{mail: built.Mail, deps: d, now: wallClock, review: built.Review}
+	return &service{mail: built.Mail, deps: d, review: built.Review}
 }
 
 func Module(o Options) web.Module {
@@ -76,7 +70,6 @@ func Module(o Options) web.Module {
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)
 		r.Post("/proposals/{proposal_id}/undo", s.proposalUndo)
 		r.Post("/proposals/{proposal_id}/resolve", s.proposalResolve)
-		d.Public(http.MethodPost, "/actions/{token}", o.Phone(s.phone, s.now))
 
 		r.Get("/activity", s.activityPage)
 		r.Get("/activity/recent", s.recentActivity)
@@ -123,7 +116,7 @@ func bindMail(next http.Handler) http.Handler {
 		}
 		ctx, err := module.BindOwner(r.Context(), module.Mail)
 		if err != nil {
-			if strings.HasPrefix(r.URL.Path, web.APIPrefix+"/") {
+			if web.IsAPI(r) {
 				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
 			} else {
 				http.Error(w, err.Error(), http.StatusConflict)

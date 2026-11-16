@@ -254,6 +254,8 @@ func checkAPIShape(b application.Binding, def application.Definition) string {
 		return "multipart body has no byte limit"
 	case !shape.Body.Valid():
 		return "has unknown body kind " + string(shape.Body)
+	case (shape.Body == application.BodyEventStream) != (shape.Stream == application.RunStream || shape.Stream == application.AppStream):
+		return "event stream needs a stream kind, and only an event stream has one"
 	case !slices.Contains([]int{200, 201, 202, 204, 206}, shape.Success):
 		return "has an invalid success status"
 	case !wireStruct(shape.Request):

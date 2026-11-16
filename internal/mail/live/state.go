@@ -23,11 +23,10 @@ import (
 var log = logx.Logger("atrium.live")
 
 const (
-	File         = "file"
-	Flag         = "flag"
-	Trash        = "trash"
-	Correct      = "correct"
-	SnoozeReturn = "snooze_return"
+	File    = "file"
+	Flag    = "flag"
+	Trash   = "trash"
+	Correct = "correct"
 
 	GoliveKey   = "golive_ts"
 	DeletionKey = "deletion_pass_ts"
@@ -35,7 +34,7 @@ const (
 	UndoHeldText = "cancelled, write outcome unknown: write in flight"
 )
 
-var Kinds = [...]string{File, Flag, Trash, Correct, SnoozeReturn}
+var Kinds = [...]string{File, Flag, Trash, Correct}
 
 const NoNewCorrection = "NOT EXISTS (SELECT 1 FROM corrections c WHERE c.message_id = m.id AND c.ts >= :golive)"
 

@@ -22,7 +22,7 @@ func (o Options) ScanCommands() []*cli.Command {
 	out := make([]*cli.Command, len(mailapp.ScanKinds))
 	for i, s := range mailapp.ScanKinds {
 		out[i] = o.scanGroup(s.Command, func(x *exec) (mailapp.ScanResult, error) {
-			return x.opts.Application(x.Pass).WithSuggestedNamer(x.Classifier).Scans(x.Now())(x.Ctx, s.Key)
+			return x.opts.Application(x.Pass).Scans(x.Now())(x.Ctx, s.Key)
 		})
 	}
 	return out

@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/scans"
 	"github.com/jeiang/atrium/internal/mail/tracking"
@@ -47,7 +46,7 @@ func (m Module) syncJob(env config.Env) scheduler.Definition {
 func (m Module) scanJob(env config.Env) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Mail, Key: scans.JobKey, Name: passrun.Scan, Kind: scheduler.JobBuiltin,
-		Prompt:   "Monthly: scan the mailboxes for rebalance, deletion and label proposals.",
+		Prompt:   "Monthly: scan the mailboxes for deletion proposals.",
 		Schedule: scanSchedule, Persistent: true, Timeout: 2 * time.Hour,
 		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, RunsWhilePaused: true,
 		Resources: []string{mail.PassResource}, Needs: []string{module.Mail},
@@ -60,11 +59,7 @@ func (m Module) scanJob(env config.Env) scheduler.Definition {
 			if now == nil {
 				now = mail.WallClock
 			}
-			c, err := m.classifiers(ctx, env, d, cfg, now)
-			if err != nil {
-				return scheduler.Result{}, err
-			}
-			if _, err := scans.ScanPass(ctx, d, mailapp.New(d, cfg, env, now).WithNamer(rebalance.SuggestName(c)).Scans(now())); err != nil {
+			if _, err := scans.ScanPass(ctx, d, mailapp.New(d, cfg, env, now).Scans(now())); err != nil {
 				return scheduler.Result{}, err
 			}
 			return scheduler.Result{Status: scheduler.StatusOK}, nil

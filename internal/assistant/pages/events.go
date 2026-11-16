@@ -68,10 +68,13 @@ func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, threadID, ru
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	key, recheck := web.StreamCredential(ctx)
-	release, err := asstapp.AcquireStream(key)
-	if err != nil {
+	release, recheck, err := web.OpenStream(ctx, application.RunStream)
+	switch {
+	case errors.Is(err, web.ErrStreamLimit):
 		refuse(http.StatusTooManyRequests, "rate_limited", "Too many open streams.", runID)
+		return
+	case err != nil:
+		refuse(http.StatusUnauthorized, "unauthenticated", "Sign in again.", runID)
 		return
 	}
 	defer release()

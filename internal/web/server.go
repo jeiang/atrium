@@ -242,6 +242,7 @@ func New(o Options) (*Server, error) {
 		o.Render.oidcOn.Store(true)
 		s.registerAuthRoutes()
 	}
+	s.registerWebSession()
 	if o.OnReady != nil {
 		if err := o.OnReady(deps); err != nil {
 			return nil, errors.Join(err, s.Close())
@@ -406,7 +407,7 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(path, "/") {
 		alt = strings.TrimRight(path, "/")
 	}
-	if isAPI(r) || alt == "" || alt == path || len(s.allowed(alt)) == 0 {
+	if IsAPI(r) || alt == "" || alt == path || len(s.allowed(alt)) == 0 {
 		s.missing(w, r)
 		return
 	}
@@ -419,7 +420,7 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) missing(w http.ResponseWriter, r *http.Request) {
-	if isAPI(r) {
+	if IsAPI(r) {
 		APIError(w, http.StatusNotFound, "not_found", "Not found.")
 		return
 	}
@@ -430,7 +431,7 @@ func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
 	if allow := s.allowed(r.URL.Path); len(allow) > 0 {
 		w.Header().Set("Allow", strings.Join(allow, ", "))
 	}
-	if isAPI(r) {
+	if IsAPI(r) {
 		APIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 		return
 	}
@@ -478,7 +479,7 @@ func recoverer(next http.Handler) http.Handler {
 				h.Del(name)
 			}
 			log.Error("unhandled exception", logx.Err, fmt.Sprint(rec), "method", r.Method, "path", r.URL.Path)
-			if isAPI(r) {
+			if IsAPI(r) {
 				APIError(w, http.StatusInternalServerError, "internal", "Internal error.")
 				return
 			}

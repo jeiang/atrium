@@ -14,7 +14,7 @@ func Proposals(svc func(*tool.Context) *mailapp.Service) []proposalsapp.Definiti
 	return []proposalsapp.Definition{{
 		Kind: proposalsapp.Kind{Name: mailapp.MailTriage, Module: module.Mail, Locks: []string{mailapp.PassResource}},
 		Build: &proposalsapp.Builder{
-			Description: "{items: [{id, action, label?, due?}]}: propose archive, label or snooze for a batch of messages; one proposal per run",
+			Description: "{items: [{id, action, label?}]}: propose archive or label for a batch of messages; one proposal per run",
 			Build: func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error) {
 				return proposeTriage(ctx, tc, payload, svc)
 			},
@@ -26,7 +26,6 @@ type triageRequest struct {
 	ID     int64
 	Action string
 	Label  string
-	Due    string
 }
 
 func triageRequests(payload map[string]any) ([]triageRequest, error) {
@@ -53,9 +52,9 @@ func triageRequests(payload map[string]any) ([]triageRequest, error) {
 			return nil, tool.Error("each item needs an action")
 		}
 		switch action {
-		case mailapp.TriageArchive, mailapp.TriageLabel, mailapp.TriageSnooze:
+		case mailapp.TriageArchive, mailapp.TriageLabel:
 		default:
-			return nil, tool.Error("action must be archive, label or snooze")
+			return nil, tool.Error("action must be archive or label")
 		}
 		req := triageRequest{ID: id, Action: action}
 		if label, ok := item["label"].(string); ok {
@@ -63,12 +62,6 @@ func triageRequests(payload map[string]any) ([]triageRequest, error) {
 		}
 		if req.Action == mailapp.TriageLabel && req.Label == "" {
 			return nil, tool.Error("a label action needs a label")
-		}
-		if due, ok := item["due"].(string); ok {
-			req.Due = strings.TrimSpace(due)
-		}
-		if req.Action == mailapp.TriageSnooze && req.Due == "" {
-			return nil, tool.Error("a snooze action needs a due time")
 		}
 		out = append(out, req)
 	}

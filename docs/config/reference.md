@@ -88,8 +88,6 @@ Operator settings are stored in the database and edited in the application. They
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
 | `action_link_key` | string | none | secret |
-| `phone_actions_enabled` | bool | `false` | ui |
-| `phone_actions_kinds` | string | `reminder,triage_label,triage_archive,triage_snooze,memory,profile` | ui |
 
 ### assistant
 
@@ -103,7 +101,6 @@ Operator settings are stored in the database and edited in the application. They
 | `agent_schedule_knowledge_export` | string | `daily 03:30` | advanced |
 | `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced |
 | `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced |
-| `agent_schedule_media_thumbnails` | string | `daily 04:00` | advanced |
 | `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced |
 | `agent_schedule_nightly` | string | `daily 02:30` | advanced |

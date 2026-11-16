@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -25,7 +24,6 @@ type proposalsDeps struct {
 	Enabled func(context.Context, db.Querier, string) (bool, error)
 	Store   func(*db.DB, config.Config) *ledger.Store
 	Tools   registry.Source
-	Namer   func(context.Context, *db.DB, config.Config) (rebalance.Namer, error)
 }
 
 func (o proposalsDeps) session(ctx context.Context, run func(proposalscmd.Runtime) error) error {
@@ -73,9 +71,6 @@ func (o proposalsDeps) session(ctx context.Context, run func(proposalscmd.Runtim
 			return reviewapp.New(reviewapp.Deps{DB: d, Ledger: p.Ledger, Registry: p.Registry, Pipeline: p})
 		},
 		Scanner: func(now func() float64) *mailapp.Service { return mailapp.New(d, cfg, config.OS, now) },
-	}
-	if o.Namer != nil {
-		rt.Namer = func(ctx context.Context) (mailapp.Namer, error) { return o.Namer(ctx, d, cfg) }
 	}
 	return run(rt)
 }

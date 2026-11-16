@@ -59,6 +59,25 @@ func FileKey(ctx context.Context, key string) ([]byte, bool, error) {
 	return []byte(value), true, nil
 }
 
+func AppKey(ctx context.Context, q db.Querier) ([]byte, error) {
+	if raw, ok, err := FileKey(ctx, ActionLinkKeyFile); err != nil {
+		return nil, err
+	} else if ok {
+		return raw, nil
+	}
+	store := NewIn(settings.From(ctx), nil, q, nil)
+	raw, err := store.Value(ctx, ActionLinkKey)
+	if err != nil {
+		return nil, err
+	}
+	if raw == "" {
+		if raw, err = store.Generate(ctx, ActionLinkKey); err != nil {
+			return nil, err
+		}
+	}
+	return []byte(raw), nil
+}
+
 func New(reg *settings.Registry, d *db.DB, cipher settings.Cipher) *settings.Store {
 	return settings.NewStore(reg, d, cipher)
 }

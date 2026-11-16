@@ -93,7 +93,7 @@ func TestCommandKeyReplaysAcrossRestartAndBearers(t *testing.T) {
 func TestUnkeyedCommandStatusShowsAudit(t *testing.T) {
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := asstDB(t, dir)
-	id, _, err := proposals.Create(testProposalContext(), d, "rebalance_split", nil, "deny me", map[string]any{}, map[string]any{}, "deny me", float64(time.Now().UnixNano())/1e9)
+	id, _, err := proposals.Create(testProposalContext(), d, "inbox_backlog", nil, "deny me", map[string]any{}, map[string]any{}, "deny me", float64(time.Now().UnixNano())/1e9)
 	if err != nil {
 		t.Fatal(err)
 	}
