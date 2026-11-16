@@ -17,8 +17,8 @@ type ThreadPage struct {
 	History  bool                 `json:"history"`
 	Composer asstapp.ComposerView `json:"composer"`
 	Work     asstapp.Work         `json:"work"`
-	Projects []asstapp.Space    `json:"projects"`
-	Project  *asstapp.Space     `json:"project"`
+	Projects []asstapp.Space      `json:"projects"`
+	Project  *asstapp.Space       `json:"project"`
 }
 
 type QueuedData struct {

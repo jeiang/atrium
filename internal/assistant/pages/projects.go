@@ -23,7 +23,7 @@ type ProjectFormValues struct {
 }
 
 type ProjectFormData struct {
-	Project       *asstapp.Space  `json:"project"`
+	Project       *asstapp.Space    `json:"project"`
 	Values        ProjectFormValues `json:"values"`
 	Efforts       []string          `json:"efforts"`
 	ContextLimits []int64           `json:"context_limits"`
@@ -31,7 +31,7 @@ type ProjectFormData struct {
 }
 
 type ProjectEditData struct {
-	Form  ProjectFormData       `json:"form"`
+	Form  ProjectFormData     `json:"form"`
 	Files []asstapp.SpaceFile `json:"files"`
 }
 
