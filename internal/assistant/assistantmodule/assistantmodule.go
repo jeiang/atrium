@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
@@ -49,17 +50,20 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/kb"
+	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
@@ -103,7 +107,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
-			export.Settings(), weather.SettingsDefs()),
+			export.Settings(), weather.SettingsDefs(), scheduler.Settings(unit.Assistant)),
 		Host: export.HostSettings(),
 		Recover: func(ctx context.Context, d *db.DB, _ config.Config) error {
 			return kb.EnsureInstructions(ctx, d, prompts.System, assistant.Now())
@@ -112,6 +116,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Attention: AttentionSources(mc.Env),
 		Search:    SearchSources(),
 		Metrics:   opsmetrics.Metrics(),
+		Queues:    []ops.Queue{{Name: "thread_queue", Count: journal.QueueDepth}},
+		Corpora:   []embed.Corpus{kbembedding.Corpus},
 		ReviewKinds: func(module.ReviewDeps) review.Kinds {
 			return review.Kinds{Findings: serverops.ReviewKindFindings}
 		},

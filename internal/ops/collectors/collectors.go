@@ -3,13 +3,9 @@ package collectors
 import (
 	"context"
 
-	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/openloops"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	notifycounts "github.com/jeiang/atrium/internal/notify/counts"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -20,6 +16,10 @@ func gauge(name, help string, collect func(ctx context.Context, q db.Querier) ([
 }
 
 func one(v float64) []ops.Sample { return []ops.Sample{{Value: v}} }
+
+func Queues() []ops.Queue {
+	return []ops.Queue{{Name: "embed_index", Count: embed.PendingTotal}, {Name: "proposals", Count: proposals.CountPending}}
+}
 
 func Metrics() []ops.Metric {
 	var metrics []ops.Metric
@@ -32,27 +32,6 @@ func Metrics() []ops.Metric {
 		Collect: func(context.Context, db.Querier) ([]ops.Sample, error) {
 			return one(float64(db.ExclusiveTimeouts.Load())), nil
 		}})
-	add(gauge("atrium_queue_depth", "Open items in each attention queue.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		queues := []struct {
-			name  string
-			count func(context.Context, db.Querier) (int, error)
-		}{
-			{"thread_queue", journal.QueueDepth},
-			{"embed_index", embed.PendingTotal},
-			{"drafts", drafts.CountDraft},
-			{"proposals", proposals.CountPending},
-			{"open_loops", openloops.CountOpen},
-		}
-		out := make([]ops.Sample, 0, len(queues))
-		for _, queue := range queues {
-			n, err := queue.count(ctx, q)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, ops.Sample{Labels: [][2]string{{"queue", queue.name}}, Value: float64(n)})
-		}
-		return out, nil
-	}))
 	add(gauge("atrium_integration_state", "Current health state of each connection.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
 		states, err := connections.HealthStates(ctx, q)
 		if err != nil {
@@ -71,17 +50,6 @@ func Metrics() []ops.Metric {
 	add(gauge("atrium_notification_push_failing_devices", "Push devices whose last three or more deliveries failed.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
 		n, err := notifycounts.FailingPush(ctx, q)
 		return one(float64(n)), err
-	}))
-	add(gauge("atrium_mail_sync_last_success_timestamp_seconds", "Finish time of the last successful mail sync, by account.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		accounts, err := mailsync.AccountSyncTimes(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]ops.Sample, 0, len(accounts))
-		for _, account := range accounts {
-			out = append(out, ops.Sample{Labels: [][2]string{{"account", account.Name}}, Value: account.LastSyncAt})
-		}
-		return out, nil
 	}))
 	return metrics
 }

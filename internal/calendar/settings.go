@@ -34,7 +34,7 @@ func SettingsDefs() []settings.Def {
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: CalendarDirKey, Module: unit.Calendar, Type: settings.String},
+		{Key: CalendarDirKey, Module: unit.Calendar, Type: settings.String, NixOption: "services.atrium.stateDir"},
 	}
 }
 

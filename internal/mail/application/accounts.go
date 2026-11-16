@@ -199,7 +199,7 @@ func (s *Service) Accounts(ctx context.Context, in struct{}) (application.Read[A
 	}
 	out.Accounts = list
 	out.Presets = []string{config.ICloud, config.Gmail}
-	if out.Indexes, err = mail.EmbedIndexes(ctx, s.db); err != nil {
+	if out.Indexes, err = vecindex.Indexes(ctx, s.db.Read); err != nil {
 		return application.Read[AccountsResult]{}, err
 	}
 	if out.Fields, err = settings.LoadFields(ctx, s.db.Read, MailFields); err != nil {

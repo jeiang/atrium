@@ -33,7 +33,7 @@ var kindLabels = map[string]string{
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath},
+		{Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath, NixOption: "services.atrium.knowledgeExport.obsidianDirectory"},
 	}
 }
 

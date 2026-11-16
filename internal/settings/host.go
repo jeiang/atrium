@@ -6,14 +6,15 @@ import (
 )
 
 type HostDef struct {
-	Key      string
-	Module   string
-	Type     Type
-	Default  string
-	Choices  []string
-	Secret   bool
-	EnvAlias string
-	Check    func(value string) error
+	Key       string
+	Module    string
+	Type      Type
+	Default   string
+	Choices   []string
+	Secret    bool
+	EnvAlias  string
+	NixOption string
+	Check     func(value string) error
 }
 
 func (r *Registry) HostDefs() []HostDef { return HostDefsFrom(r.host) }

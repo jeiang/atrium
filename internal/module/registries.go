@@ -12,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/ops"
-	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	"github.com/jeiang/atrium/internal/review"
 )
 
@@ -76,7 +76,7 @@ type registries struct {
 	categories  []review.Category
 	corpora     []embed.Corpus
 	queues      []ops.Queue
-	scans       []proposals.Scan
+	scans       []proposalsapp.Scan
 }
 
 type claims map[string]string
@@ -202,7 +202,7 @@ func compileRegistries(decls []Declaration) (registries, error) {
 	r.channels = append(r.channels, SystemChannel)
 	slices.SortFunc(r.categories, func(a, b review.Category) int { return strings.Compare(a.Name, b.Name) })
 	slices.SortFunc(r.queues, func(a, b ops.Queue) int { return strings.Compare(a.Name, b.Name) })
-	slices.SortFunc(r.scans, func(a, b proposals.Scan) int { return strings.Compare(a.Module, b.Module) })
+	slices.SortFunc(r.scans, func(a, b proposalsapp.Scan) int { return strings.Compare(a.Module, b.Module) })
 	return r, nil
 }
 
@@ -221,9 +221,9 @@ func (c *Catalog) ActivityCategories() []review.Category { return slices.Clone(c
 
 func (c *Catalog) Corpora() []embed.Corpus { return slices.Clone(c.regs.corpora) }
 
-func (c *Catalog) ProposalScans() []proposals.Scan { return slices.Clone(c.regs.scans) }
+func (c *Catalog) ProposalScans() []proposalsapp.Scan { return slices.Clone(c.regs.scans) }
 
-func bindScans(decls []Declaration, scans []proposals.Scan) []Declaration {
+func bindScans(decls []Declaration, scans []proposalsapp.Scan) []Declaration {
 	var uses []application.Name
 	for _, s := range scans {
 		uses = append(uses, s.Uses...)
@@ -235,7 +235,7 @@ func bindScans(decls []Declaration, scans []proposals.Scan) []Declaration {
 		}
 		bindings := slices.Clone(d.Bindings)
 		for j, b := range bindings {
-			if b.Kind == application.CLI && b.Target == proposals.ScanCommand {
+			if b.Kind == application.CLI && b.Target == proposalsapp.ScanCommand {
 				bindings[j].Uses = slices.Concat(b.Uses, uses)
 			}
 		}

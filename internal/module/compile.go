@@ -65,7 +65,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := compileSettings(decls, jobs)
+	reg, err := compileSettings(decls)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +296,7 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 	return reg, proposals.Hooks{Created: created}, credential, nil
 }
 
-func compileSettings(decls []Declaration, jobs []scheduler.Definition) (*settings.Registry, error) {
+func compileSettings(decls []Declaration) (*settings.Registry, error) {
 	defs := make([]settings.Def, 0, len(decls))
 	hosts := make([]settings.HostDef, 0, len(decls))
 	owner := make(map[string]string, len(decls))
@@ -317,12 +317,6 @@ func compileSettings(decls []Declaration, jobs []scheduler.Definition) (*setting
 		}
 		defs = append(defs, FlagDef(d.Name))
 		hosts = append(hosts, FlagHostDef(d.Name))
-	}
-	if len(jobs) > 0 {
-		for _, def := range scheduler.Settings() {
-			owner[def.Key] = def.Module
-			defs = append(defs, def)
-		}
 	}
 	reg, err := settings.Compile(defs, hosts)
 	if err != nil {

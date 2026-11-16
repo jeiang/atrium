@@ -84,17 +84,22 @@ var allowed = map[string]bool{
 }
 
 var platform = map[string]bool{
-	"internal/module":             true,
-	"internal/unit":               true,
-	"internal/tool":               true,
-	"internal/ledger":             true,
-	"internal/proposals":          true,
-	"internal/review":             true,
-	"internal/review/application": true,
-	"internal/review/hub":         true,
-	"internal/notify":             true,
-	"internal/web":                true,
-	"internal/web/tpl":            true,
+	"internal/module":                 true,
+	"internal/unit":                   true,
+	"internal/tool":                   true,
+	"internal/ledger":                 true,
+	"internal/proposals":              true,
+	"internal/proposals/proposalscmd": true,
+	"internal/embed":                  true,
+	"internal/ops":                    true,
+	"internal/ops/collectors":         true,
+	"internal/scheduler":              true,
+	"internal/review":                 true,
+	"internal/review/application":     true,
+	"internal/review/hub":             true,
+	"internal/notify":                 true,
+	"internal/web":                    true,
+	"internal/web/tpl":                true,
 }
 
 var units = []string{

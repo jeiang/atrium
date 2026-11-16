@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/classify"
+	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/openloops"
@@ -222,7 +223,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 	if err != nil {
 		return err
 	}
-	if err := embed.PendingOrWarn(ctx, p.DB, embedURL, log); err != nil {
+	if err := embed.DrainOrWarn(ctx, p.DB, embedURL, mailembedding.Corpus, log); err != nil {
 		return err
 	}
 	var failed []string

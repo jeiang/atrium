@@ -7,9 +7,9 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
@@ -60,7 +60,21 @@ func (o proposalsDeps) session(ctx context.Context, run func(proposalscmd.Runtim
 			}
 			return reviewapp.New(reviewapp.Deps{DB: d, Ledger: p.Ledger, Registry: p.Registry, Pipeline: p})
 		},
-		Scanner: func(now func() float64) *mailapp.Service { return mailapp.New(d, cfg, config.OS, now) },
+		Scan: func(scanCtx context.Context, now func() float64) ([]proposalsapp.ScanResult, bool, error) {
+			var out []proposalsapp.ScanResult
+			ran := false
+			for _, s := range module.SetFrom(ctx).Catalog().ProposalScans() {
+				results, ok, err := s.Run(scanCtx, d, cfg, now)
+				if err != nil {
+					return nil, true, err
+				}
+				if ok {
+					ran = true
+					out = append(out, results...)
+				}
+			}
+			return out, ran, nil
+		},
 	}
 	return run(rt)
 }

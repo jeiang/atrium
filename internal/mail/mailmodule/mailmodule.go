@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
@@ -23,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -207,5 +209,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		ActivityCategory: unit.Mail,
 		Connections:      slices.Concat(Connections(), tracking.Connections()),
 		AccountSync:      mailconn.AccountSync(),
+		Corpora:          []embed.Corpus{mailembedding.Corpus},
+		Queues:           Queues(),
+		Metrics:          Metrics(),
+		ProposalScan:     ProposalScan(),
 	}
 }

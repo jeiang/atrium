@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
 )
 
 const ledgerMarker = "the ledger code is 7712"
@@ -64,7 +65,7 @@ func documentHash(t *testing.T, d *db.DB, id int64) string {
 	if err := d.Read.QueryRow("SELECT title, aliases, body FROM kb_records WHERE id = ?", id).Scan(&title, &aliases, &body); err != nil {
 		t.Fatal(err)
 	}
-	return embed.Hash(embed.KBDocumentText(context.Background(), title, aliases, body))
+	return embed.Hash(kbembedding.Document(context.Background(), title, aliases, body))
 }
 
 func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {

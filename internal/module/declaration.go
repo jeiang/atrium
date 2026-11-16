@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -82,7 +83,7 @@ type Declaration struct {
 	Metrics           []ops.Metric
 	Queues            []ops.Queue
 	Corpora           []embed.Corpus
-	ProposalScan      *proposals.Scan
+	ProposalScan      *proposalsapp.Scan
 	Checks            []ops.Check
 	Operations        []application.Definition
 	Bindings          []application.Binding

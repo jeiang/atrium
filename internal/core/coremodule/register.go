@@ -40,8 +40,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
-	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/obs/opsmetrics"
@@ -50,6 +48,7 @@ import (
 	"github.com/jeiang/atrium/internal/ops/collectors"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
@@ -89,7 +88,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	operations = append(operations, webusage.DescribeRoutes())
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "usage routes", Uses: []application.Name{webusage.RoutesName}})
-	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanDeletionsName}, Composite: true})
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: proposalsapp.ScanCommand, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
@@ -135,6 +134,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		})},
 		Attention:         AttentionSources(),
 		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
+		Queues:            collectors.Queues(),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
 		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
@@ -239,7 +239,7 @@ func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
 			if err != nil {
 				return err
 			}
-			return embedIndex(ctx, d)
+			return embedIndex(ctx, d, mc.Catalog().Corpora())
 		}},
 		{Name: "connection-health", Run: func(ctx context.Context, _ *runtime.Services) error {
 			d, _, err := m.Resources(ctx)
@@ -273,7 +273,7 @@ func recoverEvery(ctx context.Context, s *runtime.Services, d *db.DB, cfg config
 	}
 }
 
-func kbPending(ctx context.Context, d *db.DB) error {
+func drainBackground(ctx context.Context, d *db.DB, corpora []embed.Corpus) error {
 	embedURL, err := embed.EmbedURL(ctx, d.Read)
 	if err != nil {
 		return nil
@@ -282,17 +282,25 @@ func kbPending(ctx context.Context, d *db.DB) error {
 	if err != nil {
 		return nil
 	}
-	_, err = embed.KBPending(modelCtx, d, embedURL, nil)
-	var unavailable *httpx.ServiceUnavailable
-	if errors.As(err, &unavailable) || errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) {
-		return nil
+	for _, c := range corpora {
+		if !c.Background {
+			continue
+		}
+		_, err = embed.Drain(modelCtx, d, embedURL, c, nil)
+		var unavailable *httpx.ServiceUnavailable
+		if errors.As(err, &unavailable) || errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
-func embedIndex(ctx context.Context, d *db.DB) error {
+func embedIndex(ctx context.Context, d *db.DB, corpora []embed.Corpus) error {
 	for {
-		more, err := embedStep(ctx, d)
+		more, err := embedStep(ctx, d, corpora)
 		if err != nil {
 			return err
 		}
@@ -307,17 +315,17 @@ func embedIndex(ctx context.Context, d *db.DB) error {
 	}
 }
 
-func embedStep(ctx context.Context, d *db.DB) (bool, error) {
+func embedStep(ctx context.Context, d *db.DB, corpora []embed.Corpus) (bool, error) {
 	step, cancel := context.WithTimeout(ctx, embedStepTimeout)
 	defer cancel()
-	more, err := mail.ReembedStep(step, d)
+	more, err := embed.Reembed(step, d, corpora)
 	if err != nil && ctx.Err() == nil {
 		return false, fmt.Errorf("embedding index rebuild failed: %w", err)
 	}
 	if more || ctx.Err() != nil {
 		return more, ctx.Err()
 	}
-	if err := kbPending(step, d); err != nil && ctx.Err() == nil {
+	if err := drainBackground(step, d, corpora); err != nil && ctx.Err() == nil {
 		return false, fmt.Errorf("knowledge embedding failed: %w", err)
 	}
 	return false, ctx.Err()

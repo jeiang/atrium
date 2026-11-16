@@ -6,9 +6,9 @@ import (
 
 const KeyMinInterval = "agent_schedule_min_interval_seconds"
 
-func Settings() []settings.Def {
+func Settings(module string) []settings.Def {
 	return []settings.Def{settings.Value(settings.Advanced, settings.Def{
-		Key: KeyMinInterval, Module: "assistant", Type: settings.Int, Default: "3600",
+		Key: KeyMinInterval, Module: module, Type: settings.Int, Default: "3600",
 		Check: settings.Between(60, 604800),
 	})}
 }

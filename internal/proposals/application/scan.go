@@ -1,4 +1,4 @@
-package proposals
+package application
 
 import (
 	"context"
