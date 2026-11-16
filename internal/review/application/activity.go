@@ -34,9 +34,9 @@ const (
 
 var platformCategories = []string{CategoryAssistant, CategoryKnowledge, CategoryMedia, CategorySettings}
 
-func (s *Service) Categories(ctx context.Context) []string {
+func (s *Service) Categories() []string {
 	var out []string
-	for _, c := range s.contributions(ctx) {
+	for _, c := range s.kinds {
 		if c.Kinds.Actions != nil && c.Category != "" {
 			out = append(out, c.Category)
 		}
@@ -204,7 +204,7 @@ func (in ActivityInput) bound(source string) (float64, int64) {
 }
 
 func (s *Service) Activity(ctx context.Context, in ActivityInput) (application.Read[Activity], error) {
-	if in.Category != "" && !slices.Contains(s.Categories(ctx), in.Category) {
+	if in.Category != "" && !slices.Contains(s.Categories(), in.Category) {
 		return application.Read[Activity]{}, invalid("category", "unknown category")
 	}
 	if in.After != nil && !in.After.Valid() {
@@ -368,7 +368,7 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, err
 		pages = append(pages, page)
 	}
 	var contributed []string
-	for _, c := range s.contributions(ctx) {
+	for _, c := range s.kinds {
 		if c.Kinds.Actions == nil || c.Category == "" {
 			continue
 		}

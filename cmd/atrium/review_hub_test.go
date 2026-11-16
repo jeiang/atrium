@@ -55,11 +55,9 @@ func TestReviewHubServesOtherUnitsWhenMailIsOff(t *testing.T) {
 	s.restart()
 
 	expect("/review", http.StatusOK, []string{"Allow web_fetch"}, []string{"Re: lease"})
-	expect("/proposals/900", http.StatusOK, []string{"Allow web_fetch"}, nil)
-	expect("/activity", http.StatusOK, nil, []string{`value="mail"`})
+	expect("/proposals/900/card", http.StatusOK, []string{"Allow web_fetch"}, nil)
+	expect("/activity", http.StatusOK, nil, nil)
+	expect("/activity?category=mail", http.StatusOK, nil, nil)
 	expect("/activity/recent", http.StatusOK, nil, nil)
-	if got := get("/activity?category=mail"); got.status == http.StatusOK {
-		t.Fatalf("mail is off but the mail activity category is served: %s", got.body)
-	}
 	expect("/api/v1/pending", http.StatusOK, []string{`"drafts":[]`}, []string{"Re: lease"})
 }

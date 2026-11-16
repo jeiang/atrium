@@ -32,7 +32,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 		s.failRead(w, r, err, "")
 		return
 	}
-	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: s.review.Categories(r.Context()), After: raw}
+	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: s.review.Categories(), After: raw}
 	if found.Data.Next != nil {
 		data.Next = found.Data.Next.String()
 	}
