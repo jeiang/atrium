@@ -30,8 +30,8 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/webusage"
 	"github.com/jeiang/atrium/internal/web/tpl"
+	"github.com/jeiang/atrium/internal/webusage"
 )
 
 var log = logx.Logger("atrium.web")
