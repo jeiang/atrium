@@ -258,7 +258,7 @@ func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
 
 func TestAuthRateLimitChargesLongBearerTokens(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	s := startAPISite(t, dir, api, "--trusted-proxy", "127.0.0.1/32")
+	s := startAPISite(t, dir, api)
 	token := s.token("owner", oidctest.AccessOptions{Mutate: func(claims map[string]any) {
 		claims["pad"] = strings.Repeat("p", 5000)
 	}})
@@ -277,8 +277,8 @@ func TestAuthRateLimitChargesLongBearerTokens(t *testing.T) {
 }
 
 func TestAuthRateLimitIgnoresUntrustedForwardedAddresses(t *testing.T) {
-	s := newAPISite(t)
-	call := newRateCall(t, s.base)
+	_, base, _ := rateSite(t, false)
+	call := newRateCall(t, base)
 	allowed := 0
 	for i := range 125 {
 		status, header, body := call.get("/api/v1/me", fmt.Sprintf("198.51.100.%d", i+1), "")

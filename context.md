@@ -1127,7 +1127,11 @@ claims about the running application. Operator contracts are in
   `@thread/12/m<seq>`.
 - The NixOS public auth default is OIDC; first-hour bootstrap uses the keyed database from its first start and the same-process emergency listener, with host-declared OIDC configuration activated automatically when valid.
 - The public web service accepts an authenticating reverse proxy
-  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Every
+  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy
+  identity headers count only when the socket peer is in the trusted proxy
+  list (`--trusted-proxy` or the host's `web.trusted_proxy_cidrs`); from any
+  other peer the request carries no identity. A proxy mode with an empty list
+  refuses to start (exit 78). Every
   admitted proxy request or OIDC session is the one operator with full
   authority; no role distinguishes them. A separate local mode provides
   loopback access: it binds only a numeric loopback address, refuses any other

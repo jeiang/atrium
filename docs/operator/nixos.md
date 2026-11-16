@@ -84,7 +84,7 @@ for host-owned password accounts.
 | `web.host` | string | `"0.0.0.0"` | Public bind address. |
 | `web.auth` | `"proxy"`, `"oidc"`, `"proxy+oidc"`, or `"local"` | `"oidc"` | Authentication modes, emitted as separate `--auth` arguments. Local requires numeric loopback. |
 | `web.allowedHost` | null or string | `null` | Accepted public Host; required unless auth is local. Also passed as `ATRIUM_PUBLIC_HOST`. |
-| `web.trustedProxyCidrs` | list of strings | `[]` | Peer addresses/CIDRs allowed to supply `CF-Connecting-IP`; rendered as `web.trusted_proxy_cidrs`. |
+| `web.trustedProxyCidrs` | list of strings | `[]` | Peer addresses/CIDRs allowed to supply `CF-Connecting-IP` and, in proxy modes, `Remote-Groups`; rendered as `web.trusted_proxy_cidrs`. Required with a proxy `web.auth`. |
 | `web.emergency.enable` | boolean | `true` | Adds a local-mode listener on `127.0.0.1` inside `atrium.service`. |
 | `web.emergency.port` | port | `8481` | Emergency port; must differ from public and ops ports. |
 
@@ -98,7 +98,9 @@ the `service/oidc` connection is configured. OIDC connection selectors are
 collisions. The public port is not automatically opened in the firewall.
 
 Proxy modes require a trusted reverse proxy to strip or overwrite `Remote-*`
-headers. Do not publicly proxy the emergency listener. `/api/v1` remains
+headers, and `web.trustedProxyCidrs` must name it: evaluation fails without
+it, and identity headers from any other peer are ignored. Do not publicly
+proxy the emergency listener. `/api/v1` remains
 bearer-only in every listener and does not use browser/proxy authentication;
 with `proxy` or `proxy+oidc`, the reverse proxy must pass `/api/v1` through
 without forward authentication.

@@ -701,7 +701,7 @@ in {
       auth = mkOption {
         type = types.enum ["proxy" "oidc" "proxy+oidc" "local"];
         default = "oidc";
-        description = "Auth modes of the public listener, rendered as one --auth flag per mode. The default oidc keeps public operator access closed until OIDC is activated through the local bootstrap listener and needs allowedHost. proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; proxy+oidc accepts both; local trusts every request and needs a numeric loopback web.host.";
+        description = "Auth modes of the public listener, rendered as one --auth flag per mode. The default oidc keeps public operator access closed until OIDC is activated through the local bootstrap listener and needs allowedHost. proxy trusts Remote-Groups from a reverse proxy in trustedProxyCidrs and needs allowedHost and trustedProxyCidrs; proxy+oidc accepts both; local trusts every request and needs a numeric loopback web.host.";
       };
 
       allowedHost = mkOption {
@@ -714,7 +714,7 @@ in {
         type = types.listOf types.str;
         default = [];
         example = ["127.0.0.1/32"];
-        description = "Socket peer addresses or CIDRs allowed to name the client in CF-Connecting-IP, rendered as host.web.trusted_proxy_cidrs. Empty keys every request by its socket address.";
+        description = "Socket peer addresses or CIDRs allowed to name the client in CF-Connecting-IP and, in proxy modes, to send the Remote-Groups identity header, rendered as host.web.trusted_proxy_cidrs. Required with a proxy web.auth. Empty keys every request by its socket address.";
       };
 
       emergency = {
@@ -992,6 +992,10 @@ in {
       {
         assertion = cfg.web.auth == "local" || cfg.web.allowedHost != null;
         message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\", \"oidc\" or \"proxy+oidc\"";
+      }
+      {
+        assertion = !(lib.hasPrefix "proxy" cfg.web.auth) || renderedHost ? web.trusted_proxy_cidrs || renderedHost ? web.trusted_proxy_cidrs_file;
+        message = "services.atrium.web.trustedProxyCidrs must name the reverse proxy with web.auth = \"proxy\" or \"proxy+oidc\"; proxy identity headers count only from those peers";
       }
       {
         assertion = cfg.web.auth != "local" || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["::1" "[::1]"];
