@@ -289,8 +289,17 @@ func MarkRead(ctx context.Context, q db.Querier, id int64, read bool, now float6
 }
 
 func Withdraw(ctx context.Context, q db.Querier, occurrence string, now float64) error {
-	_, err := q.ExecContext(ctx, "UPDATE notifications SET read_at = ? WHERE read_at IS NULL AND id IN "+
-		"(SELECT json_extract(after_json, '$.notification_id') FROM effects WHERE origin = 'notify' AND operation_key = ?)", now, occurrence)
+	effects, err := ledger.ListEffects(ctx, q, ledger.Filter{Origin: "notify", Operation: "notify_inbox", OperationKey: occurrence, Direction: "forward", Limit: 1}, now)
+	if err != nil || len(effects) == 0 {
+		return err
+	}
+	var after struct {
+		NotificationID int64 `json:"notification_id"`
+	}
+	if json.Unmarshal(effects[0].After, &after) != nil || after.NotificationID == 0 {
+		return nil
+	}
+	_, err = q.ExecContext(ctx, "UPDATE notifications SET read_at = ? WHERE id = ? AND read_at IS NULL", now, after.NotificationID)
 	return err
 }
 
