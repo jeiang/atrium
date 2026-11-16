@@ -86,7 +86,6 @@ const (
 	MailTriage             = executors.MailTriage
 	TriageArchive          = executors.TriageArchive
 	TriageLabel            = executors.TriageLabel
-	TriageSnooze           = executors.TriageSnooze
 	UndoUntrack            = tracking.UndoUntrack
 	LoopOweReply           = openloops.OweReply
 	LoopWaiting            = openloops.Waiting

@@ -821,8 +821,10 @@ claims about the running application. Operator contracts are in
   effect before the IMAP or SMTP call. An unknown outcome stays blocked until
   the operator resolves it and is never retried automatically; an action the
   operator has undone is not applied again; moves use COPY, STORE Deleted and
-  UID EXPUNGE. A due snooze in shadow mode records a skipped effect and stays
-  pending. Proposal undo reverses completed effects newest first and stops at
+  UID EXPUNGE. Mail triage proposals only archive or label; a proposal item,
+  effect or undo plan of a removed kind (message snooze) stays readable,
+  is refused before any IMAP call, and cannot be undone. Proposal undo
+  reverses completed effects newest first and stops at
   the first reversal that does not complete.
 - Going live takes a baseline of the read, unflagged inbox messages present
   at that moment, and automatic filing and deletion never touch them. A
@@ -906,8 +908,7 @@ claims about the running application. Operator contracts are in
   Findings of severity warning or critical appear in the attention view
   and on Needs you. No worker run starts automatically and nothing
   restarts or changes a host.
-- The Notion page view is read-only, and `notion_link` and `notion_edit`
-  proposals from v2 stay readable and dismissable. Approvals are only for
+- The Notion page view is read-only. Approvals are only for
   external or costly actions.
 - Threads carry marks, recorded with `threads.tainted_at` as the first
   mark time. The set is a bitmask: `untrusted` (someone else wrote the

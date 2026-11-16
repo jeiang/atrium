@@ -37,7 +37,6 @@ const (
 
 	OpDeleteFolder = "delete_folder"
 	OpRuleDelete   = "rule_delete"
-	OpCancelSnooze = "cancel_snooze"
 )
 
 func chosenSnapshots(messages []mailops.Snapshot, wanted any) ([]mailops.Snapshot, error) {
@@ -255,10 +254,8 @@ func operationKey(pid int64, action map[string]any) string {
 		}
 		key += ":" + strings.Join(parts, ",")
 	}
-	for _, field := range []string{"id", "snooze_id"} {
-		if value, ok := action[field]; ok {
-			key += ":" + fmt.Sprint(value)
-		}
+	if value, ok := action["id"]; ok {
+		key += ":" + fmt.Sprint(value)
 	}
 	return key
 }
@@ -1000,7 +997,6 @@ func (e *Executors) Undo() []ledger.UndoDefinition {
 	}
 	return append(out,
 		ledger.UndoDefinition{Operation: OpRuleDelete, Undoer: ledger.Undoer{Validate: validatePlan(OpRuleDelete), Local: e.UndoRuleDelete}},
-		ledger.UndoDefinition{Operation: OpCancelSnooze, Undoer: ledger.Undoer{Validate: validatePlan(OpCancelSnooze), Local: e.UndoCancelSnooze}},
 	)
 }
 
