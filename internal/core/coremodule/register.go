@@ -97,6 +97,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, eventOps...), append(bindings, eventBindings...)
 	searchOps, searchBindings := searchOperations(m.Now)
 	operations, bindings = append(operations, searchOps...), append(bindings, searchBindings...)
+	pauseOps, pauseBindings := pauseOperations()
+	operations, bindings = append(operations, pauseOps...), append(bindings, pauseBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -160,6 +162,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				authRoutes(d)
 				commandRoutes(d)
 				eventRoutes(d)
+				pauseRoutes(d)
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
