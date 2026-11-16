@@ -380,7 +380,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (application.Read[
 		return embed(ctx, texts)
 	}
 	found, err := kb.Search(ctx, s.db.Read, kb.SearchFilter{
-		Query: in.Query, Scope: in.Scope, Limit: in.Limit, ProjectID: project, Now: s.now(), Embed: embedTexts,
+		Query: in.Query, Scope: in.Scope, Limit: in.Limit, ProjectID: project, Now: s.now(), Embed: embedTexts, ExcludeInstructions: true,
 	})
 	if err != nil {
 		return application.Read[SearchResult]{}, err

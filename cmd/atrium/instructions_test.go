@@ -90,6 +90,25 @@ func TestStandingInstructionsPage(t *testing.T) {
 		t.Fatalf("system prompt does not carry the edited instructions once: %q", system)
 	}
 
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "kb_search", map[string]any{"query": "metric units"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("none")))
+	if ran := runApp(t, "agent", "run", "--text", "which units do I use"); ran.code != cli.ExitOK {
+		t.Fatalf("kb_search run: %d %s", ran.code, ran.stderr)
+	}
+	if found := kbResults(t, d, latestThread(t, dir), "s1"); len(found) != 0 {
+		t.Fatalf("kb_search returned the standing instructions already in the prompt: %v", found)
+	}
+	all := apiData(t, s.do(http.MethodGet, "/api/v1/search/all?q=metric&types=record", token, nil), http.StatusOK)
+	var shown []int64
+	for _, g := range all["groups"].([]any) {
+		for _, item := range g.(map[string]any)["items"].([]any) {
+			shown = append(shown, number(t, item.(map[string]any)["id"]))
+		}
+	}
+	if len(shown) != 1 || shown[0] != id {
+		t.Fatalf("operator search does not show the standing instructions: %v", all)
+	}
+
 	page = apiData(t, s.do(http.MethodGet, "/api/v1/knowledge/instructions", token, nil), http.StatusOK)
 	history := page["history"].([]any)
 	if len(history) == 0 {

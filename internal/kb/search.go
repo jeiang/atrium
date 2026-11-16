@@ -29,20 +29,28 @@ func semanticSkipped(ctx context.Context, operation, reason string) {
 }
 
 type SearchFilter struct {
-	Query          string
-	Scope          string
-	Limit          int
-	ProjectID      int64
-	IncludePrivate bool
-	Now            float64
-	Embed          func(ctx context.Context, texts []string) ([][]float64, error)
+	Query               string
+	Scope               string
+	Limit               int
+	ProjectID           int64
+	IncludePrivate      bool
+	ExcludeInstructions bool
+	Now                 float64
+	Embed               func(ctx context.Context, texts []string) ([][]float64, error)
 }
 
 func (f SearchFilter) live() (string, []any) {
+	var where string
+	var args []any
 	if f.IncludePrivate {
-		return liveBase("r", f.Now, f.Scope)
+		where, args = liveBase("r", f.Now, f.Scope)
+	} else {
+		where, args = liveWhere("r", f.ProjectID, f.Now, f.Scope)
 	}
-	return liveWhere("r", f.ProjectID, f.Now, f.Scope)
+	if f.ExcludeInstructions {
+		where += " AND " + notInstructions("r")
+	}
+	return where, args
 }
 
 type Hit struct {
