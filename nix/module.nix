@@ -291,6 +291,12 @@
     ++ lib.optional (cfg.database.keyFile != null) "db-key:${cfg.database.keyFile}";
 
   obsidianDir = cfg.knowledgeExport.obsidianDirectory;
+  obsidianGrant = obsidianDir != null && !(within cfg.stateDir obsidianDir);
+  obsidianErrors = lib.optionals (obsidianDir != null) (
+    lib.optional (!lib.hasPrefix "/" obsidianDir) "services.atrium.knowledgeExport.obsidianDirectory must be an absolute path"
+    ++ lib.optional (obsidianDir == cfg.stateDir || within cacheDir obsidianDir) "services.atrium.knowledgeExport.obsidianDirectory must be a folder below ${cfg.stateDir} other than ${cacheDir}, or a folder outside ${cfg.stateDir}"
+    ++ lib.optional (within "/home" obsidianDir || within "/root" obsidianDir) "services.atrium.knowledgeExport.obsidianDirectory is under /home or /root, which ProtectHome hides from atrium.service"
+  );
 
   appEnvironment =
     {
@@ -436,7 +442,7 @@
     // lib.optionalAttrs (writePaths != []) {ReadWritePaths = writePaths;}
     // lib.optionalAttrs agent.enable {InaccessiblePaths = ["-${libraryDir}"];};
 
-  writePaths = lib.optional (obsidianDir != null) obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
+  writePaths = lib.optional obsidianGrant obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
 
   writeTimeout = "45min";
 
@@ -737,7 +743,7 @@ in {
       obsidianDirectory = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "Folder that receives the generated Obsidian vault; the web unit runs the export job that writes it, and the operator syncs it. The one source for export.export_obsidian_dir and its ReadWritePaths grant.";
+        description = "Folder that receives the knowledge export as Markdown files; the daily knowledge-export job fails while it is unset or not writable. A folder below services.atrium.stateDir needs no extra access; any other folder is created by systemd-tmpfiles and granted through ReadWritePaths. The one source for export.export_obsidian_dir.";
       };
     };
 
@@ -987,8 +993,8 @@ in {
         message = "services.atrium.database.keyFile must be an absolute path";
       }
       {
-        assertion = obsidianDir == null || lib.hasPrefix "/" obsidianDir;
-        message = "services.atrium.knowledgeExport.obsidianDirectory must be an absolute path";
+        assertion = obsidianErrors == [];
+        message = lib.concatStringsSep "; " obsidianErrors;
       }
       {
         assertion = cfg.web.auth == "local" || cfg.web.allowedHost != null;
@@ -1045,7 +1051,8 @@ in {
     systemd = {
       tmpfiles.rules =
         ["d ${cacheDir} 0750 ${cfg.user} ${cfg.group} -"]
-        ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 ${cfg.user} ${cfg.group} -";
+        ++ lib.optional cfg.backup.enable "d ${cfg.backup.directory} 0750 ${cfg.user} ${cfg.group} -"
+        ++ lib.optional obsidianGrant "d ${obsidianDir} 0750 ${cfg.user} ${cfg.group} -";
       services = {
         atrium = atriumService;
         atrium-media-agent = mkIf agent.enable agentService;

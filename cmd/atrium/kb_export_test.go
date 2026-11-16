@@ -129,6 +129,9 @@ func TestObsidianFolderIsHostConfiguration(t *testing.T) {
 	if strings.Contains(body, `name="export_obsidian_dir"`) {
 		t.Errorf("the folder is still an editable control")
 	}
+	if !strings.Contains(body, "Not configured") {
+		t.Errorf("the export settings do not say the folder is not configured")
+	}
 	fields, _ := exportForm(t, body, action)
 	submitted := append(fields, [2]string{"export_obsidian_dir", "/srv/vault"})
 	if status, body, _ := exportPost(t, w, action, submitted, false); status != http.StatusOK {
@@ -136,7 +139,16 @@ func TestObsidianFolderIsHostConfiguration(t *testing.T) {
 	}
 }
 
-func TestExportWithoutADestinationIsSkipped(t *testing.T) {
+func lastExportRun(t *testing.T, d *db.DB) (string, string) {
+	t.Helper()
+	var status, text string
+	if err := d.Read.QueryRow("SELECT status, COALESCE(error, '') FROM job_runs WHERE job_id = ? ORDER BY id DESC LIMIT 1", exportJob(t, d)).Scan(&status, &text); err != nil {
+		t.Fatal(err)
+	}
+	return status, text
+}
+
+func TestExportWithoutAFolderFails(t *testing.T) {
 	_, f, d := obsidianFixture(t)
 	setEnv(t, settingEnv("public_url"), "https://atrium.invalid")
 	if ran := runApp(t, "settings", "set", kbexport.ObsidianKindsKey, "pii,messages,personal"); ran.code != cli.ExitOK {
@@ -152,14 +164,74 @@ func TestExportWithoutADestinationIsSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	if writes != 0 || mapped != 0 {
-		t.Errorf("the export ran without a destination: %d writes, %d mappings", writes, mapped)
+		t.Errorf("the export ran without a folder: %d writes, %d mappings", writes, mapped)
 	}
-	var status string
-	if err := d.Read.QueryRow("SELECT status FROM job_runs ORDER BY id DESC LIMIT 1").Scan(&status); err != nil {
+	if status, text := lastExportRun(t, d); status != "error" || !strings.Contains(text, "export."+kbexport.ObsidianDirKey+" is not set") {
+		t.Errorf("export without a folder = %s %q, want a failed run naming the missing folder", status, text)
+	}
+	var outcome string
+	if err := d.Read.QueryRow("SELECT outcome FROM operation_audit WHERE operation = 'knowledge.export' ORDER BY id DESC LIMIT 1").Scan(&outcome); err != nil {
 		t.Fatal(err)
 	}
-	if status == "error" {
-		t.Errorf("the export job failed without a destination")
+	if outcome != "failed" {
+		t.Errorf("audit outcome = %s, want failed", outcome)
+	}
+}
+
+func TestExportToAnUnwritableFolderFails(t *testing.T) {
+	_, f, d := obsidianFixture(t)
+	blocker := filepath.Join(t.TempDir(), "taken")
+	if err := os.WriteFile(blocker, []byte("not a folder"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	vault := filepath.Join(blocker, "vault")
+	obsidianEnable(t, vault)
+	exportRecord(t, d, "Dentist", "body", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	if status, text := lastExportRun(t, d); status != "error" || !strings.Contains(text, "knowledge export folder "+vault+" is not writable") {
+		t.Errorf("export to an unwritable folder = %s %q, want a failed run naming the folder", status, text)
+	}
+	var mapped int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages").Scan(&mapped); err != nil || mapped != 0 {
+		t.Errorf("mappings after a failed export = %d, %v", mapped, err)
+	}
+}
+
+func TestExportIgnoresRemovedTargetRowsAndUpdatesInPlace(t *testing.T) {
+	_, f, d := obsidianFixture(t)
+	vault := filepath.Join(t.TempDir(), "knowledge")
+	obsidianEnable(t, vault)
+	id := exportRecord(t, d, "Dentist", "first body", "personal", "chat", 0, 0, 0, 0, 0)
+	exportSeed(t, d, "INSERT INTO export_pages (target, record_id, remote_id, hash, updated_at) VALUES ('notion', ?, 'page-1', 'h1', 1), ('notion', 0, 'page-0', 'h0', 1)", id)
+	runExport(t, f, d)
+	if status, text := lastExportRun(t, d); status != "ok" {
+		t.Fatalf("first export = %s %q", status, text)
+	}
+	path := filepath.Join(vault, "personal", "dentist-K"+fmt.Sprint(id)+".md")
+	if content, err := os.ReadFile(path); err != nil || !strings.Contains(string(content), "first body") {
+		t.Fatalf("first export file = %q, %v", content, err)
+	}
+	if _, err := d.Write.Exec("UPDATE kb_records SET body = 'second body', updated_at = 300 WHERE id = ?", id); err != nil {
+		t.Fatal(err)
+	}
+	runExport(t, f, d)
+	if status, text := lastExportRun(t, d); status != "ok" {
+		t.Fatalf("second export = %s %q", status, text)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(content), "second body") || strings.Contains(string(content), "first body") {
+		t.Errorf("updated export file = %q, %v", content, err)
+	}
+	entries, err := os.ReadDir(filepath.Join(vault, "personal"))
+	if err != nil || len(entries) != 1 {
+		t.Errorf("personal folder after two runs = %v, %v; want one file", entries, err)
+	}
+	var notion, folder int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE target = 'notion'), COUNT(*) FILTER (WHERE target = 'obsidian') FROM export_pages").Scan(&notion, &folder); err != nil {
+		t.Fatal(err)
+	}
+	if notion != 2 || folder != 2 {
+		t.Errorf("export_pages rows = %d notion, %d folder; want 2 and 2", notion, folder)
 	}
 }
 

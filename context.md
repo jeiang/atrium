@@ -834,14 +834,17 @@ claims about the running application. Operator contracts are in
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium writes
   resolve <id>` or the Activity page.
-- The knowledge export is export-only: a built-in job renders live,
-  non-expired records into the Obsidian folder and writes and removes only
-  the files it tracks; a target with no destination is skipped. Each
-  external write records an effect first, and an unknown outcome blocks the
-  target until `atrium writes resolve <id>`. Edits made in the folder are
-  overwritten on the next run. Private records are exported
-  only with consent recorded for that exact destination; changing the
-  destination clears the consent.
+- The knowledge export is export-only and has one destination, a Markdown
+  folder declared by the host (`export.export_obsidian_dir`). The daily
+  `knowledge-export` job renders live, non-expired records into it and
+  writes and removes only the files it tracks. With no folder set, or a
+  folder it cannot create or write, the run fails and is recorded as a
+  failed job; it never reports success with nothing written. Mapping rows
+  of the removed Notion target are ignored. Each file write records an
+  effect first, and an unknown outcome blocks the export until `atrium
+  writes resolve <id>`. Edits made in the folder are overwritten on the
+  next run. Private records are exported only with consent recorded for
+  that exact folder; changing the folder clears the consent.
 - Draft edits carry an optional expected revision: stale edits are refused without overwriting newer content. The HTML form sends it automatically; API and tool callers may supply `revision`.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not

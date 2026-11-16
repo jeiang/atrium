@@ -3,6 +3,9 @@ package export
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,26 +27,33 @@ type Result struct {
 	Skipped int `json:"skipped"`
 }
 
-func (r Result) add(other Result) Result {
-	return Result{
-		Created: r.Created + other.Created, Updated: r.Updated + other.Updated,
-		Removed: r.Removed + other.Removed, Skipped: r.Skipped + other.Skipped,
-	}
-}
+var errNoFolder = errors.New("knowledge export has no folder: host key export." + ObsidianDirKey + " is not set")
 
 func Run(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, error) {
-	var out Result
-	var errs []error
-	if dir, err := readSetting(ctx, d, ObsidianDirKey); err != nil {
-		return out, err
-	} else if dir != "" {
-		res, err := runObsidian(ctx, d, env, now)
-		out = out.add(res)
-		if err != nil {
-			errs = append(errs, err)
-		}
+	dir, err := readSetting(ctx, d, ObsidianDirKey)
+	if err != nil {
+		return Result{}, err
 	}
-	return out, errors.Join(errs...)
+	if dir == "" {
+		return Result{}, errNoFolder
+	}
+	dir = filepath.Clean(dir)
+	if err := writable(dir); err != nil {
+		return Result{}, fmt.Errorf("knowledge export folder %s is not writable: %w", dir, err)
+	}
+	return runObsidian(ctx, d, env, now, dir)
+}
+
+func writable(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	probe, err := os.CreateTemp(dir, ".atrium-*.tmp")
+	if err != nil {
+		return err
+	}
+	name := probe.Name()
+	return errors.Join(probe.Close(), os.Remove(name))
 }
 
 func readSetting(ctx context.Context, d *db.DB, key string) (string, error) {

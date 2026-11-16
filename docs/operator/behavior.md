@@ -325,11 +325,13 @@ dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.
 
-The knowledge export is one-way. It overwrites only the Obsidian files it
-tracks and never touches other files; edits made at the destination are
-overwritten on the next run. Private records are exported only with consent
-recorded for that exact destination, and changing the destination clears the
-consent.
+The knowledge export is one-way and writes one Markdown folder, set by the
+host. It overwrites only the files it tracks and never touches other files;
+edits made in the folder are overwritten on the next run. The daily
+`knowledge-export` job fails, and the Scheduled page shows the run as failed
+with the reason, when no folder is set or the folder cannot be written.
+Private records are exported only with consent recorded for that exact
+folder, and changing the folder clears the consent.
 
 Notifications enter the in-app inbox before best-effort Web Push. A push failure
 does not roll back the inbox occurrence. Registration is limited to 16 devices,

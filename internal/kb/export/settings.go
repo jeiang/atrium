@@ -49,7 +49,7 @@ func Settings() []settings.Def {
 func Sections() []settingspage.Section {
 	return []settingspage.Section{
 		{
-			Name: ObsidianSection, Title: "Obsidian export", Module: "export", Template: "export_obsidian_settings",
+			Name: ObsidianSection, Title: "Markdown export", Module: "export", Template: "export_obsidian_settings",
 			Fields: []settingspage.Field{
 				{Key: ObsidianKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
 				{Key: ObsidianPrivateKey, Label: "Include private records"},

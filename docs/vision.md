@@ -55,7 +55,7 @@ assistant for their own circumstances.
 
 Behavior should be configurable rather than requiring source changes.
 Mutable state should live outside the program and its source tree, in
-systems such as SQLite and Notion, with other backends possible later.
+SQLite, with exports to open formats, with other backends possible later.
 
 Updating or replacing the program should not mean losing the knowledge,
 configuration, or history that makes the assistant useful.

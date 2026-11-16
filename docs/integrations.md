@@ -91,11 +91,13 @@ Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_
 
 ## Knowledge export
 
-The knowledge base is projected into a Markdown folder by the
-`knowledge-export` job. The **Obsidian export** section on the Export settings
-page (`/settings/export`) shows the folder (`export_obsidian_dir`, normally
-declared by the host); its private switch stores the folder path in
-`export_obsidian_private_to`. The export overwrites the files it tracks on every
+The knowledge base is written to one Markdown folder by the daily
+`knowledge-export` job. The **Markdown export** section on the Export settings
+page (`/settings/export`) shows the folder (`export_obsidian_dir`, declared by
+the host through `services.atrium.knowledgeExport.obsidianDirectory`) or "Not
+configured"; its private switch stores the folder path in
+`export_obsidian_private_to`. The job fails while no folder is set or the
+folder cannot be written. The export overwrites the files it tracks on every
 run and removes the file of a record that is retracted or leaves the export
 set. A write with an unknown outcome blocks the export until it is resolved.
 

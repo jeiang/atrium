@@ -6,7 +6,7 @@
   <input type="hidden" name="csrf_token" value="{{$csrf}}">{{with opt . "Back" ""}}<input type="hidden" name="back" value="{{.}}">{{end}}
   <div role="group" class="set-row">
     <label for="export_obsidian_dir">Folder</label>
-    <code id="export_obsidian_dir" class="set-pinned" data-pinned>{{icon "lock"}}{{$dir}}</code>
+    <code id="export_obsidian_dir" class="set-pinned" data-pinned>{{icon "lock"}}{{if $dir}}{{$dir}}{{else}}Not configured{{end}}</code>
   </div>
   <div role="group" class="set-row" aria-label="Include">
     <span>Include</span>

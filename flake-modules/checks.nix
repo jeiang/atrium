@@ -484,10 +484,23 @@
       assert builtins.all notifying notifyUnits; true;
     vaultExport = let
       scheduler = unitText "atrium.service";
+      inState = host {
+        web.allowedHost = "atrium.example.org";
+        knowledgeExport.obsidianDirectory = "/var/lib/atrium/knowledge";
+      };
     in
       assert cfg.renderedHost.export.export_obsidian_dir == "/var/lib/atrium-vault";
       assert lib.hasInfix "ReadWritePaths=/var/lib/atrium-vault" scheduler;
-      assert !(defaults.config.services.atrium.renderedHost ? export); true;
+      assert builtins.elem "d /var/lib/atrium-vault 0750 atrium atrium -" nixos.config.systemd.tmpfiles.rules;
+      assert !(defaults.config.services.atrium.renderedHost ? export);
+      assert failing inState == [];
+      assert inState.config.services.atrium.renderedHost.export.export_obsidian_dir == "/var/lib/atrium/knowledge";
+      assert !(lib.hasInfix "/var/lib/atrium/knowledge" inState.config.systemd.units."atrium.service".text);
+      assert !(builtins.any (lib.hasInfix "/var/lib/atrium/knowledge") inState.config.systemd.tmpfiles.rules);
+      assert refusedWith "obsidianDirectory must be a folder below /var/lib/atrium" {knowledgeExport.obsidianDirectory = "/var/lib/atrium";};
+      assert refusedWith "obsidianDirectory must be a folder below /var/lib/atrium" {knowledgeExport.obsidianDirectory = "/var/lib/atrium/cache/vault";};
+      assert refusedWith "obsidianDirectory is under /home or /root" {knowledgeExport.obsidianDirectory = "/home/operator/vault";};
+      assert refusedWith "obsidianDirectory must be an absolute path" {knowledgeExport.obsidianDirectory = "vault";}; true;
     hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
     assert cfg.renderedHost.app_keys.action_link_key_file == "\${CREDENTIALS_DIRECTORY}/action_links.action_link_key";
     assert cfg.renderedHost.app_keys.link_key_file == "\${CREDENTIALS_DIRECTORY}/media.link_key";
