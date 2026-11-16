@@ -28,6 +28,7 @@ import (
 type Context struct {
 	Current  func() *Snapshot
 	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
+	Follow   func(context.Context, db.Querier) (bool, error)
 	Catalog  func() *Catalog
 	Env      config.Env
 }

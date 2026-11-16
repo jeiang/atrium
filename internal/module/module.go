@@ -121,8 +121,7 @@ func FlagDef(name string) settings.Def {
 		Label:   strings.ToUpper(name[:1]) + name[1:] + " app is on",
 		Module:  Core,
 		Type:    settings.Bool,
-		Default: "false",
-		Restart: true})
+		Default: "false"})
 }
 
 type State string
