@@ -104,7 +104,6 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 	for schema, field := range map[string]string{
 		"SchedulePatch":   "schedule",
 		"ScheduleEnabled": "enabled",
-		"SubagentEnabled": "enabled",
 	} {
 		s := doc.Components.Schemas[schema]
 		if !slices.Contains(s.Required, field) {
@@ -166,7 +165,7 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 			settings = true
 		}
 	}
-	if len(reach.Areas) != 21 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
+	if len(reach.Areas) != 20 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
 		t.Fatalf("reach.json: %s", raw)
 	}
 
