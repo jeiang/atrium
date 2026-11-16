@@ -18,12 +18,12 @@ import (
 
 const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untrusted + " Gather, then write the review as your reply, with these " +
 	"short sections and nothing invented: " +
-	"1) Wins: commitments marked done (commitments status=done) and things finished this week that you can " +
+	"1) Wins: items marked done (commitment_list status=done) and things finished this week that you can " +
 	"see in recent threads. " +
-	"2) Waiting on them: open_loops state=waiting_on_them. " +
-	"3) Stalled: items from open_loops or commitments (status=open) that have been open for more than 14 days. " +
+	"2) Waiting on them: open_loops state=waiting_on_them and commitment_list side=waiting status=open. " +
+	"3) Stalled: items from open_loops or commitment_list (status=open) that have been open for more than 14 days. " +
 	"4) Owed replies: open_loops state=owe_reply. " +
-	"5) Commitments due in the next 7 days or overdue: commitments status=open, compared with today's date. " +
+	"5) Commitments due in the next 7 days or overdue: commitment_list side=todo status=open, compared with today's date. " +
 	"6) Next week: upcoming_birthdays days=7 and the calendar for the next 7 days. " +
 	"7) Packages in transit: packages active_only=true. " +
 	"8) Knowledge: call kb_search for records written or retracted this week and list them. " +

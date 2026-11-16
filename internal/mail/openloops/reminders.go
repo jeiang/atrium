@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -273,7 +274,44 @@ func Undo() []ledger.UndoDefinition {
 			}
 			return ledger.Result{State: ledger.Done, After: after}, nil
 		},
+	}}, {Operation: UndoCommitmentStatus, Undoer: ledger.Undoer{
+		Validate: func(raw json.RawMessage) error {
+			_, err := commitmentStatusUndo(raw)
+			return err
+		},
+		Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
+			info, err := commitmentStatusUndo(raw)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			found, err := SetCommitmentStatus(ctx, tx, info.ID, info.Status)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			if !found {
+				return ledger.Result{State: ledger.Failed, Error: "the commitment is gone"}, nil
+			}
+			after, err := encode(map[string]any{"id": info.ID, "status": info.Status})
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: after}, nil
+		},
 	}}}
+}
+
+type CommitmentStatusUndo struct {
+	Op     string `json:"op"`
+	ID     int64  `json:"id"`
+	Status string `json:"status"`
+}
+
+func commitmentStatusUndo(raw json.RawMessage) (CommitmentStatusUndo, error) {
+	var info CommitmentStatusUndo
+	if err := json.Unmarshal(raw, &info); err != nil || info.ID <= 0 || !slices.Contains(CommitmentStatuses[:], info.Status) {
+		return CommitmentStatusUndo{}, ledger.Refused("commitment status undo payload is invalid")
+	}
+	return info, nil
 }
 
 func (r *Reminders) Proposals(owner string) []proposals.Definition {
