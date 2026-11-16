@@ -115,15 +115,29 @@
         "knowledge.create",
         "knowledge.detail",
         "knowledge.edit",
+        "knowledge.instructions",
+        "knowledge.link",
+        "knowledge.links",
         "knowledge.list",
+        "knowledge.map",
         "knowledge.profile",
         "knowledge.purge",
         "knowledge.restore",
         "knowledge.retract",
-        "knowledge.retract-run"
+        "knowledge.retract-run",
+        "knowledge.space.archive",
+        "knowledge.space.create",
+        "knowledge.space.detail",
+        "knowledge.space.edit",
+        "knowledge.space.file.delete",
+        "knowledge.space.file.upload",
+        "knowledge.space.list",
+        "knowledge.subject",
+        "knowledge.subjects",
+        "knowledge.unlink"
       ],
-      "required": 17,
-      "bound": 17
+      "required": 31,
+      "bound": 31
     },
     {
       "area": "mail",
@@ -211,20 +225,6 @@
       "bound": 2
     },
     {
-      "area": "projects",
-      "operations": [
-        "assistant.project-file.delete",
-        "assistant.project-file.upload",
-        "assistant.project.archive",
-        "assistant.project.create",
-        "assistant.project.detail",
-        "assistant.project.edit",
-        "assistant.project.list"
-      ],
-      "required": 7,
-      "bound": 7
-    },
-    {
       "area": "proposals",
       "operations": [
         "review.approve",
@@ -262,19 +262,16 @@
     {
       "area": "search",
       "operations": [
-        "assistant.search"
+        "assistant.search",
+        "search.all"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "settings",
       "operations": [
         "assistant.defaults-set",
-        "assistant.subagent.delete",
-        "assistant.subagent.enabled",
-        "assistant.subagent.list",
-        "assistant.subagent.set",
         "auth.bearer-issue",
         "auth.bearer-list",
         "auth.bearer-revoke",
@@ -291,8 +288,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 20,
-      "bound": 20
+      "required": 16,
+      "bound": 16
     },
     {
       "area": "tasks",
@@ -396,7 +393,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 213,
-  "total_bound": 213,
+  "total_required": 217,
+  "total_bound": 217,
   "total_approval_reached": 11
 }

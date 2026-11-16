@@ -227,7 +227,7 @@ func (s *Service) threadStart(ctx context.Context, in StartInput, started *Start
 			return 0, err
 		}
 		if found == nil || found.ID == 0 {
-			return 0, notFound(unknownProject)
+			return 0, notFound(unknownSpace)
 		}
 		if err := archivedProject(found, "start chats in it"); err != nil {
 			return 0, err
