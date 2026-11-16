@@ -7,11 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/passrun"
 )
 
 var tuningKeys = []string{
@@ -23,7 +21,6 @@ var tuningKeys = []string{
 	"http_timeout_seconds",
 	"max_events",
 	"max_occurrences",
-	"pass_run_retention_days",
 	"preview_bytes",
 	"web_page_size",
 	"web_run_history",
@@ -147,31 +144,5 @@ func TestPoisonedTuningRowsCannotChangeHTTPBehavior(t *testing.T) {
 	}
 	if status := post(strings.Repeat("a", 1<<20)); status != http.StatusRequestEntityTooLarge {
 		t.Errorf("POST above the 1 MiB constant body cap = %d, want 413", status)
-	}
-}
-
-func TestPoisonedRetentionRowCannotChangePassPruning(t *testing.T) {
-	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
-		t.Fatalf("settings list: %d %s", got.code, got.stderr)
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('pass_run_retention_days', '1')"); err != nil {
-		t.Fatal(err)
-	}
-	old := float64(time.Now().Add(-91 * 24 * time.Hour).Unix())
-	recent := float64(time.Now().Add(-48 * time.Hour).Unix())
-	for _, at := range []float64{old, recent} {
-		if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome) VALUES ('scan', ?, ?, 'ok')", at, at); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if got := runApp(t, "proposals", "scan-all"); got.code != cli.ExitOK {
-		t.Fatalf("scan-all: %d %s", got.code, got.stderr)
-	}
-	if ok, failed, _ := passRows(t, dir, passrun.Scan); ok != 2 || failed != 0 {
-		t.Errorf("scan rows ok=%d failed=%d, want the new success and the 48h row kept while the 91d row is pruned by the 90-day constant", ok, failed)
 	}
 }

@@ -129,11 +129,7 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[Syn
 	err = calendar.MirrorConfigured(ctx, set, src.Dir)
 	var stats davmirror.Stats
 	if err == nil {
-		err = passrun.Track(ctx, s.db, passrun.CardDAV, func() error {
-			var syncErr error
-			stats, syncErr = calendar.SyncContactsMirror(ctx, s.env, set, src.Dir)
-			return syncErr
-		})
+		stats, err = calendar.SyncContactsMirror(ctx, s.env, set, src.Dir)
 	}
 	if err != nil {
 		outcome := state.Failed

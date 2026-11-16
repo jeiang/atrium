@@ -184,7 +184,6 @@ var manifest = []Entry{
 	{Module: "core", Key: "ops_listen", Class: ClassHost, Action: ActionDropHost, Target: "host.core.ops_listen", Default: "127.0.0.1:9180", Type: String, Choices: nil, Cutover: false},
 	{Module: "core", Key: "ops_pprof", Class: ClassHost, Action: ActionDropHost, Target: "host.core.ops_pprof", Default: "false", Type: Bool, Choices: nil, Cutover: false},
 	{Module: "core", Key: "otel_traces_endpoint", Class: ClassHost, Action: ActionDropHost, Target: "host.core.otel_traces_endpoint", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "core", Key: "pass_run_retention_days", Class: ClassTuning, Action: ActionDropTuning, Target: "internal/passrun/tuning.go:TuningPassRunRetentionDays", Default: "90", Type: Int, Choices: nil, Cutover: false},
 	{Module: "core", Key: "public_url", Class: ClassHost, Action: ActionDropHost, Target: "host.core.public_url", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "core", Key: "tz", Class: ClassOperator, Action: ActionCarry, Target: "settings.tz", Default: "America/Port_of_Spain", Type: String, Choices: nil, Cutover: false},
 	{Module: "db", Key: "key", Class: ClassHost, Action: ActionDropHost, Target: "host.db.key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true},

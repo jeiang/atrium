@@ -15,7 +15,16 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
-func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
+func legacyPassRows(t *testing.T, d *db.DB) int {
+	t.Helper()
+	var n int
+	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM pass_runs) + (SELECT COUNT(*) FROM pass_run_alerts)").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestPassesRecordOutcomesInJobRuns(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
@@ -23,7 +32,7 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	old := float64(time.Now().Add(-91 * 24 * time.Hour).Unix())
-	if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome) VALUES ('scan', ?, ?, 'ok')", old, old); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome, message) VALUES ('scan', ?, ?, 'failed', 'legacy')", old, old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -31,7 +40,7 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 		t.Fatalf("scan-all: %d %s", got.code, got.stderr)
 	}
 	if ok, failed, _ := passRows(t, dir, passrun.Scan); ok != 1 || failed != 0 {
-		t.Errorf("scan rows ok=%d failed=%d, want the new success only (old row pruned by the 90-day constant)", ok, failed)
+		t.Errorf("scan runs ok=%d failed=%d, want the new success only", ok, failed)
 	}
 
 	missing := filepath.Join(dir, "no-such-dir", "out.backup")
@@ -39,13 +48,43 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 		t.Fatal("backup into a missing directory succeeded")
 	}
 	if ok, failed, msg := passRows(t, dir, passrun.Backup); ok != 0 || failed != 1 || !strings.Contains(msg, "no-such-dir") {
-		t.Errorf("backup rows ok=%d failed=%d message %q, want one failure naming the path", ok, failed, msg)
+		t.Errorf("backup runs ok=%d failed=%d message %q, want one failure naming the path", ok, failed, msg)
 	}
 	if got := runApp(t, "backup", filepath.Join(dir, "out.backup")); got.code != cli.ExitOK {
 		t.Fatalf("backup: %d %s", got.code, got.stderr)
 	}
 	if ok, failed, _ := passRows(t, dir, passrun.Backup); ok != 1 || failed != 1 {
-		t.Errorf("backup rows ok=%d failed=%d after a success", ok, failed)
+		t.Errorf("backup runs ok=%d failed=%d after a success", ok, failed)
+	}
+	if n := legacyPassRows(t, d); n != 1 {
+		t.Errorf("legacy pass rows %d, want only the seeded row", n)
+	}
+}
+
+func TestLegacyPassRowsLeavePassesReadyOnFirstStart(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
+		t.Fatalf("settings list: %d %s", got.code, got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	old := float64(time.Now().Add(-30 * 24 * time.Hour).Unix())
+	for _, job := range []string{passrun.Backup, passrun.Sync, passrun.CalDAV} {
+		if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome, message) VALUES (?, ?, ?, 'failed', 'legacy')", job, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	opsBase := opsAddr(t)
+	startServeIn(t, dir)
+	if status, state := readiness(t, opsBase); status != http.StatusOK || state != ops.StateReady {
+		t.Errorf("readyz = %d %s with only legacy pass rows, want ready", status, state)
+	}
+	_, body, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
+	if strings.Contains(body, "atrium_job_stale{") {
+		t.Errorf("metrics report a pass from legacy rows:\n%s", body)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM notifications"); n != 0 {
+		t.Errorf("%d notifications from legacy pass rows, want none", n)
 	}
 }
 
@@ -137,8 +176,8 @@ func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
 	opsAddr(t)
 	startServeIn(t, dir)
 	time.Sleep(time.Second)
-	if n := rows("pass_run_alerts"); n != 0 {
-		t.Errorf("%d stale alerts recorded while notifications are off", n)
+	if n := legacyPassRows(t, d); n != 0 {
+		t.Errorf("%d legacy pass rows written while notifications are off", n)
 	}
 	if n := rows("notifications"); n != 0 {
 		t.Errorf("%d notifications recorded while notifications are off", n)
@@ -152,7 +191,10 @@ func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
 	if notice := browser.decrypt(t, push.wait(t, 1).body); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
 		t.Fatalf("notice %v after enabling notifications, want the backup stale notice", notice)
 	}
-	if n := rows("pass_run_alerts"); n != 1 {
-		t.Errorf("%d stale alerts after enabling notifications, want 1", n)
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM notifications WHERE title LIKE '%backup is stale%'"); n != 1 {
+		t.Errorf("%d stale notices after enabling notifications, want 1", n)
+	}
+	if n := legacyPassRows(t, d); n != 0 {
+		t.Errorf("%d legacy pass rows after enabling notifications, want none", n)
 	}
 }

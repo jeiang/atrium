@@ -1,13 +1,16 @@
 package passrun
 
 import (
+	"cmp"
 	"context"
-	"database/sql"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 const (
@@ -16,82 +19,53 @@ const (
 	Backup  = "backup"
 	CalDAV  = "caldav"
 	CardDAV = "carddav"
-
-	OK     = "ok"
-	Failed = "failed"
 )
 
-var MaxAge = map[string]time.Duration{
-	Sync:    time.Hour,
-	Scan:    35 * 24 * time.Hour,
-	Backup:  8 * 24 * time.Hour,
-	CalDAV:  time.Hour,
-	CardDAV: time.Hour,
+type pass struct {
+	name   string
+	maxAge time.Duration
 }
 
-var log = logx.Logger("atrium.passrun")
+var passes = map[string]pass{
+	module.Mail + "/" + Sync:        {Sync, time.Hour},
+	module.Mail + "/" + Scan:        {Scan, 35 * 24 * time.Hour},
+	module.Core + "/" + Backup:      {Backup, 8 * 24 * time.Hour},
+	module.Calendar + "/" + CalDAV:  {CalDAV, time.Hour},
+	module.Contacts + "/" + CardDAV: {CardDAV, time.Hour},
+}
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-func Track(ctx context.Context, d *db.DB, job string, fn func() error) error {
-	started := now()
-	err := fn()
-	Record(context.WithoutCancel(ctx), d, job, started, err)
-	return err
-}
-
-func Record(ctx context.Context, d *db.DB, job string, started float64, failure error) {
-	outcome, message := OK, ""
-	if failure != nil {
-		outcome, message = Failed, logx.Scrub(failure.Error())
-	}
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		finished := now()
-		if _, err := tx.ExecContext(ctx, "INSERT INTO pass_runs (job, started_at, finished_at, outcome, message) VALUES (?, ?, ?, ?, ?)",
-			job, started, finished, outcome, message); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, "DELETE FROM pass_runs WHERE started_at < ?", finished-float64(TuningPassRunRetentionDays)*86400)
-		return err
-	})
-	if err != nil {
-		log.Warn("pass run not recorded", logx.Job, job, logx.Err, err.Error())
-	}
-}
-
 type Last struct {
-	Job      string
-	Outcome  string
-	Finished float64
-	Message  string
-	Success  *float64
+	Job     string
+	Failed  bool
+	Message string
+	Success *float64
+	maxAge  time.Duration
 }
 
 func Latest(ctx context.Context, q db.Querier) ([]Last, error) {
-	rows, err := q.QueryContext(ctx, `SELECT r.job, r.outcome, r.finished_at, r.message,
-		(SELECT MAX(s.finished_at) FROM pass_runs s WHERE s.job = r.job AND s.outcome = 'ok')
-		FROM pass_runs r WHERE r.id = (SELECT MAX(id) FROM pass_runs WHERE job = r.job) ORDER BY r.job`)
+	runs, err := scheduler.LastOutcomes(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	var out []Last
-	for rows.Next() {
-		var l Last
-		if err := rows.Scan(&l.Job, &l.Outcome, &l.Finished, &l.Message, &l.Success); err != nil {
-			return nil, err
+	for _, r := range runs {
+		p, ok := passes[r.Key]
+		if !ok {
+			continue
 		}
-		out = append(out, l)
+		out = append(out, Last{Job: p.name, Failed: r.Status == scheduler.StatusError, Message: logx.Scrub(r.Error), Success: r.OKEndedAt, maxAge: p.maxAge})
 	}
-	return out, rows.Err()
+	slices.SortFunc(out, func(a, b Last) int { return cmp.Compare(a.Job, b.Job) })
+	return out, nil
 }
 
 func (l Last) Stale(at float64) (bool, string) {
-	if l.Outcome == Failed {
+	if l.Failed {
 		return true, "last run failed: " + l.Message
 	}
-	limit, ok := MaxAge[l.Job]
-	if ok && l.Success != nil && at-*l.Success > limit.Seconds() {
+	if l.Success != nil && at-*l.Success > l.maxAge.Seconds() {
 		return true, fmt.Sprintf("no success for %s", time.Duration((at-*l.Success)*float64(time.Second)).Round(time.Minute))
 	}
 	return false, ""

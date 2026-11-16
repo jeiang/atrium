@@ -26,19 +26,16 @@ var All = []Scan{
 
 type Runner func(ctx context.Context, key string) (scanutil.Result, error)
 
-func ScanPass(ctx context.Context, d *db.DB, run Runner) (out map[string]any, err error) {
-	out = map[string]any{}
-	err = passrun.Track(ctx, d, passrun.Scan, func() error {
-		for _, s := range All {
-			res, err := run(ctx, s.Key)
-			if err != nil {
-				return err
-			}
-			out[s.Key] = res.Dict()
+func ScanPass(ctx context.Context, d *db.DB, run Runner) (map[string]any, error) {
+	out := map[string]any{}
+	for _, s := range All {
+		res, err := run(ctx, s.Key)
+		if err != nil {
+			return out, err
 		}
-		return nil
-	})
-	return out, err
+		out[s.Key] = res.Dict()
+	}
+	return out, nil
 }
 
 func Manual(ctx context.Context, d *db.DB, cfg config.Config, run Runner) (map[string]any, error) {

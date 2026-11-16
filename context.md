@@ -323,8 +323,8 @@ claims about the running application. Operator contracts are in
   archive made under an earlier key opens with `--key-file`. Install takes
   the serve exclusion, and an existing database that cannot be opened is
   replaced only with `--replace-unopenable`, which keeps it aside.
-  `atrium backup` and `atrium db backup` write one `operation_audit` row
-  (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
+  `atrium backup` writes one `operation_audit` row
+  (`maintenance.backup`; destination, encryption and
   file count only) to the source database, including refused destinations; a
   completed `atrium restore` writes one `maintenance.restore` row to the
   restored database. A refused or failed restore writes nothing, since it
@@ -651,6 +651,12 @@ claims about the running application. Operator contracts are in
   notification delivery. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
+  Pass staleness (the `passes` readiness check, `atrium_job_stale`,
+  `atrium_job_last_success_timestamp_seconds` and the one stale notice per
+  episode) reads the scheduler's `job_runs`: a pass is stale when its last
+  finished run failed or its last success is older than its limit, and a
+  pass with no finished run is never stale. The `pass_runs` and
+  `pass_run_alerts` tables are no longer read or written.
   The host owns the scrape job and the traces endpoint.
 
 ### Media agent
