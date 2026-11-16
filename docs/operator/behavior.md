@@ -62,8 +62,8 @@ administrator role or remote emergency bypass.
 - Requests still enforce accepted Host, CSRF, same-origin, and CSP rules. A
   Host outside the accepted list gets 400 `Bad Host header`; `GET /healthz` is
   the only exception (HEAD is not exempt). CSRF and same-origin failures get
-  403. Signed media and phone action links have narrowly scoped credentials,
-  not general operator sessions.
+  403. Signed media links have narrowly scoped credentials, not general
+  operator sessions.
 - Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
   Such a peer must send exactly one valid value; otherwise the request is 400.
   Other forwarded-address headers do not choose a rate-limit identity.
@@ -192,7 +192,7 @@ Pause/resume does not change the mode or grant
 go-live eligibility.
 
 - Shadow records what automatic actions would do and makes no automatic
-  mailbox writes. A due snooze stays pending when shadow skips its return.
+  mailbox writes.
 - Live automatic writes also require no pause, go-live eligibility, verified
   current message state, safe folders, and the per-account write cap. Read,
   unflagged inbox filing, contact flagging, corrections, and deletion rules
@@ -217,11 +217,14 @@ go-live eligibility.
 
 ### Long passes and busy work
 
+The monthly mail scan job proposes deletions only; folder rebalancing and the
+Gmail label merge are gone. A stored proposal of a removed kind still lists
+and can be dismissed, but approving or undoing it fails with
+`unknown proposal kind`.
 The mail scan job holds the shared `mail-pass` resource for up to two hours;
 mail sync has a 20-minute bound. Approvals, assistant moves, and undo wait five
 seconds before returning busy. They have not thereby approved, moved, or undone
-the item and can be retried after the pass. A busy phone Approve returns 503,
-leaves the proposal pending, and leaves the link usable.
+the item and can be retried after the pass.
 
 API sync and scans use their declared job claims. API apply-deletions,
 rebaseline, and loops/watches refresh instead take the resource lock alone,
@@ -259,16 +262,9 @@ releases the block and governs later undo. Resolving a draft as sent updates
 the draft but leaves its original SMTP attempt unknown; it does not resend.
 A partial undo must be checked and resolved rather than repeatedly invoked.
 
-Phone action links are off by default. `phone_actions_enabled` turns them on
-and `phone_actions_kinds` lists the proposal kinds that may be approved or
-dismissed from a notification; web-only kinds cannot be enabled, and phone
-links never decide a permission request. One stored nonce mints an Approve and
-a Dismiss link. A link is valid for 12 hours and one use, and at most 20 links
-are minted per hour. `POST /actions/<token>` needs no session but still checks
-Host. A phone approval that meets a busy lock answers 503, leaves the proposal
-pending and keeps the link usable. Revoke removes unused links and stamps used
-rows, including expired ones. Link minting limits do not drop the proposal's
-inbox notification or prevent a push without action links.
+A push notification carries only a title, a body and the path of the
+signed-in page for its subject, such as `/proposals/<id>`. It has no action
+buttons, carries no token, and opening it writes nothing.
 
 ## Assistant and daily work
 
@@ -394,7 +390,7 @@ not the MIME boundary.
 Media is at `/apps/media`. The application reads the library and files media
 only through `service/media-agent`. With the local NixOS agent, the main
 application and `atrium-run` cannot access the media parent. Only the agent has
-that filesystem access, the library group, and ffmpeg/ffprobe.
+that filesystem access and the library group.
 
 The agent control listener checks bearer and Host. The module binds control to
 loopback. Its optional TLS VPN listener instead checks peer CIDRs at accept
@@ -423,10 +419,8 @@ are refused inputs.
   group-readable, with directories group-writable; otherwise the agent refuses
   them and does not change download inodes.
 - A failed catalog refresh retains the old snapshot marked stale. Until one
-  exists, library reads return 503 rather than an empty library. Thumbnails
-  are generated and cached by the agent. A video ffmpeg cannot read is
-  remembered for seven days and answers 404; an agent-side failure answers 503
-  and is retried on the next request.
+  exists, library reads return 503 rather than an empty library. Show pages
+  list episodes without thumbnails; posters and season art come from TMDB.
 - Signed public file links expire and still check Host. Content supports
   GET/HEAD and ranges. Relays do not recompress media; a broken stream aborts
   the connection instead of presenting truncated content as complete. API

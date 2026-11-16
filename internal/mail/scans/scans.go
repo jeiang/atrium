@@ -6,8 +6,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/deletions"
-	"github.com/jeiang/atrium/internal/mail/gmaillabels"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
@@ -19,19 +17,11 @@ const JobKey = module.Mail + "/" + passrun.Scan
 type Scan struct {
 	Command string
 	Key     string
-	Run     func(ctx context.Context, d *db.DB, ts float64, namer rebalance.Namer) (scanutil.Result, error)
+	Run     func(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error)
 }
 
 var All = []Scan{
-	{"rebalance", "rebalance", func(ctx context.Context, d *db.DB, ts float64, namer rebalance.Namer) (scanutil.Result, error) {
-		return rebalance.Scan(ctx, d, ts, namer)
-	}},
-	{"deletions", "deletions", func(ctx context.Context, d *db.DB, ts float64, _ rebalance.Namer) (scanutil.Result, error) {
-		return deletions.Scan(ctx, d, ts)
-	}},
-	{"gmail-labels", "gmail-labels", func(ctx context.Context, d *db.DB, ts float64, _ rebalance.Namer) (scanutil.Result, error) {
-		return gmaillabels.Scan(ctx, d, ts)
-	}},
+	{"deletions", "deletions", deletions.Scan},
 }
 
 type Runner func(ctx context.Context, key string) (scanutil.Result, error)

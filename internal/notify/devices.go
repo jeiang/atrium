@@ -234,7 +234,7 @@ func deliverPush(ctx context.Context, d *db.DB, id int64, m delivery, link strin
 	}
 	sent, failure, err := pushAll(ctx, d, Wakeup{
 		NotificationID: id, Channel: m.channel, FullText: c.FullText(), Title: m.title, Body: m.body,
-		URL: pushURL(link, m.click), Priority: m.priority, Actions: m.actions,
+		URL: pushURL(link, m.click), Priority: m.priority,
 	})
 	return true, sent > 0, failure, err
 }

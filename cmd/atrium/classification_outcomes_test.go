@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -458,95 +457,6 @@ func TestMailPassIgnoresARealFolderNamedUncertain(t *testing.T) {
 	if strings.Contains(userText(requests[0]), "- uncertain (") {
 		t.Errorf("the real uncertain folder was offered as a destination: %q", userText(requests[0]))
 	}
-}
-
-func TestRebalanceNamingKeepsPaidNamesAndFallsBackOnProviderFailure(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	const fresh = "SELECT COUNT(*) FROM proposals WHERE kind = 'rebalance_split' AND fingerprint NOT LIKE '%:old'"
-	setup := func(t *testing.T) (*fixture, func(string) int, func(string)) {
-		f := newFixture(t, loadGoldenData(t), nil, "")
-		d := mustConnect(t, f.dir+"/atrium.db", keyFor(t))
-		exec := func(query string) {
-			t.Helper()
-			if _, err := d.Write.ExecContext(ctx, query); err != nil {
-				t.Fatal(err)
-			}
-		}
-		count := func(query string) int {
-			t.Helper()
-			var n int
-			if err := d.Read.QueryRowContext(ctx, query).Scan(&n); err != nil {
-				t.Fatal(err)
-			}
-			return n
-		}
-		exec("UPDATE proposals SET fingerprint = fingerprint || ':old' WHERE kind = 'rebalance_split'")
-		return f, count, exec
-	}
-
-	t.Run("paid name kept when staging stops", func(t *testing.T) {
-		t.Parallel()
-		f, count, exec := setup(t)
-		old := count("SELECT COUNT(*) FROM proposals WHERE kind = 'rebalance_split' AND fingerprint LIKE '%:old'")
-		var mu sync.Mutex
-		var prompts []string
-		f.api.SetOnRequest(func(req anthropictest.Request) {
-			mu.Lock()
-			defer mu.Unlock()
-			prompts = append(prompts, userText(req.JSON(t)))
-		})
-		exec("CREATE TRIGGER stop_staging BEFORE INSERT ON proposals WHEN NEW.kind = 'rebalance_split' BEGIN SELECT RAISE(ABORT, 'disk full'); END")
-		if code, _, _ := f.Run(ctx, "proposals", "scan-all"); code == cli.ExitOK {
-			t.Fatal("scan-all succeeded although no proposal could be staged")
-		}
-		mu.Lock()
-		bought := len(prompts)
-		mu.Unlock()
-		if bought == 0 {
-			t.Fatal("no folder names were asked for")
-		}
-		exec("DROP TRIGGER stop_staging")
-		if code, _, stderr := f.Run(ctx, "proposals", "scan-all"); code != cli.ExitOK {
-			t.Fatalf("scan-all: exit %d stderr %q", code, stderr)
-		}
-		if n := count(fresh); n != old {
-			t.Fatalf("%d split proposals were staged, want %d", n, old)
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		if len(prompts) != bought {
-			t.Errorf("the next scan bought %d names again: %q", len(prompts)-bought, prompts[bought:])
-		}
-	})
-
-	t.Run("provider failure", func(t *testing.T) {
-		t.Parallel()
-		f, count, _ := setup(t)
-		old := count("SELECT COUNT(*) FROM proposals WHERE kind = 'rebalance_split' AND fingerprint LIKE '%:old'")
-		var mu sync.Mutex
-		asked := 0
-		f.api.SetOnRequest(func(anthropictest.Request) {
-			mu.Lock()
-			asked++
-			mu.Unlock()
-			f.api.PushJSON(anthropictest.Failure(http.StatusBadRequest, "invalid_request_error", "rejected"))
-		})
-		if code, _, stderr := f.Run(ctx, "proposals", "scan-all"); code != cli.ExitOK {
-			t.Fatalf("scan-all with the provider failing: exit %d stderr %q", code, stderr)
-		}
-		if n := count(fresh); n != old {
-			t.Fatalf("with the provider failing %d split proposals were staged, want %d with fallback names", n, old)
-		}
-		mu.Lock()
-		defer mu.Unlock()
-		if asked == 0 {
-			t.Fatal("no folder names were asked for")
-		}
-		if n := count("SELECT COUNT(*) FROM runs r JOIN threads t ON t.id = r.thread_id WHERE t.role = 'classification:mail_folder_name' AND r.state = 'done'"); n != 0 {
-			t.Errorf("%d naming runs succeeded against a failing provider", n)
-		}
-	})
 }
 
 func TestMailPassFinalEventOutcomesLeaveThePendingWindow(t *testing.T) {

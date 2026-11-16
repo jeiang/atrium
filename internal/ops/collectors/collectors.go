@@ -2,9 +2,7 @@ package collectors
 
 import (
 	"context"
-	"time"
 
-	"github.com/jeiang/atrium/internal/actionlink/counts"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
@@ -65,20 +63,6 @@ func Metrics() []ops.Metric {
 			out = append(out, ops.Sample{Labels: [][2]string{{"integration", state.ID}, {"state", string(state.State)}}, Value: 1})
 		}
 		return out, nil
-	}))
-	add(gauge("atrium_action_links_outstanding", "Phone action links that are unused and unexpired.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		now := float64(time.Now().UnixNano()) / 1e9
-		n, err := counts.Outstanding(ctx, q, now)
-		return one(float64(n)), err
-	}))
-	add(gauge("atrium_action_links_minted_last_hour", "Phone action links created in the last hour.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		now := float64(time.Now().UnixNano()) / 1e9
-		n, err := counts.MintedSince(ctx, q, now-3600)
-		return one(float64(n)), err
-	}))
-	add(gauge("atrium_action_links_used_total", "Phone action links redeemed since the database was created.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		n, err := counts.Used(ctx, q)
-		return one(float64(n)), err
 	}))
 	add(gauge("atrium_notifications_undelivered", "Recorded notifications that were not delivered.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
 		n, err := notifycounts.Undelivered(ctx, q)

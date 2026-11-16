@@ -236,7 +236,7 @@ func TestMailPassesAPI(t *testing.T) {
 	if n := count("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.sync'"); n != syncs {
 		t.Fatalf("a busy sync was audited as a run: %d -> %d", syncs, n)
 	}
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/scans/rebalance", token, nil), http.StatusServiceUnavailable, "refused")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/scans/deletions", token, nil), http.StatusServiceUnavailable, "refused")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/loops/refresh", token, nil, "Idempotency-Key", "refresh-1"), http.StatusServiceUnavailable, "refused")
 	m.fake.SetStatusHook(nil)
 	releaseOnce.Do(func() { close(release) })
@@ -328,10 +328,11 @@ func TestMailPassesAPI(t *testing.T) {
 		t.Fatalf("second deletion pass: %v, writes %v", again, m.verbs()[writes:])
 	}
 
-	for _, scan := range []string{"rebalance", "deletions", "gmail-labels"} {
-		if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/scans/"+scan, token, nil), http.StatusOK); got["outcome"] != "ok" {
-			t.Fatalf("scan %s: %v", scan, got)
-		}
+	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/scans/deletions", token, nil), http.StatusOK); got["outcome"] != "ok" {
+		t.Fatalf("scan deletions: %v", got)
+	}
+	for _, scan := range []string{"rebalance", "gmail-labels"} {
+		expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/scans/"+scan, token, nil), http.StatusNotFound, "not_found")
 	}
 	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/rebaseline", token, nil), http.StatusOK); got["outcome"] != "ok" {
 		t.Fatalf("rebaseline: %v", got)

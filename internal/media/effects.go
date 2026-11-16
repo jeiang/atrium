@@ -25,7 +25,6 @@ const (
 	OpImportCleanup = "media_import_cleanup"
 
 	UndoTorrent     = "media_torrent_delete"
-	UndoFilePlace   = "media_file_place"
 	UndoAgentUnfile = "media_agent_unfile"
 )
 
@@ -389,12 +388,6 @@ func Undo(s *ledger.Store, env config.Env) []ledger.UndoDefinition {
 	return []ledger.UndoDefinition{
 		{Operation: UndoTorrent, Undoer: undoTorrent(s, env)},
 		{Operation: UndoAgentUnfile, Undoer: undoAgent(s, env)},
-		{Operation: UndoFilePlace, Undoer: ledger.Undoer{
-			Validate: validateOp(UndoFilePlace),
-			External: func(context.Context, json.RawMessage) (ledger.Result, error) {
-				return ledger.Result{}, ledger.Refused("filed before the media agent; inspect the files and resolve this effect manually")
-			},
-		}},
 	}
 }
 

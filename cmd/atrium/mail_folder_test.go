@@ -235,8 +235,8 @@ S: {t} OK DELETE completed
 	}
 
 	for _, id := range []int64{ids[1], ids[0]} {
-		if undone := runApp(t, "writes", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
-			t.Fatalf("undo write %d = %d %s", id, undone.code, undone.stderr)
+		if undone := runApp(t, "effects", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
+			t.Fatalf("undo effect %d = %d %s", id, undone.code, undone.stderr)
 		}
 	}
 	for _, id := range ids {
@@ -364,7 +364,7 @@ S: {t} OK DELETE completed
 		t.Fatal(err)
 	}
 	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
-	if undone := runApp(t, "writes", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
+	if undone := runApp(t, "effects", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
 		t.Fatalf("undo in shadow mode = %d %s", undone.code, undone.stderr)
 	}
 	var undone *int64

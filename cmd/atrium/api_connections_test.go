@@ -322,7 +322,7 @@ func TestConnectionOIDCIssuerAndPresetCannotMoveARetainedClientSecret(t *testing
 	}
 	for _, change := range []struct{ field, issuer, preset string }{
 		{"issuer", "https://issuer.example/changed", "generic"},
-		{"preset", "https://issuer.example/original", "keycloak"},
+		{"preset", "https://issuer.example/original", "pocket_id"},
 	} {
 		t.Run(change.field, func(t *testing.T) {
 			host := fmt.Sprintf("[connections.\"service/oidc\"]\nkind = \"service/oidc\"\n[connections.\"service/oidc\".config]\nissuer = %q\npreset = %q\nclient_id = \"atrium\"\n", change.issuer, change.preset)
@@ -358,6 +358,7 @@ func TestConnectionHostEndpointRefusalStopsServeAsAConfigurationError(t *testing
 	before := queryValue(t, d.Read, "SELECT COUNT(*) FROM connections")
 	for _, tc := range []struct{ name, id, field, body string }{
 		{"issuer userinfo", "service/oidc", "issuer", "\n[connections.\"service/oidc\"]\nkind = \"service/oidc\"\n[connections.\"service/oidc\".config]\nissuer = \"https://operator:" + password + "@issuer.example/\"\nclient_id = \"atrium\"\n"},
+		{"removed preset", "service/oidc", "unknown preset \"keycloak\"; use generic or pocket_id", "\n[connections.\"service/oidc\"]\nkind = \"service/oidc\"\n[connections.\"service/oidc\".config]\npreset = \"keycloak\"\nissuer = \"https://issuer.example/\"\nclient_id = \"atrium\"\n"},
 		{"url userinfo", "service/qbittorrent", "url", strings.Replace(defaultQbitConnection, "http://qbittorrent.invalid", "http://operator:"+password+"@qbittorrent.invalid", 1)},
 		{"scheme-less host userinfo", "mail/x", "imap_host", mail("imap_host", "operator:"+password+"@imap.example.com")},
 		{"host with a path", "mail/x", "smtp_host", mail("smtp_host", "smtp.example.com/"+password)},

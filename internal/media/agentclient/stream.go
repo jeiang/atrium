@@ -10,7 +10,6 @@ import (
 )
 
 type StreamRequest struct {
-	Resource                                     string
 	Path                                         protocol.Path
 	Method                                       string
 	Range, IfRange, IfNoneMatch, IfModifiedSince string
@@ -20,19 +19,8 @@ func (c *Client) Stream(ctx context.Context, in StreamRequest) (*http.Response, 
 	if in.Method != http.MethodGet && in.Method != http.MethodHead {
 		return nil, errors.New("unsupported media stream method")
 	}
-	resource := "/v1/files"
-	switch in.Resource {
-	case "file":
-	case "thumbnail":
-		resource = "/v1/thumbnail"
-	default:
-		return nil, errors.New("unsupported media resource")
-	}
 	q := url.Values{"root": {in.Path.Root}, "path": {in.Path.Rel}}
-	if in.Resource == "thumbnail" {
-		q.Set("generate", "0")
-	}
-	req, err := http.NewRequestWithContext(ctx, in.Method, c.base+resource+"?"+q.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, in.Method, c.base+"/v1/files?"+q.Encode(), nil)
 	if err != nil {
 		return nil, ErrUnavailable
 	}

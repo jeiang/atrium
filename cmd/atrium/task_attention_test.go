@@ -26,6 +26,9 @@ func TestTaskAttentionSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := d.Write.Exec("INSERT INTO tasks (title, due, status, priority, created_ts, updated_ts) VALUES ('Renew the licence', ?, 'dismissed', 'high', ?, ?)", due, now, now); err != nil {
+		t.Fatal(err)
+	}
 	runAttention := func() string {
 		t.Helper()
 		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("a1", "attention", map[string]any{})))
@@ -57,6 +60,21 @@ func TestTaskAttentionSource(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("attention result misses %q: %s", want, body)
 		}
+	}
+	if strings.Contains(body, "Renew the licence") {
+		t.Fatalf("dismissed task is listed: %s", body)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "task_list", map[string]any{"status": "dismissed"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("listed")))
+	if ran := runApp(t, "agent", "run", "--text", "dismissed tasks"); ran.code != cli.ExitOK {
+		t.Fatalf("task_list run: %d %s", ran.code, ran.stderr)
+	}
+	var listed string
+	if err := d.Read.QueryRow("SELECT group_concat(content_json) FROM thread_messages WHERE thread_id = (SELECT MAX(id) FROM threads) AND role = 'user'").Scan(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(listed, "Renew the licence") || strings.Contains(listed, "Pay the invoice") {
+		t.Fatalf("task_list of dismissed tasks: %s", listed)
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("d1", "task_done", map[string]any{"id": id})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))

@@ -193,6 +193,35 @@ func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
 	}
 }
 
+func TestKnowledgeSearchSkipsExpiredRecords(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	for _, row := range []struct {
+		title   string
+		expires float64
+	}{{"Locksmith", 1}, {"Glazier", 4102444800}} {
+		if _, err := d.Write.Exec("INSERT INTO kb_records (title, body, scope, writer, expires_at, created_at, updated_at) VALUES (?, 'Fixes the broken window.', 'work', 'worker', ?, 1, 1)", row.title, row.expires); err != nil {
+			t.Fatal(err)
+		}
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "kb_search", map[string]any{"query": "window"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
+	if ran := runApp(t, "agent", "run", "--text", "who fixes the window"); ran.code != cli.ExitOK {
+		t.Fatalf("kb_search run: %d %s", ran.code, ran.stderr)
+	}
+	found := kbResults(t, d, latestThread(t, dir), "s1")
+	if len(found) != 1 {
+		t.Fatalf("kb_search returned %v, want only the unexpired record", found)
+	}
+	if hit, _ := found[0].(map[string]any); hit["title"] != "Glazier" {
+		t.Fatalf("kb_search hit = %v, want Glazier", hit)
+	}
+}
+
 func TestPrivateProjectKnowledgeStaysInItsProject(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {

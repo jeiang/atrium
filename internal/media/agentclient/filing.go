@@ -130,12 +130,3 @@ func (c *Client) Library(ctx context.Context, cursor string) (protocol.LibraryPa
 	}
 	return out, c.call(ctx, client, http.MethodGet, target, nil, &out)
 }
-
-func (c *Client) ThumbnailPass(ctx context.Context, in protocol.ThumbnailPass) (protocol.ThumbnailResult, error) {
-	var out protocol.ThumbnailResult
-	client, err := c.lease.StreamClient("url", 2*time.Hour)
-	if err != nil {
-		return out, ErrUnavailable
-	}
-	return out, c.call(ctx, client, http.MethodPost, "/v1/thumbnails/pass", in, &out)
-}
