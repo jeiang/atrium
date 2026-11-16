@@ -191,7 +191,7 @@ func TestWimOIDCModeIgnoresLoopbackProxyHeaders(t *testing.T) {
 
 func TestWimProxyAuthGatesPagesByForwardedGroups(t *testing.T) {
 	t.Parallel()
-	base, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--allowed-host", "127.0.0.1")
+	base, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
 	const access, admin = "atrium_access", "atrium_access, atrium_admin"
 	for _, c := range []struct {
 		groups string
@@ -256,6 +256,47 @@ func TestWimProxyAuthGatesPagesByForwardedGroups(t *testing.T) {
 	}
 	if code := post(admin, base); code != http.StatusNotFound {
 		t.Errorf("admin POST for an unknown account: %d", code)
+	}
+}
+
+func TestWimProxyIdentityCountsOnlyFromTrustedPeers(t *testing.T) {
+	t.Parallel()
+	forged := []string{"Remote-Groups", "atrium_access, atrium_admin", "Remote-User", "root"}
+	untrusted, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "192.0.2.0/24")
+	if status, body, _ := wimGet(t, untrusted+"/settings/mail", forged...); status != http.StatusForbidden || strings.Contains(body, "Mail") {
+		t.Errorf("proxy mode admitted identity headers from an untrusted peer: %d %.200q", status, body)
+	}
+	combined, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "192.0.2.0/24")
+	if status, _, header := wimGet(t, combined+"/settings/mail", forged...); status != http.StatusSeeOther || !strings.HasPrefix(header.Get("Location"), "/login") {
+		t.Errorf("proxy+oidc mode admitted identity headers from an untrusted peer: %d %q", status, header.Get("Location"))
+	}
+	trusted, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "192.0.2.0/24", "--trusted-proxy", "127.0.0.1/32")
+	if status, body, _ := wimGet(t, trusted+"/settings/mail", forged...); status != http.StatusOK || !strings.Contains(body, "Mail") {
+		t.Errorf("proxy mode refused identity headers from a trusted peer: %d %.200q", status, body)
+	}
+	if status, _, _ := wimGet(t, trusted+"/settings/mail"); status != http.StatusForbidden {
+		t.Errorf("proxy mode admitted a trusted peer without identity headers: %d", status)
+	}
+}
+
+func TestWimProxyModeRefusesToStartWithoutATrustedProxy(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	seedAllFlags(t)
+	for _, auth := range [][]string{{"--auth", "proxy"}, {"--auth", "proxy", "--auth", "oidc"}} {
+		var out, errs bytes.Buffer
+		code := newTestApp(t).Run(context.Background(), append([]string{"serve", "--port", "0", "--allowed-host", "127.0.0.1"}, auth...), &out, &errs)
+		if code != cli.ExitConfig || !strings.Contains(errs.String(), "proxy mode needs --trusted-proxy or host web.trusted_proxy_cidrs") {
+			t.Errorf("serve %v without a trusted proxy: exit %d stderr %q", auth, code, errs.String())
+		}
+	}
+	setEnv(t, "ATRIUM_WEB_TRUSTED_PROXY_CIDRS", "127.0.0.1/32")
+	base, _ := wimServeIn(t, dir, "--auth", "proxy", "--allowed-host", "127.0.0.1")
+	if status, body, _ := wimGet(t, base+"/settings/mail", "Remote-Groups", "atrium_access"); status != http.StatusOK || !strings.Contains(body, "Mail") {
+		t.Errorf("proxy mode refused identity headers from the host's trusted proxy: %d %.200q", status, body)
 	}
 }
 

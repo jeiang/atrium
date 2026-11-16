@@ -160,6 +160,16 @@ func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, conf
 	})
 }
 
+func compact(values map[string]string) map[string]string {
+	out := map[string]string{}
+	for key, value := range values {
+		if value != "" {
+			out[key] = value
+		}
+	}
+	return out
+}
+
 // EnsureCredential returns a credential value, generating and storing it when
 // the slot is absent.
 func (s *Store) EnsureCredential(ctx context.Context, id ID, slot string, generate func() (string, error)) (string, error) {

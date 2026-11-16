@@ -25,9 +25,6 @@ func Poll(ctx context.Context, svc *mediaapp.Service) (any, error) {
 	if err != nil {
 		return polled.Data.Result.Dict(), err
 	}
-	if !polled.Data.Ran {
-		return map[string]any{}, nil
-	}
 	return polled.Data.Result.Dict(), nil
 }
 

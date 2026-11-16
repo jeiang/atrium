@@ -19,7 +19,7 @@ type HostDef struct {
 func (r *Registry) HostDefs() []HostDef { return HostDefsFrom(r.host) }
 
 func HostDefsFrom(defs []HostDef) []HostDef {
-	out := make([]HostDef, 0, len(defs)+len(importManifest))
+	out := make([]HostDef, 0, len(defs)+len(manifest))
 	for _, d := range defs {
 		if ConnectionOwnedHostKey(d.Key) {
 			continue
@@ -27,8 +27,8 @@ func HostDefsFrom(defs []HostDef) []HostDef {
 		d.Choices = slices.Clone(d.Choices)
 		out = append(out, d)
 	}
-	for _, e := range importManifest {
-		if e.Class != ImportHost || e.Retired || e.Action == ImportRename || e.Module == "db" && e.Key == "key" || ConnectionOwnedHostKey(e.Key) {
+	for _, e := range manifest {
+		if e.Class != ClassHost || e.Retired || e.Action == ActionRename || e.Module == "db" && e.Key == "key" || ConnectionOwnedHostKey(e.Key) {
 			continue
 		}
 		if slices.ContainsFunc(out, func(d HostDef) bool { return d.Key == e.Key }) {
@@ -45,7 +45,7 @@ func (r *Registry) HostKey(key string) bool {
 }
 
 func DefaultOf(key string) string {
-	entry, ok := ImportEntryFor(key)
+	entry, ok := EntryFor(key)
 	if !ok {
 		return ""
 	}

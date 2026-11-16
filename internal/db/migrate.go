@@ -71,7 +71,7 @@ const (
 	schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
 )
 
-var ErrNotV3 = errors.New("db: this database has no v3 marker and was created by v2 or older; import it with `atrium db import-v2` into a fresh database; nothing was changed")
+var ErrNotV3 = errors.New("db: this database has no v3 marker and was created by v2 or older; this release cannot read it: import it into a fresh database with release v3.0.0, the last release that reads v2 data, then upgrade; nothing was changed")
 
 func RequireV3(ctx context.Context, q Querier) error {
 	var tables int
