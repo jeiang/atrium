@@ -54,7 +54,6 @@ func TestSchedulerLockIdentityFollowsTheCanonicalDatabase(t *testing.T) {
 	waitUntil(t, 20*time.Second, "the held weekly review request", func() bool { return len(api.Requests()) > before })
 
 	asstExec(t, d, "UPDATE jobs SET lease_until = 0, next_due = ? WHERE name = 'weekly-review'", float64(time.Now().Unix())-1)
-	schedulerDue(t, d, "daily-nudges")
 	link := filepath.Join(t.TempDir(), "link")
 	if err := os.Symlink(dir, link); err != nil {
 		t.Fatal(err)
@@ -64,10 +63,9 @@ func TestSchedulerLockIdentityFollowsTheCanonicalDatabase(t *testing.T) {
 	if err := other.Start(); err != nil {
 		t.Fatal(err)
 	}
-	if err := other.Wait(); err != nil {
-		t.Fatal(err)
+	if code := exitCode(other.Wait()); code != cli.ExitTempFail {
+		t.Fatalf("agent tick through the linked path beside serve exit %d, want the refusal", code)
 	}
-	waitUntil(t, 60*time.Second, "the manual tick to run the free job", schedulerTerminal(d, "daily-nudges"))
 
 	if n := schedulerRuns(t, d, "weekly-review"); n != 1 {
 		t.Errorf("weekly review has %d runs, want only the held one", n)
