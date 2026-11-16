@@ -10,7 +10,6 @@ type identity struct {
 	Email         string
 	EmailVerified bool
 	Name          string
-	Hosted        string
 	Groups        []string
 	HasGroups     bool
 }
@@ -51,7 +50,7 @@ func lookupClaim(claims map[string]any, path string) (any, bool) {
 	return cur, true
 }
 
-func groupList(v any, trimSlash bool) ([]string, bool) {
+func groupList(v any) ([]string, bool) {
 	var raw []string
 	switch t := v.(type) {
 	case []any:
@@ -70,9 +69,6 @@ func groupList(v any, trimSlash bool) ([]string, bool) {
 	out := make([]string, 0, len(raw))
 	for _, g := range raw {
 		g = strings.TrimSpace(g)
-		if trimSlash {
-			g = strings.TrimPrefix(g, "/")
-		}
 		if g != "" {
 			out = append(out, g)
 		}
@@ -90,12 +86,9 @@ func identityOf(claims map[string]any, cfg Config) identity {
 	if id.Name == "" {
 		id.Name = claimString(claims, "preferred_username")
 	}
-	if cfg.Preset.DomainClaim != "" {
-		id.Hosted = strings.ToLower(claimString(claims, cfg.Preset.DomainClaim))
-	}
 	if cfg.GroupsClaim != "" {
 		if v, ok := lookupClaim(claims, cfg.GroupsClaim); ok {
-			id.Groups, id.HasGroups = groupList(v, cfg.Preset.TrimSlash)
+			id.Groups, id.HasGroups = groupList(v)
 		}
 	}
 	return id
@@ -114,9 +107,6 @@ func (id identity) signed(claims map[string]any, cfg Config) identity {
 	}
 	if next.Name != "" {
 		id.Name = next.Name
-	}
-	if next.Hosted != "" {
-		id.Hosted = next.Hosted
 	}
 	if cfg.GroupsClaim != "" {
 		id.Groups, id.HasGroups = next.Groups, next.HasGroups
@@ -137,9 +127,6 @@ func (id identity) absorb(claims map[string]any, cfg Config) identity {
 	if id.Name == "" {
 		id.Name = next.Name
 	}
-	if id.Hosted == "" {
-		id.Hosted = next.Hosted
-	}
 	if cfg.GroupsClaim != "" && !id.HasGroups {
 		id.Groups, id.HasGroups = next.Groups, next.HasGroups
 	}
@@ -153,9 +140,6 @@ func needsUserinfo(id identity, cfg Config) bool {
 func (c Config) decide(id identity) bool {
 	emailOK := id.EmailVerified && id.Email != ""
 	domain := id.Email[strings.LastIndexByte(id.Email, '@')+1:]
-	if c.Preset.DomainClaim != "" {
-		domain = id.Hosted
-	}
 	if domain == "" {
 		domain = "\x00"
 	}
