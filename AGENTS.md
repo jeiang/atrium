@@ -58,6 +58,18 @@ settings the operator edits in the UI or pins from the host.
   containment tests.
 - Direct helper, parser, query, repository, or component tests do not qualify.
   Checking source text or internal call wiring does not qualify.
+- The client in `web/` is tested only by real-browser e2e: Playwright in
+  Chromium, Firefox and WebKit against the mock build (`atrium-web-mock`,
+  MSW for the API), in `web/e2e`. No Vitest, Jest, component or story tests.
+  `just web-test` runs it; the `web-e2e` check runs it in the Nix sandbox.
+  The `@playwright/test`, `playwright` and `playwright-core` pins in
+  `web/package-lock.json` must equal nixpkgs `playwright-driver.version`
+  (the `web-playwright-pin` check), because the browsers come from Nix.
+- Every screen's browser test calls the layout checks in `web/e2e/checks.ts`
+  at the phone, tablet and desktop widths of `layouts`: `expectTouchTargets`
+  on touch layouts, `expectRoundedSurfaces`, `expectNoHorizontalScroll` and
+  `expectNoSeriousAxeFindings`. The fixture in `web/e2e/fixtures.ts` fails a
+  test on any console error or policy violation.
 - Test observable results, state transitions, refusals, and failure outcomes.
   An e2e filename or a golden fixture does not make a test e2e.
 - Add an e2e test only when its regression value justifies its maintenance.
@@ -89,7 +101,7 @@ settings the operator edits in the UI or pins from the host.
 - Application calendar boundaries use `config.Location`, not process
   `time.Local`.
 - Stage web assets through the existing build. Do not commit
-  `internal/web/static`.
+  `internal/web/static` or `internal/web/app/dist`.
 - UI: avoid unnecessary secondary labels and descriptions. Let the layout
   do the explaining. No helper text that restates a control, no
   parenthetical notes repeated on every option.
@@ -149,7 +161,8 @@ settings the operator edits in the UI or pins from the host.
   (migration 1) and `testdata/schema/baseline.v3.txt` is its canonical dump;
   both are frozen: never edit them. `seeds.json` is seed data applied at
   start and is not frozen. From the v3 cutover, every schema change is a new
-  additive migration in `internal/db/migrate.go`, with an e2e that migrates
+  additive migration in `internal/db/migrate.go`; a migration may also drop
+  tables that no code reads. Each comes with an e2e that migrates
   a database from the previous version and compares its schema with a fresh
   one. Row rewrites require explicit approval and validation on a database
   copy. Refuse unknown future schema versions before writes.

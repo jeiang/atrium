@@ -32,11 +32,13 @@ no default; a `null` default is not a usable credential or listener value.
 | `environmentFiles` | list of strings | `[]` | `EnvironmentFile` paths for the application service and `atrium-run`, not the agent. Accepted environment inputs still undergo startup validation. |
 | `embeddingServerUnits` | list of strings | `[]` | Adds embedding-service units to the application's `After` and `Wants`. |
 
-The module derives mirror paths, backup inputs, tracing destination, Obsidian
+The module derives mirror paths, backup inputs, tracing destination, knowledge
 export path, proxy CIDRs, and generated connections in the host file. The
 application does not read host-owned values from database setting rows. A
-host-declared module flag wins over a stored flag and is read-only. A flag
-change requires restarting serve; there is no runtime module-toggle UI or API.
+host-declared module flag wins over a stored flag and is read-only. A flag the
+host file does not declare is a stored operator setting: the first start seeds
+it, and `atrium settings set` changes it. A flag change requires restarting
+serve; there is no runtime module-toggle UI or API.
 
 ### Connection fields
 
@@ -191,10 +193,18 @@ these options and are refused by the application/configuration schema.
 | `backup.schedule` | string | `"daily 03:00"` | Operator-time-zone schedule; renders `core.backup_schedule`. Evaluation checks daily, weekly, or five-field cron grammar. A missed occurrence runs once on start. |
 | `backup.keep` | integer, 1 through 10000 | `5` | Newest matching archives always kept regardless of age; renders `core.backup_keep`. |
 | `backup.keepDays` | integer, 0 through 36500 | `14` | Also keeps matching archives modified within this many days; renders `core.backup_keep_days`. |
-| `knowledgeExport.obsidianDirectory` | null or string | `null` | Absolute generated-vault destination; renders `export.export_obsidian_dir` and adds application/CLI write access. The directory must be available and writable. |
+| `knowledgeExport.obsidianDirectory` | null or string | `null` | Absolute Markdown folder for the knowledge export; renders `export.export_obsidian_dir`. A folder below `stateDir` (not `stateDir` itself or its `cache`) needs no extra access; any other folder is created by systemd-tmpfiles and added to `ReadWritePaths` for the application and `atrium-run`. Folders under `/home` or `/root` are refused. While null, the daily `knowledge-export` job fails. |
 | `observability.tracesEndpoint` | null or string | `null` | Full OTLP/HTTP traces URL; renders `core.otel_traces_endpoint`. Null leaves tracing unconfigured. |
 | `monitoring.ruleFile` | path, read-only | `nix/monitoring/atrium.rules.yml` | Prometheus/vmalert rule file for host provisioning. |
 | `monitoring.dashboardFile` | path, read-only | `nix/monitoring/atrium-dashboard.json` | Grafana dashboard for host provisioning. |
+
+The rule file's `AtriumIntegrationUnhealthy` alert reads
+`atrium_integration_state`, which exports one series per connection row with
+value 1 and labels `integration` (the connection id) and `state` (`unconfigured`,
+`disabled`, `untested`, `ok`, `failing`, `expiring`, or `needs_reauth`). The
+alert fires when a connection stays `failing`, `expiring`, or `needs_reauth` for
+15 minutes, or stays `untested` for 1 hour. It does not fire for `disabled`,
+`unconfigured`, or `ok` connections.
 
 Backup pruning applies only after successful archive creation to regular
 `atrium-*.backup` files directly in the directory, including old v2 archives and

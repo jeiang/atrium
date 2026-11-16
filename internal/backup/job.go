@@ -86,16 +86,12 @@ func ArchiveName(now time.Time, ext string) string {
 	return "atrium-" + now.UTC().Format(archiveStamp) + "-" + hex.EncodeToString(suffix[:]) + ext
 }
 
-func Prune(ctx context.Context, ext string, now time.Time) error {
+func Prune(ctx context.Context, now time.Time) error {
 	dir, err := Directory(ctx)
 	if err != nil {
 		return err
 	}
-	keep := hostInt(ctx, KeyKeep, defaultKeep)
-	if ext == ArchiveExt {
-		return prune(dir, archivePattern, keep, hostInt(ctx, KeyKeepDays, defaultKeepDays), now)
-	}
-	return prune(dir, "atrium-*"+ext, max(keep, 1), 0, now)
+	return prune(dir, archivePattern, hostInt(ctx, KeyKeep, defaultKeep), hostInt(ctx, KeyKeepDays, defaultKeepDays), now)
 }
 
 func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now time.Time, create func(context.Context, string, func(context.Context, db.Querier) error) error) (scheduler.Result, error) {
@@ -118,7 +114,7 @@ func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now t
 		return scheduler.Result{}, err
 	}
 	defer func() { _ = d.Close() }()
-	err = passrun.Track(ctx, d, passrun.Backup, func() error {
+	err = func() error {
 		if err := sweepStaged(dir, now.Add(-jobTimeout)); err != nil {
 			return err
 		}
@@ -130,7 +126,7 @@ func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now t
 			return err
 		}
 		return prune(dir, archivePattern, keep, keepDays, now)
-	})
+	}()
 	if err != nil {
 		return scheduler.Result{}, err
 	}
@@ -141,11 +137,7 @@ func manual(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest s
 	var count int
 	var runErr error
 	_, err := module.Invoke(ctx, d, cfg, JobKey, db.ShortLockWait, func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
-		runErr = passrun.Track(ctx, d, passrun.Backup, func() error {
-			var err error
-			count, err = writeBackup(ctx, d, cfg, key, dest, run.Claim.RemoveFrom)
-			return err
-		})
+		count, runErr = writeBackup(ctx, d, cfg, key, dest, run.Claim.RemoveFrom)
 		return scheduler.Result{}, runErr
 	})
 	return count, cmp.Or(err, runErr)

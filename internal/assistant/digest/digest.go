@@ -221,11 +221,7 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	for _, c := range conflicts {
 		out.conflicts = append(out.conflicts, conflict{id: c.ID, title: c.Title, thread: c.Thread, marks: int64(c.Marks)})
 	}
-	if id, err := ledger.BlockedTarget(ctx, q, "export:notion:"); err != nil {
-		return out, err
-	} else if id != 0 {
-		out.exportID = id
-	} else if id, err := ledger.BlockedTarget(ctx, q, "export:obsidian:"); err != nil {
+	if id, err := ledger.BlockedTarget(ctx, q, "export:obsidian:"); err != nil {
 		return out, err
 	} else {
 		out.exportID = id

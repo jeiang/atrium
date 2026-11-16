@@ -3,3 +3,5 @@ dist/
 dist-mock/
 .npm-cache/
 src/contract/gen/
+src/tokens/gen/
+test-results/

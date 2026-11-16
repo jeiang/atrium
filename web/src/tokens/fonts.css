@@ -1,0 +1,73 @@
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/alegreya-sans/files/alegreya-sans-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/alegreya-sans/files/alegreya-sans-latin-400-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("@fontsource/alegreya-sans/files/alegreya-sans-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@fontsource/alegreya-sans/files/alegreya-sans-latin-700-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Alegreya Sans";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("@fontsource/alegreya-sans/files/alegreya-sans-latin-800-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Fira Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/fira-mono/files/fira-mono-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Fira Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("@fontsource/fira-mono/files/fira-mono-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Alegreya Sans Fallback";
+  src: local("Arial");
+  size-adjust: 84.95%;
+  ascent-override: 105.94%;
+  descent-override: 35.31%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Fira Mono Fallback";
+  src: local("Courier New");
+  size-adjust: 99.98%;
+  ascent-override: 93.52%;
+  descent-override: 26.5%;
+  line-gap-override: 0%;
+}

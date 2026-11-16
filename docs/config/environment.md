@@ -21,7 +21,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_CORE_MAIL_ENABLED` | `core.mail_enabled` |
 | `ATRIUM_CORE_MEDIA_ENABLED` | `core.media_enabled` |
 | `ATRIUM_CORE_NOTIFICATIONS_ENABLED` | `core.notifications_enabled` |
-| `ATRIUM_CORE_NOTION_ENABLED` | `core.notion_enabled` |
 | `ATRIUM_CORE_OPS_LISTEN` | `core.ops_listen` |
 | `ATRIUM_CORE_OPS_PPROF` | `core.ops_pprof` |
 | `ATRIUM_CORE_OTEL_TRACES_ENDPOINT` | `core.otel_traces_endpoint` |

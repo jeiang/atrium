@@ -14,5 +14,13 @@
     "noEmit": true,
     "types": ["node", "vite/client", "svelte"]
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "scripts/**/*.ts", "vite.config.ts", "orval.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "scripts/**/*.ts",
+    "vite.config.ts",
+    "orval.config.ts",
+    "playwright.config.ts",
+    "e2e/**/*.ts"
+  ]
 }

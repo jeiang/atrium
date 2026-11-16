@@ -5,6 +5,7 @@
   go-licenses,
   removeReferencesTo,
   atrium-static,
+  atrium-web,
   sqlcipherLib,
   stdenv,
 }: let
@@ -36,6 +37,7 @@ in
 
     preBuild = ''
       cp -r --no-preserve=mode ${atrium-static} internal/web/static
+      cp -r --no-preserve=mode ${atrium-web} internal/web/app/dist
       export GOFLAGS="$GOFLAGS -tags=libsqlite3,sqlite_fts5"
       ${goSrc.licenseCheck}
       ${goSrc.licenseReport "internal/about/THIRD_PARTY_NOTICES"}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+
+	_ "github.com/jeiang/atrium/internal/web/app"
 )
 
 //go:embed static
