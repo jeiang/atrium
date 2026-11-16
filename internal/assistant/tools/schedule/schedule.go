@@ -161,8 +161,7 @@ func Tools(svc Service) []tool.Tool {
 		},
 		{
 			Name:        "schedule_list",
-			Description: "List scheduled runs with their next due time. Schedules the operator made are listed read-only (created_by operator, read_only true): " +
-				"report them, but do not try to change, cancel, enable or disable them.",
+			Description: "List scheduled runs with their next due time. Schedules the operator made are listed read-only (created_by operator, read_only true): report them, but do not try to change, cancel, enable or disable them.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`),
 			Handler:     list(svc),
 			Effect:      tool.Read,
