@@ -16,6 +16,7 @@
         (root + "/web/dist")
         (root + "/web/dist-mock")
         (root + "/web/src/contract/gen")
+        (root + "/web/src/tokens/gen")
       ])))
       (root + "/docs/api/openapi.json")
       (lib.fileset.maybeMissing (root + "/design/tokens"))
