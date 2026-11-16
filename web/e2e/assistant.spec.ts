@@ -60,11 +60,18 @@ test.describe('assistant design checks', () => {
     if (!box) throw new Error('no hold button');
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(200);
-    const fill = await hold.locator('.hold__fill').evaluate((element) => {
-      const style = getComputedStyle(element);
-      return { transform: style.transform, opacity: Number(style.opacity) };
-    });
+    const fill = await hold.locator('.hold__fill').evaluate(
+      (element) =>
+        new Promise<{ transform: string; opacity: number }>((resolve) => {
+          const sample = (): void => {
+            const style = getComputedStyle(element);
+            const opacity = Number(style.opacity);
+            if (opacity > 0) resolve({ transform: style.transform, opacity });
+            else requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        }),
+    );
     await page.mouse.up();
     expect(fill.transform).toBe('none');
     expect(fill.opacity).toBeGreaterThan(0);
@@ -168,10 +175,16 @@ test.describe('approval cards on a desktop', () => {
     await page.waitForTimeout(400);
     await expect(log(page)).toHaveText('No decisions yet');
 
+    await row.evaluate((element) => {
+      const seen: string[] = [];
+      Object.assign(window, { rowStates: seen });
+      new MutationObserver(() => {
+        seen.push(`${element.hasAttribute('data-arming')} ${element.hasAttribute('inert')}`);
+      }).observe(element, { attributes: true, attributeFilter: ['data-arming', 'inert'] });
+    });
     await card.evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
-    await expect(row).toHaveAttribute('data-arming');
-    await expect(row).toHaveAttribute('inert');
-    await expect(row).not.toHaveAttribute('inert');
+    await expect(row).not.toHaveAttribute('inert', { timeout: 0 });
+    expect(await page.evaluate(() => (window as Window & { rowStates?: string[] }).rowStates)).toContain('true true');
     await decline.click();
     await expect(log(page)).toHaveText('decline a-move');
     const receipt = card.locator('.receipt');
@@ -279,10 +292,18 @@ test.describe('tool cards', () => {
     const section = page.locator('[data-gallery="tools"]');
     const live = section.getByTestId('tool-live');
 
+    await live.evaluate((element) => {
+      const seen: string[] = [];
+      Object.assign(window, { toolStates: seen });
+      new MutationObserver(() => {
+        const state = element.querySelector('[data-tool="call-1"]')?.getAttribute('data-state');
+        if (state && seen.at(-1) !== state) seen.push(state);
+      }).observe(element, { attributes: true, childList: true, subtree: true });
+    });
     await section.getByText('Finishes', { exact: true }).click();
     await section.getByRole('button', { name: 'Run script' }).click();
-    await expect(live.locator('[data-tool="call-1"]')).toHaveAttribute('data-state', 'running');
     await expect(section.getByTestId('tool-run-result')).toHaveText('done', { timeout: 0 });
+    expect(await page.evaluate(() => (window as Window & { toolStates?: string[] }).toolStates)).toContain('running');
     const done = live.locator('[data-tool="call-1"]');
     await expect(done).toHaveAttribute('data-state', 'done');
     await expect(done).toContainText('Found prices from 3 suppliers · 3 sources');
