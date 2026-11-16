@@ -149,28 +149,3 @@ func KBIDs(ctx context.Context, q db.Querier, idx Index, blob []byte, k int) ([]
 		return id, err
 	})
 }
-
-func NotionCount(ctx context.Context, q db.Querier, idx Index) (int, error) {
-	var n int
-	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.NotionTable()).Scan(&n)
-	return n, err
-}
-
-func NotionHits(ctx context.Context, q db.Querier, idx Index, blob []byte, k int, visibility string) ([]VectorHit, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT rowid, distance FROM "+idx.NotionTable()+" WHERE embedding MATCH ? AND k = ? AND visibility = ?", blob, k, visibility)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (VectorHit, error) {
-		var h VectorHit
-		err := r.Scan(&h.ID, &h.Distance)
-		return h, err
-	})
-}
-
-func NotionEmbedding(ctx context.Context, q db.Querier, idx Index, rid int64) ([]byte, error) {
-	var blob []byte
-	err := q.QueryRowContext(ctx, "SELECT embedding FROM "+idx.NotionTable()+" WHERE rowid = ?", rid).Scan(&blob)
-	return blob, err
-}

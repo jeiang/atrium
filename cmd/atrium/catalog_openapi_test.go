@@ -166,7 +166,7 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 			settings = true
 		}
 	}
-	if len(reach.Areas) != 22 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
+	if len(reach.Areas) != 21 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
 		t.Fatalf("reach.json: %s", raw)
 	}
 

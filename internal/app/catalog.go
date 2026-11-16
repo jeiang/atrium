@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"
-	"github.com/jeiang/atrium/internal/notion/notionmodule"
 )
 
 type Dependencies struct {
@@ -39,7 +38,6 @@ func Builtins(d Dependencies) []module.Builder {
 		contactsmodule.Module{Jobs: jobs},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
 		calendarmodule.Module{Jobs: jobs},
-		notionmodule.Module{Env: d.Env, Jobs: jobs},
 		mediamodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
 		assistantmodule.Module{Now: d.Now, ProposeKinds: mailmodule.ProposeKinds(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
 		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},

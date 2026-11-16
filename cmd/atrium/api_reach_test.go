@@ -44,8 +44,8 @@ func TestEveryAreaReachableFromSchema(t *testing.T) {
 		TotalApprovalReached int                `json:"total_approval_reached"`
 	}
 	readJSON(t, filepath.Join(out, "reach.json"), &reach)
-	if len(application.Areas) != 22 || len(reach.Areas) != len(application.Areas) {
-		t.Fatalf("reach lists %d areas, the catalog defines %d, want 22", len(reach.Areas), len(application.Areas))
+	if len(application.Areas) != 21 || len(reach.Areas) != len(application.Areas) {
+		t.Fatalf("reach lists %d areas, the catalog defines %d, want 21", len(reach.Areas), len(application.Areas))
 	}
 	for _, a := range reach.Areas {
 		if len(a.Operations) == 0 {

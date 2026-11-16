@@ -40,8 +40,6 @@ var connectionOwnedHost = map[string]string{
 	"oidc_access_groups":     `connections."service/oidc".config.access_groups`,
 	"oidc_access_emails":     `connections."service/oidc".config.access_emails`,
 	"oidc_access_domains":    `connections."service/oidc".config.access_domains`,
-	"notion_ca_file":         `connections."service/notion".transport.ca_file`,
-	"notion_proxy":           `connections."service/notion".transport.proxy`,
 	"webpush_ca_file":        `connections."service/webpush".transport.ca_file`,
 	"mail_accounts_file":     "the Connections page (mail account connections)",
 }

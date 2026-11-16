@@ -11,31 +11,21 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 type Prepare func(ctx context.Context, d *db.DB) (func(context.Context) (Stats, error), error)
 
-func Pass(ctx context.Context, d *db.DB, pass string, prepare Prepare) (Stats, error) {
+func Pass(ctx context.Context, d *db.DB, prepare Prepare) (Stats, error) {
 	run, err := prepare(ctx, d)
-	if _, skip := errors.AsType[config.NotConfigured](err); skip {
+	if err != nil {
 		return Stats{}, err
 	}
-	var st Stats
-	err = passrun.Track(ctx, d, pass, func() error {
-		if err != nil {
-			return err
-		}
-		var runErr error
-		st, runErr = run(ctx)
-		return runErr
-	})
-	return st, err
+	return run(ctx)
 }
 
-func SyncCommand(help, key, pass string, prepare Prepare) *cli.Command {
+func SyncCommand(help, key string, prepare Prepare) *cli.Command {
 	return &cli.Command{
 		Name: "sync",
 		Help: help,
@@ -56,7 +46,7 @@ func SyncCommand(help, key, pass string, prepare Prepare) *cli.Command {
 				var st Stats
 				var syncErr error
 				_, err = module.Invoke(env.Ctx, d, cfg, key, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
-					st, syncErr = Pass(ctx, d, pass, prepare)
+					st, syncErr = Pass(ctx, d, prepare)
 					if missing, skip := errors.AsType[config.NotConfigured](syncErr); skip {
 						return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
 					}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,10 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -155,7 +156,7 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	seedNotionVectors(t, path, db.Key{})
+	seedMessageVectors(t, path)
 	seedPendingMessage(t, path)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", model, ""))
 	return dir, path
@@ -174,16 +175,71 @@ func seedPendingMessage(t *testing.T, path string) {
 	})
 }
 
+func seedMessageVectors(t *testing.T, path string) {
+	t.Helper()
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	type message struct {
+		id      int64
+		account string
+		subject string
+	}
+	rows, err := d.Read.Query("SELECT id, account, subject FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var messages []message
+	for rows.Next() {
+		var m message
+		if err := rows.Scan(&m.id, &m.account, &m.subject); err != nil {
+			t.Fatal(err)
+		}
+		messages = append(messages, m)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range messages {
+		if _, err := d.Write.Exec("INSERT INTO embed_message_0 (rowid, account, embedding) VALUES (?, ?, ?)", m.id, m.account, embed.Serialize(hashedVector(m.subject, config.EmbedDim))); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.Write.Exec("UPDATE messages SET embedded_hash = 'seeded' WHERE id = ?", m.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func gmailSearch(t *testing.T, base, token string) string {
+	t.Helper()
+	s := &apiSite{t: t, base: base}
+	items := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages?q=weekly+status&account=gmail", token, nil), http.StatusOK))
+	if len(items) == 0 {
+		return ""
+	}
+	raw, err := json.Marshal(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
 func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *testing.T) {
 	t.Parallel()
 	fake := newFakeEmbedder(t)
 	dir, path := goldenEmbedFixture(t, fake, bigModel)
+	token := localAPIToken(t, "reembed")
 	fake.release(1000)
 	base, _, stop := startServeStoppable(t, dir)
 	waitFor(t, func() bool {
 		_, _, page := embedProgress(t, base)
 		return strings.Contains(page, bigModel+" · 1024 dimensions") && !strings.Contains(page, "Re-embedding")
 	})
+	if got := gmailSearch(t, base, token); got == "" || fake.lastQueryModel() != bigModel {
+		t.Fatalf("search on the rebuilt index: %q (query model %q)", got, fake.lastQueryModel())
+	}
 	stop()
 	d, err := db.Connect(path)
 	if err != nil {
@@ -194,37 +250,24 @@ func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *test
 	if err := d.Read.QueryRow("SELECT generation FROM embed_index WHERE state = 'active' AND dimension = 1024").Scan(&generation); err != nil || generation != 1 {
 		t.Fatalf("active index after the first serve: generation %d (%v)", generation, err)
 	}
-	if got := runApp(t, "notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastQueryModel() != bigModel {
-		t.Fatalf("search on the rebuilt index: %d %q %q (query model %q)", got.code, got.stdout, got.stderr, fake.lastQueryModel())
-	}
 }
 
 func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testing.T) {
 	t.Parallel()
 	fake := newFakeEmbedder(t)
 	dir, path := goldenEmbedFixture(t, fake, "embeddinggemma")
-	search := func() string {
-		t.Helper()
-		got := runApp(t, "notion", "search", "project notes")
-		if got.code != cli.ExitOK {
-			t.Fatalf("notion search: %d %q", got.code, got.stderr)
-		}
-		return got.stdout
-	}
-	before := search()
-	if before == "" {
-		t.Fatal("notion search on the golden copy found nothing")
-	}
+	token := localAPIToken(t, "reembed")
 
 	base, _, stop := startServeStoppable(t, dir)
 	waitFor(t, func() bool {
 		_, _, page := embedProgress(t, base)
 		return strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
-	stop()
-	if after := search(); after != before || fake.lastQueryModel() != "embeddinggemma" {
-		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastQueryModel())
+	before := gmailSearch(t, base, token)
+	if before == "" || fake.lastQueryModel() != "embeddinggemma" {
+		t.Fatalf("search with an unchanged embedder: %q (model %q)", before, fake.lastQueryModel())
 	}
+	stop()
 
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", bigModel, ""))
 	fake.release(1)
@@ -235,7 +278,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		first, total, page = embedProgress(t, base)
 		return first > 0 && first < total && strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
-	if during := search(); during != before || fake.lastQueryModel() != "embeddinggemma" {
+	if during := gmailSearch(t, base, token); during != before || fake.lastQueryModel() != "embeddinggemma" {
 		t.Fatalf("search while re-embedding (%d of %d): %q, was %q (query model %q)", first, total, during, before, fake.lastQueryModel())
 	}
 	fake.release(1)
@@ -259,8 +302,8 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	}
 	defer func() { _ = d.Close() }()
 	var rows, generations, oldTables int
-	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM embed_message_1) + (SELECT COUNT(*) FROM embed_notion_1), "+
-		"(SELECT COUNT(*) FROM embed_index), (SELECT COUNT(*) FROM sqlite_master WHERE name IN ('embed_message_0', 'embed_notion_0'))").
+	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM embed_message_1) + (SELECT COUNT(*) FROM embed_kb_1), "+
+		"(SELECT COUNT(*) FROM embed_index), (SELECT COUNT(*) FROM sqlite_master WHERE name IN ('embed_message_0', 'embed_kb_0'))").
 		Scan(&rows, &generations, &oldTables); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +313,9 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	if sent := fake.embedded(bigModel); sent > total+endpoint.TuningMailEmbedBatch+8 {
 		t.Errorf("the restart re-embedded finished rows: %d texts sent for %d documents", sent, total)
 	}
-	if after := search(); after == "" || fake.lastQueryModel() != bigModel {
+	base, _, stop = startServeStoppable(t, dir)
+	if after := gmailSearch(t, base, token); after == "" || fake.lastQueryModel() != bigModel {
 		t.Errorf("search after the swap: %q (query model %q)", after, fake.lastQueryModel())
 	}
+	stop()
 }

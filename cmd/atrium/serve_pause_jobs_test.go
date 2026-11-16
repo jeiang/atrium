@@ -14,12 +14,10 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
 func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
-	fake := newHeldNotion(t, false)
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)
@@ -28,12 +26,8 @@ func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	token := filepath.Join(dir, "notion.token")
-	if err := os.WriteFile(token, []byte("ntn_good\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	host := filepath.Join(dir, "host-paused.toml")
-	body := fmt.Sprintf("%s\n[connections.\"service/notion\"]\nkind = \"service/notion\"\nlabel = \"Notion\"\nconfig = { api = %q }\ncapabilities = [\"api\"]\ncredential_files = { token = %q }\n\n[core]\nbackup_directory = %q\n", base, fake.URL, token, dest)
+	body := fmt.Sprintf("%s\n[core]\nbackup_directory = %q\n", base, dest)
 	if err := os.WriteFile(host, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +38,7 @@ func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
 		t.Fatalf("live pause exit %d: %s", got.code, got.stderr)
 	}
 	due := float64(time.Now().Unix()) - 1
-	for _, key := range []string{notion.JobKey, backup.JobKey, davJobKeys[0], davJobKeys[1], module.Mail + "/" + tracking.JobPackageTracking} {
+	for _, key := range []string{backup.JobKey, davJobKeys[0], davJobKeys[1], module.Mail + "/" + tracking.JobPackageTracking} {
 		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", due, key)
 	}
 	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", due, assistant.NightlyName)
@@ -53,7 +47,6 @@ func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
 		t.Fatalf("agent tick while paused: exit %d: %s", ran.code, ran.stderr)
 	}
 	for name, want := range map[string]string{
-		passrun.NotionSync:          "ok",
 		passrun.Backup:              "ok",
 		passrun.CalDAV:              "ok",
 		passrun.CardDAV:             "ok",
@@ -64,13 +57,7 @@ func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
 			t.Errorf("%s status %s (%s) while paused, want %s", name, status, text, want)
 		}
 	}
-	if fake.hits.Load() == 0 {
-		t.Error("the paused Notion mirror never reached Notion")
-	}
-	if ok, failed, _ := passRows(t, dir, passrun.NotionSync); ok != 1 || failed != 0 {
-		t.Errorf("notion-sync pass rows ok=%d failed=%d while paused, want 1 and 0", ok, failed)
-	}
-	for _, name := range []string{passrun.CalDAV, passrun.CardDAV} {
+	for _, name := range []string{passrun.Backup, passrun.CalDAV, passrun.CardDAV} {
 		if ok, failed, _ := passRows(t, dir, name); ok != 1 || failed != 0 {
 			t.Errorf("%s pass rows ok=%d failed=%d while paused, want 1 and 0", name, ok, failed)
 		}
@@ -88,7 +75,9 @@ func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if why, found := stale[passrun.NotionSync]; found {
-		t.Errorf("notion-sync stale while paused: %s", why)
+	for _, name := range []string{passrun.Backup, passrun.CalDAV, passrun.CardDAV} {
+		if why, found := stale[name]; found {
+			t.Errorf("%s stale while paused: %s", name, why)
+		}
 	}
 }

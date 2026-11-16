@@ -19,7 +19,6 @@ func Command(maintenance *maintenanceapp.Service) *cli.Command {
 		Commands: []*cli.Command{
 			{Name: "encrypt", Help: "encrypt a plaintext database with the configured key into a fresh file, verify it and replace the original; stop the atrium units and timers that use the database first", Setup: s.encrypt},
 			{Name: "rekey", Help: "re-encrypt the database under a new key read from a file or standard input; stop the atrium units and timers that use the database first", Setup: s.rekey},
-			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
 			{Name: "check", Help: "verify database integrity and report FTS5 and vec0 table counts", Setup: s.check},
 		},
@@ -42,18 +41,6 @@ func readKey(path string, stdin io.Reader) func() ([]byte, error) {
 			r = f
 		}
 		return io.ReadAll(io.LimitReader(r, maxKeyInput+1))
-	}
-}
-
-func (s *service) backup(a *cli.Args) cli.Handler {
-	dest := a.Arg("dest", cli.Opt{Help: "path of the new backup file; must not exist"})
-	return func(e *cli.Env) int {
-		res, err := s.maintenance.DBBackup(e.Ctx, maintenanceapp.BackupInput{Dest: *dest})
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		_, _ = fmt.Fprintf(e.Stdout, "backup written to %s (%s)\n", *dest, encryption(res.Data.Encryption))
-		return cli.ExitOK
 	}
 }
 
