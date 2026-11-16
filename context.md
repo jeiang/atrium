@@ -486,6 +486,20 @@ claims about the running application. Operator contracts are in
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
   Test exchanges it, and a 400 or 401
   marks the integration needs-reauth.
+- Capability model (`internal/connections/needs.go`): each kind declares
+  `Offers`, the capability names its test reports; each module declares
+  `Needs` (kind, capability, soft, features), checked at compile. Bindings,
+  repairs and dependents are derived from those declarations and the stored
+  rows, with no table: the binding is the first healthy serving connection
+  by id, else the first; a repair (`connection:<id>:<auth|unreachable|config>`)
+  exists for every enabled connection in needs-reauth, failing or
+  unconfigured and lists the features of unmet active needs it could serve.
+  `GET /api/v1/connections/dependencies` (`connections.dependencies`) is the
+  read model; connection views add `dependents`. Failure notices append
+  `; affects <features>`. Connection read revisions also follow the settings
+  counter so module toggles refresh `active`; no connection write takes
+  `If-Match`. The `connection owners` readiness check (non-critical) requires
+  `config_source = 'host'` exactly for enabled rows the host file declares.
 
 ### State, backups, settings, and keys
 - SQLite holds application records, configuration stored by the application,
@@ -763,6 +777,14 @@ claims about the running application. Operator contracts are in
   consecutive unattended threadless unconfigured skips with the same error
   coalesce into the newest run's row, which keeps the first start time, so
   an audit row never names a later run of another job.
+  Two builtin jobs record `skipped_dependency` instead of `ok` when a
+  connection they need is unavailable and the run did no work:
+  `mail/package_tracking` (Ship24 absent while packages wait, or every
+  tracker request failed) and `media/channels` (every EZTV feed failed, or
+  every qBittorrent add failed with nothing added). The run error names
+  the capability, the connection and the repair id. These rows do not
+  coalesce. The `packages poll` CLI and the channels poll API keep their
+  results.
   Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
