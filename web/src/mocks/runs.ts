@@ -116,3 +116,5 @@ export const runScripts: readonly RunScript[] = [
     ]),
   },
 ];
+
+export const extraRunScripts: RunScript[] = [];

@@ -80,7 +80,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
 		{Name: "loops", Title: "Open loops", Keys: []string{
-			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays,
 		}},
 		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 	}

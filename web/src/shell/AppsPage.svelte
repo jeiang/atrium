@@ -1,10 +1,24 @@
 <script lang="ts">
-  import { apps } from '../apps';
+  import { useShell } from './frame';
+  import { appsDestination, mailStatus, shownApps } from './nav';
+  import Placeholder from './Placeholder.svelte';
+  import { p } from './router';
+  import Tiles from './Tiles.svelte';
+
+  const shell = useShell();
+  const tiles = $derived(
+    shownApps(shell.data).map((app) => ({
+      key: app.id,
+      href: p('/apps/:app', { params: { app: app.id } }),
+      label: app.title,
+      icon: app.icon,
+      meta: app.id === 'mail' ? mailStatus(shell.data) : undefined,
+    })),
+  );
 </script>
 
-<h1>Apps</h1>
-<ul class="app-list">
-  {#each apps as app (app.id)}
-    <li>{app.title}</li>
-  {/each}
-</ul>
+<Placeholder title={appsDestination.label} legacy={appsDestination.legacy}>
+  {#if tiles.length > 0}
+    <Tiles {tiles} label="Apps" />
+  {/if}
+</Placeholder>

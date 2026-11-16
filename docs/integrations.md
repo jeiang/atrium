@@ -211,8 +211,9 @@ media agent's `[vpn]` listener; the retired `media_movies_url` and
 
 Weather forecasts and place lookup need no credential. The location is the
 operator settings `weather_latitude`, `weather_longitude` and optionally
-`weather_location_name`; no settings page offers them, so set them with
-`atrium settings set` or the host file. The `weather` tool reads them, or
+`weather_location_name`, in the Weather group of the Assistant settings, the
+weather connection in `/next/` Settings › Connections, `atrium settings set`
+or the host file. The `weather` tool reads them, or
 geocodes a place named in the call. Latitude must be between -90 and 90 and
 longitude between -180 and 180. The tool fetches only
 the configured Open-Meteo hosts, and the request carries no operator data
@@ -224,7 +225,7 @@ Ship24 supplies live package tracking for packages the operator registers
 with the `track_package` tool. Create an API key in the Ship24 dashboard and
 paste it on the Connections page, or declare `credential_files.api_key` on
 the `service/ship24` connection in the host configuration. The free plan registers 10 shipments a month; the
-`mail_ship24_monthly_quota` setting (default 10) refuses further
+compiled quota `tracking.TuningMailShip24MonthlyQuota` (10) refuses further
 registrations once the month's count is exhausted. Atrium polls the active
 trackers hourly and stops polling delivered packages. There is no webhook
 route.

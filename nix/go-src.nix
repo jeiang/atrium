@@ -12,6 +12,7 @@
       (root + "/tools/registrationownership")
       (root + "/tools/adapterboundary")
       (root + "/tools/e2e-loopback")
+      (root + "/tools/go-test-shard")
       (root + "/tools/openapi-diff")
       (root + "/docs/config")
       (root + "/docs/api")

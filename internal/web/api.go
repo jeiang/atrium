@@ -228,7 +228,11 @@ func (d *Deps) mountSurface(s surface) {
 		if d.commands != nil && isUnsafe(op.method) && !op.shape.ReadOnlyPost {
 			h = d.commands(pattern, h).ServeHTTP
 		}
-		op.router.Method(op.method, pattern, h)
+		router := op.router
+		if r, ok := router.(*Registrar); ok && op.shape.Unowned && r.ungated != nil {
+			router = r.ungated
+		}
+		router.Method(op.method, pattern, h)
 		*d.routes = append(*d.routes, routeRule{method: op.method, pattern: pattern, access: accessDefault, owner: op.owner, api: &op.shape})
 	}
 }

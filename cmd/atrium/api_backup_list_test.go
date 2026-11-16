@@ -20,7 +20,7 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 	configure := func(dir string) {
 		t.Helper()
-		writeFile(t, f.dir, "host.toml", "[core]\nbackup_directory = \""+dir+"\"\n")
+		writeFile(t, f.dir, "host.toml", "[core]\nbackup_directory = \""+dir+"\"\nbackup_keep = 1\nbackup_keep_days = 0\n")
 	}
 	listJSON := func() map[string]any {
 		t.Helper()
@@ -79,7 +79,8 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 	newer := filepath.Join(backups, "atrium-20260102T000000Z-0000bbbb.backup")
 	outside := filepath.Join(elsewhere, "atrium-20260103T000000Z-0000cccc.backup")
 	named := filepath.Join(elsewhere, "list")
-	for _, dest := range []string{newer, older, outside, named} {
+	kept := filepath.Join(backups, "pre-D7-20260101T000000Z.archive")
+	for _, dest := range []string{newer, older, outside, named, kept} {
 		if got := runApp(t, "backup", dest); got.code != cli.ExitOK || !strings.Contains(got.stdout, "backup written to "+dest) {
 			t.Fatalf("backup %s exited %d: %q %q", dest, got.code, got.stdout, got.stderr)
 		}
@@ -97,7 +98,11 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 	if err := os.Chtimes(newer, now.Add(-time.Hour), now.Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chtimes(kept, now.Add(time.Hour), now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, backups, "notes.txt", "not a backup")
+	writeFile(t, backups, "atrium-20260106T000000Z-0000ffff.backup", "not an archive either")
 	writeFile(t, backups, ".atrium-snapshot.1", "staging")
 	if err := os.Mkdir(filepath.Join(backups, "atrium-20260104T000000Z-0000dddd.backup"), 0o750); err != nil {
 		t.Fatal(err)
@@ -105,7 +110,7 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(backups, "atrium-20260105T000000Z-0000eeee.backup")); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{filepath.Base(newer), filepath.Base(older)}
+	want := []string{filepath.Base(kept), filepath.Base(newer), filepath.Base(older)}
 
 	base, _, stop, err = startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {
@@ -118,7 +123,7 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 		t.Fatalf("the backup list names a filesystem path: %s", reply.body)
 	}
 	listed := apiData(t, reply, http.StatusOK)
-	if state(listed) != "ready" || listed["total"] != float64(2) || strings.Join(names(listed), " ") != strings.Join(want, " ") {
+	if state(listed) != "ready" || listed["total"] != float64(3) || listed["unexamined"] != float64(0) || strings.Join(names(listed), " ") != strings.Join(want, " ") {
 		t.Fatalf("listed %v, want %v newest first: %s", names(listed), want, reply.body)
 	}
 	for i, it := range apiItems(t, listed) {
@@ -129,7 +134,7 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 		}
 		header, _ := item["header"].(map[string]any)
 		enc, _ := header["encryption"].(map[string]any)
-		if item["size_bytes"] != float64(info.Size()) || item["format"] != float64(2) || item["problem"] != nil || enc["encrypted"] != false || header["created_at"] == "" {
+		if item["size_bytes"] != float64(info.Size()) || item["format"] != float64(2) || item["problem"] != nil || enc["encrypted"] != false || header["created_at"] == "" || item["prunable"] != (i > 0) {
 			t.Fatalf("archive %s is described as %v", want[i], item)
 		}
 		if _, err := time.Parse(time.RFC3339, item["modified_at"].(string)); err != nil {
@@ -137,7 +142,7 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 		}
 	}
 	capped := apiData(t, s.do(http.MethodGet, "/api/v1/maintenance/backups?limit=1", token, nil), http.StatusOK)
-	if strings.Join(names(capped), " ") != want[0] || capped["total"] != float64(2) {
+	if strings.Join(names(capped), " ") != want[0] || capped["total"] != float64(3) {
 		t.Fatalf("limit=1 gave %v of %v", names(capped), capped["total"])
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/maintenance/backups?limit=0", token, nil), http.StatusUnprocessableEntity, "invalid")
@@ -149,12 +154,26 @@ func TestBackupListThroughCLIAndAPI(t *testing.T) {
 			t.Fatalf("verify %s answered %v", name, verified)
 		}
 	}
+	for _, outsider := range []string{"../" + filepath.Base(elsewhere) + "/list", named, filepath.Join("..", filepath.Base(elsewhere), filepath.Base(outside))} {
+		expectField(t, s.do(http.MethodPost, "/api/v1/maintenance/backups/verify", token, map[string]any{"name": outsider}), "name")
+	}
 
-	if cliList := listJSON(); strings.Join(names(cliList), " ") != strings.Join(want, " ") || cliList["total"] != float64(2) {
+	if cliList := listJSON(); strings.Join(names(cliList), " ") != strings.Join(want, " ") || cliList["total"] != float64(3) {
 		t.Fatalf("CLI list %v differs from the API list %v", names(cliList), want)
 	}
 	text := runApp(t, "backup", "list")
-	if text.code != cli.ExitOK || !strings.HasPrefix(text.stdout, want[0]+"\t") || !strings.Contains(text.stdout, "\n"+want[1]+"\t") || !strings.HasSuffix(text.stdout, "2 of 2 archives\n") {
+	if text.code != cli.ExitOK || !strings.HasPrefix(text.stdout, want[0]+"\t") || !strings.Contains(text.stdout, "\tnamed, never pruned\t") || !strings.Contains(text.stdout, "\n"+want[1]+"\t") || !strings.HasSuffix(text.stdout, "3 of 3 archives\n") {
 		t.Fatalf("backup list: %d %q %q", text.code, text.stdout, text.stderr)
+	}
+
+	fresh, _ := apiData(t, s.do(http.MethodPost, "/api/v1/maintenance/backups", token, nil), http.StatusCreated)["name"].(string)
+	pruned := apiData(t, s.do(http.MethodGet, "/api/v1/maintenance/backups", token, nil), http.StatusOK)
+	if got := strings.Join(names(pruned), " "); got != filepath.Base(kept)+" "+fresh || pruned["total"] != float64(2) {
+		t.Fatalf("after a prune with backup_keep = 1 the list is %q, want the named archive and %s", got, fresh)
+	}
+	for _, gone := range []string{older, newer} {
+		if _, err := os.Lstat(gone); err == nil {
+			t.Fatalf("the prune kept %s", gone)
+		}
 	}
 }

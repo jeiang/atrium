@@ -48,6 +48,7 @@
         '';
       });
     tags = "libsqlite3,sqlite_fts5";
+    testShards = 6;
     inherit (pkgs.stdenv.hostPlatform) isLinux;
     containmentTools = lib.optionals isLinux [pkgs.util-linux pkgs.iproute2];
     testTags = tags: ''
@@ -104,7 +105,15 @@
         go run ./tools/adapterboundary
       '';
 
-      go-test = goCheck "test" containmentTools (testTags tags);
+      go-test = (goCheck "test" containmentTools (testTags tags)).overrideAttrs (old: {
+        passthru =
+          (old.passthru or {})
+          // lib.optionalAttrs isLinux {
+            shards =
+              lib.genAttrs (map toString (lib.range 1 testShards)) (shard:
+                goCheck "test-shard-${shard}" containmentTools "ATRIUM_GO_TAGS=${tags} bash tools/go-test-shard ${shard} ${toString testShards}");
+          };
+      });
 
       go-licenses = goCheck "licenses" [pkgs.go-licenses pkgs.diffutils] ''
         GOFLAGS="$GOFLAGS -tags=${tags}" ${goSrc.licenseCheck}

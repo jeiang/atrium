@@ -63,7 +63,7 @@ claims about the running application. Operator contracts are in
   untrusted-data preamble is fixed in code and always comes first.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
-  `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
+  `memory.TuningMemoryVerbatimTokens` (16,000, at most a quarter of the context left
   after the tools and system prompt) verbatim, tool calls and results
   included; each operator message ends with its run's start time in the
   configured time zone. Older messages come first as memory-tree lines,
@@ -474,8 +474,9 @@ claims about the running application. Operator contracts are in
   `weather` tool: current conditions and an hourly/daily forecast for the
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
-  `weather_longitude` and `weather_location_name`), validated in range and
-  read-only when the host file declares them. Without a location name or
+  `weather_longitude` and `weather_location_name`), validated in range,
+  offered in the Assistant settings' Weather group and on the `/next/`
+  weather connection, and read-only when the host file declares them. Without a location name or
   both coordinates, the weather connection checks as `unconfigured` and
   probes nothing. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
@@ -535,19 +536,25 @@ claims about the running application. Operator contracts are in
   keep_days. No directory means `skipped_unconfigured`. `atrium backup`
   shares the job's claim. There is no backup unit or timer.
   `GET /maintenance/backups` (operation `maintenance.backup.list`, operator
-  only, not an agent tool) and `atrium backup list [--json]` list the
-  regular files named `atrium-*.backup` directly in `core.backup_directory`,
-  newest modification first, capped by `limit` (default 50, at most 100;
-  the CLI shows 100) with the full `total`. Symlinks, directories and other
-  names are skipped, and files are opened through an `os.Root` on that
-  directory. Each item carries the name, size, modification time and the
-  unauthenticated archive header (format, created time, schema, encryption
-  and key id, file count) or a `problem` (`not_archive`, `old_format`,
-  `newer_format`). No path is returned. `location.state` is `ready`,
-  `unconfigured` (no host key) or `missing` (the directory does not exist),
-  with the host key and NixOS option that set it. Verify takes a listed
-  name; verify results are not recorded. `atrium backup list` lists; an
-  archive named `list` is written with `atrium backup ./list`.
+  only, not an agent tool) and `atrium backup list [--json]` list every
+  atrium archive directly in `core.backup_directory`: the regular files,
+  without a leading dot, whose tar header entry parses as an archive header.
+  Scheduled and API archives (`atrium-*.backup`, `prunable: true`) and named
+  archives such as `pre-<deploy>-<stamp>.archive` from `atrium backup PATH`
+  (`prunable: false`; pruning never counts or deletes them) are listed
+  together, newest modification first, capped by `limit` (default 50, at
+  most 100; the CLI shows 100) with the full `total`. At most the newest
+  1000 candidate files are examined; `unexamined` counts the rest. Other
+  files, symlinks and directories are skipped silently, and files are opened
+  through an `os.Root` on that directory. Each item carries the name, size,
+  modification time, `prunable` and the unauthenticated archive header
+  (format, created time, schema, encryption and key id, file count) or a
+  `problem` (`old_format`, `newer_format`). No path is returned.
+  `location.state` is `ready`, `unconfigured` (no host key) or `missing`
+  (the directory does not exist), with the host key and NixOS option that
+  set it. Verify takes a listed name; verify results are not recorded.
+  `atrium backup list` lists; an archive named `list` is written with
+  `atrium backup ./list`.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -566,6 +573,17 @@ claims about the running application. Operator contracts are in
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
   application instance gets its own settings registry from the compiled
   module declaration catalog, and every command reads the same stored operator values.
+  Each settings schema field carries `group`, its placement in the new
+  interface (from `internal/settings/placement.go`), and `restart`, true when
+  a change applies only after serve restarts: the `<name>_enabled` module
+  flags and `tz`. `tz` (Settings › General) sets the day and month
+  boundaries for schedules, calendar days and work hours, open loop
+  reminders, package and mail reports, notifications, the Obsidian export
+  and the attention view; serve reads it once at start. Budget months and
+  classification counts read it live. `digest_notify` and
+  `agent_schedule_min_interval_seconds` (assistant group `schedules`) apply
+  live; the minimum interval is checked when a schedule is created or
+  changed.
   `atrium settings`, `atrium secrets`, the settings group and section forms
   and the assistant permission form run the same `settings.*` operations: a
   value refused as invalid exits 2 on the command line (unknown keys, an
@@ -854,7 +872,7 @@ claims about the running application. Operator contracts are in
   syncing; contacts import no other unit. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
-  calendar-candidate stage and notification sends are skipped (the mail pause
+  calendar-candidate stage and notification sends are skipped (the pause
   controls stay available), and its tables remain.
   On its first start the application seeds the module flags. A database
   that already holds operator data (settings, secrets, accounts, threads or
@@ -906,6 +924,26 @@ claims about the running application. Operator contracts are in
   after the publish lock and write connection are released; a failed
   starter marks its module unavailable with the error, is logged once per
   failure and is retried at the next publication.
+- One platform pause (`internal/pause`) covers all unattended work. Its state
+  is the `pause` file beside the database: the file's existence is the
+  pause, and its JSON body records who (`by`, `source`), when (`since`) and
+  an optional `reason`; an empty file written by an older binary reads as
+  paused since its modification time, and an older binary honors the new
+  file. Every check reads the file, so a pause set by a separate CLI process
+  stops a running `serve`: scheduled admission at its next tick (30 s),
+  run-now requests and each automatic mail write at once. A due job is
+  skipped as `skipped_pause` unless it runs while paused (backups, the mail
+  sync and scan passes, whose automatic writes the gate still refuses, and
+  the CalDAV/CardDAV mirrors); run-now of any other job is refused (409
+  `refused`). Chat stays available; the assistant's direct mailbox writes
+  are refused while paused. Mail's write gate delegates only its pause
+  check. `GET /automation/pause`, `POST /automation/pause` (optional
+  `reason`) and `POST /automation/resume` are operator-only on both
+  prefixes and never agent tools; the two commands are audited as
+  `automation.pause` and `automation.resume`, bump the `automation` event
+  topic and send the pause notice, and `GET /shell` carries the same state
+  as `pause`. `POST /api/v1/mail/live/pause` and `/resume` and `atrium live
+  pause|resume` are aliases of the same pause with unchanged shapes.
 - Each `module.Declaration` states its contract: `Name` (the stable id),
   `Title`, `Core` (the platform core), `App` (a switchable app; units with
   `App` false are core units), `Depends` (other units it needs on),
@@ -1055,8 +1093,8 @@ claims about the running application. Operator contracts are in
   `module_disabled`) and again during execution (503 `module_disabled` with
   `Retry-After: 5`). A binary API relay owned by a module (media content and
   artwork, file downloads) answers 409 `module_disabled` before relaying when
-  that module is off. Only
-  `POST /api/v1/mail/live/pause` is unowned. The
+  that module is off. Only the pause aliases
+  `POST /api/v1/mail/live/pause` and `/resume` are unowned. The
   owner generation follows a pending mutation to ledger admission: a halted
   owner cannot start a new effect, an effect already started finishes
   recording its result, and re-enabling an owner does not make an old
@@ -1498,7 +1536,8 @@ claims about the running application. Operator contracts are in
   the web session key on `/web/v1`, and each server instance owns its
   counts. Static assets are served from content-hashed immutable URLs.
 - Client read models (both prefixes): `GET /shell` (navigation, sections
-  and tabs, Needs you count, mail mode and pause, module states, version),
+  and tabs, Needs you count, mail mode, the platform `pause` state (paused,
+  by, source, since, reason), module states, version),
   `GET /about` (version, VCS build when stamped, schema version, modules),
   `GET /settings/schema` (offered settings per page with type, choices,
   bounds, default, source, editable, secret; secret values are never sent),
@@ -1536,6 +1575,31 @@ claims about the running application. Operator contracts are in
   `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
   and it never controls the old UI's pages, while it does see every request
   a `/next/` page makes, `/web/v1` writes included.
+- The `/next/` client registers `/next/sw.js` (scope `/next/`, production
+  build only, through the `atrium-sw` Trusted Types policy). The worker
+  precaches the shell and every hashed asset, lazy route chunks included,
+  answers `/next/assets/` cache-first and `/next/` navigations network-first
+  with a 3 s timeout and the cached shell as fallback, and passes everything
+  else through untouched, so `/web/v1`, `/api/v1`, streams, `/login` and
+  `/auth/` never reach its cache. Caches are named `next-shell-<build>`, not
+  `atrium-`, because the old UI worker deletes `atrium-*` caches. A new
+  worker waits; it activates at once only when the open page's own scripts
+  are in its precache list, otherwise on the next in-app navigation, which
+  becomes a full load. Activation deletes older `next-shell-*` caches.
+- Read models from queries that declare `meta.topics` or `meta.persist: true`
+  are kept for 7 days in the IndexedDB database `atrium-read-cache`, keyed to
+  the signed-in subject, with the session's identity but never its CSRF
+  token. Keys starting with `session`, `settings`, `connections`, `auth`,
+  `tokens` or `secrets` are never kept. Sign-out, a 401, a different subject,
+  a changed API contract hash or 7 days without a verified session delete
+  it; storage errors mean no cache. Offline means atrium itself did not
+  answer: the last request or stream to it failed, and the next response
+  clears it. `navigator.onLine` is never trusted; its `online` and `offline`
+  events only probe the session at once, and while atrium is unreachable
+  the client probes on its own every 2 s doubling to 60 s, because
+  a VPN or LAN can reach atrium while the browser reports offline. While
+  offline, writes refuse at once and are never queued. A lazy page missing
+  from the device shows "Not available" instead of failing.
 - The one inbox is `GET /queue` (both prefixes): parked `ask_operator`
   questions and permission requests (`ask`), pending and outcome-unknown
   proposals (`proposal`), drafts to send or resolve (`draft`), and
@@ -1619,6 +1683,7 @@ claims about the running application. Operator contracts are in
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+- **New web client shell:** `/next/` opens with a frame prerendered in its HTML, then signs in through `GET /web/v1/session` only: a 401 with `login_url` sends the browser there once with a same-origin `next`, a 401 without it shows what to do, and a 503 or a network failure offers a retry. Signed in, it shows Home, Plan, Knowledge, Apps and Assistant in a rail (Inbox with the `needs_you` count, enabled apps under Apps, and Chats, Settings and Sign out behind the avatar), or Home, Decide, Chats and Spaces in a phone tab bar. Modules turned off hide their entries. One tab per browser holds the `/web/v1/events` stream and shares its notices with the others. Pages not yet built link to the same place in the server-rendered UI, which stays the default.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
