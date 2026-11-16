@@ -3,9 +3,12 @@
 package main
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -59,6 +62,10 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
+	waitFor(t, func() bool { return connectionNotices(t, dir, "Grafana") > 0 })
+	if n := connectionNotices(t, dir, "Grafana"); n != 1 || connectionState(t, dir, "service/grafana") != "failing" {
+		t.Fatalf("%d notices for a host connection without a token after start, want 1", n)
+	}
 
 	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK {
 		t.Fatalf("grafana test: %d %s", code, body)
@@ -66,8 +73,8 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	if state := connectionState(t, dir, "service/grafana"); state != "ok" {
 		t.Fatalf("state after a passing test = %q", state)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 0 {
-		t.Fatalf("%d notices for the first observation, want 0", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
+		t.Fatalf("%d notices after the recovery, want 2", n)
 	}
 
 	status.Store(http.StatusInternalServerError)
@@ -77,14 +84,14 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	if state := connectionState(t, dir, "service/grafana"); state != "failing" {
 		t.Fatalf("state after a failing test = %q", state)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 1 {
-		t.Fatalf("%d notices after one transition, want 1", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 3 {
+		t.Fatalf("%d notices after one transition, want 3", n)
 	}
 	if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitError {
 		t.Fatalf("second failing test: exit %d", got.code)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 1 {
-		t.Fatalf("%d notices after an unchanged failing check, want 1", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 3 {
+		t.Fatalf("%d notices after an unchanged failing check, want 3", n)
 	}
 
 	status.Store(http.StatusUnauthorized)
@@ -94,15 +101,15 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	if state := connectionState(t, dir, "service/grafana"); state != "needs_reauth" {
 		t.Fatalf("state after a refused token = %q", state)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
-		t.Fatalf("%d notices after a second transition, want 2", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 4 {
+		t.Fatalf("%d notices after a second transition, want 4", n)
 	}
 
 	s.stop()
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/grafana") == "needs_reauth" })
-	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
-		t.Fatalf("%d notices after a restart in the same state, want 2", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 4 {
+		t.Fatalf("%d notices after a restart in the same state, want 4", n)
 	}
 
 	before := connectionNotices(t, dir, "Grafana")
@@ -114,6 +121,88 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	}
 	if after := connectionNotices(t, dir, "Grafana"); after != before || after == 0 {
 		t.Fatalf("notifications after disconnect: %d, want the %d rows kept", after, before)
+	}
+}
+
+func TestHostConnectionChangesAreCheckedAtStartAndAnnouncedOnce(t *testing.T) {
+	t.Parallel()
+	requireCipher(t)
+	good, broken := newFakeOpenAI(t), newFakeOpenAI(t)
+	broken.setStatus(http.StatusInternalServerError)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	host := func(embedURL string, withQbit bool) string {
+		t.Helper()
+		table := fmt.Sprintf(`
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = "embeddinggemma" }
+capabilities = ["embeddings"]
+`, embedURL)
+		if withQbit {
+			table += defaultQbitConnection
+		}
+		path := filepath.Join(dir, "host-changes.toml")
+		if err := os.WriteFile(path, []byte(hostConfigBodyWith(table, defaultWebPushConnection, filepath.Join(testRoot, "host", "anthropic.key"))), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	checkedAt := func(id string) float64 {
+		t.Helper()
+		var at sql.NullFloat64
+		if err := d.Read.QueryRow("SELECT checked_at FROM connections WHERE id = ?", id).Scan(&at); err != nil {
+			t.Fatal(err)
+		}
+		return at.Float64
+	}
+
+	setEnv(t, "ATRIUM_HOST_CONFIG", host(good.URL+"/v1", true))
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "ok") {
+		t.Fatalf("passing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 0 {
+		t.Fatalf("%d notices for a first passing check, want 0", n)
+	}
+
+	setEnv(t, "ATRIUM_HOST_CONFIG", host(broken.URL+"/v1", true))
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	waitFor(t, func() bool { return titledNotices(t, d, "atrium: Embedding failing") > 0 })
+	if state := connectionState(t, dir, "service/embedding"); state != "failing" {
+		t.Fatalf("state of a changed host connection after start = %q", state)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 1 {
+		t.Fatalf("%d notices for the first failure of a changed host connection, want 1", n)
+	}
+
+	checked := checkedAt("service/embedding")
+	s.start()
+	waitFor(t, func() bool { return checkedAt("service/embedding") > checked })
+	if state := connectionState(t, dir, "service/embedding"); state != "failing" {
+		t.Fatalf("state after a restart = %q", state)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 1 {
+		t.Fatalf("%d notices after a second failing check, want 1", n)
+	}
+
+	s.stop()
+	setEnv(t, "ATRIUM_HOST_CONFIG", host(broken.URL+"/v1", false))
+	s.start()
+	if state := connectionState(t, dir, "service/qbittorrent"); state != "disabled" {
+		t.Fatalf("state of a connection dropped from the host file = %q", state)
+	}
+	if n := titledNotices(t, d, "atrium: qBittorrent disabled"); n != 1 {
+		t.Fatalf("%d notices for a connection dropped from the host file, want 1", n)
+	}
+	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK || !strings.Contains(listed.stdout, "removed from host configuration") {
+		t.Fatalf("connections list after the host row was dropped: %d %q", listed.code, listed.stdout)
+	}
+	s.start()
+	defer s.stop()
+	if n := titledNotices(t, d, "atrium: qBittorrent disabled"); n != 1 {
+		t.Fatalf("%d notices after restarting without the host row, want 1", n)
 	}
 }
 
@@ -181,6 +270,9 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 	embed.mu.Lock()
 	embed.dim = config.EmbedDim
 	embed.mu.Unlock()
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 90000 WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
 	var checked float64
 	if err := d.Read.QueryRow("SELECT checked_at FROM connections WHERE id = 'service/embedding'").Scan(&checked); err != nil {
 		t.Fatal(err)
@@ -251,6 +343,10 @@ func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing
 		t.Fatalf("mail not released after a passing Test: %d %q", on.code, on.stderr)
 	}
 
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 90000 WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
 	embed.setStatus(http.StatusInternalServerError)
 	s.start()
 	defer s.stop()
@@ -270,6 +366,7 @@ func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	defer s.stop()
+	waitFor(t, func() bool { return connectionNotices(t, dir, "Grafana") > 0 })
 	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK && code != http.StatusSeeOther {
 		t.Fatalf("grafana test: %d %s", code, body)
 	}

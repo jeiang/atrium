@@ -56,8 +56,8 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 			log.Warn("connection health check failed", logx.Err, err.Error())
 		}
 	}
-	observe(connectionsapp.ObserveHealthInput{Stale: true})
-	ticker := time.NewTicker(24 * time.Hour)
+	observe(connectionsapp.ObserveHealthInput{Start: true})
+	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
@@ -65,8 +65,8 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 			return ctx.Err()
 		case <-ticker.C:
 			observe(connectionsapp.ObserveHealthInput{})
-		case failed := <-connections.Failed():
-			observe(connectionsapp.ObserveHealthInput{ID: failed.ID})
+		case seen := <-connections.Outcomes():
+			observe(connectionsapp.ObserveHealthInput{ID: seen.ID, Recovered: seen.OK})
 		}
 	}
 }

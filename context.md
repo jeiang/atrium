@@ -301,6 +301,16 @@ claims about the running application. Operator contracts are in
   records a stored row that fails these rules as failing without sending a
   request. Credential slots must belong to the
   connection kind, and credential values remain write-only.
+- The health watch checks, at start and then hourly, every enabled
+  connection that was never checked (new or host-changed rows first) or
+  was last checked more than 24 hours ago by wall clock, so restarts do
+  not reset the schedule; at start it also rechecks failing and
+  needs-reauth rows. Runtime request failures trigger a check (at most
+  one per 5 minutes) in every state except disabled; a success while
+  failing triggers a recovery check. A first failing result notifies once,
+  also after a host change. A host-declared row dropped from the host file
+  is disabled with its credentials kept and announced once; runtime
+  observations do not change a disabled row.
 - Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification

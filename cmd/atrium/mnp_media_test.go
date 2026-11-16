@@ -610,7 +610,7 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 	webDB := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = webDB.Close() }()
 	var effects, invalid int
-	if err := webDB.Read.QueryRow("SELECT COUNT(*) FROM effects").Scan(&effects); err != nil {
+	if err := webDB.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation <> 'notify_inbox'").Scan(&effects); err != nil {
 		t.Fatal(err)
 	}
 	if err := webDB.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'media.add' AND outcome = 'invalid'").Scan(&invalid); err != nil {
@@ -643,7 +643,7 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 	if cards != 0 {
 		t.Fatalf("the refused tool add created %d approval cards", cards)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects").Scan(&effects); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation <> 'notify_inbox'").Scan(&effects); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'media.add' AND outcome = 'invalid'").Scan(&invalid); err != nil {
