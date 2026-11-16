@@ -114,6 +114,9 @@ func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, l
 	}
 	wake, unsubscribe := Subscribe()
 	defer unsubscribe()
+	transient, unsubscribeLive := SubscribeLive(s.RunID)
+	defer unsubscribeLive()
+	var pending []string
 	if err := write("retry: 1000\n\n"); err != nil {
 		return nil
 	}
@@ -168,6 +171,12 @@ func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, l
 			}
 			paused = state
 		}
+		for _, frame := range pending {
+			if err := write(frame); err != nil {
+				return nil
+			}
+		}
+		pending = pending[:0]
 	wait:
 		for {
 			select {
@@ -176,6 +185,9 @@ func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, l
 			case <-live.Stopping:
 				return nil
 			case <-wake:
+				break wait
+			case frame := <-transient:
+				pending = append(pending, frame)
 				break wait
 			case <-ticker.C:
 				if live.Check(ctx) != nil {

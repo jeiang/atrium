@@ -175,14 +175,14 @@ web-test *args:
   {{dev}} bash -c 'cd web && npm run build:mock && npm run e2e -- "$@"' web-test "$@"
 
 settingsgen:
-  go run -tags modernc ./tools/settingsgen docs/config
+  go run ./tools/settingsgen docs/config
 
 settingsgen-check:
   #!/usr/bin/env bash
   set -euo pipefail
   out=$(mktemp -d)
   trap 'rm -rf "$out"' EXIT
-  go run -tags modernc ./tools/settingsgen "$out"
+  go run ./tools/settingsgen "$out"
   diff -r docs/config "$out"
 
 go-test *args="./...":
