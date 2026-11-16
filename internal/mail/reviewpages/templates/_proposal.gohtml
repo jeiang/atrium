@@ -69,11 +69,6 @@
   {{template "proposal_message_list" (dict "i" 0 "messages" (get $g "messages") "verb" .verb)}}
 </fieldset>{{end}}
 
-{{define "proposal_page_ref"}}<div class="flex min-w-0 flex-col gap-0.5">
-  <span class="flex min-w-0 items-center gap-1.5">{{template "page_link" (dict "ref" . "class" "truncate text-sm")}}<a class="shrink-0 text-muted-foreground hover:text-foreground" {{template "external" (get . "url")}} title="Open in Notion" aria-label="Open {{or (get . "title") "Untitled"}} in Notion">{{icon "external-link" "size-3.5"}}</a></span>
-  {{if get . "path"}}<span class="truncate text-xs text-muted-foreground">{{page_path (get . "path")}}</span>{{end}}
-</div>{{end}}
-
 {{define "proposal_body"}}{{$p := .p}}{{$v := .v}}{{$kind := $p.Kind}}
 {{if and (eq $p.Status "failed") (get $p.Result "error")}}
 <div class="alert" data-variant="destructive" role="alert">
@@ -90,7 +85,7 @@
 </div>
 
 {{else if eq $kind "mail_triage"}}
-<p class="text-sm text-muted-foreground">Archive, label or snooze the messages below. Anything not picked stays where it is.</p>
+<p class="text-sm text-muted-foreground">Archive or label the messages below. Anything not picked stays where it is.</p>
 <fieldset class="flex flex-col gap-2" data-group>
   <legend class="sr-only">Messages</legend>
   {{template "proposal_toggle" (dict "uid" (printf "%v-0" $p.ID) "g" (dict "messages" (get $v "messages") "count" (get $v "count")))}}
@@ -134,14 +129,6 @@
   <span>Deleting moves mail to Trash, so it can still be recovered there. {{if eq $.mode "live"}}The rule also deletes new matching mail from now on.{{else}}The rule deletes new matching mail only once routing is live.{{end}}</span>
 </p>
 
-{{else if eq $kind "notion_link"}}
-<div class="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-  {{template "proposal_page_ref" (get $v "a")}}
-  <span class="flex items-center gap-2 text-muted-foreground max-sm:ps-1">{{icon "link" "size-4"}}<span class="sr-only">linked with</span></span>
-  {{template "proposal_page_ref" (get $v "b")}}
-</div>
-<p class="text-xs text-muted-foreground">Adds a link to the page text under a “Related” heading.</p>
-{{if get $v "reason"}}<blockquote class="border-s-2 ps-3 text-sm text-muted-foreground">{{attr $v "reason"}}</blockquote>{{end}}
 
 {{else if eq $kind "calendar_rsvp"}}
 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
@@ -176,36 +163,6 @@
   {{if get $v "subject"}}<dt class="text-muted-foreground">From mail</dt><dd>{{attr $v "subject"}}</dd>{{end}}
 </dl>
 <p class="text-xs text-muted-foreground">Approving creates a one-time schedule that notifies you.</p>
-
-{{else if eq $kind "notion_edit"}}
-{{$diff := get $v "diff"}}
-{{template "proposal_page_ref" (get $v "page")}}
-<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
-  <dt class="text-muted-foreground">You asked</dt>
-  <dd>{{attr $v "instruction"}}</dd>
-  {{if get $v "summary"}}
-  <dt class="text-muted-foreground">The 9B changed</dt>
-  <dd>{{attr $v "summary"}}</dd>
-  {{end}}
-</dl>
-<div class="flex flex-col overflow-hidden rounded-md border">
-  <p class="flex items-center gap-3 border-b bg-muted/50 px-3 py-1.5 text-xs tabular-nums">
-    <span class="text-success">+{{countwhere $diff "op" "add"}}<span class="sr-only"> lines added</span></span>
-    <span class="text-destructive">−{{countwhere $diff "op" "del"}}<span class="sr-only"> lines removed</span></span>
-  </p>
-  <div class="max-h-96 overflow-auto bg-background py-1 font-mono text-xs/5" role="group" aria-label="Changes">
-    {{range $diff}}
-    {{$op := attr . "op"}}
-    {{if eq $op "add"}}
-    <ins class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-success/10 no-underline"><span class="select-none text-center text-success" aria-hidden="true">+</span><span class="whitespace-pre-wrap break-words pe-3">{{attr . "text"}}</span></ins>
-    {{else if eq $op "del"}}
-    <del class="grid grid-cols-[--spacing(6)_minmax(0,1fr)] bg-destructive/10 no-underline"><span class="select-none text-center text-destructive" aria-hidden="true">−</span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground line-through decoration-destructive/40">{{attr . "text"}}</span></del>
-    {{else}}
-    <div class="grid grid-cols-[--spacing(6)_minmax(0,1fr)]"><span aria-hidden="true"></span><span class="whitespace-pre-wrap break-words pe-3 text-muted-foreground">{{attr . "text"}}</span></div>
-    {{end}}
-    {{end}}
-  </div>
-</div>
 
 {{else if $p.Approval}}
 {{if $p.Args}}

@@ -49,10 +49,10 @@
 </div>
 {{- end}}
 
-{{define "toast_button"}}{{$item := .item}}{{$href := or (opt $item "href" nil) (opt $item "url" nil)}}{{$onclick := opt $item "onclick" nil -}}
+{{define "toast_button"}}{{$item := .item}}{{$href := or (opt $item "href" nil) (opt $item "url" nil) -}}
 {{if $href -}}
 <a href="{{safeurl $href}}" class="btn" {{if .variant}}data-variant="{{.variant}}" {{end}}data-size="sm" {{if eq .marker "action"}}data-toast-action{{else}}data-toast-cancel{{end}}>{{opt $item "label" ""}}</a>
 {{- else -}}
-<button type="button" class="btn" {{if .variant}}data-variant="{{.variant}}" {{end}}data-size="sm" {{if eq .marker "action"}}data-toast-action{{else}}data-toast-cancel{{end}}{{if $onclick}} onclick="{{$onclick}}"{{end}}>{{opt $item "label" ""}}</button>
+<button type="button" class="btn" {{if .variant}}data-variant="{{.variant}}" {{end}}data-size="sm" {{if eq .marker "action"}}data-toast-action{{else}}data-toast-cancel{{end}}>{{opt $item "label" ""}}</button>
 {{- end}}
 {{- end}}

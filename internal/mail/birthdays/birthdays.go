@@ -6,15 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/timex"
 	"golang.org/x/text/cases"
 )
 
@@ -140,15 +137,4 @@ func UpcomingFor(ctx context.Context, q db.Querier, today time.Time, days int) (
 	}
 	items, err = Upcoming(contacts.Load(dir), today, days, dismissed)
 	return items, err == nil, err
-}
-
-func Dismiss(ctx context.Context, q db.Querier, key, occurrenceDate string, ts float64) error {
-	if _, ok := timex.ParseDay(occurrenceDate); !ok {
-		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(occurrenceDate))
-	}
-	_, err := q.ExecContext(ctx,
-		"INSERT INTO watch_dismissed (key, occurrence, ts) VALUES (?, ?, ?) "+
-			"ON CONFLICT(key) DO UPDATE SET occurrence = excluded.occurrence, ts = excluded.ts",
-		key, occurrenceDate, ts)
-	return err
 }

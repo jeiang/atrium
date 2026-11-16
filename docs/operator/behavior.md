@@ -192,7 +192,7 @@ Pause/resume does not change the mode or grant
 go-live eligibility.
 
 - Shadow records what automatic actions would do and makes no automatic
-  mailbox writes. A due snooze stays pending when shadow skips its return.
+  mailbox writes.
 - Live automatic writes also require no pause, go-live eligibility, verified
   current message state, safe folders, and the per-account write cap. Read,
   unflagged inbox filing, contact flagging, corrections, and deletion rules

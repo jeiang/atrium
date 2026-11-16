@@ -10,7 +10,7 @@ var labelSets = map[string][]pair{
 		{"operator", "Rule"},
 		{"learned", "Learned"},
 		{"knn", "kNN"},
-		{"llm", "9B"},
+		{"llm", "Model"},
 		{"fallback", "Fallback"},
 	},
 	"stage_dot": {
@@ -60,14 +60,6 @@ var labelSets = map[string][]pair{
 		{"suffix", "Domains separated by commas"},
 		{"re", "RE2 regular expression, case-insensitive"},
 		{"gte", "Whole number of days"},
-	},
-	"kind": {
-		{"notion_link", "Notion link"},
-		{"notion_edit", "Notion edit"},
-	},
-	"kind_icon": {
-		{"notion_link", "link"},
-		{"notion_edit", "pencil"},
 	},
 	"status": {
 		{"pending", "Pending"},
