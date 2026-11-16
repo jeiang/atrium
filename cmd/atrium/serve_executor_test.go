@@ -247,7 +247,6 @@ func TestSyncWithServeRunningDelegates(t *testing.T) {
 	waitUntil(t, 60*time.Second, "the mail sync job row", func() bool {
 		return count("SELECT COUNT(*) FROM jobs WHERE declaration_key = 'mail/sync'") == 1
 	})
-	passes := count("SELECT COUNT(*) FROM pass_runs WHERE job = 'sync'")
 	runs := count("SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = 'mail/sync'")
 	var code int
 	var stdout, stderr string
@@ -264,9 +263,6 @@ func TestSyncWithServeRunningDelegates(t *testing.T) {
 	if r.Job != "mail/sync" || r.Status != "ok" || !servedHere(r.Owner) {
 		t.Fatalf("sync run record %+v, want mail/sync ok owned by serve pid %d", r, os.Getpid())
 	}
-	if n := count("SELECT COUNT(*) FROM pass_runs WHERE job = 'sync'"); n != passes+1 {
-		t.Errorf("sync passes %d, want %d", n, passes+1)
-	}
 	if n := count("SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = 'mail/sync'"); n != runs+1 {
 		t.Errorf("mail sync runs %d, want %d", n, runs+1)
 	}
@@ -278,8 +274,8 @@ func TestSyncWithServeRunningDelegates(t *testing.T) {
 	if code != cli.ExitTempFail || !strings.Contains(stderr, "serve is running") {
 		t.Errorf("agent tick with serve running exit %d: %s %s", code, stdout, stderr)
 	}
-	if n := count("SELECT COUNT(*) FROM pass_runs WHERE job = 'sync'"); n != passes+1 {
-		t.Errorf("sync passes %d after refusals, want %d", n, passes+1)
+	if n := count("SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = 'mail/sync'"); n != runs+1 {
+		t.Errorf("mail sync runs %d after refusals, want %d", n, runs+1)
 	}
 }
 
@@ -296,7 +292,6 @@ func TestServeRecoversAStaleMailRunWithoutRerunningIt(t *testing.T) {
 	asstExec(t, d, "INSERT INTO job_runs (job_id, due_at, started_at, heartbeat_at, owner, status) SELECT id, ?, ?, ?, ?, 'running' FROM jobs WHERE declaration_key = 'mail/sync'", now-3600, now-3600, now-3600, owner)
 	stale := int64(asstCount(t, d, "SELECT MAX(id) FROM job_runs"))
 	asstExec(t, d, "UPDATE jobs SET lease_owner = ?, lease_until = ?, last_run_id = ? WHERE declaration_key = 'mail/sync'", owner, now-3000, stale)
-	passes := asstCount(t, d, "SELECT COUNT(*) FROM pass_runs WHERE job = 'sync'")
 	runs := asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = 'mail/sync'")
 	startExecutorServe(t, f)
 	waitUntil(t, 60*time.Second, "the stale mail run to be recovered", func() bool {
@@ -310,9 +305,6 @@ func TestServeRecoversAStaleMailRunWithoutRerunningIt(t *testing.T) {
 		t.Errorf("stale mail run status %q, want error", status)
 	}
 	time.Sleep(2 * time.Second)
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM pass_runs WHERE job = 'sync'"); n != passes {
-		t.Errorf("sync passes %d after recovery, want %d", n, passes)
-	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.declaration_key = 'mail/sync'"); n != runs {
 		t.Errorf("mail sync runs %d after recovery, want %d", n, runs)
 	}

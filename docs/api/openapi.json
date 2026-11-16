@@ -363,7 +363,8 @@
           {
             "properties": {
               "data": {
-                "type": "object"
+                "contentMediaType": "application/json",
+                "type": "string"
               },
               "event": {
                 "type": "string"
@@ -380,21 +381,25 @@
       "AppEventChange": {
         "properties": {
           "data": {
-            "properties": {
-              "revision": {
-                "format": "int64",
-                "maximum": 9007199254740991,
-                "type": "integer"
+            "contentMediaType": "application/json",
+            "contentSchema": {
+              "properties": {
+                "revision": {
+                  "format": "int64",
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                },
+                "topic": {
+                  "type": "string"
+                }
               },
-              "topic": {
-                "type": "string"
-              }
+              "required": [
+                "topic",
+                "revision"
+              ],
+              "type": "object"
             },
-            "required": [
-              "topic",
-              "revision"
-            ],
-            "type": "object"
+            "type": "string"
           },
           "event": {
             "const": "change",
@@ -410,32 +415,36 @@
       "AppEventSync": {
         "properties": {
           "data": {
-            "properties": {
-              "topics": {
-                "items": {
-                  "properties": {
-                    "revision": {
-                      "format": "int64",
-                      "maximum": 9007199254740991,
-                      "type": "integer"
+            "contentMediaType": "application/json",
+            "contentSchema": {
+              "properties": {
+                "topics": {
+                  "items": {
+                    "properties": {
+                      "revision": {
+                        "format": "int64",
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      "topic": {
+                        "type": "string"
+                      }
                     },
-                    "topic": {
-                      "type": "string"
-                    }
+                    "required": [
+                      "topic",
+                      "revision"
+                    ],
+                    "type": "object"
                   },
-                  "required": [
-                    "topic",
-                    "revision"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              }
+                  "type": "array"
+                }
+              },
+              "required": [
+                "topics"
+              ],
+              "type": "object"
             },
-            "required": [
-              "topics"
-            ],
-            "type": "object"
+            "type": "string"
           },
           "event": {
             "const": "sync",

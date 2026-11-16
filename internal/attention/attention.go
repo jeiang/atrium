@@ -67,7 +67,7 @@ func Query(ctx context.Context, q db.Querier, now float64, sources ...Source) (R
 	if err != nil {
 		return Result{}, err
 	}
-	var items []Item
+	items := []Item{}
 	for _, source := range sources {
 		found, err := source.Items(ctx, q, now)
 		if err != nil {
@@ -102,7 +102,7 @@ func Query(ctx context.Context, q db.Querier, now float64, sources ...Source) (R
 		}
 		return a.SourceID < b.SourceID
 	})
-	result := Result{Items: items, Counts: map[Group]int{}}
+	result := Result{Items: items, Groups: []GroupResult{}, Counts: map[Group]int{}}
 	for _, group := range groupOrder {
 		var grouped []Item
 		for _, item := range items {

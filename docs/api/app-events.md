@@ -4,7 +4,7 @@
 
 ## Frames
 
-A 200 `text/event-stream` starts with `retry: 1000`, then one `sync` event, then a `change` event each time a topic's revision moves. `docs/api/openapi.json` types every frame as `AppEvent`: the `event` name and the JSON `data`. Frames carry no `id:`; there is no cursor and no replay.
+A 200 `text/event-stream` starts with `retry: 1000`, then one `sync` event, then a `change` event each time a topic's revision moves. `docs/api/openapi.json` types every frame as `AppEvent`: the `event` name and the `data` line, a JSON text (`contentMediaType: application/json`) whose decoded value the event's `contentSchema` describes. Frames carry no `id:`; there is no cursor and no replay.
 
 | Event | `data` |
 |---|---|
