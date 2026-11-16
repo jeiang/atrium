@@ -29,6 +29,7 @@ type ContactDate struct {
 }
 
 type Contact struct {
+	UID    string        `json:"uid,omitempty"`
 	Name   string        `json:"name,omitempty"`
 	Org    string        `json:"org,omitempty"`
 	Emails []string      `json:"emails,omitempty"`
@@ -60,6 +61,9 @@ func contactRoutes(d *web.Deps) []application.Binding {
 				raw, err := json.Marshal(read.Data.Value)
 				if err == nil {
 					err = json.Unmarshal(raw, &out)
+				}
+				for i := range out.Results {
+					out.Results[i].UID = read.Data.UIDs[i]
 				}
 				return application.Read[Contacts]{Revision: read.Revision, Data: out}, err
 			}),

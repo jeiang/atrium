@@ -99,6 +99,32 @@ claims about the running application. Operator contracts are in
   attention item. Notion, its wiki view and the one-shot `kb import` are
   removed; records imported from Notion keep their `notion:` origin and stay
   readable and searchable.
+- Knowledge opens on a subject page. Every live record is a subject;
+  its kind comes from existing data (`lesson` for a `Lesson: ` title,
+  `wiki` for a `notion:` origin, otherwise `fact`). Its facts are the
+  records, retracted ones marked superseded, whose title, aliases or body
+  contain its title or an alias of at least three characters, the
+  retrieval exact-match rule; at most 200 are returned. The page text is
+  the stored body, split into heading sections of paragraph, item,
+  numbered, quote and code blocks, never HTML. Related subjects are the
+  live records the body mentions and records from the same run. The map
+  is the subject's live neighborhood one or two steps out over mentions
+  and same-run edges, capped at 50 nodes with a `truncated` flag. These
+  operator reads show private records with their flag, like the record
+  list, and change nothing the assistant retrieves.
+- The operator links a record to another record, a task or a contact
+  (by vCard `UID`) with one relation: `about`, `part_of`, `works_with`,
+  `depends_on` or `see_also`. Kinds and relations are checked in code, so
+  new ones need no migration. Linking needs a live source and an existing
+  target; an identical live link is a no-op, removing a link keeps the row,
+  and both are undoable. The subject page lists links after mentions and
+  same-run records with a direction, a target state (`live`, `retracted`,
+  `done`, `dismissed`, `missing` or `unavailable` when contacts are off)
+  and a client address (`/knowledge/{id}`, `/tasks/{id}`,
+  `/contacts/{uid}`); the map adds record-to-record links as edges named by
+  the relation. Purging a record deletes the links from and to it; a
+  deleted task or contact leaves its links showing as missing. Links are
+  never read by retrieval and the assistant has no link tool.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
 
@@ -466,6 +492,8 @@ claims about the running application. Operator contracts are in
   drop.
   Migration 3 adds the `usage_counters` table and an `agent` column
   (default 0) on `auth_bearers` and `auth_sessions`, with no row rewrite.
+  Migration 4 adds the `record_links` table, its indexes and its revision
+  triggers on the `knowledge` scope, with no row rewrite.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database

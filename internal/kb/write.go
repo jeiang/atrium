@@ -362,7 +362,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 }
 
 func Undo() []ledger.UndoDefinition {
-	return []ledger.UndoDefinition{{Operation: UndoOp, Undoer: ledger.Undoer{
+	return []ledger.UndoDefinition{linkUndoDefinition(), {Operation: UndoOp, Undoer: ledger.Undoer{
 		Validate: func(payload json.RawMessage) error {
 			var u undoPayload
 			if err := json.Unmarshal(payload, &u); err != nil {

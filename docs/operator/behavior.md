@@ -175,7 +175,9 @@ recover by rolling forward to a fixed release or by restoring the backup taken
 before the upgrade, which loses every later write. Schema version 3 only adds
 the request usage table and the agent mark columns on tokens and sign-in
 sessions; a release from before version 3 refuses a database at version 3, with
-the same recovery.
+the same recovery. Schema version 4 only adds the knowledge link table; a
+release from before version 4 refuses a database at version 4, with the same
+recovery.
 
 ## Settings, connections, and modules
 

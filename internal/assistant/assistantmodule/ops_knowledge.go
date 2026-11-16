@@ -27,6 +27,8 @@ func (m Module) knowledgeOperations() ([]application.Definition, []application.B
 			kbapp.DescribeCreate(), kbapp.DescribeEdit(), kbapp.DescribeConfirm(), kbapp.DescribeRetract(), kbapp.DescribeRestore(),
 			kbapp.DescribePurge(), kbapp.DescribeRetractRun(), kbapp.DescribeConfirmSelected(), kbapp.DescribeConfirmMatching(),
 			kbapp.DescribeAgentWrite(), kbapp.DescribeAgentRetract(), kbapp.DescribeExport(),
+			kbapp.DescribeSubjects(), kbapp.DescribeSubject(), kbapp.DescribeMap(),
+			kbapp.DescribeLinks(), kbapp.DescribeLink(), kbapp.DescribeUnlink(),
 		}, append(m.knowledgeRoutes(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /library/knowledge", Uses: []application.Name{kbapp.ListName}},
 			{Kind: application.HTML, Target: "GET /library/knowledge/{record_id}", Uses: []application.Name{kbapp.DetailName}},
