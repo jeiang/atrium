@@ -929,13 +929,22 @@ claims about the running application. Operator contracts are in
   Mail binds its IMAP opener and post-proposal sync hook in its own module
   declaration, and its assistant tools take the opener from the same place.
   `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
-  `internal/tool`, `internal/ledger` or `internal/proposals` imports a unit
-  package (mail, media, calendar, contacts, kb, tasks, weather, grafana,
-  serverops, or the agent tools under `internal/assistant/tools`).
+  `internal/tool`, `internal/ledger`, `internal/proposals`, `internal/review`
+  and its subpackages, `internal/notify`, `internal/web` or `internal/web/tpl`
+  imports a unit package (mail, media, calendar, contacts, kb, tasks, weather,
+  grafana, serverops, or the agent tools under `internal/assistant/tools`).
   `internal/module` names only `core`; every other module name is a constant
-  in the leaf package `internal/unit`, the effect origins a module owns are
-  declared on its declaration (`EffectOrigins`), and the list of modules is
-  `internal/app/catalog.go`.
+  in the leaf package `internal/unit`, and the list of modules is
+  `internal/app/catalog.go`. Platform lookups read registries that units fill
+  on their declarations and `module.Compile` collects, failing start with
+  both module names when two claim one key: effect origins (`EffectOrigins`,
+  with `Direct` marking the origins listed in Activity and the undo list),
+  notification channels (`Channels`; `system` stays the platform's), the
+  Review, Library and Apps hubs (core's `Hub` nav items), reference kinds for
+  chat "about" links (`Refs`), thread attachments such as mail drafts
+  (`Attachments`), and Activity write categories (`EffectCategories`, keyed by
+  operation prefix with one default). Each registry covers every declared
+  unit, enabled or not.
   Settlement continues on a cancellation-detached context. Resolving an
   unknown or partial effect appends actor, source, outcome, prior state and
   evidence to `effect_resolutions`; it does not rewrite the raw attempt.
