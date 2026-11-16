@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/mail/tracking"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/unit"
 )
@@ -110,7 +111,7 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	declareJobsAndParkThem(t, d)
 	path := writeOldPauseFile(t, dir)
 	token := localAPIToken(t, "pause")
-	base := startServeIn(t, f.dir)
+	base, _, stop := startServeStoppable(t, f.dir)
 	s := &apiSite{t: t, base: base}
 
 	state := apiData(t, s.do(http.MethodGet, "/api/v1/automation/pause", token, nil), http.StatusOK)
@@ -184,6 +185,14 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation IN ('automation.pause', 'automation.resume') AND outcome = 'ok'"); n != 2 {
 		t.Fatalf("%d platform pause audits, want 2", n)
+	}
+
+	stop()
+	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "false"})
+	s.base = startServeIn(t, f.dir)
+	apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/pause", token, nil), http.StatusOK)
+	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/resume", token, nil), http.StatusOK); got["paused"] != false {
+		t.Fatalf("mail resume alias with mail off: %v", got)
 	}
 }
 

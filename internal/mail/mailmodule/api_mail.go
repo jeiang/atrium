@@ -420,7 +420,7 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 		api.Command(d, mailapp.DescribePause(), application.APIShape{Area: area, Unowned: true}, "POST /mail/live/pause", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
 			return svc().Pause(ctx, in)
 		}),
-		api.Command(d, mailapp.DescribeResume(), application.APIShape{Area: area}, "POST /mail/live/resume", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
+		api.Command(d, mailapp.DescribeResume(), application.APIShape{Area: area, Unowned: true}, "POST /mail/live/resume", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
 			return svc().Resume(ctx, in)
 		}),
 		api.Query(d, mailapp.DescribeLiveStatus(), application.APIShape{Area: area}, "GET /mail/live", func(ctx context.Context, in struct{}) (application.Read[live.Status], error) {
