@@ -29,6 +29,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/web/app"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -213,6 +214,13 @@ func New(o Options) (*Server, error) {
 	core.Handle(staticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
 	}))
+	shell := newAppHandler(app.FS)
+	core.Get(strings.TrimSuffix(nextPrefix, "/"), func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, nextPrefix, http.StatusMovedPermanently)
+	})
+	core.Handle(nextPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		shell.serve(w, r, func(status int, detail string) { deny(w, status, detail) })
+	}))
 	home := o.Home
 	if home == "" {
 		home = "/about"
@@ -270,7 +278,7 @@ func New(o Options) (*Server, error) {
 	}
 	s.handler = otelhttp.NewHandler(guard.Middleware(Gzip(recoverer(s.mux))), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
-			return !strings.HasPrefix(r.URL.Path, staticPrefix) && r.URL.Path != healthPath
+			return !strings.HasPrefix(r.URL.Path, staticPrefix) && !strings.HasPrefix(r.URL.Path, nextPrefix) && r.URL.Path != healthPath
 		}),
 	)
 	return s, nil

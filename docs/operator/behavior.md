@@ -78,6 +78,12 @@ administrator role or remote emergency bypass.
   out, every `/web/v1` request gets 401 with the sign-in URL; sign-in itself
   is still `/login`. `POST /web/v1/session/logout` signs an OIDC session out
   of the pages too.
+- The new web client is at `/next/` on every listener, beside the
+  server-rendered UI, and nothing links to it yet. Its page and files need no
+  sign-in, like `/static/`, because they hold no data; everything it shows
+  comes from `/web/v1`, which keeps the rules above. Host validation applies.
+  Responses under `/next/` carry a stricter CSP with Trusted Types; the
+  server-rendered pages keep their CSP unchanged.
 
 Public requests are limited in process by token buckets owned by each listener:
 10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`

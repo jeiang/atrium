@@ -1,11 +1,14 @@
 import { createRouter } from 'sv-router';
 import NotFound from './NotFound.svelte';
 
-export const { p, navigate, isActive, route } = createRouter({
-  '/': () => import('../features/today/TodayPage.svelte'),
-  '/apps': () => import('./AppsPage.svelte'),
-  '*': NotFound,
-});
+export const { p, navigate, isActive, route } = createRouter(
+  {
+    '/': () => import('../features/today/TodayPage.svelte'),
+    '/apps': () => import('./AppsPage.svelte'),
+    '*': NotFound,
+  },
+  { base: import.meta.env.BASE_URL.replace(/\/$/, '') || undefined },
+);
 
 export const pages = [
   { path: '/', title: 'Today' },
