@@ -151,7 +151,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			}
 		}
 	}
-	metrics := map[string]bool{}
+	metrics := map[string]string{}
 	checks := map[string]bool{}
 	var allMetrics []ops.Metric
 	var allChecks []ops.Check
@@ -163,10 +163,10 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			optional = append(optional, d.Name)
 		}
 		for _, m := range d.Metrics {
-			if metrics[m.Name] {
-				return nil, &DuplicateMetric{Name: m.Name}
+			if owner, ok := metrics[m.Name]; ok {
+				return nil, &DuplicateHook{Hook: "metric " + m.Name, Modules: []string{owner, d.Name}}
 			}
-			metrics[m.Name] = true
+			metrics[m.Name] = d.Name
 			allMetrics = append(allMetrics, m)
 		}
 		for _, c := range d.Checks {
@@ -205,8 +205,8 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	}
 	if len(regs.queues) > 0 {
 		depth := ops.QueueDepth(regs.queues)
-		if metrics[depth.Name] {
-			return nil, &DuplicateMetric{Name: depth.Name}
+		if owner, ok := metrics[depth.Name]; ok {
+			return nil, &DuplicateHook{Hook: "metric " + depth.Name, Modules: []string{owner, platformOwner}}
 		}
 		allMetrics = append(allMetrics, depth)
 	}

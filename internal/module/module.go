@@ -236,10 +236,6 @@ func (e *DeclarationError) Error() string {
 
 func (e *DeclarationError) Unwrap() error { return e.Err }
 
-type DuplicateMetric struct{ Name string }
-
-func (e *DuplicateMetric) Error() string { return "module: duplicate metric " + e.Name }
-
 type DuplicateCheck struct{ Name string }
 
 func (e *DuplicateCheck) Error() string { return "module: duplicate check " + e.Name }
