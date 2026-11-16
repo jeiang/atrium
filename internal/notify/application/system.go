@@ -17,7 +17,7 @@ func ConnectionNotice() connections.Notifier {
 		if !notify.Enabled(ctx) {
 			return nil
 		}
-		_, err := New(d).Send(ctx, SendInput{Message: notify.Message{Channel: notify.System, Priority: 4, Title: title, Body: body}})
+		_, err := New(d).Send(ctx, SendInput{Message: notify.Message{Channel: notify.System, Priority: 4, Title: title, Body: body, Click: connections.Screen}})
 		return err
 	}
 }
