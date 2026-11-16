@@ -1,5 +1,6 @@
 import { createRouter } from 'sv-router';
 import { preloadMarkdown } from '../shared/markdown/load';
+import { routeLoaded } from './firstView';
 import NotFound from './NotFound.svelte';
 import { appById } from './nav';
 import Unavailable from './Unavailable.svelte';
@@ -18,6 +19,7 @@ const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.sv
 const settingsPage = () => import('../features/settings/SettingsPage.svelte').catch(unavailable);
 export const { p, navigate, isActive, route } = createRouter(
   {
+    hooks: { afterLoad: routeLoaded },
     '/': { '/': () => import('../features/home/HomePage.svelte').catch(unavailable), meta: { title: 'Home' } },
     '/inbox': {
       '/': () => import('../features/inbox/InboxPage.svelte').catch(unavailable),
