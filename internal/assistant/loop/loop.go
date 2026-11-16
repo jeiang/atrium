@@ -76,6 +76,7 @@ type Options struct {
 	Limits    journal.Limits
 	Inference *inference.Service
 	Stop      <-chan struct{}
+	Settled   func(ctx context.Context, run *journal.Run, cause error, watched bool)
 }
 
 type state struct {
@@ -226,7 +227,12 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		if o.Now != nil {
 			now = o.Now()
 		}
-		_ = journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(err.Error()))
+		watched := progress.Watched(runID)
+		if ferr := journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(err.Error())); ferr == nil && o.Settled != nil {
+			if failed, gerr := journal.GetRun(ctx, d.Read, runID); gerr == nil && failed != nil {
+				o.Settled(ctx, failed, err, watched)
+			}
+		}
 		return nil, err
 	}
 	span.SetAttributes(
@@ -240,6 +246,7 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	stopBeat := s.heartbeat(ctx)
 	err = s.body(ctx)
 	stopBeat()
+	watched := progress.Watched(runID)
 	var api *anthropic.APIError
 	if errors.As(err, &api) && api.SpendCapped() {
 		err = inference.SpendCap()
@@ -281,9 +288,12 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 			return nil, err
 		}
 	}
-	finished, err := journal.GetRun(ctx, d.Read, runID)
+	finished, gerr := journal.GetRun(ctx, d.Read, runID)
 	s.observeRun(started, span, finished)
-	return finished, err
+	if gerr == nil && finished != nil && o.Settled != nil {
+		o.Settled(ctx, finished, err, watched)
+	}
+	return finished, gerr
 }
 
 func (s *state) observeRun(started time.Time, span trace.Span, run *journal.Run) {
