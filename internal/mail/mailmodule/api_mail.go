@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/applier"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
@@ -252,11 +251,11 @@ func mailRuleChanged(change application.Change[rules.Rule], err error) (applicat
 	}
 	return out, err
 }
-func mailAPIRoutes(d *web.Deps) []application.Binding {
+func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 	var service *mailapp.Service
 	svc := func() *mailapp.Service { return service }
 	if d != nil {
-		open := imapclient.Opener(d.Cfg)
+		open := m.opener(d.Cfg)
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: mail.WallClock}
 		cat := module.SetFrom(d.Ctx).Catalog()
 		store, err := cat.Ledger(d.DB, d.Env, d.Cfg, mail.WallClock)

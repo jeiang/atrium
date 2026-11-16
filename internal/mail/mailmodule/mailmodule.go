@@ -135,7 +135,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	passOps, passBindings := mailPassOperations()
 	operations = append(operations, passOps...)
 	bindings = append(bindings, passBindings...)
-	bindings = append(bindings, mailAPIRoutes(nil)...)
+	bindings = append(bindings, m.mailAPIRoutes(nil)...)
 	bindings = append(bindings, mailWorkRoutes(nil, m)...)
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
@@ -155,18 +155,18 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Requires:        Requirements(),
 		Pages: []web.Page{
 			{Module: func(_ chi.Router, d *web.Deps) {
-				mailAPIRoutes(d)
+				m.mailAPIRoutes(d)
 				mailWorkRoutes(d, m)
 				mailPassRoutes(d, m)
 				mailDraftRoutes(d, m)
 			}},
-			{Module: pages.Module(mailPageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+			{Module: pages.Module(m.pageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule(mailPageService)},
-			{Module: reviewpages.MailModule(reviewpages.Options{Compose: ReviewServices(ReviewOptions{Clients: m.opener, Tools: mc.Tools, Application: mailPageService})}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
+			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},

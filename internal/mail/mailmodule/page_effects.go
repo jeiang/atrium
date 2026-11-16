@@ -4,7 +4,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/applier"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
@@ -14,8 +13,8 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
-func mailPageEffects(d *web.Deps) (*mailapp.Service, *reviewapp.Service) {
-	open := imapclient.Opener(d.Cfg)
+func (m Module) pageEffects(d *web.Deps) (*mailapp.Service, *reviewapp.Service) {
+	open := m.opener(d.Cfg)
 	syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: mail.WallClock}
 	cat := module.SetFrom(d.Ctx).Catalog()
 	store, err := cat.Ledger(d.DB, d.Env, d.Cfg, mail.WallClock)

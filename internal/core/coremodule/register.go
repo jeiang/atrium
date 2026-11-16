@@ -66,7 +66,6 @@ import (
 type Module struct {
 	Version   string
 	Guard     settingsapp.Guard
-	Clients   func(config.Config) mail.OpenFunc
 	Now       func() float64
 	Resources module.Resources
 	Jobs      jobworker.Dependencies
