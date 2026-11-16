@@ -109,7 +109,6 @@ Operator settings are stored in the database and edited in the application. They
 | `monthly_budget_usd` | float | `150` | ui |
 | `ops_worker_max_run_usd` | float | `0.10` | ui |
 | `ops_worker_monthly_usd` | float | `5` | ui |
-| `prompt_system` | string | none | ui |
 | `thread_cost_cap_usd` | float | `10` | ui |
 | `weather_latitude` | float | none | ui |
 | `weather_location_name` | string | none | ui |

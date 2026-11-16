@@ -59,20 +59,21 @@ type request struct {
 }
 
 func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, cc prompts.CacheControl, extra string) ([]prompts.Block, error) {
-	var p prompts.Parts
-	var err error
-	if p.System, err = prompts.Text(ctx, q, prompts.KeySystem); err != nil {
-		return nil, err
-	}
-	p.Extra = extra
+	p := prompts.Parts{System: prompts.System, Extra: extra}
 	if !registry.PromptCarriesKnowledge(kind) {
 		return prompts.SystemBlocks(p, cc), nil
 	}
-	if r.Profile != nil {
-		var projectID int64
-		if thread.ProjectID != nil {
-			projectID = *thread.ProjectID
+	var projectID int64
+	if thread.ProjectID != nil {
+		projectID = *thread.ProjectID
+	}
+	var err error
+	if r.Instructions != nil {
+		if p.Instructions, err = r.Instructions(ctx, q, projectID); err != nil {
+			return nil, err
 		}
+	}
+	if r.Profile != nil {
 		if p.Profile, err = r.Profile(ctx, q, projectID); err != nil {
 			return nil, err
 		}

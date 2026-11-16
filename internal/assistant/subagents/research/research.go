@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math/big"
-	"slices"
 	"strings"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
@@ -33,10 +31,17 @@ type Research struct{ svc Service }
 func New(svc Service) *Research { return &Research{svc: svc} }
 
 func Metadata() tool.Tool {
+	names := make([]string, len(asstapp.SubagentRoles))
+	roles := make([]string, len(asstapp.SubagentRoles))
+	for i, r := range asstapp.SubagentRoles {
+		names[i] = r.Name
+		roles[i] = r.Name + ": " + r.Description
+	}
+	enum, _ := json.Marshal(names)
 	return tool.Tool{
 		Name:        Name,
-		Description: Description,
-		InputSchema: json.RawMessage(fmt.Sprintf(schemaFormat, `{"type":"string","description":"Name of an enabled subagent (see Settings › Subagents)."}`)),
+		Description: Description + " Roles: " + strings.Join(roles, "; "),
+		InputSchema: json.RawMessage(fmt.Sprintf(schemaFormat, `{"type":"string","enum":`+string(enum)+`}`)),
 		Effect:      tool.Read,
 		Annotated:   true,
 		Channel:     tool.ChannelInternet,
@@ -46,27 +51,7 @@ func Metadata() tool.Tool {
 }
 
 func Definition() module.ToolDefinition {
-	return module.ToolDefinition{Tool: Metadata(), Bind: Bind}
-}
-
-func Bind(ctx context.Context, q asstapp.Querier, t tool.Tool) (tool.Tool, bool, error) {
-	agents, err := asstapp.EnabledSubagents(ctx, q)
-	if err != nil || len(agents) == 0 {
-		return t, false, err
-	}
-	names := make([]string, len(agents))
-	roles := make([]string, len(agents))
-	for i, a := range agents {
-		names[i] = a.Name
-		roles[i] = a.Name + ": " + a.Description
-	}
-	enum, err := json.Marshal(names)
-	if err != nil {
-		return t, false, err
-	}
-	t.InputSchema = json.RawMessage(fmt.Sprintf(schemaFormat, `{"type":"string","enum":`+string(enum)+`}`))
-	t.Description = Description + " Roles: " + strings.Join(roles, "; ")
-	return t, true, nil
+	return module.ToolDefinition{Tool: Metadata()}
 }
 
 func taskText(task string, contextIDs []string) string {
@@ -99,10 +84,6 @@ func cleanIDs(args tool.Args, maxIDs int) ([]string, error) {
 	return ids, nil
 }
 
-func sortedURLs(allowed map[string]struct{}) []string {
-	return slices.Sorted(maps.Keys(allowed))
-}
-
 func (r *Research) Handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	roleValue, _ := args.Get("role")
 	task, _, err := tool.TextArg(args, "task", true)
@@ -114,8 +95,7 @@ func (r *Research) Handle(ctx context.Context, tc *tool.Context, args tool.Args)
 		return nil, err
 	}
 	role, _ := roleValue.(string)
-	done, err := r.svc(ctx, tc).Research(ctx, asstapp.ResearchInput{ThreadID: tc.ThreadID, RunID: tc.RunID, Role: role, Task: task,
-		ContextIDs: ids, AllowedURLs: sortedURLs(tc.AllowedURLs)})
+	done, err := r.svc(ctx, tc).Research(ctx, asstapp.ResearchInput{ThreadID: tc.ThreadID, RunID: tc.RunID, Role: role, Task: task, ContextIDs: ids})
 	if err != nil {
 		return nil, asstapp.ToolError(err)
 	}

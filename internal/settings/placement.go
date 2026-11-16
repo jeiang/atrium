@@ -14,7 +14,6 @@ const (
 	PlaceAssistantSpend     = "assistant.spend"
 	PlaceConnections        = "connections"
 	PlaceConnectionsWeather = "connections.weather"
-	PlaceKnowledgeAboutMe   = "knowledge.about_me"
 	PlaceKnowledgeExport    = "knowledge.export"
 	PlacePlanOptions        = "plan.options"
 	PlaceSettingsGeneral    = "settings.general"
@@ -57,7 +56,6 @@ var placement = map[string]string{
 	"openloops_waiting_after_days":        PlacePlanOptions,
 	"ops_worker_max_run_usd":              PlaceAssistantRoutines,
 	"ops_worker_monthly_usd":              PlaceAssistantRoutines,
-	"prompt_system":                       PlaceKnowledgeAboutMe,
 	"search_web_max_cost_usd":             PlaceAssistantSpend,
 	"search_web_model":                    PlaceAssistantHelpers,
 	"thread_cost_cap_usd":                 PlaceAssistantSpend,

@@ -65,7 +65,7 @@ type cleaned struct {
 func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 	name := strings.TrimSpace(f.Name)
 	if name == "" {
-		return cleaned{}, ProjectError("Give the project a name.")
+		return cleaned{}, ProjectError("Give the space a name.")
 	}
 	maxName, maxInstructions := assistant.TuningAgentProjectNameChars, assistant.TuningAgentProjectInstructionChars
 	if utf8.RuneCountInString(name) > maxName {
@@ -158,7 +158,7 @@ func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *in
 		var one int
 		err := q.QueryRowContext(ctx, "SELECT 1 FROM projects WHERE id = ? AND archived = 0", *projectID).Scan(&one)
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, ProjectError("unknown project")
+			return false, ProjectError("unknown space")
 		}
 		if err != nil {
 			return false, err
@@ -167,12 +167,25 @@ func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *in
 	return db.Changed(q.ExecContext(ctx, "UPDATE threads SET project_id = ? WHERE id = ? AND kind = 'chat'", projectID, threadID))
 }
 
-func HubMarkdown(p Project) string {
-	lines := []string{fmt.Sprintf("Durable knowledge for the project “%s”: decisions, status, open questions and links.", p.Name)}
-	if p.Instructions != "" {
-		lines = append(lines, "", "## Project brief", "", p.Instructions)
+type Thread struct {
+	ID        int64
+	Title     *string
+	Archived  store.Flag
+	Pinned    store.Flag
+	UpdatedAt float64
+}
+
+func Threads(ctx context.Context, q db.Querier, projectID int64) ([]Thread, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, title, archived, pinned, updated_at FROM threads "+
+		"WHERE project_id = ? AND kind = 'chat' AND deleted_at IS NULL ORDER BY updated_at DESC, id DESC", projectID)
+	if err != nil {
+		return nil, err
 	}
-	return strings.Join(lines, "\n")
+	return db.Collect(rows, func(r *sql.Rows) (Thread, error) {
+		var t Thread
+		err := r.Scan(&t.ID, &t.Title, &t.Archived, &t.Pinned, &t.UpdatedAt)
+		return t, err
+	})
 }
 
 func SystemBlock(ctx context.Context, q db.Querier, t threads.Thread) (*string, error) {

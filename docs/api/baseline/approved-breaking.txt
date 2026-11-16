@@ -1,2 +1,17 @@
 # <oasdiff change id> <METHOD> <path> <ruling or decision that approves it>
+api-path-removed-without-deprecation GET /projects ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation POST /projects ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation GET /projects/{project_id} ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation PATCH /projects/{project_id} ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation POST /projects/{project_id}/archive ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation GET /projects/{project_id}/files ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation POST /projects/{project_id}/files ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation DELETE /projects/{project_id}/files/{file_id} ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation GET /projects/{project_id}/files/{file_id} ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation GET /projects/{project_id}/files/{file_id}/content ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation HEAD /projects/{project_id}/files/{file_id}/content ruling 1; replaced by /knowledge/spaces (P7.4, #903)
+api-path-removed-without-deprecation GET /subagents ruling 1; roles are fixed in code (P7.3, #902)
+api-path-removed-without-deprecation DELETE /subagents/{name} ruling 1; roles are fixed in code (P7.3, #902)
+api-path-removed-without-deprecation PUT /subagents/{name} ruling 1; roles are fixed in code (P7.3, #902)
+api-path-removed-without-deprecation PUT /subagents/{name}/enabled ruling 1; roles are fixed in code (P7.3, #902)
 response-body-any-of-added GET /events document corrected to match the wire since v3.0.0

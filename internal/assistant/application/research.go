@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -31,12 +30,11 @@ const (
 var agentCallers = []application.Authority{application.Agent, application.Approved}
 
 type ResearchInput struct {
-	ThreadID    int64
-	RunID       int64
-	Role        string
-	Task        string
-	ContextIDs  []string
-	AllowedURLs []string
+	ThreadID   int64
+	RunID      int64
+	Role       string
+	Task       string
+	ContextIDs []string
 }
 
 type ResearchDigest struct {
@@ -148,20 +146,9 @@ func (s *Service) research(ctx context.Context, in ResearchInput, child *int64) 
 	if len(in.ContextIDs) > 0 {
 		text += "\n\nStarting points from the parent conversation (ids): " + strings.Join(in.ContextIDs, ", ")
 	}
-	agent, err := subagents.Get(ctx, s.db.Read, in.Role)
-	if err != nil {
-		return ResearchDigest{}, err
-	}
-	if agent == nil || !agent.Enabled {
-		enabled, err := subagents.Enabled(ctx, s.db.Read)
-		if err != nil {
-			return ResearchDigest{}, err
-		}
-		names := make([]string, len(enabled))
-		for i, a := range enabled {
-			names[i] = a.Name
-		}
-		return ResearchDigest{}, invalidInput("role must be one of: " + strings.Join(names, ", "))
+	agent, ok := subagents.Lookup(in.Role)
+	if !ok {
+		return ResearchDigest{}, invalidInput("role must be one of: " + strings.Join(subagents.Names(), ", "))
 	}
 	now := s.clock()
 	if err := subagents.Slots.Acquire(ctx, assistant.TuningAgentSubagentMaxConcurrent); err != nil {
@@ -174,22 +161,17 @@ func (s *Service) research(ctx context.Context, in ResearchInput, child *int64) 
 		return ResearchDigest{}, err
 	}
 	if err := s.db.WithTx(ctx, func(tx *sql.Tx) (err error) {
-		*child, err = subagents.CreateChild(ctx, tx, in.ThreadID, in.RunID, *agent, title, auth.ProjectID, auth.Effective(), now())
+		*child, err = subagents.CreateChild(ctx, tx, in.ThreadID, in.RunID, agent, title, auth.ProjectID, auth.Effective(), now())
 		return err
 	}); err != nil {
 		return ResearchDigest{}, err
-	}
-	if slices.Contains(agent.Tools, "web_fetch") {
-		if err := threads.AddAllowedURLs(ctx, s.db, *child, in.AllowedURLs); err != nil {
-			return ResearchDigest{}, err
-		}
 	}
 	set := assistant.Read(ctx, s.db.Read)
 	steps, cost := int64(assistant.TuningAgentSubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
 	if err := set.Err(); err != nil {
 		return ResearchDigest{}, err
 	}
-	extra := subagents.SystemAddendum(*agent)
+	extra := agent.System()
 	if err := s.runChild(ctx, *child, in.RunID, text, in.Role+" research", journal.Limits{
 		MaxSteps: &steps, MaxCostUSD: &cost, SystemExtra: &extra, AllowedTools: agent.Tools,
 	}); err != nil {

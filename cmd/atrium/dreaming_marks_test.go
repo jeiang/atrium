@@ -179,7 +179,7 @@ func TestDreamingSignalsFollowTheirThreadMarks(t *testing.T) {
 	}
 }
 
-func TestDreamingSignalsSkipPrivateProjects(t *testing.T) {
+func TestDreamingSignalsSkipPrivateSpaces(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "public fact"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)

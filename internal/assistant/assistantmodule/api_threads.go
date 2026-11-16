@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/references"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -32,7 +31,6 @@ import (
 type apiPages struct {
 	deps      *web.Deps
 	assistant func() *asstapp.Service
-	tools     registry.Source
 	events    http.HandlerFunc
 }
 
@@ -43,17 +41,14 @@ func (p *apiPages) handle(b application.Binding) application.Binding {
 	return api.Handle(p.deps, b, p.events)
 }
 
-func threadAPI(tools registry.Source) func(*web.Deps, func() *asstapp.Service, http.HandlerFunc) {
-	return func(d *web.Deps, assistant func() *asstapp.Service, events http.HandlerFunc) {
-		p := &apiPages{deps: d, assistant: assistant, tools: tools, events: events}
-		apiBindings(p)
-		fileAPIBindings(p)
-		projectAPIBindings(p)
-		scheduleAPIBindings(p)
-		memoryAPIBindings(p)
-		subagentAPIBindings(p)
-		searchAPIBindings(p)
-	}
+func threadAPI(d *web.Deps, assistant func() *asstapp.Service, events http.HandlerFunc) {
+	p := &apiPages{deps: d, assistant: assistant, events: events}
+	apiBindings(p)
+	fileAPIBindings(p)
+	spaceAPIBindings(p)
+	scheduleAPIBindings(p)
+	memoryAPIBindings(p)
+	searchAPIBindings(p)
 }
 
 func errorIs(err error, code application.Code) bool {

@@ -18,7 +18,7 @@ func TestTaskVerbsLinksFiltersAndUndo(t *testing.T) {
 	exec("INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")
 	exec("INSERT INTO mailboxes (account, name, imap_name, role, uidvalidity, highest_uid) VALUES ('icloud', 'INBOX', 'INBOX', 'inbox', 1, 1)")
 	exec("INSERT INTO messages (account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, first_seen) VALUES ('icloud', 1, 1, 1, 'lease@test', 'lease', 'Your lease offer', 'agent@example.com', 0)")
-	made := s.do(http.MethodPost, "/api/v1/projects", s.token, map[string]any{"name": "Move house", "instructions": "Pack early.", "effort": "high", "context_limit": 200000, "private": false})
+	made := s.do(http.MethodPost, "/api/v1/knowledge/spaces", s.token, map[string]any{"name": "Move house", "instructions": "Pack early.", "effort": "high", "context_limit": 200000, "private": false})
 	if made.status != http.StatusCreated {
 		t.Fatalf("create project: %d %s", made.status, made.body)
 	}

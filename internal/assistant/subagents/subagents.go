@@ -3,28 +3,20 @@ package subagents
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"unicode/utf8"
-
-	"regexp"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/db/store"
 	"github.com/jeiang/atrium/internal/inference"
-	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
 )
 
@@ -35,8 +27,6 @@ const (
 	ErrorStatus = "error"
 	Interrupted = "interrupted"
 )
-
-var name = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
 
 type Gate struct {
 	mu     sync.Mutex
@@ -74,176 +64,63 @@ func (g *Gate) Release() {
 
 var Slots = NewGate()
 
-type Error string
-
-func (e Error) Error() string { return string(e) }
-
-type Agent struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Prompt      string   `json:"prompt"`
-	Effort      string   `json:"effort"`
-	Enabled     bool     `json:"enabled"`
-	Builtin     bool     `json:"builtin"`
-	UpdatedAt   float64  `json:"updated_at"`
-	Tools       []string `json:"tools"`
-}
-
-const columns = "name, description, prompt, effort, tools_json, enabled, builtin, updated_at"
-
-func scan(row interface{ Scan(...any) error }) (Agent, error) {
-	var a Agent
-	var tools string
-	var enabled, builtin store.Flag
-	if err := row.Scan(&a.Name, &a.Description, &a.Prompt, &a.Effort, &tools, &enabled, &builtin, &a.UpdatedAt); err != nil {
-		return Agent{}, err
-	}
-	a.Enabled, a.Builtin = bool(enabled), bool(builtin)
-	if err := json.Unmarshal([]byte(tools), &a.Tools); err != nil {
-		return Agent{}, fmt.Errorf("subagents: agent %s tools_json: %w", a.Name, err)
-	}
-	return a, nil
-}
-
-func agents(ctx context.Context, q db.Querier, where string, args ...any) ([]Agent, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM subagents"+where+" ORDER BY name", args...)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (Agent, error) { return scan(r) })
-}
-
-func List(ctx context.Context, q db.Querier) ([]Agent, error) { return agents(ctx, q, "") }
-
-func Enabled(ctx context.Context, q db.Querier) ([]Agent, error) {
-	return agents(ctx, q, " WHERE enabled = 1")
-}
-
-func Get(ctx context.Context, q db.Querier, agent string) (*Agent, error) {
-	a, err := scan(q.QueryRowContext(ctx, "SELECT "+columns+" FROM subagents WHERE name = ?", agent))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &a, nil
-}
-
-type PoolTool struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-func Pool(reg *registry.Registry) ([]PoolTool, error) {
-	open, err := reg.SubagentPool()
-	if err != nil {
-		return nil, err
-	}
-	found := make([]PoolTool, 0, len(open))
-	for _, t := range open {
-		found = append(found, PoolTool{Name: t.Name, Description: t.Description})
-	}
-	return found, nil
-}
-
-func CleanTools(reg *registry.Registry, tools []string) ([]string, error) {
-	var names []string
-	for _, t := range tools {
-		if t = strings.TrimSpace(t); t != "" {
-			names = append(names, t)
-		}
-	}
-	pool, err := Pool(reg)
-	if err != nil {
-		return nil, err
-	}
-	var bad []string
-	for _, n := range names {
-		if !slices.ContainsFunc(pool, func(p PoolTool) bool { return p.Name == n }) && !slices.Contains(bad, n) {
-			bad = append(bad, n)
-		}
-	}
-	if len(bad) > 0 {
-		slices.Sort(bad)
-		return nil, Error("not read-only tools open to subagents: " + strings.Join(bad, ", "))
-	}
-	if len(names) == 0 {
-		return nil, Error("choose at least one tool")
-	}
-	slices.Sort(names)
-	return slices.Compact(names), nil
-}
-
-type Definition struct {
+type Role struct {
 	Name        string
 	Description string
 	Prompt      string
 	Effort      string
 	Tools       []string
-	Enabled     bool
 }
 
-func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definition, now float64) (*Agent, error) {
-	agent := strings.TrimSpace(d.Name)
-	description := strings.Join(strings.Fields(d.Description), " ")
-	prompt := strings.TrimSpace(d.Prompt)
-	if !name.MatchString(agent) {
-		return nil, Error("name must be lowercase letters, digits, - or _ (max 32 characters)")
-	}
-	maxDescription, maxPrompt := assistant.TuningAgentSubagentDescriptionChars, assistant.TuningAgentSubagentPromptChars
-	if n := utf8.RuneCountInString(description); n == 0 || n > maxDescription {
-		return nil, Error(fmt.Sprintf("description is required, one line, at most %d characters", maxDescription))
-	}
-	if n := utf8.RuneCountInString(prompt); n == 0 || n > maxPrompt {
-		return nil, Error(fmt.Sprintf("prompt is required, at most %d characters", maxPrompt))
-	}
-	if !slices.Contains(pricing.Efforts, d.Effort) {
-		return nil, Error("effort must be one of " + strings.Join(pricing.Efforts, ", "))
-	}
-	tools, err := CleanTools(reg, d.Tools)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := q.ExecContext(ctx,
-		"INSERT INTO subagents (name, description, prompt, effort, tools_json, enabled, builtin, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?) "+
-			"ON CONFLICT(name) DO UPDATE SET description = excluded.description, prompt = excluded.prompt, effort = excluded.effort, "+
-			"tools_json = excluded.tools_json, enabled = excluded.enabled, updated_at = excluded.updated_at",
-		agent, description, prompt, d.Effort, jsonx.Dumps(tools), store.Bit(d.Enabled), now); err != nil {
-		return nil, err
-	}
-	return Get(ctx, q, agent)
+var Roles = []Role{
+	{
+		Name:        "calendar",
+		Description: "Calendar events.",
+		Prompt:      "Look up events with calendar_list. Return an event list or summary with event ids.",
+		Effort:      pricing.Medium,
+		Tools:       []string{"calendar_list", "recall"},
+	},
+	{
+		Name:        "mail",
+		Description: "The operator's mail and contacts.",
+		Prompt:      "Research the operator's mail with mail_search, mail_read and contacts_lookup. Return message ids, dates, senders and short excerpts.",
+		Effort:      pricing.Medium,
+		Tools:       []string{"contacts_lookup", "mail_read", "mail_search", "recall"},
+	},
+	{
+		Name:        "observability",
+		Description: "Grafana metrics, logs, alerts and dashboards.",
+		Prompt:      "Investigate with the read-only grafana_* tools. Return a summary of query results with dashboard uids or datasource uids.",
+		Effort:      pricing.Medium,
+		Tools:       []string{"grafana_alerts", "grafana_datasources", "grafana_query", "grafana_search_dashboards", "recall"},
+	},
 }
 
-func SetEnabled(ctx context.Context, q db.Querier, agent string, enabled bool, now float64) (bool, error) {
-	res, err := q.ExecContext(ctx, "UPDATE subagents SET enabled = ?, updated_at = ? WHERE name = ?", store.Bit(enabled), now, agent)
-	if err != nil {
-		return false, err
+func Lookup(name string) (Role, bool) {
+	for _, r := range Roles {
+		if r.Name == name {
+			return r, true
+		}
 	}
-	n, err := res.RowsAffected()
-	return n > 0, err
+	return Role{}, false
 }
 
-func Delete(ctx context.Context, q db.Querier, agent string) (bool, error) {
-	found, err := Get(ctx, q, agent)
-	if err != nil || found == nil {
-		return false, err
+func Names() []string {
+	names := make([]string, len(Roles))
+	for i, r := range Roles {
+		names[i] = r.Name
 	}
-	if found.Builtin {
-		return false, Error("built-in agents cannot be deleted; disable instead")
-	}
-	_, err = q.ExecContext(ctx, "DELETE FROM subagents WHERE name = ?", agent)
-	return err == nil, err
+	return names
 }
 
-func SystemAddendum(a Agent) string {
-	return prompts.Subagent + "\n\nAgent `" + a.Name + "`: " + a.Prompt
+func (r Role) System() string {
+	return prompts.Subagent + "\n\nAgent `" + r.Name + "`: " + r.Prompt
 }
 
-func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, project *int64, marks threads.Marks, now float64) (int64, error) {
+func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, r Role, title string, project *int64, marks threads.Marks, now float64) (int64, error) {
 	return threads.Create(ctx, q, now, threads.Spec{
 		Kind: threads.Subagent, Title: &title, ParentID: &parentThread,
-		Effort: a.Effort, Role: &a.Name, ParentRunID: &parentRun,
+		Effort: r.Effort, Role: &r.Name, ParentRunID: &parentRun,
 		ProjectID: project, Marks: marks,
 	})
 }

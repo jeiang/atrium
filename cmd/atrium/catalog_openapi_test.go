@@ -105,14 +105,13 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 			}
 		}
 	}
-	for schema, field := range map[string]string{
-		"SchedulePatch":   "schedule",
-		"ScheduleEnabled": "enabled",
-		"SubagentEnabled": "enabled",
+	for schema, required := range map[string][]string{
+		"SchedulePatch":   nil,
+		"ScheduleEnabled": {"enabled"},
 	} {
 		s := doc.Components.Schemas[schema]
-		if !slices.Contains(s.Required, field) {
-			t.Errorf("%s does not require %s", schema, field)
+		if !slices.Equal(s.Required, required) {
+			t.Errorf("%s requires %v, want %v", schema, s.Required, required)
 		}
 		if s.AdditionalProperties == nil || *s.AdditionalProperties {
 			t.Errorf("request schema %s accepts unknown fields", schema)
@@ -170,7 +169,7 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 			settings = true
 		}
 	}
-	if len(reach.Areas) != 21 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
+	if len(reach.Areas) != 20 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
 		t.Fatalf("reach.json: %s", raw)
 	}
 
