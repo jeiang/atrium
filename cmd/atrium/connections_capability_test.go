@@ -240,16 +240,17 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 
 func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *testing.T) {
 	var mode atomic.Int32
-	release := func(hash, title string) map[string]any {
-		return map[string]any{"hash": hash, "magnet_url": "magnet:?xt=urn:btih:" + hash, "title": title, "size_bytes": 1000}
+	release := func(letter, title string) map[string]any {
+		hash := strings.Repeat(letter, 40)
+		return map[string]any{"hash": hash, "magnet_url": mediaMagnet(hash, "Lanterns"), "title": title, "size_bytes": "1000"}
 	}
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		switch mode.Load() {
 		case 0:
-			_ = json.NewEncoder(w).Encode(map[string]any{"torrents": []map[string]any{release("aaaa", "Lanterns S01E01 1080p")}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"torrents": []map[string]any{release("a", "Lanterns S01E01 1080p")}})
 		case 1:
 			_ = json.NewEncoder(w).Encode(map[string]any{"torrents": []map[string]any{
-				release("aaaa", "Lanterns S01E01 1080p"), release("bbbb", "Lanterns S01E02 1080p")}})
+				release("a", "Lanterns S01E01 1080p"), release("b", "Lanterns S01E02 1080p")}})
 		default:
 			w.WriteHeader(http.StatusBadGateway)
 		}
