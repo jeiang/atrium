@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -118,11 +117,6 @@ type Tuning struct {
 	TMDBSearchLimit int
 	ShowSearchLimit int
 	ArtworkMissTTL  float64
-	ThumbWidth      int
-	ThumbPosition   float64
-	ThumbPassLimit  int
-	FFmpegTimeout   time.Duration
-	FFmpegNice      string
 	SeenTTL         float64
 	NameChars       int
 	PatternChars    int

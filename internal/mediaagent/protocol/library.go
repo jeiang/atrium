@@ -3,10 +3,8 @@ package protocol
 import "time"
 
 const (
-	CodeScanChanged    = "scan_changed"
-	MaxThumbnailPaths  = 1000
-	LibraryPageSize    = 500
-	ThumbnailMediaType = "image/jpeg"
+	CodeScanChanged = "scan_changed"
+	LibraryPageSize = 500
 )
 
 type Node struct {
@@ -23,15 +21,4 @@ type LibraryPage struct {
 	RootRevision string    `json:"root_revision"`
 	Nodes        []Node    `json:"nodes"`
 	Next         string    `json:"next"`
-}
-
-type ThumbnailPass struct {
-	Paths []Path `json:"paths"`
-	Limit int    `json:"limit"`
-}
-
-type ThumbnailResult struct {
-	Generated int `json:"generated"`
-	Remaining int `json:"remaining"`
-	Failed    int `json:"failed"`
 }

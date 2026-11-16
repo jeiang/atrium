@@ -1,25 +1,11 @@
 {
   "subagents": [
     {
-      "name": "web",
-      "description": "Public web research with web_search and web_fetch.",
-      "prompt": "Research on the public web with web_search and web_fetch. Return source URLs with brief evidence.",
-      "effort": "medium",
-      "tools_json": "[\"recall\", \"web_fetch\", \"web_search\"]"
-    },
-    {
       "name": "mail",
       "description": "The operator's mail and contacts.",
       "prompt": "Research the operator's mail with mail_search, mail_read and contacts_lookup. Return message ids, dates, senders and short excerpts.",
       "effort": "medium",
       "tools_json": "[\"contacts_lookup\", \"mail_read\", \"mail_search\", \"recall\"]"
-    },
-    {
-      "name": "notion",
-      "description": "The operator's Notion knowledge pages.",
-      "prompt": "Research the operator's Notion knowledge with search_knowledge and fetch_knowledge. Return page ids with cited snippets.",
-      "effort": "medium",
-      "tools_json": "[\"fetch_knowledge\", \"recall\", \"search_knowledge\"]"
     },
     {
       "name": "observability",

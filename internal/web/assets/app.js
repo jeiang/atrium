@@ -88,8 +88,6 @@ document.addEventListener("htmx:beforeRequest", (event) => {
     if (opener && opener.id) dialogOpeners.set(dialog, opener.id);
     dialog.setAttribute("aria-busy", "true");
     if (target === dialog && !dialog.contains(opener)) dialog.replaceChildren(loadingForm());
-  } else if (event.detail.boosted) {
-    document.querySelectorAll("dialog[open]").forEach((openDialog) => openDialog.close());
   }
 });
 
@@ -282,10 +280,6 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("change", (event) => {
-  if (event.target.matches("[data-submit-on-change]")) {
-    event.target.form.submit();
-    return;
-  }
   const group = event.target.closest("form[data-selection] [data-group]");
   if (!group) return;
   const boxes = [...group.querySelectorAll("input[data-message]")];

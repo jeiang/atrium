@@ -18,16 +18,12 @@ const (
 
 	TriageArchive = "archive"
 	TriageLabel   = "label"
-	TriageSnooze  = "snooze"
-
-	SnoozedLabel = "Snoozed"
 )
 
 type TriageItem struct {
 	mailops.Snapshot
-	Action string  `json:"action"`
-	Label  string  `json:"label,omitempty"`
-	DueTS  float64 `json:"due_ts,omitempty"`
+	Action string `json:"action"`
+	Label  string `json:"label,omitempty"`
 }
 
 func (i TriageItem) Dict() map[string]any {
@@ -35,7 +31,6 @@ func (i TriageItem) Dict() map[string]any {
 		"id": i.ID, "uid": i.UID, "uidvalidity": i.UIDValidity,
 		"msgid": i.MsgID, "digest": i.Digest, "mailbox": i.Mailbox,
 		"imap_name": i.IMAPName, "action": i.Action, "label": i.Label,
-		"due_ts": i.DueTS,
 	}
 }
 
@@ -101,6 +96,11 @@ func (e *Executors) ExecuteTriage(ctx context.Context, p *proposals.Proposal, se
 	if err != nil {
 		return nil, err
 	}
+	for _, item := range payload.Items {
+		if (selected == nil || selected[item.ID]) && item.Action != TriageArchive && item.Action != TriageLabel {
+			return nil, proposals.SelectionError("unknown triage action " + item.Action)
+		}
+	}
 	applied, skipped := 0, 0
 	var notes []string
 	err = mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
@@ -153,8 +153,6 @@ func (e *Executors) triageOne(ctx context.Context, client mail.Client, pid int64
 		return e.triageArchive(ctx, client, pid, account, v, shadow)
 	case TriageLabel:
 		return e.triageLabel(ctx, client, pid, account, v, item.Label, shadow)
-	case TriageSnooze:
-		return e.triageSnooze(ctx, client, pid, account, v, item.DueTS, shadow)
 	}
 	return 0, proposals.SelectionError("unknown triage action " + item.Action)
 }
@@ -189,71 +187,6 @@ func (e *Executors) triageLabel(ctx context.Context, client mail.Client, pid int
 	return e.relabelItems(ctx, client, pid, account, []mailops.Verified{v}, []string{label}, nil)
 }
 
-func (e *Executors) triageSnooze(ctx context.Context, client mail.Client, pid int64, account string, v mailops.Verified, due float64, shadow bool) (int, error) {
-	if due <= e.now() {
-		return 0, proposals.SelectionError("a snooze needs a due time in the future")
-	}
-	action := map[string]any{"op": "snooze", "account": account, "imap_name": v.IMAPName,
-		"uids": uidList([]uint32{v.UID}), "due_ts": due}
-	if shadow {
-		return 0, e.recordSkipped(ctx, pid, action, "shadow mode: would snooze")
-	}
-	imapName, validity, uid := v.IMAPName, v.UIDValidity, v.UID
-	local := ledger.WithoutAdmission(ctx)
-	if config.From(ctx).Preset(account) == config.Gmail {
-		n, err := e.relabelItems(ctx, client, pid, account, []mailops.Verified{v}, []string{SnoozedLabel}, []string{mailops.InboxLabel})
-		if err != nil {
-			return 0, err
-		}
-		if n == 0 {
-			local = ctx
-		}
-	} else {
-		dest := mail.UTF7Encode(SnoozedLabel)
-		if _, err := mailops.EnsureFolder(ctx, client, dest); err != nil {
-			return 0, err
-		}
-		if _, err := e.moveItems(ctx, client, pid, account, []mailops.Verified{v}, dest); err != nil {
-			return 0, err
-		}
-		st, err := client.Status(ctx, dest)
-		if err != nil {
-			return 0, err
-		}
-		if err := client.Select(ctx, dest); err != nil {
-			return 0, err
-		}
-		found, err := client.UIDSearch(ctx, mail.SearchCriteria{HeaderName: "Message-ID", HeaderValue: v.MsgID})
-		if err != nil {
-			return 0, err
-		}
-		if len(found) != 1 {
-			return 0, mailops.Error("could not locate the snoozed copy by Message-ID")
-		}
-		imapName, validity, uid = dest, st.UIDValidity, found[0]
-	}
-	_, err := e.store().ApplyLocal(local, e.effect(pid, map[string]any{"op": "snooze", "account": account,
-		"imap_name": imapName, "uidvalidity": validity, "uid": uid, "due_ts": due, "uids": uidList([]uint32{uid})}),
-		func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-			res, err := tx.ExecContext(ctx, "INSERT INTO snoozes (proposal_id, account, message_id, imap_name, uidvalidity, uid, due_ts, state, created_ts) "+
-				"VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)", pid, account, v.ID, imapName, validity, uid, due, e.now())
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			snoozeID, err := res.LastInsertId()
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			return ledger.Result{State: ledger.Done,
-				After: jsonOf(map[string]any{"op": "snooze", "snooze_id": snoozeID, "imap_name": imapName, "uid": uid}),
-				Undo:  jsonOf(map[string]any{"op": OpCancelSnooze, "snooze_id": snoozeID})}, nil
-		})
-	if err != nil {
-		return 0, err
-	}
-	return 1, nil
-}
-
 func archiveIMAP(ctx context.Context, client mail.Client, account string) (string, error) {
 	boxes, err := client.ListMailboxes(ctx)
 	if err != nil {
@@ -269,22 +202,4 @@ func archiveIMAP(ctx context.Context, client mail.Client, account string) (strin
 		return "", err
 	}
 	return dest, nil
-}
-
-func (e *Executors) UndoCancelSnooze(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
-	var plan struct {
-		SnoozeID int64 `json:"snooze_id"`
-	}
-	if err := json.Unmarshal(raw, &plan); err != nil {
-		return ledger.Result{}, err
-	}
-	res, err := tx.ExecContext(ctx, "UPDATE snoozes SET state = 'cancelled' WHERE id = ? AND state = 'pending'", plan.SnoozeID)
-	if err != nil {
-		return ledger.Result{}, err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return ledger.Result{}, err
-	}
-	return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"cancelled": n})}, nil
 }

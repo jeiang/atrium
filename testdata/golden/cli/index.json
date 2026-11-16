@@ -254,32 +254,12 @@
   {
     "argv": [
       "atrium",
-      "rebalance",
-      "scan"
-    ],
-    "exit_code": 0,
-    "name": "rebalance-scan",
-    "stdout": "rebalance-scan.stdout"
-  },
-  {
-    "argv": [
-      "atrium",
       "deletions",
       "scan"
     ],
     "exit_code": 0,
     "name": "deletions-scan",
     "stdout": "deletions-scan.stdout"
-  },
-  {
-    "argv": [
-      "atrium",
-      "gmail-labels",
-      "scan"
-    ],
-    "exit_code": 0,
-    "name": "gmail-labels-scan",
-    "stdout": "gmail-labels-scan.stdout"
   },
   {
     "argv": [
@@ -489,20 +469,10 @@
       "approve",
       "7"
     ],
-    "exit_code": 0,
-    "name": "proposals-approve-7",
-    "stdout": "proposals-approve-7.stdout"
-  },
-  {
-    "argv": [
-      "atrium",
-      "proposals",
-      "approve",
-      "8"
-    ],
-    "exit_code": 0,
-    "name": "proposals-approve-8",
-    "stdout": "proposals-approve-8.stdout"
+    "exit_code": 1,
+    "name": "proposals-approve-removed-kind",
+    "stderr": "proposals-approve-removed-kind.stderr",
+    "stdout": "proposals-approve-removed-kind.stdout"
   },
   {
     "argv": [
@@ -514,33 +484,6 @@
     "exit_code": 0,
     "name": "proposals-approve-6",
     "stdout": "proposals-approve-6.stdout"
-  },
-  {
-    "argv": [
-      "atrium",
-      "proposals",
-      "approve",
-      "9",
-      "--selection",
-      "{\"groups\": [{\"id\": \"Receipts/Shop B\", \"name\": \"Receipts/Shop B Subset\", \"message_ids\": [48, 49, 50, 51, 52]}]}"
-    ],
-    "exit_code": 0,
-    "name": "proposals-approve-selection",
-    "stdout": "proposals-approve-selection.stdout"
-  },
-  {
-    "argv": [
-      "atrium",
-      "proposals",
-      "approve",
-      "9",
-      "--selection",
-      "{\"groups\": []}"
-    ],
-    "exit_code": 2,
-    "name": "proposals-approve-bad-selection",
-    "stderr": "proposals-approve-bad-selection.stderr",
-    "stdout": "proposals-approve-bad-selection.stdout"
   },
   {
     "argv": [
@@ -567,20 +510,6 @@
     "name": "proposals-approve-unknown",
     "stderr": "proposals-approve-unknown.stderr",
     "stdout": "proposals-approve-unknown.stdout"
-  },
-  {
-    "argv": [
-      "atrium",
-      "proposals",
-      "approve",
-      "9",
-      "--selection",
-      "[1]"
-    ],
-    "exit_code": 1,
-    "name": "proposals-approve-list-selection",
-    "stdout": "proposals-approve-list-selection.stdout",
-    "stderr": "proposals-approve-list-selection.stderr"
   },
   {
     "argv": [
@@ -674,7 +603,7 @@
       "atrium",
       "proposals",
       "undo",
-      "7"
+      "6"
     ],
     "exit_code": 1,
     "name": "proposals-undo-pending",

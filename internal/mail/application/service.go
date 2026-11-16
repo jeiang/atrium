@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/run"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 )
@@ -24,7 +23,6 @@ type Service struct {
 	classifiers run.Classifier
 	workContext context.Context
 	classifier  *classifier.Service
-	namer       rebalance.Namer
 	syncer      *mailsync.Syncer
 	syncAll     func(context.Context) error
 	effects     *ledger.Store

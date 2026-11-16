@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/backlog"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/run"
@@ -196,7 +195,7 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 	scan := func(def application.Definition, target string, do func(*mailapp.Service, context.Context) (application.Change[scanutil.Result], error)) application.Binding {
 		return api.Command(d, def, application.APIShape{Area: area, Errors: refusals}, target, func(ctx context.Context, _ struct{}) (out application.Change[MailScanned], err error) {
 			err = passes.jobPass(ctx, scans.JobKey, func(ctx context.Context, p *run.Pass) error {
-				done, err := do(mailCLIService(d.Env)(p).WithNamer(rebalance.SuggestName(p.Classifier)), ctx)
+				done, err := do(mailCLIService(d.Env)(p), ctx)
 				out = application.Change[MailScanned]{Data: MailScanned{Outcome: outcomeOK, Candidates: done.Data.Candidates, Created: done.Data.Created}, AuditID: done.AuditID, EffectIDs: done.EffectIDs}
 				return withEffects(err, done.EffectIDs)
 			})
@@ -204,14 +203,8 @@ func mailPassRoutes(d *web.Deps, m Module) []application.Binding {
 		})
 	}
 	return []application.Binding{
-		scan(mailapp.DescribeScanRebalance(), "POST /mail/scans/rebalance", func(s *mailapp.Service, ctx context.Context) (application.Change[scanutil.Result], error) {
-			return s.ScanRebalance(ctx, mailapp.ScanInput{})
-		}),
 		scan(mailapp.DescribeScanDeletions(), "POST /mail/scans/deletions", func(s *mailapp.Service, ctx context.Context) (application.Change[scanutil.Result], error) {
 			return s.ScanDeletions(ctx, mailapp.ScanInput{})
-		}),
-		scan(mailapp.DescribeScanGmailLabels(), "POST /mail/scans/gmail-labels", func(s *mailapp.Service, ctx context.Context) (application.Change[scanutil.Result], error) {
-			return s.ScanGmailLabels(ctx, mailapp.ScanInput{})
 		}),
 		api.Command(d, mailapp.DescribeBacklog(), application.APIShape{Area: area, Errors: refusals}, "POST /mail/live/backlog", func(ctx context.Context, _ struct{}) (application.Change[MailBacklog], error) {
 			done, err := service().Backlog(ctx, struct{}{})

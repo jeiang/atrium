@@ -12,7 +12,7 @@ import (
 
 var owners = map[string]string{
 	"accounts":                           "mail",
-	"action_links":                       "actionlink",
+	"action_links":                       "notify",
 	"agent_events":                       "calendar",
 	"agent_profile":                      "kb",
 	"attention_snoozes":                  "attention",

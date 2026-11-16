@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const ConnectionID = "service/oidc"
@@ -142,7 +143,7 @@ func ValidateConnection(raw json.RawMessage) error {
 	}
 	if vals.Preset != "" {
 		if _, ok := presetNamed(vals.Preset); !ok {
-			return fmt.Errorf("unknown preset %q", vals.Preset)
+			return settings.Invalid(unknownPreset(vals.Preset))
 		}
 	}
 	if vals.Issuer != "" {

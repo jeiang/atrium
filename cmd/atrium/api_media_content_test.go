@@ -185,7 +185,7 @@ func TestMediaRelayRefusesWhenMediaIsOffAtBoot(t *testing.T) {
 	t.Cleanup(func() { stop() })
 	s := &apiSite{t: t, base: base}
 	id := mediaAPIID(rel)
-	for _, path := range []string{"/api/v1/media/files/" + id + "/content", "/api/v1/media/files/" + id + "/thumbnail", "/api/v1/media/art/movie/" + id} {
+	for _, path := range []string{"/api/v1/media/files/" + id + "/content", "/api/v1/media/art/movie/" + id} {
 		expectAPI(t, s.do(http.MethodGet, path, token, nil), http.StatusConflict, "module_disabled")
 	}
 	if got := s.do(http.MethodHead, "/api/v1/media/files/"+id+"/content", token, nil); got.status != http.StatusConflict {

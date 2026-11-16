@@ -1,11 +1,9 @@
 package media
 
 const (
-	JobChannels   = "media-channels"
-	JobSweep      = "media-sweep"
-	JobThumbnails = "media-thumbnails"
+	JobChannels = "media-channels"
+	JobSweep    = "media-sweep"
 
-	KeyScheduleChannels   = "agent_schedule_media_channels"
-	KeyScheduleSweep      = "agent_schedule_media_sweep"
-	KeyScheduleThumbnails = "agent_schedule_media_thumbnails"
+	KeyScheduleChannels = "agent_schedule_media_channels"
+	KeyScheduleSweep    = "agent_schedule_media_sweep"
 )

@@ -1,7 +1,6 @@
 package reviewpages
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -101,20 +100,11 @@ func previewGet(preview any, key string) any {
 
 func selectionOf(p *proposalsapp.Proposal, kind proposalsapp.Kind, form url.Values) (map[string]any, error) {
 	switch {
-	case kind.Groups || kind.Group:
-		var groups []any
-		if kind.Groups {
-			groups, _ = previewGet(p.Preview, "groups").([]any)
-		} else {
-			groups = []any{previewGet(p.Preview, "group")}
-		}
+	case kind.Groups:
+		groups, _ := previewGet(p.Preview, "groups").([]any)
 		out := make([]any, len(groups))
 		for i, g := range groups {
 			group, _ := g.(map[string]any)
-			var name any
-			if v, ok := web.Value(form, fmt.Sprintf("name-%d", i)); ok {
-				name = v
-			}
 			messages := group["messages"]
 			ids, err := picked(form, i, messages)
 			if err != nil {
@@ -125,7 +115,7 @@ func selectionOf(p *proposalsapp.Proposal, kind proposalsapp.Kind, form url.Valu
 				chosen = ids
 			}
 			id := group["name"]
-			out[i] = map[string]any{"id": id, "name": name, "message_ids": chosen}
+			out[i] = map[string]any{"id": id, "name": nil, "message_ids": chosen}
 		}
 		return map[string]any{"groups": out}, nil
 	case kind.Messages:
@@ -209,10 +199,6 @@ func (s *service) decided(w http.ResponseWriter, r *http.Request, err error, mis
 	return nil, true
 }
 
-func (s *service) phone(ctx context.Context, token string, now float64) (*proposalsapp.Proposal, error) {
-	done, err := s.review.Phone(ctx, reviewapp.PhoneInput{Token: token, Now: now})
-	return done.Data.Proposal, err
-}
 func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "proposal_id")
 	if !ok {

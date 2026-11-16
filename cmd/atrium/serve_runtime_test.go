@@ -270,7 +270,7 @@ func TestServeRuntimeRecoversBeforeTheFirstRequest(t *testing.T) {
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := asstDB(t, dir)
 	now := float64(time.Now().UnixNano()) / 1e9
-	stuck, _, err := proposals.Create(testProposalContext(), d, "rebalance_split", nil, "stuck", map[string]any{}, map[string]any{}, "stuck", now-5000)
+	stuck, _, err := proposals.Create(testProposalContext(), d, "inbox_backlog", nil, "stuck", map[string]any{}, map[string]any{}, "stuck", now-5000)
 	if err != nil {
 		t.Fatal(err)
 	}

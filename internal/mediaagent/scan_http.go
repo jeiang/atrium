@@ -23,14 +23,6 @@ func (a *Agent) libraryRoutes(w http.ResponseWriter, r *http.Request) bool {
 		if allowRead(w, r) {
 			a.serveLibrary(w, r)
 		}
-	case "/v1/thumbnail":
-		if allowRead(w, r) {
-			a.serveThumbnail(w, r)
-		}
-	case "/v1/thumbnails/pass":
-		if requireMethod(w, r, http.MethodPost) {
-			a.serveThumbnailPass(w, r)
-		}
 	default:
 		return false
 	}

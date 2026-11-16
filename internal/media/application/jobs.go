@@ -7,13 +7,9 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
-const (
-	SweepName      application.Name = "media.sweep"
-	ThumbnailsName application.Name = "media.thumbnails"
-)
+const SweepName application.Name = "media.sweep"
 
 type SweepInput struct{}
 
@@ -69,62 +65,4 @@ func (s *Service) sweep(ctx context.Context) (Swept, error) {
 	swept, err := media.Sweep(ctx, s.d.Ledger, set)
 	out.Removed, out.Errors = swept.Removed, swept.Errors
 	return out, classify(err)
-}
-
-type ThumbnailsInput struct{}
-
-type Thumbnails struct {
-	Generated int
-	Remaining int
-}
-
-func DescribeThumbnails() application.Definition {
-	return application.Describe[ThumbnailsInput, Thumbnails](ThumbnailsName, application.Command,
-		[]application.Authority{application.System}, application.NoEffect, false)
-}
-
-func (s *Service) Thumbnails(ctx context.Context, _ ThumbnailsInput) (application.Change[Thumbnails], error) {
-	out, err := s.thumbnails(ctx)
-	outcome := state.OK
-	if out.Generated == 0 {
-		outcome = state.Noop
-	}
-	id, err := s.recordOutcome(ctx, ThumbnailsName, "", map[string]any{"generated": out.Generated, "remaining": out.Remaining}, outcome, err)
-	if err != nil {
-		return application.Change[Thumbnails]{}, err
-	}
-	return application.Change[Thumbnails]{Data: out, AuditID: id}, nil
-}
-
-func (s *Service) thumbnails(ctx context.Context) (Thumbnails, error) {
-	set, err := s.settings(ctx)
-	if err != nil {
-		return Thumbnails{}, err
-	}
-	snap, err := s.snapshot(ctx, set)
-	if err != nil {
-		return Thumbnails{}, classify(err)
-	}
-	client, err := set.Agent(protocol.CapabilityFile)
-	if err != nil {
-		return Thumbnails{}, classify(err)
-	}
-	paths := []protocol.Path{}
-	for _, rel := range set.EpisodeFiles(snap) {
-		if root, rest, ok := media.SplitRel(rel); ok {
-			paths = append(paths, protocol.Path{Root: root, Rel: rest})
-		}
-	}
-	var out Thumbnails
-	for len(paths) > 0 {
-		batch := paths[:min(len(paths), protocol.MaxThumbnailPaths)]
-		paths = paths[len(batch):]
-		result, err := client.ThumbnailPass(ctx, protocol.ThumbnailPass{Paths: batch, Limit: max(set.ThumbPassLimit-out.Generated, 0)})
-		if err != nil {
-			return out, &media.LibraryUnavailable{Cause: err}
-		}
-		out.Generated += result.Generated
-		out.Remaining += result.Remaining
-	}
-	return out, nil
 }

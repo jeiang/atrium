@@ -158,9 +158,6 @@ func (s *Service) authorizeURL(cfg Config, p *provider, state, nonce, verifier s
 		"code_challenge":        {challenge(verifier)},
 		"code_challenge_method": {"S256"},
 	}
-	for k, v := range cfg.Preset.AuthParams {
-		q.Set(k, v)
-	}
 	target, err := url.Parse(p.authURL)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrProvider, err)
@@ -263,7 +260,7 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 			tokenHash: digest(token), subject: id.Subject, email: id.Email, name: id.Name,
 			now: now, idle: idle, absolute: absolute, rechecked: now,
 			accessToken: sl.seal(reply.AccessToken), accessExpires: accessExpires,
-			refreshToken: sl.seal(reply.RefreshToken), verified: id.EmailVerified, hosted: id.Hosted,
+			refreshToken: sl.seal(reply.RefreshToken), verified: id.EmailVerified,
 		})
 	})
 	if err != nil {
