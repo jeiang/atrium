@@ -374,8 +374,9 @@ buttons, carries no token, and opening it writes nothing.
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
 response. A new home message starts a thread. Review keeps decisions and
-history; Library holds knowledge, files, rules, and schedules. Projects
-group threads. Draft and proposal cards in chat call the same send/approval
+history; Library holds knowledge, files, rules, and schedules. Spaces in
+Knowledge hold a former project's instructions, files, threads and tasks,
+and records can link to them. Draft and proposal cards in chat call the same send/approval
 services as their dedicated views. `/chat/agenda` returns 404 when the calendar
 module is off and 503 when the calendar cannot be listed, for example when none
 is configured. Full page navigations are not conditional fragment responses.
@@ -420,7 +421,7 @@ provenance; an edit can only add marks. Confirmed and operator/import-written
 records are protected from agent edits and retraction. Confirmation clears
 `untrusted` but keeps `pii` and `messages`, so such records stay out of the
 profile. Eligible pinned, confirmed, unmarked records form the assistant
-profile. Private projects restrict their content to that project, and nightly
+profile. Private spaces restrict their content to that space, and nightly
 dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.

@@ -30,14 +30,14 @@ import (
 var log = logx.Logger("atrium.agent.application")
 
 const (
-	ProjectFileUploadName application.Name = "assistant.project-file.upload"
-	ProjectFileDeleteName application.Name = "assistant.project-file.delete"
-	FileWriteName         application.Name = "assistant.file.write"
-	FilePreviewName       application.Name = "assistant.file.preview"
-	FileDownloadName      application.Name = "assistant.file.download"
-	FileListName          application.Name = "assistant.file.list"
-	FileReadName          application.Name = "assistant.file.read"
-	FileSearchName        application.Name = "assistant.file.search"
+	SpaceFileUploadName application.Name = "knowledge.space.file.upload"
+	SpaceFileDeleteName application.Name = "knowledge.space.file.delete"
+	FileWriteName       application.Name = "assistant.file.write"
+	FilePreviewName     application.Name = "assistant.file.preview"
+	FileDownloadName    application.Name = "assistant.file.download"
+	FileListName        application.Name = "assistant.file.list"
+	FileReadName        application.Name = "assistant.file.read"
+	FileSearchName      application.Name = "assistant.file.search"
 
 	unknownFile    = "unknown file"
 	missingStorage = "file is missing from storage"
@@ -75,7 +75,7 @@ type FileListInput struct {
 	Limit     int
 }
 
-type ProjectUploadInput struct {
+type SpaceUploadInput struct {
 	ProjectID int64
 	Uploads   []files.UploadedFile
 }
@@ -142,12 +142,12 @@ type FileChanged struct {
 	EffectID  int64   `json:"effect_id,omitempty"`
 }
 
-func DescribeProjectFileUpload() application.Definition {
-	return application.Describe[ProjectUploadInput, FileChanged](ProjectFileUploadName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+func DescribeSpaceFileUpload() application.Definition {
+	return application.Describe[SpaceUploadInput, FileChanged](SpaceFileUploadName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
 }
 
-func DescribeProjectFileDelete() application.Definition {
-	return application.Describe[FileInput, FileChanged](ProjectFileDeleteName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+func DescribeSpaceFileDelete() application.Definition {
+	return application.Describe[FileInput, FileChanged](SpaceFileDeleteName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
 }
 
 func DescribeFileWrite() application.Definition {
@@ -294,7 +294,7 @@ func (s *Service) FileList(ctx context.Context, in FileListInput) (application.R
 			return err
 		}
 		if project == nil {
-			return notFound(unknownProject)
+			return notFound(unknownSpace)
 		}
 		out.Project = project
 		var rows []files.Row
@@ -329,12 +329,12 @@ func (s *Service) writableProject(ctx context.Context, projectID int64, verb str
 		return nil, err
 	}
 	if project == nil {
-		return nil, notFound(unknownProject)
+		return nil, notFound(unknownSpace)
 	}
 	return project, archivedProject(project, verb)
 }
 
-func (s *Service) ProjectFileUpload(ctx context.Context, in ProjectUploadInput) (application.Change[FileChanged], error) {
+func (s *Service) SpaceFileUpload(ctx context.Context, in SpaceUploadInput) (application.Change[FileChanged], error) {
 	tgt := target("project", in.ProjectID)
 	changed, err := func() (FileChanged, error) {
 		project, err := s.writableProject(ctx, in.ProjectID, "add files")
@@ -353,13 +353,13 @@ func (s *Service) ProjectFileUpload(ctx context.Context, in ProjectUploadInput) 
 		return out, err
 	}()
 	if err != nil {
-		return application.Change[FileChanged]{}, s.reject(ctx, ProjectFileUploadName, tgt, classify(err))
+		return application.Change[FileChanged]{}, s.reject(ctx, SpaceFileUploadName, tgt, classify(err))
 	}
-	auditID, err := s.audit(ctx, nil, ProjectFileUploadName, tgt, state.OK)
+	auditID, err := s.audit(ctx, nil, SpaceFileUploadName, tgt, state.OK)
 	return application.Change[FileChanged]{Data: changed, AuditID: auditID}, err
 }
 
-func (s *Service) ProjectFileDelete(ctx context.Context, in FileInput) (application.Change[FileChanged], error) {
+func (s *Service) SpaceFileDelete(ctx context.Context, in FileInput) (application.Change[FileChanged], error) {
 	tgt := target("project", in.ProjectID)
 	var auditID int64
 	var path string
@@ -376,12 +376,12 @@ func (s *Service) ProjectFileDelete(ctx context.Context, in FileInput) (applicat
 			if path, _, err = files.DeleteRow(ctx, tx, found.ID); err != nil {
 				return err
 			}
-			auditID, err = s.audit(ctx, tx, ProjectFileDeleteName, tgt, state.OK)
+			auditID, err = s.audit(ctx, tx, SpaceFileDeleteName, tgt, state.OK)
 			return err
 		})
 	}()
 	if err != nil {
-		return application.Change[FileChanged]{}, s.reject(ctx, ProjectFileDeleteName, tgt, classify(err))
+		return application.Change[FileChanged]{}, s.reject(ctx, SpaceFileDeleteName, tgt, classify(err))
 	}
 	if path != "" {
 		if err := files.RemoveFile(path); err != nil {

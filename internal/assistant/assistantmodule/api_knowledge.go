@@ -214,17 +214,17 @@ type KnowledgeRelated struct {
 	Title      string `json:"title"`
 	Kind       string `json:"kind"`
 	Relation   string `json:"relation"`
-	TargetKind string `json:"target_kind" api:"enum=record|task|contact"`
+	TargetKind string `json:"target_kind" api:"enum=record|task|contact|space"`
 	TargetID   string `json:"target_id"`
 	Direction  string `json:"direction,omitempty" api:"enum=outgoing|incoming"`
 	LinkID     int64  `json:"link_id,omitempty"`
-	State      string `json:"state" api:"enum=live|retracted|done|dismissed|missing|unavailable"`
+	State      string `json:"state" api:"enum=live|retracted|done|dismissed|archived|missing|unavailable"`
 	Address    string `json:"address"`
 }
 
 type KnowledgeLinkRequest struct {
 	ID         int64  `path:"record_id" json:"-"`
-	TargetKind string `json:"target_kind" api:"enum=record|task|contact"`
+	TargetKind string `json:"target_kind" api:"enum=record|task|contact|space"`
 	TargetID   string `json:"target_id"`
 	Relation   string `json:"relation" api:"enum=about|part_of|works_with|depends_on|see_also"`
 }
@@ -234,11 +234,11 @@ type KnowledgeLinkIDRequest struct {
 }
 
 type KnowledgeLinkEnd struct {
-	Kind       string `json:"kind" api:"enum=record|task|contact"`
+	Kind       string `json:"kind" api:"enum=record|task|contact|space"`
 	ID         string `json:"id"`
 	Title      string `json:"title"`
 	RecordKind string `json:"record_kind,omitempty"`
-	State      string `json:"state" api:"enum=live|retracted|done|dismissed|missing|unavailable"`
+	State      string `json:"state" api:"enum=live|retracted|done|dismissed|archived|missing|unavailable"`
 	Address    string `json:"address"`
 }
 
@@ -505,16 +505,21 @@ func knowledgeRecord(r kbapp.Record) KnowledgeRecord {
 	return out
 }
 
-func knowledgeSubjectPage(p kbapp.SubjectPage) KnowledgeSubjectPage {
-	out := KnowledgeSubjectPage{Subject: knowledgeRecord(p.Subject), Kind: p.Kind, CreatedAt: seconds(p.CreatedAt),
-		Sections: make([]KnowledgeSection, len(p.Sections)), Facts: make([]KnowledgeFact, len(p.Facts)),
-		FactsTruncated: p.FactsTruncated, Related: make([]KnowledgeRelated, len(p.Related))}
-	for i, s := range p.Sections {
-		out.Sections[i] = KnowledgeSection{Heading: s.Heading, Level: s.Level, Blocks: make([]KnowledgeBlock, len(s.Blocks))}
+func knowledgeSections(sections []kb.PageSection) []KnowledgeSection {
+	out := make([]KnowledgeSection, len(sections))
+	for i, s := range sections {
+		out[i] = KnowledgeSection{Heading: s.Heading, Level: s.Level, Blocks: make([]KnowledgeBlock, len(s.Blocks))}
 		for j, b := range s.Blocks {
-			out.Sections[i].Blocks[j] = KnowledgeBlock{Kind: b.Kind, Text: b.Text}
+			out[i].Blocks[j] = KnowledgeBlock{Kind: b.Kind, Text: b.Text}
 		}
 	}
+	return out
+}
+
+func knowledgeSubjectPage(p kbapp.SubjectPage) KnowledgeSubjectPage {
+	out := KnowledgeSubjectPage{Subject: knowledgeRecord(p.Subject), Kind: p.Kind, CreatedAt: seconds(p.CreatedAt),
+		Sections: knowledgeSections(p.Sections), Facts: make([]KnowledgeFact, len(p.Facts)),
+		FactsTruncated: p.FactsTruncated, Related: make([]KnowledgeRelated, len(p.Related))}
 	for i, f := range p.Facts {
 		r := knowledgeRecord(f.Record)
 		out.Facts[i] = KnowledgeFact{ID: r.ID, Title: r.Title, Value: r.Body, Kind: f.Kind, Scope: r.Scope, Private: r.Private, Marks: r.Marks,

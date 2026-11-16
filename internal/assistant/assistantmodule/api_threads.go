@@ -45,7 +45,7 @@ func threadAPI(d *web.Deps, assistant func() *asstapp.Service, events http.Handl
 	p := &apiPages{deps: d, assistant: assistant, events: events}
 	apiBindings(p)
 	fileAPIBindings(p)
-	projectAPIBindings(p)
+	spaceAPIBindings(p)
 	scheduleAPIBindings(p)
 	memoryAPIBindings(p)
 	searchAPIBindings(p)

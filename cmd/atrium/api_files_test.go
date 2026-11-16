@@ -22,8 +22,8 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
-func projectPath(id int64, rest string) string {
-	return "/api/v1/projects/" + strconv.FormatInt(id, 10) + rest
+func spacePath(id int64, rest string) string {
+	return "/api/v1/knowledge/spaces/" + strconv.FormatInt(id, 10) + rest
 }
 
 func uploadBody(t *testing.T, fields map[string]string, name, data string) (string, string) {
@@ -141,19 +141,19 @@ func TestDeclaredMultipartAndBinaryAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, media := uploadBody(t, nil, "unsafe.html", "<script>untrusted</script>")
-	first := s.do(http.MethodPost, projectPath(project, "/files"), token, body, "Content-Type", media, "Idempotency-Key", "upload-transport")
+	first := s.do(http.MethodPost, spacePath(project, "/files"), token, body, "Content-Type", media, "Idempotency-Key", "upload-transport")
 	if first.status != http.StatusCreated {
 		t.Fatalf("upload: %d %s", first.status, first.body)
 	}
 	ids := first.json["file_ids"].([]any)
 	file := number(t, ids[0])
-	replay := s.do(http.MethodPost, projectPath(project, "/files"), token, body, "Content-Type", media, "Idempotency-Key", "upload-transport")
+	replay := s.do(http.MethodPost, spacePath(project, "/files"), token, body, "Content-Type", media, "Idempotency-Key", "upload-transport")
 	if replay.status != first.status || replay.body != first.body || replay.header.Get("Idempotent-Replayed") != "true" {
 		t.Fatalf("multipart replay: %d %s", replay.status, replay.body)
 	}
 	changed, changedType := uploadBody(t, nil, "unsafe.html", "different")
-	expectAPI(t, s.do(http.MethodPost, projectPath(project, "/files"), token, changed, "Content-Type", changedType, "Idempotency-Key", "upload-transport"), 422, "idempotency_mismatch")
-	path := projectPath(project, "/files/"+strconv.FormatInt(file, 10)+"/content")
+	expectAPI(t, s.do(http.MethodPost, spacePath(project, "/files"), token, changed, "Content-Type", changedType, "Idempotency-Key", "upload-transport"), 422, "idempotency_mismatch")
+	path := spacePath(project, "/files/"+strconv.FormatInt(file, 10)+"/content")
 	got := s.do(http.MethodGet, path, token, nil, "Range", "bytes=0-6")
 	if got.status != 206 || got.body != "<script" || got.header.Get("Content-Range") != "bytes 0-6/26" || got.header.Get("Accept-Ranges") != "bytes" || got.header.Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(got.header.Get("Content-Disposition"), "attachment") {
 		t.Fatalf("binary range: %d %q %v", got.status, got.body, got.header)
@@ -162,13 +162,13 @@ func TestDeclaredMultipartAndBinaryAPI(t *testing.T) {
 		t.Fatalf("range beyond file: %d", got.status)
 	}
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/today", token, body, "Content-Type", media), 415, "unsupported_media_type")
-	expectAPI(t, s.do(http.MethodPost, projectPath(project, "/files"), token, map[string]any{}), 415, "unsupported_media_type")
+	expectAPI(t, s.do(http.MethodPost, spacePath(project, "/files"), token, map[string]any{}), 415, "unsupported_media_type")
 	var readers []io.Reader
 	chunk := strings.Repeat("x", 1<<20)
 	for range 66 {
 		readers = append(readers, strings.NewReader(chunk))
 	}
-	large := rawFileRequest(t, s, token, http.MethodPost, projectPath(project, "/files"), "multipart/form-data; boundary=large", io.MultiReader(readers...))
+	large := rawFileRequest(t, s, token, http.MethodPost, spacePath(project, "/files"), "multipart/form-data; boundary=large", io.MultiReader(readers...))
 	expectAPI(t, large, 413, "too_large")
 	entries, err := os.ReadDir(temp)
 	if err != nil || len(entries) != 0 {
@@ -206,7 +206,7 @@ func malformedLast(t *testing.T, cursor string) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
-func TestFilesAndProjectsAPI(t *testing.T) {
+func TestFilesAndSpacesAPI(t *testing.T) {
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, model)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -220,7 +220,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	s := &apiSite{t: t, base: base}
 	create := func(name string, private bool) int64 {
 		t.Helper()
-		reply := s.do(http.MethodPost, "/api/v1/projects", token, map[string]any{"name": name, "instructions": "Keep the brief.", "effort": "high", "context_limit": 200000, "private": private})
+		reply := s.do(http.MethodPost, "/api/v1/knowledge/spaces", token, map[string]any{"name": name, "instructions": "Keep the brief.", "effort": "high", "context_limit": 200000, "private": private})
 		if reply.status != 201 {
 			t.Fatalf("create project: %d %s", reply.status, reply.body)
 		}
@@ -228,46 +228,46 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	}
 	project := create("Private project", true)
 	other := create("Other project", false)
-	detail := s.do(http.MethodGet, projectPath(project, ""), token, nil)
+	detail := s.do(http.MethodGet, spacePath(project, ""), token, nil)
 	if detail.status != 200 {
 		t.Fatalf("detail: %d %s", detail.status, detail.body)
 	}
 	before := detail.header.Get("ETag")
-	if got := s.do(http.MethodGet, projectPath(project, ""), token, nil, "If-None-Match", before); before == "" || got.status != 304 {
+	if got := s.do(http.MethodGet, spacePath(project, ""), token, nil, "If-None-Match", before); before == "" || got.status != 304 {
 		t.Fatalf("project conditional: %q %d", before, got.status)
 	}
-	patch := s.do(http.MethodPatch, projectPath(project, ""), token, map[string]any{"name": "Renamed"})
+	patch := s.do(http.MethodPatch, spacePath(project, ""), token, map[string]any{"name": "Renamed"})
 	if patch.status != 200 {
 		t.Fatalf("patch: %d %s", patch.status, patch.body)
 	}
-	detail = s.do(http.MethodGet, projectPath(project, ""), token, nil, "If-None-Match", before)
-	row := detail.json["project"].(map[string]any)
+	detail = s.do(http.MethodGet, spacePath(project, ""), token, nil, "If-None-Match", before)
+	row := detail.json["space"].(map[string]any)
 	if detail.status != 200 || detail.header.Get("ETag") == before || row["name"] != "Renamed" || row["instructions"] != "Keep the brief." || row["effort"] != "high" || row["context_limit"] != float64(200000) || row["private"] != true {
 		t.Fatalf("patch lost fields: %d %s", detail.status, detail.body)
 	}
-	invalid := s.do(http.MethodPatch, projectPath(project, ""), token, map[string]any{"name": " "})
+	invalid := s.do(http.MethodPatch, spacePath(project, ""), token, map[string]any{"name": " "})
 	expectAPI(t, invalid, 422, "invalid")
 	if fields := invalid.json["error"].(map[string]any)["fields"]; fields == nil {
 		t.Fatal("missing validation fields")
 	}
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects/999999", token, nil), 404, "not_found")
-	empty := s.do(http.MethodGet, projectPath(project, "/files"), token, nil)
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/knowledge/spaces/999999", token, nil), 404, "not_found")
+	empty := s.do(http.MethodGet, spacePath(project, "/files"), token, nil)
 	if len(apiReplyItems(t, empty)) != 0 {
 		t.Fatalf("new project has files: %s", empty.body)
 	}
 	fileETag := empty.header.Get("ETag")
-	if conditional := s.do(http.MethodGet, projectPath(project, "/files"), token, nil, "If-None-Match", fileETag); fileETag == "" || conditional.status != 304 {
+	if conditional := s.do(http.MethodGet, spacePath(project, "/files"), token, nil, "If-None-Match", fileETag); fileETag == "" || conditional.status != 304 {
 		t.Fatalf("files conditional: %q %d", fileETag, conditional.status)
 	}
 	fileText := strings.Repeat("preview text ", 20000) + "FULL_FILE_TEXT_SECRET"
 	body, media := uploadBody(t, nil, "note.txt", fileText)
-	uploaded := s.do(http.MethodPost, projectPath(project, "/files"), token, body, "Content-Type", media)
+	uploaded := s.do(http.MethodPost, spacePath(project, "/files"), token, body, "Content-Type", media)
 	if uploaded.status != 201 {
 		t.Fatalf("upload: %d %s", uploaded.status, uploaded.body)
 	}
 	file := number(t, uploaded.json["file_ids"].([]any)[0])
-	fileURL := projectPath(project, "/files/"+strconv.FormatInt(file, 10))
-	listed := s.do(http.MethodGet, projectPath(project, "/files"), token, nil, "If-None-Match", fileETag)
+	fileURL := spacePath(project, "/files/"+strconv.FormatInt(file, 10))
+	listed := s.do(http.MethodGet, spacePath(project, "/files"), token, nil, "If-None-Match", fileETag)
 	if len(apiReplyItems(t, listed)) != 1 || listed.header.Get("ETag") == fileETag {
 		t.Fatalf("file list did not change: %s", listed.body)
 	}
@@ -299,15 +299,15 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	if got := s.do(http.MethodGet, fileURL+"/content", token, nil, "Range", "bytes="+strconv.Itoa(len(fileText))+"-"); got.status != 416 {
 		t.Fatalf("bad range: %d", got.status)
 	}
-	if len(apiReplyItems(t, s.do(http.MethodGet, projectPath(other, "/files"), token, nil))) != 0 {
+	if len(apiReplyItems(t, s.do(http.MethodGet, spacePath(other, "/files"), token, nil))) != 0 {
 		t.Fatal("private project's file leaked to other project list")
 	}
 	for _, suffix := range []string{"", "/content"} {
-		expectAPI(t, s.do(http.MethodGet, projectPath(other, "/files/"+strconv.FormatInt(file, 10)+suffix), token, nil), 404, "not_found")
+		expectAPI(t, s.do(http.MethodGet, spacePath(other, "/files/"+strconv.FormatInt(file, 10)+suffix), token, nil), 404, "not_found")
 	}
-	expectAPI(t, s.do(http.MethodDelete, projectPath(other, "/files/"+strconv.FormatInt(file, 10)), token, nil), 404, "not_found")
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects/0/files", token, nil), 404, "not_found")
-	expectAPI(t, s.do(http.MethodGet, projectPath(project, "/files/not-an-id/content"), token, nil), 404, "not_found")
+	expectAPI(t, s.do(http.MethodDelete, spacePath(other, "/files/"+strconv.FormatInt(file, 10)), token, nil), 404, "not_found")
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/knowledge/spaces/0/files", token, nil), 404, "not_found")
+	expectAPI(t, s.do(http.MethodGet, spacePath(project, "/files/not-an-id/content"), token, nil), 404, "not_found")
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/files/"+strconv.FormatInt(file, 10), token, nil), 404, "not_found")
 
 	var bulk bytes.Buffer
@@ -324,25 +324,25 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.do(http.MethodPost, projectPath(project, "/files"), token, bulk.String(), "Content-Type", writer.FormDataContentType()); got.status != 201 {
+	if got := s.do(http.MethodPost, spacePath(project, "/files"), token, bulk.String(), "Content-Type", writer.FormDataContentType()); got.status != 201 {
 		t.Fatalf("bulk files: %d %s", got.status, got.body)
 	}
-	first := s.do(http.MethodGet, projectPath(project, "/files?limit=100"), token, nil)
+	first := s.do(http.MethodGet, spacePath(project, "/files?limit=100"), token, nil)
 	if len(apiReplyItems(t, first)) != 100 {
 		t.Fatalf("file first page: %s", first.body)
 	}
 	cursor := first.json["next_cursor"].(string)
-	expectAPI(t, s.do(http.MethodGet, projectPath(project, "/files?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor))), token, nil), 400, "bad_cursor")
+	expectAPI(t, s.do(http.MethodGet, spacePath(project, "/files?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor))), token, nil), 400, "bad_cursor")
 	removed := number(t, apiReplyItems(t, first)[1].(map[string]any)["id"])
-	if deleted := s.do(http.MethodDelete, projectPath(project, "/files/"+strconv.FormatInt(removed, 10)), token, nil); deleted.status != 204 {
+	if deleted := s.do(http.MethodDelete, spacePath(project, "/files/"+strconv.FormatInt(removed, 10)), token, nil); deleted.status != 204 {
 		t.Fatalf("delete paged file: %d %s", deleted.status, deleted.body)
 	}
-	next := s.do(http.MethodGet, projectPath(project, "/files?limit=100&cursor="+url.QueryEscape(cursor)), token, nil)
+	next := s.do(http.MethodGet, spacePath(project, "/files?limit=100&cursor="+url.QueryEscape(cursor)), token, nil)
 	if len(apiReplyItems(t, next)) != 6 || next.json["next_cursor"] != nil {
 		t.Fatalf("file next page: %s", next.body)
 	}
-	expectAPI(t, s.do(http.MethodGet, projectPath(other, "/files?cursor="+url.QueryEscape(cursor)), token, nil), 400, "bad_cursor")
-	expectAPI(t, s.do(http.MethodGet, projectPath(project, "/files?limit=101"), token, nil), 422, "invalid")
+	expectAPI(t, s.do(http.MethodGet, spacePath(other, "/files?cursor="+url.QueryEscape(cursor)), token, nil), 400, "bad_cursor")
+	expectAPI(t, s.do(http.MethodGet, spacePath(project, "/files?limit=101"), token, nil), 422, "invalid")
 	seen := map[int64]bool{}
 	for _, page := range []apiReply{first, next} {
 		for _, raw := range apiReplyItems(t, page) {
@@ -431,40 +431,40 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	}
 
 	body, media = uploadBody(t, nil, "large.txt", strings.Repeat("x", (32<<20)+1))
-	expectAPI(t, s.do(http.MethodPost, projectPath(project, "/files"), token, body, "Content-Type", media), 413, "too_large")
+	expectAPI(t, s.do(http.MethodPost, spacePath(project, "/files"), token, body, "Content-Type", media), 413, "too_large")
 	if deleted := s.do(http.MethodDelete, fileURL, token, nil); deleted.status != 204 {
 		t.Fatalf("delete: %d %s", deleted.status, deleted.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, fileURL, token, nil), 404, "not_found")
-	archived := s.do(http.MethodPost, projectPath(project, "/archive"), token, map[string]any{"archived": true})
+	archived := s.do(http.MethodPost, spacePath(project, "/archive"), token, map[string]any{"archived": true})
 	if archived.status != 200 {
 		t.Fatalf("archive: %d %s", archived.status, archived.body)
 	}
-	if view := s.do(http.MethodGet, projectPath(project, ""), token, nil); view.json["project"].(map[string]any)["archived"] != true {
+	if view := s.do(http.MethodGet, spacePath(project, ""), token, nil); view.json["space"].(map[string]any)["archived"] != true {
 		t.Fatalf("archive not visible: %s", view.body)
 	}
 	body, media = uploadBody(t, nil, "refused.txt", "no")
-	expectAPI(t, s.do(http.MethodPost, projectPath(project, "/files"), token, body, "Content-Type", media), 409, "project_archived")
+	expectAPI(t, s.do(http.MethodPost, spacePath(project, "/files"), token, body, "Content-Type", media), 409, "project_archived")
 	for i := range 105 {
 		createHTMLProject(t, base, fmt.Sprintf("Page %03d", i))
 	}
 	token = localAPIToken(t, "project-pages")
-	first = s.do(http.MethodGet, "/api/v1/projects?limit=100", token, nil)
+	first = s.do(http.MethodGet, "/api/v1/knowledge/spaces?limit=100", token, nil)
 	if len(apiReplyItems(t, first)) != 100 {
 		t.Fatalf("project first page: %s", first.body)
 	}
 	cursor = first.json["next_cursor"].(string)
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor)), token, nil), 400, "bad_cursor")
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/knowledge/spaces?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor)), token, nil), 400, "bad_cursor")
 	deletedProject := number(t, apiReplyItems(t, first)[1].(map[string]any)["id"])
 	if _, err := d.Write.Exec("DELETE FROM projects WHERE id = ?", deletedProject); err != nil {
 		t.Fatal(err)
 	}
-	next = s.do(http.MethodGet, "/api/v1/projects?limit=100&cursor="+url.QueryEscape(cursor), token, nil)
+	next = s.do(http.MethodGet, "/api/v1/knowledge/spaces?limit=100&cursor="+url.QueryEscape(cursor), token, nil)
 	if len(apiReplyItems(t, next)) != 6 || next.json["next_cursor"] != nil {
 		t.Fatalf("project next page: %s", next.body)
 	}
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects?archived=true&cursor="+url.QueryEscape(cursor), token, nil), 400, "bad_cursor")
-	archivedList := s.do(http.MethodGet, "/api/v1/projects?archived=true", token, nil)
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/knowledge/spaces?archived=true&cursor="+url.QueryEscape(cursor), token, nil), 400, "bad_cursor")
+	archivedList := s.do(http.MethodGet, "/api/v1/knowledge/spaces?archived=true", token, nil)
 	if len(apiReplyItems(t, archivedList)) != 1 || number(t, apiReplyItems(t, archivedList)[0].(map[string]any)["id"]) != project {
 		t.Fatalf("archived list: %s", archivedList.body)
 	}
@@ -566,13 +566,13 @@ func TestMultipartUploadAdmission(t *testing.T) {
 		}
 	}
 	body, media := uploadBody(t, map[string]string{"text": "fifth"}, "fifth.txt", strings.Repeat("fifth", 1<<18))
-	rejected := s.do(http.MethodPost, "/api/v1/projects/1/files", token, body, "Content-Type", media, "Idempotency-Key", "fifth")
+	rejected := s.do(http.MethodPost, "/api/v1/knowledge/spaces/1/files", token, body, "Content-Type", media, "Idempotency-Key", "fifth")
 	expectAPI(t, rejected, http.StatusTooManyRequests, "rate_limited")
 	if rejected.header.Get("Retry-After") == "" {
 		t.Fatalf("missing Retry-After: %v", rejected.header)
 	}
 	small, smallMedia := uploadBody(t, nil, "small.txt", "small")
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/projects/1/files", token, small, "Content-Type", smallMedia), http.StatusTooManyRequests, "rate_limited")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/knowledge/spaces/1/files", token, small, "Content-Type", smallMedia), http.StatusTooManyRequests, "rate_limited")
 	preamble := strings.Repeat("x\r\n", 4<<20/3) + "--b--\r\n"
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", token, preamble, "Content-Type", "multipart/form-data; boundary=b"), http.StatusTooManyRequests, "rate_limited")
 	truncated := "--b\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nunfinished"
