@@ -13,7 +13,7 @@ import (
 
 var unreadTables = []string{
 	"nightly_observations", "agent_profile", "notion_pages", "notion_sources", "notion_state", "notion_fts", "wiki_pages",
-	"embed_notion_0", "action_links", "rebalance_candidates", "pass_runs", "pass_run_alerts", "snoozes",
+	"embed_notion_0", "embed_notion_3", "action_links", "rebalance_candidates", "pass_runs", "pass_run_alerts", "snoozes",
 }
 
 func TestMigrationTwoDropsUnreadTablesAndKeepsCarriedRows(t *testing.T) {
@@ -25,6 +25,8 @@ func TestMigrationTwoDropsUnreadTablesAndKeepsCarriedRows(t *testing.T) {
 	vector := "[" + strings.TrimSuffix(strings.Repeat("0.5,", 768), ",") + "]"
 	old := mustConnect(t, path, db.Key{})
 	for _, stmt := range []string{
+		"CREATE VIRTUAL TABLE embed_notion_3 USING vec0(visibility TEXT PARTITION KEY, embedding FLOAT[768] DISTANCE_METRIC=cosine)",
+		"INSERT INTO embed_notion_3 (rowid, visibility, embedding) VALUES (1, 'personal', '" + vector + "')",
 		"INSERT INTO nightly_observations (subject, value, first_seen, last_seen) VALUES ('s', 'v', 1, 1)",
 		"INSERT INTO notion_fts (title, path, body) VALUES ('Old page', 'Root', 'old body')",
 		"INSERT INTO action_links (nonce, proposal_id, content_hash, expires_ts, created_ts) VALUES ('n1', 1, 'h', 2, 1)",
@@ -58,6 +60,13 @@ func TestMigrationTwoDropsUnreadTablesAndKeepsCarriedRows(t *testing.T) {
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
+
+	freshDir := t.TempDir()
+	freshEnv := schemaBaselineEnv(freshDir, filepath.Join(freshDir, "fresh.db"), "")
+	if got := runProcess(t, "settings list", freshEnv...); got.code != cli.ExitOK {
+		t.Fatalf("creating a fresh database through CLI: %s", got.stderr)
+	}
+	migrateSchemaFixture(t, path, schemaBaselineDump(t, freshEnv))
 
 	base, _, stop := startServeStoppable(t, dir)
 	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/activity", nil); status != http.StatusOK {

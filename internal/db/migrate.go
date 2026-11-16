@@ -18,13 +18,11 @@ type migration struct {
 
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
-	{2, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, dropUnreadTables)
-		return err
-	}},
+	{2, dropUnreadTables},
 }
 
-const dropUnreadTables = `
+const (
+	unreadTablesDDL = `
 DROP TABLE nightly_observations;
 DROP TABLE agent_profile;
 DROP TABLE notion_pages;
@@ -32,13 +30,40 @@ DROP TABLE notion_sources;
 DROP TABLE notion_state;
 DROP TABLE notion_fts;
 DROP TABLE wiki_pages;
-DROP TABLE embed_notion_0;
 DROP TABLE action_links;
 DROP TABLE rebalance_candidates;
 DROP TABLE pass_runs;
 DROP TABLE pass_run_alerts;
 DROP TABLE snoozes;
 `
+	notionVectorTables = "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'embed_notion_[0-9]*' AND name NOT GLOB 'embed_notion_*[^0-9]*' AND sql LIKE 'CREATE VIRTUAL TABLE%' ORDER BY name"
+)
+
+func dropUnreadTables(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, notionVectorTables)
+	if err != nil {
+		return err
+	}
+	var vectors []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		vectors = append(vectors, name)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	for _, name := range vectors {
+		if _, err := tx.ExecContext(ctx, `DROP TABLE "`+name+`"`); err != nil {
+			return fmt.Errorf("drop %s: %w", name, err)
+		}
+	}
+	_, err = tx.ExecContext(ctx, unreadTablesDDL)
+	return err
+}
 
 type FutureSchemaError struct {
 	Versions []int

@@ -210,11 +210,12 @@ var (
 	tableBody      = regexp.MustCompile(`CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
 )
 
-var vectorPrefixes = []string{"embed_message_", "embed_kb_"}
+var vectorPrefixes = []string{"embed_message_", "embed_notion_", "embed_kb_"}
 
 var (
 	createTable = regexp.MustCompile(`CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)`)
 	dropTable   = regexp.MustCompile(`DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)`)
+	dropVectors = regexp.MustCompile(`name\s+GLOB\s+'(embed_[a-z]+_)\[0-9\]\*'`)
 	sqlRef      = regexp.MustCompile(`\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_]*)`)
 	vectorCall  = regexp.MustCompile(`\.(?:MessageTable|KBTable)\(\)`)
 )
@@ -272,6 +273,9 @@ func checkSchema(root string) error {
 		}
 		for _, m := range dropTable.FindAllStringSubmatch(string(body), -1) {
 			dropped[normalize(m[1])] = true
+		}
+		for _, m := range dropVectors.FindAllStringSubmatch(string(body), -1) {
+			dropped[m[1]] = true
 		}
 	}
 	for name := range dropped {

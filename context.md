@@ -410,10 +410,13 @@ claims about the running application. Operator contracts are in
   reads. A fresh database is the baseline followed by every migration.
   Migration 2 drops the unread tables `nightly_observations`,
   `agent_profile`, `notion_pages`, `notion_sources`, `notion_state`,
-  `notion_fts`, `wiki_pages`, `embed_notion_0`, `action_links`,
-  `rebalance_candidates`, `pass_runs`, `pass_run_alerts` and `snoozes`, with
-  their indexes, revision triggers and FTS5 and vec0 shadow tables; their
-  rows are discarded. `skills`, `export_pages` and `attention_snoozes` stay.
+  `notion_fts`, `wiki_pages`, every Notion vector generation
+  `embed_notion_<N>`, `action_links`, `rebalance_candidates`, `pass_runs`,
+  `pass_run_alerts` and `snoozes`, with their indexes, revision triggers
+  and FTS5 and vec0 shadow tables; their rows are discarded. `skills`,
+  `export_pages` and `attention_snoozes` stay; `skills` and
+  `effect_import_refs` are read by nothing and are candidates for a later
+  drop.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
