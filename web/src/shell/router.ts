@@ -13,7 +13,13 @@ const placeholder = () => import('./PlaceholderPage.svelte');
 export const { p, navigate, isActive, route } = createRouter(
   {
     '/': { '/': () => import('../features/home/HomePage.svelte'), meta: { title: 'Home' } },
-    '/inbox': { '/': () => import('../features/inbox/InboxPage.svelte'), meta: { title: 'Inbox' } },
+    '/inbox': {
+      '/': () => import('../features/inbox/InboxPage.svelte'),
+      '/:item': () => import('../features/inbox/InboxPage.svelte'),
+      meta: { title: 'Inbox' },
+    },
+    '/proposals/:id': () => import('../features/inbox/ResolveItem.svelte'),
+    '/drafts/:id': () => import('../features/inbox/ResolveItem.svelte'),
     '/chat': { '/': () => import('../features/chats/ChatsPage.svelte'), meta: { title: 'Chats' } },
     '/plan': { '/': placeholder, meta: { title: 'Plan' } },
     '/knowledge': { '/': placeholder, meta: { title: 'Knowledge' } },

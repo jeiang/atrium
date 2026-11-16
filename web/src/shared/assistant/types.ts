@@ -196,7 +196,8 @@ export interface Approval {
 }
 
 export interface DecidedElsewhere {
-  where: string;
+  outcome?: string;
+  where?: string;
   at: string;
 }
 
