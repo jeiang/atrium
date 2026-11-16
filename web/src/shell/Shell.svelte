@@ -33,6 +33,7 @@
   const frame = $derived(signedIn ? shell.data : undefined);
   const waiting = $derived(frame?.needs_you ?? 0);
   const appRows = $derived(shownApps(frame));
+  const mailMeta = $derived(mailStatus(frame));
   const visible = $derived(destinations.filter((item) => moduleOn(frame, item.module)));
 
   $effect(() => {
@@ -42,12 +43,16 @@
 
   const title = $derived(signedIn ? routeTitle() : stateTitle(session.view));
 
-  let announced = false;
+  let lastPath: string | undefined;
   $effect(() => {
     const current = title;
-    void route.pathname;
+    const path = route.pathname;
     document.title = `${current} · atrium`;
-    if (announced) {
+    if (!signedIn) {
+      lastPath = undefined;
+      return;
+    }
+    if (lastPath !== undefined && lastPath !== path) {
       announce(current);
       const heading = document.querySelector<HTMLElement>('main h1');
       if (heading) {
@@ -55,7 +60,7 @@
         heading.focus();
       }
     }
-    announced = signedIn !== undefined || session.view.status !== 'loading';
+    lastPath = path;
   });
 
   const current = (path: DestinationPath): 'page' | undefined =>
@@ -92,7 +97,6 @@
           {#if item === appsDestination && appRows.length > 0}
             <ul class="rail__sub">
               {#each appRows as app (app.id)}
-                {@const (status = app.id === 'mail' ? mailStatus(frame) : undefined)}
                 <li>
                   <a
                     class="rail-link rail-link--sub"
@@ -100,8 +104,8 @@
                     aria-current={isActive('/apps/:app', { app: app.id }) ? 'page' : undefined}
                   >
                     <Icon name={app.icon} /><span class="rail-link__text">{app.title}</span>
-                    {#if status}
-                      <span class="rail-link__meta">{status}</span>
+                    {#if app.id === 'mail' && mailMeta}
+                      <span class="rail-link__meta">{mailMeta}</span>
                     {/if}
                   </a>
                 </li>
@@ -126,7 +130,9 @@
     </div>
   </header>
   <main id="main" class="main" tabindex="-1">
-    {#if signedIn}
+    {#if signedIn && shell.isPending}
+      <p class="frame-note">Loading atrium</p>
+    {:else if signedIn}
       <Router />
     {:else}
       <SessionState view={session.view} />

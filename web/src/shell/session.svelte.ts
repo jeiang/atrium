@@ -62,7 +62,6 @@ export async function loadSession(redirect = true, after: 'logout' | 'start' = '
   try {
     const res = await webSession();
     if (res.status === 200) {
-      sessionStorage.removeItem(REDIRECT_KEY);
       setCsrfToken(res.data.csrf_token);
       session.view = { status: 'signed-in', session: res.data };
       return;
@@ -77,7 +76,7 @@ export async function loadSession(redirect = true, after: 'logout' | 'start' = '
   }
 }
 
-export async function signOut(): Promise<void> {
+export async function handleSignOut(): Promise<void> {
   if (session.view.status !== 'signed-in' || !session.view.session.sign_out) return;
   try {
     const res = await webSessionLogout();

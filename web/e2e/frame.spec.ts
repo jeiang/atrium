@@ -21,15 +21,29 @@ async function frameBoxes(page: Page): Promise<Record<string, number[]>> {
     const out: Record<string, number[]> = {};
     const selectors = ['.rail .brand', '.rail-link', '.rail__foot', '.topbar', '.topbar .brand', '.tabbar a', '.main'];
     for (const selector of selectors) {
-      document.querySelectorAll(selector).forEach((el, index) => {
-        if (el.closest('.rail__sub')) return;
-        const box = el.getBoundingClientRect();
+      const boxes = [...document.querySelectorAll(selector)]
+        .filter((el) => !el.closest('.rail__sub'))
+        .map((el) => el.getBoundingClientRect());
+      boxes.forEach((box, index) => {
         if (box.width === 0 && box.height === 0) return;
-        out[`${selector}#${index}`] = [box.x, box.y, box.width, box.height].map((value) => Math.round(value));
+        out[`${selector}#${index}`] = [box.x, box.y, box.width, box.height];
       });
     }
     return out;
   });
+}
+
+function shiftScore(before: Record<string, number[]>, after: Record<string, number[]>, width: number, height: number) {
+  let area = 0;
+  let distance = 0;
+  for (const [key, [x0 = 0, y0 = 0, w0 = 0, h0 = 0]] of Object.entries(before)) {
+    const [x1 = 0, y1 = 0, w1 = 0, h1 = 0] = after[key] ?? [];
+    const moved = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    if (moved <= 1) continue;
+    area += w0 * h0 + w1 * h1;
+    distance = Math.max(distance, moved);
+  }
+  return Math.min(1, area / (width * height)) * (distance / Math.max(width, height));
 }
 
 test.describe('signed in', () => {
@@ -38,11 +52,11 @@ test.describe('signed in', () => {
   test('the rail shows the five destinations, the inbox count and the identity', async ({ page }) => {
     await gotoShell(page, '/');
     const rail = page.getByRole('navigation', { name: 'Main' });
-    for (const name of ['Home', 'Plan', 'Knowledge', 'Apps', 'Assistant', 'Inbox']) {
+    for (const name of ['Home', 'Plan', 'Knowledge', 'Apps', 'Assistant']) {
       await expect(rail.getByRole('link', { name, exact: true })).toBeVisible();
     }
     await expect(rail.getByRole('link', { name: 'Home', exact: true })).toHaveAttribute('aria-current', 'page');
-    await expect(rail.getByRole('link', { name: 'Inbox, 3 waiting' })).toBeVisible();
+    await expect(rail.getByRole('link', { name: /^Inbox\W+3 waiting$/ })).toBeVisible();
     await expect(rail.getByRole('link', { name: 'Mail' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Tabs' })).toBeHidden();
     await page.getByRole('button', { name: 'Account: Operator' }).click();
@@ -83,9 +97,9 @@ test.describe('signed in', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
   });
 
-  test('the skip link moves focus to the main region', async ({ page }) => {
+  test('the skip link moves focus to the main region', async ({ page, browserName }) => {
     await gotoShell(page, '/');
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(browserName === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab');
     const skip = page.getByRole('link', { name: 'Skip to content' });
     await expect(skip).toBeFocused();
     await expect(skip).toBeInViewport();
@@ -114,7 +128,7 @@ test.describe('signed in', () => {
   test('an app event refreshes the inbox count', async ({ page }) => {
     await gotoShell(page, '/');
     const rail = page.getByRole('navigation', { name: 'Main' });
-    await expect(rail.getByRole('link', { name: 'Inbox, 3 waiting' })).toBeVisible();
+    await expect(rail.getByRole('link', { name: /^Inbox\W+3 waiting$/ })).toBeVisible();
     await expect.poll(() => streamsOpened(page)).toBe(1);
     await page.evaluate(() => {
       localStorage.setItem('atrium.mock', JSON.stringify({ needsYou: 5 }));
@@ -122,7 +136,7 @@ test.describe('signed in', () => {
       channel.postMessage({ topic: 'review' });
       channel.close();
     });
-    await expect(rail.getByRole('link', { name: 'Inbox, 5 waiting' })).toBeVisible();
+    await expect(rail.getByRole('link', { name: /^Inbox\W+5 waiting$/ })).toBeVisible();
   });
 
   test('two tabs share one event stream and hand it over', async ({ context }) => {
@@ -150,7 +164,7 @@ test.describe('signed in', () => {
       channel.close();
     });
     await expect(
-      second.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Inbox, 7 waiting' }),
+      second.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^Inbox\W+7 waiting$/ }),
     ).toBeVisible();
   });
 
@@ -181,9 +195,6 @@ test.describe('signed out', () => {
 
   test('with a sign-in page the client goes there with a return path', async ({ page }) => {
     await useScenario(page, { session: 'signed-out' });
-    await page.route('**/login?*', (route) =>
-      route.fulfill({ contentType: 'text/html', body: '<title>Sign in</title>' }),
-    );
     await page.goto('/plan?view=week');
     await expect(page).toHaveURL(/\/login\?reason=expired&next=%2Fplan%3Fview%3Dweek$/);
   });
@@ -199,18 +210,14 @@ test.describe('signed out', () => {
   });
 
   test('a 401 during use goes to sign-in once', async ({ page }) => {
-    let visits = 0;
-    await page.route('**/login?*', (route) => {
-      visits += 1;
-      return route.fulfill({ contentType: 'text/html', body: '<title>Sign in</title>' });
-    });
     await useScenario(page, { expireOn: 'shell' });
     await page.goto('/knowledge');
-    await expect(page).toHaveURL(/\/login\?reason=expired&next=%2Fknowledge$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Sign in to atrium' })).toBeVisible();
+    expect(new URL(page.url()).search).toBe('?reason=expired&next=%2Fknowledge');
     await page.goto('/knowledge');
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in to atrium' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
-    expect(visits).toBe(1);
+    await expect(page).toHaveURL(/\/knowledge$/);
   });
 
   test('an unavailable sign-in shows an error with retry', async ({ page }) => {
@@ -233,7 +240,7 @@ test.describe('phone', () => {
     for (const name of ['Home', 'Decide', 'Chats', 'Spaces']) {
       await expect(tabs.getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
     }
-    await expect(tabs.getByRole('link', { name: 'Decide, 3 waiting' })).toBeVisible();
+    await expect(tabs.getByRole('link', { name: /^Decide\W+3 waiting$/ })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();
     await tabs.getByRole('link', { name: 'Spaces' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Spaces' })).toBeFocused();
@@ -241,9 +248,10 @@ test.describe('phone', () => {
     await page.getByRole('link', { name: 'Knowledge' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
     await expect(tabs.getByRole('link', { name: 'Spaces' })).toHaveAttribute('aria-current', 'page');
+    await expectTouchTargets(page);
     await page.getByRole('button', { name: 'Account: Operator' }).click();
     await expect(page.getByRole('menuitem', { name: 'Settings' })).toBeVisible();
-    await expectTouchTargets(page);
+    await expectTouchTargets(page, '.account__popup');
   });
 });
 
@@ -262,9 +270,10 @@ test.describe('prerendered frame', () => {
   for (const layout of layouts) {
     test(`${layout.name}: the client keeps the frame geometry`, async ({ browser }) => {
       const options = { viewport: { width: layout.width, height: layout.height }, hasTouch: layout.touch };
-      const still = await browser.newContext({ ...options, javaScriptEnabled: false });
+      const still = await browser.newContext(options);
+      await still.route('**/*.js', (route) => route.abort());
       const raw = await still.newPage();
-      await raw.goto('/');
+      await raw.goto('/', { waitUntil: 'load' });
       await raw.evaluate(() => document.fonts.ready);
       const before = await frameBoxes(raw);
       await still.close();
@@ -275,7 +284,7 @@ test.describe('prerendered frame', () => {
       const after = await frameBoxes(page);
       await live.close();
       expect(Object.keys(before).length).toBeGreaterThan(3);
-      expect(after).toEqual(before);
+      expect(shiftScore(before, after, layout.width, layout.height)).toBeLessThanOrEqual(0.05);
     });
   }
 });

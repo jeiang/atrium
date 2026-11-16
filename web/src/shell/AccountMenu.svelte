@@ -3,7 +3,7 @@
   import Icon from '../shared/ui/Icon.svelte';
   import { chats, settings } from './nav';
   import { p } from './router';
-  import { signOut } from './session.svelte';
+  import { handleSignOut } from './session.svelte';
 
   interface Props {
     session: WebSession;
@@ -71,7 +71,7 @@
   async function onSignOut(): Promise<void> {
     pending = true;
     try {
-      await signOut();
+      await handleSignOut();
     } finally {
       pending = false;
     }

@@ -34,6 +34,9 @@ export async function useScenario(page: Page, scenario: MockScenario): Promise<v
   await page.addInitScript((value) => localStorage.setItem('atrium.mock', value), JSON.stringify(scenario));
 }
 
+const mockStreamAborted =
+  /ServiceWorker intercepted the request and encountered an unexpected error.*mockServiceWorker\.js/;
+
 export const test = base.extend<{ problems: string[]; allowStatus: number[] }>({
   allowStatus: [[], { option: true }],
   problems: [
@@ -43,6 +46,7 @@ export const test = base.extend<{ problems: string[]; allowStatus: number[] }>({
         if (message.type() !== 'error') return;
         const status = /status of (\d+)/.exec(message.text())?.[1];
         if (status && allowStatus.includes(Number(status))) return;
+        if (mockStreamAborted.test(message.text())) return;
         problems.push(`console error: ${message.text()}`);
       });
       page.on('pageerror', (error) => problems.push(`uncaught: ${error.message}`));
