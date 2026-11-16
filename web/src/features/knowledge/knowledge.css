@@ -567,6 +567,7 @@
     display: grid;
     grid-template-columns: 1.5rem minmax(0, 1fr);
     padding-inline: var(--s-2);
+    border-radius: var(--r-sm);
   }
 
   .kdiff__line--add {
@@ -595,6 +596,22 @@
       min-block-size: var(--target);
       min-inline-size: var(--target);
       justify-content: center;
+    }
+  }
+
+  .kmap__phone-note {
+    display: none;
+    margin: 0;
+    color: var(--ink-2);
+  }
+
+  @media (--phone) {
+    .kmap__canvas--wide {
+      display: none;
+    }
+
+    .kmap__phone-note {
+      display: block;
     }
   }
 

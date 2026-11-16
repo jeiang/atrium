@@ -38,7 +38,8 @@
 </script>
 
 <Section id="g-knowledge-map" data-gallery="knowledge-map" title="Subject map">
-  <div class="kmap__canvas">
+  <p class="kmap__phone-note">Below 861 px the map page shows only its list.</p>
+  <div class="kmap__canvas kmap__canvas--wide">
     <NeighborhoodMap {center} {neighbors} centerHref="#g-knowledge-map" href={(id) => `#subject-${id}`} {onopen} />
   </div>
 </Section>
