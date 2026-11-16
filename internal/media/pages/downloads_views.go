@@ -16,8 +16,6 @@ const (
 	dlDownloadsPage = "/apps/media/downloads"
 )
 
-var dlAddModes = []string{dlModeMedia, dlModePlain}
-
 type TorrentView struct {
 	Hash    string `json:"hash"`
 	Name    string `json:"name"`
@@ -57,14 +55,6 @@ type QueueView struct {
 	Error     string      `json:"error"`
 }
 
-type FileView struct {
-	Index    int    `json:"index"`
-	Wanted   bool   `json:"wanted"`
-	Name     string `json:"name"`
-	SizeText string `json:"size_text"`
-	Percent  int64  `json:"percent"`
-}
-
 type torrentsView struct {
 	Torrents []TorrentView `json:"torrents"`
 	Error    string        `json:"error"`
@@ -80,20 +70,6 @@ type downloadsView struct {
 	Queue      []QueueView   `json:"queue"`
 	QueueError string        `json:"queue_error"`
 	Kinds      []string      `json:"kinds"`
-}
-
-type filesView struct {
-	Hash        string     `json:"hash"`
-	TorrentName string     `json:"torrent_name"`
-	Files       []FileView `json:"files"`
-	Error       string     `json:"error"`
-}
-
-type addView struct {
-	Magnet      string `json:"magnet"`
-	TorrentName string `json:"torrent_name"`
-	AddMode     string `json:"add_mode"`
-	Error       string `json:"error"`
 }
 
 func dlHumanSize(n *int64) string {
@@ -138,7 +114,7 @@ func dlSpeedText(n *int64) string {
 	return dlHumanSize(n) + "/s"
 }
 
-func torrentView(t mediaapp.QBitTorrent) TorrentView {
+func torrentView(t mediaapp.Torrent) TorrentView {
 	state := t.State
 	if state == "" {
 		state = "unknown"
@@ -157,13 +133,6 @@ func torrentView(t mediaapp.QBitTorrent) TorrentView {
 		Percent: int64(math.Round(t.Progress * 100)),
 		Filed:   t.HasTag(mediaapp.TagFiled), Ignored: t.HasTag(mediaapp.TagIgnored),
 		Active: t.Active(),
-	}
-}
-
-func fileView(f mediaapp.QBitTorrentFile) FileView {
-	return FileView{
-		Index: f.Index, Wanted: f.Priority != mediaapp.PrioritySkip, Name: f.Name,
-		SizeText: dlHumanSize(f.Size), Percent: int64(math.Round(f.Progress * 100)),
 	}
 }
 

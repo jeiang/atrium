@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -60,7 +61,7 @@ func TestMediaDownloadsAPI(t *testing.T) {
 	if qb.count("add") != 1 {
 		t.Fatalf("adds: %d", qb.count("add"))
 	}
-	mediaEffectID(t, d, media.OpAddMagnet, hash, "done")
+	mediaEffectID(t, d, contract.OpAddMagnet, hash, "done")
 	changed := s.do(http.MethodGet, "/api/v1/media/torrents", token, nil, "If-None-Match", before.header.Get("ETag"))
 	expectAPI(t, changed, 200, "")
 	if changed.header.Get("ETag") == before.header.Get("ETag") || !strings.Contains(changed.body, hash) {
@@ -163,11 +164,11 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	mnpWrite(t, filepath.Join(root, "downloads", "secret.mkv"), []byte("do not serve"))
 	content := filepath.Join(root, "downloads", "Arrival.2016.1080p.WEB")
 	mnpWrite(t, filepath.Join(content, "Arrival.2016.mkv"), []byte("arrival"))
-	qb.put(mnpTorrent{hash: hash, name: "Arrival.2016.1080p.WEB", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: hash, name: "Arrival.2016.1080p.WEB", tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 	heat := filepath.Join(root, "downloads", "Heat.1995.1080p.WEB")
 	mnpWrite(t, filepath.Join(heat, "Heat.1995.mkv"), []byte("heat"))
-	qb.put(mnpTorrent{hash: skipped, name: "Heat.1995.1080p.WEB", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: heat})
-	qb.put(mnpTorrent{hash: untagged, name: "Heat.1995.1080p.WEB", state: media.StoppedUP, progress: 1, content: heat})
+	qb.put(mnpTorrent{hash: skipped, name: "Heat.1995.1080p.WEB", tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: heat})
+	qb.put(mnpTorrent{hash: untagged, name: "Heat.1995.1080p.WEB", state: contract.StoppedUP, progress: 1, content: heat})
 	setEnv(t, settingEnv(config.KeyPublicURL), "https://atrium.test")
 	setEnv(t, settingEnv(media.KeyVPNBaseURL), "https://artemis.vpn:8443")
 	seedAllFlagsIn(t, dir)

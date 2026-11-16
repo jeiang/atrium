@@ -281,8 +281,8 @@ func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *test
 	if indexer.Kind != "service/eztv" || indexer.Connection != "service/eztv" || !indexer.Soft || !slices.Contains(indexer.Features, "media channels") {
 		t.Fatalf("media indexer need = %+v", indexer)
 	}
-	if qb := model.need(t, "media", "api"); qb.Soft {
-		t.Fatalf("media qbittorrent api need = %+v, want hard", qb)
+	if qb := model.need(t, "torrents", "api"); qb.Soft {
+		t.Fatalf("torrents qbittorrent api need = %+v, want hard", qb)
 	}
 	s.stop()
 

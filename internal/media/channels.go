@@ -13,6 +13,7 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
@@ -307,7 +308,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 	stamp := now()
 	result := PollResult{Added: []Added{}, Errors: []string{}}
 	request := ledger.NewKey()
-	if _, err := settings.Qbit(); err != nil {
+	if err := settings.Intake.Ready(ctx); err != nil {
 		return result, err
 	}
 	q := d.Write
@@ -352,8 +353,8 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 				continue
 			}
 			if rule.Primed || opts.Force {
-				_, err := settings.Add(ctx, store, settings, AddRequest{
-					Magnet: t.MagnetURL, Tags: TagMedia,
+				_, err := settings.Intake.Add(ctx, contract.AddRequest{
+					Magnet: t.MagnetURL, Label: TagMedia, Scope: contract.Scope{Actor: contract.Job},
 					OperationKey: "media:channel:" + strconv.FormatInt(rule.ID, 10) + ":" + t.Hash + ":" + request,
 					Done: func(ctx context.Context, tx *sql.Tx) error {
 						return markSeen(ctx, tx, t.Hash, stamp)
@@ -365,7 +366,12 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 						result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: an earlier add is unresolved", rule.Name, t.Title))
 						continue
 					}
-					if !IsQbit(err) {
+					var invalid contract.Invalid
+					if errors.As(err, &invalid) {
+						result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: %v", rule.Name, t.Title, err))
+						continue
+					}
+					if !contract.IsQbit(err) {
 						return result, err
 					}
 					result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: %v", rule.Name, t.Title, err))
@@ -413,7 +419,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 				result.Errors = append(result.Errors, "notify: "+sent.Error)
 			}
 		}
-		if _, err := settings.SelectFiles(ctx, store, settings, Scope{}, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, settings, contract.Scope{Actor: contract.Job}, nil); err != nil {
 			return result, err
 		}
 	}
@@ -429,7 +435,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 	case polled > 0 && feedFailed == polled:
 		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindEZTV), "indexer", fmt.Errorf("every channel feed failed: %w", feedErr))
 	case addFailed > 0 && len(result.Added) == 0:
-		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindQbittorrent), "api", fmt.Errorf("every add failed: %w", addErr))
+		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(contract.Kind), "api", fmt.Errorf("every add failed: %w", addErr))
 	}
 	return result, nil
 }

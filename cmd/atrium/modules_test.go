@@ -50,8 +50,9 @@ var moduleCases = []moduleCase{
 		command: []string{"rules", "export"}, output: nonEmpty},
 	{module: unit.Calendar, tool: "calendar_list", table: "agent_events",
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
-	{module: unit.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
+	{module: unit.Media, tool: "media_channels", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
+	{module: unit.Torrents, tool: "downloads", method: "GET", path: "/apps/media/add", status: http.StatusOK},
 	{module: unit.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
 		command: []string{"agent", "run", "--text", "hello", "--kind", "chat"}, output: func(stdout, _ string, code int) bool {
 			return code == cli.ExitOK && strings.HasPrefix(stdout, "{")
@@ -362,7 +363,7 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 		}
 		base, logs := startServeLogged(t, dir)
 		waitFor(t, func() bool { return strings.Count(logs.String(), "module is unavailable") == 2 })
-		for _, name := range []string{"mail", "media"} {
+		for _, name := range []string{"mail", "torrents"} {
 			if text := logs.String(); !strings.Contains(text, "MODULE="+name+" STATE=unavailable REASON=") || !strings.Contains(text, "expires_at") {
 				t.Fatalf("the unavailable %s module and its reason are not logged: %s", name, text)
 			}
@@ -375,6 +376,9 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/settings/media", nil)
 		if status != http.StatusOK || !strings.Contains(body, "Unavailable") || !strings.Contains(body, "data-unavailable") || !strings.Contains(body, "expires_at") || strings.Contains(body, "data-restart") {
 			t.Fatalf("media settings page = %d, want the unavailable state and its reason: %s", status, body)
+		}
+		if !strings.Contains(body, "Torrents is unavailable: ") {
+			t.Fatalf("media settings page does not name the unavailable Torrents dependency: %s", body)
 		}
 	})
 	t.Run("core", func(t *testing.T) {

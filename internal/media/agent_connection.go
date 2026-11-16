@@ -74,8 +74,8 @@ func (s Settings) Agent(capability string) (*agentclient.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	if s.QbitStore != nil {
-		lease, store := s.AgentLease, s.QbitStore
+	if s.Store != nil {
+		lease, store := s.AgentLease, s.Store
 		client.Observe = func(ctx context.Context, state connections.State, reason string) {
 			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{Capability: capability, State: state, Reason: reason})
 		}

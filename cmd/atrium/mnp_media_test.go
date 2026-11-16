@@ -20,6 +20,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/torrents"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
@@ -213,7 +215,7 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 				}
 				data, err := io.ReadAll(file)
 				_ = file.Close()
-				hash, hashErr := media.TorrentHash(data)
+				hash, hashErr := torrents.TorrentHash(data)
 				if err != nil || hashErr != nil {
 					http.Error(w, "torrent", 400)
 					return
@@ -224,7 +226,7 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		if hash, ok := media.MagnetHash(form.Get("urls")); ok && hash != "" {
+		if hash, ok := torrents.MagnetHash(form.Get("urls")); ok && hash != "" {
 			if _, ok := f.items[hash]; !ok {
 				f.order = append(f.order, hash)
 				f.items[hash] = &mnpTorrent{hash: hash, name: "magnet " + hash[:8], state: "metaDL", tags: mnpTags(form.Get("tags"))}
@@ -259,6 +261,12 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 		for _, h := range strings.Split(form.Get("hashes"), "|") {
 			if t, ok := f.items[h]; ok {
 				t.state = "downloading"
+			}
+		}
+	case "torrents/stop":
+		for _, h := range strings.Split(form.Get("hashes"), "|") {
+			if t, ok := f.items[h]; ok {
+				t.state = "stoppedDL"
 			}
 		}
 	case "torrents/delete":
@@ -379,7 +387,7 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, name+".mkv"), make([]byte, 100))
 	mnpWrite(t, filepath.Join(content, name+".en.srt"), make([]byte, 100))
-	qb.put(mnpTorrent{hash: ready, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: ready, name: name, tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 	qb.put(mnpTorrent{hash: busy, name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", content: "Dune.2021",
 		files: []mnpFile{{0, "Dune.2021.mkv", 0}, {1, "Dune.2021.nfo", 1}}})
 	qb.put(mnpTorrent{hash: plain, name: "plain.thing", state: "stoppedDL", content: "plain.thing",
@@ -401,12 +409,12 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 
 	magnet := "magnet:?xt=urn:btih:" + fresh + "&dn=Lanterns.S01E09"
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK)
-	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != media.TagMedia {
+	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != "atrium,"+media.TagMedia {
 		t.Fatalf("media add sent %v", got)
 	}
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {"magnet:?xt=urn:btih:" + strings.Repeat("e", 40)}, "mode": {"plain"}}, http.StatusOK)
-	if got := qb.lastAdd(); got.Get("tags") != "" {
-		t.Fatalf("plain add carried tags %q", got.Get("tags"))
+	if got := qb.lastAdd(); got.Get("tags") != "atrium" {
+		t.Fatalf("plain add carried tags %q, want only atrium", got.Get("tags"))
 	}
 
 	form := func(action string) url.Values {
@@ -489,7 +497,7 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 	}
 
 	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}, http.StatusOK)
-	if len(qb.added) != 1 || qb.added[0].Get("tags") != media.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
+	if len(qb.added) != 1 || qb.added[0].Get("tags") != "atrium,"+media.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
 		t.Fatalf("backfill adds = %v", qb.added)
 	}
 }
@@ -627,9 +635,9 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 	mnpMediaRoot(t, toolDir)
 	toolQB, toolURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, toolDir, toolURL, "", "", ""))
-	result := unescape(toolResult(t, "media_add_magnet", map[string]any{"magnet": v2only}))
+	result := unescape(toolResult(t, "download_add", map[string]any{"magnet": v2only}))
 	if !strings.Contains(result, `"code":"invalid"`) || !strings.Contains(result, "magnet") {
-		t.Fatalf("media_add_magnet with a v2-only magnet = %s, want an invalid tool error", result)
+		t.Fatalf("download_add with a v2-only magnet = %s, want an invalid tool error", result)
 	}
 	if adds := toolQB.count("add"); adds != 0 {
 		t.Fatalf("the refused tool add reached qBittorrent: %d adds", adds)

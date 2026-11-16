@@ -25,6 +25,7 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_CORE_OPS_PPROF` | `core.ops_pprof` |
 | `ATRIUM_CORE_OTEL_TRACES_ENDPOINT` | `core.otel_traces_endpoint` |
 | `ATRIUM_CORE_PUBLIC_URL` | `core.public_url` |
+| `ATRIUM_CORE_TORRENTS_ENABLED` | `core.torrents_enabled` |
 | `ATRIUM_EXPORT_EXPORT_OBSIDIAN_DIR` | `export.export_obsidian_dir` |
 | `ATRIUM_GRAFANA_OPS_HOSTS` | `grafana.ops_hosts` |
 | `ATRIUM_GRAFANA_OPS_LABEL_SELECTOR` | `grafana.ops_label_selector` |
