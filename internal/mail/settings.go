@@ -26,7 +26,6 @@ const (
 	KeyLoopsRemindAheadDays   = "openloops_remind_ahead_days"
 	KeyLoopsRemindHour        = "openloops_remind_hour"
 	KeyLoopsSnoozeDefaultDays = "openloops_snooze_default_days"
-	KeyWatchesCarrierDomains  = "watches_carrier_domains"
 )
 
 const modeDefault = config.Shadow
@@ -48,7 +47,6 @@ func Settings() []settings.Def {
 		settings.Shown("Remind ahead of a due date (days)", adv(KeyLoopsRemindAheadDays, settings.Int, "1", atLeast(1))),
 		ui(KeyLoopsRemindHour, settings.Int, "9", settings.Between(0, 23)),
 		settings.Shown("Default snooze (days)", adv(KeyLoopsSnoozeDefaultDays, settings.Int, "3", atLeast(1))),
-		ui(KeyWatchesCarrierDomains, settings.String, "ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de", domainsCheck),
 	}
 }
 
@@ -83,20 +81,6 @@ func modeCheck(value string) error {
 		}
 	}
 	return settings.Invalid(fmt.Sprintf("must be one of (%s, %s), got %s", strconv.Quote(config.Shadow), strconv.Quote(config.Live), strconv.Quote(value)))
-}
-
-func domainsCheck(value string) error {
-	if len(endpoint.SplitList(value)) == 0 {
-		return settings.Invalid("must list at least one domain")
-	}
-	for _, d := range endpoint.SplitList(value) {
-		for _, c := range d {
-			if c != '.' && c != '-' && (c < 'a' || c > 'z') && (c < '0' || c > '9') {
-				return settings.Invalid("domains are lowercase letters, digits, dots and hyphens, got " + strconv.Quote(d))
-			}
-		}
-	}
-	return nil
 }
 
 func WallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }

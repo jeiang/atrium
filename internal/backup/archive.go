@@ -416,10 +416,10 @@ func readHeader(tr *tar.Reader) (Header, []byte, error) {
 		return Header{}, nil, ErrNotArchive
 	}
 	if h.Format > formatVersion {
-		return Header{}, nil, ErrNewerFormat
+		return Header{Format: h.Format}, nil, ErrNewerFormat
 	}
 	if h.Format < formatVersion {
-		return Header{}, nil, ErrOldFormat
+		return Header{Format: h.Format}, nil, ErrOldFormat
 	}
 	return h, raw, nil
 }

@@ -95,31 +95,17 @@ Operator settings are stored in the database and edited in the application. They
 | `agent_effort_cron` | enum (low, medium, high, xhigh, max) | `high` | ui |
 | `agent_effort_nightly` | enum (low, medium, high, xhigh, max) | `high` | ui |
 | `agent_effort_subagent` | enum (low, medium, high, xhigh, max) | `medium` | ui |
-| `agent_schedule_calendar_candidates` | string | `0 * * * *` | advanced |
-| `agent_schedule_daily_nudges` | string | `daily 08:00` | advanced |
-| `agent_schedule_knowledge_export` | string | `daily 03:30` | advanced |
-| `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced |
-| `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced |
-| `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced |
-| `agent_schedule_nightly` | string | `daily 02:30` | advanced |
-| `agent_schedule_ops_sampler` | string | `*/15 * * * *` | advanced |
-| `agent_schedule_package_tracking` | string | `0 * * * *` | advanced |
-| `agent_schedule_task_reminders` | string | `*/5 * * * *` | advanced |
-| `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced |
 | `agent_subagent_max_cost_usd` | float | `0.25` | ui |
 | `budget_chat_share` | float | `1` | ui |
 | `budget_unattended_share` | float | `0.8` | ui |
-| `cache_ttl_chat` | enum (5m, 1h) | `5m` | ui |
 | `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui |
 | `default_effort` | enum (low, medium, high, xhigh, max) | `xhigh` | ui |
 | `default_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui |
 | `digest_notify` | bool | `true` | ui |
 | `dreaming_max_cost_usd` | float | `0.30` | ui |
 | `dreaming_monthly_usd` | float | `3` | ui |
-| `max_run_cost_usd_haiku_5_5` | float | `2` | ui |
-| `max_run_cost_usd_opus_5_5` | float | `10` | ui |
-| `max_run_cost_usd_sonnet_5_5` | float | `6` | ui |
+| `max_run_cost_usd` | float | `10` | ui |
 | `monthly_budget_usd` | float | `150` | ui |
 | `ops_worker_max_run_usd` | float | `0.10` | ui |
 | `ops_worker_monthly_usd` | float | `5` | ui |
@@ -173,13 +159,11 @@ Operator settings are stored in the database and edited in the application. They
 | `mail_mode` | string | `shadow` | advanced |
 | `mail_ship24_destination_country` | string | none | ui |
 | `mail_ship24_destination_postcode` | string | none | ui |
-| `mail_ship24_monthly_quota` | int | `10` | advanced |
 | `openloops_remind_ahead_days` | int | `1` | ui |
 | `openloops_remind_hour` | int | `9` | ui |
 | `openloops_snooze_default_days` | int | `3` | ui |
 | `openloops_waiting_after_days` | int | `3` | ui |
 | `uncertain_dest` | string | `Misc` | ui |
-| `watches_carrier_domains` | string | `ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de` | ui |
 | `write_cap` | int | `100` | ui |
 
 ### media
@@ -188,21 +172,6 @@ Operator settings are stored in the database and edited in the application. They
 | --- | --- | --- | --- |
 | `link_key` | string | none | secret |
 | `media_link_ttl_seconds` | int | `43200` | ui |
-
-### memory
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `memory_effort` | string | `low` | ui |
-| `memory_model` | string | `claude-haiku-5-5` | ui |
-| `memory_verbatim_tokens` | int | `16000` | advanced |
-
-### notify
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `notify_nightly_cap` | int | `1` | ui |
-| `notify_per_run_cap` | int | `3` | ui |
 
 ### permissions
 
@@ -232,12 +201,6 @@ Operator settings are stored in the database and edited in the application. They
 | `permission_people_untrusted_isolated` | enum (allow, ask, deny) | `ask` | ui |
 | `permission_people_untrusted_kinds` | enum (ask, deny) | `ask` | ui |
 | `permission_people_untrusted_knowledge` | enum (ask, deny) | `ask` | ui |
-
-### web
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `snooze_choices` | string | `1,3,7,14` | ui |
 
 ### web_search
 

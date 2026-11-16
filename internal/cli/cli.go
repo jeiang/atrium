@@ -20,10 +20,11 @@ import (
 )
 
 const (
-	ExitOK       = 0
-	ExitError    = 1
-	ExitUsage    = 2
-	ExitTempFail = 75
+	ExitOK          = 0
+	ExitError       = 1
+	ExitUsage       = 2
+	ExitUnavailable = 69
+	ExitTempFail    = 75
 	// ExitConfig (EX_CONFIG) is a permanent refusal: retrying with the same configuration,
 	// database key and schema fails the same way, so a supervisor should not restart it.
 	ExitConfig     = 78

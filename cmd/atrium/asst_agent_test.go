@@ -390,15 +390,14 @@ func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	asstSet(t, "default_model", pricing.OpusID)
-	asstSet(t, "max_run_cost_usd_opus_5_5", "0.0001")
+	asstSet(t, "max_run_cost_usd", "0.0001")
 
 	sent := len(api.Requests())
 	refused, _ := asstRun(t, "--text", "hi")
-	if refused.State != "failed" || !strings.Contains(refused.err(), "run cost cap") || !strings.Contains(refused.err(), "max_run_cost_usd_opus_5_5") || len(api.Requests()) != sent {
+	if refused.State != "failed" || !strings.Contains(refused.err(), "run cost cap") || !strings.Contains(refused.err(), "max_run_cost_usd") || len(api.Requests()) != sent {
 		t.Fatalf("run over the cap: %+v %q, %d requests sent", refused, refused.err(), len(api.Requests())-sent)
 	}
-	asstSet(t, "max_run_cost_usd_opus_5_5", "10")
-	asstSet(t, "cache_ttl_chat", "5m")
+	asstSet(t, "max_run_cost_usd", "10")
 	api.Push(asstReply("measured"))
 	measured, _ := asstRun(t, "--text", "hi")
 	if measured.State != "done" {
@@ -409,17 +408,17 @@ func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 		t.Fatal(err)
 	}
 	reservation := float64(reservationN) / inference.NanoUSD
-	asstSet(t, "max_run_cost_usd_opus_5_5", strconv.FormatFloat(reservation+1e-6, 'f', -1, 64))
+	asstSet(t, "max_run_cost_usd", strconv.FormatFloat(reservation+1e-6, 'f', -1, 64))
 	api.Push(asstReply("sent"))
 	if ran, _ := asstRun(t, "--text", "hi"); ran.State != "done" || len(api.Requests()) != sent+2 {
-		t.Fatalf("5m run under the cap: %+v %q, %d requests", ran, ran.err(), len(api.Requests())-sent)
+		t.Fatalf("run under the cap: %+v %q, %d requests", ran, ran.err(), len(api.Requests())-sent)
 	}
-	asstSet(t, "cache_ttl_chat", "1h")
+	asstSet(t, "max_run_cost_usd", strconv.FormatFloat(reservation-1e-6, 'f', -1, 64))
 	if held, _ := asstRun(t, "--text", "hi"); held.State != "failed" || !strings.Contains(held.err(), "run cost cap") || len(api.Requests()) != sent+2 {
-		t.Fatalf("1h run: %+v %q, want the dearer 1h write to hit the cap before sending", held, held.err())
+		t.Fatalf("run just over the cap: %+v %q, want the reservation to hit the cap before sending", held, held.err())
 	}
 
-	if ran := runApp(t, "settings", "unset", "max_run_cost_usd_opus_5_5"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "settings", "unset", "max_run_cost_usd"); ran.code != cli.ExitOK {
 		t.Fatalf("settings unset: %d %s", ran.code, ran.stderr)
 	}
 	api.Push(anthropictest.Failure(http.StatusTooManyRequests, "rate_limit_error", "You have reached your specified API usage limits."))

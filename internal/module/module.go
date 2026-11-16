@@ -129,7 +129,8 @@ func FlagDef(name string) settings.Def {
 		Key:     FlagKey(name),
 		Module:  Core,
 		Type:    settings.Bool,
-		Default: "false"})
+		Default: "false",
+		Restart: true})
 }
 
 type State string

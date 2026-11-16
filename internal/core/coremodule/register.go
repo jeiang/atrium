@@ -8,6 +8,7 @@ import (
 	"time"
 
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 
 	"github.com/go-chi/chi/v5"
 
@@ -185,6 +186,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			dbcmd.BackupCommand(maintenance),
 			dbcmd.RestoreCommand(maintenance),
 			catalogCommand(mc),
+			jobcmd.Command(),
 		},
 	}
 }
@@ -197,6 +199,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
 		{Name: "budget", Title: "Monthly budget", Page: usagepages.URL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
+		{Name: "general", Title: "General", Keys: []string{config.KeyTZ}},
 	}
 }
 

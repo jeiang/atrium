@@ -183,7 +183,7 @@ Ship24 supplies live package tracking for packages the operator registers
 with the `track_package` tool. Create an API key in the Ship24 dashboard and
 paste it on the Connections page, or declare `credential_files.api_key` on
 the `service/ship24` connection in the host configuration. The free plan registers 10 shipments a month; the
-`mail_ship24_monthly_quota` setting (default 10) refuses further
+compiled quota `tracking.TuningMailShip24MonthlyQuota` (10) refuses further
 registrations once the month's count is exhausted. Atrium polls the active
 trackers hourly and stops polling delivered packages. There is no webhook
 route.

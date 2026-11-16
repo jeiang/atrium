@@ -74,6 +74,9 @@ type SettingsSchemaField struct {
 	Class     string          `json:"class"`
 	Editable  bool            `json:"editable"`
 	Secret    bool            `json:"secret"`
+	Group     string          `json:"group"`
+	Restart   bool            `json:"restart"`
+	Help      string          `json:"help,omitempty"`
 }
 
 type SettingChoice struct {
@@ -226,6 +229,7 @@ func schemaField(def settings.Def, f settings.Field, row settingsapp.Setting) Se
 	out := SettingsSchemaField{
 		Key: def.Key, Label: f.Label, Module: def.Module, Type: string(def.Type), Multi: f.Multi, Choices: []SettingChoice{},
 		Value: row.Value, Source: row.Source, PinSource: row.PinSource, Class: def.Class(), Secret: def.IsSecret(),
+		Group: settings.Placement(def.Key), Restart: def.Restart, Help: def.Help,
 	}
 	if out.Label == "" {
 		out.Label = def.Key
