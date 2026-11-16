@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
@@ -28,10 +27,10 @@ var (
 )
 
 type handlers struct {
-	torrents contract.Provider
+	torrents mediaapp.Torrents
 }
 
-func Definitions(torrents contract.Provider) []module.ToolDefinition {
+func Definitions(torrents mediaapp.Torrents) []module.ToolDefinition {
 	tools := Tools(torrents)
 	defs := make([]module.ToolDefinition, len(tools))
 	for i, t := range tools {
@@ -40,7 +39,7 @@ func Definitions(torrents contract.Provider) []module.ToolDefinition {
 	return defs
 }
 
-func Tools(torrents contract.Provider) []tool.Tool {
+func Tools(torrents mediaapp.Torrents) []tool.Tool {
 	h := handlers{torrents: torrents}
 	return []tool.Tool{
 		{

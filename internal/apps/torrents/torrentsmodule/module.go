@@ -62,7 +62,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:  unit.Torrents,
 		Title: "Torrents",
-		App:   true,
+		App:      true,
+		Inherits: unit.Media,
 		Needs: []module.Need{
 			{Kind: contract.Kind, Capability: "api", Features: []string{"downloads"}},
 		},

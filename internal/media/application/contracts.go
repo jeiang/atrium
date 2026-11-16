@@ -1,6 +1,9 @@
 package application
 
-import "github.com/jeiang/atrium/internal/media"
+import (
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
+	"github.com/jeiang/atrium/internal/media"
+)
 
 const (
 	FilePrefix             = media.FilePrefix
@@ -18,6 +21,10 @@ type (
 	Entry      = media.Entry
 	PollResult = media.PollResult
 	View       = media.View
+	Torrent    = contract.Torrent
+	Torrents   = contract.Provider
 )
+
+var StateLabels = contract.StateLabels
 
 func QueryValue(values []string) string { return media.QueryValue(values) }

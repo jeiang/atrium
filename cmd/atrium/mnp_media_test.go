@@ -20,6 +20,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/torrents"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
@@ -213,7 +215,7 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 				}
 				data, err := io.ReadAll(file)
 				_ = file.Close()
-				hash, hashErr := media.TorrentHash(data)
+				hash, hashErr := torrents.TorrentHash(data)
 				if err != nil || hashErr != nil {
 					http.Error(w, "torrent", 400)
 					return
@@ -224,7 +226,7 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		if hash, ok := media.MagnetHash(form.Get("urls")); ok && hash != "" {
+		if hash, ok := torrents.MagnetHash(form.Get("urls")); ok && hash != "" {
 			if _, ok := f.items[hash]; !ok {
 				f.order = append(f.order, hash)
 				f.items[hash] = &mnpTorrent{hash: hash, name: "magnet " + hash[:8], state: "metaDL", tags: mnpTags(form.Get("tags"))}
@@ -379,7 +381,7 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, name+".mkv"), make([]byte, 100))
 	mnpWrite(t, filepath.Join(content, name+".en.srt"), make([]byte, 100))
-	qb.put(mnpTorrent{hash: ready, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: ready, name: name, tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 	qb.put(mnpTorrent{hash: busy, name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", content: "Dune.2021",
 		files: []mnpFile{{0, "Dune.2021.mkv", 0}, {1, "Dune.2021.nfo", 1}}})
 	qb.put(mnpTorrent{hash: plain, name: "plain.thing", state: "stoppedDL", content: "plain.thing",

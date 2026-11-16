@@ -5,7 +5,6 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 )
 
@@ -115,12 +114,12 @@ func dlSpeedText(n *int64) string {
 	return dlHumanSize(n) + "/s"
 }
 
-func torrentView(t contract.Torrent) TorrentView {
+func torrentView(t mediaapp.Torrent) TorrentView {
 	state := t.State
 	if state == "" {
 		state = "unknown"
 	}
-	label, ok := contract.StateLabels[state]
+	label, ok := mediaapp.StateLabels[state]
 	if !ok {
 		label = state
 	}

@@ -140,7 +140,7 @@ func routes(d *web.Deps, s *torrentsapp.Service) []application.Binding {
 			r, e := s.SelectFiles(ctx, torrentsapp.SelectFilesInput{Hash: in.Hash, Index: in.Index, Wanted: in.Wanted})
 			return change(r, MediaAdded{Hash: r.Data.Hash}), e
 		}),
-		api.Command(d, torrentsapp.DescribeControl(), shape[TorrentControlled]("torrents"), "POST /torrents/{hash}/control", func(ctx context.Context, in TorrentControlInput) (application.Change[TorrentControlled], error) {
+		api.Command(d, torrentsapp.DescribeControl(), shape[TorrentControlled]("media"), "POST /media/torrents/{hash}/control", func(ctx context.Context, in TorrentControlInput) (application.Change[TorrentControlled], error) {
 			r, e := s.Control(ctx, torrentsapp.ControlInput{Hash: in.Hash, Action: contract.Action(in.Action), DeleteFiles: in.DeleteFiles})
 			return change(r, TorrentControlled{Hash: r.Data.Hash, Action: string(r.Data.Action)}), e
 		}),

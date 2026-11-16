@@ -51,6 +51,7 @@ type Declaration struct {
 	Core              bool
 	App               bool
 	Depends           []string
+	Inherits          string
 	Needs             []Need
 	Packages          []string
 	Tables            []string
