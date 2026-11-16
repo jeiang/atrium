@@ -216,11 +216,18 @@ func TestMediaPagesReuseTheConnectionClient(t *testing.T) {
 	var mu sync.Mutex
 	connections := 0
 	tmdb := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer tmdb_good" || r.URL.Path != "/3/search/tv" {
+		if r.Header.Get("Authorization") != "Bearer tmdb_good" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`{"results":[{"id":42,"name":"Lanterns","first_air_date":"2026-01-01","poster_path":"/lanterns.jpg"}]}`))
+		switch r.URL.Path {
+		case "/3/configuration":
+			_, _ = w.Write([]byte(`{}`))
+		case "/3/search/tv":
+			_, _ = w.Write([]byte(`{"results":[{"id":42,"name":"Lanterns","first_air_date":"2026-01-01","poster_path":"/lanterns.jpg"}]}`))
+		default:
+			w.WriteHeader(http.StatusUnauthorized)
+		}
 	}))
 	tmdb.Config.ConnState = func(_ net.Conn, state http.ConnState) {
 		if state != http.StateNew {
@@ -244,6 +251,12 @@ func TestMediaPagesReuseTheConnectionClient(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHostConfig(t, dir, "http://qbittorrent.invalid", tmdb.URL+"/3", images.URL, eztv.URL+"/api/get-torrents"))
 	base := startServeIn(t, dir)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	waitFor(t, func() bool {
+		var state string
+		return d.Read.QueryRow("SELECT state FROM connections WHERE id = 'service/tmdb' AND checked_at IS NOT NULL").Scan(&state) == nil && state == "ok"
+	})
 	for i := range 2 {
 		code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil)
 		if code != http.StatusOK || !strings.Contains(body, "Lanterns") {
