@@ -1,26 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import type { ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
+import { type Api, CSRF, fakeApi, signedInApi } from './api.ts';
 import { expectNoHorizontalScroll, expectNoSeriousAxeFindings, expectTouchTargets } from './checks.ts';
 import { test as base, expect, layouts } from './fixtures.ts';
-import { type Handler, type ServeState, serve } from './server.ts';
+import { type ServeState, serve } from './server.ts';
 
 const dist = resolve(process.env.ATRIUM_WEB_DIST ?? 'dist');
-const CSRF = 'csrf-fictional-7f3a91';
 const T0 = new Date('2026-03-02T09:00:00Z').getTime();
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-
-interface Api {
-  subject: string;
-  signedIn: boolean;
-  needsYou: number;
-  logouts: number;
-  calls: string[];
-}
 
 interface Site {
   url: string;
@@ -34,78 +25,10 @@ interface Stored {
   meta: Record<string, unknown>;
 }
 
-const names: Record<string, string> = { 'op-1': 'Ada Operator', 'op-2': 'Grace Operator' };
-
-function shell(needsYou: number): unknown {
-  return {
-    brand_url: '/',
-    footer: [],
-    groups: [],
-    sections: [],
-    settings: [],
-    settings_url: '/settings',
-    needs_you: needsYou,
-    notify_failing: [],
-    mail: { mode: 'live', paused: false },
-    modules: ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'].map((name) => ({
-      name,
-      state: 'enabled',
-    })),
-    version: '0.0.0-offline',
-  };
-}
-
-function json(res: ServerResponse, status: number, body?: unknown): true {
-  if (body === undefined) {
-    res.writeHead(status).end();
-  } else {
-    res
-      .writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-      .end(JSON.stringify(body));
-  }
-  return true;
-}
-
-function fakeApi(api: Api): Handler {
-  return (req, res, pathname) => {
-    const method = req.method ?? 'GET';
-    if (pathname === '/login' || pathname.startsWith('/auth/')) {
-      const title = pathname === '/login' ? 'Sign in' : 'Callback';
-      res
-        .writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-        .end(`<!doctype html><title>${title}</title><h1>${title}</h1>`);
-      return true;
-    }
-    if (!pathname.startsWith('/web/v1/')) return false;
-    const path = pathname.slice('/web/v1'.length);
-    api.calls.push(`${method} ${path}`);
-    if (path === '/session' && method === 'GET') {
-      if (!api.signedIn) return json(res, 401, { error: { code: 'unauthenticated', message: 'Sign in to continue.' } });
-      return json(res, 200, {
-        auth_mode: 'oidc',
-        csrf_token: CSRF,
-        identity: { subject: api.subject, name: names[api.subject], email: `${api.subject}@example.test` },
-        sign_out: { method: 'POST', url: '/web/v1/session/logout' },
-      });
-    }
-    if (path === '/session/logout' && method === 'POST') {
-      api.logouts += 1;
-      api.signedIn = false;
-      return json(res, 204);
-    }
-    if (path === '/shell') return json(res, 200, shell(api.needsYou));
-    if (path === '/events') {
-      res.writeHead(200, { 'Content-Type': 'text/event-stream' }).end('event: sync\ndata: {"topics":[]}\n\n');
-      return true;
-    }
-    return json(res, 404, { error: { code: 'not_found', message: 'Not found.' } });
-  };
-}
-
 const test = base.extend<{ site: Site }>({
   site: async ({ browserName: _ }, use) => {
     const state: ServeState = {};
-    const api: Api = { subject: 'op-1', signedIn: true, needsYou: 3, logouts: 0, calls: [] };
+    const api: Api = signedInApi();
     const { url, server } = await serve(dist, { base: '/next/', state, handle: fakeApi(api) });
     await use({
       url,
@@ -123,7 +46,7 @@ const test = base.extend<{ site: Site }>({
 });
 
 test.use({
-  allowConsole: /Failed to load resource|net::ERR_|NetworkError|Load failed|network connection/,
+  allowConsole: [/Failed to load resource|net::ERR_|NetworkError|Load failed|network connection/],
 });
 
 async function signedIn(page: Page, url: string, name = 'Ada Operator'): Promise<void> {
@@ -443,7 +366,7 @@ test.describe('the read cache', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toBeVisible();
     await openAccount(page);
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
-    await expect(page.getByText('You are offline. Nothing was sent.').first()).toBeVisible();
+    await expect(page.getByText('Cannot reach atrium. Nothing was sent.').first()).toBeVisible();
     await context.setOffline(false);
     await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toHaveCount(0);
     await page.waitForTimeout(1_500);

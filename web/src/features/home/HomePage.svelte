@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createQuery, useQueryClient } from '@tanstack/svelte-query';
-  import { type Approval, assistantHome, assistantThreadStart, type Draft, ok, reviewPending } from '../../contract';
+  import { type Approval, assistantThreadStart, type Draft, ok } from '../../contract';
   import Composer from '../../shared/assistant/Composer.svelte';
   import Digest from '../../shared/assistant/Digest.svelte';
   import { inboxPath } from '../../shared/assistant/inboxId';
@@ -14,20 +14,10 @@
   import { useShell } from '../../shell/frame';
   import { moduleOn } from '../../shell/nav';
   import { navigate, p } from '../../shell/router';
+  import { homeQuery, pendingQuery } from './queries';
   import { ageText, failureText } from './weather';
   import './home.css';
 
-  const HOME_TOPICS = ['assistant', 'settings', 'calendar', 'tasks', 'attention', 'mail', 'knowledge'] as const;
-  const PENDING_TOPICS = [
-    'review',
-    'effects',
-    'mail',
-    'calendar',
-    'tasks',
-    'assistant',
-    'settings',
-    'connections',
-  ] as const;
   const NEEDS_LIMIT = 5;
   const DIGEST_LIMIT = 5;
   const digestRows = Array.from({ length: DIGEST_LIMIT }, (_, index) => index);
@@ -37,18 +27,9 @@
   const assistantOn = $derived(moduleOn(shell.data, 'assistant'));
   const waiting = $derived(shell.data?.needs_you ?? 0);
 
-  const home = createQuery(() => ({
-    queryKey: ['home'],
-    queryFn: async ({ signal }) => ok(await assistantHome(undefined, { signal })),
-    enabled: assistantOn,
-    meta: { topics: HOME_TOPICS },
-  }));
+  const home = createQuery(() => ({ ...homeQuery, enabled: assistantOn }));
 
-  const pending = createQuery(() => ({
-    queryKey: ['pending'],
-    queryFn: async ({ signal }) => ok(await reviewPending({ signal })),
-    meta: { topics: PENDING_TOPICS },
-  }));
+  const pending = createQuery(() => pendingQuery);
 
   interface Need {
     key: string;
