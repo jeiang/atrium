@@ -382,7 +382,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 			return nil, err
 		}
 	}
-	writer := progress.NewWriter(d.Write, runID, now, o.Stop)
+	writer := progress.NewWriter(ctx, d.Write, runID, now, o.Stop)
 	tc := &tool.Context{
 		DB: d, Cfg: cfg, Env: env, Kind: kind, ThreadID: thread.ID, RunID: runID, AllowedURLs: allowed,
 		Embed: o.Embed, Now: now, Client: client, Progress: writer, Ledger: r.Ledger, MailOpen: r.MailOpen, Sources: o.Limits.Sources,

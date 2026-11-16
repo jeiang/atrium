@@ -22,6 +22,7 @@ type streamFrame struct {
 	id   int64
 	kind string
 	run  int64
+	data map[string]any
 }
 
 func parseFrames(t *testing.T, stream string) []streamFrame {
@@ -35,13 +36,12 @@ func parseFrames(t *testing.T, stream string) []streamFrame {
 		case strings.HasPrefix(line, "event: "):
 			cur.kind = strings.TrimPrefix(line, "event: ")
 		case strings.HasPrefix(line, "data: "):
-			var d struct {
-				RunID int64 `json:"run_id"`
-			}
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &d); err != nil {
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &cur.data); err != nil {
 				t.Fatalf("frame data %q: %v", line, err)
 			}
-			cur.run = d.RunID
+			if run, ok := cur.data["run_id"].(float64); ok {
+				cur.run = int64(run)
+			}
 		case line == "":
 			if cur.id != 0 {
 				out = append(out, cur)

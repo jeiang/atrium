@@ -166,7 +166,7 @@ func (x *dispatcher) invoke(ctx context.Context, use ToolUse) (errText *string, 
 			return nil, nil, &tool.Park{Question: permission.Title(authorized.Name)}
 		}
 	}
-	value, err = x.call(ctx, &authorized, args)
+	value, err = x.call(progress.WithTool(ctx, x.tc.RunID, use.ID), &authorized, args)
 	if err == nil {
 		marks := authorized.Marks
 		if marked, ok := value.(tool.Marked); ok {
@@ -267,7 +267,11 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 	if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.OK, x.now(), nil, resultID, &content); err != nil {
 		return nil, err
 	}
-	if err := x.tc.Progress.Event(ctx, progress.ToolDone, map[string]any{"id": use.ID, "ok": true, "preview": progress.PreviewOf(content)}); err != nil {
+	done := map[string]any{"id": use.ID, "ok": true, "preview": progress.PreviewOf(content)}
+	if results := progress.ToolResults(use.Name, content); results != nil {
+		done["results"] = progress.ResultsData(results)
+	}
+	if err := x.tc.Progress.Event(ctx, progress.ToolDone, done); err != nil {
 		return nil, err
 	}
 	return toolResult(use.ID, content, false), nil
