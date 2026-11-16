@@ -189,10 +189,7 @@ func (s *Service) research(ctx context.Context, in ResearchInput, child *int64) 
 	if err := set.Err(); err != nil {
 		return ResearchDigest{}, err
 	}
-	extra, err := subagents.SystemAddendum(ctx, s.db.Read, *agent)
-	if err != nil {
-		return ResearchDigest{}, err
-	}
+	extra := subagents.SystemAddendum(*agent)
 	if err := s.runChild(ctx, *child, in.RunID, text, in.Role+" research", journal.Limits{
 		MaxSteps: &steps, MaxCostUSD: &cost, SystemExtra: &extra, AllowedTools: agent.Tools,
 	}); err != nil {

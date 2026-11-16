@@ -179,11 +179,7 @@ func (s *state) history(ctx context.Context) (*history, error) {
 	if err != nil {
 		return nil, err
 	}
-	budget, err := memory.VerbatimTokens(ctx, s.d.Read)
-	if err != nil {
-		return nil, err
-	}
-	from, err := verbatimFrom(messages, s.run.ID, min(budget, (s.contextLimit-s.req.fixedTokens)/4))
+	from, err := verbatimFrom(messages, s.run.ID, min(memory.TuningMemoryVerbatimTokens, (s.contextLimit-s.req.fixedTokens)/4))
 	if err != nil {
 		return nil, err
 	}

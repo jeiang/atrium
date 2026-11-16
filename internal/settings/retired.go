@@ -102,6 +102,16 @@ var Retired = []RetiredKey{
 	{Module: "assistant", Key: "max_run_cost_usd_haiku_5_5"},
 	{Module: "assistant", Key: "max_run_cost_usd_sonnet_5_5"},
 	{Module: "assistant", Key: "max_run_cost_usd_opus_5_5"},
+	{Module: "assistant", Key: "cache_ttl_chat"},
+	{Module: "assistant", Key: "prompt_subagent"},
+	{Module: "mail", Key: "mail_ship24_monthly_quota"},
+	{Module: "mail", Key: "watches_carrier_domains"},
+	{Module: "memory", Key: "memory_effort"},
+	{Module: "memory", Key: "memory_model"},
+	{Module: "memory", Key: "memory_verbatim_tokens"},
+	{Module: "notify", Key: "notify_nightly_cap"},
+	{Module: "notify", Key: "notify_per_run_cap"},
+	{Module: "web", Key: "snooze_choices"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

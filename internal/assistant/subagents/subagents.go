@@ -236,12 +236,8 @@ func Delete(ctx context.Context, q db.Querier, agent string) (bool, error) {
 	return err == nil, err
 }
 
-func SystemAddendum(ctx context.Context, q db.Querier, a Agent) (string, error) {
-	rules, err := prompts.Text(ctx, q, prompts.KeySubagent)
-	if err != nil {
-		return "", err
-	}
-	return rules + "\n\nAgent `" + a.Name + "`: " + a.Prompt, nil
+func SystemAddendum(a Agent) string {
+	return prompts.Subagent + "\n\nAgent `" + a.Name + "`: " + a.Prompt
 }
 
 func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, project *int64, marks threads.Marks, now float64) (int64, error) {
