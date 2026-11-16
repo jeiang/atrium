@@ -89,10 +89,7 @@
     verifying = entry.name;
     try {
       const checked = ok(
-        await maintenanceVerifyArchive(
-          { name: entry.name },
-          { headers: { 'Idempotency-Key': crypto.randomUUID() } },
-        ),
+        await maintenanceVerifyArchive({ name: entry.name }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
       ).data;
       checks[entry.name] = {
         tone: 'ok',
@@ -126,7 +123,10 @@
   <Skeleton lines={3} label="Loading the backups" />
 {:else}
   {#if !ready}
-    <ViewState kind="blocked" title={data.location.state === 'missing' ? 'The backup folder is missing' : 'Backups are not set up'}>
+    <ViewState
+      kind="blocked"
+      title={data.location.state === 'missing' ? 'The backup folder is missing' : 'Backups are not set up'}
+    >
       Set by the host: {data.location.nix_option} ({data.location.host_key}).
     </ViewState>
   {:else}

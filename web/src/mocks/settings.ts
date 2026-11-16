@@ -45,7 +45,9 @@ function seedBackups(): BackupEntry[] {
     size_bytes: size,
     modified_at: at(days),
     format: 2,
-    header: problem ? null : { created_at: at(days), schema: 4, encryption: { encrypted: true, key_id: 'k1' }, files: 3 },
+    header: problem
+      ? null
+      : { created_at: at(days), schema: 4, encryption: { encrypted: true, key_id: 'k1' }, files: 3 },
     ...(problem ? { problem } : {}),
   });
   return [entry(0.2, 48_211_000), entry(1.2, 47_904_000), entry(2.2, 47_650_000, 'old_format')];
@@ -83,7 +85,13 @@ function row(state: SettingsScenario, field: SettingsSchemaField): Setting {
   const pin = state.pinned?.[field.key];
   if (field.secret) return { key: field.key, class: field.class };
   if (pin !== undefined) {
-    return { key: field.key, class: field.class, value: store.values[field.key] ?? field.default ?? '', source: 'pin', pin_source: pin };
+    return {
+      key: field.key,
+      class: field.class,
+      value: store.values[field.key] ?? field.default ?? '',
+      source: 'pin',
+      pin_source: pin,
+    };
   }
   const stored = store.values[field.key];
   return {
@@ -95,7 +103,7 @@ function row(state: SettingsScenario, field: SettingsSchemaField): Setting {
 }
 
 function schema(state: SettingsScenario): SettingsSchema {
-  const pages: SettingsSchema["pages"] = document.pages.map((page) => ({
+  const pages: SettingsSchema['pages'] = document.pages.map((page) => ({
     ...page,
     fields: page.fields.map((field) => {
       const current = row(state, field);
@@ -152,7 +160,9 @@ function invalid(field: SettingsSchemaField, value: string): string | undefined 
     return `must be one of ${field.choices.map((choice) => choice.value).join(', ')}`;
   }
   if (field.multi) {
-    const bad = text.split(',').find((part) => part.trim() && !field.choices.some((choice) => choice.value === part.trim()));
+    const bad = text
+      .split(',')
+      .find((part) => part.trim() && !field.choices.some((choice) => choice.value === part.trim()));
     if (bad) return `${bad} is not one of ${field.choices.map((choice) => choice.value).join(', ')}`;
   }
   if (field.type === 'int' || field.type === 'float') {
@@ -214,9 +224,14 @@ export function settingsHandlers(read: () => { settings?: SettingsScenario }) {
         publish('settings');
       }
       if (request.headers.get('If-Match') !== `W/"${store.revision}"`) {
-        return refusal(412, 'precondition_failed', 'The settings changed since they were read; reload them and try again.', {
-          revision: String(store.revision),
-        });
+        return refusal(
+          412,
+          'precondition_failed',
+          'The settings changed since they were read; reload them and try again.',
+          {
+            revision: String(store.revision),
+          },
+        );
       }
       const changes = [
         ...Object.entries(body.set ?? {}).map(([key, value]) => ({ key, value, unset: false })),

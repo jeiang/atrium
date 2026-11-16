@@ -38,7 +38,8 @@ export function placementProblems(fields: readonly { key: string; group: string 
   for (const field of fields) {
     if (seen.has(field.key)) problems.push({ key: field.key, problem: 'appears on more than one schema page' });
     seen.add(field.key);
-    if (home(field.group) === undefined) problems.push({ key: field.key, problem: `group "${field.group}" has no page` });
+    if (home(field.group) === undefined)
+      problems.push({ key: field.key, problem: `group "${field.group}" has no page` });
   }
   return problems;
 }

@@ -16,6 +16,7 @@ const placeholder = () => import('./PlaceholderPage.svelte').catch(unavailable);
 const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgePage.svelte').catch(unavailable));
 const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
 
+const settingsPage = () => import('../features/settings/SettingsPage.svelte').catch(unavailable);
 export const { p, navigate, isActive, route } = createRouter(
   {
     '/': { '/': () => import('../features/home/HomePage.svelte').catch(unavailable), meta: { title: 'Home' } },
@@ -73,7 +74,8 @@ export const { p, navigate, isActive, route } = createRouter(
       meta: { title: 'Assistant' },
     },
     '/settings': {
-      '/': placeholder,
+      '/': settingsPage,
+      '/:group': settingsPage,
       '/connections': {
         '/': () => import('../features/connections/ConnectionsPage.svelte').catch(unavailable),
         '/:kind/:name': () => import('../features/connections/ConnectionPage.svelte').catch(unavailable),

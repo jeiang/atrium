@@ -92,7 +92,13 @@
       {/if}
     </div>
   {:else if field.type === 'bool'}
-    <Switch label={field.label} help={field.help ?? undefined} checked={value === 'true'} {locked} onchange={onSwitch} />
+    <Switch
+      label={field.label}
+      help={field.help ?? undefined}
+      checked={value === 'true'}
+      {locked}
+      onchange={onSwitch}
+    />
   {:else if segmented}
     <fieldset class="setting__group" disabled={locked !== undefined}>
       <legend class="setting__label">{field.label}</legend>

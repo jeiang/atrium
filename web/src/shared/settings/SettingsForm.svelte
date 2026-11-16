@@ -43,9 +43,7 @@
     ),
   );
   const items = $derived(values.data?.items ?? {});
-  const writable = $derived(
-    view ? [] : fields.filter((field) => field.editable && items[field.key]?.source !== 'pin'),
-  );
+  const writable = $derived(view ? [] : fields.filter((field) => field.editable && items[field.key]?.source !== 'pin'));
   const base = $derived(
     Object.fromEntries(fields.map((field) => [field.key, field.secret ? '' : (items[field.key]?.value ?? '')])),
   );
@@ -183,7 +181,11 @@
       };
     }
     if (error instanceof ApiError && error.status === 403) {
-      return { tone: 'error', title: 'This sign-in cannot change settings', text: `${error.message} Nothing was saved.` };
+      return {
+        tone: 'error',
+        title: 'This sign-in cannot change settings',
+        text: `${error.message} Nothing was saved.`,
+      };
     }
     if (error instanceof ApiError) {
       const found = fieldErrors(error);
