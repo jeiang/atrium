@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
-import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
+import type { ModuleStateState, Shell, State, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
+import { type AppsScenario, appHandlers } from './apps';
 import { type AssistantScenario, assistantHandlers } from './assistant';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type ConnectionsScenario, connectionHandlers } from './connections';
@@ -19,6 +20,8 @@ export interface MockScenario {
   needsYou?: number;
   modules?: Record<string, ModuleStateState>;
   mail?: { mode: string; paused: boolean };
+  pause?: State;
+  apps?: AppsScenario;
   inbox?: InboxScenario;
   chat?: ChatScenario;
   connections?: ConnectionsScenario;
@@ -47,6 +50,7 @@ const TOPICS = [
   'jobs',
   'knowledge',
   'tasks',
+  'automation',
 ];
 const encoder = new TextEncoder();
 
@@ -95,7 +99,7 @@ function shell(state: MockScenario): Shell {
     needs_you: state.needsYou ?? inboxCount(),
     notify_failing: [],
     mail: state.mail ?? { mode: 'live', paused: false },
-    pause: { paused: false },
+    pause: state.pause ?? { paused: false },
     modules: MODULES.map((name) => ({ name, state: state.modules?.[name] ?? 'enabled' })),
     version: '0.0.0-mock',
   };
@@ -125,6 +129,17 @@ export const handlers = [
     }
     update({ session: 'signed-out' });
     return new HttpResponse(null, { status: 204 });
+  }),
+  http.get(`*${API_BASE}/automation/pause`, () =>
+    HttpResponse.json({ data: scenario().pause ?? { paused: false }, revision: '1' }),
+  ),
+  http.post(`*${API_BASE}/automation/pause`, () => {
+    update({ pause: { paused: true, by: 'operator@example.test', source: 'web', since: Date.now() / 1000 } });
+    return HttpResponse.json({ data: { paused: true }, undoable: false });
+  }),
+  http.post(`*${API_BASE}/automation/resume`, () => {
+    update({ pause: { paused: false } });
+    return HttpResponse.json({ data: { paused: false }, undoable: false });
   }),
   http.get(`*${API_BASE}/shell`, () => {
     const state = scenario();
@@ -171,6 +186,7 @@ export const handlers = [
   ...assistantHandlers(scenario),
   ...settingsHandlers(scenario),
   ...connectionHandlers(scenario),
+  ...appHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,
   ...knowledgeHandlers,

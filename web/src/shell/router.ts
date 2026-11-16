@@ -2,7 +2,6 @@ import { createRouter } from 'sv-router';
 import { preloadMarkdown } from '../shared/markdown/load';
 import { routeLoaded } from './firstView';
 import NotFound from './NotFound.svelte';
-import { appById } from './nav';
 import Unavailable from './Unavailable.svelte';
 
 declare module 'sv-router' {
@@ -59,8 +58,12 @@ export const { p, navigate, isActive, route } = createRouter(
       meta: { title: 'Search' },
     },
     '/apps': {
-      '/': () => import('./AppsPage.svelte').catch(unavailable),
-      '/:app': () => import('./AppPage.svelte').catch(unavailable),
+      '/': () => import('../features/apps/AppsPage.svelte').catch(unavailable),
+      '/directory': {
+        '/': () => import('../features/apps/DirectoryPage.svelte').catch(unavailable),
+        meta: { title: 'All apps' },
+      },
+      '/:app': () => import('../features/apps/AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },
     },
     '/assistant': {
@@ -84,7 +87,6 @@ export const { p, navigate, isActive, route } = createRouter(
       },
       meta: { title: 'Settings' },
     },
-    '/spaces': { '/': () => import('./SpacesPage.svelte').catch(unavailable), meta: { title: 'Spaces' } },
     '/__gallery':
       import.meta.env.MODE === 'mock'
         ? { '/': () => import('../gallery/GalleryPage.svelte').catch(unavailable), meta: { title: 'Gallery' } }
@@ -94,8 +96,8 @@ export const { p, navigate, isActive, route } = createRouter(
   { base: import.meta.env.BASE_URL.replace(/\/$/, '') || undefined },
 );
 
-export function routeTitle(): string {
+export function routeTitle(appName: (id: string) => string | undefined): string {
   const id = route.params.app;
-  if (id) return appById(id)?.title ?? 'Not found';
+  if (id) return appName(id) ?? 'Not found';
   return route.meta.title ?? 'Not found';
 }
