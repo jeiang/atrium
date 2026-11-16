@@ -79,12 +79,14 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 	}
 	seedSettings(t, map[string]string{"mail_enabled": "false"})
 	body = run()
-	for _, gone := range []string{"Re: lease", "Dinner?", "Send invoice", "In transit"} {
+	for _, gone := range []string{"Re: lease", "In transit"} {
 		if strings.Contains(body, gone) {
 			t.Fatalf("mail item %q survived a disabled mail module: %s", gone, body)
 		}
 	}
-	if !strings.Contains(body, "Call the dentist") {
-		t.Fatalf("core proposal disappeared with mail disabled")
+	for _, kept := range []string{"Call the dentist", "Dinner?", "Send invoice"} {
+		if !strings.Contains(body, kept) {
+			t.Fatalf("core or signals item %q disappeared with mail disabled: %s", kept, body)
+		}
 	}
 }
