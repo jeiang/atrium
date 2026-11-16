@@ -20,7 +20,12 @@ export const { p, navigate, isActive, route } = createRouter(
     },
     '/proposals/:id': () => import('../features/inbox/ResolveItem.svelte'),
     '/drafts/:id': () => import('../features/inbox/ResolveItem.svelte'),
-    '/chat': { '/': () => import('../features/chats/ChatsPage.svelte'), meta: { title: 'Chats' } },
+    '/chat': {
+      '/': () => import('../features/chats/ChatsPage.svelte'),
+      '/new': () => import('../features/chats/ChatPage.svelte'),
+      '/:id': () => import('../features/chats/ChatPage.svelte'),
+      meta: { title: 'Chats' },
+    },
     '/plan': { '/': placeholder, meta: { title: 'Plan' } },
     '/knowledge': { '/': placeholder, meta: { title: 'Knowledge' } },
     '/apps': {

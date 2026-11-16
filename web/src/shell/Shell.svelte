@@ -68,7 +68,7 @@
       const heading = document.querySelector<HTMLElement>('main h1');
       if (heading) {
         heading.tabIndex = -1;
-        heading.focus();
+        heading.focus({ preventScroll: true });
       }
     }
     lastPath = path;

@@ -16,7 +16,8 @@ import {
   reviewUndoEffect,
 } from '../../contract';
 import type { InboxId, InboxType } from '../../shared/assistant/inboxId';
-import type { Approval, ApprovalChange, DecidedElsewhere, Decision } from '../../shared/assistant/types';
+import { proposalToApproval } from '../../shared/assistant/proposalApproval';
+import type { Approval, DecidedElsewhere, Decision } from '../../shared/assistant/types';
 
 const PENDING_TOPICS = ['review', 'effects', 'mail'] as const;
 const PROPOSAL_TOPICS = ['review', 'effects'] as const;
@@ -101,28 +102,14 @@ const draftOutcomes: Record<string, string> = {
 
 function proposalItem(key: string, detail: ProposalDetail): InboxItem {
   const action = detail.payload.kind === 'action' ? detail.payload : undefined;
-  const change = (action?.change ?? null) as ApprovalChange | null;
   const decidedAt = detail.decided_at ?? detail.applied_at ?? detail.created_at;
   return {
-    approval: {
+    approval: proposalToApproval(detail, {
       id: key,
-      kind: change?.kind ?? action?.proposal_kind ?? detail.kind,
-      title: detail.title,
       from: action?.module ? `atrium, ${action.module}` : 'atrium',
-      created: iso(detail.created_at),
       why: '',
-      change,
-      plain: { label: action?.label ?? detail.kind, args: action?.args ?? [], preview: action?.preview ?? null },
-      consequence: {
-        reversible: detail.undoable ? 'Yes, for 10 seconds with Undo, then from History' : 'No',
-        audience: 'Only you',
-        cost: 'Free',
-        outside: detail.account ? `Changes ${detail.account}` : 'Stays inside atrium',
-      },
-      primary: 'Approve',
-      irreversible: !detail.undoable,
-      done: 'Approved. atrium applied it',
-    },
+      inRun: false,
+    }),
     decided:
       detail.status === 'pending'
         ? undefined
