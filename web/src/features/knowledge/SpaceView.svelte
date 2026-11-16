@@ -10,7 +10,7 @@
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { p } from '../../shell/router';
-  import Markdown from '../chats/Markdown.svelte';
+  import Markdown from '../../shared/markdown/Markdown.svelte';
   import AddToSpaceDialog from './AddToSpaceDialog.svelte';
   import {
     failureText,
@@ -213,7 +213,7 @@
               <ListRow
                 title={task.title}
                 meta={taskMeta(task)}
-                href={p('/tasks/:id', { params: { id: String(task.id) } })}
+                href={p('/plan/tasks/:id', { params: { id: String(task.id) } })}
               />
             {/each}
           </List>

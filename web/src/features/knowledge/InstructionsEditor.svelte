@@ -12,7 +12,7 @@
   import Segmented from '../../shared/ui/Segmented.svelte';
   import TextArea from '../../shared/ui/TextArea.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import Markdown from '../chats/Markdown.svelte';
+  import Markdown from '../../shared/markdown/Markdown.svelte';
   import { failureText, handleSaveEdit, isStale, refreshKnowledge, useInstructions } from './knowledge';
   import LineDiff from './LineDiff.svelte';
   import { type Version, versions } from './versions';

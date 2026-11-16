@@ -104,7 +104,7 @@
   function endHref(end: KnowledgeLink['target']): string | undefined {
     if (end.state === 'missing') return undefined;
     if (end.kind === 'record') return p('/knowledge/:id', { params: { id: end.id } });
-    if (end.kind === 'task') return p('/tasks/:id', { params: { id: end.id } });
+    if (end.kind === 'task') return p('/plan/tasks/:id', { params: { id: end.id } });
     if (end.kind === 'space') return p('/knowledge/spaces/:space', { params: { space: end.id } });
     return undefined;
   }
