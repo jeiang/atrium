@@ -11,6 +11,7 @@
   dejavu_fonts,
   mesa,
   stdenv,
+  runCommand,
 }: let
   root = ../.;
   src = lib.fileset.toSource {
@@ -95,13 +96,33 @@
       '';
       installPhase = "touch $out";
     };
-in {
-  inherit atrium-web-mock;
   atrium-web = build {
     pname = "atrium-web";
     script = "build";
     dist = "dist";
   };
+  browserEnv =
+    {
+      PLAYWRIGHT_BROWSERS_PATH = "${playwright-driver.browsers}";
+      PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+      FONTCONFIG_FILE = "${makeFontsConf {fontDirectories = [dejavu_fonts];}}";
+      CI = "1";
+    }
+    // lib.optionalAttrs stdenv.hostPlatform.isLinux {
+      __EGL_VENDOR_LIBRARY_DIRS = "${mesa}/share/glvnd/egl_vendor.d";
+      LIBGL_DRIVERS_PATH = "${mesa}/lib/dri";
+    };
+  sizeSrc = lib.fileset.toSource {
+    inherit root;
+    fileset = lib.fileset.unions [
+      (root + "/web/package.json")
+      (root + "/web/budgets.json")
+      (root + "/web/scripts/size.ts")
+    ];
+  };
+in {
+  inherit atrium-web atrium-web-mock;
   web-lint = check {
     pname = "atrium-web-lint";
     nativeBuildInputs = [biome];
@@ -109,19 +130,18 @@ in {
   };
   web-e2e = check {
     pname = "atrium-web-e2e";
-    env =
-      {
-        ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";
-        PLAYWRIGHT_BROWSERS_PATH = "${playwright-driver.browsers}";
-        PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
-        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-        FONTCONFIG_FILE = "${makeFontsConf {fontDirectories = [dejavu_fonts];}}";
-        CI = "1";
-      }
-      // lib.optionalAttrs stdenv.hostPlatform.isLinux {
-        __EGL_VENDOR_LIBRARY_DIRS = "${mesa}/share/glvnd/egl_vendor.d";
-        LIBGL_DRIVERS_PATH = "${mesa}/lib/dri";
-      };
+    env = browserEnv // {ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";};
     command = "npm run e2e -- --reporter=line";
+  };
+  web-size = runCommand "atrium-web-size" {nativeBuildInputs = [nodejs_24];} ''
+    node ${sizeSrc}/web/scripts/size.ts ${atrium-web} > report.txt 2>&1 || status=$?
+    cat report.txt
+    [ -z "''${status:-}" ] || exit "$status"
+    mv report.txt $out
+  '';
+  web-lighthouse = check {
+    pname = "atrium-web-lighthouse";
+    env = browserEnv;
+    command = "node scripts/lighthouse.ts ${atrium-web}";
   };
 }

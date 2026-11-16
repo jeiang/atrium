@@ -174,6 +174,14 @@ web-lint:
 web-test *args:
   {{dev}} bash -c 'cd web && npm run build:mock && npm run e2e -- "$@"' web-test "$@"
 
+# Build the production client and check its brotli sizes against web/budgets.json
+web-size:
+  {{dev}} bash -c 'cd web && npm run build && node scripts/size.ts dist'
+
+# Build the production client and check its Lighthouse scores and metrics against web/budgets.json
+web-lighthouse:
+  {{dev}} bash -c 'cd web && npm run build && node scripts/lighthouse.ts dist'
+
 settingsgen:
   go run ./tools/settingsgen docs/config
 

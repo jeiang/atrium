@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { extname, join, normalize, resolve } from 'node:path';
+import { brotliCompressSync, constants } from 'node:zlib';
 
 export const policy = [
   "default-src 'self'",
@@ -36,8 +37,9 @@ async function file(root: string, pathname: string): Promise<string | undefined>
   return undefined;
 }
 
-export async function serve(dist: string): Promise<{ url: string; server: Server }> {
+export async function serve(dist: string, brotli = false): Promise<{ url: string; server: Server }> {
   const root = resolve(dist);
+  const packed = new Map<string, Buffer>();
   const server = createServer(async (req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
     const path = await file(root, pathname);
@@ -48,7 +50,18 @@ export async function serve(dist: string): Promise<{ url: string; server: Server
     const type = types[extname(path)] ?? 'application/octet-stream';
     const headers: Record<string, string> = { 'Content-Type': type, 'Cache-Control': 'no-cache' };
     if (type.startsWith('text/html')) headers['Content-Security-Policy'] = policy;
-    res.writeHead(200, headers).end(await readFile(path));
+    let body: Buffer = await readFile(path);
+    if (brotli && !type.startsWith('font/') && /\bbr\b/.test(req.headers['accept-encoding'] ?? '')) {
+      const encoded =
+        packed.get(path) ?? brotliCompressSync(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } });
+      packed.set(path, encoded);
+      if (encoded.length < body.length) {
+        body = encoded;
+        headers['Content-Encoding'] = 'br';
+        headers.Vary = 'Accept-Encoding';
+      }
+    }
+    res.writeHead(200, headers).end(body);
   });
   await once(server.listen(0, '127.0.0.1'), 'listening');
   const { port } = server.address() as AddressInfo;

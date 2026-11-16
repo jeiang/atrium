@@ -531,7 +531,7 @@
       {
         inherit (self'.packages) atrium-static atrium-docs atrium-web atrium-web-mock;
 
-        inherit (pkgs.callPackage ../nix/web.nix {}) web-lint;
+        inherit (pkgs.callPackage ../nix/web.nix {}) web-lint web-size;
 
         web-playwright-pin = pkgs.runCommand "atrium-web-playwright-pin" {nativeBuildInputs = [pkgs.jq];} ''
           driver=${pkgs.playwright-driver.version}
@@ -589,7 +589,7 @@
           '';
       }
       // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-        inherit (pkgs.callPackage ../nix/web.nix {}) web-e2e;
+        inherit (pkgs.callPackage ../nix/web.nix {}) web-e2e web-lighthouse;
       }
       // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
         module-keyed = pkgs.callPackage ../nix/module-keyed-test.nix {inherit self;};
