@@ -169,6 +169,11 @@ web-build:
 web-lint:
   {{dev}} bash -c 'cd web && npm run lint && npm run check'
 
+# Build the mock client and run the browser e2e headless in Chromium, Firefox and WebKit; args go to playwright test
+[positional-arguments]
+web-test *args:
+  {{dev}} bash -c 'cd web && npm run build:mock && npm run e2e -- "$@"' web-test "$@"
+
 settingsgen:
   go run -tags modernc ./tools/settingsgen docs/config
 

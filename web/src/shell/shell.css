@@ -76,6 +76,16 @@
     background: var(--moss);
   }
 
+  @media (--touch) {
+    .nav a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-block-size: var(--target);
+      min-inline-size: var(--target);
+    }
+  }
+
   .status {
     margin-inline-start: auto;
     font-size: var(--t-sm);

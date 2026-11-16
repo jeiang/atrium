@@ -21,7 +21,14 @@
   $effect(() => {
     const title = pages.find((page) => page.path === route.pathname)?.title ?? 'Not found';
     document.title = `${title} · atrium`;
-    if (announced) announce(title);
+    if (announced) {
+      announce(title);
+      const heading = document.querySelector<HTMLElement>('main h1');
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus();
+      }
+    }
     announced = true;
   });
 </script>
