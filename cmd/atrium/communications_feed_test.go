@@ -36,7 +36,7 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(invite, []byte(strings.ReplaceAll(string(raw), "20261020T", "20271020T")), 0o600); err != nil {
+	if err := os.WriteFile(invite, []byte(strings.NewReplacer("20261020T", "20271020T", "dentist-20261020@", "dentist-20271020@").Replace(string(raw))), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var before int64
@@ -114,7 +114,7 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
 		t.Fatalf("calendar candidates: exit %d %q %q: %v", code, stdout, stderr, err)
 	}
-	got.WriteString(fmt.Sprintf("calendar candidates: exit %d candidates %d proposed %d\n", code, result.Candidates, result.Proposed))
+	fmt.Fprintf(&got, "calendar candidates: exit %d candidates %d proposed %d\n", code, result.Candidates, result.Proposed)
 	var prompt string
 	if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = (SELECT thread_id FROM runs WHERE id = ?) AND role = 'user' ORDER BY seq LIMIT 1",
 		result.RunID).Scan(&prompt); err != nil {
