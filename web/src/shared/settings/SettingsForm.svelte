@@ -318,7 +318,7 @@
       <SettingControl
         {field}
         setting={items[field.key]}
-        bind:value={draft[field.key]}
+        bind:value={() => draft[field.key] ?? '', (next) => (draft[field.key] = next)}
         error={errors[field.key]}
         elsewhere={marks[field.key]}
         {locked}
