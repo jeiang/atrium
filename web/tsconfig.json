@@ -11,6 +11,7 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "noEmit": true,
     "types": ["node", "vite/client", "svelte"]
   },
@@ -22,5 +23,6 @@
     "orval.config.ts",
     "playwright.config.ts",
     "e2e/**/*.ts"
-  ]
+  ],
+  "exclude": ["src/worker"]
 }

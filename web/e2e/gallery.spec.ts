@@ -11,7 +11,7 @@ import {
 } from './checks.ts';
 import { expect, galleryLayouts, layouts, test } from './fixtures.ts';
 
-const edgeSurfaces = ['header.bar', 'dialog.sheet'];
+const edgeSurfaces = ['.rail', '.tabbar', 'dialog.sheet'];
 
 async function gotoGallery(page: Page): Promise<void> {
   test.slow();
@@ -95,7 +95,18 @@ test.describe('reduced motion', () => {
 
 test.describe('keyboard focus', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
-  for (const section of ['buttons', 'links', 'fields', 'choices', 'cards', 'table', 'overlays', 'simulator']) {
+  for (const section of [
+    'buttons',
+    'links',
+    'fields',
+    'choices',
+    'cards',
+    'table',
+    'overlays',
+    'simulator',
+    'settings',
+    'apps',
+  ]) {
     test(`every stop in ${section} shows the focus ring`, async ({ page }) => {
       await gotoGallery(page);
       await expectFocusVisible(page, `[data-gallery="${section}"]`);

@@ -1,7 +1,10 @@
 package assistantmodule
 
 import (
+	"context"
+
 	"github.com/jeiang/atrium/internal/application"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	opsapp "github.com/jeiang/atrium/internal/serverops/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -12,11 +15,17 @@ func opsToolService(tc *tool.Context) *opsapp.Service {
 
 func opsOperations() ([]application.Definition, []application.Binding) {
 	uses := func(name application.Name) []application.Name { return []application.Name{name} }
-	return append(opsapp.DescribeWorker(), opsapp.DescribeHealth()), []application.Binding{
+	return append(opsapp.DescribeWorker(), opsapp.DescribeHealth(), connectionsapp.DescribeStatusTool(), connectionsapp.DescribeRecheckTool()), []application.Binding{
 		{Kind: application.Tool, Target: "worker_status", Uses: uses(opsapp.HealthName)},
 		{Kind: application.Tool, Target: "ops_samples", Uses: uses(opsapp.ObservationsName)},
 		{Kind: application.Tool, Target: "ops_findings", Uses: uses(opsapp.ObservationsName)},
 		{Kind: application.Tool, Target: "worker_finding", Uses: uses(opsapp.ObservationsName)},
 		{Kind: application.Tool, Target: "ops_finding", Uses: uses(opsapp.FindingName)},
+		{Kind: application.Tool, Target: "dependencies_status", Uses: uses(connectionsapp.StatusToolName)},
+		{Kind: application.Tool, Target: "dependency_recheck", Uses: uses(connectionsapp.RecheckToolName)},
 	}
+}
+
+func dependencyToolService(ctx context.Context, tc *tool.Context) (*connectionsapp.Service, error) {
+	return connectionsapp.New(ctx, tc.DB)
 }

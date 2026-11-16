@@ -9,11 +9,9 @@ import (
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
@@ -51,12 +49,6 @@ type MailPackagesRequest struct {
 type MailPackagesPage struct {
 	Items      []watches.Package `json:"items"`
 	NextCursor *string           `json:"next_cursor" api:"nullable"`
-}
-type MailBirthdaysRequest struct {
-	Days *int64 `query:"days" json:"-" api:"min=0"`
-}
-type MailBirthdays struct {
-	Upcoming []birthdays.Item `json:"upcoming"`
 }
 type MailLoopRef struct {
 	ID int64 `path:"loop_id" json:"-" api:"min=1"`
@@ -273,16 +265,6 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			page := MailPackagesPage{Items: items, NextCursor: next}
 			return application.Read[MailPackagesPage]{Revision: servedRevision(mailapp.DescribePackages().Name, page), Data: page}, err
 		}),
-		api.Query(d, mailapp.DescribeUpcomingBirthdays(), application.APIShape{Area: area, Errors: []application.Code{application.NotConfigured}}, "GET /mail/birthdays", func(ctx context.Context, in MailBirthdaysRequest) (application.Read[MailBirthdays], error) {
-			loc, err := config.From(ctx).Location(d.Env)
-			if err != nil {
-				return application.Read[MailBirthdays]{}, err
-			}
-			now := time.Now().In(loc)
-			r, err := svc().UpcomingBirthdays(ctx, mailapp.UpcomingBirthdaysInput{Today: birthdays.Date(now.Year(), now.Month(), now.Day()), Days: in.Days})
-			out := MailBirthdays{Upcoming: r.Data.Upcoming}
-			return application.Read[MailBirthdays]{Revision: servedRevision(mailapp.DescribeUpcomingBirthdays().Name, out), Data: out}, err
-		}),
 		api.Command(d, mailapp.DescribeLoopSnooze(), application.APIShape{Area: area, Errors: []application.Code{application.NotFound}}, "POST /mail/loops/{loop_id}/snooze", func(ctx context.Context, in MailLoopSnooze) (application.Change[MailLoopSnoozed], error) {
 			r, err := svc().LoopSnooze(ctx, mailapp.LoopSnoozeInput{ID: in.ID, Days: in.Days})
 			return application.Change[MailLoopSnoozed]{Data: MailLoopSnoozed{Days: r.Data.Days}, AuditID: r.AuditID}, err
@@ -317,7 +299,7 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			})
 			return out, err
 		}),
-		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
+		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable, application.Refused}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
 			var r application.Change[mailapp.PollTrackersResult]
 			_, err := module.Invoke(ctx, d.DB, d.Cfg, unit.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 				var err error

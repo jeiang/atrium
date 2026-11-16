@@ -117,9 +117,10 @@ func (s *registrations) unbound() []Route {
 
 type Registrar struct {
 	chi.Router
-	owner  string
-	prefix string
-	state  *registrations
+	owner   string
+	prefix  string
+	state   *registrations
+	ungated chi.Router
 }
 
 func (r *Registrar) Seal() error {
@@ -210,6 +211,7 @@ func Owned(owner string, mount Module, middleware func(*Deps, http.Handler) http
 		registrar := &Registrar{Router: router, owner: owner, state: d.registrations}
 		if middleware != nil {
 			registrar.Router = router.With(func(next http.Handler) http.Handler { return middleware(d, next) })
+			registrar.ungated = &Registrar{Router: router, owner: owner, state: d.registrations}
 		}
 		previousOwner, previousRouter := d.owner, d.router
 		d.owner, d.router = owner, registrar

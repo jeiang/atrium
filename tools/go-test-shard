@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -ne 2 ] || ! [ "$1" -ge 1 ] 2>/dev/null || ! [ "$2" -ge "$1" ] 2>/dev/null; then
+  echo "usage: tools/go-test-shard SHARD TOTAL (1 <= SHARD <= TOTAL)" >&2
+  exit 2
+fi
+shard=$1 total=$2
+pkg=./cmd/atrium
+flags=(-race ${ATRIUM_GO_TAGS:+-tags "$ATRIUM_GO_TAGS"})
+
+bin=$(mktemp -d)
+trap 'rm -rf "$bin"' EXIT
+go build ${ATRIUM_GO_TAGS:+-tags "$ATRIUM_GO_TAGS"} -o "$bin/atrium" ./cmd/atrium
+go test "${flags[@]}" -count=1 -exec true ./... >/dev/null
+export ATRIUM_E2E_BINARY=$bin/atrium
+
+mapfile -t names < <(go test "${flags[@]}" -list '^(Test|Example|Fuzz)' "$pkg" | grep -E '^(Test|Example|Fuzz)' | LC_ALL=C sort | awk -v n="$total" -v k="$shard" '(NR - 1) % n == k - 1')
+if [ ${#names[@]} -eq 0 ]; then
+  echo "go-test-shard: shard $shard of $total has no tests" >&2
+  exit 1
+fi
+echo "go-test-shard: shard $shard of $total runs ${#names[@]} tests of $pkg" >&2
+
+if [ "$shard" -eq 1 ]; then
+  mapfile -t rest < <(go list ./... | grep -v '/cmd/atrium$')
+  bash tools/e2e-loopback go test "${flags[@]}" -count=1 -timeout 60m "${rest[@]}"
+fi
+run=$(IFS='|'; echo "${names[*]}")
+bash tools/e2e-loopback go test "${flags[@]}" -count=1 -timeout 60m -run "^($run)\$" "$pkg"

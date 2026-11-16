@@ -30,7 +30,6 @@ var log = logx.Logger("atrium.tracking")
 const Module = "mail"
 
 const (
-	KeyMonthlyQuota        = "mail_ship24_monthly_quota"
 	KeyDestinationCountry  = "mail_ship24_destination_country"
 	KeyDestinationPostcode = "mail_ship24_destination_postcode"
 	DefaultURL             = "https://api.ship24.com/public/v1"
@@ -48,7 +47,6 @@ func SettingsDefs() []settings.Def {
 		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
 	}
 	return []settings.Def{
-		adv(KeyMonthlyQuota, settings.Int, "10", settings.Between(1, 1000)),
 		settings.Shown("Destination country", adv(KeyDestinationCountry, settings.String, "", countryCheck)),
 		settings.Shown("Destination postcode", adv(KeyDestinationPostcode, settings.String, "", nil)),
 	}
@@ -126,7 +124,7 @@ func OutcomeUnknown(err error) bool {
 
 type Settings struct {
 	URL, Key            string
-	Quota, Timeout      int
+	Timeout             int
 	PollLimit, PollDays int
 	Country, Postcode   string
 	lease               *connections.Lease
@@ -171,15 +169,6 @@ func Load(ctx context.Context, q db.Querier) (Settings, error) {
 			return Settings{}, err
 		}
 		s.Key = ""
-	}
-	quota, err := read(KeyMonthlyQuota)
-	if err != nil {
-		lease.Close()
-		return Settings{}, err
-	}
-	if s.Quota, err = strconv.Atoi(quota); err != nil {
-		lease.Close()
-		return Settings{}, err
 	}
 	if s.Country, err = read(KeyDestinationCountry); err != nil {
 		lease.Close()
@@ -426,10 +415,10 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 	if err != nil {
 		return Target{}, Settings{}, err
 	}
-	if used >= s.Quota {
+	if used >= TuningMailShip24MonthlyQuota {
 		return Target{}, Settings{}, QuotaError(fmt.Sprintf(
-			"the Ship24 monthly quota is exhausted (%d of %d registrations used this month; raise %s or wait until next month)",
-			used, s.Quota, KeyMonthlyQuota))
+			"the Ship24 monthly quota is exhausted (%d of %d registrations used this month; wait until next month)",
+			used, TuningMailShip24MonthlyQuota))
 	}
 	return t, s, nil
 }
@@ -534,12 +523,13 @@ func Refresh(ctx context.Context, d *db.DB, now float64, t Target, s Settings, e
 }
 
 type PollResult struct {
-	Checked     int      `json:"checked"`
-	Updated     int      `json:"updated"`
-	Events      int      `json:"events"`
-	Notified    int      `json:"notified"`
-	RateLimited bool     `json:"rate_limited,omitempty"`
-	Errors      []string `json:"errors,omitempty"`
+	Checked     int                `json:"checked"`
+	Updated     int                `json:"updated"`
+	Events      int                `json:"events"`
+	Notified    int                `json:"notified"`
+	RateLimited bool               `json:"rate_limited,omitempty"`
+	Errors      []string           `json:"errors,omitempty"`
+	Unmet       *connections.Unmet `json:"-"`
 }
 
 func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResult, error) {
@@ -573,12 +563,14 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 	if err != nil {
 		var missing config.NotConfigured
 		if errors.As(err, &missing) {
-			return PollResult{}, nil
+			return PollResult{Unmet: connections.Unavailable(ctx, d.Read, ConnectionID, "api", missing)}, nil
 		}
 		return PollResult{}, err
 	}
 	defer client.Close()
 	var out PollResult
+	failed := 0
+	var lastErr error
 	for _, t := range targets {
 		out.Checked++
 		tracking, err := client.Results(ctx, t.TrackerID)
@@ -595,6 +587,8 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 					return out, nil
 				}
 				out.Errors = append(out.Errors, err.Error())
+				failed++
+				lastErr = err
 			}
 			continue
 		}
@@ -608,6 +602,9 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 		if notified {
 			out.Notified++
 		}
+	}
+	if failed > 0 && failed == out.Checked {
+		out.Unmet = connections.Unavailable(ctx, d.Read, ConnectionID, "api", fmt.Errorf("every tracker request failed: %w", lastErr))
 	}
 	return out, nil
 }

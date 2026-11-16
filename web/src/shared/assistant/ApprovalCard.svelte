@@ -24,8 +24,6 @@
     presentation?: Presentation | 'auto';
     decided?: DecidedElsewhere;
     blocked?: Blocked;
-    insetTop?: number;
-    insetBottom?: number;
     level?: 2 | 3 | 4;
     more?: Snippet;
     onapprove: Handler;
@@ -34,6 +32,7 @@
     onedit?: () => void;
     onrepair?: () => void;
     onundo: (decision: Decision) => void | Promise<void>;
+    undoable?: readonly Decision[];
   }
 
   let {
@@ -41,8 +40,6 @@
     presentation = 'auto',
     decided,
     blocked,
-    insetTop = 0,
-    insetBottom = 0,
     level = 3,
     more,
     onapprove,
@@ -51,6 +48,7 @@
     onedit,
     onrepair,
     onundo,
+    undoable = ['approve', 'decline', 'later'],
   }: Props = $props();
 
   const uid = $props.id();
@@ -59,6 +57,8 @@
   let sentinel = $state<HTMLElement>();
   let receiptEl = $state<HTMLElement>();
   let rowHeight = $state(0);
+  let chromeEnd = $state(0);
+  let measured = $state(false);
   let touch = $state(false);
   let endSeen = $state(false);
   let cardSeen = $state(false);
@@ -71,13 +71,19 @@
   let receipt = $state<{ decision: Decision; title: string; at: Date; note?: string; undoUntil?: number }>();
   let armTimer: number | undefined;
   let countTimer: number | undefined;
+  let confirmedAt = 0;
 
   const mode = $derived<Presentation>(presentation === 'auto' ? (touch ? 'hold' : 'click') : presentation);
   const away = $derived(!cardSeen || (!rowClear && !confirming));
   const rowInert = $derived(away || arming || phase !== 'open');
   const heading = $derived(`h${level}`);
+  const decidedText = $derived(
+    decided
+      ? `${decided.outcome ?? 'Decided'} ${decided.where ? `on ${decided.where} ` : ''}at ${formatClock(decided.at)}`
+      : '',
+  );
   const gated = $derived(approval.irreversible && !endSeen);
-  const margin = $derived(`${-insetTop}px 0px ${-insetBottom}px 0px`);
+  const margin = $derived(`0px 0px ${-chromeEnd}px 0px`);
 
   $effect(() => {
     const query = matchMedia(touchQuery);
@@ -87,9 +93,22 @@
 
   $effect(() => {
     if (!row) return;
-    const observer = new ResizeObserver(() => (rowHeight = row?.offsetHeight ?? 0));
-    observer.observe(row);
-    return () => observer.disconnect();
+    const target = row;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        rowHeight = target.offsetHeight;
+        chromeEnd = Number.parseFloat(getComputedStyle(target).insetBlockEnd) || 0;
+        measured = true;
+      });
+    });
+    observer.observe(target);
+    observer.observe(document.documentElement);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   });
 
   $effect(() => {
@@ -109,6 +128,10 @@
   });
 
   $effect(() => {
+    if (!confirming) confirmedAt = performance.now();
+  });
+
+  $effect(() => {
     if (!row) return;
     const tracked = 'isVisible' in IntersectionObserverEntry.prototype;
     const options = {
@@ -119,6 +142,7 @@
     const observer = new IntersectionObserver((entries) => {
       if (confirming || row?.querySelector(':popover-open')) return;
       for (const entry of entries) {
+        if (entry.time < confirmedAt) continue;
         const visible = (entry as IntersectionObserverEntry & { isVisible?: boolean }).isVisible;
         rowClear = entry.isIntersecting && (!tracked || visible !== false);
       }
@@ -128,12 +152,12 @@
   });
 
   $effect(() => {
-    if (!sentinel || endSeen) return;
+    if (!sentinel || endSeen || !measured) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) endSeen = true;
       },
-      { rootMargin: `${-insetTop}px 0px ${-(insetBottom + rowHeight)}px 0px` },
+      { rootMargin: `0px 0px ${-(chromeEnd + rowHeight)}px 0px` },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -190,7 +214,7 @@
       title: said.title,
       at,
       note: said.note,
-      undoUntil: said.undo ? at.getTime() + UNDO_MS : undefined,
+      undoUntil: said.undo && undoable.includes(decision) ? at.getTime() + UNDO_MS : undefined,
     };
     phase = 'decided';
     busyOn = undefined;
@@ -239,7 +263,11 @@
   async function onUndo(): Promise<void> {
     const decision = receipt?.decision;
     if (decision === undefined) return;
-    await onundo(decision);
+    try {
+      await onundo(decision);
+    } catch {
+      return;
+    }
     receipt = undefined;
     phase = 'open';
     announce('Undone. The card is open again.');
@@ -305,7 +333,7 @@
   {/if}
 
   {#if decided}
-    <p class="approval__note" role="status">Decided on {decided.where} at {formatClock(decided.at)}</p>
+    <p class="approval__note" role="status">{decidedText}</p>
     <div class="approval__row">
       <Button variant="primary" disabled>{approval.primary}</Button>
       <Button variant="secondary" disabled>Decline</Button>

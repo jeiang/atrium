@@ -14,6 +14,20 @@
       npmRoot = ../web;
       nodejs = pkgs.nodejs_24;
     };
+    goEnv = {
+      CGO_ENABLED = "1";
+      GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
+      CGO_CFLAGS = "${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
+      CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
+      ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
+      ATRIUM_WEB_STUB = "${self'.packages.atrium-web.stub}";
+    };
+    linuxTools = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
+    stageAssets = ''
+      export ATRIUM_DEV_ROOT=$root
+      [ -e "$root/internal/web/static/assets.json" ] || just --justfile "$root/justfile" static-assets
+      [ -e "$root/internal/web/app/dist/index.html" ] || just --justfile "$root/justfile" web-stub
+    '';
   in {
     treefmt.config = {
       projectRootFile = "flake.nix";
@@ -51,17 +65,12 @@
           pkgs.tailwindcss-language-server
           pkgs.bash-language-server
         ]
-        ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
+        ++ linuxTools;
       env =
-        {
-          CGO_ENABLED = "1";
-          GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
-          CGO_CFLAGS = "${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
-          CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
-          ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
+        goEnv
+        // {
           ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";
           npmDeps = "${webNodeModules}";
-          ATRIUM_WEB_STUB = "${self'.packages.atrium-web.stub}";
           PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
           PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
@@ -77,9 +86,17 @@
         npmRoot=$root/web linkNodeModulesHook >/dev/null
         case "''${ATRIUM_WEB_ASSETS:-}" in */web/dist) unset ATRIUM_WEB_ASSETS ;; esac
         export ATRIUM_WEB_ASSETS=''${ATRIUM_WEB_ASSETS:-$root/web/dist}
-        export ATRIUM_DEV_ROOT=$root
-        [ -e "$root/internal/web/static/assets.json" ] || just --justfile "$root/justfile" static-assets
-        [ -e "$root/internal/web/app/dist/index.html" ] || just --justfile "$root/justfile" web-stub
+        ${stageAssets}
+      '';
+    };
+
+    devShells.ci = pkgs.mkShell {
+      packages = [go pkgs.git pkgs.jq pkgs.just pkgs.golangci-lint pkgs.pkg-config pkgs.diffutils] ++ linuxTools;
+      env = goEnv;
+      shellHook = ''
+        unset GOROOT GOPATH
+        root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
+        ${stageAssets}
       '';
     };
   };

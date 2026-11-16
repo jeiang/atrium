@@ -8,11 +8,17 @@ import (
 	"os"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 func RunNow(ctx context.Context, d *db.DB, dbPath, tz string, def Definition, wait time.Duration, fn func(context.Context, Run) (Result, error)) (Result, error) {
+	if !def.RunsWhilePaused && pause.Paused(config.Config{DBPath: dbPath}.PausePath()) {
+		return Result{}, &application.Error{Code: application.Refused, Message: "Automation is paused; resume it to run " + def.Name + "."}
+	}
 	s := New(d, []Definition{def}, Dependencies{DBPath: dbPath, Owner: fmt.Sprintf("manual/%d/%d", os.Getpid(), time.Now().UnixNano())})
 	job, err := manualJob(ctx, s, tz, def)
 	if err != nil {

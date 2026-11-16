@@ -53,7 +53,7 @@ func CLI(env config.Env) Open {
 }
 
 func (s *Service) revision(ctx context.Context, name application.Name, input any) (application.Revision, error) {
-	counters, err := s.state.Read(ctx, nil, []string{state.Connections})
+	counters, err := s.state.Read(ctx, nil, []string{state.Connections, state.Settings})
 	if err != nil {
 		return "", err
 	}
@@ -134,12 +134,13 @@ func classify(err error) *application.Error {
 	var missing connections.MissingCredential
 	var failed *connections.TestFailed
 	var disabled connections.DisabledConnection
+	var refusal *connections.Refusal
 	switch {
 	case errors.As(err, &unknown):
 		code = application.NotFound
 	case errors.As(err, &conflict):
 		code = application.Conflict
-	case errors.As(err, &encrypted), errors.As(err, &disabled):
+	case errors.As(err, &encrypted), errors.As(err, &disabled), errors.As(err, &refusal):
 		code = application.Refused
 	case errors.As(err, &invalid), errors.As(err, &missing), errors.As(err, &failed), errors.Is(err, connections.ErrUnknownConsent):
 		code = application.Invalid

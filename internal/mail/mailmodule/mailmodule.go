@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -79,7 +80,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
 		{Name: "loops", Title: "Open loops", Keys: []string{
-			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsRemindHour, mail.KeyLoopsSnoozeDefaultDays,
 		}},
 		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 	}
@@ -144,7 +145,18 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
-		Name:            unit.Mail,
+		Name:  unit.Mail,
+		Title: "Mail",
+		App:   true,
+		Needs: []module.Need{
+			{Kind: connections.Kind(endpoint.KindEmbedding), Capability: "embeddings", Features: []string{"mail search"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilityIMAP, Features: []string{"mail sync"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilitySMTP, Features: []string{"mail sending"}},
+			{Kind: tracking.KindShip24, Soft: true, Capability: "api", Features: []string{"package tracking"}},
+		},
+		Packages: []string{"internal/assistant/tools/mail", "internal/mail"},
+		Tables: []string{"accounts", "commitments", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state", "loop_overrides",
+			"mail_scans", "mailboxes", "message_fts", "messages", "open_loops", "package_events", "packages", "rules", "watch_dismissed"},
 		Operations:      operations,
 		Bindings:        append(bindings, finalBindings()...),
 		Recover:         recoverDrafts,
@@ -196,7 +208,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			return module.Effects{
 				Proposals: slices.Concat(e.Proposals(unit.Mail), r.Proposals(unit.Mail)),
-				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo()),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo(), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoCommitmentSnooze, d.Now)}),
 				Resolve:   live.Resolve(),
 				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),
 			}

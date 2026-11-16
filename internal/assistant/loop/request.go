@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -26,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tokens"
 	"github.com/jeiang/atrium/internal/tool"
@@ -58,8 +60,25 @@ type request struct {
 	fixedTokens int64
 }
 
+func appsOff(ctx context.Context) string {
+	set := module.SetFrom(ctx)
+	if set == nil || set.Current() == nil {
+		return ""
+	}
+	off := set.Current().AppsOff()
+	if len(off) == 0 {
+		return ""
+	}
+	names := make([]string, len(off))
+	for i, app := range off {
+		names[i] = app.Name + " (" + app.ID + ")"
+	}
+	return "These apps are turned off, so their tools and data are not available: " + strings.Join(names, ", ") +
+		". Only the operator can turn an app on, in Apps; say that the app is off instead of trying to use it."
+}
+
 func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, cc prompts.CacheControl, extra string) ([]prompts.Block, error) {
-	p := prompts.Parts{System: prompts.System, Extra: extra}
+	p := prompts.Parts{System: prompts.System, Apps: appsOff(ctx), Extra: extra}
 	if !registry.PromptCarriesKnowledge(kind) {
 		return prompts.SystemBlocks(p, cc), nil
 	}
@@ -180,11 +199,7 @@ func (s *state) history(ctx context.Context) (*history, error) {
 	if err != nil {
 		return nil, err
 	}
-	budget, err := memory.VerbatimTokens(ctx, s.d.Read)
-	if err != nil {
-		return nil, err
-	}
-	from, err := verbatimFrom(messages, s.run.ID, min(budget, (s.contextLimit-s.req.fixedTokens)/4))
+	from, err := verbatimFrom(messages, s.run.ID, min(memory.TuningMemoryVerbatimTokens, (s.contextLimit-s.req.fixedTokens)/4))
 	if err != nil {
 		return nil, err
 	}

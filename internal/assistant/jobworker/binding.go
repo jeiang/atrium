@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -46,6 +47,9 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 		var off *module.OwnerDisabled
 		if errors.As(err, &off) {
 			return scheduler.Result{Status: scheduler.StatusSkippedModule, Error: new(off.Error())}, nil
+		}
+		if unmet := new(connections.Unmet); errors.As(err, &unmet) && len(runs) == 0 {
+			return scheduler.Result{Status: scheduler.StatusSkippedDependency, Error: new(unmet.Error())}, nil
 		}
 		var missing config.NotConfigured
 		unconfigured := errors.As(err, &missing)

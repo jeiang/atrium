@@ -24,7 +24,7 @@ func connectionsOperations() ([]application.Definition, []application.Binding) {
 
 func connectionsDeclared() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
-			connectionsapp.DescribeList(), connectionsapp.DescribeOAuthSetup(), connectionsapp.DescribeTestSave(), connectionsapp.DescribeSaveFields(), connectionsapp.DescribeDisconnect(), connectionsapp.DescribeOAuthConfigure(), connectionsapp.DescribeOAuthStart(), connectionsapp.DescribeOAuthComplete(), connectionsapp.DescribeTest(), connectionsapp.DescribeObserveHealth(), connectionsapp.DescribeCheck(),
+			connectionsapp.DescribeList(), connectionsapp.DescribeDependencies(), connectionsapp.DescribeOAuthSetup(), connectionsapp.DescribeTestSave(), connectionsapp.DescribeSaveFields(), connectionsapp.DescribeDisconnect(), connectionsapp.DescribeEnable(), connectionsapp.DescribeDisable(), connectionsapp.DescribeOAuthConfigure(), connectionsapp.DescribeOAuthStart(), connectionsapp.DescribeOAuthComplete(), connectionsapp.DescribeTest(), connectionsapp.DescribeObserveHealth(), connectionsapp.DescribeCheck(),
 		}, []application.Binding{
 			{Kind: application.CLI, Target: "connections list", Uses: []application.Name{connectionsapp.ListName}},
 			{Kind: application.CLI, Target: "connections test", Uses: []application.Name{connectionsapp.TestName}},
@@ -57,8 +57,14 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 			log.Warn("connection health check failed", logx.Err, err.Error())
 		}
 	}
+	syncUnits := func() {
+		if err := svc.SyncUnits(ctx); err != nil && ctx.Err() == nil {
+			log.Warn("connection rows did not follow their apps", logx.Err, err.Error())
+		}
+	}
 	reports, stop := connections.Reports(d)
 	defer stop()
+	syncUnits()
 	observe(connectionsapp.ObserveHealthInput{Start: true})
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
@@ -70,6 +76,9 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 			observe(connectionsapp.ObserveHealthInput{})
 		case seen := <-connections.Outcomes():
 			observe(connectionsapp.ObserveHealthInput{ID: seen.ID, Recovered: seen.OK})
+		case <-svc.UnitsChanged():
+			syncUnits()
+			observe(connectionsapp.ObserveHealthInput{})
 		case r := <-reports:
 			if err := r.Record(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("connection outcome not recorded", logx.Integration, string(r.ID), logx.Err, err.Error())
@@ -132,6 +141,14 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 				read, err := s.List(ctx, connectionsapp.ListInput{})
 				return application.Read[Connections]{Revision: read.Revision, Data: Connections{Connections: read.Data}}, err
 			}),
+		api.Query(d, connectionsapp.DescribeDependencies(), application.APIShape{Area: area},
+			"GET /connections/dependencies", func(ctx context.Context, _ struct{}) (application.Read[connectionsapp.Dependencies], error) {
+				s, err := svc()
+				if err != nil {
+					return application.Read[connectionsapp.Dependencies]{}, err
+				}
+				return s.Dependencies(ctx, connectionsapp.DependenciesInput{})
+			}),
 		api.Command(d, connectionsapp.DescribeTest(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable},
 			"POST /connections/{kind}/{name}/test", func(ctx context.Context, in ConnectionRef) (application.Change[Connections], error) {
 				s, err := svc()
@@ -164,6 +181,22 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 					return application.Change[struct{}]{}, err
 				}
 				return s.Disconnect(ctx, connectionsapp.DisconnectInput{ID: in.id()})
+			}),
+		api.Command(d, connectionsapp.DescribeEnable(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable},
+			"POST /connections/{kind}/{name}/enable", func(ctx context.Context, in ConnectionRef) (application.Change[connectionsapp.View], error) {
+				s, err := svc()
+				if err != nil {
+					return application.Change[connectionsapp.View]{}, err
+				}
+				return s.Enable(ctx, connectionsapp.EnableInput{ID: in.id()})
+			}),
+		api.Command(d, connectionsapp.DescribeDisable(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable},
+			"POST /connections/{kind}/{name}/disable", func(ctx context.Context, in ConnectionRef) (application.Change[connectionsapp.View], error) {
+				s, err := svc()
+				if err != nil {
+					return application.Change[connectionsapp.View]{}, err
+				}
+				return s.Disable(ctx, connectionsapp.DisableInput{ID: in.id()})
 			}),
 		api.Query(d, connectionsapp.DescribeOAuthSetup(), application.APIShape{Area: area},
 			"GET /connections/google/oauth", func(ctx context.Context, _ struct{}) (application.Read[connectionsapp.OAuthSetup], error) {

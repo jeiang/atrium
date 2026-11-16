@@ -23,9 +23,10 @@ const eztvProbeIMDb = "tt0000001"
 
 func Connections() []connections.Definition {
 	return []connections.Definition{
-		{Kind: KindMediaAgent, CredentialSlots: []string{"bearer"}, Validate: validateMediaAgent, Test: testMediaAgent},
+		{Kind: KindMediaAgent, Offers: []string{"scan", "file", "stream"}, CredentialSlots: []string{"bearer"}, Validate: validateMediaAgent, Test: testMediaAgent},
 		{
 			Kind:            KindQbittorrent,
+			Offers:          []string{"api"},
 			CredentialSlots: []string{"api_key"},
 			Validate:        validateQbitConnection,
 			Grace:           connections.UnreachableGrace,
@@ -33,12 +34,14 @@ func Connections() []connections.Definition {
 		},
 		{
 			Kind:            KindTMDB,
+			Offers:          []string{"api", "images"},
 			CredentialSlots: []string{"read_token"},
 			Validate:        validateTMDBConnection,
 			Test:            testTMDBConnection,
 		},
 		{
 			Kind:     KindEZTV,
+			Offers:   []string{"indexer"},
 			Validate: validateEZTVConnection,
 			Test:     testEZTVConnection,
 		},

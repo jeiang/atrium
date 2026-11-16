@@ -84,7 +84,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 	for _, def := range testSettings().Defs() {
 		registered = append(registered, def.Key)
 	}
-	if !slices.Equal(listed, registered) || !slices.Contains(listed, "monthly_budget_usd") || !slices.Contains(listed, "cache_ttl_chat") {
+	if !slices.Equal(listed, registered) || !slices.Contains(listed, "monthly_budget_usd") || !slices.Contains(listed, "default_effort") {
 		t.Errorf("list keys = %v, want every registered key %v", listed, registered)
 	}
 
@@ -112,7 +112,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 	for _, tc := range []struct{ key, value string }{
 		{"monthly_budget_usd", "0x1p3"},
 		{"monthly_budget_usd", "0"},
-		{"cache_ttl_chat", "10m"},
+		{"default_effort", "extreme"},
 	} {
 		wantMessage := testSettings().Validate(tc.key, tc.value)
 		if wantMessage == nil {
@@ -126,8 +126,8 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 	if v, ok := storedSetting(t, path, "monthly_budget_usd"); !ok || v != "200" {
 		t.Errorf("monthly_budget_usd after refused values = %q, %v; want 200", v, ok)
 	}
-	if _, ok := storedSetting(t, path, "cache_ttl_chat"); ok {
-		t.Error("a refused cache_ttl_chat value was stored")
+	if _, ok := storedSetting(t, path, "default_effort"); ok {
+		t.Error("a refused default_effort value was stored")
 	}
 
 	unset := runSettings(t, "unset", "monthly_budget_usd")

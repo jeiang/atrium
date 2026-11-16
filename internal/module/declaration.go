@@ -29,6 +29,7 @@ import (
 type Context struct {
 	Current  func() *Snapshot
 	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
+	Follow   func(context.Context, db.Querier) (bool, error)
 	Catalog  func() *Catalog
 	Env      config.Env
 }
@@ -48,8 +49,13 @@ func (c Context) Tools() (*registry.Registry, error) {
 
 type Declaration struct {
 	Name              string
+	Title             string
 	Core              bool
-	Needs             []string
+	App               bool
+	Depends           []string
+	Needs             []Need
+	Packages          []string
+	Tables            []string
 	Requires          []Requirement
 	Settings          []settings.Def
 	Host              []settings.HostDef
@@ -90,6 +96,13 @@ type Declaration struct {
 	Checks            []ops.Check
 	Operations        []application.Definition
 	Bindings          []application.Binding
+}
+
+type Need struct {
+	Kind       connections.Kind
+	Soft       bool
+	Capability string
+	Features   []string
 }
 
 type SetService struct {

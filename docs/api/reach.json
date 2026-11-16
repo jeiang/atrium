@@ -17,10 +17,11 @@
       "area": "composer",
       "operations": [
         "assistant.configuration",
+        "assistant.subagent_roles",
         "assistant.thread.options"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 3,
+      "bound": 3
     },
     {
       "area": "devices",
@@ -86,7 +87,10 @@
       "operations": [
         "calendar.draft-candidates",
         "calendar.sync",
+        "connections.dependencies",
+        "connections.disable",
         "connections.disconnect",
+        "connections.enable",
         "connections.list",
         "connections.oauth-complete",
         "connections.oauth-configure",
@@ -98,8 +102,8 @@
         "contacts.lookup",
         "contacts.sync"
       ],
-      "required": 13,
-      "bound": 13
+      "required": 16,
+      "bound": 16
     },
     {
       "area": "knowledge",
@@ -182,11 +186,10 @@
         "mail.search",
         "mail.shadow-report",
         "mail.sync",
-        "mail.triage",
-        "mail.upcoming-birthdays"
+        "mail.triage"
       ],
-      "required": 42,
-      "bound": 42
+      "required": 41,
+      "bound": 41
     },
     {
       "area": "media",
@@ -218,11 +221,14 @@
     {
       "area": "permissions",
       "operations": [
+        "automation.pause",
+        "automation.pause-status",
+        "automation.resume",
         "review.permissions",
         "review.permissions-update"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "proposals",
@@ -273,6 +279,8 @@
     {
       "area": "settings",
       "operations": [
+        "apps.list",
+        "apps.switch",
         "assistant.defaults-set",
         "auth.bearer-issue",
         "auth.bearer-list",
@@ -291,8 +299,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 17,
-      "bound": 17
+      "required": 19,
+      "bound": 19
     },
     {
       "area": "tasks",
@@ -303,6 +311,7 @@
         "commitments.get",
         "commitments.list",
         "commitments.reopen",
+        "commitments.snooze",
         "commitments.update",
         "tasks.add",
         "tasks.delete",
@@ -313,8 +322,8 @@
         "tasks.reopen",
         "tasks.update"
       ],
-      "required": 15,
-      "bound": 15
+      "required": 16,
+      "bound": 16
     },
     {
       "area": "threads",
@@ -397,7 +406,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 221,
-  "total_bound": 221,
+  "total_required": 230,
+  "total_bound": 230,
   "total_approval_reached": 11
 }

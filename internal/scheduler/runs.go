@@ -20,6 +20,7 @@ const (
 	StatusSkippedPause        Status = "skipped_pause"
 	StatusSkippedModule       Status = "skipped_module"
 	StatusSkippedUnconfigured Status = "skipped_unconfigured"
+	StatusSkippedDependency   Status = "skipped_dependency"
 	StatusMissed              Status = "missed_coalesced"
 	StatusRequested           Status = "requested"
 	StatusRefused             Status = "refused"

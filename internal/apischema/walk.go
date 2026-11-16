@@ -45,7 +45,6 @@ var pinnedNames = map[string]string{
 	atrium + "assistant/assistantmodule.apiAbout":      "AboutPage",
 	atrium + "assistant/assistantmodule.apiAgenda":     "AgendaPage",
 	atrium + "assistant/assistantmodule.apiItem":       "TranscriptItem",
-	atrium + "mail/birthdays.Item":                     "BirthdayItem",
 	atrium + "media.Channel":                           "MediaChannel",
 	atrium + "notify.Channel":                          "NotificationChannel",
 	atrium + "notify/application.KindRow":              "NotificationKindRow",

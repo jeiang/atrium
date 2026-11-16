@@ -33,7 +33,7 @@ const (
 
 func Settings() []settings.Def {
 	return []settings.Def{settings.Value(settings.UI, settings.Def{
-		Key: NotifyKey, Module: "assistant", Type: settings.Bool, Default: "true",
+		Key: NotifyKey, Label: "Notify me when the morning brief is ready", Module: "assistant", Type: settings.Bool, Default: "true",
 	})}
 }
 

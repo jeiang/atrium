@@ -25,6 +25,7 @@ type connectionConfig struct {
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:            KindGrafana,
+		Offers:          []string{"viewer"},
 		CredentialSlots: []string{"viewer_token", "api_key"},
 		Validate:        validateConnection,
 		Test:            testConnection,
