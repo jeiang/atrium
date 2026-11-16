@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,7 @@ type Settings struct {
 	Latitude     float64
 	Longitude    float64
 	HasLocation  bool
+	ForecastOff  bool
 	ForecastURL  string
 	GeocodingURL string
 	HTTP         *http.Client
@@ -101,6 +103,7 @@ func Load(ctx context.Context, q db.Querier) (Settings, error) {
 		}
 		return Settings{}, err
 	}
+	s.ForecastOff = !slices.ContainsFunc(lease.Capabilities(), func(c connections.Capability) bool { return c.Name == "forecast" && c.Enabled })
 	if s.ForecastURL, err = lease.Endpoint("url"); err != nil {
 		return Settings{}, err
 	}
