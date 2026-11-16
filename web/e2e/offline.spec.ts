@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -187,6 +188,7 @@ async function openAccount(page: Page, name = 'Ada Operator'): Promise<void> {
 async function buildUpdate(): Promise<{ root: string; entry: string }> {
   const root = await mkdtemp(join(tmpdir(), 'atrium-next-update-'));
   await cp(dist, root, { recursive: true });
+  execFileSync('chmod', ['-R', 'u+w', root]);
   const html = await readFile(join(root, 'index.html'), 'utf8');
   const old = /\/next\/assets\/(index-[\w-]+)\.js/.exec(html)?.[1];
   if (!old) throw new Error('no entry script in index.html');
