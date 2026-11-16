@@ -1,12 +1,11 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
   import { Router } from 'sv-router';
-  import { startAppEvents } from '../contract';
   import { announce } from '../shared/announce.svelte';
   import LiveRegion from '../shared/LiveRegion.svelte';
-  import { topicInvalidator } from '../shared/live';
   import Icon from '../shared/ui/Icon.svelte';
   import Toaster from '../shared/ui/Toaster.svelte';
+  import { toast } from '../shared/ui/toast.svelte';
   import AccountMenu from './AccountMenu.svelte';
   import { useShell } from './frame';
   import {
@@ -22,10 +21,9 @@
   } from './nav';
   import { isActive, p, route, routeTitle } from './router';
   import SessionState, { stateTitle } from './SessionState.svelte';
-  import { loadSession, session } from './session.svelte';
+  import { session } from './session.svelte';
 
   const client = useQueryClient();
-  void loadSession();
 
   const signedIn = $derived(session.view.status === 'signed-in' ? session.view.session : undefined);
   const shell = useShell(() => signedIn !== undefined);
@@ -38,7 +36,20 @@
 
   $effect(() => {
     if (!signedIn) return;
-    return startAppEvents({ onNotice: topicInvalidator(client) });
+    let stop: (() => void) | undefined;
+    let ended = false;
+    Promise.all([import('../contract/events'), import('../shared/live')]).then(
+      ([events, live]) => {
+        if (!ended) stop = events.startAppEvents({ onNotice: live.topicInvalidator(client) });
+      },
+      () => {
+        if (!ended) toast('Live updates are off. Reload to turn them on.', { tone: 'error' });
+      },
+    );
+    return () => {
+      ended = true;
+      stop?.();
+    };
   });
 
   const title = $derived(signedIn ? routeTitle() : stateTitle(session.view));
@@ -131,7 +142,7 @@
   </header>
   <main id="main" class="main" tabindex="-1">
     {#if signedIn && shell.isPending}
-      <p class="frame-note">Loading atrium</p>
+      <p class="frame-note">Loading atrium. Home, your plan and the inbox appear here in a moment.</p>
     {:else if signedIn}
       <Router />
     {:else}

@@ -26,7 +26,11 @@
 </script>
 
 {#if view.status === 'loading' || view.status === 'redirecting'}
-  <p class="frame-note">{view.status === 'redirecting' ? 'Signing in' : 'Loading atrium'}</p>
+  <p class="frame-note">
+    {view.status === 'redirecting'
+    ? 'Signing in'
+    : 'Loading atrium. Home, your plan and the inbox appear here in a moment.'}
+  </p>
 {:else}
   <section class="gate">
     <h1 class="gate__title">{stateTitle(view)}</h1>
