@@ -25,7 +25,7 @@ type EffectOrigin struct {
 type Ref struct {
 	Ref     string
 	Label   string
-	Project string
+	Project int64
 	Line    string
 }
 
