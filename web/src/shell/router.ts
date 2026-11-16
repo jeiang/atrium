@@ -1,4 +1,5 @@
 import { createRouter } from 'sv-router';
+import { preloadMarkdown } from '../shared/markdown/load';
 import NotFound from './NotFound.svelte';
 import { appById } from './nav';
 import Unavailable from './Unavailable.svelte';
@@ -25,8 +26,8 @@ export const { p, navigate, isActive, route } = createRouter(
     '/drafts/:id': () => import('../features/inbox/ResolveItem.svelte').catch(unavailable),
     '/chat': {
       '/': () => import('../features/chats/ChatsPage.svelte').catch(unavailable),
-      '/new': () => import('../features/chats/ChatPage.svelte').catch(unavailable),
-      '/:id': () => import('../features/chats/ChatPage.svelte').catch(unavailable),
+      '/new': () => preloadMarkdown(import('../features/chats/ChatPage.svelte').catch(unavailable)),
+      '/:id': () => preloadMarkdown(import('../features/chats/ChatPage.svelte').catch(unavailable)),
       meta: { title: 'Chats' },
     },
     '/plan': { '/': placeholder, meta: { title: 'Plan' } },

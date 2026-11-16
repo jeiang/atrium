@@ -9,6 +9,7 @@
   import Forms from './sections/Forms.svelte';
   import Foundations from './sections/Foundations.svelte';
   import Overlays from './sections/Overlays.svelte';
+  import Prose from './sections/Prose.svelte';
   import Simulator from './sections/Simulator.svelte';
   import States from './sections/States.svelte';
   import Status from './sections/Status.svelte';
@@ -39,5 +40,6 @@
   <Approvals />
   <Tools />
   <Assistant />
+  <Prose />
   <Simulator />
 </Page>

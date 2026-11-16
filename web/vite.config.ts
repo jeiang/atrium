@@ -79,6 +79,14 @@ export default defineConfig(({ mode }) => ({
     transformer: 'lightningcss',
     lightningcss: { drafts: { customMedia: true } },
   },
+  resolve: {
+    alias: [
+      {
+        find: /^decode-named-character-reference$/,
+        replacement: fileURLToPath(new URL('src/shared/markdown/entities.ts', import.meta.url)),
+      },
+    ],
+  },
   base: mode === 'mock' ? '/' : '/next/',
   build: {
     outDir: mode === 'mock' ? 'dist-mock' : 'dist',
