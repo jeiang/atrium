@@ -77,6 +77,7 @@ func TestServeSyncsNotionOnSchedule(t *testing.T) {
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
 	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-3600, notion.JobKey)
+	asstExec(t, d, "UPDATE connections SET state = 'ok', reason = '', checked_at = unixepoch() WHERE id = 'service/notion'")
 
 	started := float64(time.Now().Unix())
 	startServeIn(t, dir)

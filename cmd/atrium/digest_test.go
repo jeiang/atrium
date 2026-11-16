@@ -69,7 +69,7 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE name = 'daily-nudges'", now-1)
 	requests := len(api.Requests())
 	cancel, done = start()
-	first := browser.decrypt(t, push.wait(t, 1).body)
+	first := push.find(t, browser, "Call the dentist")
 	waitFor(t, func() bool {
 		var running int
 		if err := d.Read.QueryRow("SELECT COUNT(*) FROM job_runs WHERE status = 'running'").Scan(&running); err != nil {

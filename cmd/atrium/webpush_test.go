@@ -553,6 +553,30 @@ func (f *fakePush) wait(t *testing.T, n int) pushRequest {
 	return pushRequest{}
 }
 
+func (f *fakePush) find(t *testing.T, b pushBrowser, want string) map[string]any {
+	t.Helper()
+	for n := 1; ; n++ {
+		body := b.decrypt(t, f.wait(t, n).body)
+		if strings.Contains(fmt.Sprint(body["title"])+"\n"+fmt.Sprint(body["body"]), want) {
+			return body
+		}
+	}
+}
+
+func (f *fakePush) titled(t *testing.T, b pushBrowser, want string) int {
+	t.Helper()
+	f.mu.Lock()
+	got := append([]pushRequest(nil), f.received...)
+	f.mu.Unlock()
+	n := 0
+	for _, p := range got {
+		if strings.Contains(fmt.Sprint(b.decrypt(t, p.body)["title"]), want) {
+			n++
+		}
+	}
+	return n
+}
+
 func clearBootNotices(t *testing.T, d *db.DB) {
 	t.Helper()
 	waitFor(t, func() bool {
