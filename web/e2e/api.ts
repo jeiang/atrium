@@ -153,6 +153,7 @@ export function fakeApi(api: Api): Handler {
     if (path === '/shell') return json(res, 200, shell(api.needsYou));
     if (path === '/home') return json(res, 200, home);
     if (path === '/pending') return json(res, 200, pending);
+    if (path === '/apps') return json(res, 200, { data: { apps: [] }, revision: '1' });
     if (path === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' }).end('event: sync\ndata: {"topics":[]}\n\n');
       return true;

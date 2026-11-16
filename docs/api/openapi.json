@@ -1250,56 +1250,6 @@
         ],
         "type": "object"
       },
-      "BirthdayItem": {
-        "properties": {
-          "date": {
-            "type": "string"
-          },
-          "days_until": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "emails": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "key": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "turning": {
-            "anyOf": [
-              {
-                "maximum": 9007199254740991,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "name",
-          "kind",
-          "label",
-          "date",
-          "days_until",
-          "emails",
-          "key"
-        ],
-        "type": "object"
-      },
       "BranchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7508,20 +7458,6 @@
         ],
         "type": "object"
       },
-      "MailBirthdays": {
-        "properties": {
-          "upcoming": {
-            "items": {
-              "$ref": "#/components/schemas/BirthdayItem"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "upcoming"
-        ],
-        "type": "object"
-      },
       "MailCommitmentsPage": {
         "properties": {
           "items": {
@@ -8823,6 +8759,48 @@
         "required": [
           "items",
           "matched"
+        ],
+        "type": "object"
+      },
+      "MediaQueue": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MediaQueueItem"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "MediaQueueItem": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "torrent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "torrent"
         ],
         "type": "object"
       },
@@ -11622,21 +11600,6 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/MailActionsPage"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "ReadMailBirthdays": {
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/MailBirthdays"
           },
           "revision": {
             "type": "string"
@@ -15877,6 +15840,36 @@
         },
         "required": [
           "tokens"
+        ],
+        "type": "object"
+      },
+      "TorrentControlInput": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "delete_files": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "TorrentControlled": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hash",
+          "action"
         ],
         "type": "object"
       },
@@ -32499,137 +32492,6 @@
         "x-atrium-module": "mail"
       }
     },
-    "/mail/birthdays": {
-      "get": {
-        "operationId": "mail.upcoming-birthdays",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "days",
-            "schema": {
-              "format": "int64",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReadMailBirthdays"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "mail"
-        ],
-        "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
-      }
-    },
     "/mail/commitments": {
       "get": {
         "operationId": "mail.commitments",
@@ -41611,6 +41473,156 @@
         "x-atrium-module": "media"
       }
     },
+    "/media/queue": {
+      "get": {
+        "operationId": "media.queue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaQueue"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "media"
+        ],
+        "x-atrium-area": "media",
+        "x-atrium-module": "media"
+      }
+    },
     "/media/shows": {
       "get": {
         "operationId": "media.show-search",
@@ -42201,7 +42213,7 @@
           "media"
         ],
         "x-atrium-area": "media",
-        "x-atrium-module": "media"
+        "x-atrium-module": "torrents"
       },
       "post": {
         "operationId": "media.add",
@@ -42400,7 +42412,179 @@
         ],
         "x-atrium-area": "media",
         "x-atrium-body-limit": 2097152,
-        "x-atrium-module": "media"
+        "x-atrium-module": "torrents"
+      }
+    },
+    "/media/torrents/{hash}/control": {
+      "post": {
+        "operationId": "torrents.control",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "hash",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TorrentControlInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TorrentControlled"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "media"
+        ],
+        "x-atrium-area": "media",
+        "x-atrium-module": "torrents"
       }
     },
     "/media/torrents/{hash}/files": {
@@ -42558,7 +42742,7 @@
           "media"
         ],
         "x-atrium-area": "media",
-        "x-atrium-module": "media"
+        "x-atrium-module": "torrents"
       },
       "put": {
         "operationId": "media.select-files",
@@ -42728,7 +42912,7 @@
           "media"
         ],
         "x-atrium-area": "media",
-        "x-atrium-module": "media"
+        "x-atrium-module": "torrents"
       }
     },
     "/memory/backfill": {

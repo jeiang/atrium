@@ -1,6 +1,7 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
-  import { ok, type PermissionRule, reviewPermissionsUpdate } from '../../contract';
+  import { automationPause, automationResume, ok, type PermissionRule, reviewPermissionsUpdate } from '../../contract';
+  import { announce } from '../../shared/announce.svelte';
   import { inboxPath } from '../../shared/assistant/inboxId';
   import { unreachable } from '../../shared/device.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
@@ -12,10 +13,13 @@
   import Section from '../../shared/ui/Section.svelte';
   import SelectField from '../../shared/ui/SelectField.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
+  import StatusMark from '../../shared/ui/StatusMark.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
+  import { useShell } from '../../shell/frame';
   import { p } from '../../shell/router';
   import AssistantNav from './AssistantNav.svelte';
   import {
+    dateTime,
     failure,
     fieldErrors,
     gesture,
@@ -60,6 +64,27 @@
   const requests = usePermissionRequests();
   const offline = $derived(unreachable(permissions));
   const requestsOffline = $derived(unreachable(requests));
+  const shell = useShell();
+  const pause = $derived(shell.data?.pause);
+  let pausing = $state(false);
+  let pauseResult = $state<Outcome>();
+
+  async function onPauseToggle(): Promise<void> {
+    if (pausing || !pause) return;
+    const resume = pause.paused;
+    pausing = true;
+    pauseResult = undefined;
+    try {
+      if (resume) ok(await automationResume(gesture()));
+      else ok(await automationPause({}, gesture()));
+      announce(resume ? 'Automation resumed' : 'Automation paused');
+    } catch (error) {
+      pauseResult = failure(error, resume ? 'the resume' : 'the pause', () => void shell.refetch());
+    } finally {
+      pausing = false;
+      void client.invalidateQueries({ queryKey: ['shell'] });
+    }
+  }
 
   let draft = $state<Record<string, string>>({});
   let synced = $state<string>();
@@ -141,6 +166,28 @@
         </li>
         <li>Once outside text is in a thread, actions toward other people or the internet can only ask or refuse.</li>
       </ul>
+    </Section>
+
+    <Section id="automation" title="Automation">
+      {#if pause}
+        <div class="cluster asst-pause">
+          <StatusMark tone={pause.paused ? 'warn' : 'ok'}>{pause.paused ? 'Paused' : 'Running'}</StatusMark>
+          {#if pause.paused && pause.since}
+            <span class="meta">Since {dateTime(pause.since)}{pause.by ? ` by ${pause.by}` : ''}</span>
+          {/if}
+          <Button variant={pause.paused ? 'primary' : 'secondary'} pending={pausing} onclick={onPauseToggle}
+            >{pause.paused ? 'Resume automation' : 'Pause automation'}</Button
+          >
+        </div>
+        {#if pause.paused && pause.reason}
+          <p class="asst-text">{pause.reason}</p>
+        {/if}
+        {#if pauseResult}
+          <Notice tone={pauseResult.tone} variant="inline" title={pauseResult.title}>{pauseResult.text}</Notice>
+        {/if}
+      {:else}
+        <Skeleton lines={1} label="Loading the pause state" />
+      {/if}
     </Section>
 
     {#if offline}

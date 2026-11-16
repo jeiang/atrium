@@ -92,8 +92,8 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	before := audits()
 
 	listed := apiData(t, api.do(http.MethodGet, "/api/v1/apps", token, nil), http.StatusOK)
-	if ids := appIDs(listed); !slices.Equal(ids, []string{"calendar", "grafana", "mail", "media", "weather"}) {
-		t.Fatalf("manifest apps = %v, want only the five apps", ids)
+	if ids := appIDs(listed); !slices.Equal(ids, []string{"calendar", "grafana", "mail", "media", "torrents", "weather"}) {
+		t.Fatalf("manifest apps = %v, want only the six apps", ids)
 	}
 	if web := apiData(t, browser.do(http.MethodGet, "/web/v1/apps", nil), http.StatusOK); !slices.Equal(appIDs(web), appIDs(listed)) {
 		t.Fatalf("the web manifest differs: %v", appIDs(web))
@@ -110,6 +110,12 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	}
 	if grafana := appEntryOf(t, listed, "grafana"); !strings.Contains(mustJSON(t, grafana["depends"]), `"id":"assistant"`) {
 		t.Fatalf("grafana depends: %v", grafana)
+	}
+	if !strings.Contains(mustJSON(t, mediaApp["depends"]), `"id":"torrents"`) {
+		t.Fatalf("media depends: %v", mediaApp)
+	}
+	if torrentsApp := appEntryOf(t, listed, "torrents"); torrentsApp["enabled"] != true || !strings.Contains(mustJSON(t, torrentsApp["dependents"]), `"id":"media"`) {
+		t.Fatalf("torrents entry: %v", torrentsApp)
 	}
 	calendar := appEntryOf(t, listed, "calendar")
 	if calendar["switchable"] != false || !strings.Contains(calendar["pin_source"].(string), "host") {
@@ -145,6 +151,10 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 		t.Fatalf("the agent changed media_enabled to %q", v)
 	}
 
+	expectAPI(t, api.do(http.MethodPut, "/api/v1/apps/torrents/enabled", token, map[string]any{"enabled": false}), http.StatusConflict, "dependent_on")
+	if v, _ := storedFlag(t, dir, unit.Torrents); v != "true" {
+		t.Fatalf("a refused switch turned torrents off: %q", v)
+	}
 	off := apiData(t, api.do(http.MethodPut, "/api/v1/apps/media/enabled", token, map[string]any{"enabled": false}, "If-Match", revision), http.StatusOK)
 	if off["enabled"] != false || off["state"] != "off" {
 		t.Fatalf("switched media: %v", off)
@@ -164,8 +174,8 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	})
 	model.Push(asstReply("ok"))
 	ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
-	if slices.Contains(offeredTools(t, model, ran), "media_downloads") {
-		t.Fatal("media_downloads is offered with media off")
+	if slices.Contains(offeredTools(t, model, ran), "media_channels") {
+		t.Fatal("media_channels is offered with media off")
 	}
 	if system := systemText(t, model.Requests()[len(model.Requests())-1]); !strings.Contains(system, "Media (media)") || strings.Contains(system, "Mail (mail)") {
 		t.Fatalf("the system prompt does not name only the off apps: %.400s", system)
@@ -180,6 +190,12 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 		t.Fatalf("run-now of the media sweep with media off: %d %.400s", got.status, got.body)
 	}
 
+	apiData(t, api.do(http.MethodPut, "/api/v1/apps/torrents/enabled", token, map[string]any{"enabled": false}), http.StatusOK)
+	expectAPI(t, api.do(http.MethodPut, "/api/v1/apps/media/enabled", token, map[string]any{"enabled": true}), http.StatusConflict, "dependency_off")
+	if v, _ := storedFlag(t, dir, unit.Media); v != "false" {
+		t.Fatalf("a refused switch turned media on: %q", v)
+	}
+	apiData(t, api.do(http.MethodPut, "/api/v1/apps/torrents/enabled", token, map[string]any{"enabled": true}), http.StatusOK)
 	on := browser.do(http.MethodPut, "/web/v1/apps/media/enabled", map[string]any{"enabled": true})
 	if data := apiData(t, on, http.StatusOK); data["enabled"] != true || data["state"] != "enabled" {
 		t.Fatalf("media back on: %v", data)
@@ -193,8 +209,8 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	})
 	model.Push(asstReply("ok"))
 	ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
-	if !slices.Contains(offeredTools(t, model, ran), "media_downloads") {
-		t.Fatal("media_downloads is missing with media back on")
+	if !slices.Contains(offeredTools(t, model, ran), "media_channels") {
+		t.Fatal("media_channels is missing with media back on")
 	}
 	if system := systemText(t, model.Requests()[len(model.Requests())-1]); strings.Contains(system, "These apps are turned off") {
 		t.Fatalf("the prompt names off apps while all are on: %.400s", system)

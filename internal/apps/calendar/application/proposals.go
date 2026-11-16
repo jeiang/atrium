@@ -145,6 +145,9 @@ func (s *Service) RequestDelete(ctx context.Context, in DeleteInput) (applicatio
 	if in.ProposalID != nil {
 		details["proposal_id"] = *in.ProposalID
 	}
+	if err := calendar.RefuseBirthday(in.UID); err != nil {
+		return application.Change[Deleted]{}, s.fail(ctx, RequestDeleteName, calendar.Birthdays, details, err)
+	}
 	row, err := calendar.FindTracked(ctx, s.db.Write, in.UID)
 	if err != nil {
 		return application.Change[Deleted]{}, s.fail(ctx, RequestDeleteName, "", details, err)

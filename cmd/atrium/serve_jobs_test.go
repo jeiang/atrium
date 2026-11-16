@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
@@ -41,7 +42,7 @@ func newHeldQBittorrent(t *testing.T, held bool) *heldQBittorrent {
 		case <-r.Context().Done():
 			return
 		}
-		_ = json.NewEncoder(w).Encode([]media.Torrent{})
+		_ = json.NewEncoder(w).Encode([]contract.Torrent{})
 	}))
 	t.Cleanup(func() {
 		select {

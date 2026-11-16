@@ -232,6 +232,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "torrents_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "torrents_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "weather_enabled": {
           "default": false,
           "type": [
@@ -491,6 +502,7 @@
     "core.ops_pprof": "host",
     "core.otel_traces_endpoint": "host",
     "core.public_url": "host",
+    "core.torrents_enabled": "operator",
     "core.tz": "operator",
     "core.weather_enabled": "operator",
     "db.key": "host",
@@ -991,6 +1003,7 @@
     "core.media_enabled": "atrium settings set media_enabled",
     "core.notifications_enabled": "atrium settings set notifications_enabled",
     "core.otel_traces_endpoint": "services.atrium.observability.tracesEndpoint",
+    "core.torrents_enabled": "atrium settings set torrents_enabled",
     "core.tz": "atrium settings set tz",
     "core.weather_enabled": "atrium settings set weather_enabled",
     "db.key": "services.atrium.database.keyFile",
@@ -1098,7 +1111,7 @@
     "media.media_link_ttl_seconds": "atrium settings set media_link_ttl_seconds",
     "media.media_movies_url": "host.media.media_vpn_base_url (choose explicitly)",
     "media.media_qbittorrent_api_key": "connections.\"service/qbittorrent\".credential_files.api_key",
-    "media.media_qbittorrent_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds",
+    "media.media_qbittorrent_timeout_seconds": "the compiled constant internal/apps/torrents/helpers.go:TuningMediaQbittorrentTimeoutSeconds",
     "media.media_qbittorrent_url": "connections.\"service/qbittorrent\".config.url",
     "media.media_root": "services.atrium.mediaAgent.roots",
     "media.media_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaSearchLimit",
@@ -1108,7 +1121,7 @@
     "media.media_tmdb_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaTmdbTimeoutSeconds",
     "media.media_tmdb_token": "connections.\"service/tmdb\".credential_files.read_token",
     "media.media_tmdb_url": "connections.\"service/tmdb\".config.url",
-    "media.media_torrent_upload_bytes": "the compiled constant internal/media/tuning.go:TuningMediaTorrentUploadBytes",
+    "media.media_torrent_upload_bytes": "the compiled constant internal/apps/torrents/helpers.go:TuningMediaTorrentUploadBytes",
     "media.media_tv_url": "host.media.media_vpn_base_url (choose explicitly)",
     "media.media_video_extensions": "the compiled constant internal/media/tuning.go:TuningMediaVideoExtensions",
     "media.qbittorrent_ca_file": "connections.\"service/qbittorrent\".transport.ca_file",

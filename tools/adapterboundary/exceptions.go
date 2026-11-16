@@ -3,6 +3,7 @@ package main
 const unplanned = "unplanned"
 
 var exceptions = []exception{
+	{"internal/apps/calendar", "internal/contacts", unplanned},
 	{"internal/apps/calendar/calendarmodule", "internal/assistant/application", "P12.2"},
 	{"internal/apps/calendar/calendarmodule", "internal/assistant/jobworker", unplanned},
 	{"internal/apps/calendar/calendarmodule", "internal/assistant/journal", "P12.2"},
@@ -12,6 +13,7 @@ var exceptions = []exception{
 	{"internal/apps/calendar/calendarmodule", "internal/assistant/threads", "P12.2"},
 	{"internal/apps/calendar/calendarmodule", "internal/attention/sources", "P12.2"},
 	{"internal/apps/calendar/calendartools", "internal/assistant/application", unplanned},
+	{"internal/apps/torrents/torrenttools", "internal/assistant/application", unplanned},
 	{"internal/assistant/assistantmodule", "internal/assistant/tools/ops", "P14.1"},
 	{"internal/assistant/assistantmodule", "internal/serverops", "P14.1"},
 	{"internal/assistant/assistantmodule", "internal/serverops/application", "P14.1"},
@@ -49,7 +51,6 @@ var exceptions = []exception{
 	{"internal/mail/application", "internal/assistant/classifier", "P13.2b"},
 	{"internal/mail/application", "internal/commitments/application", "P12.1b"},
 	{"internal/mail/application", "internal/contacts", "P13.2b"},
-	{"internal/mail/birthdays", "internal/contacts", "P11.2"},
 	{"internal/mail/classify", "internal/assistant/classifier", "P13.1b"},
 	{"internal/mail/flags", "internal/contacts", "P13.1a"},
 	{"internal/mail/mailmodule", "internal/assistant/classifier", "P13.2b"},

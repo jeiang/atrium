@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
@@ -125,16 +126,14 @@ type Tuning struct {
 	ChildLimit      int
 	VideoExts       map[string]bool
 	SubtitleExts    map[string]bool
-	TorrentUpload   int
 }
 
 type Settings struct {
 	Tuning
 	DownloadPrefix string
-	QbitLease      *connections.Lease
-	QbitStore      *connections.Store
+	Intake         contract.Intake
 	TMDBLease      *connections.Lease
-	TMDBStore      *connections.Store
+	Store          *connections.Store
 	EZTVLease      *connections.Lease
 	AgentLease     *connections.Lease
 	VPNBaseURL     string
@@ -178,9 +177,6 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		}
 		return found, nil
 	}
-	if out.QbitLease, failure = lease(connections.ID(KindQbittorrent)); failure != nil {
-		return Settings{}, failure
-	}
 	if out.TMDBLease, failure = lease(connections.ID(KindTMDB)); failure != nil {
 		return Settings{}, failure
 	}
@@ -190,8 +186,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	if out.AgentLease, failure = lease(connections.ID(KindMediaAgent)); failure != nil {
 		return Settings{}, failure
 	}
-	out.QbitStore = connections.DefaultFor(q)
-	out.TMDBStore = out.QbitStore
+	out.Store = connections.DefaultFor(q)
 	return out, nil
 }
 
@@ -224,8 +219,8 @@ func (s Settings) TMDB() *TMDB {
 		return nil
 	}
 	tmdb := NewTMDBAt(token, apiHTTP, imageHTTP, api, images)
-	if s.TMDBStore != nil && tmdb != nil {
-		lease, store := s.TMDBLease, s.TMDBStore
+	if s.Store != nil && tmdb != nil {
+		lease, store := s.TMDBLease, s.Store
 		tmdb.report = func(ctx context.Context, state connections.State, reason string) {
 			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{
 				Capability: "api", State: state, Reason: reason,
@@ -233,37 +228,4 @@ func (s Settings) TMDB() *TMDB {
 		}
 	}
 	return tmdb
-}
-
-func (s Settings) NeedQbit() (string, error) {
-	if s.QbitLease == nil {
-		return "", config.NotConfigured("the qBittorrent connection is not configured")
-	}
-	base, err := s.QbitLease.Endpoint("url")
-	if err != nil {
-		return "", config.NotConfigured("the qBittorrent connection has no URL")
-	}
-	return base, nil
-}
-
-func (s Settings) Qbit() (*Qbit, error) {
-	base, err := s.NeedQbit()
-	if err != nil {
-		return nil, err
-	}
-	client, err := s.QbitLease.HTTP("url")
-	if err != nil {
-		return nil, err
-	}
-	token, _ := s.QbitLease.Credential("api_key")
-	q := NewQbit(base, token, client)
-	if s.QbitStore != nil {
-		lease, store := s.QbitLease, s.QbitStore
-		q.report = func(ctx context.Context, state connections.State, reason string) {
-			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{
-				Capability: "api", State: state, Reason: reason,
-			})
-		}
-	}
-	return q, nil
 }

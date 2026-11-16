@@ -143,8 +143,6 @@ test.describe('the cached shell', () => {
     await expect(inboxCount(page)).toContainText('3');
     await page.goto(`${site.url}/next/apps`);
     await expect(page.getByRole('heading', { level: 1, name: 'Apps' })).toBeVisible();
-    await page.goto(`${site.url}/next/spaces`);
-    await expect(page.getByRole('heading', { level: 1, name: 'Spaces' })).toBeVisible();
   });
 
   test('a page missing from the device shows that it is not available', async ({ page, site }) => {
@@ -383,7 +381,7 @@ test.describe('the read cache', () => {
     await expect.poll(() => storedShell(page)).toBe(3);
     await expect
       .poll(async () => (await readStored(page)).entries.map((entry) => entry.key).sort())
-      .toEqual(['["home"]', '["pending"]', '["shell"]']);
+      .toEqual(['["apps"]', '["home"]', '["pending"]', '["shell"]']);
     const stored = await readStored(page);
     expect(Object.keys(stored.meta).sort()).toEqual(['format', 'seen', 'session']);
     expect(stored.meta.session).toEqual({
