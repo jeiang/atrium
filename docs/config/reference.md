@@ -88,8 +88,6 @@ Operator settings are stored in the database and edited in the application. They
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
 | `action_link_key` | string | none | secret |
-| `phone_actions_enabled` | bool | `false` | ui |
-| `phone_actions_kinds` | string | `reminder,triage_label,triage_archive,triage_snooze,memory,profile` | ui |
 
 ### assistant
 

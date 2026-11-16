@@ -18,17 +18,11 @@ import (
 )
 
 type Service struct {
-	db      *db.DB
-	state   *state.Store
-	present notify.Presenter
+	db    *db.DB
+	state *state.Store
 }
 
 func New(d *db.DB) *Service { return &Service{db: d, state: state.New(d)} }
-
-func (s *Service) WithPresenter(present notify.Presenter) *Service {
-	s.present = present
-	return s
-}
 
 type Notification = notify.Notification
 type Channel = notify.Channel
@@ -44,8 +38,6 @@ const (
 	TestName           application.Name = "notifications.test"
 	ResendName         application.Name = "notifications.resend"
 	SendName           application.Name = "notifications.send"
-	PhonePolicyName    application.Name = "notifications.phone-policy"
-	RevokeLinksName    application.Name = "notifications.revoke-links"
 	MarkName           application.Name = "notifications.mark"
 )
 
@@ -61,8 +53,6 @@ func Describe() []application.Definition {
 		application.Describe[Empty, TestResult](TestName, application.Command, op, application.External, true),
 		application.Describe[ResendInput, Delivery](ResendName, application.Command, op, application.External, true),
 		application.Describe[SendInput, Delivery](SendName, application.Command, []application.Authority{application.Agent, application.System}, application.External, true),
-		application.Describe[PhonePolicyInput, Empty](PhonePolicyName, application.Command, op, application.NoEffect, true),
-		application.Describe[Empty, Empty](RevokeLinksName, application.Command, op, application.NoEffect, true),
 	}
 }
 

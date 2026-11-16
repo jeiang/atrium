@@ -580,44 +580,6 @@ func ProposalsWithActiveEffects(ctx context.Context, q db.Querier, leaseAfter fl
 	})
 }
 
-type ResolutionRow struct {
-	ID         int64
-	TS         float64
-	Actor      string
-	Source     string
-	Outcome    string
-	Origin     string
-	Operation  string
-	Target     string
-	EffectID   *int64
-	ProposalID *int64
-}
-
-func ResolutionsBefore(ctx context.Context, q db.Querier, source string, beforeTS float64, beforeID int64, limit int) ([]ResolutionRow, error) {
-	where, args := "r.source = ?", []any{source}
-	if beforeID > 0 {
-		where += " AND (r.ts, r.id) < (?, ?)"
-		args = append(args, beforeTS, beforeID)
-	}
-	rows, err := q.QueryContext(ctx,
-		"SELECT r.id, r.ts, r.actor, r.source, r.outcome, COALESCE(e.origin, ''), COALESCE(e.operation, ''), "+
-			"COALESCE(e.target, ''), r.effect_id, r.proposal_id FROM effect_resolutions r "+
-			"LEFT JOIN effects e ON e.id = r.effect_id WHERE "+where+" ORDER BY r.ts DESC, r.id DESC LIMIT ?", append(args, limit)...)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (ResolutionRow, error) {
-		var row ResolutionRow
-		var effectID, proposalID sql.NullInt64
-		if err := r.Scan(&row.ID, &row.TS, &row.Actor, &row.Source, &row.Outcome, &row.Origin, &row.Operation,
-			&row.Target, &effectID, &proposalID); err != nil {
-			return row, err
-		}
-		row.EffectID, row.ProposalID = intPtr(effectID), intPtr(proposalID)
-		return row, nil
-	})
-}
-
 type UnresolvedMailEffect struct {
 	MessageID *int64
 	Account   string

@@ -192,7 +192,7 @@ func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
 		"atrium_runs_total", "atrium_run_steps", "atrium_run_duration_seconds",
 		"atrium_tool_calls_total", "atrium_tool_duration_seconds",
 		"atrium_db_transactions_total", "atrium_queue_depth",
-		"atrium_integration_state", "atrium_action_links_outstanding",
+		"atrium_integration_state",
 		"atrium_notifications_undelivered",
 	} {
 		if !strings.Contains(scrape, "# TYPE "+name+" ") {

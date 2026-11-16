@@ -42,24 +42,14 @@ self.addEventListener("push", (event) => {
   } catch {
     data = {};
   }
-  const actions = Array.isArray(data.actions) ? data.actions.slice(0, 2) : [];
   event.waitUntil(self.registration.showNotification(data.title || "atrium", {
     body: data.body || "",
-    data: { url: local(data.url), actions: Object.fromEntries(actions.map((action) => [action.action, local(action.url)])) },
-    actions: actions.map((action) => ({ action: action.action, title: action.title })),
+    data: { url: local(data.url) },
   }));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const { url, actions } = event.notification.data || {};
-  const target = url || home();
-  const post = event.action && actions ? actions[event.action] : "";
-  if (!post) {
-    event.waitUntil(open(target));
-    return;
-  }
-  event.waitUntil(fetch(post, { method: "POST", credentials: "same-origin" })
-    .then((response) => (response.ok ? undefined : open(target)))
-    .catch(() => open(target)));
+  const { url } = event.notification.data || {};
+  event.waitUntil(open(url || home()));
 });

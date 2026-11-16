@@ -358,8 +358,6 @@
   "type": "object",
   "x-atrium-classes": {
     "action_links.action_link_key": "operator",
-    "action_links.phone_actions_enabled": "operator",
-    "action_links.phone_actions_kinds": "operator",
     "anthropic.anthropic_api_key": "operator",
     "app_keys.action_link_key_file": "host",
     "app_keys.link_key_file": "host",
@@ -980,8 +978,6 @@
   },
   "x-atrium-destinations": {
     "action_links.action_link_key": "the app key file app_keys.action_link_key_file",
-    "action_links.phone_actions_enabled": "atrium settings set phone_actions_enabled",
-    "action_links.phone_actions_kinds": "atrium settings set phone_actions_kinds",
     "anthropic.anthropic_api_key": "connections.\"service/anthropic\".credential_files.api_key",
     "assistant.agent_effort_cron": "atrium settings set agent_effort_cron",
     "assistant.agent_effort_nightly": "atrium settings set agent_effort_nightly",

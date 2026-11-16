@@ -1,7 +1,6 @@
 package reviewpages
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -209,10 +208,6 @@ func (s *service) decided(w http.ResponseWriter, r *http.Request, err error, mis
 	return nil, true
 }
 
-func (s *service) phone(ctx context.Context, token string, now float64) (*proposalsapp.Proposal, error) {
-	done, err := s.review.Phone(ctx, reviewapp.PhoneInput{Token: token, Now: now})
-	return done.Data.Proposal, err
-}
 func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "proposal_id")
 	if !ok {

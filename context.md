@@ -116,8 +116,8 @@ claims about the running application. Operator contracts are in
   key is a generated secret (`webpush_vapid_private_key`) or the
   `service/webpush` connection's `credential_files.vapid_private` host file,
   and the subject comes from `webpush_subject`, edited on the Notifications page,
-  which the notifications module requires. A push carries the title, a body of at most 240 characters, a
-  URL path and, for phone actions, the action links; it is encrypted per
+  which the notifications module requires. A push carries the title, a body of at most 240 characters and a
+  URL path to the signed-in page for its subject; it has no action buttons and opening it writes nothing. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
@@ -145,20 +145,12 @@ claims about the running application. Operator contracts are in
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
   contacts/calendar concern and are not an open-loop source.
-- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain. Link minting limits do not suppress proposal inbox rows or pushes.
-- Phone actions are HMAC-signed links in a notification that approve or
-  dismiss a proposal: `phone_actions_enabled` (default off) and
-  `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot
-  be enabled. A link is valid for 12 hours, one use, with at most 20 links
-  minted per hour; `POST /actions/{token}` redeems it without a session, and
-  the resolution is recorded with source `phone` and shown as "approved via
-  phone" in `/activity`. The host file may bind `app_keys.action_link_key_file`;
-  its bytes sign and verify links and are never copied into the database.
-  Rotating the generated `action_link_key` invalidates
-  outstanding links; the phone action section of the Notifications settings
-  tab shows the outstanding count and revokes links. With a host-file key, revocation deletes outstanding links without rewriting the key.
-  A phone approval that meets a busy lock leaves the proposal pending and
-  the link usable.
+- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain.
+- A permission proposal sends an assistant notification whose push opens
+  `/proposals/{id}`, where the operator decides it while signed in. The
+  generated `action_link_key` secret, or the host file's
+  `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
+  fingerprints; host-file bytes are never copied into the database.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -664,7 +656,7 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery and action links. The ops listener also serves
+  notification delivery. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   The host owns the scrape job and the traces endpoint.
@@ -982,8 +974,7 @@ claims about the running application. Operator contracts are in
   and subagent runs never park: an ask without a card is a deny there. A
   tool that leaves the allow set is withdrawn from dispatch; the request
   keeps its tools array so the run's thinking stays valid, and only a
-  server tool that must go rebuilds the request. Phone action links never
-  approve or dismiss a permission request. Branches inherit the marks.
+  server tool that must go rebuilds the request. Branches inherit the marks.
   A thinking block is resent only while everything before it is
   unchanged.
 - `lookup` reads one source in a child subagent and returns typed

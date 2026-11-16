@@ -4,14 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/actionlink"
-	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
-	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
@@ -36,11 +32,6 @@ type DismissInput struct {
 type Decision struct {
 	Proposal *proposals.Proposal
 	Applied  bool
-}
-
-type PhoneInput struct {
-	Token string
-	Now   float64
 }
 
 func WithOrigin(ctx context.Context, actor, source string) (context.Context, error) {
@@ -75,11 +66,11 @@ func (s *Service) Approve(ctx context.Context, in ApproveInput) (application.Cha
 		}
 		in.Selection = chosen
 	}
-	return s.approve(ctx, in, who, nil)
+	return s.approve(ctx, in, who)
 }
 
-func (s *Service) approve(ctx context.Context, in ApproveInput, who proposals.Resolver, check func(context.Context, db.Querier) error) (application.Change[Decision], error) {
-	done, err := s.pipeline.ApproveAndApply(ctx, in.ProposalID, in.Selection, who, check)
+func (s *Service) approve(ctx context.Context, in ApproveInput, who proposals.Resolver) (application.Change[Decision], error) {
+	done, err := s.pipeline.ApproveAndApply(ctx, in.ProposalID, in.Selection, who)
 	target := proposalTarget(in.ProposalID)
 	var badSelection proposals.SelectionError
 	if errors.As(err, &badSelection) {
@@ -139,65 +130,6 @@ func (s *Service) dismiss(ctx context.Context, in DismissInput, who proposals.Re
 	return application.Change[Decision]{Data: Decision{Proposal: done}, AuditID: s.audit(ctx, DismissName, target, state.OK, nil)}, nil
 }
 
-func (s *Service) Phone(ctx context.Context, in PhoneInput) (application.Change[Decision], error) {
-	ctx = audit.With(ctx, "phone", audit.Phone)
-	who := proposals.Resolver{Actor: "phone", Source: string(audit.Phone)}
-	claims, err := actionlink.Verify(ctx, s.db.Write, in.Token, in.Now)
-	if err != nil {
-		return application.Change[Decision]{}, err
-	}
-	name := DismissName
-	if claims.Action == actionlink.Approve {
-		name = ApproveName
-	}
-	pol, err := policy.Load(ctx, s.db.Read)
-	if err != nil {
-		s.audit(ctx, name, proposalTarget(claims.ProposalID), state.Failed, nil)
-		return application.Change[Decision]{}, fmt.Errorf("%w: %w", actionlink.ErrUnavailable, err)
-	}
-	entered := false
-	delegated := false
-	var out application.Change[Decision]
-	err = actionlink.Redeem(ctx, s.db.Write, in.Token, in.Now, func(ctx context.Context, claims actionlink.Claims) error {
-		entered = true
-		prop, err := proposals.Get(ctx, s.db.Write, claims.ProposalID)
-		if err != nil {
-			return err
-		}
-		if prop == nil || prop.Fingerprint != claims.Hash {
-			return actionlink.ErrInvalid
-		}
-		if prop.Kind == permission.Kind || !pol.Allows(prop.Kind) {
-			return actionlink.ErrRefused
-		}
-		delegated = true
-		if claims.Action == actionlink.Approve {
-			out, err = s.approve(ctx, ApproveInput{ProposalID: prop.ID}, who, func(ctx context.Context, q db.Querier) error {
-				return actionlink.CheckRedemption(ctx, q, claims.Nonce, in.Now)
-			})
-			return err
-		}
-		out, err = s.dismiss(ctx, DismissInput{ProposalID: prop.ID}, who)
-		return err
-	})
-	if entered && !delegated && err != nil {
-		outcome := state.Failed
-		if errors.Is(err, actionlink.ErrInvalid) {
-			outcome = state.Invalid
-		}
-		if errors.Is(err, actionlink.ErrRefused) {
-			outcome = state.Refused
-		}
-		out.AuditID = s.audit(ctx, name, proposalTarget(claims.ProposalID), outcome, nil)
-	}
-	if delegated && out.Data.Proposal == nil && errors.As(err, new(*db.LockBusy)) {
-		if rerr := actionlink.Release(context.WithoutCancel(ctx), s.db.Write, claims.Nonce, in.Now); rerr != nil {
-			log.Error("restoring a phone link after a busy lock failed", "proposal_id", claims.ProposalID, logx.Err, rerr.Error())
-		}
-	}
-	return out, err
-}
-
 func (s *Service) known(ctx context.Context, id int64) error {
 	found, err := proposals.Get(ctx, s.db.Read, id)
 	if err != nil {
@@ -226,9 +158,6 @@ func (s *Service) proposalEffects(ctx context.Context, id int64) []int64 {
 }
 
 func pipelineRefusal(err error) *application.Error {
-	if errors.Is(err, actionlink.ErrUsed) {
-		return &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}
-	}
 	if errors.As(err, new(*db.LockBusy)) {
 		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly", Cause: err}
 	}

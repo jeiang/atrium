@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/netguard"
 	"github.com/jeiang/atrium/internal/notify"
@@ -553,129 +555,122 @@ func (f *fakePush) wait(t *testing.T, n int) pushRequest {
 	return pushRequest{}
 }
 
-func TestInboxActionsSurviveRestartAndResend(t *testing.T) {
+type signedInSite struct {
+	t      *testing.T
+	dir    string
+	base   string
+	client *http.Client
+	stop   func()
+}
+
+func newSignedInSite(t *testing.T, dir string) *signedInSite {
+	t.Helper()
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	jar, _ := cookiejar.New(nil)
+	s := &signedInSite{t: t, dir: dir, client: &http.Client{Jar: jar}}
+	s.restart()
+	return s
+}
+
+func (s *signedInSite) restart() {
+	s.t.Helper()
+	s.base, _, s.stop = startServeStoppable(s.t, s.dir)
+}
+
+func (s *signedInSite) post(path string, form url.Values) (int, string) {
+	s.t.Helper()
+	if code, _, _ := fetch(s.t, s.client, http.MethodGet, s.base+"/settings/notifications", nil); code != http.StatusOK {
+		s.t.Fatalf("notifications page = %d", code)
+	}
+	if form == nil {
+		form = url.Values{}
+	}
+	code, body, _ := fetch(s.t, s.client, http.MethodPost, s.base+path, form)
+	return code, body
+}
+
+func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testing.T) {
+	srv, _ := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
-	s := newPhoneSite(t, dir, api)
+	s := newSignedInSite(t, dir)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
 	if code, _ := s.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
 		t.Fatalf("subscribe = %d", code)
 	}
-	s.policy(phoneKind)
-	type pushed struct {
-		Title   string `json:"title"`
-		Body    string `json:"body"`
-		Actions []struct {
-			Title string `json:"title"`
-			URL   string `json:"url"`
-		} `json:"actions"`
-	}
-	payload := func(n int) pushed {
-		t.Helper()
-		var p pushed
-		raw, err := json.Marshal(browser.decrypt(t, push.wait(t, n).body))
-		if err != nil || json.Unmarshal(raw, &p) != nil {
-			t.Fatalf("payload %d: %v", n, err)
-		}
-		return p
-	}
-	links := func(p pushed) []string {
-		t.Helper()
-		if len(p.Actions) != 2 || p.Actions[0].Title != "Approve" || p.Actions[1].Title != "Dismiss" {
-			t.Fatalf("actions = %#v", p.Actions)
-		}
-		out := []string{}
-		for _, a := range p.Actions {
-			if !strings.HasPrefix(a.URL, "/actions/") {
-				t.Fatalf("action url %q", a.URL)
-			}
-			out = append(out, a.URL)
-		}
-		return out
-	}
-	rows := func() int {
+	rows := func(query string) int {
 		t.Helper()
 		var n int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications").Scan(&n); err != nil {
+		if err := d.Read.QueryRow(query).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
 	}
+	payload := func(n int) map[string]any {
+		t.Helper()
+		p := browser.decrypt(t, push.wait(t, n).body)
+		if len(p) != 3 || p["title"] != "atrium: permission proposal" || p["body"] == "" || p["actions"] != nil {
+			t.Fatalf("push payload %d = %v; want only title, body and url", n, p)
+		}
+		return p
+	}
 
 	push.answer(http.StatusInternalServerError)
-	s.propose(1)
-	first := links(payload(1))
-	if rows() != 1 {
-		t.Fatalf("%d inbox rows after a failed push, want 1", rows())
+	thread := latestThread(t, dir)
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("waiting")))
+	if code, body := s.post(fmt.Sprintf("/chat/%d/messages", thread), url.Values{"text": {"read " + srv.URL + "/a then " + srv.URL + "/b"}}); code >= http.StatusBadRequest {
+		t.Fatalf("POST message = %d: %s", code, body)
 	}
-	var id, proposal int64
-	var stored, failure string
+	proposal := waitParkedPermission(t, d, thread)
+	card := fmt.Sprintf("/proposals/%d", proposal)
+	if p := payload(1); p["url"] != card {
+		t.Fatalf("push url = %v, want the proposal card %s", p["url"], card)
+	}
+	var id int64
 	var delivered bool
-	if err := d.Read.QueryRow("SELECT n.id, n.actions_json, n.delivered, COALESCE(n.error, ''), p.id FROM notifications n, proposals p").Scan(&id, &stored, &delivered, &failure, &proposal); err != nil {
+	var failure string
+	if err := d.Read.QueryRow("SELECT id, delivered, COALESCE(error, '') FROM notifications").Scan(&id, &delivered, &failure); err != nil {
 		t.Fatal(err)
 	}
 	if delivered || !strings.Contains(failure, "web push 500") {
 		t.Fatalf("failed push recorded delivered=%v error=%q", delivered, failure)
 	}
-	var refs []notify.ActionRef
-	if err := json.Unmarshal([]byte(stored), &refs); err != nil || len(refs) != 2 {
-		t.Fatalf("actions_json %q: %v", stored, err)
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+card, nil); code != http.StatusOK {
+		t.Fatalf("the pushed card = %d, want the signed-in proposal page", code)
 	}
-	for i, decision := range []string{"approve", "dismiss"} {
-		if refs[i].Kind != "proposal" || refs[i].TargetID != proposal || refs[i].Decision != decision {
-			t.Fatalf("action reference %d = %#v", i, refs[i])
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		if code, _, _ := fetch(t, s.client, method, s.base+"/actions/any-token", url.Values{}); code != http.StatusNotFound {
+			t.Fatalf("%s /actions/any-token = %d, want 404", method, code)
 		}
 	}
-	for _, link := range first {
-		if strings.Contains(stored, strings.TrimPrefix(link, "/actions/")) {
-			t.Fatal("the inbox row stores a phone link token")
-		}
-	}
-	var failures int
-	if err := d.Read.QueryRow("SELECT failure_count FROM notification_devices").Scan(&failures); err != nil || failures != 1 {
-		t.Fatalf("failure_count = %d, %v", failures, err)
+	if n := rows("SELECT COUNT(*) FROM proposals WHERE status = 'pending'"); n != 1 {
+		t.Fatalf("%d pending proposals after the removed action route, want 1", n)
 	}
 
 	s.stop()
 	s.restart()
-	resend := "/inbox/" + strconv.FormatInt(id, 10) + "/resend"
-	s.policy("reminder")
-	if code, _ := s.post(resend, nil); code == http.StatusOK {
-		t.Fatal("a failing resend reported delivery")
-	}
-	if p := payload(2); len(p.Actions) != 0 {
-		t.Fatalf("a disallowed kind presented phone actions %#v", p.Actions)
-	}
-	s.policy(phoneKind)
 	push.answer(http.StatusCreated)
-	if code, _ := s.post(resend, nil); code != http.StatusOK {
+	if code, _ := s.post(fmt.Sprintf("/inbox/%d/resend", id), nil); code != http.StatusOK {
 		t.Fatalf("resend = %d", code)
 	}
-	again := links(payload(3))
-	if again[0] == first[0] || again[1] == first[1] {
-		t.Fatal("the resend reused the first phone links")
+	if p := payload(2); p["url"] != card {
+		t.Fatalf("resent push url = %v, want %s", p["url"], card)
 	}
-	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", id).Scan(&delivered); err != nil || !delivered || rows() != 1 {
-		t.Fatalf("after resend delivered=%v rows=%d, %v", delivered, rows(), err)
-	}
-	if code := s.action(strings.TrimPrefix(again[1], "/actions/")); code != http.StatusOK {
-		t.Fatalf("dismiss link = %d", code)
-	}
-	if code := s.action(strings.TrimPrefix(again[0], "/actions/")); code != http.StatusGone {
-		t.Fatalf("the sibling approve link still acts after dismiss: %d", code)
+	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", id).Scan(&delivered); err != nil || !delivered || rows("SELECT COUNT(*) FROM notifications") != 1 {
+		t.Fatalf("after resend delivered=%v, %v", delivered, err)
 	}
 
 	push.answer(http.StatusGone)
 	if code, _ := s.post("/settings/notifications/push/test", nil); code == http.StatusOK {
 		t.Fatal("a 410 test reported delivery")
 	}
-	var devices int
-	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM notification_devices) + (SELECT COUNT(*) FROM webpush_devices)").Scan(&devices); err != nil || devices != 0 {
-		t.Fatalf("%d device rows after a 410, %v", devices, err)
-	}
-	if rows() != 1 {
-		t.Fatalf("%d inbox rows after the device was removed", rows())
+	if n := rows("SELECT (SELECT COUNT(*) FROM notification_devices) + (SELECT COUNT(*) FROM webpush_devices)"); n != 0 {
+		t.Fatalf("%d device rows after a 410", n)
 	}
 }
 
