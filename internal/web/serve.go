@@ -32,6 +32,8 @@ const (
 	noEmergency       = -1
 )
 
+var ErrNoTrustedProxy = errors.New("proxy mode needs --trusted-proxy or host web.trusted_proxy_cidrs naming the reverse proxy")
+
 type NavItem = tpl.NavItem
 
 type Page struct {
@@ -65,7 +67,7 @@ func DefineServeFlags(args *cli.Args) func() ServeFlags {
 	port := args.Int("port", 0, cli.Opt{Required: true})
 	modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 	hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
-	trusted := args.Repeated("trusted-proxy", cli.Opt{Help: "socket peer CIDR allowed to set CF-Connecting-IP; repeatable"})
+	trusted := args.Repeated("trusted-proxy", cli.Opt{Help: "socket peer CIDR allowed to set CF-Connecting-IP and the proxy identity headers; repeatable (proxy mode requires one, or host web.trusted_proxy_cidrs)"})
 	emergencyHost := args.String("emergency-host", defaultHost, cli.Opt{Help: "numeric loopback address (127.0.0.0/8 or ::1) of the emergency listener"})
 	emergencyPort := args.Int("emergency-port", noEmergency, cli.Opt{Help: "port of the emergency listener, which trusts every loopback request like --auth local; omitted runs none"})
 	return func() ServeFlags {
@@ -172,6 +174,9 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 	trusted, err := trustedProxies(site.State.Host().Value("trusted_proxy_cidrs"), p.trusted)
 	if err != nil {
 		return nil, nil, err
+	}
+	if p.Public.policy.Proxy() && len(trusted) == 0 {
+		return nil, nil, ErrNoTrustedProxy
 	}
 	var modules []Module
 	var templates []fs.FS
