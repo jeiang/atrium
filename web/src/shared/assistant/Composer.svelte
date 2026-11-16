@@ -109,7 +109,20 @@
     {#if onstop && running}
       <Button variant="secondary" pending={stopping} onclick={onStop}>Stop run</Button>
     {/if}
-    <Button type="submit" variant="primary" icon="arrow" disabled={blocked && !sending} pending={sending}>Send</Button>
+    {#if touch}
+      <Button
+        type="submit"
+        variant="primary"
+        icon="arrow"
+        label="Send"
+        disabled={blocked && !sending}
+        pending={sending}
+      />
+    {:else}
+      <Button type="submit" variant="primary" icon="arrow" disabled={blocked && !sending} pending={sending}
+        >Send</Button
+      >
+    {/if}
   </div>
   {#if failed}
     <p class="composer__error" id="{id}-error" role="alert">
@@ -166,8 +179,8 @@
     overflow-y: auto;
   }
 
-  .composer__text:focus {
-    outline: none;
+  .composer__text:focus-visible {
+    outline-offset: 0;
   }
 
   .composer__text::placeholder {
