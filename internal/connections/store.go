@@ -263,6 +263,9 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 				return err
 			}
 		}
+		if err := s.disableUnknownKinds(ctx, tx); err != nil {
+			return err
+		}
 		if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reconcile != nil {
 			if err := s.reg.sync.Reconcile(ctx, tx, s.host); err != nil {
 				return err
@@ -275,6 +278,41 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reload != nil {
 		return s.reg.sync.Reload(ctx, s)
+	}
+	return nil
+}
+
+const reasonUnsupportedKind = "this kind of connection is no longer supported"
+
+func (s *Store) disableUnknownKinds(ctx context.Context, tx *sql.Tx) error {
+	if s.reg == nil {
+		return nil
+	}
+	rows, err := tx.QueryContext(ctx, "SELECT id, kind FROM connections WHERE NOT (enabled = 0 AND state = 'disabled') ORDER BY id")
+	if err != nil {
+		return err
+	}
+	var unknown []string
+	for rows.Next() {
+		var id, kind string
+		if err := rows.Scan(&id, &kind); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if _, ok := s.reg.Lookup(Kind(kind)); !ok {
+			unknown = append(unknown, id)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, id := range unknown {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE connections SET enabled = 0, state = 'disabled', reason = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
+			reasonUnsupportedKind, s.stamp(), id); err != nil {
+			return err
+		}
+		log.Warn("a stored connection has a kind this version does not support and is disabled", logx.Integration, id)
 	}
 	return nil
 }

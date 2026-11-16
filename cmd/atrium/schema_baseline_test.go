@@ -93,6 +93,33 @@ func assertPreviousMigrationSchemas(t *testing.T, env []string, fresh string) {
 	}
 }
 
+func assertNewestMigrationFixture(t *testing.T, env []string, fresh string) {
+	t.Helper()
+	got := runProcessStdin(t, "SELECT MAX(version) FROM schema_migrations;\n", "db shell", env...)
+	if got.code != cli.ExitOK {
+		t.Fatalf("reading the newest migration: %s", got.stderr)
+	}
+	newest, err := strconv.Atoi(strings.TrimSpace(got.stdout))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newest == 1 {
+		return
+	}
+	name := fmt.Sprintf("schema-v3-%d.db", newest)
+	dir := t.TempDir()
+	fixture := filepath.Join(dir, name)
+	copyFile(t, filepath.Join(golden.Dir(), name), fixture)
+	fixtureEnv := schemaBaselineEnv(dir, fixture, "")
+	got = runProcessStdin(t, "SELECT MAX(version) FROM schema_migrations;\n", "db shell", fixtureEnv...)
+	if got.code != cli.ExitOK || got.stdout != strconv.Itoa(newest)+"\n" {
+		t.Fatalf("%s must be at migration %d for the next migration's e2e: exit %d, version %q, error %s", name, newest, got.code, got.stdout, got.stderr)
+	}
+	if got := schemaBaselineDump(t, fixtureEnv); got != fresh {
+		t.Fatalf("%s differs from a fresh database at migration %d\n%s", name, newest, got)
+	}
+}
+
 func TestSchemaBaselineFrozenAndPreviousMigrationsMatchFresh(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -120,4 +147,5 @@ func TestSchemaBaselineFrozenAndPreviousMigrationsMatchFresh(t *testing.T) {
 	fresh := schemaBaselineDump(t, freshEnv)
 	migrateSchemaFixture(t, fixture, fresh)
 	assertPreviousMigrationSchemas(t, freshEnv, fresh)
+	assertNewestMigrationFixture(t, freshEnv, fresh)
 }

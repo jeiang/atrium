@@ -26,7 +26,6 @@
     "ATRIUM_MEDIA_MOVIES_URL": "http://movies.test",
     "ATRIUM_MEDIA_TV_URL": "http://tv.test",
     "ATRIUM_MODE": "live",
-    "ATRIUM_NOTION_WIKI_ROOT": "00000000-0000-0000-0000-000000000900",
     "ATRIUM_PUBLIC_URL": "https://atrium.test",
     "ATRIUM_TZ": "America/Port_of_Spain",
     "GMAIL_ADDRESS": "operator@gmail.example",
@@ -34,7 +33,6 @@
     "ICLOUD_APPLE_ID": "operator@icloud.example",
     "ICLOUD_APP_PASSWORD": "golden-app-password",
     "ICLOUD_MAIL_USERNAME": "operator@icloud.example",
-    "NOTION_TOKEN": "golden-notion-token",
     "QBITTORRENT_URL": "http://qbit.test",
     "TMDB_API_KEY": "k",
     "TZ": "UTC"

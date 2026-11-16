@@ -33,29 +33,13 @@ func TestMaintenanceAPI(t *testing.T) {
 		}
 	}
 
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, map[string]any{"dest": filepath.Join(f.dir, "elsewhere.db")}), http.StatusBadRequest, "bad_request")
-	made := s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, nil)
-	noPath(made)
-	name, _ := apiData(t, made, http.StatusCreated)["name"].(string)
-	if name == "" || strings.ContainsAny(name, `/\`) {
-		t.Fatalf("db backup name: %s", made.body)
+	if gone := s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, nil); gone.status != http.StatusNotFound {
+		t.Fatalf("POST /maintenance/db-backups = %d, want 404: %s", gone.status, gone.body)
 	}
-	if _, err := os.Stat(filepath.Join(backups, name)); err != nil {
-		t.Fatalf("the backup is not in the backup directory: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(f.dir, "elsewhere.db")); err == nil {
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/maintenance/backups", token, map[string]any{"dest": filepath.Join(f.dir, "elsewhere.backup")}), http.StatusBadRequest, "bad_request")
+	if _, err := os.Stat(filepath.Join(f.dir, "elsewhere.backup")); err == nil {
 		t.Fatal("a caller-chosen destination was written")
 	}
-	second := s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, nil)
-	noPath(second)
-	newer, _ := apiData(t, second, http.StatusCreated)["name"].(string)
-	if newer == name {
-		t.Fatalf("two database backups in one second share the name %s", name)
-	}
-	if found, _ := filepath.Glob(filepath.Join(backups, "atrium-*.db")); len(found) != 1 || filepath.Base(found[0]) != newer {
-		t.Fatalf("database backups beyond backup_keep remain: %v", found)
-	}
-	name = newer
 
 	archived := s.do(http.MethodPost, "/api/v1/maintenance/backups", token, nil)
 	noPath(archived)
@@ -91,7 +75,7 @@ func TestMaintenanceAPI(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{`"backup:` + name + `"`, `"backup:` + archive + `"`, `"older.backup"`} {
+	for _, want := range []string{`"backup:` + first + `"`, `"backup:` + archive + `"`, `"older.backup"`} {
 		if !strings.Contains(activity.body, want) {
 			t.Fatalf("activity lacks %s: %.3000s", want, activity.body)
 		}
@@ -108,11 +92,11 @@ func TestMaintenanceAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	busy := s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, nil)
+	busy := s.do(http.MethodPost, "/api/v1/maintenance/backups", token, nil)
 	_ = held.Close()
 	noPath(busy)
 	expectAPI(t, busy, http.StatusConflict, "conflict")
-	if entries, _ := os.ReadDir(backups); len(entries) != 2 {
+	if entries, _ := os.ReadDir(backups); len(entries) != 1 {
 		t.Fatalf("a refused backup wrote %d files", len(entries))
 	}
 }

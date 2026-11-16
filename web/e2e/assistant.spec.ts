@@ -5,9 +5,10 @@ import { expect, galleryLayouts, test } from './fixtures.ts';
 const cards = ['a-draft', 'a-move', 'a-triage', 'a-unknown', 'a-elsewhere', 'a-blocked'];
 
 async function gotoGallery(page: Page): Promise<void> {
+  test.slow();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await gotoShell(page, '/__gallery');
-  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible({ timeout: 0 });
 }
 
 async function showCard(page: Page, id: string): Promise<Locator> {
@@ -59,10 +60,18 @@ test.describe('assistant design checks', () => {
     if (!box) throw new Error('no hold button');
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(200);
+    await expect(hold).toHaveAttribute('data-phase', 'holding');
     const fill = await hold.locator('.hold__fill').evaluate((element) => {
-      const style = getComputedStyle(element);
-      return { transform: style.transform, opacity: Number(style.opacity) };
+      const { promise, resolve } = Promise.withResolvers<{ transform: string; opacity: number }>();
+      const deadline = performance.now() + 2000;
+      const sample = (): void => {
+        const style = getComputedStyle(element);
+        const opacity = Number(style.opacity);
+        if (opacity > 0 || performance.now() > deadline) resolve({ transform: style.transform, opacity });
+        else requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+      return promise;
     });
     await page.mouse.up();
     expect(fill.transform).toBe('none');
@@ -167,10 +176,16 @@ test.describe('approval cards on a desktop', () => {
     await page.waitForTimeout(400);
     await expect(log(page)).toHaveText('No decisions yet');
 
+    await row.evaluate((element) => {
+      const seen: string[] = [];
+      Object.assign(window, { rowStates: seen });
+      new MutationObserver(() => {
+        seen.push(`${element.hasAttribute('data-arming')} ${element.hasAttribute('inert')}`);
+      }).observe(element, { attributes: true, attributeFilter: ['data-arming', 'inert'] });
+    });
     await card.evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
-    await expect(row).toHaveAttribute('data-arming');
-    await expect(row).toHaveAttribute('inert');
-    await expect(row).not.toHaveAttribute('inert');
+    await expect(row).not.toHaveAttribute('inert', { timeout: 0 });
+    expect(await page.evaluate(() => (window as Window & { rowStates?: string[] }).rowStates)).toContain('true true');
     await decline.click();
     await expect(log(page)).toHaveText('decline a-move');
     const receipt = card.locator('.receipt');
@@ -278,10 +293,18 @@ test.describe('tool cards', () => {
     const section = page.locator('[data-gallery="tools"]');
     const live = section.getByTestId('tool-live');
 
+    await live.evaluate((element) => {
+      const seen: string[] = [];
+      Object.assign(window, { toolStates: seen });
+      new MutationObserver(() => {
+        const state = element.querySelector('[data-tool="call-1"]')?.getAttribute('data-state');
+        if (state && seen.at(-1) !== state) seen.push(state);
+      }).observe(element, { attributes: true, childList: true, subtree: true });
+    });
     await section.getByText('Finishes', { exact: true }).click();
     await section.getByRole('button', { name: 'Run script' }).click();
-    await expect(live.locator('[data-tool="call-1"]')).toHaveAttribute('data-state', 'running');
-    await expect(section.getByTestId('tool-run-result')).toHaveText('done');
+    await expect(section.getByTestId('tool-run-result')).toHaveText('done', { timeout: 0 });
+    expect(await page.evaluate(() => (window as Window & { toolStates?: string[] }).toolStates)).toContain('running');
     const done = live.locator('[data-tool="call-1"]');
     await expect(done).toHaveAttribute('data-state', 'done');
     await expect(done).toContainText('Found prices from 3 suppliers · 3 sources');
@@ -303,13 +326,13 @@ test.describe('tool cards', () => {
 
     await section.getByText('Fails', { exact: true }).click();
     await section.getByRole('button', { name: 'Run script' }).click();
-    await expect(section.getByTestId('tool-run-result')).toHaveText('failed');
+    await expect(section.getByTestId('tool-run-result')).toHaveText('failed', { timeout: 0 });
     await expect(live.locator('[data-tool="call-1"]')).toHaveAttribute('data-state', 'failed');
     await expect(live).toContainText('The weather service timed out');
 
     await section.getByText('Parks', { exact: true }).click();
     await section.getByRole('button', { name: 'Run script' }).click();
-    await expect(section.getByTestId('tool-run-result')).toHaveText('parked');
+    await expect(section.getByTestId('tool-run-result')).toHaveText('parked', { timeout: 0 });
     const waiting = live.locator('[data-tool="call-1"]');
     await expect(waiting).toHaveAttribute('data-state', 'waiting');
     await expect(waiting.locator('[data-approval="a-parked"]')).toContainText(

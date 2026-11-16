@@ -1,0 +1,283 @@
+import { HttpResponse, http, type JsonBodyType } from 'msw';
+import type { Approval, Draft, PendingBody, ProposalDetail } from '../contract';
+import { API_BASE } from '../contract';
+
+export interface InboxScenario {
+  decide?: 'ok' | 'conflict' | 'stale' | 'network';
+  empty?: boolean;
+  fail?: boolean;
+}
+
+interface MockEffect {
+  id: number;
+  proposal_id: number;
+  undoable: boolean;
+  undone_at: number | null;
+}
+
+export interface InboxRequest {
+  method: string;
+  path: string;
+  key: string | null;
+}
+
+const NOW = 1_795_600_000;
+const log = globalThis as typeof globalThis & { atriumInboxRequests?: InboxRequest[] };
+
+const letter = [
+  'Hello Ilse,',
+  '',
+  'Thank you for the plans for the shared garden. Sam and I read them over the weekend and we like the idea of moving the compost bins behind the shed.',
+  '',
+  'Two questions before the meeting on Thursday:',
+  '',
+  '1. Would the new raised beds keep the path wide enough for the wheelbarrow?',
+  '2. Could the tap move to the north fence, so the hose reaches every bed?',
+  '',
+  'If both work, we are happy to help build the beds on the first Saturday of December. We can bring the drill and two spades.',
+  '',
+  'The seed order is also nearly ready. We picked the early carrots, the striped beans and the yellow courgettes from the list you shared. If you want anything else, add it to the sheet by Sunday evening.',
+  '',
+  'See you on Thursday,',
+  'Sam',
+].join('\n');
+
+function seed(): { proposals: ProposalDetail[]; drafts: Draft[]; effects: MockEffect[] } {
+  return {
+    proposals: [
+      {
+        id: 12,
+        kind: 'calendar_update',
+        title: 'Move the dentist visit to Friday',
+        status: 'pending',
+        account: 'Home calendar',
+        actions: ['approve', 'deny'],
+        undoable: false,
+        blocked: false,
+        created_at: NOW - 5400,
+        payload: {
+          kind: 'action',
+          label: 'Update event',
+          module: 'calendar',
+          proposal_kind: 'calendar_update',
+          args: [{ label: 'Calendar', value: 'Home' }],
+          preview: null,
+          result: null,
+          change: {
+            kind: 'calendar_update',
+            calendar: 'Home',
+            uid: 'evt-2291',
+            title: 'Dentist check-up',
+            start: '2026-11-27T09:30:00+01:00',
+            end: '2026-11-27T10:00:00+01:00',
+            location: 'Riverside Dental, Mill Lane 4',
+          },
+        },
+      } as ProposalDetail,
+      {
+        id: 14,
+        kind: 'weather_station_reset',
+        title: 'Reset the garden weather station',
+        status: 'pending',
+        actions: ['approve', 'deny'],
+        undoable: true,
+        blocked: false,
+        created_at: NOW - 1800,
+        payload: {
+          kind: 'action',
+          label: 'Reset station',
+          module: 'garden',
+          proposal_kind: 'weather_station_reset',
+          args: [
+            { label: 'Station', value: 'Garden shed' },
+            { label: 'Keep history', value: 'Yes' },
+          ],
+          preview: 'The station restarts and keeps its readings.',
+          result: null,
+          change: null,
+        },
+      },
+    ],
+    drafts: [
+      {
+        id: 7,
+        account: 'sam@example.test',
+        account_configured: true,
+        to: 'Ilse de Wit <ilse@example.test>',
+        cc: '',
+        subject: 'Shared garden plans',
+        body: letter,
+        status: 'draft',
+        revision: 3,
+        created_at: NOW - 7200,
+        updated_at: NOW - 3600,
+        unexpected_recipients: [],
+      },
+    ],
+    effects: [],
+  };
+}
+
+let store = seed();
+let read = '';
+
+function scenario(): InboxScenario {
+  try {
+    const raw = localStorage.getItem('atrium.mock') ?? '{}';
+    if (raw !== read) {
+      read = raw;
+      store = seed();
+    }
+    const parsed: { inbox?: InboxScenario } = JSON.parse(raw);
+    return parsed.inbox ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function row(item: ProposalDetail): Approval {
+  const payload = item.payload.kind === 'action' ? item.payload : undefined;
+  return {
+    id: item.id,
+    kind: item.kind,
+    kind_label: payload?.label ?? item.kind,
+    title: item.title,
+    args: payload?.args ?? [],
+    preview: payload?.preview ?? null,
+    result: null,
+    status: item.status,
+    undoable: item.undoable,
+    blocked: item.blocked,
+    blocked_effect: false,
+    blocked_undo: false,
+    created_at: item.created_at,
+    module: payload?.module ?? 'core',
+    approval: true,
+  };
+}
+
+function waiting(): { proposals: ProposalDetail[]; drafts: Draft[] } {
+  if (scenario().empty) return { proposals: [], drafts: [] };
+  return {
+    proposals: store.proposals.filter((item) => item.status === 'pending'),
+    drafts: store.drafts.filter((item) => item.status === 'draft'),
+  };
+}
+
+export function inboxCount(): number {
+  const open = waiting();
+  return open.proposals.filter((item) => !item.blocked).length + open.drafts.length;
+}
+
+function decide(key: string, approve: boolean): void {
+  const [type, raw] = key.split(':');
+  const id = Number(raw);
+  const at = Math.floor(Date.now() / 1000);
+  if (type === 'draft') {
+    const draft = store.drafts.find((item) => item.id === id);
+    if (draft?.status !== 'draft') return;
+    Object.assign(draft, approve ? { status: 'sent', sent_at: at } : { status: 'discarded' }, { updated_at: at });
+    return;
+  }
+  const proposal = store.proposals.find((item) => item.id === id);
+  if (proposal?.status !== 'pending') return;
+  Object.assign(proposal, { status: approve ? 'applied' : 'dismissed', decided_at: at });
+  if (approve && proposal.undoable) {
+    store.effects.push({ id: 500 + store.effects.length, proposal_id: id, undoable: true, undone_at: null });
+  }
+}
+
+export function decideElsewhere(key: string): void {
+  scenario();
+  decide(key, true);
+}
+
+function record(request: Request): void {
+  log.atriumInboxRequests = [
+    ...(log.atriumInboxRequests ?? []),
+    { method: request.method, path: new URL(request.url).pathname, key: request.headers.get('Idempotency-Key') },
+  ];
+}
+
+function refusal(status: number, code: string, message: string): Response {
+  return HttpResponse.json({ error: { code, message } }, { status });
+}
+
+function command(key: string, approve: boolean, request: Request, body: () => JsonBodyType): Response {
+  const mode = scenario().decide ?? 'ok';
+  record(request);
+  if (mode === 'conflict') return refusal(409, 'conflict', 'The item changed while you were looking at it.');
+  if (mode === 'stale') return refusal(412, 'precondition_failed', 'The draft has a newer revision.');
+  const open = waiting();
+  const [type, raw] = key.split(':');
+  const id = Number(raw);
+  const pending =
+    type === 'draft' ? open.drafts.some((item) => item.id === id) : open.proposals.some((item) => item.id === id);
+  if (!pending) return refusal(409, 'not_pending', 'It was already decided.');
+  decide(key, approve);
+  if (mode === 'network') return HttpResponse.error();
+  return HttpResponse.json(body());
+}
+
+function proposal(id: unknown): ProposalDetail | undefined {
+  return store.proposals.find((item) => item.id === Number(id));
+}
+
+function draft(id: unknown): Draft | undefined {
+  return store.drafts.find((item) => item.id === Number(id));
+}
+
+export const inboxHandlers = [
+  http.get(`*${API_BASE}/pending`, () => {
+    if (scenario().fail) return refusal(500, 'internal', 'The review store did not answer.');
+    const open = waiting();
+    const body: PendingBody = {
+      approvals: open.proposals.filter((item) => !item.blocked).map(row),
+      blocked: open.proposals.filter((item) => item.blocked).map(row),
+      drafts: open.drafts,
+      counts: { approvals: open.proposals.length, blocked: 0, drafts: open.drafts.length, unknown: 0 },
+    };
+    return HttpResponse.json(body);
+  }),
+  http.get(`*${API_BASE}/proposals/:id`, ({ params }) => {
+    scenario();
+    const item = proposal(params.id);
+    if (!item) return refusal(404, 'not_found', 'No such proposal.');
+    return HttpResponse.json({ data: item, revision: 1 });
+  }),
+  http.get(`*${API_BASE}/drafts/:id`, ({ params }) => {
+    scenario();
+    const item = draft(params.id);
+    if (!item) return refusal(404, 'not_found', 'No such draft.');
+    return HttpResponse.json(item);
+  }),
+  http.post(`*${API_BASE}/approvals/:id/approve`, ({ params, request }) =>
+    command(`proposal:${params.id}`, true, request, () => {
+      const item = proposal(params.id) as ProposalDetail;
+      return { approval: row(item), outcome: 'applied', summary: 'Done.' };
+    }),
+  ),
+  http.post(`*${API_BASE}/approvals/:id/deny`, ({ params, request }) =>
+    command(`proposal:${params.id}`, false, request, () => ({ approval: row(proposal(params.id) as ProposalDetail) })),
+  ),
+  http.post(`*${API_BASE}/drafts/:id/send`, ({ params, request }) =>
+    command(`draft:${params.id}`, true, request, () => ({ draft: draft(params.id), filed: true, refused: [] })),
+  ),
+  http.post(`*${API_BASE}/drafts/:id/discard`, ({ params, request }) =>
+    command(`draft:${params.id}`, false, request, () => ({ draft: draft(params.id) })),
+  ),
+  http.get(`*${API_BASE}/effects`, ({ request }) => {
+    scenario();
+    const id = Number(new URL(request.url).searchParams.get('proposal_id'));
+    return HttpResponse.json({ items: store.effects.filter((item) => item.proposal_id === id) });
+  }),
+  http.post(`*${API_BASE}/effects/:id/undo`, ({ params, request }) => {
+    record(request);
+    const effect = store.effects.find((item) => item.id === Number(params.id));
+    if (!effect || effect.undone_at) return refusal(409, 'not_undoable', 'Nothing is left to undo.');
+    effect.undone_at = Math.floor(Date.now() / 1000);
+    const item = proposal(effect.proposal_id);
+    if (item) item.undone_at = effect.undone_at;
+    return HttpResponse.json({ undone: true });
+  }),
+];

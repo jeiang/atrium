@@ -1,6 +1,9 @@
 import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
+import { type ChatScenario, chatHandlers } from './chats';
+import { type HomeScenario, homeHandlers } from './home';
+import { decideElsewhere, type InboxScenario, inboxCount, inboxHandlers } from './inbox';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -10,13 +13,16 @@ export interface MockScenario {
   needsYou?: number;
   modules?: Record<string, ModuleStateState>;
   mail?: { mode: string; paused: boolean };
+  inbox?: InboxScenario;
+  chat?: ChatScenario;
+  home?: HomeScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
 export const MOCK_EVENTS = 'atrium-mock-events';
 const CSRF = 'mock-csrf-token';
 const MODULES = ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'];
-const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections'];
+const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant'];
 const encoder = new TextEncoder();
 
 function scenario(): MockScenario {
@@ -61,7 +67,7 @@ function shell(state: MockScenario): Shell {
     sections: [],
     settings: [],
     settings_url: '/settings',
-    needs_you: state.needsYou ?? 3,
+    needs_you: state.needsYou ?? inboxCount(),
     notify_failing: [],
     mail: state.mail ?? { mode: 'live', paused: false },
     modules: MODULES.map((name) => ({ name, state: state.modules?.[name] ?? 'enabled' })),
@@ -115,7 +121,8 @@ export const handlers = [
         };
         const topics = [...revisions].map(([topic, revision]) => ({ topic, revision }));
         send(`retry: 1000\n\nevent: sync\ndata: ${JSON.stringify({ topics })}\n\n`);
-        channel.addEventListener('message', (event: MessageEvent<{ topic: string }>) => {
+        channel.addEventListener('message', (event: MessageEvent<{ topic: string; decide?: string }>) => {
+          if (event.data.decide) decideElsewhere(event.data.decide);
           const revision = (revisions.get(event.data.topic) ?? 0) + 1;
           revisions.set(event.data.topic, revision);
           send(`event: change\ndata: ${JSON.stringify({ topic: event.data.topic, revision })}\n\n`);
@@ -129,5 +136,8 @@ export const handlers = [
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },
     });
   }),
+  ...homeHandlers(scenario),
+  ...chatHandlers,
   ...simulatorHandlers,
+  ...inboxHandlers,
 ];

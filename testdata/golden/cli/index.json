@@ -66,17 +66,6 @@
   {
     "argv": [
       "atrium",
-      "notion",
-      "search",
-      "alpha"
-    ],
-    "exit_code": 0,
-    "name": "notion-search-alpha",
-    "stdout": "notion-search-alpha.stdout"
-  },
-  {
-    "argv": [
-      "atrium",
       "media",
       "poll"
     ],

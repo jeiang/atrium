@@ -8,9 +8,18 @@
     title?: string;
     limit?: number;
     empty?: string;
+    more?: string;
+    level?: 2 | 3;
   }
 
-  let { lines, title = 'Digest', limit = 5, empty = 'Nothing new since the last digest.' }: Props = $props();
+  let {
+    lines,
+    title = 'Digest',
+    limit = 5,
+    empty = 'Nothing new since the last digest.',
+    more,
+    level = 3,
+  }: Props = $props();
 
   const uid = $props.id();
   const list = $derived(lines ?? []);
@@ -26,7 +35,7 @@
 
 <section class="digest" aria-labelledby="{uid}-title">
   <div class="digest__head">
-    <h3 class="card__title" id="{uid}-title">{title}</h3>
+    <svelte:element this={`h${level}`} class="card__title" id="{uid}-title">{title}</svelte:element>
     <span class="meta">{plural(list.length, 'item')}</span>
   </div>
   {#if shown.length === 0}
@@ -44,7 +53,13 @@
       {/each}
     </ol>
     {#if rest > 0}
-      <p class="digest__more">and {rest} more</p>
+      <p class="digest__more">
+        {#if more}
+          <a class="link" href={more}>and {rest} more</a>
+        {:else}
+          and {rest} more
+        {/if}
+      </p>
     {/if}
   {/if}
 </section>

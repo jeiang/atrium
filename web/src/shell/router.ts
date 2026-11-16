@@ -16,8 +16,19 @@ const placeholder = () => import('./PlaceholderPage.svelte').catch(unavailable);
 export const { p, navigate, isActive, route } = createRouter(
   {
     '/': { '/': () => import('../features/home/HomePage.svelte').catch(unavailable), meta: { title: 'Home' } },
-    '/inbox': { '/': () => import('../features/inbox/InboxPage.svelte').catch(unavailable), meta: { title: 'Inbox' } },
-    '/chat': { '/': () => import('../features/chats/ChatsPage.svelte').catch(unavailable), meta: { title: 'Chats' } },
+    '/inbox': {
+      '/': () => import('../features/inbox/InboxPage.svelte').catch(unavailable),
+      '/:item': () => import('../features/inbox/InboxPage.svelte').catch(unavailable),
+      meta: { title: 'Inbox' },
+    },
+    '/proposals/:id': () => import('../features/inbox/ResolveItem.svelte').catch(unavailable),
+    '/drafts/:id': () => import('../features/inbox/ResolveItem.svelte').catch(unavailable),
+    '/chat': {
+      '/': () => import('../features/chats/ChatsPage.svelte').catch(unavailable),
+      '/new': () => import('../features/chats/ChatPage.svelte').catch(unavailable),
+      '/:id': () => import('../features/chats/ChatPage.svelte').catch(unavailable),
+      meta: { title: 'Chats' },
+    },
     '/plan': { '/': placeholder, meta: { title: 'Plan' } },
     '/knowledge': { '/': placeholder, meta: { title: 'Knowledge' } },
     '/apps': {
