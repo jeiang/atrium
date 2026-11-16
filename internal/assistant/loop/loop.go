@@ -339,11 +339,6 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		allow = registry.Only(o.Limits.AllowedTools)
 	}
 	ttl := prompts.TTL5m
-	if kind == tool.Chat {
-		if ttl, err = cacheTTL(ctx, d.Read); err != nil {
-			return nil, err
-		}
-	}
 	steps, err := maxSteps(ctx, d.Read, kind)
 	if err != nil {
 		return nil, err
