@@ -99,6 +99,24 @@ separate from the operator routes and serves `/metrics`, `/readyz`, `/livez`,
 from the stored run history, so a restart does not reset it. Operator schedules
 share the `operator_schedule` label.
 
+Requests to the operator listeners are also counted per day, surface (`page`,
+`api` for `/api/v1`, `web` for `/web/v1`), method and route pattern, never the
+raw path; unknown paths count as `unmatched`, and static files and `/healthz`
+are not counted. Counts are batched in memory and saved every minute and at
+shutdown, in one transaction that also deletes days older than 400. They are
+exported as `atrium_http_route_requests_total{surface,method,route,agent}`,
+summed from the saved rows, so the metric lags by up to a minute and survives
+restarts. `atrium usage routes [--days N] [--json]` lists the last 30 days by
+default, with operator and agent requests in separate columns.
+
+A request counts as agent traffic when its bearer token was issued with
+`atrium auth token issue --agent` (or the Agent box under Settings › Sign-in),
+or when it carries the header `Atrium-Agent: 1`. Under OIDC sign-in, that header
+marks the sign-in session itself, and every later request on the session counts
+as agent traffic. The mark grants and removes nothing: it only separates the
+counts. The token list and `/web/v1/session` show it; use a separate browser
+profile for agent sessions, because a marked session stays marked until it ends.
+
 Every command can export OTLP/HTTP traces when the host sets
 `otel_traces_endpoint`. Span attributes are an allowlist of ids, counts,
 durations and bounded names; string values are scrubbed of known secrets and
@@ -154,7 +172,10 @@ pass run records, message snoozes, action links, rebalance candidates,
 nightly observations and the agent profile) and discards their rows. A release
 from before version 2 refuses a database at version 2: after that upgrade,
 recover by rolling forward to a fixed release or by restoring the backup taken
-before the upgrade, which loses every later write.
+before the upgrade, which loses every later write. Schema version 3 only adds
+the request usage table and the agent mark columns on tokens and sign-in
+sessions; a release from before version 3 refuses a database at version 3, with
+the same recovery.
 
 ## Settings, connections, and modules
 

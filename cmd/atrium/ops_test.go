@@ -26,6 +26,7 @@ var opsMetricNames = []string{
 	"atrium_scheduler_job_last_started_timestamp_seconds",
 	"atrium_db_exclusive_waits_total",
 	"atrium_db_exclusive_timeouts_total",
+	"atrium_http_route_requests_total",
 }
 
 func opsAddr(t *testing.T) string {

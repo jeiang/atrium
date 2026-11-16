@@ -61,6 +61,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/webusage"
 )
 
 type Module struct {
@@ -128,7 +129,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return err
 		})},
 		Attention:         AttentionSources(),
-		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics()),
+		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
 		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
@@ -170,6 +171,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),
+			webusage.Command(mc.Env),
 			secretscmd.Command(openSettings),
 			dbcmd.Command(maintenance),
 			dbcmd.BackupCommand(maintenance),
