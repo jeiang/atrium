@@ -325,6 +325,7 @@ func (s *Store) disableUnknownKinds(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+
 const reasonRemovedFromHost = "removed from host configuration"
 
 func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.HostConnection) error {
