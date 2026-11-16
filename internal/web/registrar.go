@@ -64,19 +64,33 @@ func (s *registrations) check() error {
 	for owner, bindings := range s.bindings {
 		for _, b := range bindings {
 			method, pattern, ok := application.Route(b.Target)
-			if b.Kind == application.API {
-				pattern = APIPrefix + pattern
-			}
-			key := routeKey{method, pattern}
-			if !ok || s.seen[key] != owner {
+			if !ok {
 				return &UnmountedBinding{Owner: owner, Kind: b.Kind, Target: b.Target}
 			}
-			s.bound[key] = true
+			if b.Kind != application.API {
+				if err := s.bind(owner, b, routeKey{method, pattern}); err != nil {
+					return err
+				}
+				continue
+			}
+			for _, surface := range surfaces {
+				if err := s.bind(owner, b, routeKey{method, surface.prefix + pattern}); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	if routes := s.unbound(); len(routes) != 0 {
 		return &UnboundRoute{Route: routes[0]}
 	}
+	return nil
+}
+
+func (s *registrations) bind(owner string, b application.Binding, key routeKey) error {
+	if s.seen[key] != owner {
+		return &UnmountedBinding{Owner: owner, Kind: b.Kind, Target: b.Target}
+	}
+	s.bound[key] = true
 	return nil
 }
 
@@ -87,8 +101,11 @@ func (s *registrations) unbound() []Route {
 			continue
 		}
 		route := Route{Owner: owner, Kind: application.HTML, Method: key.method, Pattern: key.pattern}
-		if rest, ok := strings.CutPrefix(key.pattern, APIPrefix); ok && strings.HasPrefix(rest, "/") {
-			route.Kind, route.Pattern = application.API, rest
+		for _, surface := range surfaces {
+			if rest, ok := strings.CutPrefix(key.pattern, surface.prefix); ok && strings.HasPrefix(rest, "/") {
+				route.Kind, route.Pattern = application.API, rest
+				break
+			}
 		}
 		out = append(out, route)
 	}
