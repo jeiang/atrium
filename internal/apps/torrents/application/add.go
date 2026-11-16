@@ -8,6 +8,8 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const AddName application.Name = "media.add"
@@ -80,7 +82,7 @@ func (s *Service) add(ctx context.Context, in AddInput) (Added, error) {
 	}
 	var err error
 	req := contract.AddRequest{Scope: s.scope(ctx, in.ProposalID)}
-	if in.Media {
+	if in.Media && module.IsEnabled(ctx, unit.Media) {
 		req.Label = contract.TagLegacy
 	}
 	if in.Torrent != nil {

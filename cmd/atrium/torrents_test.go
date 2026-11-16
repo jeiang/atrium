@@ -67,8 +67,8 @@ func TestTorrentsIntakeKeysAgentWritesToItsOwnTags(t *testing.T) {
 	if got := runApp(t, "proposals", "approve", add); got.code != cli.ExitOK {
 		t.Fatalf("approve add: %d %q %q", got.code, got.stdout, got.stderr)
 	}
-	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium {
-		t.Fatalf("agent add sent tags %q, want atrium", got.Get("tags"))
+	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium+","+media.TagMedia {
+		t.Fatalf("agent add sent tags %q, want atrium and the Library label", got.Get("tags"))
 	}
 
 	for _, hash := range []string{legacy, stamped} {
@@ -155,30 +155,21 @@ func TestTorrentsFlagFollowsLibraryOnceAtSeed(t *testing.T) {
 	}
 	t.Run("Library on writes the flag once", func(t *testing.T) {
 		dir, _, _ := moduleFixture(t, map[string]string{unit.Media: "true"})
-		if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
-			t.Fatalf("settings list: %d %q", got.code, got.stderr)
-		}
-		if got := runApp(t, "settings", "list"); got.code != cli.ExitOK || !strings.Contains(got.stdout, flag) {
-			t.Fatalf("settings list: %d %q %q", got.code, got.stdout, got.stderr)
-		}
+		startServeIn(t, dir)
 		if settings, audits, migrated := rows(t, dir); settings != "1" || audits != "1" || migrated != "1" {
 			t.Fatalf("rows %s, audits %s, migration audits %s, want one of each", settings, audits, migrated)
 		}
 	})
 	t.Run("a fresh database stays opt-in", func(t *testing.T) {
 		dir, _, _ := moduleFixture(t, map[string]string{})
-		if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
-			t.Fatalf("settings list: %d %q", got.code, got.stderr)
-		}
+		startServeIn(t, dir)
 		if settings, audits, _ := rows(t, dir); settings != "0" || audits != "0" {
 			t.Fatalf("a fresh database wrote %s rows and %s audits", settings, audits)
 		}
 	})
 	t.Run("Library off writes nothing", func(t *testing.T) {
 		dir, _, _ := moduleFixture(t, map[string]string{unit.Media: "false"})
-		if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
-			t.Fatalf("settings list: %d %q", got.code, got.stderr)
-		}
+		startServeIn(t, dir)
 		if settings, audits, _ := rows(t, dir); settings != "0" || audits != "0" {
 			t.Fatalf("Library off wrote %s rows and %s audits", settings, audits)
 		}

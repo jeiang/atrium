@@ -178,7 +178,9 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 
 func TestMediaRelayRefusesWhenMediaIsOffAtBoot(t *testing.T) {
 	const rel = "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
-	_, _, f := moduleFixture(t, flagsExcept("media", "false"))
+	flags := flagsExcept("media", "false")
+	flags["torrents"] = "false"
+	_, _, f := moduleFixture(t, flags)
 	token := localAPIToken(t, "media-off")
 	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {

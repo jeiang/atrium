@@ -363,7 +363,7 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 		}
 		base, logs := startServeLogged(t, dir)
 		waitFor(t, func() bool { return strings.Count(logs.String(), "module is unavailable") == 2 })
-		for _, name := range []string{"mail", "media"} {
+		for _, name := range []string{"mail", "torrents"} {
 			if text := logs.String(); !strings.Contains(text, "MODULE="+name+" STATE=unavailable REASON=") || !strings.Contains(text, "expires_at") {
 				t.Fatalf("the unavailable %s module and its reason are not logged: %s", name, text)
 			}

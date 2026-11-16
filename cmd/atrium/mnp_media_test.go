@@ -497,7 +497,7 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 	}
 
 	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}, http.StatusOK)
-	if len(qb.added) != 1 || qb.added[0].Get("tags") != media.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
+	if len(qb.added) != 1 || qb.added[0].Get("tags") != "atrium,"+media.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
 		t.Fatalf("backfill adds = %v", qb.added)
 	}
 }
