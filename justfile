@@ -223,5 +223,21 @@ vuln:
 licenses:
   go-licenses check ./... --disallowed_types=forbidden,unknown
 
+openapi-diff:
+  {{dev}} bash tools/openapi-diff/openapi-diff.sh
+
+openapi-baseline tag:
+  {{dev}} bash tools/openapi-diff/openapi-diff.sh --baseline {{tag}}
+
+schemathesis report="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
+  bin=$(mktemp -d)
+  trap 'rm -rf "$bin"' EXIT
+  go build -o "$bin/atrium" ./cmd/atrium
+  report="{{report}}"
+  tools/schemathesis/nightly.sh "$bin/atrium" "${report:-$(mktemp -d)}"
+
 imap-upstream *args:
   tools/imap-upstream/imap-upstream.sh {{args}}
