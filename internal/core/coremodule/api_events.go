@@ -30,7 +30,6 @@ var topicModules = map[string]string{
 	state.Tasks:     module.Assistant,
 	state.Mail:      module.Mail,
 	state.Calendar:  module.Calendar,
-	state.Notion:    module.Notion,
 	state.Media:     module.Media,
 	state.Notify:    module.Notifications,
 }

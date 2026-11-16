@@ -38,6 +38,7 @@ type tokenView struct {
 	LastUsed string
 	Revoked  string
 	Active   bool
+	Agent    bool
 }
 
 func (s *Server) signInPage(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +51,7 @@ func (s *Server) tokenIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := FormValues(r)
-	in := authapp.BearerIssueInput{Name: form.Get("name")}
+	in := authapp.BearerIssueInput{Name: form.Get("name"), Agent: form.Get("agent") == "1"}
 	if raw := strings.TrimSpace(form.Get("expires_at")); raw != "" {
 		parsed, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
@@ -131,7 +132,7 @@ func tokenViews(tokens []authapp.Token) []tokenView {
 			ID: tok.ID, Name: tok.Name, Kind: tok.Kind, Subject: owner,
 			Created: tokenStamp(&tok.CreatedAt), Expires: tokenStamp(tok.ExpiresAt),
 			LastUsed: tokenStamp(tok.LastUsedAt), Revoked: tokenStamp(tok.RevokedAt),
-			Active: tok.RevokedAt == nil,
+			Active: tok.RevokedAt == nil, Agent: tok.Agent,
 		}
 	}
 	return out

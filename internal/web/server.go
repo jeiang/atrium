@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/felixge/httpsnoop"
@@ -30,6 +31,7 @@ import (
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web/tpl"
+	"github.com/jeiang/atrium/internal/webusage"
 )
 
 var log = logx.Logger("atrium.web")
@@ -157,6 +159,10 @@ type Server struct {
 	starting      atomic.Bool
 	routes        []routeRule
 	registrations *registrations
+	usage         *webusage.Batch
+	usageDB       *db.DB
+	usageLoc      *time.Location
+	usageLoop     chan struct{}
 }
 
 func New(o Options) (*Server, error) {
@@ -193,7 +199,7 @@ func New(o Options) (*Server, error) {
 	bindings["core"] = append(BuiltinBindings(auth.OIDC()), bindings["core"]...)
 	s.registrations = &registrations{seen: map[routeKey]string{}, bindings: bindings}
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
-	s.mux.Use(instrument)
+	s.mux.Use(s.instrument)
 	if s.errPage == nil && o.Render != nil {
 		s.errPage = o.Render.ErrorPage
 	}
@@ -273,6 +279,7 @@ func New(o Options) (*Server, error) {
 			return !strings.HasPrefix(r.URL.Path, staticPrefix) && r.URL.Path != healthPath
 		}),
 	)
+	s.startUsage(o)
 	return s, nil
 }
 
@@ -298,7 +305,7 @@ func Unbound(ctx context.Context, pages []Page) ([]Route, error) {
 	return unbound, nil
 }
 
-func instrument(next http.Handler) http.Handler {
+func (s *Server) instrument(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		metrics := httpsnoop.CaptureMetrics(next, w, r)
 		route := chi.RouteContext(r.Context()).RoutePattern()
@@ -307,6 +314,7 @@ func instrument(next http.Handler) http.Handler {
 		}
 		status := strconv.Itoa(metrics.Code)
 		obs.HTTPRequests.Add(1, route, r.Method, status)
+		s.recordUsage(r, route)
 		obs.HTTPDuration.Observe(metrics.Duration.Seconds(), route, r.Method, status)
 		span := trace.SpanFromContext(r.Context())
 		if span.IsRecording() {
@@ -380,6 +388,7 @@ func (s *Server) StopStreams() { s.stopOnce.Do(func() { close(s.stop) }) }
 
 func (s *Server) Close() error {
 	s.StopStreams()
+	s.closeUsage()
 	return nil
 }
 

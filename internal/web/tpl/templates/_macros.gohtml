@@ -86,7 +86,7 @@
 
 {{define "external"}}href="{{safeurl .}}" target="_blank" rel="noopener noreferrer"{{end}}
 
-{{define "page_link"}}<a class="rounded-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring {{opt . "class" ""}}" href="/notion/{{urlencode (opt .ref "id" "")}}">{{or (opt .ref "title" "") "Untitled"}}</a>{{end}}
+{{define "page_link"}}<span class="font-medium {{opt . "class" ""}}">{{or (opt .ref "title" "") "Untitled"}}</span>{{end}}
 
 {{define "run_badge"}}{{$state := .}}{{with badge "run" .}}<span class="badge" data-variant="{{.Variant}}">{{if eq $state "running"}}{{icon "loader-circle" "animate-spin"}}{{end}}{{.Label}}</span>{{end}}{{end}}
 

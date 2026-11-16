@@ -115,7 +115,6 @@
         "knowledge.create",
         "knowledge.detail",
         "knowledge.edit",
-        "knowledge.import",
         "knowledge.list",
         "knowledge.profile",
         "knowledge.purge",
@@ -123,8 +122,8 @@
         "knowledge.retract",
         "knowledge.retract-run"
       ],
-      "required": 18,
-      "bound": 18
+      "required": 17,
+      "bound": 17
     },
     {
       "area": "mail",
@@ -282,7 +281,6 @@
         "core.about",
         "maintenance.backup",
         "maintenance.check",
-        "maintenance.db-backup",
         "maintenance.verify-archive",
         "settings.read",
         "settings.secret-delete",
@@ -291,8 +289,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 21,
-      "bound": 21
+      "required": 20,
+      "bound": 20
     },
     {
       "area": "tasks",
@@ -337,17 +335,6 @@
       ],
       "required": 1,
       "bound": 1
-    },
-    {
-      "area": "wiki",
-      "operations": [
-        "wiki.detail",
-        "wiki.list",
-        "wiki.search",
-        "wiki.sync"
-      ],
-      "required": 4,
-      "bound": 4
     }
   ],
   "approval_reached": [
@@ -396,7 +383,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 206,
-  "total_bound": 206,
+  "total_required": 200,
+  "total_bound": 200,
   "total_approval_reached": 11
 }

@@ -12,9 +12,7 @@ import (
 
 var owners = map[string]string{
 	"accounts":                           "mail",
-	"action_links":                       "notify",
 	"agent_events":                       "calendar",
-	"agent_profile":                      "kb",
 	"attention_snoozes":                  "attention",
 	"auth_bearers":                       "auth",
 	"auth_logins":                        "auth",
@@ -38,7 +36,6 @@ var owners = map[string]string{
 	"embed_index":                        "embed",
 	"embed_kb_":                          "embed",
 	"embed_message_":                     "embed",
-	"embed_notion_":                      "embed",
 	"event_candidates":                   "calendar",
 	"events":                             "mail",
 	"export_pages":                       "kb",
@@ -66,12 +63,7 @@ var owners = map[string]string{
 	"memory_views":                       "assistant",
 	"message_fts":                        "mail",
 	"messages":                           "mail",
-	"nightly_observations":               "kb",
 	"notifications":                      "notify",
-	"notion_fts":                         "notion",
-	"notion_pages":                       "notion",
-	"notion_sources":                     "notion",
-	"notion_state":                       "notion",
 	"ntfy_channels":                      "notify",
 	"oauth_states":                       "connections",
 	"open_loops":                         "mail",
@@ -80,14 +72,11 @@ var owners = map[string]string{
 	"ops_samples":                        "serverops",
 	"package_events":                     "mail",
 	"packages":                           "mail",
-	"pass_run_alerts":                    "notify",
-	"pass_runs":                          "passrun",
 	"projects":                           "assistant",
 	"proposals":                          "proposals",
 	"notification_devices":               "notify",
 	"webpush_devices":                    "notify",
 	"read_revisions":                     "application",
-	"rebalance_candidates":               "mail",
 	"rules":                              "mail",
 	"run_events":                         "assistant",
 	"run_streams":                        "assistant",
@@ -97,7 +86,6 @@ var owners = map[string]string{
 	"settings":                           "settings",
 	"settings_audit":                     "settings",
 	"skills":                             "assistant",
-	"snoozes":                            "mail",
 	"subagents":                          "assistant",
 	"tasks":                              "tasks",
 	"thread_files":                       "assistant",
@@ -109,15 +97,13 @@ var owners = map[string]string{
 	"tool_calls":                         "assistant",
 	"tool_results":                       "assistant",
 	"usage":                              "inference",
+	"usage_counters":                     "webusage",
 	"watch_dismissed":                    "mail",
-	"wiki_pages":                         "notion",
 }
 
 var invalidates = map[string]string{
 	"accounts":                           "mail",
-	"action_links":                       "notify",
 	"agent_events":                       "calendar",
-	"agent_profile":                      "knowledge",
 	"attention_snoozes":                  "attention",
 	"auth_bearers":                       "auth",
 	"auth_logins":                        "auth",
@@ -158,11 +144,7 @@ var invalidates = map[string]string{
 	"memory_state":                       "assistant",
 	"memory_views":                       "assistant",
 	"messages":                           "mail",
-	"nightly_observations":               "assistant",
 	"notifications":                      "notify",
-	"notion_pages":                       "notion",
-	"notion_sources":                     "notion",
-	"notion_state":                       "notion",
 	"ntfy_channels":                      "notify",
 	"oauth_states":                       "connections",
 	"open_loops":                         "mail",
@@ -170,19 +152,15 @@ var invalidates = map[string]string{
 	"ops_samples":                        "ops",
 	"package_events":                     "mail",
 	"packages":                           "mail",
-	"pass_run_alerts":                    "notify",
-	"pass_runs":                          "ops",
 	"projects":                           "assistant",
 	"proposals":                          "review",
 	"notification_devices":               "notify",
 	"webpush_devices":                    "notify",
-	"rebalance_candidates":               "mail",
 	"rules":                              "mail",
 	"runs":                               "assistant",
 	"secrets":                            "settings",
 	"settings":                           "settings",
 	"settings_audit":                     "settings",
-	"snoozes":                            "mail",
 	"subagents":                          "assistant",
 	"tasks":                              "tasks",
 	"thread_files":                       "assistant",
@@ -194,7 +172,6 @@ var invalidates = map[string]string{
 	"tool_results":                       "assistant",
 	"usage":                              "assistant",
 	"watch_dismissed":                    "mail",
-	"wiki_pages":                         "notion",
 }
 
 var revisionExempt = map[string]string{
@@ -203,15 +180,14 @@ var revisionExempt = map[string]string{
 	"embed_index":         "derived index rows",
 	"embed_kb_":           "vector index",
 	"embed_message_":      "vector index",
-	"embed_notion_":       "vector index",
 	"job_resource_leases": "runtime bookkeeping",
 	"kb_fts":              "full-text index",
 	"memory_fts":          "full-text index",
 	"message_fts":         "full-text index",
-	"notion_fts":          "full-text index",
 	"operation_audit":     "the operation audit itself",
 	"commands":            "API command bookkeeping; commands.status derives its revision from the row",
 	"read_revisions":      "the revision counters themselves",
+	"usage_counters":      "usage counters, read by no live view",
 	"run_events":          "stream sequences are their own revision",
 	"run_streams":         "stream sequences are their own revision",
 	"schema_migrations":   "runtime bookkeeping",
@@ -240,8 +216,10 @@ var vectorPrefixes = []string{"embed_message_", "embed_notion_", "embed_kb_"}
 
 var (
 	createTable = regexp.MustCompile(`CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)`)
+	dropTable   = regexp.MustCompile(`DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)`)
+	dropVectors = regexp.MustCompile(`name\s+GLOB\s+'(embed_[a-z]+_)\[0-9\]\*'`)
 	sqlRef      = regexp.MustCompile(`\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_]*)`)
-	vectorCall  = regexp.MustCompile(`\.(?:MessageTable|NotionTable|KBTable)\(\)`)
+	vectorCall  = regexp.MustCompile(`\.(?:MessageTable|KBTable)\(\)`)
 )
 
 type violation struct {
@@ -279,6 +257,7 @@ func fail(err error) {
 
 func checkSchema(root string) error {
 	names := map[string]bool{}
+	dropped := map[string]bool{}
 	files, err := filepath.Glob(filepath.Join(root, "internal", "db", "schema", "*.sql"))
 	if err != nil {
 		return err
@@ -294,8 +273,17 @@ func checkSchema(root string) error {
 		for _, m := range createTable.FindAllStringSubmatch(string(body), -1) {
 			names[normalize(m[1])] = true
 		}
+		for _, m := range dropTable.FindAllStringSubmatch(string(body), -1) {
+			dropped[normalize(m[1])] = true
+		}
+		for _, m := range dropVectors.FindAllStringSubmatch(string(body), -1) {
+			dropped[m[1]] = true
+		}
 	}
-	if err := checkRevisions(names, schema.String()); err != nil {
+	for name := range dropped {
+		delete(names, name)
+	}
+	if err := checkRevisions(names, dropped, schema.String()); err != nil {
 		return err
 	}
 	var missing []string
@@ -311,7 +299,7 @@ func checkSchema(root string) error {
 	return nil
 }
 
-func checkRevisions(names map[string]bool, schema string) error {
+func checkRevisions(names, dropped map[string]bool, schema string) error {
 	var problems []string
 	for name := range names {
 		_, covered := invalidates[name]
@@ -348,6 +336,9 @@ func checkRevisions(names map[string]bool, schema string) error {
 		table, op, event, of, on, when, scope := m[1], m[2], m[3], m[4], m[5], m[6], m[7]
 		trigger := table + "_read_" + op
 		shaped[trigger] = true
+		if dropped[on] {
+			continue
+		}
 		if table != on || strings.ToUpper(op) != event || invalidates[table] != scope || found[table+"/"+op] {
 			problems = append(problems, fmt.Sprintf("trigger %s on %s writes scope %q; want one per operation on its own table with scope %q", trigger, on, scope, invalidates[table]))
 			continue

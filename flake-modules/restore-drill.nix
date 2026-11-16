@@ -51,8 +51,7 @@
             export ATRIUM_DB_KEY=$key
             atrium settings list >/dev/null
             atrium db shell <<'SQL'
-          INSERT INTO notion_pages (rid, id, title, path, url, markdown) VALUES (1, 'p1', 'Alpha page', 'Root', 'https://notion.example/p1', 'alpha beta gamma');
-          INSERT INTO notion_fts (rowid, title, path, body) VALUES (1, 'Alpha page', 'Root', 'alpha beta gamma');
+          INSERT INTO kb_records (title, body, scope, writer, created_at, updated_at) VALUES ('Alpha record', 'alpha beta gamma', 'personal', 'operator', 1, 1);
           SQL
           }
           drill keyed keyed

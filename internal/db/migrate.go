@@ -18,6 +18,62 @@ type migration struct {
 
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
+	{2, dropUnreadTables},
+	{3, addUsageCounters},
+}
+
+const (
+	unreadTablesDDL = `
+DROP TABLE nightly_observations;
+DROP TABLE agent_profile;
+DROP TABLE notion_pages;
+DROP TABLE notion_sources;
+DROP TABLE notion_state;
+DROP TABLE notion_fts;
+DROP TABLE wiki_pages;
+DROP TABLE action_links;
+DROP TABLE rebalance_candidates;
+DROP TABLE pass_runs;
+DROP TABLE pass_run_alerts;
+DROP TABLE snoozes;
+`
+	notionVectorTables = "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'embed_notion_[0-9]*' AND name NOT GLOB 'embed_notion_*[^0-9]*' AND sql LIKE 'CREATE VIRTUAL TABLE%' ORDER BY name"
+	usageCountersDDL   = `
+CREATE TABLE usage_counters (day TEXT NOT NULL, surface TEXT NOT NULL, method TEXT NOT NULL, route TEXT NOT NULL, agent INTEGER NOT NULL CHECK (agent IN (0, 1)), count INTEGER NOT NULL CHECK (count >= 0), PRIMARY KEY (day, surface, method, route, agent));
+ALTER TABLE auth_bearers ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1));
+ALTER TABLE auth_sessions ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1));
+`
+)
+
+func addUsageCounters(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, usageCountersDDL)
+	return err
+}
+
+func dropUnreadTables(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, notionVectorTables)
+	if err != nil {
+		return err
+	}
+	var vectors []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		vectors = append(vectors, name)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	for _, name := range vectors {
+		if _, err := tx.ExecContext(ctx, `DROP TABLE "`+name+`"`); err != nil {
+			return fmt.Errorf("drop %s: %w", name, err)
+		}
+	}
+	_, err = tx.ExecContext(ctx, unreadTablesDDL)
+	return err
 }
 
 type FutureSchemaError struct {

@@ -22,12 +22,7 @@ import (
 
 const TargetObsidian = "obsidian"
 
-func runObsidian(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, error) {
-	dir, err := readSetting(ctx, d, ObsidianDirKey)
-	if err != nil {
-		return Result{}, err
-	}
-	dir = filepath.Clean(dir)
+func runObsidian(ctx context.Context, d *db.DB, env config.Env, now float64, dir string) (Result, error) {
 	privateTo, err := readSetting(ctx, d, ObsidianPrivateKey)
 	if err != nil {
 		return Result{}, err

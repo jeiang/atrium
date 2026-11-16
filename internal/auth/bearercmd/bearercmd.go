@@ -31,8 +31,9 @@ type service struct{ open authapp.Open }
 func (s *service) issue(a *cli.Args) cli.Handler {
 	name := a.String("name", "", cli.Opt{Required: true, Help: "label for the token"})
 	expires := a.String("expires-at", "", cli.Opt{Help: "RFC 3339 expiry; the default is no expiry"})
+	agent := a.Bool("agent", cli.Opt{Help: "mark the token as used by an agent; usage counters count its requests apart, and it grants nothing"})
 	return func(e *cli.Env) int {
-		in := authapp.BearerIssueInput{Name: *name}
+		in := authapp.BearerIssueInput{Name: *name, Agent: *agent}
 		if raw := *expires; raw != "" {
 			parsed, err := time.Parse(time.RFC3339, raw)
 			if err != nil {
@@ -71,13 +72,20 @@ func (s *service) list(*cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		_, _ = fmt.Fprintln(e.Stdout, "ID\tNAME\tKIND\tCREATED\tEXPIRES\tLAST USED\tREVOKED")
+		_, _ = fmt.Fprintln(e.Stdout, "ID\tNAME\tKIND\tCREATED\tEXPIRES\tLAST USED\tREVOKED\tAGENT")
 		for _, tok := range tokens.Data {
-			_, _ = fmt.Fprintf(e.Stdout, "%d\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				tok.ID, tok.Name, tok.Kind, stamp(tok.CreatedAt), stampOpt(tok.ExpiresAt), stampOpt(tok.LastUsedAt), stampOpt(tok.RevokedAt))
+			_, _ = fmt.Fprintf(e.Stdout, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tok.ID, tok.Name, tok.Kind, stamp(tok.CreatedAt), stampOpt(tok.ExpiresAt), stampOpt(tok.LastUsedAt), stampOpt(tok.RevokedAt), agentMark(tok.Agent))
 		}
 		return cli.ExitOK
 	}
+}
+
+func agentMark(agent bool) string {
+	if agent {
+		return "agent"
+	}
+	return "-"
 }
 
 func (s *service) revoke(a *cli.Args) cli.Handler {

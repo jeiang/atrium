@@ -95,7 +95,7 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 		t.Fatalf("the list exposes a secret:\n%s", listed.stdout)
 	}
 	phone := tokenRow(t, listed.stdout, "phone")
-	if len(phone) != 7 || phone[0] != "1" || phone[2] != "local" || phone[3] == "" || phone[4] != "-" || phone[5] != "-" || phone[6] != "-" {
+	if len(phone) != 8 || phone[0] != "1" || phone[2] != "local" || phone[3] == "" || phone[4] != "-" || phone[5] != "-" || phone[6] != "-" || phone[7] != "-" {
 		t.Fatalf("phone row: %v", phone)
 	}
 	laptop := tokenRow(t, listed.stdout, "laptop")

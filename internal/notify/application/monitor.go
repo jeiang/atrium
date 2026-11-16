@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -27,7 +26,7 @@ func Monitor(ctx context.Context, d *db.DB, env config.Env, budget notify.Budget
 	defer t.Stop()
 	for ctx.Err() == nil {
 		if notify.Enabled(ctx) {
-			warn("stale pass check failed", noticeStale(ctx, d, env))
+			warn("stale pass check failed", noticeStale(ctx, d))
 			warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp(), budget))
 		}
 		select {
@@ -38,54 +37,31 @@ func Monitor(ctx context.Context, d *db.DB, env config.Env, budget notify.Budget
 	return ctx.Err()
 }
 
-func noticeStale(ctx context.Context, d *db.DB, env config.Env) error {
-	stale, err := passrun.StaleJobs(ctx, d.Read)
+func noticeStale(ctx context.Context, d *db.DB) error {
+	latest, err := passrun.Latest(ctx, d.Read)
 	if err != nil {
 		return err
 	}
-	fresh := map[string]struct {
-		why string
-		at  float64
-	}{}
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "SELECT job FROM pass_run_alerts")
-		if err != nil {
+	at := float64(time.Now().UnixNano()) / 1e9
+	for _, l := range latest {
+		stale, why := l.Stale(at)
+		if !stale {
+			continue
+		}
+		since := 0.0
+		if l.Success != nil {
+			since = *l.Success
+		}
+		title := "atrium: " + l.Job + " is stale"
+		var n int
+		if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE channel = ? AND title = ? AND ts >= ?", notify.System, title, since).Scan(&n); err != nil {
 			return err
 		}
-		alerted, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-			var job string
-			return job, r.Scan(&job)
-		})
-		if err != nil {
-			return err
+		if n > 0 {
+			continue
 		}
-		for _, job := range alerted {
-			if _, still := stale[job]; still {
-				delete(stale, job)
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, "DELETE FROM pass_run_alerts WHERE job = ?", job); err != nil {
-				return err
-			}
-		}
-		for job, why := range stale {
-			at := float64(time.Now().UnixNano()) / 1e9
-			if _, err := tx.ExecContext(ctx, "INSERT INTO pass_run_alerts (job, notified_at) VALUES (?, ?)", job, at); err != nil {
-				return err
-			}
-			fresh[job] = struct {
-				why string
-				at  float64
-			}{why, at}
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	for job, alert := range fresh {
-		if _, err := New(d).Send(ctx, SendInput{Message: notify.Message{Channel: notify.System, Title: "atrium: " + job + " is stale", Body: alert.why,
-			Occurrence: fmt.Sprintf("stale:%s:%g", job, alert.at)}}); err != nil {
+		if _, err := New(d).Send(ctx, SendInput{Message: notify.Message{Channel: notify.System, Title: title, Body: why,
+			Occurrence: fmt.Sprintf("stale:%s:%g", l.Job, since)}}); err != nil {
 			return err
 		}
 	}

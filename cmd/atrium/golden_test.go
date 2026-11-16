@@ -26,7 +26,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
@@ -243,7 +242,7 @@ capabilities = ["api"]
 			t.Fatal(err)
 		}
 	}
-	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ATRIUM_NOTION_WIKI_ROOT", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
+	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}
 	env := config.Map(vars)
@@ -260,15 +259,11 @@ capabilities = ["api"]
 	if mode != "" {
 		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{mail.KeyMode: mode})
 	}
-	if wikiRoot := data.environment["ATRIUM_NOTION_WIKI_ROOT"]; wikiRoot != "" {
-		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{notion.WikiRootKey: wikiRoot})
-	}
 	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
 		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}
 	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, embedURL: embed.URL + "/v1", api: api}
 	registerFixture(t, f)
-	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"), appKey(t, env))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
 	}
@@ -338,12 +333,6 @@ func (f *fixture) Serve() string {
 	return f.base
 }
 
-type notionVector struct {
-	RowID      int64  `json:"rowid"`
-	Visibility string `json:"visibility"`
-	Embedding  []byte `json:"embedding"`
-}
-
 func copyFile(t *testing.T, from, to string) {
 	t.Helper()
 	data, err := os.ReadFile(from)
@@ -352,24 +341,6 @@ func copyFile(t *testing.T, from, to string) {
 	}
 	if err := os.WriteFile(to, data, 0o644); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func seedNotionVectors(t *testing.T, path string, key db.Key) {
-	t.Helper()
-	var vectors []notionVector
-	if err := json.Unmarshal(golden.ReadFile(t, ".", "notion_vec.json"), &vectors); err != nil {
-		t.Fatal(err)
-	}
-	d, err := db.Connect(path, db.WithKey(key))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
-	for _, v := range vectors {
-		if _, err := d.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (?, ?, ?)", v.RowID, v.Visibility, v.Embedding); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 
