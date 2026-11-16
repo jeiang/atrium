@@ -161,9 +161,6 @@ settingsgen-check:
 go-test *args="./...":
   go test -race {{args}}
 
-go-test-modernc *args="./...":
-  go test -tags modernc {{args}}
-
 go-test-musl *args="./...":
   CC="${ATRIUM_MUSL_CC:?set by the Linux dev shell}" CGO_CFLAGS="$ATRIUM_MUSL_CGO_CFLAGS" CGO_LDFLAGS="$ATRIUM_MUSL_CGO_LDFLAGS" go test -ldflags '-linkmode external -extldflags -static' {{args}}
 
