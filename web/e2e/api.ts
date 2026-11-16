@@ -135,7 +135,12 @@ export function fakeApi(api: Api): Handler {
       return json(res, 200, {
         auth_mode: 'oidc',
         csrf_token: CSRF,
-        identity: { subject: api.subject, name: names[api.subject], email: `${api.subject}@example.test` },
+        identity: {
+          subject: api.subject,
+          name: names[api.subject],
+          email: `${api.subject}@example.test`,
+          agent: false,
+        },
         sign_out: { method: 'POST', url: '/web/v1/session/logout' },
       });
     }

@@ -46,7 +46,9 @@ const test = base.extend<{ site: Site }>({
 });
 
 test.use({
-  allowConsole: [/Failed to load resource|net::ERR_|NetworkError|Load failed|network connection/],
+  allowConsole: [
+    /Failed to load resource|net::ERR_|NetworkError|Load failed|network connection|ServiceWorker intercepted the request/,
+  ],
 });
 
 async function signedIn(page: Page, url: string, name = 'Ada Operator'): Promise<void> {
@@ -379,14 +381,16 @@ test.describe('the read cache', () => {
     await signedIn(page, `${site.url}/next/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
+    await expect
+      .poll(async () => (await readStored(page)).entries.map((entry) => entry.key).sort())
+      .toEqual(['["home"]', '["pending"]', '["shell"]']);
     const stored = await readStored(page);
     expect(Object.keys(stored.meta).sort()).toEqual(['format', 'seen', 'session']);
     expect(stored.meta.session).toEqual({
       auth_mode: 'oidc',
-      identity: { subject: 'op-1', name: 'Ada Operator', email: 'op-1@example.test' },
+      identity: { subject: 'op-1', name: 'Ada Operator', email: 'op-1@example.test', agent: false },
       sign_out: { method: 'POST', url: '/web/v1/session/logout' },
     });
-    expect(stored.entries.map((entry) => entry.key)).toEqual(['["shell"]']);
     const everything = await page.evaluate(async () => {
       const texts: string[] = [JSON.stringify({ ...localStorage }), JSON.stringify({ ...sessionStorage })];
       for (const key of await caches.keys()) {

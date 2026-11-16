@@ -54,7 +54,7 @@ function unauthenticated(proxy = false): Response {
 function session(state: MockScenario): WebSession {
   return {
     auth_mode: state.signOut === false ? 'proxy' : 'oidc',
-    identity: { subject: 'operator', email: 'operator@example.test', name: 'Operator' },
+    identity: { subject: 'operator', email: 'operator@example.test', name: 'Operator', agent: false },
     csrf_token: CSRF,
     sign_out: state.signOut === false ? null : { method: 'POST', url: `${API_BASE}/session/logout` },
   };
