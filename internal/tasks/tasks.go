@@ -28,6 +28,24 @@ type Task struct {
 	CreatedTS  float64  `json:"created_ts"`
 	UpdatedTS  float64  `json:"updated_ts"`
 	DoneTS     *float64 `json:"done_ts"`
+	RemindedTS *float64 `json:"-"`
+}
+
+const (
+	LinkThread   = "thread"
+	LinkProject  = "project"
+	LinkPerson   = "person"
+	LinkRecord   = "record"
+	LinkMessage  = "message"
+	LinkProposal = "proposal"
+)
+
+var SettableLinks = []string{LinkThread, LinkProject, LinkPerson, LinkRecord, LinkMessage}
+
+type Link struct {
+	Kind  string  `json:"kind"`
+	ID    string  `json:"id"`
+	Title *string `json:"title" api:"nullable"`
 }
 
 type Spec struct {
@@ -40,11 +58,11 @@ type Spec struct {
 	SourceID   string   `json:"source_id"`
 }
 
-const columns = "id, title, notes, due, remind_at, status, priority, source_kind, source_id, created_ts, updated_ts, done_ts"
+const columns = "id, title, notes, due, remind_at, status, priority, source_kind, source_id, created_ts, updated_ts, done_ts, reminded_ts"
 
 func scan(r interface{ Scan(...any) error }) (Task, error) {
 	var t Task
-	err := r.Scan(&t.ID, &t.Title, &t.Notes, &t.Due, &t.RemindAt, &t.Status, &t.Priority, &t.SourceKind, &t.SourceID, &t.CreatedTS, &t.UpdatedTS, &t.DoneTS)
+	err := r.Scan(&t.ID, &t.Title, &t.Notes, &t.Due, &t.RemindAt, &t.Status, &t.Priority, &t.SourceKind, &t.SourceID, &t.CreatedTS, &t.UpdatedTS, &t.DoneTS, &t.RemindedTS)
 	return t, err
 }
 
@@ -77,51 +95,11 @@ func Get(ctx context.Context, q db.Querier, id int64) (*Task, error) {
 	return &t, nil
 }
 
-type ListKey struct {
-	Rank      int     `json:"r"`
-	RemindAt  float64 `json:"a"`
-	CreatedTS float64 `json:"c"`
-	ID        int64   `json:"id"`
-}
-
-func KeyOf(t Task) ListKey {
-	k := ListKey{RemindAt: 1e18, CreatedTS: t.CreatedTS, ID: t.ID}
-	if t.Status != StatusOpen {
-		k.Rank = 1
-	}
-	if t.RemindAt != nil {
-		k.RemindAt = *t.RemindAt
-	}
-	return k
-}
-
-func List(ctx context.Context, q db.Querier, status string, limit int, after *ListKey) ([]Task, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-	query := "SELECT " + columns + " FROM tasks WHERE 1 = 1"
-	var args []any
-	if status != "" {
-		query += " AND status = ?"
-		args = append(args, status)
-	}
-	if after != nil {
-		query += " AND (CASE status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(remind_at, 1e18), created_ts, id) > (?, ?, ?, ?)"
-		args = append(args, after.Rank, after.RemindAt, after.CreatedTS, after.ID)
-	}
-	query += " ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(remind_at, 1e18), created_ts, id LIMIT ?"
-	args = append(args, limit)
-	rows, err := q.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (Task, error) { return scan(r) })
-}
-
 func Update(ctx context.Context, q db.Querier, now float64, id int64, s Spec) (bool, error) {
 	res, err := q.ExecContext(ctx,
-		"UPDATE tasks SET title = ?, notes = ?, due = ?, remind_at = ?, priority = ?, updated_ts = ? WHERE id = ?",
-		s.Title, s.Notes, s.Due, s.RemindAt, s.Priority, now, id)
+		"UPDATE tasks SET title = ?, notes = ?, due = ?, remind_at = ?, priority = ?, source_kind = ?, source_id = ?, "+
+			"reminded_ts = CASE WHEN remind_at IS ? THEN reminded_ts ELSE NULL END, updated_ts = ? WHERE id = ?",
+		s.Title, s.Notes, s.Due, s.RemindAt, s.Priority, s.SourceKind, s.SourceID, s.RemindAt, now, id)
 	if err != nil {
 		return false, err
 	}
@@ -136,6 +114,20 @@ func Done(ctx context.Context, q db.Querier, now float64, id int64) (bool, error
 	}
 	n, err := res.RowsAffected()
 	return n == 1, err
+}
+
+func Reopen(ctx context.Context, q db.Querier, now float64, id int64) (bool, error) {
+	return db.Changed(q.ExecContext(ctx, "UPDATE tasks SET status = 'open', done_ts = NULL, updated_ts = ? WHERE id = ? AND status <> 'open'", now, id))
+}
+
+func Dismiss(ctx context.Context, q db.Querier, now float64, id int64) (bool, error) {
+	return db.Changed(q.ExecContext(ctx, "UPDATE tasks SET status = 'dismissed', updated_ts = ? WHERE id = ? AND status = 'open'", now, id))
+}
+
+func Reinsert(ctx context.Context, q db.Querier, t Task) (bool, error) {
+	return db.Changed(q.ExecContext(ctx,
+		"INSERT INTO tasks ("+columns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+		t.ID, t.Title, t.Notes, t.Due, t.RemindAt, t.Status, t.Priority, t.SourceKind, t.SourceID, t.CreatedTS, t.UpdatedTS, t.DoneTS, t.RemindedTS))
 }
 
 func Delete(ctx context.Context, q db.Querier, id int64) (bool, error) {
