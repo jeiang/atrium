@@ -66,7 +66,7 @@ test.describe('home on desktop', () => {
     await box.press('Shift+Enter');
     await box.pressSequentially('Keep it short.');
     await box.press('Enter');
-    await expect(page).toHaveURL(/\/next\/chat\/41$/);
+    await expect(page).toHaveURL(/\/chat\/41$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Chats' })).toBeVisible();
     const started = await page.evaluate(() => Reflect.get(globalThis, 'atriumMockStarted'));
     expect(started).toHaveLength(1);
@@ -117,7 +117,7 @@ test.describe('home on desktop', () => {
     const digest = page.locator('.home__digest');
     await expect(digest.getByRole('heading', { level: 2, name: "Today's digest" })).toBeVisible();
     await expect(digest.locator('.digest__list > li')).toHaveCount(5);
-    await expect(digest.getByRole('link', { name: 'and 2 more' })).toHaveAttribute('href', '/next/chat');
+    await expect(digest.getByRole('link', { name: 'and 2 more' })).toHaveAttribute('href', '/chat');
   });
 
   test('an empty day says so', async ({ page }) => {
@@ -135,13 +135,13 @@ test.describe('home on desktop', () => {
     await expect(list).toContainText('3 waiting');
     const rows = list.getByRole('list', { name: 'Waiting for you' }).getByRole('link');
     await expect(rows).toHaveCount(3);
-    await expect(rows.nth(0)).toHaveAttribute('href', '/next/inbox/proposal:100');
-    await expect(rows.nth(1)).toHaveAttribute('href', '/next/inbox/proposal:102');
+    await expect(rows.nth(0)).toHaveAttribute('href', '/inbox/proposal:100');
+    await expect(rows.nth(1)).toHaveAttribute('href', '/inbox/proposal:102');
     await expect(rows.nth(1)).toContainText('blocked');
-    await expect(rows.nth(2)).toHaveAttribute('href', '/next/inbox/draft:7');
-    await expect(list.getByRole('link', { name: 'All in Inbox' })).toHaveAttribute('href', '/next/inbox');
+    await expect(rows.nth(2)).toHaveAttribute('href', '/inbox/draft:7');
+    await expect(list.getByRole('link', { name: 'All in Inbox' })).toHaveAttribute('href', '/inbox');
     await rows.nth(0).click();
-    await expect(page).toHaveURL(/\/next\/inbox\/proposal:100$/);
+    await expect(page).toHaveURL(/\/inbox\/proposal:100$/);
   });
 
   test('many items show five and the full count', async ({ page }) => {
@@ -192,9 +192,9 @@ test.describe('home failures', () => {
     const box = page.getByRole('textbox', { name: 'Message' });
     await box.fill('Plan the weekend');
     await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByText('The assistant is busy. Try again in a moment.')).toBeVisible();
+    await expect(page.getByText('The assistant is busy. Try again in a moment.').first()).toBeVisible();
     await expect(box).toHaveValue('Plan the weekend');
-    await expect(page).toHaveURL(/\/next\/$/);
+    await expect(page).toHaveURL(/:\d+\/$/);
   });
 
   test('a failed load offers a retry', async ({ page }) => {
@@ -233,7 +233,7 @@ test.describe('home on a phone', () => {
     await gotoHome(page);
     await page.getByRole('textbox', { name: 'Message' }).fill('Remind me about the bins');
     await page.getByRole('button', { name: 'Send' }).tap();
-    await expect(page).toHaveURL(/\/next\/chat\/41$/);
+    await expect(page).toHaveURL(/\/chat\/41$/);
   });
 });
 
