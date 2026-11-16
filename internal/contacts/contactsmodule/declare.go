@@ -46,6 +46,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Tools:      ToolDefinitions(),
 		Operations: operations,
 		Bindings:   bindings,
+		Search:     SearchSources(),
 		Pages:      []web.Page{{Module: func(_ chi.Router, d *web.Deps) { contactRoutes(d) }}},
 	}
 }

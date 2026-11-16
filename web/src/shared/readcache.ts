@@ -148,13 +148,13 @@ export async function restore(client: QueryClient, session: CachedSession, verif
     identity: session.identity,
     sign_out: session.sign_out,
   };
-  const loaded = same
-    ? []
-    : client
-        .getQueryCache()
-        .getAll()
-        .filter((query) => query.state.status === 'success' && persistable(query))
-        .map(entryOf);
+  const loaded = client
+    .getQueryCache()
+    .getAll()
+    .filter((query) => query.state.status === 'success' && persistable(query))
+    .map(entryOf);
+  subject = session.identity.subject;
+  watch(client);
   await transact('readwrite', (store, meta) => {
     if (!same) store.clear();
     for (const entry of loaded) store.put(entry);
@@ -163,13 +163,11 @@ export async function restore(client: QueryClient, session: CachedSession, verif
     if (verified) meta.put(Date.now(), 'seen');
   });
   if (!enabled) return;
-  subject = session.identity.subject;
   for (const entry of same ? await entries() : []) {
     if ((client.getQueryState(entry.queryKey)?.dataUpdatedAt ?? 0) < entry.updatedAt) {
       client.setQueryData(entry.queryKey, entry.data, { updatedAt: entry.updatedAt });
     }
   }
-  watch(client);
 }
 
 function watch(client: QueryClient): void {

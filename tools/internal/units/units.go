@@ -7,7 +7,10 @@ import (
 	"github.com/jeiang/atrium/internal/app"
 )
 
-const Module = "github.com/jeiang/atrium"
+const (
+	Module = "github.com/jeiang/atrium"
+	Apps   = "internal/apps/"
+)
 
 type Unit struct {
 	Name     string
@@ -41,6 +44,12 @@ func (s Set) Get(name string) (Unit, bool) {
 
 func (s Set) Of(pkg string) (Unit, string, bool) {
 	pkg = strings.TrimPrefix(pkg, Module+"/")
+	if rest, ok := strings.CutPrefix(pkg, Apps); ok {
+		name, _, _ := strings.Cut(rest, "/")
+		if u, ok := s.Get(name); ok {
+			return u, Apps + name, true
+		}
+	}
 	var best Unit
 	root := ""
 	for _, u := range s {

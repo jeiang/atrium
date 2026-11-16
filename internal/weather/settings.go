@@ -35,13 +35,13 @@ const (
 )
 
 func SettingsDefs() []settings.Def {
-	ui := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Value(settings.UI, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
+	ui := func(key, label string, kind settings.Type, def string, check func(string) error) settings.Def {
+		return settings.Value(settings.UI, settings.Def{Key: key, Label: label, Module: Module, Type: kind, Default: def, Check: check})
 	}
 	return []settings.Def{
-		ui(KeyLocationName, settings.String, "", nil),
-		ui(KeyLatitude, settings.Float, "", settings.Between(-90, 90)),
-		ui(KeyLongitude, settings.Float, "", settings.Between(-180, 180)),
+		ui(KeyLocationName, "Place name", settings.String, "", nil),
+		ui(KeyLatitude, "Latitude", settings.Float, "", settings.Between(-90, 90)),
+		ui(KeyLongitude, "Longitude", settings.Float, "", settings.Between(-180, 180)),
 	}
 }
 
