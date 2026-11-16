@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -65,7 +66,7 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 	fakeOpenMeteo(t, dir)
 	seedSettings(t, map[string]string{weather.KeyLatitude: "1.25", weather.KeyLongitude: "2.5", weather.KeyLocationName: "Lowmarsh"})
 	host, _ := f.lookup("ATRIUM_HOST_CONFIG")
-	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, host, dir, "host-pinned.toml", nil, "\n[core]\n"+module.FlagKey(module.Mail)+" = true\n"))
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, host, dir, "host-pinned.toml", nil, "\n[core]\n"+module.FlagKey(unit.Mail)+" = true\n"))
 	s := startAPISite(t, dir, api)
 	token := s.token("owner")
 	browser := newWebClient(t, s.base, nil)
@@ -121,7 +122,7 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 	}
 
 	settingsSchema := strictJSON[coremodule.SettingsSchema](t, "/settings/schema", both("/settings/schema"))
-	pinned := schemaField(t, settingsSchema, module.FlagKey(module.Mail))
+	pinned := schemaField(t, settingsSchema, module.FlagKey(unit.Mail))
 	if pinned.Editable || pinned.Source == nil || *pinned.Source != "pin" || pinned.Value == nil || *pinned.Value != "true" {
 		t.Fatalf("host-pinned setting: %+v", pinned)
 	}

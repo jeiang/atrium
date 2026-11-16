@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -249,7 +250,7 @@ func TestConcurrentSettingsCommitsDoNotStallTheDrain(t *testing.T) {
 		out <- commit{run: ran, took: time.Since(start)}
 	}
 	disable, other := make(chan commit, 1), make(chan commit, 1)
-	go set(module.FlagKey(module.Assistant), "false", disable)
+	go set(module.FlagKey(unit.Assistant), "false", disable)
 	go set("monthly_budget_usd", "50", other)
 	limit := 10 * time.Second
 	for name, ch := range map[string]chan commit{"disabling the assistant": disable, "the budget": other} {

@@ -12,9 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
-const module = "media"
+const module = unit.Media
 
 const (
 	KeyDownloadPrefix = "media_download_path_prefix"

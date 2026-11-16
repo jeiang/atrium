@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type heldQBittorrent struct {
@@ -61,7 +62,7 @@ func sweepRuns(t *testing.T, d *db.DB) int {
 func sweepNextDue(t *testing.T, d *db.DB) *float64 {
 	t.Helper()
 	var due *float64
-	if err := d.Read.QueryRow("SELECT next_due FROM jobs WHERE declaration_key = ?", module.Media+"/"+media.JobSweep).Scan(&due); err != nil {
+	if err := d.Read.QueryRow("SELECT next_due FROM jobs WHERE declaration_key = ?", unit.Media+"/"+media.JobSweep).Scan(&due); err != nil {
 		t.Fatal(err)
 	}
 	return due
@@ -84,7 +85,7 @@ func TestServeRunsModelFreeJobsWithAssistantDisabled(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbit.URL, "", "", ""))
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
-	asstSet(t, module.FlagKey(module.Assistant), "false")
+	asstSet(t, module.FlagKey(unit.Assistant), "false")
 	before := len(api.Requests())
 	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, media.JobSweep)
 

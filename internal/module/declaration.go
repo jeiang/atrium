@@ -57,6 +57,7 @@ type Declaration struct {
 	Tools             []ToolDefinition
 	ProposeKinds      []proposals.Definition
 	Effects           func(EffectDeps) Effects
+	EffectOrigins     []string
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync
 	AccountCredential config.AccountCredentialFunc
@@ -69,6 +70,7 @@ type Declaration struct {
 	ServiceSets       func(context.Context) ([]SetService, error)
 	ServiceSetName    string
 	Recover           func(context.Context, *db.DB, config.Config) error
+	HasOperatorData   func(context.Context, db.Querier) (bool, error)
 	Metrics           []ops.Metric
 	Checks            []ops.Check
 	Operations        []application.Definition

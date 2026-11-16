@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestModulesSettingsPageIsGone(t *testing.T) {
@@ -17,7 +17,7 @@ func TestModulesSettingsPageIsGone(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/modules", nil); code != http.StatusNotFound {
 		t.Errorf("GET /settings/modules = %d, want 404", code)
 	}
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/settings/modules/"+module.Contacts, url.Values{"on": {"true"}}); code != http.StatusNotFound {
-		t.Errorf("POST /settings/modules/%s = %d, want 404", module.Contacts, code)
+	if code, _, _ := fetch(t, client, http.MethodPost, base+"/settings/modules/"+unit.Contacts, url.Values{"on": {"true"}}); code != http.StatusNotFound {
+		t.Errorf("POST /settings/modules/%s = %d, want 404", unit.Contacts, code)
 	}
 }

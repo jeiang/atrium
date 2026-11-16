@@ -12,9 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
-const module = "mail"
+const module = unit.Mail
 
 const PassResource = "mail-pass"
 

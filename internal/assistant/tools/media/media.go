@@ -12,6 +12,7 @@ import (
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -73,7 +74,7 @@ func Tools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaAddMagnet, Check: checkAddMagnet, Label: "Add torrent", Icon: "download", Module: module.Media},
+			Approval:  &tool.Approval{Apply: mediaAddMagnet, Check: checkAddMagnet, Label: "Add torrent", Icon: "download", Module: unit.Media},
 		}),
 		asstapp.ApprovalGate(tool.Tool{
 			Name:        "media_channel_add",
@@ -83,7 +84,7 @@ func Tools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaChannelAdd, Label: "Watch show", Icon: "tv", Module: module.Media, Detail: "name"},
+			Approval:  &tool.Approval{Apply: mediaChannelAdd, Label: "Watch show", Icon: "tv", Module: unit.Media, Detail: "name"},
 		}),
 		asstapp.ApprovalGate(tool.Tool{
 			Name:        "media_channel_remove",
@@ -93,7 +94,7 @@ func Tools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaChannelRemove, Label: "Stop watching show", Icon: "tv", Module: module.Media},
+			Approval:  &tool.Approval{Apply: mediaChannelRemove, Label: "Stop watching show", Icon: "tv", Module: unit.Media},
 		}),
 	}
 }

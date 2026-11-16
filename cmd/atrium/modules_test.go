@@ -28,6 +28,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type moduleCase struct {
@@ -45,19 +46,19 @@ type moduleCase struct {
 func nonEmpty(stdout, _ string, code int) bool { return code == cli.ExitOK && stdout != "" }
 
 var moduleCases = []moduleCase{
-	{module: module.Mail, tool: "mail_search", table: "messages", method: "GET", path: "/triage", status: http.StatusOK,
+	{module: unit.Mail, tool: "mail_search", table: "messages", method: "GET", path: "/triage", status: http.StatusOK,
 		command: []string{"rules", "export"}, output: nonEmpty},
-	{module: module.Calendar, tool: "calendar_list", table: "agent_events",
+	{module: unit.Calendar, tool: "calendar_list", table: "agent_events",
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
-	{module: module.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
+	{module: unit.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
-	{module: module.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
+	{module: unit.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
 		command: []string{"agent", "run", "--text", "hello", "--kind", "chat"}, output: func(stdout, _ string, code int) bool {
 			return code == cli.ExitOK && strings.HasPrefix(stdout, "{")
 		}},
-	{module: module.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
-	{module: module.Grafana, tool: "grafana_datasources"},
-	{module: module.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
+	{module: unit.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
+	{module: unit.Grafana, tool: "grafana_datasources"},
+	{module: unit.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
 }
 
 type appRun struct {
@@ -236,7 +237,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 					t.Errorf("%v while off: exit %d stdout %q stderr %q, want a silent exit 0", c.command, got.code, got.stdout, got.stderr)
 				}
 			}
-			if c.module != module.Assistant {
+			if c.module != unit.Assistant {
 				if c.tool != "" {
 					if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
 						t.Errorf("tool %s is offered while %s is off", c.tool, c.module)
@@ -263,7 +264,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 					t.Errorf("%v: exit %d stdout %q stderr %q", c.command, ran.code, ran.stdout, ran.stderr)
 				}
 			}
-			if c.module != module.Assistant {
+			if c.module != unit.Assistant {
 				ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
 			}
 			if c.tool != "" {
@@ -277,7 +278,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 		})
 	}
 	t.Run("live routes and security", func(t *testing.T) {
-		_, _, f := moduleFixture(t, flagsExcept(module.Media, "false"))
+		_, _, f := moduleFixture(t, flagsExcept(unit.Media, "false"))
 		base, _, _, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
 		if err != nil {
 			t.Fatal(err)
@@ -301,14 +302,14 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 		if got := request(http.MethodGet, "/apps/media/channels", true); got != http.StatusNotFound {
 			t.Fatalf("disabled route = %d", got)
 		}
-		if got := runApp(t, "settings", "set", module.FlagKey(module.Media), "invalid"); got.code == cli.ExitOK {
+		if got := runApp(t, "settings", "set", module.FlagKey(unit.Media), "invalid"); got.code == cli.ExitOK {
 			t.Fatal("invalid module flag was accepted")
 		}
 		if got := request(http.MethodGet, "/apps/media/channels", true); got != http.StatusNotFound {
 			t.Fatalf("refused setting changed the live route = %d", got)
 		}
 		for _, enabled := range []string{"true", "false", "true"} {
-			if got := runApp(t, "settings", "set", module.FlagKey(module.Media), enabled); got.code != cli.ExitOK {
+			if got := runApp(t, "settings", "set", module.FlagKey(unit.Media), enabled); got.code != cli.ExitOK {
 				t.Fatalf("toggle %s: %s", enabled, got.stderr)
 			}
 			want := http.StatusOK
@@ -333,7 +334,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 
 func TestDisabledModuleKeepsPageAndAPIErrorResponses(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	base := startServeIn(t, dir)
 	status, body, header := fetch(t, http.DefaultClient, http.MethodGet, base+"/library/files", nil)
 	if status != http.StatusNotFound || !strings.HasPrefix(header.Get("Content-Type"), "text/html") || !strings.Contains(body, "Nothing here") {
@@ -451,10 +452,10 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 	if offered() {
 		t.Fatal("grafana tools are offered while the Grafana connection is broken")
 	}
-	if got := runApp(t, "settings", "set", module.FlagKey(module.Grafana), "false"); got.code != cli.ExitOK {
+	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "false"); got.code != cli.ExitOK {
 		t.Fatalf("disable the broken module: exit %d stderr %q", got.code, got.stderr)
 	}
-	if got := runApp(t, "settings", "set", module.FlagKey(module.Grafana), "true"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "grafana-ca.pem cannot be read") {
+	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "true"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "grafana-ca.pem cannot be read") {
 		t.Fatalf("enabling the broken module: exit %d stderr %q, want a refusal naming the CA file", got.code, got.stderr)
 	}
 	srv := httptest.NewTLSServer(http.NotFoundHandler())
@@ -463,7 +464,7 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := runApp(t, "settings", "set", module.FlagKey(module.Grafana), "true"); got.code != cli.ExitOK {
+	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "true"); got.code != cli.ExitOK {
 		t.Fatalf("enable the repaired module: exit %d stderr %q", got.code, got.stderr)
 	}
 	if !offered() {
@@ -474,7 +475,7 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 func TestDisabledModuleRoutesEndInNotFound(t *testing.T) {
 	t.Parallel()
 	flags := allFlagsTrue()
-	flags[module.Media], flags[module.Notifications] = "false", "false"
+	flags[unit.Media], flags[unit.Notifications] = "false", "false"
 	dir, _, _ := moduleFixture(t, flags)
 	base := startServeIn(t, dir)
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -497,7 +498,7 @@ func TestDisabledModuleRoutesEndInNotFound(t *testing.T) {
 
 func TestUsageAndBudgetStayReachableWithTheAssistantOff(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -539,7 +540,7 @@ func TestUsageAndBudgetStayReachableWithTheAssistantOff(t *testing.T) {
 
 func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	t.Parallel()
-	dir, api, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	dir, api, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'Lifecycle thread', 'low', ?, ?)", now, now); err != nil {
@@ -556,7 +557,7 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	}
 	toggle := func(value string) {
 		t.Helper()
-		if got := runApp(t, "settings", "set", module.FlagKey(module.Assistant), value); got.code != cli.ExitOK {
+		if got := runApp(t, "settings", "set", module.FlagKey(unit.Assistant), value); got.code != cli.ExitOK {
 			t.Fatalf("assistant_enabled %s: exit %d stderr %q", value, got.code, got.stderr)
 		}
 	}
@@ -619,7 +620,7 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 
 func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -675,7 +676,7 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 	<-started
 	<-started
 	enabled := make(chan appRun, 1)
-	go func() { enabled <- runApp(t, "settings", "set", module.FlagKey(module.Assistant), "true") }()
+	go func() { enabled <- runApp(t, "settings", "set", module.FlagKey(unit.Assistant), "true") }()
 	select {
 	case got := <-enabled:
 		if got.code != cli.ExitOK {
@@ -710,7 +711,7 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 }
 
 func TestFailedAssistantStartRestartsAfterBackoff(t *testing.T) {
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("CREATE TRIGGER jobs_refused BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'jobs refused'); END"); err != nil {
 		t.Fatal(err)
@@ -725,7 +726,7 @@ func TestFailedAssistantStartRestartsAfterBackoff(t *testing.T) {
 		}
 		return n
 	}
-	if got := runApp(t, "settings", "set", module.FlagKey(module.Assistant), "true"); got.code != cli.ExitOK {
+	if got := runApp(t, "settings", "set", module.FlagKey(unit.Assistant), "true"); got.code != cli.ExitOK {
 		t.Fatalf("settings set: exit %d stderr %q", got.code, got.stderr)
 	}
 	failures := func() int { return strings.Count(logs.String(), "service assistant failed; restarting") }
@@ -768,12 +769,12 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	clearModuleEnv(t)
 	for _, tc := range []struct{ module, reason string }{
-		{module.Mail, "the embedding connection is not configured"},
-		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
-		{module.Media, "the service/media-agent connection is not configured"},
-		{module.Contacts, "contacts_dir is not set"},
-		{module.Grafana, "the Grafana connection is not configured"},
-		{module.Grafana, "needs assistant"},
+		{unit.Mail, "the embedding connection is not configured"},
+		{unit.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
+		{unit.Media, "the service/media-agent connection is not configured"},
+		{unit.Contacts, "contacts_dir is not set"},
+		{unit.Grafana, "the Grafana connection is not configured"},
+		{unit.Grafana, "needs assistant"},
 	} {
 		got := runSettings(t, "set", module.FlagKey(tc.module), "true")
 		if got.code != cli.ExitError || !strings.Contains(got.stderr, tc.module+" needs settings") || !strings.Contains(got.stderr, tc.reason) {
@@ -784,7 +785,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		}
 	}
 	for _, value := range []string{"true", "false"} {
-		if got := runSettings(t, "set", module.FlagKey(module.Assistant), value); got.code != cli.ExitOK {
+		if got := runSettings(t, "set", module.FlagKey(unit.Assistant), value); got.code != cli.ExitOK {
 			t.Errorf("setting assistant %s without an Anthropic API key: exit %d stderr %q", value, got.code, got.stderr)
 		}
 	}
@@ -794,18 +795,18 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	if got := runApp(t, "connections", "list"); got.code != cli.ExitOK {
 		t.Fatalf("connections list: exit %d %q", got.code, got.stderr)
 	}
-	for _, name := range []string{module.Mail, module.Notifications} {
+	for _, name := range []string{unit.Mail, unit.Notifications} {
 		if got := runSettings(t, "set", module.FlagKey(name), "true"); got.code != cli.ExitOK || got.row(t).Value == nil || *got.row(t).Value != "true" {
 			t.Errorf("enabling %s with its settings met: exit %d stdout %q stderr %q", name, got.code, got.stdout, got.stderr)
 		}
 	}
-	if got := runSettings(t, "set", module.FlagKey(module.Grafana), "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "needs assistant (off)") {
+	if got := runSettings(t, "set", module.FlagKey(unit.Grafana), "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "needs assistant (off)") {
 		t.Errorf("enabling grafana while assistant is off: exit %d stderr %q", got.code, got.stderr)
 	}
-	if got := runSettings(t, "set", module.FlagKey(module.Assistant), "true"); got.code != cli.ExitOK {
+	if got := runSettings(t, "set", module.FlagKey(unit.Assistant), "true"); got.code != cli.ExitOK {
 		t.Fatalf("enabling assistant: exit %d %q", got.code, got.stderr)
 	}
-	if got := runSettings(t, "set", module.FlagKey(module.Grafana), "true"); got.code != cli.ExitOK {
+	if got := runSettings(t, "set", module.FlagKey(unit.Grafana), "true"); got.code != cli.ExitOK {
 		t.Errorf("enabling grafana with assistant on: exit %d %q", got.code, got.stderr)
 	}
 }
@@ -840,9 +841,27 @@ func readFlag(t *testing.T, name string) string {
 
 func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 	t.Parallel()
-	phaseA := func(t *testing.T, populated bool) (base string, path string) {
-		dir := t.TempDir()
-		path = filepath.Join(dir, "atrium.db")
+	const (
+		account = "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')"
+		thread  = "INSERT INTO threads (id, kind, effort, created_at, updated_at) VALUES (1, 'chat', 'low', 0, 0)"
+	)
+	insert := func(t *testing.T, path string, rows ...string) {
+		d, err := db.Connect(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range rows {
+			if _, err := d.Write.Exec(q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := d.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	phaseA := func(t *testing.T, rows ...string) (base, dir string, stop func()) {
+		dir = t.TempDir()
+		path := filepath.Join(dir, "atrium.db")
 		setEnv(t, "ATRIUM_DB", path)
 		setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 		setEnv(t, "ATRIUM_PUBLIC_HOST", "")
@@ -854,55 +873,78 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 		if got := runSettings(t, "list"); got.code != cli.ExitOK {
 			t.Fatalf("settings list: exit %d %q", got.code, got.stderr)
 		}
-		if populated {
-			d, err := db.Connect(path)
-			if err != nil {
-				t.Fatal(err)
+		insert(t, path, rows...)
+		base, _, stop = startServeStoppable(t, dir)
+		return base, dir, stop
+	}
+	wantFlags := func(t *testing.T, base string, want func(name string) string) {
+		t.Helper()
+		for _, c := range moduleCases {
+			value := want(c.module)
+			if got := readFlag(t, c.module); got != value {
+				t.Errorf("%s_enabled = %s, want %s", c.module, got, value)
 			}
-			for _, q := range []string{
-				"INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')",
-				"INSERT INTO threads (id, kind, effort, created_at, updated_at) VALUES (1, 'chat', 'low', 0, 0)",
-			} {
-				if _, err := d.Write.Exec(q); err != nil {
-					t.Fatal(err)
-				}
+			if c.path == "" {
+				continue
 			}
-			if err := d.Close(); err != nil {
-				t.Fatal(err)
+			status := c.status
+			if value != "true" {
+				status = http.StatusNotFound
+			}
+			if got := probe(t, base, c); got != status {
+				t.Errorf("%s %s = %d with %s_enabled %s, want %d", c.method, c.path, got, c.module, value, status)
 			}
 		}
-		return startServeIn(t, dir), path
+	}
+	allOn := func(string) string { return "true" }
+	coreOnly := func(string) string { return "false" }
+
+	for _, c := range []struct {
+		name string
+		rows []string
+	}{
+		{"accounts and threads", []string{account, thread}},
+		{"only a mail account", []string{account}},
+		{"only an assistant thread", []string{thread}},
+	} {
+		t.Run("a Phase A database with "+c.name+" turns every module on", func(t *testing.T) {
+			base, _, _ := phaseA(t, c.rows...)
+			wantFlags(t, base, allOn)
+		})
 	}
 
-	t.Run("a Phase A database turns every module on", func(t *testing.T) {
-		base, _ := phaseA(t, true)
-		for _, c := range moduleCases {
-			if got := readFlag(t, c.module); got != "true" {
-				t.Errorf("%s_enabled = %s after adoption, want true", c.module, got)
-			}
-			if c.path != "" {
-				if status := probe(t, base, c); status != c.status {
-					t.Errorf("%s %s = %d after adoption, want %d", c.method, c.path, status, c.status)
-				}
-			}
-		}
-	})
-
 	t.Run("an empty database starts core only", func(t *testing.T) {
-		base, _ := phaseA(t, false)
-		for _, c := range moduleCases {
-			if got := readFlag(t, c.module); got != "false" {
-				t.Errorf("%s_enabled = %s on an empty database, want false", c.module, got)
-			}
-			if c.path != "" {
-				if status := probe(t, base, c); status != http.StatusNotFound {
-					t.Errorf("%s %s = %d on an empty database, want 404", c.method, c.path, status)
-				}
-			}
-		}
+		base, _, _ := phaseA(t)
+		wantFlags(t, base, coreOnly)
 		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+"/review", nil); status != http.StatusOK {
 			t.Errorf("GET /review = %d, want the core review page", status)
 		}
+	})
+
+	t.Run("a seeded database keeps its stored flags across a restart", func(t *testing.T) {
+		_, dir, stop := phaseA(t, account)
+		stop()
+		off := map[string]bool{unit.Mail: true, unit.Media: true}
+		for name := range off {
+			if got := runSettings(t, "set", module.FlagKey(name), "false"); got.code != cli.ExitOK {
+				t.Fatalf("settings set %s false: exit %d %q", module.FlagKey(name), got.code, got.stderr)
+			}
+		}
+		base := startServeIn(t, dir)
+		wantFlags(t, base, func(name string) string {
+			if off[name] {
+				return "false"
+			}
+			return "true"
+		})
+	})
+
+	t.Run("operator data added after an empty first start turns nothing on", func(t *testing.T) {
+		_, dir, stop := phaseA(t)
+		stop()
+		insert(t, filepath.Join(dir, "atrium.db"), account, thread)
+		base := startServeIn(t, dir)
+		wantFlags(t, base, coreOnly)
 	})
 }
 
@@ -911,7 +953,7 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 	data := loadGoldenData(t)
 	candidates := func(flag string) int {
 		f := newFixture(t, data, nil, "")
-		seedFlagsAt(t, f.app, filepath.Join(f.dir, "atrium.db"), map[string]string{module.Calendar: flag})
+		seedFlagsAt(t, f.app, filepath.Join(f.dir, "atrium.db"), map[string]string{unit.Calendar: flag})
 		seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {
 			t.Fatal(err)
@@ -950,7 +992,7 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 
 func TestMailPauseUnavailableWhileMailIsOff(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, "false"))
 	paused := func() bool {
 		got := runApp(t, "live", "status")
 		return got.code == cli.ExitOK && strings.Contains(got.stdout, `"paused": true`)
@@ -1008,8 +1050,8 @@ func TestMailDisableDuringProposalApproval(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("approval did not reach IMAP preflight")
 	}
-	asstSet(t, module.FlagKey(module.Mail), "false")
-	asstSet(t, module.FlagKey(module.Mail), "true")
+	asstSet(t, module.FlagKey(unit.Mail), "false")
+	asstSet(t, module.FlagKey(unit.Mail), "true")
 	once.Do(func() { close(release) })
 	ran := <-result
 	if ran.code == cli.ExitOK || !strings.Contains(ran.stderr+ran.stdout, "the mail module was disabled; start the action again") {
@@ -1090,7 +1132,7 @@ func (b midBatch) disableAfterWrite(t *testing.T, what string, run func()) {
 	case <-time.After(10 * time.Second):
 		t.Fatalf("%s did not reach an IMAP preflight after its first write", what)
 	}
-	asstSet(t, module.FlagKey(module.Mail), "false")
+	asstSet(t, module.FlagKey(unit.Mail), "false")
 	free()
 	<-done
 	b.fake.SetStatusHook(nil)
@@ -1219,7 +1261,7 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("undo did not reach IMAP preflight")
 	}
-	asstSet(t, module.FlagKey(module.Mail), "false")
+	asstSet(t, module.FlagKey(unit.Mail), "false")
 	releaseOnce.Do(func() { close(release) })
 	refused := <-result
 	m.fake.SetStatusHook(nil)
@@ -1241,7 +1283,7 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	if len(m.fake.Writes) != writes || m.count(t, "SELECT COUNT(*) FROM effects WHERE undo_of = ?", effect) != 0 {
 		t.Fatal("disabled undo wrote IMAP or recorded an undo intent")
 	}
-	asstSet(t, module.FlagKey(module.Mail), "true")
+	asstSet(t, module.FlagKey(unit.Mail), "true")
 	m.run(t, "live", "undo", effect)
 	if len(m.fake.Boxes["INBOX"].Box.Messages) != 1 {
 		t.Fatal("undo after re-enabling did not restore the message")
@@ -1277,7 +1319,7 @@ func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("model request did not arrive")
 	}
-	asstSet(t, module.FlagKey(module.Mail), "false")
+	asstSet(t, module.FlagKey(unit.Mail), "false")
 	releaseOnce.Do(func() { close(release) })
 	ran := <-result
 	api.SetOnRequest(previous)
@@ -1292,7 +1334,7 @@ func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
 	if resultBlock["is_error"] != true {
 		t.Fatalf("disabled tool result is not an error: %s", encoded)
 	}
-	asstSet(t, module.FlagKey(module.Mail), "true")
+	asstSet(t, module.FlagKey(unit.Mail), "true")
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("enabled-mail", "mail_read", map[string]any{"message_id": message})),
 		anthropictest.Reply("end_turn", anthropictest.Text("read")),
