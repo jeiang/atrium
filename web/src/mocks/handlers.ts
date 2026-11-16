@@ -101,18 +101,17 @@ export const handlers = [
   }),
   http.get(`*${API_BASE}/events`, ({ request }) => {
     const channel = new BroadcastChannel(MOCK_EVENTS);
+    let closed = false;
+    const end = (): void => {
+      if (closed) return;
+      closed = true;
+      channel.close();
+    };
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         counter.atriumMockStreams = (counter.atriumMockStreams ?? 0) + 1;
-        let closed = false;
         const send = (text: string): void => {
           if (!closed) controller.enqueue(encoder.encode(text));
-        };
-        const close = (): void => {
-          if (closed) return;
-          closed = true;
-          channel.close();
-          controller.close();
         };
         const topics = [...revisions].map(([topic, revision]) => ({ topic, revision }));
         send(`retry: 1000\n\nevent: sync\ndata: ${JSON.stringify({ topics })}\n\n`);
@@ -121,11 +120,10 @@ export const handlers = [
           revisions.set(event.data.topic, revision);
           send(`event: change\ndata: ${JSON.stringify({ topic: event.data.topic, revision })}\n\n`);
         });
-        request.signal.addEventListener('abort', close, { once: true });
+        request.signal.addEventListener('abort', end, { once: true });
+        addEventListener('pagehide', end, { once: true });
       },
-      cancel() {
-        channel.close();
-      },
+      cancel: end,
     });
     return new HttpResponse(stream, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },

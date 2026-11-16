@@ -424,6 +424,11 @@
   }
 
   @media (--phone) {
+    :root {
+      --chrome-end: calc(56px + var(--safe-bottom));
+      scroll-padding-block-end: var(--chrome-end);
+    }
+
     .frame {
       grid-template-columns: minmax(0, 1fr);
       padding-inline-start: 0;
