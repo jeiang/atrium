@@ -8,7 +8,6 @@
   import Toaster from '../shared/ui/Toaster.svelte';
   import { toast } from '../shared/ui/toast.svelte';
   import AccountMenu from './AccountMenu.svelte';
-  import { firstView } from './firstView';
   import { useShell } from './frame';
   import {
     appsDestination,
@@ -43,16 +42,14 @@
     if (!signedIn || cached) return;
     let stop: (() => void) | undefined;
     let ended = false;
-    firstView
-      .then(() => Promise.all([import('../contract/events'), import('../shared/live')]))
-      .then(
-        ([events, live]) => {
-          if (!ended) stop = events.startAppEvents({ onNotice: live.topicInvalidator(client) });
-        },
-        () => {
-          if (!ended) toast('Live updates are off. Reload to turn them on.', { tone: 'error' });
-        },
-      );
+    Promise.all([import('../contract/events'), import('../shared/live')]).then(
+      ([events, live]) => {
+        if (!ended) stop = events.startAppEvents({ onNotice: live.topicInvalidator(client) });
+      },
+      () => {
+        if (!ended) toast('Live updates are off. Reload to turn them on.', { tone: 'error' });
+      },
+    );
     return () => {
       ended = true;
       stop?.();
