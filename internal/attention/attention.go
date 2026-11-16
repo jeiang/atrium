@@ -36,6 +36,7 @@ type Action struct {
 type Item struct {
 	Kind     string   `json:"kind"`
 	SourceID string   `json:"source_id"`
+	LoopID   int64    `json:"loop_id,omitempty"`
 	Title    string   `json:"title"`
 	Detail   string   `json:"detail"`
 	Due      float64  `json:"due,omitempty"`

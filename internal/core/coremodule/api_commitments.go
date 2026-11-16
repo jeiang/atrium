@@ -179,6 +179,7 @@ func commitmentRoutes(d *web.Deps, svc func() *commitmentsapp.Service) []applica
 		verb(commitmentsapp.DoneName, "POST /commitments/{ref}/done", (*commitmentsapp.Service).Done),
 		verb(commitmentsapp.ReopenName, "POST /commitments/{ref}/reopen", (*commitmentsapp.Service).Reopen),
 		verb(commitmentsapp.DismissName, "POST /commitments/{ref}/dismiss", (*commitmentsapp.Service).Dismiss),
+		commitmentSnoozeRoute(d, svc),
 		api.Command(d, describeCommitment(commitmentsapp.UpdateName), application.APIShape{Area: area, Description: "Edit a task by `ref`, as `PATCH /tasks/{task_id}` does. " + commitmentReadOnly + commitmentTopics,
 			Errors: []application.Code{application.Invalid, application.NotFound, application.Conflict}},
 			"PATCH /commitments/{ref}", func(ctx context.Context, in CommitmentUpdateRequest) (application.Change[CommitmentChanged], error) {
@@ -195,4 +196,21 @@ func commitmentRoutes(d *web.Deps, svc func() *commitmentsapp.Service) []applica
 				return change(svc().Delete(withModules(ctx, d), commitmentsapp.RefInput{Ref: in.Ref}))
 			}),
 	}
+}
+
+type CommitmentSnoozeRequest struct {
+	Ref   string  `path:"ref" json:"-"`
+	Until float64 `json:"until"`
+}
+
+func commitmentSnoozeRoute(d *web.Deps, svc func() *commitmentsapp.Service) application.Binding {
+	return api.Command(d, describeCommitment(commitmentsapp.SnoozeName), application.APIShape{Area: "tasks", Description: "Snooze an open task or commitment by `ref` until `until` (Unix seconds, in the future). The item leaves `/queue` until then and shows `snoozed_until` in `/commitments`. Undoable. " + commitmentTopics,
+		Errors: []application.Code{application.Invalid, application.NotFound, application.Conflict}},
+		"POST /commitments/{ref}/snooze", func(ctx context.Context, in CommitmentSnoozeRequest) (application.Change[CommitmentChanged], error) {
+			c, err := svc().Snooze(withModules(ctx, d), commitmentsapp.SnoozeInput{Ref: in.Ref, Until: in.Until})
+			if err != nil {
+				return application.Change[CommitmentChanged]{}, err
+			}
+			return application.Change[CommitmentChanged]{Data: CommitmentChanged{Ref: c.Data.Ref, Status: c.Data.Status, Item: c.Data.Item}, EffectIDs: c.EffectIDs, AuditID: c.AuditID}, nil
+		})
 }

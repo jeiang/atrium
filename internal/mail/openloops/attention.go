@@ -28,6 +28,7 @@ func AttentionCommitments(ctx context.Context, q db.Querier) ([]OpenCommitment, 
 }
 
 type OpenLoop struct {
+	ID          int64
 	ThreadKey   string
 	State       string
 	Subject     string
@@ -37,7 +38,7 @@ type OpenLoop struct {
 
 func AttentionLoops(ctx context.Context, q db.Querier, now float64) ([]OpenLoop, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT l.thread_key, l.state, l.subject, l.counterpart, l.since FROM open_loops l "+
+		"SELECT l.rowid, l.thread_key, l.state, l.subject, l.counterpart, l.since FROM open_loops l "+
 			"LEFT JOIN loop_overrides o ON o.thread_key = l.thread_key "+
 			"WHERE COALESCE(o.dismissed, 0) = 0 AND (o.snoozed_until IS NULL OR o.snoozed_until <= ?) ORDER BY l.since", now)
 	if err != nil {
@@ -45,7 +46,7 @@ func AttentionLoops(ctx context.Context, q db.Querier, now float64) ([]OpenLoop,
 	}
 	return db.Collect(rows, func(r *sql.Rows) (OpenLoop, error) {
 		var l OpenLoop
-		err := r.Scan(&l.ThreadKey, &l.State, &l.Subject, &l.Counterpart, &l.Since)
+		err := r.Scan(&l.ID, &l.ThreadKey, &l.State, &l.Subject, &l.Counterpart, &l.Since)
 		return l, err
 	})
 }
