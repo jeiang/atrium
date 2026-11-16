@@ -40,7 +40,7 @@ const atrium = "github.com/jeiang/atrium/internal/"
 var pinnedNames = map[string]string{
 	atrium + "assistant/assistantmodule.apiAttachment": "ThreadAttachment",
 	atrium + "apps/mail/message.Attachment":            "MailAttachment",
-	atrium + "mail/live.Action":                        "LiveAction",
+	atrium + "apps/mail/live.Action":                   "LiveAction",
 	atrium + "attention.Action":                        "AttentionAction",
 	atrium + "assistant/assistantmodule.apiAbout":      "AboutPage",
 	atrium + "assistant/assistantmodule.apiAgenda":     "AgendaPage",
@@ -61,7 +61,7 @@ var pinnedNames = map[string]string{
 	atrium + "connections.Result":                      "ConnectionResult",
 	atrium + "connections.View":                        "ConnectionView",
 	atrium + "application/commands.Status":             "CommandStatus",
-	atrium + "mail/live.Status":                        "LiveStatus",
+	atrium + "apps/mail/live.Status":                   "LiveStatus",
 	atrium + "assistant/files.Summary":                 "FileSummary",
 }
 

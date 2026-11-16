@@ -9,10 +9,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/apps/mail/rules"
+	"github.com/jeiang/atrium/internal/apps/mail/triage"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
-	"github.com/jeiang/atrium/internal/mail/triage"
 )
 
 const RulesName application.Name = "mail.rules"

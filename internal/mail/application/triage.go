@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/apps/mail/triage"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/triage"
 )
 
 const TriageName application.Name = "mail.triage"

@@ -2,10 +2,10 @@ package mailmodule
 
 import (
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/applier"
+	"github.com/jeiang/atrium/internal/apps/mail/live"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/applier"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"

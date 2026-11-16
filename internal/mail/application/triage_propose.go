@@ -11,7 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/apps/mail"
-	"github.com/jeiang/atrium/internal/mail/executors"
+	"github.com/jeiang/atrium/internal/apps/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 )

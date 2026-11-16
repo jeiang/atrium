@@ -6,14 +6,14 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/applier"
+	"github.com/jeiang/atrium/internal/apps/mail/live"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/run"
 )
 

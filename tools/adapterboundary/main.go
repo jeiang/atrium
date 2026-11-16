@@ -111,6 +111,13 @@ const (
 
 var mailUnits = []string{"internal/mail", "internal/apps/mail"}
 
+var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live"}
+
+const (
+	mailGate     = "internal/apps/mail"
+	mailGateCall = "WriteGate("
+)
+
 var mailImporters = map[string]string{
 	"cmd/atrium":                    "composition root",
 	"internal/app":                  "composition root",
@@ -179,12 +186,19 @@ func scan() ([]string, error) {
 				edges = append(edges, "mail package imports signals instead of calling the platform hook: "+file+"\t"+imp)
 			}
 			if rel, ok := strings.CutPrefix(imp, module+"/"); outsideMail && ok && inMail(rel) {
-				if _, ok := mailImporters[path.Dir(file)]; ok {
+				_, excepted := mailImporters[path.Dir(file)]
+				switch {
+				case under(rel, mailWritePath):
+					edges = append(edges, "package outside Mail imports the mail write path: "+file+"\t"+imp)
+				case excepted:
 					importing[path.Dir(file)] = true
-				} else {
+				default:
 					edges = append(edges, "package outside Mail imports a mail package instead of reading internal/communications: "+file+"\t"+imp)
 				}
 			}
+		}
+		if path.Dir(file) != mailGate && bytes.Contains(src, []byte(mailGateCall)) {
+			edges = append(edges, "mail write gate called outside the Mail client: "+file)
 		}
 		return nil
 	}
@@ -203,8 +217,12 @@ func scan() ([]string, error) {
 }
 
 func inMail(rel string) bool {
-	for _, unit := range mailUnits {
-		if rel == unit || strings.HasPrefix(rel, unit+"/") {
+	return under(rel, mailUnits)
+}
+
+func under(rel string, dirs []string) bool {
+	for _, dir := range dirs {
+		if rel == dir || strings.HasPrefix(rel, dir+"/") {
 			return true
 		}
 	}
