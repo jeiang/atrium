@@ -26,13 +26,13 @@
   import StatusSlot from '../../shared/assistant/StatusSlot.svelte';
   import ToolCard from '../../shared/assistant/ToolCard.svelte';
   import type { ToolCall } from '../../shared/assistant/types';
+  import Markdown from '../../shared/markdown/Markdown.svelte';
   import { queryClient } from '../../shared/query';
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
-  import Markdown from './Markdown.svelte';
   import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';

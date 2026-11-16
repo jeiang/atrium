@@ -1,0 +1,121 @@
+@layer components {
+  .prose {
+    min-inline-size: 0;
+    font-size: var(--t-md);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+
+  .prose > :first-child {
+    margin-block-start: 0;
+  }
+
+  .prose > :last-child {
+    margin-block-end: 0;
+  }
+
+  .prose :is(p, ul, ol, blockquote, .md-code, .md-table) {
+    margin-block: 0 var(--s-3);
+  }
+
+  .prose :is(ul, ol) {
+    padding-inline-start: var(--s-5);
+  }
+
+  .prose li > :is(p, ul, ol, blockquote, .md-code, .md-table):last-child {
+    margin-block-end: 0;
+  }
+
+  .prose .md-h {
+    margin-block: var(--s-4) var(--s-2);
+    font-size: var(--t-lg);
+    line-height: var(--lh-tight);
+  }
+
+  .prose a {
+    font-weight: 700;
+    color: inherit;
+  }
+
+  .prose a .icon {
+    inline-size: 0.9em;
+    block-size: 0.9em;
+    margin-inline-start: 0.15em;
+    vertical-align: -0.1em;
+  }
+
+  .prose blockquote {
+    border-radius: var(--r-sm);
+    margin-inline: 0;
+    padding-inline-start: var(--s-3);
+    border-inline-start: 3px solid var(--line-strong);
+    color: var(--ink-2);
+  }
+
+  .prose .md-raw {
+    white-space: pre-wrap;
+  }
+
+  .prose code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 0.05em 0.3em;
+    background: var(--paper-2);
+    border-radius: var(--r-sm);
+  }
+
+  .prose .md-code {
+    overflow: clip;
+    display: grid;
+    gap: var(--s-1);
+    padding: var(--s-3);
+    background: var(--paper-2);
+    border-radius: var(--r-md);
+  }
+
+  .prose .md-lang {
+    color: var(--ink-3);
+    font-size: var(--t-xs);
+  }
+
+  .prose pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .prose pre code {
+    padding: 0;
+  }
+
+  .prose .md-table {
+    overflow-x: auto;
+    border-radius: var(--r-md);
+  }
+
+  .prose table {
+    min-inline-size: 100%;
+    border-collapse: collapse;
+    font-size: var(--t-sm);
+    overflow-wrap: normal;
+  }
+
+  .prose :is(th, td) {
+    padding: var(--s-1) var(--s-3);
+    border-block-end: 1px solid var(--line);
+    text-align: start;
+  }
+
+  .prose .md-center {
+    text-align: center;
+  }
+
+  .prose .md-right {
+    text-align: end;
+  }
+
+  .prose hr {
+    border: 0;
+    border-block-start: 1px solid var(--line);
+  }
+}
