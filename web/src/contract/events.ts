@@ -86,9 +86,16 @@ async function stream(signal: AbortSignal, emit: (notice: AppNotice) => void): P
 export function startAppEvents(handlers: AppEventsHandlers): () => void {
   const stop = new AbortController();
   const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(NAME) : undefined;
-  channel?.addEventListener('message', (event: MessageEvent<AppNotice>) => handlers.onNotice(event.data));
+  channel?.addEventListener(
+    'message',
+    (event: MessageEvent<AppNotice>) => {
+      if (!stop.signal.aborted) handlers.onNotice(event.data);
+    },
+    { signal: stop.signal },
+  );
   const lead = (): Promise<void> =>
     stream(stop.signal, (notice) => {
+      if (stop.signal.aborted) return;
       handlers.onNotice(notice);
       channel?.postMessage(notice);
     });
@@ -97,8 +104,11 @@ export function startAppEvents(handlers: AppEventsHandlers): () => void {
   } else {
     void lead();
   }
-  return () => {
+  const end = (): void => {
+    if (stop.signal.aborted) return;
     stop.abort();
     channel?.close();
   };
+  addEventListener('pagehide', end, { signal: stop.signal });
+  return end;
 }

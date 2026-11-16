@@ -1,3 +1,4 @@
+import { flushSync } from 'svelte';
 import {
   onUnauthorized,
   setCsrfToken,
@@ -50,7 +51,9 @@ function signedOut(signIn: WebSignIn | undefined, redirect: boolean, after: 'log
   const target = redirect ? loginTarget(signIn) : undefined;
   if (target && !recentlyRedirected()) {
     sessionStorage.setItem(REDIRECT_KEY, String(Date.now()));
-    session.view = { status: 'redirecting' };
+    flushSync(() => {
+      session.view = { status: 'redirecting' };
+    });
     location.assign(target.href);
     return;
   }
