@@ -50,7 +50,7 @@ func TestMailRetiredSnoozeRowsStayReadableAndNeverApply(t *testing.T) {
 	m.exec(t, "INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, account, target, action_json, after_json, undo_json, state, settled_at) "+
 		"VALUES (9202, ?, ?, 'retired-snooze', 'proposal', 'snooze', 'retired-snooze', 'forward', 'work', 'snooze:1', '{\"op\":\"snooze\"}', '{\"snooze_id\":1}', '{\"op\":\"cancel_snooze\",\"snooze_id\":1}', 'done', ?)", now-60, now-60, now-60)
 
-	m.run(t, "mail", "live", "actions")
+	m.run(t, "live", "actions")
 	writes := len(fake.Writes)
 	if ran := runApp(t, "proposals", "approve", "900"); ran.code == cli.ExitOK {
 		t.Fatalf("approving a retired snooze item exited 0: %q", ran.stdout)
