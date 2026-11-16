@@ -64,11 +64,13 @@ func countingServer(t *testing.T, body string) (*httptest.Server, *atomic.Int32)
 	return srv, &hits
 }
 
-func setFlag(t *testing.T, s *apiSite, token, name, value string) {
+func setFlag(t *testing.T, site *connectionSite, s *apiSite, name, value string) {
 	t.Helper()
-	if got := s.do(http.MethodPut, "/api/v1/settings/"+name+"_enabled", token, map[string]any{"value": value}); got.status != http.StatusOK {
-		t.Fatalf("set %s_enabled=%s: %d %.400s", name, value, got.status, got.body)
+	if got := runApp(t, "settings", "set", name+"_enabled", value); got.code != cli.ExitOK {
+		t.Fatalf("set %s_enabled=%s: exit %d %s", name, value, got.code, got.stderr)
 	}
+	site.start()
+	s.base = site.base
 }
 
 func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T) {
@@ -78,13 +80,16 @@ func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T
 	dir, _, _ := moduleFixture(t, flags)
 	eztv, eztvHits := countingServer(t, `{"torrents":[{"id":1}]}`)
 	ship24, ship24Hits := countingServer(t, `{"data":{"trackers":[]}}`)
-	seedOperatorConnection(t, dir, "service/eztv", "service/eztv", "EZTV", `{"url":"`+eztv.URL+`/api/get-torrents"}`, "indexer", "ok", nil)
+	if _, err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Write.Exec(
+		"UPDATE connections SET config_json = ?, state = 'ok' WHERE id = 'service/eztv' AND config_source = 'operator'", `{"url":"`+eztv.URL+`/api/get-torrents"}`); err != nil {
+		t.Fatal(err)
+	}
 	seedOperatorConnection(t, dir, "service/ship24", "service/ship24", "Ship24", `{"url":"`+ship24.URL+`/public/v1"}`, "api", "failing",
 		map[string]string{"api_key": "ship24-secret-key"})
 
 	site := &connectionSite{t: t, dir: dir}
 	site.start()
-	defer site.stop()
+	defer func() { site.stop() }()
 	token := localAPIToken(t, "lifecycle")
 	api := &apiSite{t: t, base: site.base}
 	rows, creds := lifecycleCounts(t, dir)
@@ -96,7 +101,7 @@ func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T
 	if enabled, _, reason := lifecycleRow(t, dir, "service/weather"); !enabled || reason != "" {
 		t.Fatalf("weather with the assistant on: enabled %v reason %q", enabled, reason)
 	}
-	shipView := apiData(t, api.do(http.MethodGet, "/api/v1/connections/service/ship24", token, nil), http.StatusOK)
+	shipView := connectionView(t, api, token, "service/ship24")
 	if shipView["idle"] != "its app is off" || shipView["enabled"] != true || shipView["state"] != "failing" {
 		t.Fatalf("ship24 with mail off: %v", shipView)
 	}
@@ -106,11 +111,11 @@ func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T
 	if _, ok := capabilityDependencies(t, site.base, token).repair("service/ship24"); ok {
 		t.Fatal("an idle connection still lists a repair")
 	}
-	if weather := apiData(t, api.do(http.MethodGet, "/api/v1/connections/service/weather", token, nil), http.StatusOK); weather["idle"] != nil {
+	if weather := connectionView(t, api, token, "service/weather"); weather["idle"] != nil {
 		t.Fatalf("weather is idle with the assistant on: %v", weather)
 	}
 
-	setFlag(t, api, token, "media", "true")
+	setFlag(t, site, api, "media", "true")
 	waitFor(t, func() bool {
 		enabled, state, _ := lifecycleRow(t, dir, "service/eztv")
 		return enabled && state == "ok"
@@ -121,7 +126,7 @@ func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T
 	if enabled, _, reason := lifecycleRow(t, dir, "service/tmdb"); !enabled || reason == "its app is off" {
 		t.Fatalf("tmdb after media came back: enabled %v reason %q", enabled, reason)
 	}
-	setFlag(t, api, token, "media", "false")
+	setFlag(t, site, api, "media", "false")
 	waitFor(t, func() bool {
 		enabled, _, reason := lifecycleRow(t, dir, "service/eztv")
 		return !enabled && reason == "its app is off"
@@ -136,9 +141,9 @@ func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T
 		t.Fatalf("the EZTV lifecycle raised notices %v", got)
 	}
 
-	setFlag(t, api, token, "mail", "true")
+	setFlag(t, site, api, "mail", "true")
 	waitFor(t, func() bool { return ship24Hits.Load() > 0 && connectionState(t, dir, "service/ship24") == "ok" })
-	if got := apiData(t, api.do(http.MethodGet, "/api/v1/connections/service/ship24", token, nil), http.StatusOK); got["idle"] != nil {
+	if got := connectionView(t, api, token, "service/ship24"); got["idle"] != nil {
 		t.Fatalf("ship24 with mail on is still idle: %v", got)
 	}
 	if r, c := lifecycleCounts(t, dir); r != rows || c != creds {
@@ -151,7 +156,7 @@ func TestOperatorTurnsConnectionsOnAndOffOnBothSurfaces(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("media", "false"))
 	site := &connectionSite{t: t, dir: dir}
 	site.start()
-	defer site.stop()
+	defer func() { site.stop() }()
 	token := localAPIToken(t, "lifecycle")
 	api := &apiSite{t: t, base: site.base}
 	browser := newWebClient(t, site.base, nil)
@@ -188,9 +193,7 @@ func TestDependencyToolsReportNeedsAndRecheckWithinLimits(t *testing.T) {
 	ship24, ship24Hits := countingServer(t, `{"data":{"trackers":[]}}`)
 	seedOperatorConnection(t, dir, "service/ship24", "service/ship24", "Ship24", `{"url":"`+ship24.URL+`/public/v1"}`, "api", "failing",
 		map[string]string{"api_key": "ship24-secret-key"})
-	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
-		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
-	}
+	warm(t, api)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("UPDATE connections SET enabled = 0, state = 'disabled', reason = 'turned off by the operator' WHERE id = 'service/weather'"); err != nil {
 		t.Fatal(err)
@@ -223,7 +226,7 @@ func TestDependencyToolsReportNeedsAndRecheckWithinLimits(t *testing.T) {
 	got := results()
 	if !strings.Contains(got, `\"connection\":\"service/ship24\"`) || !strings.Contains(got, `\"repair\":\"connection:service/ship24:`) ||
 		strings.Contains(got, "ship24-secret-key") {
-		t.Fatalf("dependencies_status: %s", got)
+		t.Fatalf("dependencies_status: %s\nstdout %s\nstderr %s", got, chat.stdout, chat.stderr)
 	}
 	names := offeredTools(t, api, chat)
 	if !containsName(names, "dependencies_status") || !containsName(names, "dependency_recheck") {
@@ -240,7 +243,7 @@ func TestDependencyToolsReportNeedsAndRecheckWithinLimits(t *testing.T) {
 		call("r2", "dependency_recheck", map[string]any{"connection": "service/ship24"}),
 		call("r3", "dependency_recheck", map[string]any{"connection": "service/weather"}))
 	got = results()
-	if !strings.Contains(got, `\"state\":\"ok\"`) || !strings.Contains(got, "was rechecked recently") ||
+	if !strings.Contains(got, `\"state\": \"ok\"`) || !strings.Contains(got, "was rechecked recently") ||
 		!strings.Contains(got, "service/weather is disabled") || ship24Hits.Load() != 1 {
 		t.Fatalf("dependency_recheck (%d ship24 calls): %s", ship24Hits.Load(), got)
 	}
@@ -255,4 +258,16 @@ func TestDependencyToolsReportNeedsAndRecheckWithinLimits(t *testing.T) {
 	if got := results(); !strings.Contains(got, `"is_error":true`) || ship24Hits.Load() != 1 {
 		t.Fatalf("nightly recheck (%d ship24 calls): %s", ship24Hits.Load(), got)
 	}
+}
+
+func connectionView(t *testing.T, s *apiSite, token, id string) map[string]any {
+	t.Helper()
+	list, _ := apiData(t, s.do(http.MethodGet, "/api/v1/connections", token, nil), http.StatusOK)["connections"].([]any)
+	for _, item := range list {
+		if view, _ := item.(map[string]any); view["id"] == id {
+			return view
+		}
+	}
+	t.Fatalf("no connection %s", id)
+	return nil
 }

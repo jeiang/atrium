@@ -501,6 +501,17 @@ claims about the running application. Operator contracts are in
   counter so module toggles refresh `active`; no connection write takes
   `If-Match`. The `connection owners` readiness check (non-critical) requires
   `config_source = 'host'` exactly for enabled rows the host file declares.
+- Unit lifecycle (`internal/connections/lifecycle.go`): the module set signals
+  the registry on every publish; the health watch then runs `SyncUnits`, which
+  disables operator-owned built-in rows (the `builtinConnections` list) whose
+  dependents are all inactive (reason `its app is off`) and re-enables them as
+  untested when a dependent returns. Operator-created and host rows are never
+  written; the view computes `idle` instead, and idle rows skip scheduled
+  checks, `announce` and repairs. `connections.enable`/`connections.disable`
+  (`POST /connections/{kind}/{name}/enable|disable`, operator-only) refuse host
+  rows. Tools `dependencies_status` and `dependency_recheck`
+  (`internal/assistant/tools/dependencies`); recheck is limited in process to
+  once per connection per 5 minutes.
 
 ### State, backups, settings, and keys
 - SQLite holds application records, configuration stored by the application,
