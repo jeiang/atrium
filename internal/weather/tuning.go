@@ -4,4 +4,5 @@ const (
 	TuningWeatherForecastDays   = 7
 	TuningWeatherHourlyHours    = 24
 	TuningWeatherTimeoutSeconds = 15
+	TuningHomeWeatherSeconds    = 3
 )

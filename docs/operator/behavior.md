@@ -67,10 +67,22 @@ administrator role or remote emergency bypass.
 - Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
   Such a peer must send exactly one valid value; otherwise the request is 400.
   Other forwarded-address headers do not choose a rate-limit identity.
+- `/web/v1` is the browser surface for the same API operations. It admits the
+  same identities as the pages (proxy from a trusted peer, an OIDC session, or
+  local on a loopback listener, the emergency listener included) and never a
+  bearer token: a request with an `Authorization` header gets 400
+  `bearer_refused`. Requests need `Atrium-Client: web` (binary content reads
+  excepted) and a `same-origin` `Sec-Fetch-Site` when the browser sends one;
+  writes also need a same-origin `Origin` and the CSRF token from
+  `GET /web/v1/session`, or get 403 `cross_origin` or `csrf_failed`. Signed
+  out, every `/web/v1` request gets 401 with the sign-in URL; sign-in itself
+  is still `/login`. `POST /web/v1/session/logout` signs an OIDC session out
+  of the pages too.
 
 Public requests are limited in process by token buckets owned by each listener:
-10 sign-in requests a minute per client address, 120 `/api/v1` requests a minute
-per address and 60 a minute per bearer token. A refused request returns 429 with
+10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`
+requests a minute per address and 60 a minute per bearer token or web session.
+A refused request returns 429 with
 `Retry-After` and `no-store` and changes nothing. The limits are code constants,
 not settings, and a restart clears them. The emergency listener has its own
 limiter, not a separate database or token store.
@@ -345,7 +357,10 @@ shows its secret once. API responses evolve additively within v1; generated
 an operator can call directly (`operator` or `operator_send` authority) has its
 own typed route, and no other operation does. Operations that run only after
 approval are reached through the approval route
-(`POST /api/v1/approvals/{id}/approve`).
+(`POST /api/v1/approvals/{id}/approve`). `/web/v1` serves every one of these
+routes to the web client under the same rules, authenticated by the web
+session instead of a bearer token (see Access); the same OpenAPI document
+describes both prefixes.
 
 Commands use typed outcomes and durable command receipts. Supply an
 `Idempotency-Key` to replay a matching completed request instead of executing
@@ -367,6 +382,13 @@ and single draft track the actual served payload. Draft PATCH and send accept
 that draft's ETag in `If-Match`; revision compare-and-swap still protects the
 write. Knowledge PATCH does not support `If-Match`.
 
+`PATCH /settings` changes several settings at once, all or nothing. Send the
+settings revision from `GET /settings` in `If-Match` to refuse the write with
+412 when the settings changed since that read; the 412 body carries the
+current revision. A value that is invalid alone or together with the other
+values returns 422 with one field per setting, and a host-pinned setting
+refuses the whole request; nothing is written in either case.
+
 Paged resources use opaque cursors, normally 50 rows by default and at most
 100. Cursors bind the operation, filters, and path parameters and are at most
 2048 characters. Do not reuse a cursor for another resource or filter. Some
@@ -377,7 +399,10 @@ The assistant event stream is durable and reconnectable with `Last-Event-ID`;
 only the progress lines of sub-agent tools are live and are not replayed.
 It is not a separate run. It sends a heartbeat every 15 seconds. At most 4
 streams per credential and 16 per server are open at once; more get 429.
-Finished streams are kept for 30 days. Multipart file requests share four upload slots;
+Finished streams are kept for 30 days. The app event stream (`/events`) tells
+a client which topics changed, with revision numbers and no content; at most
+2 per credential and 8 per server are open at once, counted apart from run
+streams; more get 429. Multipart file requests share four upload slots;
 excess requests get 429 with `Retry-After: 1`. A bounded 1 MiB scan determines
 whether a multipart request has files; malformed or incomplete bodies count
 as file-bearing. Multipart reads have a 30-second idle deadline. Uploads also

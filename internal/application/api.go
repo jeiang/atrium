@@ -26,12 +26,20 @@ func (b BodyKind) Valid() bool {
 	return false
 }
 
+type StreamKind string
+
+const (
+	RunStream StreamKind = "run"
+	AppStream StreamKind = "app"
+)
+
 type APIShape struct {
 	Area                 Area
 	Request              reflect.Type
 	Response             reflect.Type
 	Success              int
 	Body                 BodyKind
+	Stream               StreamKind
 	BodyLimit            int64
 	AllowJSON            bool
 	MultipartFile        string
@@ -47,7 +55,7 @@ type APIShape struct {
 	Errors               []Code
 }
 
-var Codes = []Code{Invalid, BadCursor, NotFound, Unauthenticated, Forbidden, Conflict, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}
+var Codes = []Code{Invalid, BadCursor, NotFound, Unauthenticated, Forbidden, Conflict, Precondition, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}
 
 const ApproveOperation Name = "review.approve"
 

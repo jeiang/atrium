@@ -903,6 +903,21 @@ func (l *Lease) Endpoint(name string) (string, error) {
 	return value, nil
 }
 
+func (s *Store) Definitions() []Definition {
+	if s.reg == nil {
+		return nil
+	}
+	kinds := s.reg.Kinds()
+	slices.Sort(kinds)
+	out := make([]Definition, 0, len(kinds))
+	for _, kind := range kinds {
+		if def, ok := s.reg.Lookup(kind); ok {
+			out = append(out, def)
+		}
+	}
+	return out
+}
+
 func (s *Store) defaultsFor(kind Kind) map[string]string {
 	if s.reg == nil {
 		return nil

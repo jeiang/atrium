@@ -19,6 +19,7 @@ const (
 	Unauthenticated Code = "unauthenticated"
 	Forbidden       Code = "forbidden"
 	Conflict        Code = "conflict"
+	Precondition    Code = "precondition_failed"
 	Refused         Code = "refused"
 	NotConfigured   Code = "not_configured"
 	RateLimited     Code = "rate_limited"

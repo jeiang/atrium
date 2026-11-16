@@ -64,10 +64,12 @@
         "assistant.home",
         "assistant.today.ensure",
         "calendar.find-slot",
-        "calendar.list"
+        "calendar.list",
+        "core.shell",
+        "state.events"
       ],
-      "required": 5,
-      "bound": 5
+      "required": 7,
+      "bound": 7
     },
     {
       "area": "inbox",
@@ -277,6 +279,7 @@
         "auth.bearer-revoke",
         "auth.configuration",
         "auth.identity",
+        "core.about",
         "maintenance.backup",
         "maintenance.check",
         "maintenance.db-backup",
@@ -288,8 +291,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 20,
-      "bound": 20
+      "required": 21,
+      "bound": 21
     },
     {
       "area": "tasks",
@@ -393,7 +396,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 203,
-  "total_bound": 203,
+  "total_required": 206,
+  "total_bound": 206,
   "total_approval_reached": 11
 }

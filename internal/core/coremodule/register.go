@@ -82,12 +82,16 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
 	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	readModelOps, readModelBindings := m.readModelOperations()
+	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanDeletionsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
 	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
+	eventOps, eventBindings := eventOperations()
+	operations, bindings = append(operations, eventOps...), append(bindings, eventBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -148,9 +152,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: func(_ chi.Router, d *web.Deps) {
 				authRoutes(d)
 				commandRoutes(d)
+				eventRoutes(d)
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
+				m.readModelRoutes(d)
 			}},
 		},
 		Groups:     SettingGroups(),

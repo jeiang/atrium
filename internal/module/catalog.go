@@ -166,6 +166,16 @@ func (c *Catalog) ProposeKinds() []proposals.Definition {
 	return out
 }
 
+func (c *Catalog) UndoModules() map[string]bool {
+	out := map[string]bool{}
+	for _, decl := range c.decls {
+		if decl.Effects != nil && len(decl.Effects(EffectDeps{}).Undo) > 0 {
+			out[decl.Name] = true
+		}
+	}
+	return out
+}
+
 func (c *Catalog) Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func() float64) (*ledger.Store, error) {
 	return ledger.NewStoreWith(d, now, func(s *ledger.Store) ([]ledger.UndoDefinition, []ledger.ResolveDefinition, error) {
 		operations := map[string]string{}

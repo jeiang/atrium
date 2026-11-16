@@ -47,7 +47,8 @@ const (
 
 const libraryFilesQuery = "SELECT f.id, f.name, f.media_type, f.bytes, f.created_at, f.thread_id, t.title, f.project_id, p.name " +
 	"FROM thread_files f LEFT JOIN threads t ON t.id = f.thread_id LEFT JOIN projects p ON p.id = f.project_id " +
-	"WHERE f.thread_id IS NOT NULL OR f.project_id IS NOT NULL ORDER BY f.created_at DESC, f.id DESC LIMIT ?"
+	"WHERE (f.thread_id IS NOT NULL OR f.project_id IS NOT NULL) AND (? = 0 OR f.created_at < ? OR (f.created_at = ? AND f.id < ?)) " +
+	"ORDER BY f.created_at DESC, f.id DESC LIMIT ?"
 
 var (
 	nameRe        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -70,6 +71,7 @@ type FileListInput struct {
 	ThreadID  int64
 	ProjectID int64
 	After     int64
+	AfterAt   float64
 	Limit     int
 }
 
@@ -273,7 +275,11 @@ func (s *Service) FileList(ctx context.Context, in FileListInput) (application.R
 			return err
 		}
 		if in.ProjectID == 0 {
-			rows, err := q.QueryContext(ctx, libraryFilesQuery, config.TuningWebPageSize)
+			limit := config.TuningWebPageSize
+			if in.Limit > 0 {
+				limit = in.Limit
+			}
+			rows, err := q.QueryContext(ctx, libraryFilesQuery, in.After, in.AfterAt, in.AfterAt, in.After, limit)
 			if err != nil {
 				return err
 			}
