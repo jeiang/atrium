@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/application/commands"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	authapp "github.com/jeiang/atrium/internal/auth/application"
@@ -44,7 +43,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
@@ -76,21 +74,6 @@ type Module struct {
 	Jobs      jobworker.Dependencies
 }
 
-func (m Module) namer(env config.Env) func(context.Context, *db.DB, config.Config) (rebalance.Namer, error) {
-	return func(ctx context.Context, d *db.DB, cfg config.Config) (rebalance.Namer, error) {
-		if m.Jobs.Classifier == nil {
-			return nil, errors.New("proposal scans are not bound to a classifier")
-		}
-		svc := service.New(ctx, d, cfg, env, nil)
-		svc.Now = m.Now
-		c, err := m.Jobs.Classifier(ctx, svc)
-		if err != nil {
-			return nil, err
-		}
-		return rebalance.SuggestName(c), nil
-	}
-}
-
 func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
 	reviewOps, reviewBindings := reviewOperations()
@@ -102,7 +85,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
-	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanRebalanceName, mailapp.ScanDeletionsName, mailapp.ScanGmailLabelsName}, Composite: true})
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanDeletionsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
@@ -180,7 +163,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Now: m.Now, Open: openLedger}),
 			ledgercmd.Command(ledgercmd.Options{Now: m.Now, Open: openLedger}),
-			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}.session}),
+			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}.session}),
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),

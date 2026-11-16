@@ -42,6 +42,23 @@ var Retired = []RetiredKey{
 	{Module: "memory", Key: "verbatim_tokens"},
 	{Module: "anthropic", Key: "anthropic_admin_key"},
 	{Module: "openai", Key: "openai_admin_key"},
+	{Module: "mail", Key: "gmail_labels_max_messages"},
+	{Module: "mail", Key: "gmail_labels_min_overlap"},
+	{Module: "mail", Key: "gmail_labels_min_target_messages"},
+	{Module: "mail", Key: "rebalance_cluster_iterations"},
+	{Module: "mail", Key: "rebalance_cluster_ks"},
+	{Module: "mail", Key: "rebalance_cluster_margin"},
+	{Module: "mail", Key: "rebalance_cluster_min_embedded"},
+	{Module: "mail", Key: "rebalance_merge_min_group"},
+	{Module: "mail", Key: "rebalance_merge_min_others"},
+	{Module: "mail", Key: "rebalance_merge_min_share"},
+	{Module: "mail", Key: "rebalance_min_folder"},
+	{Module: "mail", Key: "rebalance_min_group"},
+	{Module: "mail", Key: "rebalance_min_share"},
+	{Module: "mail", Key: "rebalance_name_max_chars"},
+	{Module: "mail", Key: "rebalance_run_gap_seconds"},
+	{Module: "mail", Key: "rebalance_runs_required"},
+	{Module: "mail", Key: "rebalance_top_terms"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

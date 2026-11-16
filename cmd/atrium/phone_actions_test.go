@@ -101,7 +101,7 @@ func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 	}
 
 	noFollow := &http.Client{Jar: s.client.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	code, _, header := fetch(t, noFollow, http.MethodPost, s.base+"/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": {"reminder", phoneKind, "gmail_label_merge"}})
+	code, _, header := fetch(t, noFollow, http.MethodPost, s.base+"/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": {"reminder", phoneKind, "deletion_rule"}})
 	if code != http.StatusSeeOther || header.Get("Location") != "/settings/notifications#phone-actions" {
 		t.Fatalf("save = %d to %q", code, header.Get("Location"))
 	}

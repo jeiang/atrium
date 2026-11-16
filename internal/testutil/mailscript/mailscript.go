@@ -63,7 +63,7 @@ func (s *Script) Answer(required []string, user string) (string, json.RawMessage
 	}
 	answer := s.defaults[feature]
 	if subject, found := subjectOf(user); found {
-		if override, ok := s.bySubject[subject][feature]; ok && feature != "folder_name" {
+		if override, ok := s.bySubject[subject][feature]; ok {
 			merged := map[string]json.RawMessage{}
 			if err := json.Unmarshal(answer, &merged); err != nil {
 				return "", nil, err

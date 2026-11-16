@@ -29,11 +29,8 @@ import (
 var log = logx.Logger("atrium.mail.executors")
 
 const (
-	RebalanceSplit  = "rebalance_split"
-	RebalanceMerge  = "rebalance_merge"
-	DeletionRule    = "deletion_rule"
-	GmailLabelMerge = "gmail_label_merge"
-	InboxBacklog    = "inbox_backlog"
+	DeletionRule = "deletion_rule"
+	InboxBacklog = "inbox_backlog"
 
 	OpDeleteFolder = "delete_folder"
 	OpRuleDelete   = "rule_delete"
@@ -99,14 +96,6 @@ type deletionResult struct {
 	Rule    string `json:"rule"`
 	Trashed int    `json:"trashed"`
 	Skipped []any  `json:"skipped"`
-}
-
-type labelMergeResult struct {
-	Summary         string `json:"summary"`
-	Relabelled      int    `json:"relabelled"`
-	LabelDeleted    bool   `json:"label_deleted"`
-	LabelKeptReason any    `json:"label_kept_reason"`
-	Skipped         []any  `json:"skipped"`
 }
 
 func withPairs(base map[string]any, kv ...any) map[string]any {
@@ -499,13 +488,6 @@ func uidList(uids []uint32) []any {
 	return out
 }
 
-func nullableString(v string) any {
-	if v == "" {
-		return nil
-	}
-	return v
-}
-
 func stringList(values []string) []any {
 	out := make([]any, len(values))
 	for i, v := range values {
@@ -851,74 +833,6 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	return deletionResult{Summary: fmt.Sprintf("rule %s, %d moved to Trash, %d skipped as changed", state, trashed, len(skipped)), Rule: fmt.Sprint(id), Trashed: trashed, Skipped: skipList(skipped)}, nil
 }
 
-func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
-	var payload struct {
-		Label    string             `json:"label"`
-		Into     string             `json:"into"`
-		Messages []mailops.Snapshot `json:"messages"`
-	}
-	if err := json.Unmarshal(p.Payload, &payload); err != nil {
-		return nil, err
-	}
-	ids, err := selected(selection, "message_ids")
-	if err != nil {
-		return nil, err
-	}
-	snaps, err := chosenSnapshots(payload.Messages, ids)
-	if err != nil {
-		return nil, err
-	}
-	account := p.AccountName()
-	var moved int
-	var skipped []mailops.Skip
-	deleted := false
-	keptReason := ""
-	err = mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
-		items, skips, err := mailops.Verify(ctx, e.DB.Read, client, account, snaps)
-		if err != nil {
-			return err
-		}
-		skipped = skips
-		if err := e.logSkips(ctx, p.ID, skips); err != nil {
-			return err
-		}
-		if moved, err = e.relabelItems(ctx, client, p.ID, account, items, []string{payload.Into}, []string{payload.Label}); err != nil {
-			return err
-		}
-		label := mail.UTF7Encode(payload.Label)
-		st, err := client.Status(ctx, label)
-		if err != nil {
-			return err
-		}
-		if st.Messages != 0 {
-			keptReason = fmt.Sprintf("%d messages still carry the label", st.Messages)
-			return nil
-		}
-		drop := map[string]any{"op": "delete_label", "account": account, "imap_name": label}
-		s, err := e.hold(ctx, p.ID, drop, nil, []ledger.Resource{{Key: "mail_folder:" + account + ":" + label}})
-		if err != nil {
-			return err
-		}
-		if deleted, err = mailops.DeleteFolderIfEmpty(ctx, client, label); err != nil || !deleted {
-			return s.fail(ctx, drop, err)
-		}
-		return s.record(ctx, drop, nil)
-	})
-	if err != nil {
-		return nil, err
-	}
-	state := "kept"
-	if deleted {
-		state = "deleted"
-	}
-	summary := fmt.Sprintf("%d relabelled, label %s", moved, state)
-	if keptReason != "" {
-		summary += " (" + keptReason + ")"
-	}
-	summary += fmt.Sprintf(", %d skipped as changed", len(skipped))
-	return labelMergeResult{Summary: summary, Relabelled: moved, LabelDeleted: deleted, LabelKeptReason: nullableString(keptReason), Skipped: skipList(skipped)}, nil
-}
-
 type DeleteFolder struct {
 	Account  string `json:"account"`
 	IMAPName string `json:"imap_name"`
@@ -1020,10 +934,7 @@ var passLock = []string{mail.PassResource}
 
 func (e *Executors) Proposals(owner string) []proposals.Definition {
 	return []proposals.Definition{
-		{Kind: proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true, Locks: passLock}, Execute: e.ExecuteMoves},
-		{Kind: proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true, Locks: passLock}, Execute: e.ExecuteMoves},
 		{Kind: proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog", Locks: passLock}, Execute: e.ExecuteDeletion},
-		{Kind: proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count", Locks: passLock}, Execute: e.ExecuteLabelMerge},
 		{Kind: proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true, Locks: passLock}, Execute: e.ExecuteMoves},
 		{Kind: proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count", Locks: passLock}, Execute: e.ExecuteTriage},
 	}

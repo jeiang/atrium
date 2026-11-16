@@ -164,16 +164,14 @@
         "mail.rules-export",
         "mail.rules-import",
         "mail.scan-deletions",
-        "mail.scan-gmail-labels",
-        "mail.scan-rebalance",
         "mail.search",
         "mail.shadow-report",
         "mail.sync",
         "mail.triage",
         "mail.upcoming-birthdays"
       ],
-      "required": 44,
-      "bound": 44
+      "required": 42,
+      "bound": 42
     },
     {
       "area": "media",
@@ -398,7 +396,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 208,
-  "total_bound": 208,
+  "total_required": 206,
+  "total_bound": 206,
   "total_approval_reached": 11
 }

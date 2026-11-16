@@ -37,14 +37,7 @@
 <fieldset class="flex flex-col gap-3 border-t pt-4"{{if .picker}} data-group{{end}}>
   <legend class="sr-only">{{attr $g "name"}}</legend>
   <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
-    {{if and .editable .pending}}
-    <div role="group" class="field min-w-0 flex-1 sm:max-w-sm">
-      <label for="name-{{$uid}}">New {{noun $p.Account}}</label>
-      <input id="name-{{$uid}}" name="name-{{.i}}" type="text" value="{{attr $g "name"}}" required autocomplete="off" spellcheck="false">
-    </div>
-    {{else}}
     <p class="min-w-0 flex-1 text-sm"><span class="text-muted-foreground">Into</span> <span class="font-medium">{{place (get $g "name")}}</span></p>
-    {{end}}
     {{if and .picker (get $g "messages")}}{{template "proposal_toggle" (dict "uid" $uid "g" $g)}}{{else}}<p class="text-sm text-muted-foreground tabular-nums">{{attr $g "count"}} messages</p>{{end}}
   </div>
   {{if get $g "terms"}}
@@ -90,27 +83,11 @@
 </div>
 {{end}}
 
-{{if eq $kind "rebalance_split"}}
-{{$groups := get $v "groups"}}
-<p class="text-sm"><span class="text-muted-foreground">Split</span> <span class="font-medium">{{place (get $v "folder")}}</span> <span class="text-muted-foreground">into {{length $groups}} new {{noun $p.Account}}{{if ne (length $groups) 1}}s{{end}}. Anything not moved stays where it is.</span></p>
-<div class="flex flex-col gap-3">
-  {{range $i, $g := $groups}}{{template "proposal_group_picker" (dict "p" $p "i" $i "g" $g "editable" true "pending" $.pending "picker" $.picker)}}{{end}}
-</div>
-
-{{else if eq $kind "inbox_backlog"}}
+{{if eq $kind "inbox_backlog"}}
 <p class="text-sm text-muted-foreground">Read mail that was already in the inbox when atrium went live, grouped by where atrium would file it. Anything not moved stays where it is.</p>
 <div class="flex flex-col gap-3">
-  {{range $i, $g := get $v "groups"}}{{template "proposal_group_picker" (dict "p" $p "i" $i "g" $g "editable" false "pending" $.pending "picker" $.picker)}}{{end}}
+  {{range $i, $g := get $v "groups"}}{{template "proposal_group_picker" (dict "p" $p "i" $i "g" $g "pending" $.pending "picker" $.picker)}}{{end}}
 </div>
-
-{{else if eq $kind "rebalance_merge"}}
-<div class="flex flex-wrap items-center gap-2 text-sm">
-  {{range get $v "sources"}}<span class="badge" data-variant="secondary">{{place (get . "folder")}} <span class="tabular-nums text-muted-foreground">{{attr . "count"}}</span></span>{{end}}
-  {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
-  <span class="font-medium">{{place (get $v "into")}}</span>
-  <span class="text-xs text-muted-foreground">existing {{noun $p.Account}}</span>
-</div>
-{{template "proposal_group_picker" (dict "p" $p "i" 0 "g" (get $v "group") "editable" false "pending" $.pending "picker" $.picker)}}
 
 {{else if eq $kind "mail_triage"}}
 <p class="text-sm text-muted-foreground">Archive, label or snooze the messages below. Anything not picked stays where it is.</p>
@@ -156,15 +133,6 @@
   {{icon "trash-2" "mt-0.5 size-3.5 shrink-0"}}
   <span>Deleting moves mail to Trash, so it can still be recovered there. {{if eq $.mode "live"}}The rule also deletes new matching mail from now on.{{else}}The rule deletes new matching mail only once routing is live.{{end}}</span>
 </p>
-
-{{else if eq $kind "gmail_label_merge"}}
-<div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-  <span class="inline-flex items-center gap-1.5">{{icon "tag" "size-3.5 text-muted-foreground"}}<span class="font-medium">{{attr $v "from"}}</span><span class="text-xs text-muted-foreground tabular-nums">{{attr $v "from_count"}}</span></span>
-  {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
-  <span class="inline-flex items-center gap-1.5">{{icon "tag" "size-3.5 text-muted-foreground"}}<span class="font-medium">{{attr $v "into"}}</span><span class="text-xs text-muted-foreground tabular-nums">{{attr $v "into_count"}}</span></span>
-</div>
-<p class="text-xs text-muted-foreground">Adds “{{attr $v "into"}}” to the messages labelled “{{attr $v "from"}}”, then removes “{{attr $v "from"}}” from them. No mail is deleted.</p>
-{{if $.picker}}{{template "proposal_plain_picker" (dict "p" $p "picks" $.picks "verb" "are relabelled")}}{{end}}
 
 {{else if eq $kind "notion_link"}}
 <div class="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
@@ -300,10 +268,9 @@
 
 {{define "proposal_card"}}{{$p := .p}}{{$v := $p.Preview}}{{$pending := eq $p.Status "pending"}}
 {{$picks := list}}
-{{if or (eq $p.Kind "rebalance_split") (eq $p.Kind "inbox_backlog")}}{{$picks = selattr "messages" (get $v "groups")}}
-{{else if eq $p.Kind "rebalance_merge"}}{{$picks = selattr "messages" (list (get $v "group"))}}
+{{if eq $p.Kind "inbox_backlog"}}{{$picks = selattr "messages" (get $v "groups")}}
 {{else if eq $p.Kind "deletion_rule"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "backlog")))}}
-{{else if eq $p.Kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{else if eq $p.Kind "mail_triage"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "count")))}}{{end}}
+{{else if eq $p.Kind "mail_triage"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "count")))}}{{end}}
 {{$picker := and $pending (gt (len $picks) 0)}}
 {{$ctx := dict "p" $p "v" $v "pending" $pending "picks" $picks "picker" $picker "mode" .mode}}
 <li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}" data-card="proposal" data-status="{{$p.Status}}" tabindex="-1"{{if $pending}} hx-get="/proposals/{{$p.ID}}/card?poll=1" hx-trigger="every 20s" hx-swap="outerHTML"{{end}}>

@@ -17,12 +17,9 @@ const (
 var DefaultKinds = []string{"reminder", "triage_label", "triage_archive", "triage_snooze", "memory", "profile"}
 
 var WebOnly = map[string]bool{
-	permission.Kind:     true,
-	"gmail_label_merge": true,
-	"inbox_backlog":     true,
-	"rebalance_split":   true,
-	"rebalance_merge":   true,
-	"deletion_rule":     true,
+	permission.Kind: true,
+	"inbox_backlog": true,
+	"deletion_rule": true,
 }
 
 func Settings() []settings.Def {

@@ -35,7 +35,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 		}
 	}
 	approve := func(fingerprint, rule string, settledAt float64, held bool) int64 {
-		id, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, fingerprint, map[string]any{}, map[string]any{}, fingerprint, now-1000)
+		id, _, err := proposals.Create(ctx, seed, "inbox_backlog", nil, fingerprint, map[string]any{}, map[string]any{}, fingerprint, now-1000)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -61,7 +61,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 	recent := approve("recent", "recent", now-5, true)
 	noRow := approve("norow", "norow", now-4000, false)
 	noRowRecent := approve("norowrecent", "norowrecent", now-1000, false)
-	noLedger, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "noledger", map[string]any{}, map[string]any{}, "noledger", now-5000)
+	noLedger, _, err := proposals.Create(ctx, seed, "inbox_backlog", nil, "noledger", map[string]any{}, map[string]any{}, "noledger", now-5000)
 	if err != nil {
 		t.Fatal(err)
 	}
