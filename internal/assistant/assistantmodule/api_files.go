@@ -12,29 +12,29 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
-type apiProjectUpload struct {
-	ProjectID int64                `path:"project_id" api:"min=1" json:"-"`
-	Uploads   []files.UploadedFile `json:"-"`
+type apiSpaceUpload struct {
+	SpaceID int64                `path:"space_id" api:"min=1" json:"-"`
+	Uploads []files.UploadedFile `json:"-"`
 }
 
-func (in *apiProjectUpload) DecodeMultipart(reader *multipart.Reader) error {
+func (in *apiSpaceUpload) DecodeMultipart(reader *multipart.Reader) error {
 	uploads, err := decodeUploads(reader, in)
 	in.Uploads = uploads
 	return err
 }
 
-type apiProjectFile struct {
-	ProjectID int64 `path:"project_id" api:"min=1" json:"-"`
-	FileID    int64 `path:"file_id" api:"min=1" json:"-"`
+type apiSpaceFile struct {
+	SpaceID int64 `path:"space_id" api:"min=1" json:"-"`
+	FileID  int64 `path:"file_id" api:"min=1" json:"-"`
 }
 type apiThreadFile struct {
 	ThreadID int64 `path:"thread_id" api:"min=1" json:"-"`
 	FileID   int64 `path:"file_id" api:"min=1" json:"-"`
 }
-type apiProjectFiles struct {
-	ProjectID int64      `path:"project_id" api:"min=1" json:"-"`
-	Limit     api.Limit  `query:"limit" json:"-"`
-	Cursor    api.Cursor `query:"cursor" json:"-"`
+type apiSpaceFiles struct {
+	SpaceID int64      `path:"space_id" api:"min=1" json:"-"`
+	Limit   api.Limit  `query:"limit" json:"-"`
+	Cursor  api.Cursor `query:"cursor" json:"-"`
 }
 type apiThreadFiles struct {
 	ThreadID int64      `path:"thread_id" api:"min=1" json:"-"`
@@ -105,49 +105,51 @@ func downloadFile(ctx context.Context, svc *asstapp.Service, in asstapp.FileInpu
 func fileAPIBindings(p *apiPages) []application.Binding {
 	shape := application.APIShape{Area: "files", Errors: errs(application.NotFound, application.Invalid)}
 	bodyless := shape
-	bodyless.Area = "projects"
+	bodyless.Area = "knowledge"
 	bodyless.Body = application.BodyNone
 	bodyless.Success = 204
-	threadList, threadPreview, library := shape, shape, shape
+	threadList, threadPreview, library, spaceList, spacePreview := shape, shape, shape, shape, shape
 	library.Errors = errs(application.Invalid)
 	library.ID = "assistant.file.library"
 	threadList.ID = "assistant.file.thread.list"
 	threadPreview.ID = "assistant.file.thread.preview"
+	spaceList.Area, spaceList.ID = "knowledge", "knowledge.space.files"
+	spacePreview.Area, spacePreview.ID = "knowledge", "knowledge.space.file.preview"
 	out := []application.Binding{
-		apiCommand(p, asstapp.DescribeProjectFileUpload(), multipartShape("projects", 201, application.Invalid, application.NotFound, application.Conflict), "POST /projects/{project_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiProjectUpload) (application.Change[asstapp.FileChanged], error) {
-			return svc.ProjectFileUpload(ctx, asstapp.ProjectUploadInput{ProjectID: in.ProjectID, Uploads: in.Uploads})
+		apiCommand(p, asstapp.DescribeSpaceFileUpload(), multipartShape("knowledge", 201, application.Invalid, application.NotFound, application.Conflict), "POST /knowledge/spaces/{space_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiSpaceUpload) (application.Change[asstapp.FileChanged], error) {
+			return svc.SpaceFileUpload(ctx, asstapp.SpaceUploadInput{ProjectID: in.SpaceID, Uploads: in.Uploads})
 		}),
-		apiCommand(p, asstapp.DescribeProjectFileDelete(), bodyless, "DELETE /projects/{project_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Change[asstapp.FileChanged], error) {
-			return svc.ProjectFileDelete(ctx, asstapp.FileInput{ProjectID: in.ProjectID, FileID: in.FileID})
-		}),
-		apiQuery(p, asstapp.DescribeFileList(), shape, "GET /projects/{project_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiProjectFiles) (application.Read[web.List[files.Summary]], error) {
-			return filePage(ctx, svc, asstapp.FileListInput{ProjectID: in.ProjectID}, in.Limit, in.Cursor)
+		apiCommand(p, asstapp.DescribeSpaceFileDelete(), bodyless, "DELETE /knowledge/spaces/{space_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiSpaceFile) (application.Change[asstapp.FileChanged], error) {
+			return svc.SpaceFileDelete(ctx, asstapp.FileInput{ProjectID: in.SpaceID, FileID: in.FileID})
 		}),
 		apiQuery(p, asstapp.DescribeFileList(), threadList, "GET /threads/{thread_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiThreadFiles) (application.Read[web.List[files.Summary]], error) {
 			return filePage(ctx, svc, asstapp.FileListInput{ThreadID: in.ThreadID}, in.Limit, in.Cursor)
 		}),
+		apiQuery(p, asstapp.DescribeFileList(), spaceList, "GET /knowledge/spaces/{space_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiSpaceFiles) (application.Read[web.List[files.Summary]], error) {
+			return filePage(ctx, svc, asstapp.FileListInput{ProjectID: in.SpaceID}, in.Limit, in.Cursor)
+		}),
 		apiQuery(p, asstapp.DescribeFileList(), library, "GET /files", func(ctx context.Context, svc *asstapp.Service, in apiLibraryFiles) (application.Read[web.List[asstapp.LibraryEntry]], error) {
 			return libraryPage(ctx, svc, in.Limit, in.Cursor)
 		}),
-		apiQuery(p, asstapp.DescribeFilePreview(), shape, "GET /projects/{project_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Read[asstapp.FileView], error) {
-			return svc.FilePreview(ctx, asstapp.FileInput{ProjectID: in.ProjectID, FileID: in.FileID})
-		}),
 		apiQuery(p, asstapp.DescribeFilePreview(), threadPreview, "GET /threads/{thread_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiThreadFile) (application.Read[asstapp.FileView], error) {
 			return svc.FilePreview(ctx, asstapp.FileInput{ThreadID: in.ThreadID, FileID: in.FileID})
+		}),
+		apiQuery(p, asstapp.DescribeFilePreview(), spacePreview, "GET /knowledge/spaces/{space_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiSpaceFile) (application.Read[asstapp.FileView], error) {
+			return svc.FilePreview(ctx, asstapp.FileInput{ProjectID: in.SpaceID, FileID: in.FileID})
 		}),
 	}
 	for _, method := range []string{"GET", "HEAD"} {
 		binary := shape
 		binary.Body = application.BodyBinary
-		projectBinary, threadBinary := binary, binary
-		projectBinary.ID = "assistant.file.project.download." + strings.ToLower(method)
+		spaceBinary, threadBinary := binary, binary
+		spaceBinary.Area, spaceBinary.ID = "knowledge", "knowledge.space.file.download."+strings.ToLower(method)
 		threadBinary.ID = "assistant.file.thread.download." + strings.ToLower(method)
 		out = append(out,
-			apiQuery(p, asstapp.DescribeFileDownload(), projectBinary, method+" /projects/{project_id}/files/{file_id}/content", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Read[api.Binary], error) {
-				return downloadFile(ctx, svc, asstapp.FileInput{ProjectID: in.ProjectID, FileID: in.FileID})
-			}),
 			apiQuery(p, asstapp.DescribeFileDownload(), threadBinary, method+" /threads/{thread_id}/files/{file_id}/content", func(ctx context.Context, svc *asstapp.Service, in apiThreadFile) (application.Read[api.Binary], error) {
 				return downloadFile(ctx, svc, asstapp.FileInput{ThreadID: in.ThreadID, FileID: in.FileID})
+			}),
+			apiQuery(p, asstapp.DescribeFileDownload(), spaceBinary, method+" /knowledge/spaces/{space_id}/files/{file_id}/content", func(ctx context.Context, svc *asstapp.Service, in apiSpaceFile) (application.Read[api.Binary], error) {
+				return downloadFile(ctx, svc, asstapp.FileInput{ProjectID: in.SpaceID, FileID: in.FileID})
 			}),
 		)
 	}

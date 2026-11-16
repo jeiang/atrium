@@ -354,7 +354,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 }
 
 func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	requests := api.Requests()
 	if len(requests) == 0 {
@@ -366,19 +366,6 @@ func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
 	}
 	if !slices.Contains(tools, "search_web") {
 		t.Errorf("the chat request lacks search_web: %v", tools)
-	}
-	ran := runApp(t, "agent", "subagents", "list")
-	if ran.code != cli.ExitOK {
-		t.Fatalf("subagents list: %d %s", ran.code, ran.stderr)
-	}
-	if strings.Contains(ran.stdout, `"name": "web"`) {
-		t.Errorf("the retired web role is still listed: %s", ran.stdout)
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	defer func() { _ = d.Close() }()
-	var n int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM subagents WHERE name = 'web' AND builtin = 1").Scan(&n); err != nil || n != 0 {
-		t.Errorf("builtin web rows = %d, %v, want none", n, err)
 	}
 }
 

@@ -32,7 +32,7 @@ func searchHits(t *testing.T, d *db.DB, threadID int64, toolUseID string) ([]int
 	return ids, string(raw)
 }
 
-func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
+func TestPrivateSpaceSummariesStayOutOfOtherReaders(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -113,7 +113,7 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 	}
 }
 
-func TestPrivateProjectPinnedFactsStayOutOfOtherPrompts(t *testing.T) {
+func TestPrivateSpacePinnedFactsStayOutOfOtherPrompts(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

@@ -187,7 +187,9 @@ recover by rolling forward to a fixed release or by restoring the backup taken
 before the upgrade, which loses every later write. Schema version 3 only adds
 the request usage table and the agent mark columns on tokens and sign-in
 sessions; a release from before version 3 refuses a database at version 3, with
-the same recovery.
+the same recovery. Schema version 4 only adds the knowledge link table; a
+release from before version 4 refuses a database at version 4, with the same
+recovery.
 
 ## Settings, connections, and modules
 
@@ -384,8 +386,9 @@ buttons, carries no token, and opening it writes nothing.
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
 response. A new home message starts a thread. Review keeps decisions and
-history; Library holds knowledge, files, rules, and schedules. Projects
-group threads. Draft and proposal cards in chat call the same send/approval
+history; Library holds knowledge, files, rules, and schedules. Spaces in
+Knowledge hold a former project's instructions, files, threads and tasks,
+and records can link to them. Draft and proposal cards in chat call the same send/approval
 services as their dedicated views. `/chat/agenda` returns 404 when the calendar
 module is off and 503 when the calendar cannot be listed, for example when none
 is configured. Full page navigations are not conditional fragment responses.
@@ -461,10 +464,20 @@ provenance; an edit can only add marks. Confirmed and operator/import-written
 records are protected from agent edits and retraction. Confirmation clears
 `untrusted` but keeps `pii` and `messages`, so such records stay out of the
 profile. Eligible pinned, confirmed, unmarked records form the assistant
-profile. Private projects restrict their content to that project, and nightly
+profile. Private spaces restrict their content to that space, and nightly
 dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.
+
+Standing instructions are one pinned knowledge page, created at service start
+and opened with `GET /api/v1/knowledge/instructions`. The operator edits it with
+the knowledge edit verb; its history shows each change, who made it and the
+previous text, and undo restores the previous text. Its text follows the
+compiled base prompt in chat, cron and nightly requests. It is not part of the
+profile or retrieval, the assistant cannot change it, and it cannot be purged.
+A custom system prompt stored by an earlier version is carried into the page
+once. Subagent roles are fixed in code; the `/subagents` routes and the
+`agent subagents` commands are gone.
 
 The knowledge export is one-way and writes one Markdown folder, set by the
 host. It overwrites only the files it tracks and never touches other files;

@@ -127,6 +127,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Settings:       slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:           mail.HostSettings(),
 		Attention:      AttentionSources(),
+		Search:         SearchSources(),
 		Jobs:           []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
 		ServiceSets:    m.watchServices(mc.Env),
 		ServiceSetName: "mail/watch",

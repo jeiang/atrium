@@ -17,7 +17,7 @@ const (
 	writeName  = "file_write"
 )
 
-const readSchema = `{"type":"object","properties":{"name":{"type":"string","maxLength":200,"description":"File name inside the thread or project files."}},"required":["name"],"additionalProperties":false}`
+const readSchema = `{"type":"object","properties":{"name":{"type":"string","maxLength":200,"description":"File name inside the thread or space files."}},"required":["name"],"additionalProperties":false}`
 
 const searchSchema = `{"type":"object","properties":{"query":{"type":"string","maxLength":500,"description":"Text to find in file names or contents."}},"required":["query"],"additionalProperties":false}`
 
@@ -28,12 +28,12 @@ type Service func(*tool.Context) *asstapp.Service
 func Tools(svc Service) []tool.Tool {
 	return []tool.Tool{
 		{
-			Name: readName, Description: "Read a text file from this thread's or its project's files directory. Returns the text; refuses binary files, paths outside the files directory and files over the size cap.",
+			Name: readName, Description: "Read a text file from this thread's or its space's files directory. Returns the text; refuses binary files, paths outside the files directory and files over the size cap.",
 			InputSchema: json.RawMessage(readSchema), Handler: read(svc), Effect: tool.Read,
 			Marks: tool.Messages | tool.Untrusted, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{
-			Name: searchName, Description: "Search this thread's and its project's files for a text query, returning matching file names and line snippets.",
+			Name: searchName, Description: "Search this thread's and its space's files for a text query, returning matching file names and line snippets.",
 			InputSchema: json.RawMessage(searchSchema), Handler: search(svc), Effect: tool.Read,
 			Marks: tool.Messages | tool.Untrusted, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
