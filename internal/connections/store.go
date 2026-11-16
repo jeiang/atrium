@@ -447,7 +447,14 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
+		declaredRef := hc.DeclaredCredentialFiles[slot]
+		if prior == "host_file" && priorRef.String == declaredRef {
+			continue
+		}
 		if prior == "host_file" && priorRef.String == hc.CredentialFiles[slot] {
+			if _, err := tx.ExecContext(ctx, "UPDATE connection_credentials SET file_ref = ? WHERE connection_id = ? AND slot = ?", declaredRef, id, slot); err != nil {
+				return err
+			}
 			continue
 		}
 		if prior == "database" {
@@ -458,7 +465,7 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		}
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO connection_credentials (connection_id, slot, source, file_ref, set_at, set_by) VALUES (?, ?, 'host_file', ?, ?, 'host')",
-			id, slot, hc.CredentialFiles[slot], s.stamp()); err != nil {
+			id, slot, declaredRef, s.stamp()); err != nil {
 			return err
 		}
 		credentialsChanged = true
