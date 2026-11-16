@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -13,14 +14,14 @@ type watchesPage struct {
 
 func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tpl.Toast) {
 	packages, err := s.mail.Packages(r.Context(), mailapp.PackagesInput{ActiveOnly: true})
-	check(err)
+	hub.Check(err)
 	s.page(w, r, http.StatusOK, "watches", "watches.gohtml", watchesPage{Packages: packages.Data.Packages}, notice)
 }
 
 func (s *service) watchesPage(w http.ResponseWriter, r *http.Request) { s.showWatches(w, r, nil) }
 
 func (s *service) packageDismiss(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "package_id")
+	id, ok := hub.PathID(w, r, "package_id")
 	if !ok {
 		return
 	}
@@ -28,5 +29,5 @@ func (s *service) packageDismiss(w http.ResponseWriter, r *http.Request) {
 	if !s.changed(w, r, err) {
 		return
 	}
-	s.showWatches(w, r, toast("success", "Dismissed"))
+	s.showWatches(w, r, hub.Toast("success", "Dismissed"))
 }

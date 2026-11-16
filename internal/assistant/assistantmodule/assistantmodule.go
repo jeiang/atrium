@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
@@ -20,14 +21,15 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/schedulecmd"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
@@ -51,11 +53,11 @@ import (
 	"github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/export"
-	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
@@ -63,6 +65,7 @@ import (
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -89,10 +92,12 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	opsOps, opsBindings := opsOperations()
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
-		Name:       module.Assistant,
-		Requires:   []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
+		Name:            unit.Assistant,
+		EffectOrigins:   []string{"export", "agent", "local"},
+		HasOperatorData: threads.HasRows,
+		Requires:        []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
+		Operations:      slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
+		Bindings:        slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -104,7 +109,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Attention: AttentionSources(mc.Env),
 		Search:    SearchSources(),
 		Metrics:   opsmetrics.Metrics(),
-		Jobs:      Jobs(m.Jobs),
+		ReviewKinds: func(module.ReviewDeps) review.Kinds {
+			return review.Kinds{Findings: serverops.ReviewKindFindings}
+		},
+		Jobs: Jobs(m.Jobs),
 		Services: []runtime.ServiceDefinition{{Name: "assistant", Run: func(ctx context.Context, _ *runtime.Services) error {
 			if err := m.Start(ctx); err != nil {
 				return err
@@ -113,7 +121,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}}},
 		Pages: []web.Page{{
 			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI, Home: func(d *web.Deps) func(context.Context) (any, any, error) {
-				reader := mailmodule.ReviewReads(d)
+				reader := hub.Reads(d)
 				return func(ctx context.Context) (any, any, error) {
 					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
 					if err != nil {
@@ -123,7 +131,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 					if err != nil {
 						return nil, nil, err
 					}
-					return reviewpages.StripView(pending.Data), reviewpages.ReceiptsView(activity.Data), nil
+					return hub.StripView(pending.Data), hub.ReceiptsView(activity.Data), nil
 				}
 			}}),
 			Templates: chatpages.Templates(),
@@ -137,7 +145,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), memorycmd.Command(memoryCLIService(mc.Env, m.Now))},
+		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), schedulecmd.Command(scheduleCLIService(mc.Env, m.Now))},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
@@ -173,7 +181,7 @@ func AttentionSources(env config.Env) []attention.Source {
 
 func SettingGroups() []settings.Group {
 	return append([]settings.Group{
-		{Name: "spending", Title: "Spending", Keys: append([]string{inference.ThreadCapKey}, append(runCaps(), assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD}},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 			memory.ModelKey, memory.EffortKey,
@@ -194,13 +202,4 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 		}
 	}
 	return append(defs, research.Definition(), lookup.Definition(), websearch.Definition(), report.Definition())
-}
-
-func runCaps() []string {
-	models := pricing.Models()
-	keys := make([]string, len(models))
-	for i, m := range models {
-		keys[i] = inference.RunCapKey(m.ID)
-	}
-	return keys
 }

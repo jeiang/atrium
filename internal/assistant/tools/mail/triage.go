@@ -5,14 +5,14 @@ import (
 	"strings"
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/module"
 	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func Proposals(svc func(*tool.Context) *mailapp.Service) []proposalsapp.Definition {
 	return []proposalsapp.Definition{{
-		Kind: proposalsapp.Kind{Name: mailapp.MailTriage, Module: module.Mail, Locks: []string{mailapp.PassResource}},
+		Kind: proposalsapp.Kind{Name: mailapp.MailTriage, Module: unit.Mail, Locks: []string{mailapp.PassResource}},
 		Build: &proposalsapp.Builder{
 			Description: "{items: [{id, action, label?}]}: propose archive or label for a batch of messages; one proposal per run",
 			Build: func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error) {

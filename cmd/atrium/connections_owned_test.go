@@ -18,7 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func connectionRow(t *testing.T, dir, id string) (source string, enabled int, state, configJSON string) {
@@ -144,7 +144,7 @@ func TestARemovedHostBuiltinStaysDisabledAndNeverReachesItsEndpoint(t *testing.T
 	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	plain := filepath.Join(dir, "host-plain.toml")
 	if err := os.WriteFile(plain, []byte(hostConfigBodyWith("", defaultWebPushConnection, filepath.Join(testRoot, "host", "anthropic.key"))), 0o600); err != nil {

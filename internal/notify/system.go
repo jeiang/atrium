@@ -12,9 +12,9 @@ func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) er
 	if !Enabled(ctx) {
 		return nil
 	}
-	title := "atrium: mail writes resumed"
+	title := "atrium: automation resumed"
 	if paused {
-		title = "atrium: mail writes paused"
+		title = "atrium: automation paused"
 	}
 	_, err := Send(ctx, d, Message{Channel: System, Priority: 4, Title: title, Body: "Changed by the operator."})
 	return err

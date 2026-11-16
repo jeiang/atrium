@@ -10,9 +10,10 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
-const JobKey = module.Mail + "/" + passrun.Scan
+const JobKey = unit.Mail + "/" + passrun.Scan
 
 type Scan struct {
 	Command string

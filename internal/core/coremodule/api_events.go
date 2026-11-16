@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -25,13 +26,13 @@ const (
 )
 
 var topicModules = map[string]string{
-	state.Assistant: module.Assistant,
-	state.Knowledge: module.Assistant,
-	state.Tasks:     module.Assistant,
-	state.Mail:      module.Mail,
-	state.Calendar:  module.Calendar,
-	state.Media:     module.Media,
-	state.Notify:    module.Notifications,
+	state.Assistant: unit.Assistant,
+	state.Knowledge: unit.Assistant,
+	state.Tasks:     unit.Assistant,
+	state.Mail:      unit.Mail,
+	state.Calendar:  unit.Calendar,
+	state.Media:     unit.Media,
+	state.Notify:    unit.Notifications,
 }
 
 func eventOperations() ([]application.Definition, []application.Binding) {

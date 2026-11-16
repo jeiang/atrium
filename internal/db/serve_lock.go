@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 )
 
@@ -81,7 +82,50 @@ func TryServeLock(ctx context.Context, path string) (*ServeLock, error) {
 		_ = f.Close()
 		return nil, err
 	}
+	held.Lock()
+	held.paths[id.path]++
+	held.Unlock()
 	return l, nil
+}
+
+var held = struct {
+	sync.Mutex
+	paths map[string]int
+}{paths: map[string]int{}}
+
+func ServeRunning(ctx context.Context, path string) (bool, error) {
+	id, err := identify(path)
+	if err != nil {
+		return false, err
+	}
+	held.Lock()
+	own := held.paths[id.path] > 0
+	held.Unlock()
+	if own {
+		return true, nil
+	}
+	return OtherServe(ctx, path)
+}
+
+func OtherServe(ctx context.Context, path string) (bool, error) {
+	id, err := identify(path)
+	if err != nil {
+		return false, err
+	}
+	held.Lock()
+	own := held.paths[id.path] > 0
+	held.Unlock()
+	if own {
+		return false, nil
+	}
+	l, err := TryServeLock(ctx, path)
+	if errors.As(err, new(*AlreadyRunning)) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return false, l.Close()
 }
 
 func (l *ServeLock) Check() error {
@@ -103,6 +147,11 @@ func (l *ServeLock) Close() error {
 	if l == nil || l.f == nil {
 		return nil
 	}
+	held.Lock()
+	if held.paths[l.id.path]--; held.paths[l.id.path] <= 0 {
+		delete(held.paths, l.id.path)
+	}
+	held.Unlock()
 	err := l.f.Close()
 	l.f = nil
 	return err

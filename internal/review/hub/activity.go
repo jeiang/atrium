@@ -1,4 +1,4 @@
-package reviewpages
+package hub
 
 import (
 	"encoding/json"
@@ -32,7 +32,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 		s.failRead(w, r, err, "")
 		return
 	}
-	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: reviewapp.Categories, After: raw}
+	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: s.review.Categories(), After: raw}
 	if found.Data.Next != nil {
 		data.Next = found.Data.Next.String()
 	}
@@ -56,12 +56,12 @@ func (s *service) undone(w http.ResponseWriter, r *http.Request, entry reviewapp
 }
 
 func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "action_id")
+	id, ok := PathID(w, r, "action_id")
 	if !ok {
 		return
 	}
-	_, err := s.review.Undo(detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
-	s.mailDecided(w, r, id, err, "Not undone", toast("success", "Undone"))
+	_, err := s.review.Undo(Detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}})
+	s.mailDecided(w, r, id, err, "Not undone", Toast("success", "Undone"))
 }
 
 func (s *service) mailDecided(w http.ResponseWriter, r *http.Request, id int64, err error, title string, success *tpl.Toast) {
@@ -75,35 +75,35 @@ func (s *service) mailDecided(w http.ResponseWriter, r *http.Request, id int64, 
 			s.fail(w, r, http.StatusConflict, refused.Error())
 			return
 		}
-		notice = toast("error", title, refused.Error())
+		notice = Toast("error", title, refused.Error())
 	}
-	found, err := s.review.LiveAction(detached(r), id)
-	check(err)
+	found, err := s.review.Action(Detached(r), id)
+	Check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return
 	}
-	s.undone(w, r, reviewapp.MailEntry(*found), notice)
+	s.undone(w, r, s.review.ActionEntry(*found), notice)
 }
 
 func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "action_id")
+	id, ok := PathID(w, r, "action_id")
 	if !ok {
 		return
 	}
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
-	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}, Outcome: outcome})
+	_, err := s.review.Resolve(Detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.MailTarget, ID: id}, Outcome: outcome})
 	s.mailDecided(w, r, id, err, "Not settled", resolvedToast(outcome))
 }
 
 func (s *service) undoEffect(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "effect_id")
+	id, ok := PathID(w, r, "effect_id")
 	if !ok {
 		return
 	}
-	ctx := detached(r)
+	ctx := Detached(r)
 	_, err := s.review.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}})
-	s.effectDecided(w, r, id, err, "Not undone", toast("success", "Undone"))
+	s.effectDecided(w, r, id, err, "Not undone", Toast("success", "Undone"))
 }
 
 func (s *service) effectDecided(w http.ResponseWriter, r *http.Request, id int64, err error, title string, success *tpl.Toast) {
@@ -117,20 +117,20 @@ func (s *service) effectDecided(w http.ResponseWriter, r *http.Request, id int64
 			s.fail(w, r, http.StatusConflict, refused.Error())
 			return
 		}
-		notice = toast("error", title, refused.Error())
+		notice = Toast("error", title, refused.Error())
 	}
-	found, err := s.review.StoredEffect(detached(r), id)
-	check(err)
+	found, err := s.review.StoredEffect(Detached(r), id)
+	Check(err)
 	s.undone(w, r, reviewapp.EffectEntry(found), notice)
 }
 
 func (s *service) resolveEffect(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "effect_id")
+	id, ok := PathID(w, r, "effect_id")
 	if !ok {
 		return
 	}
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
-	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}, Outcome: outcome})
+	_, err := s.review.Resolve(Detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: id}, Outcome: outcome})
 	s.effectDecided(w, r, id, err, "Not settled", resolvedToast(outcome))
 }
 
