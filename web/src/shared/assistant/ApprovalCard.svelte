@@ -32,6 +32,7 @@
     onedit?: () => void;
     onrepair?: () => void;
     onundo: (decision: Decision) => void | Promise<void>;
+    undoable?: readonly Decision[];
   }
 
   let {
@@ -47,6 +48,7 @@
     onedit,
     onrepair,
     onundo,
+    undoable = ['approve', 'decline', 'later'],
   }: Props = $props();
 
   const uid = $props.id();
@@ -73,6 +75,11 @@
   const away = $derived(!cardSeen || (!rowClear && !confirming));
   const rowInert = $derived(away || arming || phase !== 'open');
   const heading = $derived(`h${level}`);
+  const decidedText = $derived(
+    decided
+      ? `${decided.outcome ?? 'Decided'} ${decided.where ? `on ${decided.where} ` : ''}at ${formatClock(decided.at)}`
+      : '',
+  );
   const gated = $derived(approval.irreversible && !endSeen);
   const margin = $derived(`0px 0px ${-chromeEnd}px 0px`);
 
@@ -199,7 +206,7 @@
       title: said.title,
       at,
       note: said.note,
-      undoUntil: said.undo ? at.getTime() + UNDO_MS : undefined,
+      undoUntil: said.undo && undoable.includes(decision) ? at.getTime() + UNDO_MS : undefined,
     };
     phase = 'decided';
     busyOn = undefined;
@@ -248,7 +255,11 @@
   async function onUndo(): Promise<void> {
     const decision = receipt?.decision;
     if (decision === undefined) return;
-    await onundo(decision);
+    try {
+      await onundo(decision);
+    } catch {
+      return;
+    }
     receipt = undefined;
     phase = 'open';
     announce('Undone. The card is open again.');
@@ -314,7 +325,7 @@
   {/if}
 
   {#if decided}
-    <p class="approval__note" role="status">Decided on {decided.where} at {formatClock(decided.at)}</p>
+    <p class="approval__note" role="status">{decidedText}</p>
     <div class="approval__row">
       <Button variant="primary" disabled>{approval.primary}</Button>
       <Button variant="secondary" disabled>Decline</Button>

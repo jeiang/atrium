@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
+import { decideElsewhere, type InboxScenario, inboxCount, inboxHandlers } from './inbox';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -10,6 +11,7 @@ export interface MockScenario {
   needsYou?: number;
   modules?: Record<string, ModuleStateState>;
   mail?: { mode: string; paused: boolean };
+  inbox?: InboxScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
@@ -61,7 +63,7 @@ function shell(state: MockScenario): Shell {
     sections: [],
     settings: [],
     settings_url: '/settings',
-    needs_you: state.needsYou ?? 3,
+    needs_you: state.needsYou ?? inboxCount(),
     notify_failing: [],
     mail: state.mail ?? { mode: 'live', paused: false },
     modules: MODULES.map((name) => ({ name, state: state.modules?.[name] ?? 'enabled' })),
@@ -115,7 +117,8 @@ export const handlers = [
         };
         const topics = [...revisions].map(([topic, revision]) => ({ topic, revision }));
         send(`retry: 1000\n\nevent: sync\ndata: ${JSON.stringify({ topics })}\n\n`);
-        channel.addEventListener('message', (event: MessageEvent<{ topic: string }>) => {
+        channel.addEventListener('message', (event: MessageEvent<{ topic: string; decide?: string }>) => {
+          if (event.data.decide) decideElsewhere(event.data.decide);
           const revision = (revisions.get(event.data.topic) ?? 0) + 1;
           revisions.set(event.data.topic, revision);
           send(`event: change\ndata: ${JSON.stringify({ topic: event.data.topic, revision })}\n\n`);
@@ -130,4 +133,5 @@ export const handlers = [
     });
   }),
   ...simulatorHandlers,
+  ...inboxHandlers,
 ];
