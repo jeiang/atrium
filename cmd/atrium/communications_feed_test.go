@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -30,6 +31,14 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
+	invite := filepath.Join(f.dir, "cache", "raw", "icloud", "1", "7_7.eml")
+	raw, err := os.ReadFile(invite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(invite, []byte(strings.ReplaceAll(string(raw), "20261020T", "20271020T")), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	var before int64
 	for _, q := range []string{
 		"DELETE FROM event_candidates",
