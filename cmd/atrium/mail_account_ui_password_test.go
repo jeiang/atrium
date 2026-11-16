@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -83,6 +85,22 @@ func TestAHostMailAccountWithoutAPasswordFileKeepsThePasswordEnteredByTheOperato
 		t.Fatal(err)
 	}
 	s := &apiSite{t: t, base: base}
+	offered := map[string]bool{}
+	schema := apiData(t, s.do(http.MethodGet, "/api/v1/connections/schema", token, nil), http.StatusOK)
+	for _, c := range schema["connections"].([]any) {
+		for _, field := range c.(map[string]any)["fields"].([]any) {
+			if field.(map[string]any)["secret"] == true {
+				offered[fmt.Sprint(c.(map[string]any)["id"], " ", field.(map[string]any)["name"])] = true
+			}
+		}
+	}
+	if !offered["mail/home mail/home/password"] || offered["icloud/home mail/home/password"] {
+		t.Fatalf("the password field is offered on %v, want it on mail/home only", offered)
+	}
+	jar, _ := cookiejar.New(nil)
+	if code, page, _ := fetch(t, &http.Client{Jar: jar}, http.MethodGet, base+"/settings/connections", nil); code != http.StatusOK || !strings.Contains(page, `name="credential.mail/home/password"`) {
+		t.Fatalf("the connections page (%d) has no password input for mail/home", code)
+	}
 	apiData(t, s.do(http.MethodPatch, "/api/v1/connections/mail/home", token, map[string]any{"credentials": map[string]string{"mail/home/password": "home-pass"}}), http.StatusOK)
 	if stored() != "1" {
 		t.Fatal("the entered password is not stored")
