@@ -11,6 +11,7 @@ import type {
 } from '../contract';
 import { API_BASE } from '../contract';
 import { digestLines, weather } from '../gallery/assistant-fixtures';
+import { weatherPlace } from './connections';
 
 export interface HomeScenario {
   weather?: HomeWeatherState;
@@ -158,7 +159,7 @@ function weatherBody(state: HomeWeatherState): HomeWeather {
     case 'stale':
       return { ...weather, state, fetched_at: now - STALE_HOURS * 3600 };
     default:
-      return { ...weather, state: 'ok', fetched_at: now };
+      return { ...weather, location: weatherPlace() ?? weather.location, state: 'ok', fetched_at: now };
   }
 }
 

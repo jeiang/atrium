@@ -1,4 +1,5 @@
 import { createRouter } from 'sv-router';
+import { preloadMarkdown } from '../shared/markdown/load';
 import { routeLoaded } from './firstView';
 import NotFound from './NotFound.svelte';
 import { appById } from './nav';
@@ -13,6 +14,8 @@ declare module 'sv-router' {
 const unavailable = () => ({ default: Unavailable });
 
 const placeholder = () => import('./PlaceholderPage.svelte').catch(unavailable);
+const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgePage.svelte').catch(unavailable));
+const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
 
 export const { p, navigate, isActive, route } = createRouter(
   {
@@ -27,19 +30,49 @@ export const { p, navigate, isActive, route } = createRouter(
     '/drafts/:id': () => import('../features/inbox/ResolveItem.svelte').catch(unavailable),
     '/chat': {
       '/': () => import('../features/chats/ChatsPage.svelte').catch(unavailable),
-      '/new': () => import('../features/chats/ChatPage.svelte').catch(unavailable),
-      '/:id': () => import('../features/chats/ChatPage.svelte').catch(unavailable),
+      '/new': () => preloadMarkdown(import('../features/chats/ChatPage.svelte').catch(unavailable)),
+      '/:id': () => preloadMarkdown(import('../features/chats/ChatPage.svelte').catch(unavailable)),
       meta: { title: 'Chats' },
     },
-    '/plan': { '/': placeholder, meta: { title: 'Plan' } },
-    '/knowledge': { '/': placeholder, meta: { title: 'Knowledge' } },
+    '/plan': {
+      '/': () => import('../features/plan/PlanPage.svelte').catch(unavailable),
+      '/waiting': () => import('../features/plan/PlanPage.svelte').catch(unavailable),
+      '/item/:ref': () => import('../features/plan/PlanPage.svelte').catch(unavailable),
+      '/tasks': {
+        '/': () => import('../features/plan/TasksPage.svelte').catch(unavailable),
+        '/:id': () => import('../features/plan/TasksPage.svelte').catch(unavailable),
+        meta: { title: 'Tasks' },
+      },
+      meta: { title: 'Plan' },
+    },
+    '/knowledge': {
+      '/': knowledge,
+      '/subjects': knowledge,
+      '/instructions': knowledge,
+      '/map': () => import('../features/knowledge/MapPage.svelte').catch(unavailable),
+      '/spaces': { '/': spaces, '/:space': spaces },
+      '/:id': knowledge,
+      meta: { title: 'Knowledge' },
+    },
+    '/search': {
+      '/': () => import('../features/search/SearchPage.svelte').catch(unavailable),
+      meta: { title: 'Search' },
+    },
     '/apps': {
       '/': () => import('./AppsPage.svelte').catch(unavailable),
       '/:app': () => import('./AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },
     },
     '/assistant': { '/': placeholder, meta: { title: 'Assistant' } },
-    '/settings': { '/': placeholder, meta: { title: 'Settings' } },
+    '/settings': {
+      '/': placeholder,
+      '/connections': {
+        '/': () => import('../features/connections/ConnectionsPage.svelte').catch(unavailable),
+        '/:kind/:name': () => import('../features/connections/ConnectionPage.svelte').catch(unavailable),
+        meta: { title: 'Connections' },
+      },
+      meta: { title: 'Settings' },
+    },
     '/spaces': { '/': () => import('./SpacesPage.svelte').catch(unavailable), meta: { title: 'Spaces' } },
     '/__gallery':
       import.meta.env.MODE === 'mock'

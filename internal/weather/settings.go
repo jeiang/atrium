@@ -45,6 +45,10 @@ func SettingsDefs() []settings.Def {
 	}
 }
 
+func SettingGroups() []settings.Group {
+	return []settings.Group{{Name: "weather", Title: "Weather", Keys: []string{KeyLocationName, KeyLatitude, KeyLongitude}}}
+}
+
 type Settings struct {
 	LocationName string
 	Latitude     float64

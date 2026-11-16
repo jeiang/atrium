@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { useQueryClient } from '@tanstack/svelte-query';
   import { tick } from 'svelte';
   import { on } from 'svelte/events';
   import { formatDayTime, plural } from '../../shared/assistant/format';
@@ -10,9 +11,10 @@
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import StatusMark from '../../shared/ui/StatusMark.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
+  import { useShell } from '../../shell/frame';
   import { navigate, p, route } from '../../shell/router';
-  import InboxCard from './InboxCard.svelte';
-  import { type InboxRow, inboxKey, usePending } from './inbox';
+  import InboxEntry from './InboxEntry.svelte';
+  import { type InboxRow, inboxKey, useQueue } from './inbox';
   import './inbox.css';
 
   const columns: readonly Column[] = [
@@ -21,7 +23,10 @@
     { key: 'waiting', label: 'Waiting since' },
   ];
 
-  const pending = usePending();
+  const pending = useQueue();
+  const shell = useShell();
+  const client = useQueryClient();
+  let reconciled = 0;
   let phone = $state(false);
   let chosen = $state<string>();
   let decidedHere = $state<string[]>([]);
@@ -29,8 +34,20 @@
 
   const address = $derived(route.params.item);
   const selected = $derived(address ? parseInboxId(address) : undefined);
-  const rows = $derived(pending.data ?? []);
-  const waiting = $derived(rows.filter((row) => !row.blocked).length);
+  const rows = $derived(pending.data?.rows ?? []);
+  const waiting = $derived(pending.data?.total ?? 0);
+  const counts = $derived.by(() => {
+    const c = pending.data?.counts;
+    if (!c) return undefined;
+    const parts = [
+      [c.ask, 'ask'],
+      [c.proposal, 'proposal'],
+      [c.draft, 'draft'],
+      [c.attention, 'reminder'],
+    ] as const;
+    const shown = parts.filter(([n]) => n > 0);
+    return shown.length > 1 ? shown.map(([n, word]) => plural(n, word)).join(', ') : undefined;
+  });
   const currentKey = $derived(selected ? inboxKey(selected) : (chosen ?? rows[0]?.key));
   const current = $derived(currentKey ? parseInboxId(currentKey) : undefined);
   const deck = $derived.by(() => {
@@ -42,9 +59,12 @@
     });
   });
   const offline = $derived(unreachable(pending));
-  const lede = $derived(
-    pending.data ? (waiting === 0 ? 'Nothing waits on you.' : `${plural(waiting, 'item')} waiting on you`) : undefined,
-  );
+  const lede = $derived.by(() => {
+    if (!pending.data) return undefined;
+    if (waiting === 0) return 'Nothing waits on you.';
+    const head = `${plural(waiting, 'item')} waiting on you`;
+    return counts ? `${head}: ${counts}` : head;
+  });
 
   $effect(() => {
     const last = deck.at(-1);
@@ -57,6 +77,14 @@
         behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
       }),
     );
+  });
+
+  $effect(() => {
+    const loaded = pending.dataUpdatedAt;
+    const badge = shell.data?.needs_you;
+    if (!pending.data || badge === undefined || badge === pending.data.total || reconciled === loaded) return;
+    reconciled = loaded;
+    void client.invalidateQueries({ queryKey: ['shell'] });
   });
 
   $effect(() => {
@@ -107,7 +135,7 @@
       <StatusMark tone="warn">Blocked</StatusMark>
     {/if}
   {:else if column.key === 'kind'}
-    <span class="meta">{row.kind}</span>
+    <span class="meta">{row.label}</span>
   {:else}
     <span class="meta">{formatDayTime(row.created * 1000)}</span>
   {/if}
@@ -124,7 +152,7 @@
   {:else if phone && selected}
     <div class="deck">
       <a class="link deck__back" href={p('/inbox')}>All decisions</a>
-      <InboxCard target={selected} ondecided={onDecided} />
+      <InboxEntry target={selected} ondecided={onDecided} />
     </div>
   {:else if phone}
     <div class="deck">
@@ -132,7 +160,7 @@
         <div class="card inbox-card__loading"><Skeleton lines={9} label="Loading the Inbox" /></div>
       {/if}
       {#each deck as card (card.key)}
-        <InboxCard target={card.target} ondecided={onDecided} />
+        <InboxEntry target={card.target} ondecided={onDecided} />
       {/each}
       {@render listState()}
     </div>
@@ -158,7 +186,7 @@
       <div class="inbox__pane">
         {#if current}
           {#key currentKey}
-            <InboxCard target={current} ondecided={onDecided} />
+            <InboxEntry target={current} ondecided={onDecided} />
           {/key}
         {:else if pending.isPending && !offline}
           <div class="card inbox-card__loading"><Skeleton lines={9} label="Loading the item" /></div>

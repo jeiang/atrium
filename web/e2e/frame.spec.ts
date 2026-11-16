@@ -72,20 +72,20 @@ test.describe('signed in', () => {
   });
 
   test('a placeholder links to the same place in the current interface', async ({ page }) => {
-    await gotoShell(page, '/plan');
-    await expect(page.getByRole('heading', { level: 1, name: 'Plan' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Plan in the current interface' })).toHaveAttribute(
+    await gotoShell(page, '/assistant');
+    await expect(page.getByRole('heading', { level: 1, name: 'Assistant' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open Assistant in the current interface' })).toHaveAttribute(
       'href',
-      '/loops',
+      '/settings/assistant',
     );
-    await expect(page).toHaveTitle('Plan · atrium');
+    await expect(page).toHaveTitle('Assistant · atrium');
   });
 
   test('back and forward move between destinations', async ({ page }) => {
     await gotoShell(page, '/');
     const rail = page.getByRole('navigation', { name: 'Main' });
     await rail.getByRole('link', { name: 'Knowledge', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeFocused();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ilse de Wit' })).toBeVisible();
     await rail.getByRole('link', { name: 'Mail' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Mail' })).toBeVisible();
     await page.goBack();
@@ -94,7 +94,7 @@ test.describe('signed in', () => {
     await page.goBack();
     await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
     await page.goForward();
-    await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ilse de Wit' })).toBeVisible();
   });
 
   test('the skip link moves focus to the main region', async ({ page, browserName }) => {
@@ -246,7 +246,7 @@ test.describe('phone', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Spaces' })).toBeFocused();
     await expect(tabs.getByRole('link', { name: 'Spaces' })).toHaveAttribute('aria-current', 'page');
     await page.getByRole('link', { name: 'Knowledge' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ilse de Wit' })).toBeVisible();
     await expect(tabs.getByRole('link', { name: 'Spaces' })).toHaveAttribute('aria-current', 'page');
     await expectTouchTargets(page);
     await page.getByRole('button', { name: 'Account: Operator' }).click();

@@ -31,7 +31,7 @@ A 200 starts with `retry: 1000`, then replays every event after the cursor in or
 | `plan` | `items`: `[{text,done}]`, the whole plan |
 | `run_done` | `state`, `error` (string or null); written once when a run ends |
 
-Text is markdown: render CommonMark with tables, strikethrough and autolinks, and escape raw HTML.
+Text is markdown: render CommonMark with tables, strikethrough and autolinks, and escape raw HTML. The same policy applies to stored message text. Link only `http`, `https` and `mailto` URLs and paths on the same origin, and show any other link as its text. Do not load images: show an image as a link with its alt text, so that a reply never makes a request to another site.
 
 `tool_progress` is sent only for a tool that runs a sub-agent (`search_web`, `research`, `lookup`): each tool the sub-agent starts sends one event for the calling run, whose `text` is the tool name and its clipped arguments, as in the sub-agent's own `tool_start`. Other tools send none. It is live only: it has no `id:`, is never stored or replayed, does not move the cursor, and reaches only streams open in the process that runs the tool while it runs. The next `tool_progress` or the `tool_done` of the same `id` supersedes it. The sub-agent's own durable events are copied into the stream as well, under its `run_id`.
 
