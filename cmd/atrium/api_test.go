@@ -75,7 +75,7 @@ func startAPISite(t *testing.T, dir string, api *modelLog, extra ...string) *api
 		Secret:      "s3cret-for-the-test",
 		GroupsClaim: "groups",
 	}))
-	args := []string{"--port", port, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1"}
+	args := []string{"--port", port, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32"}
 	args = append(args, extra...)
 	served, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, args...)
 	if err != nil {
@@ -454,7 +454,7 @@ func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {
 	if !strings.HasPrefix(secret, "atr_") {
 		t.Fatalf("issue printed %q, not a token secret", issued.stdout)
 	}
-	for _, auth := range [][]string{{"--auth", "local"}, {"--auth", "proxy", "--allowed-host", "127.0.0.1"}} {
+	for _, auth := range [][]string{{"--auth", "local"}, {"--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32"}} {
 		base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, auth...)
 		if err != nil {
 			t.Fatal(err)

@@ -43,7 +43,7 @@ func signedAgentServeWith(t *testing.T, dir, connection string) string {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	seedAllFlagsIn(t, dir)
-	base, _, stop, err := startServeAppArgs(t, newTestApp(t), &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1")
+	base, _, stop, err := startServeAppArgs(t, newTestApp(t), &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
 	if err != nil {
 		t.Fatal(err)
 	}

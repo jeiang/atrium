@@ -42,10 +42,14 @@ configuration, and an unknown future schema are permanent refusals.
 Every admitted identity is the one operator with full authority. There is no
 administrator role or remote emergency bypass.
 
-- Proxy mode requires a `Remote-Groups` header that lists `atrium_access`;
-  otherwise the request gets 403. Only use proxy mode behind a proxy that
-  strips or overwrites incoming `Remote-*` headers. OIDC-only listeners do not
-  accept those headers as identity.
+- Proxy mode requires a `Remote-Groups` header that lists `atrium_access`,
+  sent by a socket peer in the trusted proxy list (`--trusted-proxy` or the
+  host's `web.trusted_proxy_cidrs`); otherwise the request gets 403, or in
+  `proxy+oidc` the sign-in redirect. Identity headers from any other peer are
+  ignored. A proxy mode with no trusted proxy refuses to start with exit 78.
+  Only use proxy mode behind a proxy that strips or overwrites incoming
+  `Remote-*` headers. OIDC-only listeners do not accept those headers as
+  identity.
 - OIDC uses the host-declared `service/oidc` connection. `access_groups`,
   `access_emails`, and `access_domains` select admitted identities. Until the
   connection is configured, public sign-in stays closed; the emergency listener

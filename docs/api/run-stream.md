@@ -18,7 +18,19 @@ A 200 starts with `retry: 1000`, then replays every event after the cursor in or
 
 ## Events
 
-Existing events keep their names and fields: `run_start` (now with `parent_run_id`), `thinking`, `text`, `tool_start`, `tool_done`, `user`, `plan`, `files`, `run_done` (`{state,error}`, written once when a run ends).
+`docs/api/openapi.json` types every frame as `RunStreamEvent`: the `event` name, the `id` cursor and the JSON `data`. Every durable event's `data` carries `run_id`, the run that wrote it. Clients ignore event names and data fields they do not know; new ones are added within v1.
+
+| Event | `data` besides `run_id` |
+|---|---|
+| `run_start` | `thread_id`, `thread_kind`, `role` (string or null), `title` (string or null), `effort`, `parent_run_id` (integer or null) |
+| `thinking`, `text` | `text`: the next chunk of raw markdown |
+| `tool_start` | `id`, `name`, `args` (the clipped arguments) |
+| `tool_done` | `id`, `ok`, `preview` |
+| `user` | `text`, `queue_id`: a queued message the run took up |
+| `plan` | `items`: `[{text,done}]`, the whole plan |
+| `run_done` | `state`, `error` (string or null); written once when a run ends |
+
+Text is markdown: render CommonMark with tables, strikethrough and autolinks, and escape raw HTML.
 
 Terminal events are durable and written exactly once, only to the run's own stream:
 

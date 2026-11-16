@@ -115,7 +115,8 @@ settings the operator edits in the UI or pins from the host.
   grant URL access or widen tool permissions. Arbitrary web fetches use the
   shared allowlist and SSRF protections on every redirect.
 - Preserve proxy authentication, Host validation, CSRF, same-origin checks,
-  CSP, and loopback listener defaults.
+  CSP, and loopback listener defaults. Accept forwarded identity headers only
+  from peers in the trusted proxy list.
 - Every admitted proxy, OIDC or local identity is the one principal with full
   authority; do not add an administrator role, login links, or a remote
   emergency bypass.

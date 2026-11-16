@@ -325,6 +325,22 @@
     assert builtins.length (builtins.filter (lib.hasPrefix "LoadCredential=") cfg.runProperties) == builtins.length credentialLines; true;
     defaultAuth = assert defaults.config.services.atrium.web.auth == "oidc";
     assert builtins.any (lib.hasInfix "services.atrium.web.allowedHost") (failing (host {}));
+    assert builtins.all (mode:
+      builtins.any (lib.hasInfix "services.atrium.web.trustedProxyCidrs") (failing (host {
+        web = {
+          auth = mode;
+          allowedHost = "atrium.example.org";
+        };
+      }))) ["proxy" "proxy+oidc"];
+    assert builtins.all (mode:
+      failing (host {
+        web = {
+          auth = mode;
+          allowedHost = "atrium.example.org";
+          trustedProxyCidrs = ["127.0.0.1/32"];
+        };
+      })
+      == []) ["proxy" "proxy+oidc"];
     assert builtins.all (mode: let
       system = host {
         web = {
@@ -568,7 +584,6 @@
           '';
       }
       // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
-        api-client-swift = pkgs.callPackage ../nix/swift-api-check.nix {};
         module-keyed = pkgs.callPackage ../nix/module-keyed-test.nix {inherit self;};
       }
       // lib.optionalAttrs (self'.packages ? atrium) {

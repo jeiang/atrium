@@ -83,6 +83,7 @@ func (e *refusal) Unwrap() error { return e.err }
 // Everything else (an address not yet available, a held lock, a dependency down) is transient.
 func permanentRefusal(err error) bool {
 	return errors.As(err, new(*refusal)) ||
+		errors.Is(err, web.ErrNoTrustedProxy) ||
 		errors.As(err, new(db.KeyError)) ||
 		errors.As(err, new(*db.FutureSchemaError)) ||
 		errors.Is(err, db.ErrNotV3) ||

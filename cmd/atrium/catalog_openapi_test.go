@@ -55,10 +55,18 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 				In   string `json:"in"`
 			} `json:"parameters"`
 		} `json:"paths"`
+		Security   []map[string][]string `json:"security"`
 		Components struct {
 			Schemas map[string]struct {
-				Required []string `json:"required"`
+				Required             []string                   `json:"required"`
+				AdditionalProperties *bool                      `json:"additionalProperties"`
+				Properties           map[string]json.RawMessage `json:"properties"`
+				AnyOf                []json.RawMessage          `json:"anyOf"`
 			} `json:"schemas"`
+			SecuritySchemes map[string]struct {
+				Type   string `json:"type"`
+				Scheme string `json:"scheme"`
+			} `json:"securitySchemes"`
 		} `json:"components"`
 	}
 	if err := json.Unmarshal(first, &doc); err != nil {
@@ -87,16 +95,45 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 		}
 	}
 	for schema, field := range map[string]string{
-		"AssistantmoduleapiSchedulePatch":   "schedule",
-		"AssistantmoduleapiScheduleEnabled": "enabled",
-		"AssistantmoduleapiSubagentEnabled": "enabled",
+		"SchedulePatch":   "schedule",
+		"ScheduleEnabled": "enabled",
+		"SubagentEnabled": "enabled",
 	} {
-		if !slices.Contains(doc.Components.Schemas[schema].Required, field) {
+		s := doc.Components.Schemas[schema]
+		if !slices.Contains(s.Required, field) {
 			t.Errorf("%s does not require %s", schema, field)
 		}
+		if s.AdditionalProperties == nil || *s.AdditionalProperties {
+			t.Errorf("request schema %s accepts unknown fields", schema)
+		}
 	}
-	if slices.Contains(doc.Components.Schemas["AssistantmoduleapiMemoryWork"].Required, "queued") {
+	if slices.Contains(doc.Components.Schemas["MemoryWork"].Required, "queued") {
 		t.Error("memory work incorrectly requires queued")
+	}
+	if step := doc.Components.Schemas["Step"]; step.AdditionalProperties != nil || !strings.Contains(string(step.Properties["error"]), `"string"`) {
+		t.Errorf("response schema Step is closed or leaves error untyped: %+v", step)
+	}
+	if bearer := doc.Components.SecuritySchemes["bearer"]; bearer.Type != "http" || bearer.Scheme != "bearer" || len(doc.Security) != 1 || doc.Security[0]["bearer"] == nil {
+		t.Fatalf("security: %+v %+v", doc.Security, doc.Components.SecuritySchemes)
+	}
+	var envelope struct {
+		Properties struct {
+			Code struct {
+				AnyOf []struct {
+					Type string   `json:"type"`
+					Enum []string `json:"enum"`
+				} `json:"anyOf"`
+			} `json:"code"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(doc.Components.Schemas["ErrorResponse"].Properties["error"], &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if open := envelope.Properties.Code.AnyOf; len(open) != 2 || !slices.Contains(open[0].Enum, "not_found") || open[1].Type != "string" || open[1].Enum != nil {
+		t.Errorf("error code is not an open enum: %+v", open)
+	}
+	if events := doc.Components.Schemas["RunStreamEvent"]; len(events.AnyOf) != 2 || !strings.Contains(string(events.AnyOf[0]), "RunStreamEventToolDone") {
+		t.Errorf("RunStreamEvent is not an open union of typed events: %+v", events)
 	}
 	var reach struct {
 		Areas []struct {

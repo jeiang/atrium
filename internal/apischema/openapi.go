@@ -25,7 +25,8 @@ const (
 
 var (
 	pathParam  = regexp.MustCompile(`\{([^}:]+)(?::[^}]*)?\}`)
-	errorRef   = object{"$ref": "#/components/schemas/Error"}
+	errorName  = "ErrorResponse"
+	errorRef   = object{"$ref": "#/components/schemas/" + errorName}
 	guardSafe  = []int{400, 401, 403, 404, 429, 503}
 	guardWrite = []int{409, 413, 415, 422}
 )
@@ -33,6 +34,8 @@ var (
 var transportCodes = []string{
 	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "command_interrupted", "command_result_withheld", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "module_disabled", "no_active_run", "no_question", "not_answered", "nothing_to_edit", "project_archived", "read_only_thread", "reference_refused", "run_active", "stream_expired", "too_large", "unsupported_media_type",
 }
+
+const contractRules = "Prose fields written by the model or the operator, such as message and answer text and the `text` and `thinking` run stream events, are raw markdown: render CommonMark with tables, strikethrough and autolinks, and escape raw HTML. Within v1, responses change only additively: clients ignore unknown error codes, run stream event names and response fields."
 
 func Generate(cat *module.Catalog) (map[string][]byte, error) {
 	doc, err := openAPI(cat)
@@ -64,6 +67,11 @@ func openAPI(cat *module.Catalog) (object, error) {
 	bindings := cat.Bindings()
 	slices.SortFunc(bindings, func(a, b module.Binding) int { return cmp.Compare(a.Target, b.Target) })
 	for _, b := range bindings {
+		if b.API != nil && b.API.Response != nil && b.API.Success != http.StatusNoContent && b.API.Body != application.BodyEventStream && b.API.Body != application.BodyBinary {
+			w.collect(b.API.Response)
+		}
+	}
+	for _, b := range bindings {
 		if b.API == nil {
 			continue
 		}
@@ -85,13 +93,17 @@ func openAPI(cat *module.Catalog) (object, error) {
 		}
 		item[strings.ToLower(method)] = op
 	}
-	w.schemas["Error"] = errorSchema()
+	w.schemas[errorName] = w.errorSchema()
 	return object{
-		"openapi":    "3.1.0",
-		"info":       object{"title": "atrium API", "version": "1"},
-		"servers":    []any{object{"url": web.APIPrefix}},
-		"paths":      paths,
-		"components": object{"schemas": w.schemas},
+		"openapi":  "3.1.0",
+		"info":     object{"title": "atrium API", "version": "1", "description": contractRules},
+		"servers":  []any{object{"url": web.APIPrefix}},
+		"security": []any{object{"bearer": []any{}}},
+		"paths":    paths,
+		"components": object{
+			"schemas":         w.schemas,
+			"securitySchemes": object{"bearer": object{"type": "http", "scheme": "bearer"}},
+		},
 	}, nil
 }
 
@@ -100,6 +112,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	unsafe := method != http.MethodGet && method != http.MethodHead
 	params := []any{}
 	declared := map[string]bool{}
+	w.input = true
 	for _, f := range reflect.VisibleFields(shape.Request) {
 		if f.Anonymous || !f.IsExported() {
 			continue
@@ -175,6 +188,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 			op["requestBody"] = object{"required": true, "content": object{"application/octet-stream": object{"schema": object{"type": "string", "contentMediaType": "application/octet-stream"}}}}
 		}
 	}
+	w.input = false
 	headers := object{}
 	if unsafe && !shape.ReadOnlyPost {
 		headers["Atrium-Command-Id"] = object{"schema": object{"type": "string"}}
@@ -183,17 +197,21 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	}
 	success := object{"description": http.StatusText(shape.Success), "headers": headers}
 	if shape.Success != http.StatusNoContent {
-		schema, err := w.ref(shape.Response)
-		if err != nil {
-			return nil, err
-		}
+		var schema object
 		media := "application/json"
-		if shape.Body == application.BodyBinary {
+		switch shape.Body {
+		case application.BodyBinary:
 			media = "application/octet-stream"
 			schema = object{"type": "string", "format": "binary"}
-		}
-		if shape.Body == application.BodyEventStream {
+		case application.BodyEventStream:
 			media = "text/event-stream"
+			schema = w.runStreamEvent()
+			op["x-atrium-stream-event"] = schema
+		default:
+			var err error
+			if schema, err = w.ref(shape.Response); err != nil {
+				return nil, err
+			}
 		}
 		success["content"] = object{media: object{"schema": schema}}
 	}
@@ -208,7 +226,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	if shape.Body == application.BodyEventStream {
 		responses["204"] = object{"description": http.StatusText(http.StatusNoContent)}
 		responses["410"] = object{"description": http.StatusText(http.StatusGone), "content": object{"application/json": object{"schema": object{"allOf": []any{errorRef, object{
-			"type": "object", "required": []any{"run_id"}, "properties": object{"run_id": object{"type": "integer"}},
+			"type": "object", "required": []any{"run_id"}, "properties": object{"run_id": w.integer(true)},
 		}}}}}}
 	} else if kind == application.Query && !unsafe && !shape.Uncached {
 		responses["304"] = object{"description": http.StatusText(http.StatusNotModified), "headers": object{"ETag": object{"schema": object{"type": "string"}}}}
@@ -244,7 +262,7 @@ func paramSchema(w *walker, t reflect.Type) (object, error) {
 	return w.ref(t)
 }
 
-func errorSchema() object {
+func (w *walker) errorSchema() object {
 	codes := []any{}
 	seen := map[string]bool{}
 	for _, c := range application.Codes {
@@ -267,11 +285,12 @@ func errorSchema() object {
 	}}
 	return object{"type": "object", "required": []any{"error"}, "properties": object{"error": object{
 		"type": "object", "required": []any{"code", "message"}, "properties": object{
-			"code": object{"type": "string", "enum": codes}, "message": str,
+			"code":        object{"anyOf": []any{object{"type": "string", "enum": codes}, str}},
+			"message":     str,
 			"fields":      object{"type": "array", "items": field},
-			"effect_ids":  object{"type": "array", "items": object{"type": "integer", "format": "int64"}},
-			"retry_after": object{"type": "integer"}, "diagnostic_id": str,
-			"type": str, "status": object{"type": "integer"}, "instance": str, "command_id": str,
+			"effect_ids":  object{"type": "array", "items": w.integer(true)},
+			"retry_after": w.integer(false), "diagnostic_id": str,
+			"type": str, "status": w.integer(false), "instance": str, "command_id": str,
 		},
 	}}}
 }

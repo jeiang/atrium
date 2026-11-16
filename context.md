@@ -1048,7 +1048,11 @@ claims about the running application. Operator contracts are in
   `@thread/12/m<seq>`.
 - The NixOS public auth default is OIDC; first-hour bootstrap uses the keyed database from its first start and the same-process emergency listener, with host-declared OIDC configuration activated automatically when valid.
 - The public web service accepts an authenticating reverse proxy
-  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Every
+  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy
+  identity headers count only when the socket peer is in the trusted proxy
+  list (`--trusted-proxy` or the host's `web.trusted_proxy_cidrs`); from any
+  other peer the request carries no identity. A proxy mode with an empty list
+  refuses to start (exit 78). Every
   admitted proxy request or OIDC session is the one operator with full
   authority; no role distinguishes them. A separate local mode provides
   loopback access: it binds only a numeric loopback address, refuses any other
@@ -1115,6 +1119,12 @@ claims about the running application. Operator contracts are in
   retention); it sends a heartbeat every 15 seconds and allows 4 streams per
   subject and 16 per server. Static assets are served from content-hashed
   immutable URLs.
+- The generated spec declares bearer security, leaves response schemas open
+  and closes request schemas (`<Name>Input` when a type is used both ways),
+  bounds response integers at 2^53-1, marks null-sent pointers nullable, keeps
+  the error `code` enum open, and types run stream frames as the open union
+  `RunStreamEvent`. Component names are bare Go type names; collisions fail
+  generation until a name is pinned in `internal/apischema/walk.go`.
 - Draft PATCH and send accept the resource ETag through `If-Match` and still
   compare revisions; knowledge PATCH has no `If-Match`. Opaque cursors bind
   the operation, filters and path parameters and are at most 2,048
