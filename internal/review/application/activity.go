@@ -25,7 +25,6 @@ const (
 	SourceOperation    = "operation"
 	CategoryMail       = "mail"
 	CategoryAssistant  = "assistant"
-	CategoryWiki       = "wiki"
 	CategoryKnowledge  = "knowledge"
 	CategoryMedia      = "media"
 	CategorySettings   = "settings"
@@ -34,7 +33,7 @@ const (
 	snippetLimit       = 800
 )
 
-var Categories = []string{CategoryMail, CategoryAssistant, CategoryWiki, CategoryKnowledge, CategoryMedia, CategorySettings}
+var Categories = []string{CategoryMail, CategoryAssistant, CategoryKnowledge, CategoryMedia, CategorySettings}
 
 type ActivityEntry struct {
 	Source    string             `json:"source"`
@@ -299,7 +298,6 @@ func (p *sourcePage) saw(k ActivityKey, rows, fetch int) {
 }
 
 var writeCategoryPrefixes = []struct{ Prefix, Category string }{
-	{"notion", CategoryWiki},
 	{"kb", CategoryKnowledge},
 	{"media", CategoryMedia},
 }
@@ -316,14 +314,12 @@ func writeCategory(tool string) string {
 func effectFilter(category string, limit int) ledger.Filter {
 	f := ledger.Filter{Origins: DirectOrigins, Limit: limit}
 	switch category {
-	case CategoryWiki:
-		f.OperationLike = []string{"notion%"}
 	case CategoryKnowledge:
 		f.OperationLike = []string{"kb%"}
 	case CategoryMedia:
 		f.OperationLike = []string{"media%"}
 	case CategoryAssistant:
-		f.OperationNotLike = []string{"notion%", "kb%", "media%"}
+		f.OperationNotLike = []string{"kb%", "media%"}
 	}
 	return f
 }

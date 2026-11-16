@@ -270,7 +270,7 @@ buttons, carries no token, and opening it writes nothing.
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
 response. A new home message starts a thread. Review keeps decisions and
-history; Library holds knowledge, wiki, files, rules, and schedules. Projects
+history; Library holds knowledge, files, rules, and schedules. Projects
 group threads. Draft and proposal cards in chat call the same send/approval
 services as their dedicated views. `/chat/agenda` returns 404 when the calendar
 module is off and 503 when the calendar cannot be listed, for example when none
@@ -318,14 +318,16 @@ records are protected from agent edits and retraction. Confirmation clears
 profile. Eligible pinned, confirmed, unmarked records form the assistant
 profile. Private projects restrict their content to that project, and nightly
 dreaming skips their threads. Nightly dreaming can write unconfirmed records
-within its spending limits. Notion wiki pages are read-only mirrors; the
-assistant has no Notion editing tools. There is no skills feature.
+within its spending limits. Records imported from Notion keep their origin;
+Notion itself is no longer connected. There is no skills feature.
 
-The knowledge export is one-way. It overwrites only the Notion pages it
-created and the Obsidian files it tracks, and never touches other pages or
-files; edits made at the destination are overwritten on the next run. Private
-records are exported only with consent recorded for that exact destination,
-and changing the destination clears the consent.
+The knowledge export is one-way and writes one Markdown folder, set by the
+host. It overwrites only the files it tracks and never touches other files;
+edits made in the folder are overwritten on the next run. The daily
+`knowledge-export` job fails, and the Scheduled page shows the run as failed
+with the reason, when no folder is set or the folder cannot be written.
+Private records are exported only with consent recorded for that exact
+folder, and changing the folder clears the consent.
 
 Notifications enter the in-app inbox before best-effort Web Push. A push failure
 does not roll back the inbox occurrence. Registration is limited to 16 devices,

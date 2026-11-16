@@ -77,21 +77,6 @@ func TestSettingsAPI(t *testing.T) {
 	if items := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/settings?group=mail&limit=100", token, nil), http.StatusOK)); slices.ContainsFunc(items, func(it any) bool { return it.(map[string]any)["key"] == "mail_mode" }) {
 		t.Fatalf("mail_mode is listed although no settings page shows it: %v", items)
 	}
-	exports := "/api/v1/settings?group=export&limit=100"
-	expectAPI(t, s.do(http.MethodPut, "/api/v1/settings/export_notion_enabled", token, map[string]any{"value": "true"}), http.StatusUnprocessableEntity, "invalid")
-	if r := row(apiItems(t, apiData(t, s.do(http.MethodGet, exports, token, nil), http.StatusOK)), "export_notion_enabled"); r["value"] != "false" {
-		t.Fatalf("a refused export switch was saved: %v", r)
-	}
-	page := "0123456789abcdef0123456789abcdef"
-	apiData(t, s.do(http.MethodPut, "/api/v1/settings/export_notion_parent", token, map[string]any{"value": page}), http.StatusOK)
-	apiData(t, s.do(http.MethodPut, "/api/v1/settings/export_notion_private_to", token, map[string]any{"value": page}), http.StatusOK)
-	if r := row(apiItems(t, apiData(t, s.do(http.MethodGet, exports, token, nil), http.StatusOK)), "export_notion_private_to"); r["value"] == "" {
-		t.Fatalf("private_to matching the parent was not kept: %v", r)
-	}
-	apiData(t, s.do(http.MethodPut, "/api/v1/settings/export_notion_parent", token, map[string]any{"value": "fedcba9876543210fedcba9876543210"}), http.StatusOK)
-	if r := row(apiItems(t, apiData(t, s.do(http.MethodGet, exports, token, nil), http.StatusOK)), "export_notion_private_to"); r["value"] != "" {
-		t.Fatalf("private_to survived a parent change: %v", r)
-	}
 	apiData(t, s.do(http.MethodDelete, "/api/v1/settings/monthly_budget_usd", token, nil), http.StatusOK)
 	if r := row(apiItems(t, apiData(t, s.do(http.MethodGet, group, token, nil), http.StatusOK)), "monthly_budget_usd"); r["value"] != "150" {
 		t.Fatalf("budget after unset: %v", r)

@@ -291,35 +291,6 @@ func TestServeRendersReviewPages(t *testing.T) {
 	}
 }
 
-func TestServeRendersNotionPages(t *testing.T) {
-	t.Parallel()
-	base := startServe(t)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	for _, path := range []string{"/notion/missing", "/notion/11111111-1111-1111-1111-111111111111"} {
-		if status, body, _ := fetch(t, client, "GET", base+path, nil); status != http.StatusNotFound {
-			t.Errorf("GET %s = %d: %.300s", path, status, body)
-		}
-	}
-	for _, tc := range []struct {
-		path   string
-		form   url.Values
-		status int
-	}{
-		{"/notion/missing/link", url.Values{}, http.StatusNotFound},
-		{"/notion/missing/edit", url.Values{"instruction": {"shorten"}}, http.StatusNotFound},
-		{"/projects/abc/wiki-hub", url.Values{}, http.StatusNotFound},
-		{"/projects/1/wiki-hub", url.Values{}, http.StatusNotFound},
-	} {
-		if status, body, _ := fetch(t, client, "POST", base+tc.path, tc.form); status != tc.status {
-			t.Errorf("POST %s = %d, want %d: %.300s", tc.path, status, tc.status, body)
-		}
-	}
-}
-
 func TestServeRendersAssistantPages(t *testing.T) {
 	t.Parallel()
 	base := startServe(t)
@@ -337,7 +308,6 @@ func TestServeRendersAssistantPages(t *testing.T) {
 		{"/projects/1/edit", 404},
 		{"/scheduled", 200},
 		{"/library/files", 200},
-		{"/library/wiki", 200},
 		{"/settings/assistant", 200},
 		{"/settings/usage", 200},
 		{"/settings/notifications", 200},

@@ -61,10 +61,6 @@ type KnowledgeRunRequest struct {
 	RunID int64 `json:"run_id,omitempty"`
 }
 
-type KnowledgeImportRequest struct {
-	DryRun bool `json:"dry_run,omitempty"`
-}
-
 type KnowledgeRow struct {
 	ID        int64     `json:"id"`
 	Title     string    `json:"title"`
@@ -273,10 +269,6 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 		api.Command(d, kbapp.DescribeRetractRun(), application.APIShape{Area: area},
 			"POST /knowledge/retract-run", func(ctx context.Context, in KnowledgeRunRequest) (application.Change[KnowledgeBatch], error) {
 				return knowledgeBatch(svc().RetractRun(ctx, kbapp.RunInput{RunID: in.RunID}))
-			}),
-		api.Command(d, kbapp.DescribeImport(), application.APIShape{Area: area},
-			"POST /knowledge/import", func(ctx context.Context, in KnowledgeImportRequest) (application.Change[kb.ImportStats], error) {
-				return svc().Import(ctx, kbapp.ImportInput{DryRun: in.DryRun})
 			}),
 	}
 }

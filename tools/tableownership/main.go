@@ -241,7 +241,7 @@ var vectorPrefixes = []string{"embed_message_", "embed_notion_", "embed_kb_"}
 var (
 	createTable = regexp.MustCompile(`CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)`)
 	sqlRef      = regexp.MustCompile(`\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_]*)`)
-	vectorCall  = regexp.MustCompile(`\.(?:MessageTable|NotionTable|KBTable)\(\)`)
+	vectorCall  = regexp.MustCompile(`\.(?:MessageTable|KBTable)\(\)`)
 )
 
 type violation struct {

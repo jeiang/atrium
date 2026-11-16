@@ -2,20 +2,14 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
-	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/module"
 )
 
 const thirdKeyHex = "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210"
@@ -37,56 +31,29 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	setEnv(t, "ATRIUM_DB_KEY", "")
 	setEnv(t, "ATRIUM_CONFIG", "")
 	setEnv(t, "CREDENTIALS_DIRECTORY", "")
-	vector := make([]float64, config.EmbedDim)
-	vector[0] = 1
-	embedder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"index": 0, "embedding": vector}}})
-	}))
-	defer embedder.Close()
-	setEnv(t, "ATRIUM_HOST_CONFIG", embedHost(t, dir, embedder.URL+"/v1"))
 	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	dbEnv := func(path string) string { return "ATRIUM_DB=" + path }
-	const hit = "Alpha page\thttps://notion.example/p1\n"
+	knnQuery := kbKNNQuery()
 	live := filepath.Join(dir, "live.db")
 
-	if got := runProcess(t, "notion search alpha", dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
+	if got := runProcess(t, "settings set tz UTC", dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
 		t.Fatalf("creating the encrypted database exited %d: %s", got.code, got.stderr)
-	}
-	if got := runProcess(t, "settings set "+module.FlagKey(module.Notion)+" true", dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
-		t.Fatalf("enabling notion on the encrypted database exited %d: %s", got.code, got.stderr)
 	}
 	k, err := db.ParseKey(rightKeyHex)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed, err := db.Connect(live, db.WithKey(k))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, stmt := range []string{
-		"INSERT INTO notion_pages (rid, id, title, path, url, markdown) VALUES (1, 'p1', 'Alpha page', 'Root', 'https://notion.example/p1', 'alpha beta gamma')",
-		"INSERT INTO notion_fts (rowid, title, path, body) VALUES (1, 'Alpha page', 'Root', 'alpha beta gamma')",
-	} {
-		if _, err := seed.Write.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := seed.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
-		t.Fatal(err)
-	}
-	if err := seed.Close(); err != nil {
-		t.Fatal(err)
-	}
+	seedKBRecord(t, live, k)
 
 	check := runProcess(t, "db check", dbEnv(live), keyEnv(rightKeyHex))
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "key id " + dbkey.ID(k)} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 kb_fts: 1\n", "vec0 embed_kb_0: 1\n", "key id " + dbkey.ID(k)} {
 		if check.code != cli.ExitOK || !strings.Contains(check.stdout, want) {
 			t.Errorf("db check exited %d with stdout %q, stderr %q; want 0 and %q", check.code, check.stdout, check.stderr, want)
 		}
 	}
 
 	plain := filepath.Join(dir, "plain.db")
-	if got := runProcess(t, "notion search alpha", dbEnv(plain)); got.code != cli.ExitOK {
+	if got := runProcess(t, "settings set tz UTC", dbEnv(plain)); got.code != cli.ExitOK {
 		t.Fatalf("creating the plaintext database exited %d: %s", got.code, got.stderr)
 	}
 	for name, tc := range map[string]struct {
@@ -140,16 +107,16 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	if fromBackup.code != cli.ExitOK || fromBackup.stdout != strings.Replace(check.stdout, live, backup, 1) {
 		t.Errorf("db check of the backup exited %d with stdout %q, stderr %q; want the live database's report %q", fromBackup.code, fromBackup.stdout, fromBackup.stderr, check.stdout)
 	}
-	if knn := runProcess(t, "notion search zzz", dbEnv(backup), keyEnv(rightKeyHex)); knn.code != cli.ExitOK || knn.stdout != hit {
-		t.Errorf("KNN on the backup exited %d with stdout %q, stderr %q; want %q", knn.code, knn.stdout, knn.stderr, hit)
+	if knn := runProcessStdin(t, knnQuery, "db shell", dbEnv(backup), keyEnv(rightKeyHex)); knn.code != cli.ExitOK || knn.stdout != kbHit {
+		t.Errorf("KNN on the backup exited %d with stdout %q, stderr %q; want %q", knn.code, knn.stdout, knn.stderr, kbHit)
 	}
 	plainBackup := filepath.Join(dir, "plain-backup.db")
 	if got := runProcess(t, "db backup "+plainBackup, dbEnv(plain)); got.code != cli.ExitOK || !isPlaintextSQLite(t, plainBackup) {
 		t.Errorf("backup of the plaintext database exited %d, stderr %q, plaintext %v; want 0 and a plaintext copy", got.code, got.stderr, isPlaintextSQLite(t, plainBackup))
 	}
 
-	shell := runProcessStdin(t, "SELECT count(*) FROM notion_pages;\nSELECT title, 'a;b' FROM notion_pages WHERE rid = 1;\n.tables\n", "db shell", dbEnv(live), keyEnv(rightKeyHex))
-	if shell.code != cli.ExitOK || !strings.HasPrefix(shell.stdout, "1\nAlpha page\ta;b\n") || !strings.Contains(shell.stdout, "notion_pages\n") {
+	shell := runProcessStdin(t, "SELECT count(*) FROM kb_records;\nSELECT title, 'a;b' FROM kb_records WHERE id = 1;\n.tables\n", "db shell", dbEnv(live), keyEnv(rightKeyHex))
+	if shell.code != cli.ExitOK || !strings.HasPrefix(shell.stdout, "1\nAlpha page\ta;b\n") || !strings.Contains(shell.stdout, "kb_records\n") {
 		t.Errorf("db shell exited %d with stdout %q, stderr %q", shell.code, shell.stdout, shell.stderr)
 	}
 	trigger := runProcessStdin(t, "/* a; b */ CREATE TEMP TABLE t (a);\nCREATE TEMP TRIGGER tt AFTER INSERT ON t BEGIN\n  UPDATE t SET a = a + 1;\nEND;\nINSERT INTO t VALUES (7); SELECT a FROM t;\n", "db shell", dbEnv(live), keyEnv(rightKeyHex))
@@ -201,7 +168,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec("UPDATE notion_pages SET title = 'Alpha page' WHERE rid = 1"); err != nil {
+	if _, err := tx.Exec("UPDATE kb_records SET title = 'Alpha page' WHERE id = 1"); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
@@ -243,13 +210,13 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 		t.Errorf("old key after rekey exited %d, stderr %q; want %d and %q", old.code, old.stderr, cli.ExitError, db.ErrWrongKey)
 	}
 	reopened := runProcess(t, "db check", dbEnv(live), keyEnv(otherKeyHex))
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "key id " + dbkey.ID(other)} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 kb_fts: 1\n", "vec0 embed_kb_0: 1\n", "key id " + dbkey.ID(other)} {
 		if reopened.code != cli.ExitOK || !strings.Contains(reopened.stdout, want) {
 			t.Errorf("db check with the new key exited %d with stdout %q, stderr %q; want 0 and %q", reopened.code, reopened.stdout, reopened.stderr, want)
 		}
 	}
-	if knn := runProcess(t, "notion search zzz", dbEnv(live), keyEnv(otherKeyHex)); knn.code != cli.ExitOK || knn.stdout != hit {
-		t.Errorf("KNN with the new key exited %d with stdout %q, stderr %q; want %q", knn.code, knn.stdout, knn.stderr, hit)
+	if knn := runProcessStdin(t, knnQuery, "db shell", dbEnv(live), keyEnv(otherKeyHex)); knn.code != cli.ExitOK || knn.stdout != kbHit {
+		t.Errorf("KNN with the new key exited %d with stdout %q, stderr %q; want %q", knn.code, knn.stdout, knn.stderr, kbHit)
 	}
 
 	stdinRekey := runProcessStdin(t, thirdKeyHex+"\n", "db rekey", dbEnv(live), keyEnv(otherKeyHex))
@@ -268,7 +235,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	if got := strings.Join(maintenanceAudits(t, live, third, "maintenance.rekey"), ","); got != "ok:cli,ok:cli" {
 		t.Errorf("rekey audits = %q, want two completed rekeys and no refusals", got)
 	}
-	if got := strings.Join(maintenanceAudits(t, live, third, "maintenance.sql"), ","); got != "ok:cli,ok:cli,failed:cli,ok:cli" {
+	if got := strings.Join(maintenanceAudits(t, live, third, "maintenance.sql"), ","); got != "ok:cli,ok:cli,failed:cli,ok:cli,ok:cli" {
 		t.Errorf("shell audits = %q, want one row per session with the failed session marked", got)
 	}
 }

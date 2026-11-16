@@ -3,6 +3,9 @@ package export
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,8 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -26,35 +27,33 @@ type Result struct {
 	Skipped int `json:"skipped"`
 }
 
-func (r Result) add(other Result) Result {
-	return Result{
-		Created: r.Created + other.Created, Updated: r.Updated + other.Updated,
-		Removed: r.Removed + other.Removed, Skipped: r.Skipped + other.Skipped,
-	}
-}
+var errNoFolder = errors.New("knowledge export has no folder: host key export." + ObsidianDirKey + " is not set")
 
 func Run(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, error) {
-	var out Result
-	var errs []error
-	if enabled, err := readSetting(ctx, d, NotionEnabledKey); err != nil {
-		return out, err
-	} else if enabled == "true" && module.IsEnabled(ctx, module.Notion) {
-		res, err := runNotion(ctx, d, env, now)
-		out = out.add(res)
-		if err != nil {
-			errs = append(errs, err)
-		}
+	dir, err := readSetting(ctx, d, ObsidianDirKey)
+	if err != nil {
+		return Result{}, err
 	}
-	if dir, err := readSetting(ctx, d, ObsidianDirKey); err != nil {
-		return out, err
-	} else if dir != "" {
-		res, err := runObsidian(ctx, d, env, now)
-		out = out.add(res)
-		if err != nil {
-			errs = append(errs, err)
-		}
+	if dir == "" {
+		return Result{}, errNoFolder
 	}
-	return out, errors.Join(errs...)
+	dir = filepath.Clean(dir)
+	if err := writable(dir); err != nil {
+		return Result{}, fmt.Errorf("knowledge export folder %s is not writable: %w", dir, err)
+	}
+	return runObsidian(ctx, d, env, now, dir)
+}
+
+func writable(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	probe, err := os.CreateTemp(dir, ".atrium-*.tmp")
+	if err != nil {
+		return err
+	}
+	name := probe.Name()
+	return errors.Join(probe.Close(), os.Remove(name))
 }
 
 func readSetting(ctx context.Context, d *db.DB, key string) (string, error) {
@@ -63,65 +62,6 @@ func readSetting(ctx context.Context, d *db.DB, key string) (string, error) {
 	}
 	found, err := settings.From(ctx).Resolve(ctx, d.Read, key)
 	return strings.TrimSpace(found.Value), err
-}
-
-func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, error) {
-	var out Result
-	parent, err := readSetting(ctx, d, NotionParentKey)
-	if err != nil {
-		return out, err
-	}
-	parent = notionid.Normalize(parent)
-	if parent == "" {
-		return out, nil
-	}
-	if err := blocked(ctx, d.Read); err != nil {
-		return out, err
-	}
-	privateTo, err := readSetting(ctx, d, NotionPrivateKey)
-	if err != nil {
-		return out, err
-	}
-	allow, err := readSetting(ctx, d, NotionKindsKey)
-	if err != nil {
-		return out, err
-	}
-	records, err := kb.Exportable(ctx, d.Read, kb.ExportFilter{
-		Now:            now,
-		Kinds:          mask(allow),
-		IncludePrivate: privateTo != "" && notionid.Normalize(privateTo) == parent,
-	})
-	if err != nil {
-		return out, err
-	}
-	loc, err := config.From(ctx).Location(env)
-	if err != nil {
-		return out, err
-	}
-	base := config.From(ctx).PublicURL(env)
-	titles, err := threadTitles(ctx, d.Read, records)
-	if err != nil {
-		return out, err
-	}
-	entries := make([]pageEntry, 0, len(records)+1)
-	for _, rec := range records {
-		src := render.Source{PublicURL: base, Date: date(rec.UpdatedAt, loc)}
-		if rec.SourceThreadID != nil {
-			src.ThreadTitle = titles[*rec.SourceThreadID]
-		}
-		entries = append(entries, pageEntry{recordID: rec.ID, page: render.RecordPage(rec.Record, src)})
-	}
-	entries = append(entries, pageEntry{recordID: 0, page: render.Index(indexEntries(records, loc))})
-	client, err := notion.NewClient(ctx, d.Read)
-	if err != nil {
-		return out, err
-	}
-	defer client.Close()
-	store, err := exportLedger(ctx, d, env)
-	if err != nil {
-		return out, err
-	}
-	return syncNotion(ctx, store, now, client, parent, entries)
 }
 
 func exportLedger(ctx context.Context, d *db.DB, env config.Env) (*ledger.Store, error) {

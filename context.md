@@ -13,13 +13,13 @@ claims about the running application. Operator contracts are in
   with embedded assets, SQLCipher state, and a NixOS module. The host supplies
   external services, reverse proxy configuration, credentials, persistence,
   and off-host backups. Updating this repository does not update a host's pin.
-- The application joins mail, calendar, contacts, Notion, media, notifications,
+- The application joins mail, calendar, contacts, media, notifications,
   and read-only Grafana access with assistant chat, files, projects,
   knowledge, tasks, scheduled work, and research children. Skills and code
   execution are not active assistant capabilities.
 - Today is home at `/chat`. Its initial response includes Needs you, the agenda,
   and recent activity. A new home message starts a thread. Review holds
-  decisions and history; Library holds knowledge, wiki, files, rules, and
+  decisions and history; Library holds knowledge, files, rules, and
   schedules. Projects group threads and can restrict their content to a
   private project. Draft and proposal cards in chat use the same send and
   approval services as their dedicated views. The `/chat/agenda` fragment
@@ -96,8 +96,9 @@ claims about the running application. Operator contracts are in
   and `messages`; those records stay out of the profile. Dreaming is capped
   at `dreaming_max_cost_usd` ($0.30) per night and `dreaming_monthly_usd` ($3)
   per calendar month. At the monthly cap it does not run and raises an
-  attention item. The Notion wiki is read-only for the operator. Sync and
-  the Wiki view remain; the agent has no Notion tools.
+  attention item. Notion, its wiki view and the one-shot `kb import` are
+  removed; records imported from Notion keep their `notion:` origin and stay
+  readable and searchable.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
 
@@ -271,9 +272,7 @@ claims about the running application. Operator contracts are in
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
-  index when complete. The rebuild loop runs for every install, so a
-  Notion-only install keeps its index fresh, and Notion document embeddings
-  use the same compiled body limit as mail. Knowledge records are
+  index when complete. The rebuild loop runs for every install. Knowledge records are
   embedded into the same generation-numbered index (title, aliases and body,
   same limit); the core loop drains pending records when an embed endpoint is
   set, and a retracted record leaves the index. Each embedded row stores the
@@ -295,7 +294,7 @@ claims about the running application. Operator contracts are in
   records a stored row that fails these rules as failing without sending a
   request. Credential slots must belong to the
   connection kind, and credential values remain write-only.
-- Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
+- Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token) and EZTV (no credential) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the
@@ -316,7 +315,7 @@ claims about the running application. Operator contracts are in
 ### State, backups, settings, and keys
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
-  `files/`; the Notion wiki also has external state. The database alone is
+  `files/`. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
   and `atrium restore` (with a `--verify` dry run) restores them. Restore
   stages the archive, refuses a newer schema, checks it for tampering, and
@@ -517,10 +516,7 @@ claims about the running application. Operator contracts are in
   consecutive unattended threadless unconfigured skips with the same error
   coalesce into the newest run's row, which keeps the first start time, so
   an audit row never names a later run of another job.
-  The Notion mirror is the model-free `notion/notion-sync` serve job
-  (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
-  on shutdown). Its CLI shares the `notion-sync` resource and claim;
-  unconfigured skips record no pass row. Nightly
+  Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
   executes; immediately before a child runs, on the first pass or in
@@ -564,7 +560,7 @@ claims about the running application. Operator contracts are in
   declared, and a job whose needed module is off
   records `skipped_module`. Core (settings, secrets, `db`,
   `serve`, the About, review and activity pages) is always on; mail,
-  calendar, contacts, Notion, media, assistant, notifications and Grafana each
+  calendar, contacts, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
   read-only. A module is on only when its flag is true
@@ -829,19 +825,17 @@ claims about the running application. Operator contracts are in
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium effects
   resolve <id>` or the Activity page.
-- The knowledge export is export-only: a built-in job renders live,
-  non-expired records into the Notion page named by
-  `export_notion_parent` and overwrites the pages it created; a target with no
-  destination is skipped. The Notion controls are a standalone section on the
-  Export settings page, the Obsidian folder has its own section, and the parent
-  page accepts a pasted page URL or id stored as the normalized id. Each
-  external write records an effect first; Notion mutations are not retried,
-  and an unknown outcome blocks the target until `atrium effects resolve
-  <id>`. Pages the export did not create are never touched, and edits made in
-  Notion are overwritten on the next run. The Obsidian export likewise
-  writes and removes only the files it tracks. Private records are exported
-  only with consent recorded for that exact destination; changing the
-  destination clears the consent.
+- The knowledge export is export-only and has one destination, a Markdown
+  folder declared by the host (`export.export_obsidian_dir`). The daily
+  `knowledge-export` job renders live, non-expired records into it and
+  writes and removes only the files it tracks. With no folder set, or a
+  folder it cannot create or write, the run fails and is recorded as a
+  failed job; it never reports success with nothing written. Mapping rows
+  of the removed Notion target are ignored. Each file write records an
+  effect first, and an unknown outcome blocks the export until `atrium
+  writes resolve <id>`. Edits made in the folder are overwritten on the
+  next run. Private records are exported only with consent recorded for
+  that exact folder; changing the folder clears the consent.
 - Draft edits carry an optional expected revision: stale edits are refused without overwriting newer content. The HTML form sends it automatically; API and tool callers may supply `revision`.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
@@ -898,7 +892,8 @@ claims about the running application. Operator contracts are in
   `GET /api/v1/review/items` and the `attention` tool; Needs you shows
   proposals only. No worker run starts automatically and nothing
   restarts or changes a host.
-- The Notion page view is read-only. Approvals are only for
+- Proposals of removed kinds, such as `notion_link` and `notion_edit` from
+  v2, stay readable and dismissable. Approvals are only for
   external or costly actions.
 - Threads carry marks, recorded with `threads.tainted_at` as the first
   mark time. The set is a bitmask: `untrusted` (someone else wrote the
@@ -1142,7 +1137,7 @@ claims about the running application. Operator contracts are in
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

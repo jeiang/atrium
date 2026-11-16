@@ -59,7 +59,7 @@ func TestTuningKeysAreAbsentFromSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	for _, path := range []string{"/settings/calendar", "/settings/assistant", "/settings/notion"} {
+	for _, path := range []string{"/settings/calendar", "/settings/assistant"} {
 		status, body, _ := fetch(t, client, http.MethodGet, base+path, nil)
 		if status != http.StatusOK {
 			t.Fatalf("GET %s = %d", path, status)
