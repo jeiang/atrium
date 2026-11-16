@@ -154,16 +154,9 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	tools := map[string]bool{}
 	scratch := registry.New(settings.NewFrom(nil))
 	var optional []string
-	origins := map[string]string{}
 	for _, d := range decls {
 		if !d.Core {
 			optional = append(optional, d.Name)
-		}
-		for _, origin := range d.EffectOrigins {
-			if owner, ok := origins[origin]; ok {
-				return nil, &DuplicateHook{Hook: "effect origin " + origin, Modules: []string{owner, d.Name}}
-			}
-			origins[origin] = d.Name
 		}
 		for _, m := range d.Metrics {
 			if metrics[m.Name] {
@@ -206,8 +199,12 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
+	regs, err := compileRegistries(decls)
+	if err != nil {
+		return nil, err
+	}
 	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
-		conns: conns, hooks: hooks, credential: credential, origins: origins, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
+		conns: conns, hooks: hooks, credential: credential, regs: regs, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
 		operations: operations, bindings: bindings}, nil
 }
 

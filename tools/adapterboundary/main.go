@@ -81,6 +81,9 @@ var allowed = map[string]bool{
 	"internal/assistant/registry": true,
 	"internal/review":             true,
 	"internal/review/hub":         true,
+	"internal/notify":             true,
+	"internal/web":                true,
+	"internal/web/tpl":            true,
 }
 
 var platform = map[string]bool{
@@ -92,6 +95,9 @@ var platform = map[string]bool{
 	"internal/review":             true,
 	"internal/review/application": true,
 	"internal/review/hub":         true,
+	"internal/notify":             true,
+	"internal/web":                true,
+	"internal/web/tpl":            true,
 }
 
 var units = []string{

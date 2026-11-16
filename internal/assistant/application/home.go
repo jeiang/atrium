@@ -97,16 +97,22 @@ func DescribeTodayEnsure() application.Definition {
 		[]application.Authority{application.Operator}, application.NoEffect, true)
 }
 
-var (
-	aboutUID  = regexp.MustCompile(`^[A-Za-z0-9@._+-]{1,200}$`)
-	aboutFile = regexp.MustCompile(`^[A-Za-z0-9._ ()+-]{1,200}$`)
-)
+var aboutFile = regexp.MustCompile(`^[A-Za-z0-9._ ()+-]{1,200}$`)
 
-func EventRef(day, uid string) string {
-	if !aboutUID.MatchString(uid) {
-		return ""
+func Refs() []module.RefKind {
+	return []module.RefKind{
+		module.NumberedRef("knowledge", func(ctx context.Context, q db.Querier, id int64, number string) (*module.Ref, error) {
+			label, err := kb.Title(ctx, q, id)
+			return &module.Ref{Label: label, Line: "About knowledge record " + number + "."}, err
+		}),
+		module.NumberedRef("file", func(ctx context.Context, q db.Querier, id int64, _ string) (*module.Ref, error) {
+			label, project, err := files.ProjectFileName(ctx, q, id)
+			if err != nil || !aboutFile.MatchString(label) {
+				return nil, err
+			}
+			return &module.Ref{Label: label, Project: project, Line: "About the project file " + strconv.Quote(label) + "."}, nil
+		}),
 	}
-	return "event:" + day + ":" + uid
 }
 
 func (s *Service) day(ctx context.Context, now float64) (time.Time, error) {
@@ -218,7 +224,7 @@ func agendaOf(rows []calendar.Row, tz *time.Location, now time.Time) []AgendaEve
 		fields := row.Dict(tz)
 		first, _ := fields["start"].(string)
 		last, _ := fields["end"].(string)
-		event := AgendaEvent{Time: "all day", Title: row.Title, Meta: row.Location, Ask: EventRef(now.Format(time.DateOnly), row.UID)}
+		event := AgendaEvent{Time: "all day", Title: row.Title, Meta: row.Location, Ask: calendar.EventRef(now.Format(time.DateOnly), row.UID)}
 		start, err := time.ParseInLocation("2006-01-02T15:04:05", first[:min(len(first), 19)], tz)
 		end, endErr := time.ParseInLocation("2006-01-02T15:04:05", last[:min(len(last), 19)], tz)
 		if err == nil {
@@ -265,68 +271,21 @@ func (s *Service) agenda(ctx context.Context, q db.Querier, day time.Time) (*Age
 	return out, nil
 }
 
-func (s *Service) aboutEvent(ctx context.Context, q db.Querier, rest string) (*About, error) {
-	day, uid, _ := strings.Cut(rest, ":")
-	start, err := time.Parse(time.DateOnly, day)
-	if err != nil || EventRef(day, uid) == "" || !module.IsEnabled(ctx, unit.Calendar) {
-		return nil, nil
-	}
-	set, err := calendar.LoadSettings(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	listing, err := calendar.ListEvents(ctx, s.env, set, day, start.AddDate(0, 0, 1).Format(time.DateOnly), calendar.Filter{})
-	if err != nil {
-		return nil, nil
-	}
-	for _, event := range listing.Events {
-		if event.UID == uid {
-			return &About{Ref: EventRef(day, uid), Label: event.Title, Line: "About the calendar event with uid " + uid + " on " + day + "."}, nil
-		}
-	}
-	return nil, nil
-}
-
 func (s *Service) about(ctx context.Context, q db.Querier, ref string) (*About, error) {
+	set := module.SetFrom(ctx)
+	if set == nil {
+		return nil, nil
+	}
 	kind, raw, _ := strings.Cut(ref, ":")
-	if kind == "event" {
-		return s.aboutEvent(ctx, q, raw)
-	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
+	resolver, ok := set.Catalog().Ref(kind)
+	if !ok {
 		return nil, nil
 	}
-	number := strconv.FormatInt(id, 10)
-	a := About{Ref: kind + ":" + number}
-	switch kind {
-	case "mail":
-		a.Label, err = mail.Subject(ctx, q, id)
-		a.Line = "About mail message " + number + "."
-	case "knowledge":
-		a.Label, err = kb.Title(ctx, q, id)
-		a.Line = "About knowledge record " + number + "."
-	case "package":
-		a.Label, err = tracking.Label(ctx, q, id)
-		a.Line = "About tracked package " + number + "."
-	case "file":
-		a.Label, a.Project, err = files.ProjectFileName(ctx, q, id)
-		if err == nil && !aboutFile.MatchString(a.Label) {
-			return nil, nil
-		}
-		a.Line = "About the project file " + strconv.Quote(a.Label) + "."
-	default:
-		return nil, nil
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
+	r, err := resolver.Resolve(ctx, q, raw)
+	if err != nil || r == nil {
 		return nil, err
 	}
-	if a.Label == "" {
-		a.Label = strings.TrimSuffix(strings.TrimPrefix(a.Line, "About "), ".")
-	}
-	return &a, nil
+	return &About{Ref: r.Ref, Label: r.Label, Project: r.Project, Line: r.Line}, nil
 }
 
 func (s *Service) About(ctx context.Context, in AboutInput) (application.Read[*About], error) {

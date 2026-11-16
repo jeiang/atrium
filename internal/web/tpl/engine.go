@@ -52,6 +52,7 @@ type NavItem struct {
 	Badge      bool
 	Brand      bool
 	Footer     bool
+	Hub        bool
 	Order      int
 	Current    bool
 	Mark       string

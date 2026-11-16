@@ -22,6 +22,7 @@ import (
 
 const (
 	DownloadsPage = "/apps/media/downloads"
+	NotifyChannel = "media"
 	Import        = "import"
 
 	stateKey = "channels"
@@ -389,7 +390,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 			for i, a := range result.Added {
 				hashes[i] = a.Hash
 			}
-			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media,
+			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: NotifyChannel,
 				Occurrence: "media-added:" + strings.Join(hashes, ",")}
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage

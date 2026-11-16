@@ -45,7 +45,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
 		Name:          unit.Calendar,
-		EffectOrigins: []string{"calendar"},
+		EffectOrigins: []module.EffectOrigin{{Name: "calendar", Direct: true}},
+		Refs:          []module.RefKind{eventRef(mc.Env)},
 		Settings:      slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
 		Host:          calendar.HostSettings(),
 		Sections:      calendar.Sections(),

@@ -7,6 +7,16 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 )
 
+const (
+	CategorySettings   = "settings"
+	CategoryOperations = "operations"
+)
+
+type Category struct {
+	Name       string
+	Operations []string
+}
+
 type Kinds struct {
 	Mode     func(context.Context, db.Querier) (string, error)
 	Needs    func(context.Context, db.Querier) ([]Need, error)

@@ -121,7 +121,7 @@ func Resend(ctx context.Context, d *db.DB, id int64) (Sent, error) {
 	}
 	m := delivery{channel: deref(channel), title: title, body: body, click: deref(click)}
 	if m.channel == "" {
-		m.channel = Assistant
+		m.channel = Default
 	}
 	if priority != nil {
 		m.priority = int(*priority)
@@ -198,9 +198,9 @@ func Send(ctx context.Context, d *db.DB, m Message) (Sent, error) {
 	}
 	channel := m.Channel
 	if channel == "" {
-		channel = Assistant
+		channel = Default
 	}
-	if !known(channel) {
+	if !known(ctx, channel) {
 		return Sent{}, ChannelError("unknown channel " + channel)
 	}
 	occurrence := strings.TrimSpace(m.Occurrence)

@@ -59,7 +59,11 @@ type Declaration struct {
 	Effects           func(EffectDeps) Effects
 	ReviewKinds       func(ReviewDeps) review.Kinds
 	ActivityCategory  string
-	EffectOrigins     []string
+	EffectCategories  []review.Category
+	EffectOrigins     []EffectOrigin
+	Channels          []string
+	Refs              []RefKind
+	Attachments       []Attachment
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync
 	AccountCredential config.AccountCredentialFunc

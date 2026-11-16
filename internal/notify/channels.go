@@ -4,16 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	modules "github.com/jeiang/atrium/internal/module"
 )
 
 const (
-	Assistant = "assistant"
-	Media     = "media"
-	System    = "system"
+	Default = "assistant"
+	System  = modules.SystemChannel
 
 	Auto  = "auto"
 	Full  = "full"
@@ -24,27 +25,27 @@ const (
 	privateBody  = "Open atrium to read this notification."
 )
 
-var Channels = []string{Assistant, Media, System}
-
 type Channel struct {
 	Name      string `json:"name"`
 	Content   string `json:"content"`
 	ShowsText bool   `json:"full_text"`
 }
 
-func known(name string) bool {
-	for _, c := range Channels {
-		if c == name {
-			return true
-		}
+func Channels(ctx context.Context) []string {
+	if set := modules.SetFrom(ctx); set != nil {
+		return set.Catalog().Channels()
 	}
-	return false
+	return []string{System}
+}
+
+func known(ctx context.Context, name string) bool {
+	return slices.Contains(Channels(ctx), name)
 }
 
 func stamp() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func EnsureChannels(ctx context.Context, q db.Querier) error {
-	for _, name := range Channels {
+	for _, name := range Channels(ctx) {
 		if _, err := q.ExecContext(ctx, "INSERT OR IGNORE INTO ntfy_channels (name, topic, created_at) VALUES (?, '', ?)", name, stamp()); err != nil {
 			return err
 		}
@@ -63,8 +64,9 @@ func GetChannel(ctx context.Context, q db.Querier, name string) (Channel, error)
 }
 
 func ListChannels(ctx context.Context, q db.Querier) ([]Channel, error) {
-	out := make([]Channel, 0, len(Channels))
-	for _, name := range Channels {
+	names := Channels(ctx)
+	out := make([]Channel, 0, len(names))
+	for _, name := range names {
 		c, err := GetChannel(ctx, q, name)
 		if err != nil {
 			return nil, err
@@ -77,7 +79,7 @@ func ListChannels(ctx context.Context, q db.Querier) ([]Channel, error) {
 func (c Channel) FullText() bool { return c.Content != Title }
 
 func SetContent(ctx context.Context, q db.Querier, channel, content string) error {
-	if !known(channel) {
+	if !known(ctx, channel) {
 		return ChannelError("unknown channel " + channel)
 	}
 	if content != Auto && content != Full && content != Title {

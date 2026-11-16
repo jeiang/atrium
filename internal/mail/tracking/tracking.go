@@ -671,7 +671,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 			body = "Status " + advanced
 		}
 		if _, err := notify.Send(ctx, d, notify.Message{
-			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
+			Title: title, Body: body, Channel: notify.Default, Now: func() float64 { return now },
 			Occurrence: fmt.Sprintf("package:%d:%s:%g", id, advanced, now),
 			Mark: func(ctx context.Context, tx *sql.Tx) error {
 				_, err := tx.ExecContext(ctx, "UPDATE packages SET notified_status = ? WHERE id = ?", advanced, id)

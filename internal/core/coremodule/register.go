@@ -151,6 +151,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
 			{Module: web.CoreModule, Nav: []web.NavItem{
+				{Hub: true, Label: "Review", Icon: "inbox", Page: "review", Badge: true, Order: 10},
+				{Hub: true, Label: "Library", Icon: "library", Page: "library", Order: 20},
+				{Hub: true, Label: "Apps", Icon: "layout-grid", Page: "apps", Order: 30},
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(connectionService),

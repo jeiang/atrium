@@ -118,21 +118,10 @@ func themeOf(r *http.Request) string {
 	}
 }
 
-type hub struct {
-	section, label, icon string
-	badge                bool
-}
-
-var hubs = []hub{
-	{section: "review", label: "Review", icon: "inbox", badge: true},
-	{section: "library", label: "Library", icon: "library"},
-	{section: "apps", label: "Apps", icon: "layout-grid"},
-}
-
 type navView struct {
 	groups                []tpl.NavGroup
 	settings, footer      []tpl.NavItem
-	tabs, pages           []tpl.NavItem
+	tabs, pages, hubs     []tpl.NavItem
 	sections              map[string][]tpl.NavItem
 	settingsURL, brandURL string
 }
@@ -151,6 +140,8 @@ func (rd *Renderer) navFor(page string) navView {
 		}
 		item.Current = item.Page == page
 		switch {
+		case item.Hub:
+			v.hubs = append(v.hubs, item)
 		case item.Brand:
 			v.brandURL = item.URL
 		case item.Footer:
@@ -185,19 +176,20 @@ func (rd *Renderer) navFor(page string) navView {
 		v.pages = append(v.pages, g.Items...)
 	}
 	var entries []tpl.NavItem
-	for _, h := range hubs {
-		tabs := sections[h.section]
+	sort.SliceStable(v.hubs, func(i, j int) bool { return v.hubs[i].Order < v.hubs[j].Order })
+	for _, h := range v.hubs {
+		tabs := sections[h.Page]
 		if len(tabs) == 0 {
 			continue
 		}
 		sort.SliceStable(tabs, func(i, j int) bool { return tabs[i].Order < tabs[j].Order })
-		entry := tpl.NavItem{Label: h.label, URL: tabs[0].URL, Icon: h.icon, Page: h.section, Badge: h.badge, Current: page == h.section}
+		entry := tpl.NavItem{Label: h.Label, URL: tabs[0].URL, Icon: h.Icon, Page: h.Page, Badge: h.Badge, Current: page == h.Page}
 		for _, t := range tabs {
 			if t.Current {
 				entry.Current = true
 				v.tabs = tabs
 			}
-			t.Group = h.label
+			t.Group = h.Label
 			v.pages = append(v.pages, t)
 		}
 		entries = append(entries, entry)

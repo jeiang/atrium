@@ -10,8 +10,8 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/web"
@@ -106,7 +106,7 @@ func (m Module) commitmentService(d *web.Deps) func() *commitmentsapp.Service {
 	return sync.OnceValue(func() *commitmentsapp.Service {
 		now := m.Now
 		if now == nil {
-			now = mail.WallClock
+			now = hub.Now
 		}
 		store, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, d.Cfg, now)
 		if err != nil {

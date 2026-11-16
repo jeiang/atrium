@@ -52,6 +52,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
@@ -90,12 +91,15 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	opsOps, opsBindings := opsOperations()
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
-		Name:            unit.Assistant,
-		EffectOrigins:   []string{"export", "agent", "local"},
-		HasOperatorData: threads.HasRows,
-		Requires:        []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
-		Operations:      slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
-		Bindings:        slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
+		Name:             unit.Assistant,
+		EffectOrigins:    []module.EffectOrigin{{Name: "export", Direct: true}, {Name: "agent", Direct: true}, {Name: "local", Direct: true}},
+		Channels:         []string{notify.Default},
+		EffectCategories: []review.Category{{Name: unit.Assistant}, {Name: "knowledge", Operations: []string{"kb"}}},
+		Refs:             asstapp.Refs(),
+		HasOperatorData:  threads.HasRows,
+		Requires:         []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
+		Operations:       slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
+		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),

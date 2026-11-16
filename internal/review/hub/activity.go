@@ -32,7 +32,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 		s.failRead(w, r, err, "")
 		return
 	}
-	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: s.review.Categories(), After: raw}
+	data := activityPage{Entries: found.Data.Entries, Category: category, Categories: s.review.Categories(r.Context()), After: raw}
 	if found.Data.Next != nil {
 		data.Next = found.Data.Next.String()
 	}
@@ -121,7 +121,7 @@ func (s *service) effectDecided(w http.ResponseWriter, r *http.Request, id int64
 	}
 	found, err := s.review.StoredEffect(Detached(r), id)
 	Check(err)
-	s.undone(w, r, reviewapp.EffectEntry(found), notice)
+	s.undone(w, r, s.review.EffectEntry(r.Context(), found), notice)
 }
 
 func (s *service) resolveEffect(w http.ResponseWriter, r *http.Request) {
