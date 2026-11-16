@@ -95,6 +95,8 @@ test.describe('inbox on a desktop', () => {
     await waiting(page, 3);
     const draft = card(page, 'draft:7');
     const send = draft.getByRole('button', { name: 'Send email to Ilse' });
+    await expect(send).toHaveAttribute('aria-disabled', 'true');
+    await send.click();
     await expect(send).not.toHaveAttribute('aria-disabled');
     await send.click();
     const pending = draft.locator('.receipt[data-tone="pending"]');
