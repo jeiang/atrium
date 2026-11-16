@@ -19,7 +19,7 @@ import (
 )
 
 func New(tools registry.Source, store *ledger.Store) (*loop.Runner, error) {
-	r := &loop.Runner{Ledger: store, Profile: kb.ProfileBlock}
+	r := &loop.Runner{Ledger: store, Profile: kb.ProfileBlock, Instructions: kb.InstructionsBlock}
 	child := func(ctx context.Context, tc *tool.Context) *asstapp.Service {
 		return asstapp.New(tc.DB, tc.Env, tc.Now).WithRuns(func() *service.Service {
 			svc := service.New(ctx, tc.DB, tc.Cfg, tc.Env, r)

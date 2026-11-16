@@ -31,8 +31,8 @@ type Open func(context.Context) (context.Context, *asstapp.Service, func(), erro
 
 type Tick func(context.Context, func(module string) bool) error
 
-func Command(enabled func(module string) bool, open Open, subagents OpenService, tick Tick) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{tickCommand(tick, enabled), runCommand(open), subagentsCommand(subagents)}}
+func Command(enabled func(module string) bool, open Open, tick Tick) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{tickCommand(tick, enabled), runCommand(open)}}
 }
 
 func runCommand(open Open) *cli.Command {

@@ -34,7 +34,7 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /chat/palette", Uses: uses(asstapp.ThreadListName)},
 			{Kind: application.HTML, Target: "GET /today", Uses: uses(asstapp.TodayEnsureName)},
 			{Kind: application.HTML, Target: "GET /chat/agenda", Uses: uses(asstapp.HomeName)},
-			{Kind: application.HTML, Target: "GET /chat/{thread_id}", Uses: uses(asstapp.ThreadTranscriptName, asstapp.ThreadWorkName, asstapp.ProjectListName, asstapp.ProjectDetailName)},
+			{Kind: application.HTML, Target: "GET /chat/{thread_id}", Uses: uses(asstapp.ThreadTranscriptName, asstapp.ThreadWorkName, asstapp.SpaceListName, asstapp.SpaceDetailName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/work", Uses: uses(asstapp.ThreadTranscriptName, asstapp.ThreadWorkName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/history", Uses: uses(asstapp.ThreadHistoryName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/history/{start}/{n}", Uses: uses(asstapp.ThreadHistoryName)},

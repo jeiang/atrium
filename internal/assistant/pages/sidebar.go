@@ -20,7 +20,7 @@ func (p *pages) sidebar(ctx context.Context, f *tpl.Frame) error {
 		return err
 	}
 	listed := read.Data.Items
-	shelved, err := p.assistant().ProjectList(ctx, asstapp.ProjectListInput{Archived: true})
+	shelved, err := p.assistant().SpaceList(ctx, asstapp.SpaceListInput{Archived: true})
 	if err != nil {
 		return err
 	}

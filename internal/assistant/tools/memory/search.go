@@ -15,7 +15,7 @@ const searchDescription = "Search the memory summaries of every thread for a fac
 
 const searchSchema = `{"type":"object","properties":{"query":{"type":"string","maxLength":500},` +
 	`"limit":{"type":"integer","minimum":1,"maximum":50},` +
-	`"project":{"type":"integer","description":"Only hits in this project id."}},` +
+	`"project":{"type":"integer","description":"Only hits in this space id."}},` +
 	`"required":["query"],"additionalProperties":false}`
 
 func searchTools(svc Service) []tool.Tool {

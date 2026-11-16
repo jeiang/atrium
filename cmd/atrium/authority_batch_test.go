@@ -451,10 +451,6 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 	t.Run("subagent", func(t *testing.T) {
 		srv, pages := webPages(t)
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-		if made := runApp(t, "agent", "subagents", "set", "batch", "--description", "Batch test reader",
-			"--prompt", "Read and report.", "--tool", "commitment_list", "--tool", "web_fetch"); made.code != cli.ExitOK {
-			t.Fatalf("subagents set: %d %s", made.code, made.stderr)
-		}
 		warm(t, api)
 		api.Push(
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_threads", map[string]any{"query": "warm"})),
@@ -470,8 +466,8 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		}
 		start := len(api.Requests())
 		api.Push(
-			anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "research", map[string]any{"role": "batch", "task": "read " + srv.URL + "/a"})),
-			anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": 1})),
+			anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "research", map[string]any{"role": "mail", "task": "read " + srv.URL + "/a"})),
+			anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": seedMail(t, dir)})),
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "commitment_list", map[string]any{})),
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 			anthropictest.Reply("end_turn", anthropictest.Text("digest")),
@@ -484,13 +480,13 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		if len(requests) != 6 {
 			t.Fatalf("%d model requests, want 6", len(requests))
 		}
-		escaped := findToolResult(t, requests, "m1")
-		if escaped == nil || escaped["is_error"] != true || !strings.Contains(fmt.Sprint(escaped["content"]), "unknown tool mail_read") {
+		escaped := findToolResult(t, requests, "l1")
+		if escaped == nil || escaped["is_error"] != true || !strings.Contains(fmt.Sprint(escaped["content"]), "unknown tool commitment_list") {
 			t.Errorf("the child's out-of-allow-list call returned %v, want an unknown-tool refusal", escaped)
 		}
 		refusal := findToolResult(t, requests, "f1")
-		if refusal == nil || refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "not allowed in this thread by the permission table") {
-			t.Errorf("the child's web_fetch returned %v, want a refusal", refusal)
+		if refusal == nil || refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "unknown tool web_fetch") {
+			t.Errorf("the child's web_fetch returned %v, want an unknown-tool refusal", refusal)
 		}
 		if hits := pages.seen(); len(hits) != 0 {
 			t.Errorf("the subagent reached the web: %v", hits)
@@ -498,8 +494,8 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		if n := permissionProposals(t, dir); n != 0 {
 			t.Errorf("%d permission proposals, want none", n)
 		}
-		if marks := threadMarkSet(t, dir, latestThread(t, dir)); marks&int64(tool.Messages) == 0 {
-			t.Errorf("parent marks = %d, want the child's messages mark", marks)
+		if marks := threadMarkSet(t, dir, latestThread(t, dir)); marks&int64(tool.PII) == 0 {
+			t.Errorf("parent marks = %d, want the pii mark from the child's mail_read", marks)
 		}
 	})
 }

@@ -179,6 +179,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	unsafe := method != http.MethodGet && method != http.MethodHead
 	params := []any{}
 	declared := map[string]bool{}
+	limited := false
 	w.input = true
 	for _, f := range reflect.VisibleFields(shape.Request) {
 		if f.Anonymous || !f.IsExported() {
@@ -193,6 +194,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 			if err != nil {
 				return nil, err
 			}
+			limited = limited || in == "query" && f.Type == reflect.TypeFor[api.Limit]()
 			p := object{"name": name, "in": in, "schema": constrain(schema, f.Tag.Get("api"))}
 			if doc := f.Tag.Get("doc"); doc != "" {
 				p["description"] = doc
@@ -312,6 +314,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	}
 	if shape.Body == application.BodyBinary && b.Module != module.Core {
 		statuses = append(statuses, http.StatusConflict)
+	}
+	if limited {
+		statuses = append(statuses, http.StatusUnprocessableEntity)
 	}
 	for _, code := range shape.Errors {
 		statuses = append(statuses, web.Status(code))
