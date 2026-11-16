@@ -59,7 +59,7 @@
 
   .approval__row {
     position: sticky;
-    inset-block-end: 0;
+    inset-block-end: var(--chrome-end, 0px);
     z-index: 1;
     display: flex;
     flex-wrap: wrap;

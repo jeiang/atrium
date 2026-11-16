@@ -1,16 +1,53 @@
+import type { WebSignIn } from './gen/model';
+
 export const API_BASE = '/web/v1';
 
 const UNSAFE: Record<string, true> = { POST: true, PUT: true, PATCH: true, DELETE: true };
 const NON_JSON_SUCCESS = ['application/octet-stream', 'text/event-stream'];
 
-export async function atriumFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
+let csrfToken: string | undefined;
+let unauthorized: ((signIn: WebSignIn | undefined) => void) | undefined;
+
+export function setCsrfToken(token: string | undefined): void {
+  csrfToken = token;
+}
+
+export function onUnauthorized(handler: (signIn: WebSignIn | undefined) => void): void {
+  unauthorized = handler;
+}
+
+function signInOf(body: unknown): WebSignIn | undefined {
+  if (typeof body !== 'object' || body === null || !('sign_in' in body)) return undefined;
+  const signIn = body.sign_in;
+  return typeof signIn === 'object' && signIn !== null ? (signIn as WebSignIn) : undefined;
+}
+
+export async function webFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('Atrium-Client', 'web');
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
   if (typeof init.body === 'string' && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const method = (init.method ?? 'GET').toUpperCase();
-  if (UNSAFE[method] && !headers.has('Idempotency-Key')) headers.set('Idempotency-Key', crypto.randomUUID());
+  if (UNSAFE[method]) {
+    if (!headers.has('Idempotency-Key')) headers.set('Idempotency-Key', crypto.randomUUID());
+    if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+  }
   const res = await fetch(API_BASE + url, { ...init, headers, credentials: 'same-origin' });
+  if (res.status === 401 && !url.startsWith('/session') && unauthorized) {
+    const type = res.headers.get('Content-Type') ?? '';
+    const body = type.includes('json')
+      ? await res
+          .clone()
+          .json()
+          .catch(() => undefined)
+      : undefined;
+    unauthorized(signInOf(body));
+  }
+  return res;
+}
+
+export async function atriumFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const res = await webFetch(url, init);
   const type = res.headers.get('Content-Type') ?? '';
   let data: unknown;
   if (res.status === 204 || res.status === 304) {
