@@ -12,7 +12,7 @@ export interface SettingsScenario {
   elsewhere?: Record<string, string>;
   refuse?: Record<string, string>;
   plant?: boolean;
-  backups?: 'none' | 'unconfigured' | 'fail' | 'verify-fail';
+  backups?: 'none' | 'unconfigured' | 'fail' | 'verify-fail' | 'capped';
 }
 
 export interface SettingsRequest {
@@ -40,17 +40,23 @@ interface Store {
 
 function seedBackups(): BackupEntry[] {
   const at = (days: number) => new Date(Date.now() - days * DAY).toISOString();
-  const entry = (days: number, size: number, problem?: string): BackupEntry => ({
-    name: `atrium-${at(days).slice(0, 10)}.tar.age`,
+  const entry = (days: number, size: number, problem?: string, name?: string): BackupEntry => ({
+    name: name ?? `atrium-${at(days).slice(0, 10)}.tar.age`,
     size_bytes: size,
     modified_at: at(days),
+    prunable: name === undefined,
     format: 2,
     header: problem
       ? null
       : { created_at: at(days), schema: 4, encryption: { encrypted: true, key_id: 'k1' }, files: 3 },
     ...(problem ? { problem } : {}),
   });
-  return [entry(0.2, 48_211_000), entry(1.2, 47_904_000), entry(2.2, 47_650_000, 'old_format')];
+  return [
+    entry(0.2, 48_211_000),
+    entry(1.2, 47_904_000),
+    entry(2.2, 47_650_000, 'old_format'),
+    entry(9.4, 46_980_000, undefined, 'before-moving-house.tar.age'),
+  ];
 }
 
 function seed(state: SettingsScenario): Store {
@@ -276,6 +282,7 @@ export function settingsHandlers(read: () => { settings?: SettingsScenario }) {
           },
           items: store.backups,
           total: store.backups.length,
+          unexamined: state.backups === 'capped' ? 214 : 0,
         },
       });
     }),
@@ -314,6 +321,7 @@ export function settingsHandlers(read: () => { settings?: SettingsScenario }) {
         name: `atrium-${now.slice(0, 19).replaceAll(':', '')}.tar.age`,
         size_bytes: 48_300_000,
         modified_at: now,
+        prunable: true,
         format: 2,
         header: { created_at: now, schema: 4, encryption: { encrypted: true, key_id: 'k1' }, files: 3 },
       };

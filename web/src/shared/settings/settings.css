@@ -98,4 +98,10 @@
     gap: var(--s-2);
     align-items: center;
   }
+
+  .backups__group {
+    margin: var(--s-2) 0 0;
+    font-size: var(--t-md);
+    font-weight: 700;
+  }
 }

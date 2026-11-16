@@ -21,6 +21,8 @@
   const backups = useBackups();
   const offline = $derived(unreachable(backups));
   const data = $derived(backups.data?.data);
+  const scheduled = $derived(data?.items.filter((entry) => entry.prunable) ?? []);
+  const kept = $derived(data?.items.filter((entry) => !entry.prunable) ?? []);
   const ready = $derived(data?.location.state === 'ready');
 
   let creating = $state(false);
@@ -110,6 +112,32 @@
   }
 </script>
 
+{#snippet row(
+    entry: BackupEntry,
+  )}
+  <ListRow title={entry.name} meta={meta(entry)} pending={verifying === entry.name}>
+    {#snippet end()}
+      {#if checks[entry.name]}
+        <Badge tone={checks[entry.name]?.tone === 'ok' ? 'ok' : 'error'}>{checks[entry.name]?.title}</Badge>
+      {:else if entry.problem}
+        <Badge tone="warn">Unreadable</Badge>
+      {/if}
+      {#if !entry.problem}
+        <Button
+          variant="secondary"
+          size="sm"
+          pending={verifying === entry.name}
+          disabled={locked !== undefined || (verifying !== undefined && verifying !== entry.name)}
+          reason={locked}
+          onclick={() => onVerify(entry)}
+        >
+          Verify<span class="visually-hidden"> {entry.name}</span>
+        </Button>
+      {/if}
+    {/snippet}
+  </ListRow>
+{/snippet}
+
 {#if offline}
   <ViewState kind="offline" title="Cannot reach atrium">The backups load when atrium answers again.</ViewState>
 {:else if backups.isError && !data}
@@ -145,31 +173,24 @@
       <ViewState kind="empty" title="No backups yet">Back up now makes the first archive.</ViewState>
     {/if}
   {:else}
-    <List label="Backups" class="backups">
-      {#each data.items as entry (entry.name)}
-        <ListRow title={entry.name} meta={meta(entry)} pending={verifying === entry.name}>
-          {#snippet end()}
-            {#if checks[entry.name]}
-              <Badge tone={checks[entry.name]?.tone === 'ok' ? 'ok' : 'error'}>{checks[entry.name]?.title}</Badge>
-            {:else if entry.problem}
-              <Badge tone="warn">Unreadable</Badge>
-            {/if}
-            {#if !entry.problem}
-              <Button
-                variant="secondary"
-                size="sm"
-                pending={verifying === entry.name}
-                disabled={locked !== undefined || (verifying !== undefined && verifying !== entry.name)}
-                reason={locked}
-                onclick={() => onVerify(entry)}
-              >
-                Verify<span class="visually-hidden"> {entry.name}</span>
-              </Button>
-            {/if}
-          {/snippet}
-        </ListRow>
-      {/each}
-    </List>
+    {#if scheduled.length > 0}
+      {#if kept.length > 0}
+        <h3 class="backups__group">Scheduled</h3>
+      {/if}
+      <List label="Backups" class="backups">
+        {#each scheduled as entry (entry.name)}
+          {@render row(entry)}
+        {/each}
+      </List>
+    {/if}
+    {#if kept.length > 0}
+      <h3 class="backups__group">Kept</h3>
+      <List label="Kept backups" class="backups">
+        {#each kept as entry (entry.name)}
+          {@render row(entry)}
+        {/each}
+      </List>
+    {/if}
     {#each data.items as entry (entry.name)}
       {#if checks[entry.name] && checks[entry.name]?.tone !== 'ok'}
         <Notice tone={checks[entry.name]?.tone} variant="inline" title={`${entry.name}: ${checks[entry.name]?.title}`}>
@@ -177,5 +198,11 @@
         </Notice>
       {/if}
     {/each}
+  {/if}
+  {#if data.unexamined > 0}
+    <p class="meta">
+      {plural(data.unexamined, 'more file')}
+      in the folder {data.unexamined === 1 ? 'was' : 'were'} not examined.
+    </p>
   {/if}
 {/if}

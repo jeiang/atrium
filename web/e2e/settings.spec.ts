@@ -227,6 +227,23 @@ test.describe('settings on a desktop', () => {
       .click();
     await expect(page.getByText('the archive key does not open it')).toBeVisible();
   });
+
+  test('named archives are listed apart from the scheduled ones that pruning removes', async ({ page }) => {
+    await gotoShell(page, '/settings/backups');
+    await expect(page.getByRole('heading', { level: 3, name: 'Scheduled' })).toBeVisible();
+    const kept = page.getByRole('list', { name: 'Kept backups' });
+    await expect(page.getByRole('heading', { level: 3, name: 'Kept' })).toBeVisible();
+    await expect(kept.getByRole('listitem')).toHaveCount(1);
+    await expect(kept.getByRole('listitem')).toContainText('before-moving-house.tar.age');
+    await expect(page.getByRole('list', { name: 'Backups' })).not.toContainText('before-moving-house');
+    await expect(page.getByText(/not examined/)).toHaveCount(0);
+  });
+
+  test('files past the examine cap are counted', async ({ page }) => {
+    await useScenario(page, { settings: { backups: 'capped' } });
+    await gotoShell(page, '/settings/backups');
+    await expect(page.getByText('214 more files in the folder were not examined.')).toBeVisible();
+  });
 });
 
 test.describe('settings that do not load', () => {

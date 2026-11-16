@@ -54,6 +54,14 @@ test.describe('the Assistant destination', () => {
     await expect(page.getByRole('list', { name: 'Research roles' })).toContainText('researcher');
   });
 
+  test('the routine settings list the schedule keys atrium offers', async ({ page }) => {
+    await gotoShell(page, '/assistant');
+    const form = page.locator('form#routine-settings');
+    for (const key of ['digest_notify', 'agent_schedule_min_interval_seconds']) {
+      await expect(form.locator(`[data-key="${key}"]`)).toBeVisible();
+    }
+  });
+
   test('a helper setting saves through the shared settings form', async ({ page }) => {
     await gotoShell(page, '/assistant/behavior');
     const form = page.locator('form#helpers');
