@@ -89,6 +89,8 @@ func (s *Service) refuse(ctx context.Context, name application.Name, target stri
 		outcome = state.Refused
 	case application.NotFound:
 		outcome = state.NotFound
+	case application.Precondition:
+		outcome = state.Conflict
 	default:
 		return err
 	}
@@ -102,6 +104,14 @@ func classify(err error) *application.Error {
 	var app *application.Error
 	if errors.As(err, &app) {
 		return app
+	}
+	var conflicts settings.Conflicts
+	if errors.As(err, &conflicts) {
+		out := &application.Error{Code: application.Invalid, Message: err.Error(), Cause: err}
+		for _, f := range conflicts {
+			out.Fields = append(out.Fields, application.Field{Name: f.Key, Code: string(application.Invalid), Message: f.Error()})
+		}
+		return out
 	}
 	var field settings.FieldInvalid
 	invalid := func() *application.Error {

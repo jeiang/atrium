@@ -382,6 +382,13 @@ and single draft track the actual served payload. Draft PATCH and send accept
 that draft's ETag in `If-Match`; revision compare-and-swap still protects the
 write. Knowledge PATCH does not support `If-Match`.
 
+`PATCH /settings` changes several settings at once, all or nothing. Send the
+settings revision from `GET /settings` in `If-Match` to refuse the write with
+412 when the settings changed since that read; the 412 body carries the
+current revision. A value that is invalid alone or together with the other
+values returns 422 with one field per setting, and a host-pinned setting
+refuses the whole request; nothing is written in either case.
+
 Paged resources use opaque cursors, normally 50 rows by default and at most
 100. Cursors bind the operation, filters, and path parameters and are at most
 2048 characters. Do not reuse a cursor for another resource or filter. Some

@@ -59,8 +59,12 @@ func Generate(cat *module.Catalog) (map[string][]byte, error) {
 func openAPI(cat *module.Catalog) (object, error) {
 	w := newWalker()
 	kinds := map[application.Name]application.Kind{}
+	undoable := map[application.Name]bool{}
+	undoers := cat.UndoModules()
 	for _, op := range cat.Operations() {
 		kinds[op.Name] = op.Kind
+		undoable[op.Name] = op.Name == application.ApproveOperation && len(undoers) > 0 ||
+			undoers[op.Module] && (op.Effect == application.LocalUndoable || op.Effect == application.Conditional && op.Audit)
 	}
 	paths := object{}
 	ids := map[string]string{}
@@ -90,6 +94,9 @@ func openAPI(cat *module.Catalog) (object, error) {
 		if item == nil {
 			item = object{}
 			paths[pattern] = item
+		}
+		if undoable[b.Uses[0]] {
+			op["x-atrium-undoable"] = true
 		}
 		item[strings.ToLower(method)] = op
 	}

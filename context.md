@@ -1161,7 +1161,21 @@ claims about the running application. Operator contracts are in
   `RunStreamEvent`. Component names are bare Go type names; collisions fail
   generation until a name is pinned in `internal/apischema/walk.go`.
 - Draft PATCH and send accept the resource ETag through `If-Match` and still
-  compare revisions; knowledge PATCH has no `If-Match`. Opaque cursors bind
+  compare revisions; knowledge PATCH has no `If-Match`. `PATCH /settings`
+  writes `{"set": {key: value}, "unset": [key]}` in one transaction. Its
+  optional `If-Match` is the settings revision, one token per settings state
+  shared by every `GET /settings` page (the ETag). A stale tag returns 412
+  `precondition_failed` with the current `revision`; per-key and cross-field
+  (`Def.Peers`) failures, checked against the final state, return 422 with one
+  field per key; a pinned or unoffered key refuses the whole request. Success
+  returns the keys and the new revision. Operations marked
+  `x-atrium-undoable` are `review.approve` and the local-undoable or audited
+  conditional operations of modules that register ledger undoers; a command
+  response with `effect_ids` also carries `undoable`. Proposal payloads carry
+  `change`, the stored preview typed by proposal kind (`tool_call` for gated
+  tools, with the full arguments), or null for kinds outside the union.
+  `GET /mail/rules/vocabulary` serves the rule editor's fields, operators
+  and actions. Opaque cursors bind
   the operation, filters and path parameters and are at most 2,048
   characters; pages usually default to 50 items and allow at most 100.
 - Multipart bodies containing file parts share four in-process upload slots; excess uploads return 429 with `Retry-After: 1`. A multipart body counts as carrying files unless its first 1 MiB holds every part and the closing boundary with no file part; a malformed or truncated body counts as carrying files. Multipart bodies have a 30-second idle read deadline from their first byte and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.

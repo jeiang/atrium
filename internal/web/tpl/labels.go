@@ -166,3 +166,5 @@ func badge(set string, key any) *Badge {
 	}
 	return &b
 }
+
+func Label(set, key string) string { return str(lbl(set, key)) }
