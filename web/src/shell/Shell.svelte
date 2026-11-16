@@ -4,7 +4,7 @@
   import { authIdentity, ok } from '../contract';
   import { announce } from '../shared/announce.svelte';
   import LiveRegion from '../shared/LiveRegion.svelte';
-  import { isActive, p, pages, route } from './router';
+  import { isActive, p, pages, route, routeTitle } from './router';
 
   const mock = import.meta.env.MODE === 'mock';
 
@@ -19,7 +19,7 @@
 
   let announced = false;
   $effect(() => {
-    const title = pages.find((page) => page.path === route.pathname)?.title ?? 'Not found';
+    const title = routeTitle(route.pathname);
     document.title = `${title} · atrium`;
     if (announced) {
       announce(title);

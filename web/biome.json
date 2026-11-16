@@ -25,5 +25,12 @@
         "organizeImports": "on"
       }
     }
+  },
+  "linter": {
+    "rules": {
+      "nursery": {
+        "noSvelteLegacyConst": "error"
+      }
+    }
   }
 }
