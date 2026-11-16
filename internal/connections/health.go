@@ -31,8 +31,13 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 		return
 	}
 	label := string(id)
-	if view, err := s.Get(context.WithoutCancel(ctx), id); err == nil && view.Label != "" {
-		label = view.Label
+	if view, err := s.Get(context.WithoutCancel(ctx), id); err == nil {
+		if view.Idle != "" {
+			return
+		}
+		if view.Label != "" {
+			label = view.Label
+		}
 	}
 	state := strings.ReplaceAll(string(next), "_", " ")
 	body := label + ": " + state

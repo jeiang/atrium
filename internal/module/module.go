@@ -142,6 +142,7 @@ type Unmet struct {
 type Status struct {
 	Name  string
 	State State
+	On    bool
 
 	Unmet []Unmet
 	Err   string

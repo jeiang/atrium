@@ -49,8 +49,12 @@ derived from a connection in `needs_reauth` (class `auth`), `failing`
 `connection:<id>:<class>`. A repair lists the features of unmet active needs
 that the connection could serve, and its severity is `blocker` for a hard
 need, `degraded` for soft needs only, and `notice` otherwise. A disabled
-connection has no repair. Each connection in `GET /api/v1/connections` lists
-its `dependents`.
+connection has no repair, and neither does an idle one. Each connection in
+`GET /api/v1/connections` lists its `dependents`; when it has dependents and
+none of their apps is on, an enabled connection also shows
+`idle: "its app is off"` and is not checked on schedule. Built-in connections
+atrium creates itself are disabled with that reason instead, and come back as
+`untested` when an app that needs them is turned on.
 
 | Kind | Capabilities |
 |---|---|

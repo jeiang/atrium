@@ -150,7 +150,11 @@
       </div>
     </Section>
 
-    <SettingsForm id="helpers" title="Helpers" groups={['assistant.behavior', 'assistant.helpers']} />
+    {#if offline || config || configuration.isError}
+      <SettingsForm id="helpers" title="Helpers" groups={['assistant.behavior', 'assistant.helpers']} />
+    {:else}
+      <Skeleton lines={4} label="Loading the settings" />
+    {/if}
 
     <Section id="roles" title="Research roles">
       <p class="asst-text">The helpers the assistant can start, as declared in atrium. You cannot change them here.</p>

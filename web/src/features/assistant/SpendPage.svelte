@@ -171,7 +171,11 @@
       </Section>
     {/if}
 
-    <SettingsForm id="caps" title="Budget and caps" groups={['assistant.spend']} />
+    {#if offline || budget || spend.isError}
+      <SettingsForm id="caps" title="Budget and caps" groups={['assistant.spend']} />
+    {:else}
+      <Skeleton lines={4} label="Loading the settings" />
+    {/if}
 
     {#if routineCaps.length > 0}
       <Section id="routine-caps" title="Routine caps">

@@ -137,7 +137,11 @@
           </List>
         {/if}
       </Section>
-      <SettingsForm id="routine-settings" title="Routine settings" groups={['assistant.routines']} />
+      {#if offline || schedules.data || schedules.isError}
+        <SettingsForm id="routine-settings" title="Routine settings" groups={['assistant.routines']} />
+      {:else}
+        <Skeleton lines={4} label="Loading the settings" />
+      {/if}
     {/if}
   </div>
 </Page>
