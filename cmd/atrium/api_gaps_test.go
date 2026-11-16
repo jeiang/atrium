@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -161,5 +163,76 @@ func TestCommitmentSnoozeHidesFromQueueAndUndoes(t *testing.T) {
 	undoableWrite(t, s, token, snoozed, http.StatusOK)
 	if queueItem(t, s, token, "task:5") == nil {
 		t.Fatal("undone snooze left the task hidden")
+	}
+}
+
+func TestSpaceCreateDefaultsAndRenameIfMatch(t *testing.T) {
+	s, token, _ := localAPISite(t)
+	id := number(t, apiData(t, s.do(http.MethodPost, "/api/v1/knowledge/spaces", token, map[string]any{"name": "Harbor"}), http.StatusCreated)["id"])
+	path := fmt.Sprintf("/api/v1/knowledge/spaces/%d", id)
+	read := s.do(http.MethodGet, path, token, nil)
+	space := apiData(t, read, http.StatusOK)["space"].(map[string]any)
+	if space["effort"] == "" || number(t, space["context_limit"]) <= 0 {
+		t.Fatalf("create without effort kept no default: %v", space)
+	}
+	updated := fmt.Sprint(space["updated_at"])
+	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"name": "Harbour"}, "If-Match", "1"), http.StatusConflict, "stale")
+	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"name": "Harbour"}, "If-Match", `"other"`), http.StatusConflict, "stale")
+	if got := s.do(http.MethodPatch, path, token, map[string]any{"name": "Harbour"}, "If-Match", read.header.Get("ETag")); got.status != http.StatusOK {
+		t.Fatalf("rename with the read ETag: %d %s", got.status, got.body)
+	}
+	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"name": "Port"}, "If-Match", updated), http.StatusConflict, "stale")
+	now := apiData(t, s.do(http.MethodGet, path, token, nil), http.StatusOK)["space"].(map[string]any)
+	if got := s.do(http.MethodPatch, "/web/v1"+strings.TrimPrefix(path, "/api/v1"), token, map[string]any{"name": "Port"}, "If-Match", fmt.Sprint(now["updated_at"])); got.status != http.StatusOK {
+		t.Fatalf("rename with updated_at: %d %s", got.status, got.body)
+	}
+}
+
+func TestSearchAllFindsSpacesAndContacts(t *testing.T) {
+	s, token, d, contactsDir := linksSite(t)
+	if err := os.MkdirAll(contactsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	vcf := "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:card-rui-7\r\nFN:Rui Harborview\r\nORG:Ferries\r\nEND:VCARD\r\n"
+	if err := os.WriteFile(filepath.Join(contactsDir, "rui.vcf"), []byte(vcf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	asstExec(t, d, "INSERT INTO projects (id, name, instructions, effort, context_limit, created_at, updated_at) VALUES (9002, 'Harborview rebuild', '', 'low', 100000, 5, 5)")
+	groups := searchGroups(t, apiData(t, s.do(http.MethodGet, "/api/v1/search/all?q=harborview", token, nil), http.StatusOK))
+	if len(groups["space"]) != 1 || number(t, groups["space"][0]["id"]) != 9002 || groups["space"][0]["path"] != "/knowledge/spaces/9002" {
+		t.Fatalf("space hits: %v", groups["space"])
+	}
+	if len(groups["contact"]) != 1 || groups["contact"][0]["ref"] != "card-rui-7" || groups["contact"][0]["detail"] != "Ferries" {
+		t.Fatalf("contact hits: %v", groups["contact"])
+	}
+	only := searchGroups(t, apiData(t, s.do(http.MethodGet, "/web/v1/search/all?q=harborview&types=contact", token, nil), http.StatusOK))
+	if len(only["space"]) != 0 || len(only["contact"]) != 1 {
+		t.Fatalf("types=contact: %v", only)
+	}
+}
+
+func TestHomeNeedsYouReadsTheQueue(t *testing.T) {
+	s, token, d := localAPISite(t)
+	if _, err := d.Write.Exec("INSERT INTO tasks (id, title, notes, status, priority, due, created_ts, updated_ts) VALUES (6, 'Renew the passport', '', 'open', 'normal', '2020-01-01', 0, 0)"); err != nil {
+		t.Fatal(err)
+	}
+	queue := apiData(t, s.do(http.MethodGet, "/api/v1/queue", token, nil), http.StatusOK)
+	home := s.do(http.MethodGet, "/api/v1/home", token, nil)
+	needs := apiData(t, home, http.StatusOK)["needs_you"].(map[string]any)
+	if number(t, needs["total"]) != number(t, queue["total"]) || number(t, needs["total"]) < 1 {
+		t.Fatalf("needs_you %v, queue %v", needs, queue)
+	}
+	found := false
+	for _, item := range needs["items"].([]any) {
+		found = found || item.(map[string]any)["id"] == "task:6"
+	}
+	if !found || len(needs["items"].([]any)) > 3 {
+		t.Fatalf("needs_you items: %v", needs["items"])
+	}
+	if _, err := d.Write.Exec("UPDATE tasks SET status = 'done' WHERE id = 6"); err != nil {
+		t.Fatal(err)
+	}
+	if again := s.do(http.MethodGet, "/web/v1/home", token, nil, "If-None-Match", home.header.Get("ETag")); again.status != http.StatusOK {
+		t.Fatalf("home revision ignored the queue: %d", again.status)
 	}
 }
