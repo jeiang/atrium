@@ -12,7 +12,7 @@
     "build": "npm run gen && npm run tokens && vite build",
     "build:mock": "npm run gen && npm run tokens && vite build --mode mock",
     "check": "npm run gen && npm run tokens && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p src/worker",
-    "lint": "npm run gen && npm run tokens && biome check --error-on-warnings . && node scripts/lint-commands.ts",
+    "lint": "npm run gen && npm run tokens && biome check --error-on-warnings . && node scripts/lint-commands.ts && node scripts/settings-placement.ts",
     "format": "biome check --write .",
     "e2e": "playwright test",
     "tokens": "node scripts/tokens.ts"

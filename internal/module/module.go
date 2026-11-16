@@ -118,6 +118,7 @@ func FlagKey(name string) string { return name + "_enabled" }
 func FlagDef(name string) settings.Def {
 	return settings.Value(settings.UI, settings.Def{
 		Key:     FlagKey(name),
+		Label:   strings.ToUpper(name[:1]) + name[1:] + " app is on",
 		Module:  Core,
 		Type:    settings.Bool,
 		Default: "false",

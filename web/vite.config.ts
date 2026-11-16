@@ -88,6 +88,7 @@ export default defineConfig(({ mode }) => ({
     ],
   },
   base: mode === 'mock' ? '/' : '/next/',
+  server: { fs: { allow: ['.', '../docs/api/settings-schema.json'] } },
   build: {
     outDir: mode === 'mock' ? 'dist-mock' : 'dist',
     target: 'baseline-widely-available',

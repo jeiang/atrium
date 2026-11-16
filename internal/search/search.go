@@ -25,6 +25,8 @@ const (
 	Record  = "record"
 	Task    = "task"
 	File    = "file"
+	Space   = "space"
+	Contact = "contact"
 
 	Failed              = "failed"
 	TimedOut            = "timeout"
@@ -38,7 +40,7 @@ const (
 	Budget       = 4 * time.Second
 )
 
-var Types = []string{Thread, Message, Record, Task, File}
+var Types = []string{Thread, Message, Record, Task, File, Space, Contact}
 
 var log = logx.Logger("search")
 
@@ -60,8 +62,9 @@ type Span struct {
 }
 
 type Hit struct {
-	Type    string  `json:"type" api:"enum=thread|message|record|task|file"`
+	Type    string  `json:"type" api:"enum=thread|message|record|task|file|space|contact"`
 	ID      int64   `json:"id"`
+	Ref     string  `json:"ref,omitempty"`
 	Title   string  `json:"title"`
 	Detail  string  `json:"detail"`
 	Snippet string  `json:"snippet"`
@@ -82,13 +85,13 @@ type Source struct {
 }
 
 type Group struct {
-	Type  string `json:"type" api:"enum=thread|message|record|task|file"`
+	Type  string `json:"type" api:"enum=thread|message|record|task|file|space|contact"`
 	Items []Hit  `json:"items"`
 	More  bool   `json:"more"`
 }
 
 type Partial struct {
-	Type   string `json:"type" api:"enum=thread|message|record|task|file"`
+	Type   string `json:"type" api:"enum=thread|message|record|task|file|space|contact"`
 	Reason string `json:"reason" api:"enum=failed|timeout|semantic_unavailable"`
 }
 
