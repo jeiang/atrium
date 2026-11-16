@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
+	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/watches"
@@ -69,10 +70,10 @@ func DescribeLoopsDismissMatching() application.Definition {
 	return application.Describe[LoopsDismissMatchingInput, LoopsDismissMatchingResult](LoopsDismissMatchingName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
 }
 func DescribeCommitmentDone() application.Definition {
-	return application.Describe[CommitmentInput, struct{}](CommitmentDoneName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+	return application.Describe[CommitmentInput, struct{}](CommitmentDoneName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
 }
 func DescribeCommitmentDismiss() application.Definition {
-	return application.Describe[CommitmentInput, struct{}](CommitmentDismissName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+	return application.Describe[CommitmentInput, struct{}](CommitmentDismissName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
 }
 func DescribeRefreshLoops() application.Definition {
 	return application.Describe[struct{}, RefreshResult](RefreshLoopsName, application.Command, []application.Authority{application.Operator}, application.Conditional, false)
@@ -198,19 +199,25 @@ func (s *Service) LoopsDismissMatching(ctx context.Context, in LoopsDismissMatch
 	return application.Change[LoopsDismissMatchingResult]{Data: LoopsDismissMatchingResult{Count: count}, AuditID: auditID}, err
 }
 
-func (s *Service) setCommitment(ctx context.Context, name application.Name, id int64, status string) (application.Change[struct{}], error) {
-	auditID, err := s.localChange(ctx, name, strconv.FormatInt(id, 10), "commitment", func() (bool, error) {
-		return openloops.SetCommitmentStatus(ctx, s.db.Write, id, status)
-	})
-	return application.Change[struct{}]{AuditID: auditID}, err
+func (s *Service) WithCommitments(c *commitmentsapp.Service) *Service {
+	s.commitmentVerbs = c
+	return s
+}
+
+func commitmentChange(c application.Change[commitmentsapp.Changed], err error) (application.Change[struct{}], error) {
+	return application.Change[struct{}]{EffectIDs: c.EffectIDs, AuditID: c.AuditID}, err
+}
+
+func commitmentRef(id int64) commitmentsapp.RefInput {
+	return commitmentsapp.RefInput{Ref: commitmentsapp.SourceCommitment + ":" + strconv.FormatInt(id, 10)}
 }
 
 func (s *Service) CommitmentDone(ctx context.Context, in CommitmentInput) (application.Change[struct{}], error) {
-	return s.setCommitment(ctx, CommitmentDoneName, in.ID, openloops.Done)
+	return commitmentChange(s.commitmentVerbs.DoneAs(ctx, CommitmentDoneName, commitmentRef(in.ID)))
 }
 
 func (s *Service) CommitmentDismiss(ctx context.Context, in CommitmentInput) (application.Change[struct{}], error) {
-	return s.setCommitment(ctx, CommitmentDismissName, in.ID, openloops.Dismissed)
+	return commitmentChange(s.commitmentVerbs.DismissAs(ctx, CommitmentDismissName, commitmentRef(in.ID)))
 }
 
 func (s *Service) RefreshLoops(ctx context.Context, _ struct{}) (application.Change[RefreshResult], error) {

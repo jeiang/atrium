@@ -119,7 +119,7 @@ func paceRequests(api *modelLog, held int, each time.Duration) {
 func taskListCalls(n int) []anthropictest.Response {
 	var out []anthropictest.Response
 	for i := range n {
-		out = append(out, anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("call-%d", i), "task_list", map[string]any{"query": fmt.Sprintf("step %d", i)})))
+		out = append(out, anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("call-%d", i), "commitment_list", map[string]any{"query": fmt.Sprintf("step %d", i)})))
 	}
 	return out
 }

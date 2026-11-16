@@ -6,6 +6,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
+	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -18,22 +19,23 @@ import (
 )
 
 type Service struct {
-	applier     *applier.Applier
-	pass        *run.Pass
-	classifiers run.Classifier
-	workContext context.Context
-	classifier  *classifier.Service
-	syncer      *mailsync.Syncer
-	syncAll     func(context.Context) error
-	effects     *ledger.Store
-	sender      *drafts.Store
-	open        mail.OpenFunc
-	live        *live.Live
-	db          *db.DB
-	state       *state.Store
-	cfg         config.Config
-	env         config.Env
-	now         func() float64
+	applier         *applier.Applier
+	pass            *run.Pass
+	classifiers     run.Classifier
+	workContext     context.Context
+	classifier      *classifier.Service
+	syncer          *mailsync.Syncer
+	syncAll         func(context.Context) error
+	effects         *ledger.Store
+	commitmentVerbs *commitmentsapp.Service
+	sender          *drafts.Store
+	open            mail.OpenFunc
+	live            *live.Live
+	db              *db.DB
+	state           *state.Store
+	cfg             config.Config
+	env             config.Env
+	now             func() float64
 }
 
 func New(d *db.DB, cfg config.Config, env config.Env, now func() float64) *Service {

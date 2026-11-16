@@ -47,7 +47,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
-	count := push.count
+	count := func() int { return push.titled(t, browser, "backup is stale") }
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
@@ -73,7 +73,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 		if count() != 1 {
 			t.Fatalf("%d notices, want one stale notice for backup", count())
 		}
-		if notice := browser.decrypt(t, push.wait(t, 1).body); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
+		if notice := push.find(t, browser, "backup is stale"); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
 			t.Fatalf("notice %v, want the backup stale notice", notice)
 		}
 	})
@@ -132,7 +132,9 @@ func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
 	startServeIn(t, dir)
 	time.Sleep(time.Second)
 	if n := rows("notifications"); n != 0 {
-		t.Errorf("%d notifications recorded while notifications are off", n)
+		var titles string
+		_ = d.Read.QueryRow("SELECT group_concat(title || ': ' || body, ' | ') FROM notifications").Scan(&titles)
+		t.Errorf("%d notifications recorded while notifications are off: %s", n, titles)
 	}
 	if n := push.count(); n != 0 {
 		t.Fatalf("%d pushes sent while notifications are off", n)
@@ -140,7 +142,7 @@ func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
 	if got := runApp(t, "settings", "set", module.FlagKey(module.Notifications), "true"); got.code != cli.ExitOK {
 		t.Fatalf("notifications_enabled true: exit %d stderr %q", got.code, got.stderr)
 	}
-	if notice := browser.decrypt(t, push.wait(t, 1).body); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
+	if notice := push.find(t, browser, "backup is stale"); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
 		t.Fatalf("notice %v after enabling notifications, want the backup stale notice", notice)
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM notifications WHERE title LIKE '%backup is stale%'"); n != 1 {

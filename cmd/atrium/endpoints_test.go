@@ -72,7 +72,7 @@ func (f *fakeOpenAI) authorizations() map[string][]string {
 	return out
 }
 
-func TestRemovedChatEndpointInputsAreRefusedAndTheEmbeddingTestAloneGatesMail(t *testing.T) {
+func TestRemovedChatEndpointInputsAreRefusedAndAFailedEmbeddingTestDoesNotHoldMail(t *testing.T) {
 	t.Parallel()
 	requireCipher(t)
 	const embedKey = "sk-embed-endpoint-0123456789"
@@ -155,21 +155,12 @@ func TestRemovedChatEndpointInputsAreRefusedAndTheEmbeddingTestAloneGatesMail(t 
 	if off := runSettings(t, "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
 		t.Fatalf("disabling mail: %d %q", off.code, off.stderr)
 	}
-	refused := runSettings(t, "set", module.FlagKey(module.Mail), "true")
-	if refused.code != cli.ExitError || !strings.Contains(refused.stderr, "mail needs settings") || !strings.Contains(refused.stderr, "embed endpoint probe failed") {
-		t.Fatalf("enabling mail with a failing Test: %d %q", refused.code, refused.stderr)
-	}
-
-	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v2", "embeddinggemma", "", embedKey))
-	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK {
-		t.Fatalf("reconciling the changed host endpoint: %d %q", listed.code, listed.stderr)
-	}
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
-		t.Errorf("a changed endpoint is not held to the old failed Test: %d %q", on.code, on.stderr)
+		t.Fatalf("enabling mail with a failing Test: %d %q", on.code, on.stderr)
 	}
 }
 
-func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *testing.T) {
+func TestConnectionsTestUsesTheEmbedCA(t *testing.T) {
 	t.Parallel()
 	embed := newFakeOpenAI(t)
 	tlsEmbed := httptest.NewTLSServer(embed.Config.Handler)
@@ -190,8 +181,8 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 	if failed := runApp(t, "connections", "test", "service/embedding"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
 		t.Fatalf("test with the CA and an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
-	if refused := runSettings(t, "set", module.FlagKey(module.Mail), "true"); refused.code != cli.ExitError || !strings.Contains(refused.stderr, "embed endpoint probe failed") {
-		t.Fatalf("enabling mail with a failing probe: %d %q", refused.code, refused.stderr)
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("enabling mail with a failing probe: %d %q", on.code, on.stderr)
 	}
 
 	s := &connectionSite{t: t, dir: dir}
@@ -204,9 +195,6 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 	embed.mu.Unlock()
 	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusOK || connectionState(t, dir, "service/embedding") != "ok" {
 		t.Fatalf("Test of the stored embed endpoint: %d %s", code, body)
-	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
-		t.Fatalf("enabling mail after a passing Test: %d %q", on.code, on.stderr)
 	}
 }
 

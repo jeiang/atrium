@@ -58,7 +58,7 @@ func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice 
 func (s *service) renderCard(w http.ResponseWriter, r *http.Request, card reviewapp.Card, notice *tpl.Toast) {
 	f := tpl.Fragment{Data: proposalCardData{Proposal: proposalView(card), PendingOOB: true}, Toast: notice}
 	var err error
-	f.PendingCount, err = s.review.NeedsCount(r.Context())
+	f.PendingCount, err = s.needs(r.Context())
 	check(err)
 	name := "_proposal_row.gohtml"
 	if !rowView(r) {

@@ -41,6 +41,7 @@ type Requirement struct {
 	Key        string
 	Host       bool
 	Connection bool
+	Soft       bool
 	Check      Check
 }
 
@@ -77,6 +78,29 @@ func Connection(id string, credentials ...string) Requirement {
 			}
 		}
 		return "", nil
+	}}
+}
+
+func ConnectionHealth(id string) Requirement {
+	return Requirement{Name: id + " health", Connection: true, Soft: true, Check: func(ctx context.Context, p Probe) (string, error) {
+		view, err := connections.ReadView(ctx, p.Q, connections.ID(id))
+		var unknown connections.UnknownID
+		if errors.As(err, &unknown) {
+			return id + " is " + string(connections.Unconfigured), nil
+		}
+		if err != nil {
+			return "", err
+		}
+		switch view.State {
+		case connections.Unconfigured, connections.Failing, connections.NeedsReauth, connections.Disabled:
+		default:
+			return "", nil
+		}
+		reason := id + " is " + strings.ReplaceAll(view.Status(), "_", " ")
+		if view.Reason != "" {
+			reason += ": " + view.Reason
+		}
+		return reason, nil
 	}}
 }
 

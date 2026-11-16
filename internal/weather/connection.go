@@ -3,10 +3,13 @@ package weather
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const KindWeather connections.Kind = "service/weather"
@@ -39,6 +42,17 @@ func validateConnection(c connections.Candidate) error {
 }
 
 func testConnection(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {
+	d := lease.DB()
+	if d == nil {
+		return nil, errors.New("weather test needs a writable database")
+	}
+	located, err := locationSet(ctx, d.Read)
+	if err != nil {
+		return nil, err
+	}
+	if !located {
+		return []connections.Result{{Capability: "forecast", State: connections.Unconfigured, Reason: "no weather location is set"}}, nil
+	}
 	client, err := lease.HTTPRead("url")
 	if err != nil {
 		return nil, err
@@ -78,6 +92,18 @@ func testConnection(ctx context.Context, lease *connections.Lease, _ []connectio
 		results = append(results, connections.Result{Capability: "geocoding", State: connections.OK, Data: data})
 	}
 	return results, nil
+}
+
+func locationSet(ctx context.Context, q db.Querier) (bool, error) {
+	value := map[string]string{}
+	for _, key := range []string{KeyLocationName, KeyLatitude, KeyLongitude} {
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
+		if err != nil {
+			return false, err
+		}
+		value[key] = strings.TrimSpace(found.Value)
+	}
+	return value[KeyLocationName] != "" || value[KeyLatitude] != "" && value[KeyLongitude] != "", nil
 }
 
 const probePlace = "Reykjavik"

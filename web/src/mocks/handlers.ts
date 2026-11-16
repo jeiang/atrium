@@ -3,6 +3,12 @@ import type { Identity } from '../contract';
 import { API_BASE } from '../contract';
 import { simulatorHandlers } from './simulator';
 
-const identity: Identity = { subject: 'operator', email: 'operator@example.test', name: 'Operator', api_version: 1 };
+const identity: Identity = {
+  subject: 'operator',
+  email: 'operator@example.test',
+  name: 'Operator',
+  agent: false,
+  api_version: 1,
+};
 
 export const handlers = [http.get(`*${API_BASE}/me`, () => HttpResponse.json(identity)), ...simulatorHandlers];

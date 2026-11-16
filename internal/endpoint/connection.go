@@ -38,8 +38,6 @@ type EmbeddingView struct {
 	State      string
 	Reason     string
 	CheckedAt  *time.Time
-	TestFailed bool
-	Data       json.RawMessage
 }
 
 func Connections() []connections.Definition {
@@ -47,6 +45,7 @@ func Connections() []connections.Definition {
 		Kind:            connections.Kind(KindEmbedding),
 		CredentialSlots: []string{"bearer"},
 		Validate:        validateEmbedding,
+		Grace:           connections.UnreachableGrace,
 		Test:            testEmbedding,
 	}}
 }
@@ -344,21 +343,14 @@ func openEmbeddingLease(ctx context.Context, q Querier) (*connections.Lease, err
 }
 
 func embeddingView(view connections.View) EmbeddingView {
-	out := EmbeddingView{
+	return EmbeddingView{
 		Configured: embeddingConfigOf(view.Config, "url") != "",
 		URL:        embeddingConfigOf(view.Config, "url"),
 		Model:      embeddingConfigOf(view.Config, "model"),
 		State:      string(view.State),
 		Reason:     view.Reason,
 		CheckedAt:  view.CheckedAt,
-		TestFailed: view.TestFailed(),
 	}
-	for _, r := range view.Results {
-		if r.Capability == "embeddings" {
-			out.Data = r.Data
-		}
-	}
-	return out
 }
 
 func embeddingConfigOf(raw json.RawMessage, name string) string {

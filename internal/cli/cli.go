@@ -154,6 +154,12 @@ func (a *Args) IntArg(name string, o Opt) *int {
 	return &v
 }
 
+func (a *Args) OptionalArg(name string, o Opt) *string {
+	var v string
+	a.actions = append(a.actions, &action{Opt: o, kind: kindStore, name: name, dest: name, str: &v})
+	return &v
+}
+
 func (a *Args) Has(name string) bool {
 	for _, act := range a.actions {
 		if act.name == name {
@@ -420,6 +426,9 @@ func (a *action) displayName() string {
 func (a *action) nargsPattern() string {
 	if a.kind == kindParsers {
 		return "(-*A[-AO]*)"
+	}
+	if !a.Required {
+		return "(-*A?-*)"
 	}
 	return "(-*A-*)"
 }
@@ -710,7 +719,11 @@ func (p *parser) formatUsage(width int) string {
 	var optParts, posParts []string
 	for _, a := range p.actions {
 		if len(a.opts) == 0 {
-			posParts = append(posParts, a.formatArgs())
+			part := a.formatArgs()
+			if !a.Required {
+				part = "[" + part + "]"
+			}
+			posParts = append(posParts, part)
 			continue
 		}
 		part := a.opts[0]
