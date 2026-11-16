@@ -11,7 +11,10 @@ export interface RunScript {
 type Draft = RunStreamEvent extends infer E ? (E extends unknown ? Omit<E, 'id'> : never) : never;
 
 function numbered(events: Draft[]): RunStreamEvent[] {
-  return events.map((event, index) => ({ ...event, id: String(index + 1) }) as RunStreamEvent);
+  let next = 0;
+  return events.map((event) =>
+    event.event === 'tool_progress' ? (event as RunStreamEvent) : ({ ...event, id: String(++next) } as RunStreamEvent),
+  );
 }
 
 function start(thread: number, run: number, title: string): Draft {
@@ -48,8 +51,26 @@ export const runScripts: readonly RunScript[] = [
           ],
         },
       },
-      { event: 'tool_start', data: { run_id: 101, id: 'call-1', name: 'notes.search', args: '{"query":"shed"}' } },
-      { event: 'tool_done', data: { run_id: 101, id: 'call-1', ok: true, preview: '3 notes found' } },
+      {
+        event: 'tool_start',
+        data: { run_id: 101, id: 'call-1', name: 'search_web', args: '{"query":"cedar board prices Hillfield"}' },
+      },
+      { event: 'tool_progress', data: { run_id: 101, id: 'call-1', text: 'Searching the web for cedar board prices' } },
+      { event: 'tool_progress', data: { run_id: 101, id: 'call-1', text: 'Reading 3 supplier pages' } },
+      {
+        event: 'tool_done',
+        data: {
+          run_id: 101,
+          id: 'call-1',
+          ok: true,
+          preview: 'Found prices from 3 suppliers',
+          results: [
+            { title: 'Cedar & Pine Yard: board prices', url: 'https://cedar-pine.example/boards' },
+            { title: '', url: 'https://hillfield-timber.example/price-list' },
+            { title: 'Unsafe link that must stay text', url: 'javascript:alert(1)' },
+          ],
+        },
+      },
       { event: 'text', data: { run_id: 101, text: 'The order needs **twelve** cedar boards ' } },
       { event: 'text', data: { run_id: 101, text: 'and one box of brass screws.' } },
       { event: 'run_done', data: { run_id: 101, state: 'done', error: null } },

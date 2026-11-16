@@ -51,7 +51,13 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
       const visible = (el: Element): boolean => {
         const rect = el.getBoundingClientRect();
         const style = getComputedStyle(el);
-        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && !el.closest('[inert]');
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.visibility !== 'hidden' &&
+          !el.closest('[inert]') &&
+          el.checkVisibility()
+        );
       };
       const half = size / 2;
       const found: string[] = [];
