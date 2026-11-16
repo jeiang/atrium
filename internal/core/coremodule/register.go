@@ -64,7 +64,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/writes/writescmd"
 )
 
 type Module struct {
@@ -178,7 +177,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Services:   m.services(mc),
 		Recover:    recoverProposals,
 		Commands: []*cli.Command{
-			writescmd.Command(writescmd.Options{Now: m.Now, Open: openLedger}),
 			ledgercmd.Command(ledgercmd.Options{Now: m.Now, Open: openLedger}),
 			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}.session}),
 			settingscmd.Command(openSettings),
