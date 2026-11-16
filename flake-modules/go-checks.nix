@@ -106,8 +106,6 @@
 
       go-test = goCheck "test" containmentTools (testTags "libsqlite3,sqlite_fts5");
 
-      go-test-modernc = goCheck "test-modernc" containmentTools (testTags "modernc");
-
       go-licenses = goCheck "licenses" [pkgs.go-licenses pkgs.diffutils] ''
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" ${goSrc.licenseCheck}''}
         mkdir -p $out

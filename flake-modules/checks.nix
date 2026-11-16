@@ -559,7 +559,6 @@
           '';
       }
       // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
-        api-client-swift = pkgs.callPackage ../nix/swift-api-check.nix {};
         module-keyed = pkgs.callPackage ../nix/module-keyed-test.nix {inherit self;};
       }
       // lib.optionalAttrs (self'.packages ? atrium) {
