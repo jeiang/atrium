@@ -415,9 +415,9 @@ function configuration(): ModelConfiguration {
   };
 }
 
-function decide(id: number, status: string, reply: string): Response {
+function decide(id: number, status: string, reply: string): Response | undefined {
   const proposal = proposals.get(id);
-  if (!proposal) return problem(404, 'not_found', 'This ask does not exist.');
+  if (!proposal) return undefined;
   if (proposal.status !== 'pending') return problem(409, 'conflict', 'This ask was already decided.');
   proposal.status = status;
   proposal.decided_at = BASE;
@@ -541,7 +541,7 @@ export const chatHandlers = [
   http.get(`*${API_BASE}/composer-options`, () => HttpResponse.json(configuration())),
   http.get(`*${API_BASE}/proposals/:id`, ({ params }) => {
     const proposal = proposals.get(Number(params.id));
-    if (!proposal) return problem(404, 'not_found', 'This ask does not exist.');
+    if (!proposal) return undefined;
     return HttpResponse.json({ revision: `${proposal.id}-${proposal.status}`, data: proposal });
   }),
   http.post(`*${API_BASE}/approvals/:id/approve`, ({ params }) =>

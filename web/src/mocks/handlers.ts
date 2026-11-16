@@ -1,8 +1,9 @@
 import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
-import { decideElsewhere, type InboxScenario, inboxCount, inboxHandlers } from './inbox';
 import { type ChatScenario, chatHandlers } from './chats';
+import { type HomeScenario, homeHandlers } from './home';
+import { decideElsewhere, type InboxScenario, inboxCount, inboxHandlers } from './inbox';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -14,6 +15,7 @@ export interface MockScenario {
   mail?: { mode: string; paused: boolean };
   inbox?: InboxScenario;
   chat?: ChatScenario;
+  home?: HomeScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
@@ -134,6 +136,7 @@ export const handlers = [
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },
     });
   }),
+  ...homeHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,
   ...inboxHandlers,

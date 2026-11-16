@@ -7,9 +7,11 @@
     weather: HomeWeather | null;
     plan?: string;
     toggle?: Snippet;
+    note?: Snippet;
+    level?: 2 | 3;
   }
 
-  let { weather, plan, toggle }: Props = $props();
+  let { weather, plan, toggle, note, level = 3 }: Props = $props();
 
   const uid = $props.id();
 
@@ -20,7 +22,9 @@
 
 <section class="card weather" aria-labelledby="{uid}-title">
   <div class="card__head">
-    <h3 class="card__title" id="{uid}-title">Weather{weather ? ` in ${weather.location}` : ''}</h3>
+    <svelte:element this={`h${level}`} class="card__title" id="{uid}-title"
+      >Weather{weather ? ` in ${weather.location}` : ''}</svelte:element
+    >
     {@render toggle?.()}
   </div>
   {#if weather}
@@ -48,6 +52,9 @@
     {#if plan}
       <p class="weather__plan">{plan}</p>
     {/if}
+    {@render note?.()}
+  {:else if note}
+    {@render note()}
   {:else}
     <p class="weather__plan">No weather yet. Set a location in Settings to see it here.</p>
   {/if}

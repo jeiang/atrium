@@ -453,6 +453,12 @@
     color: var(--ink-3);
   }
 
+  .digest__more a {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--row);
+  }
+
   .weather {
     display: grid;
     gap: var(--s-3);
@@ -545,6 +551,7 @@
     .sources span,
     .digest__list > li,
     .digest__list a,
+    .digest__more a,
     .status-slot {
       min-block-size: var(--target);
     }
