@@ -60,18 +60,19 @@ test.describe('assistant design checks', () => {
     if (!box) throw new Error('no hold button');
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    const fill = await hold.locator('.hold__fill').evaluate(
-      (element) =>
-        new Promise<{ transform: string; opacity: number }>((resolve) => {
-          const sample = (): void => {
-            const style = getComputedStyle(element);
-            const opacity = Number(style.opacity);
-            if (opacity > 0) resolve({ transform: style.transform, opacity });
-            else requestAnimationFrame(sample);
-          };
-          requestAnimationFrame(sample);
-        }),
-    );
+    await expect(hold).toHaveAttribute('data-phase', 'holding');
+    const fill = await hold.locator('.hold__fill').evaluate((element) => {
+      const { promise, resolve } = Promise.withResolvers<{ transform: string; opacity: number }>();
+      const deadline = performance.now() + 2000;
+      const sample = (): void => {
+        const style = getComputedStyle(element);
+        const opacity = Number(style.opacity);
+        if (opacity > 0 || performance.now() > deadline) resolve({ transform: style.transform, opacity });
+        else requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+      return promise;
+    });
     await page.mouse.up();
     expect(fill.transform).toBe('none');
     expect(fill.opacity).toBeGreaterThan(0);
