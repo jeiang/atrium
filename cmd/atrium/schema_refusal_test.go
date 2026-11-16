@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
-func TestV2DatabaseIsRefusedWithTheImportCommand(t *testing.T) {
+func TestV2DatabaseIsRefusedNamingTheLastReleaseThatReadsIt(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	data, err := os.ReadFile(filepath.Join(golden.Dir(), "..", "v2", "atrium.db"))
@@ -31,8 +31,8 @@ func TestV2DatabaseIsRefusedWithTheImportCommand(t *testing.T) {
 	cmd := cliExitProcess(t, "settings list")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if code := exitCode(cmd.Run()); code != cli.ExitError || !strings.Contains(stderr.String(), "atrium db import-v2") {
-		t.Fatalf("settings list on a v2 database exited %d, stdout %q, stderr %q; want %d and the import-v2 message", code, stdout.String(), stderr.String(), cli.ExitError)
+	if code := exitCode(cmd.Run()); code != cli.ExitError || !strings.Contains(stderr.String(), "release v3.0.0") {
+		t.Fatalf("settings list on a v2 database exited %d, stdout %q, stderr %q; want %d and the v3.0.0 message", code, stdout.String(), stderr.String(), cli.ExitError)
 	}
 	after, err := os.ReadFile(path)
 	if err != nil {

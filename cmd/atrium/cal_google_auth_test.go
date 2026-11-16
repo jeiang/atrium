@@ -160,7 +160,7 @@ func TestCalendarGoogleAuthExchangesTheCodeWithPKCEAndRefusesAForeignState(t *te
 			t.Fatalf("token request %v does not match the consent URL %v", form, consent)
 		}
 		d := keyedDB(t, filepath.Join(dir, "atrium.db"))
-		if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'"); got != "refresh-1" {
+		if got := queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'"); got != "refresh-1" {
 			t.Fatalf("stored calendar grant = %q", got)
 		}
 	})

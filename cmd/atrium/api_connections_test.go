@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -17,7 +19,17 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
+
+func queryValue(t *testing.T, q db.Querier, query string, args ...any) string {
+	t.Helper()
+	var value sql.NullString
+	if err := q.QueryRowContext(context.Background(), query, args...).Scan(&value); err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	return value.String
+}
 
 func TestConnectionsAndTokensAPI(t *testing.T) {
 	requireCipher(t)
@@ -40,7 +52,7 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 	s := &apiSite{t: t, base: base}
 	d := keyedDB(t, filepath.Join(f.dir, "atrium.db"))
 	stored := func(value string) string {
-		return importValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana' AND value = ?", value)
+		return queryValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana' AND value = ?", value)
 	}
 
 	grafanaStatus.Store(http.StatusUnauthorized)
@@ -90,7 +102,7 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 	if got := apiData(t, s.do(http.MethodPost, "/api/v1/connections/google/oauth/complete", token, map[string]any{"state": state, "code": "code-1"}), http.StatusOK); got["name"] != "calendar" {
 		t.Fatalf("oauth complete: %v", got)
 	}
-	if refresh := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'"); refresh != "refresh-api" {
+	if refresh := queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'"); refresh != "refresh-api" {
 		t.Fatalf("calendar refresh token = %q", refresh)
 	}
 	if reused := s.do(http.MethodPost, "/api/v1/connections/google/oauth/complete", token, map[string]any{"state": state, "code": "code-2"}); reused.status < 400 || reused.status >= 500 {
@@ -216,7 +228,7 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"credentials": map[string]string{"unexpected": "never-store-me"}}), http.StatusUnprocessableEntity, "invalid")
 	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"credentials": map[string]string{"unexpected": ""}}), http.StatusUnprocessableEntity, "invalid")
 	apiData(t, s.do(http.MethodPatch, path, token, map[string]any{"url": a.URL, "credentials": map[string]string{"viewer_token": ""}}), http.StatusOK)
-	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana' AND slot = 'unexpected'"); count != "0" {
+	if count := queryValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana' AND slot = 'unexpected'"); count != "0" {
 		t.Fatalf("unknown slot was stored: %s", count)
 	}
 	jar, err := cookiejar.New(nil)
@@ -233,7 +245,7 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 	if status, body, _ := fetch(t, browser, http.MethodPost, base+"/settings/connections/test", url.Values{"id": {"service/grafana"}, "url": {userinfoURL.String()}}); status != http.StatusUnprocessableEntity || strings.Contains(body, userinfoPassword) {
 		t.Fatalf("HTML userinfo refusal: status %d; password absent %t", status, !strings.Contains(body, userinfoPassword))
 	}
-	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(old_value, '') || COALESCE(new_value, ''), ?) > 0", userinfoPassword); count != "0" {
+	if count := queryValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(old_value, '') || COALESCE(new_value, ''), ?) > 0", userinfoPassword); count != "0" {
 		t.Fatal("userinfo password entered the settings audit")
 	}
 	mu.Lock()
@@ -246,7 +258,7 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 		t.Fatalf("refused move changed the connection: %s %s", source, cfg)
 	}
 	for slot, secret := range old {
-		if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/grafana' AND slot = ?", slot); got != secret {
+		if got := queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/grafana' AND slot = ?", slot); got != secret {
 			t.Fatalf("refused move changed slot %s", slot)
 		}
 	}
@@ -291,7 +303,7 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 		t.Fatalf("disconnect: %d %s", got.status, got.body)
 	}
 	apiData(t, s.do(http.MethodPatch, path, token, map[string]any{"url": a.URL}), http.StatusOK)
-	if count := importValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana'"); count != "0" {
+	if count := queryValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana'"); count != "0" {
 		t.Fatalf("disconnect retained %s credentials", count)
 	}
 }
@@ -325,10 +337,10 @@ func TestConnectionOIDCIssuerAndPresetCannotMoveARetainedClientSecret(t *testing
 			if strings.Contains(output, secret) {
 				t.Fatal("CLI identity refusal returned the client secret")
 			}
-			if cfg := importValue(t, d.Read, "SELECT config_json FROM connections WHERE id = 'service/oidc'"); cfg != original {
+			if cfg := queryValue(t, d.Read, "SELECT config_json FROM connections WHERE id = 'service/oidc'"); cfg != original {
 				t.Fatal("refused OIDC takeover changed the stored configuration")
 			}
-			if value := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/oidc' AND slot = 'client_secret'"); value != secret {
+			if value := queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/oidc' AND slot = 'client_secret'"); value != secret {
 				t.Fatal("refused OIDC takeover changed the client secret")
 			}
 		})
@@ -345,7 +357,7 @@ func TestConnectionHostEndpointRefusalStopsServeAsAConfigurationError(t *testing
 		return "\n[connections.\"mail/x\"]\nkind = \"mail\"\nconfig = { preset = \"icloud\", login = \"me@icloud.test\", auth_method = \"password\", " + field + " = " + strconv.Quote(value) + " }\ncapabilities = [\"imap\", \"smtp\"]\ncredential_files = { \"mail/x/password\" = " + strconv.Quote(passwordFile) + " }\n"
 	}
 	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
-	before := importValue(t, d.Read, "SELECT COUNT(*) FROM connections")
+	before := queryValue(t, d.Read, "SELECT COUNT(*) FROM connections")
 	for _, tc := range []struct{ name, id, field, body string }{
 		{"issuer userinfo", "service/oidc", "issuer", "\n[connections.\"service/oidc\"]\nkind = \"service/oidc\"\n[connections.\"service/oidc\".config]\nissuer = \"https://operator:" + password + "@issuer.example/\"\nclient_id = \"atrium\"\n"},
 		{"url userinfo", "service/qbittorrent", "url", strings.Replace(defaultQbitConnection, "http://qbittorrent.invalid", "http://operator:"+password+"@qbittorrent.invalid", 1)},
@@ -363,7 +375,7 @@ func TestConnectionHostEndpointRefusalStopsServeAsAConfigurationError(t *testing
 			if strings.Contains(output, password) {
 				t.Fatal("host refusal returned the refused value")
 			}
-			if after := importValue(t, d.Read, "SELECT COUNT(*) FROM connections"); after != before {
+			if after := queryValue(t, d.Read, "SELECT COUNT(*) FROM connections"); after != before {
 				t.Fatal("refused host declaration materialized a connection")
 			}
 		})

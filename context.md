@@ -295,7 +295,7 @@ claims about the running application. Operator contracts are in
   endpoint can keep its credentials. Issuer and provider preset changes also
   count as endpoint identity changes. Endpoint URLs cannot contain userinfo,
   and `host`/`*_host` fields accept only a host name or IP literal with an
-  optional port, including during v2 import and host reconciliation; refusals
+  optional port, including during host reconciliation; refusals
   name the connection and field, never the value. A host declaration refused
   at boot is a permanent configuration refusal (exit 78). The health watch
   records a stored row that fails these rules as failing without sending a
@@ -339,15 +339,12 @@ claims about the running application. Operator contracts are in
   audited. A completed `atrium db encrypt` or `atrium db rekey` writes one
   `maintenance.encrypt` or `maintenance.rekey` row (key ids only) into the new
   copy before it replaces the database, if that database has
-  `operation_audit`. A completed `atrium db import-v2` writes one
-  `maintenance.import-v2` row in the import transaction. A refused or failed
-  encrypt, rekey or import writes nothing, so the database is unchanged and
-  the import target stays fresh. Each `atrium db shell` session writes one
+  `operation_audit`. A refused or failed encrypt or rekey writes nothing, so
+  the database is unchanged. Each `atrium db shell` session writes one
   `maintenance.sql` row after the input ends, once any transaction the session
   left open is rolled back: statement and failure counts only, never the SQL.
   The outcome is `failed` if any statement failed. Backup, restore and shell
-  audits are skipped on a database without `operation_audit`, and the import
-  freshness check ignores `maintenance.*` audit rows.
+  audits are skipped on a database without `operation_audit`.
   The persistent serve job `core/backup` (host keys `core.backup_directory`,
   `core.backup_schedule` default `daily 03:00`, `core.backup_keep` default
   5, `core.backup_keep_days` default 14; resource `backup`, 2 h, drained on
@@ -422,87 +419,12 @@ claims about the running application. Operator contracts are in
   at an unknown future schema version is refused
   before any write. A binary downgrade does not reverse a migration and can
   require restoring an earlier database, losing later writes.
-  A database with tables but no v3 marker is refused before any write with
-  a message naming `atrium db import-v2`.
-
-### Database import
-- `atrium db import-v2 <path>`
-  copies a v2 database at schema version 11 into the configured database,
-  which must be a fresh v3 database (created through the normal boot path
-  when absent); the source is opened read-only and never written.
-  `--source-config` names the v2 `ATRIUM_CONFIG` file and `--source-env` a
-  `NAME=VALUE` file, and their pins decide the effective source value before
-  a shadowed row. It
-  refuses a source that is the destination file, already has the v3 marker, is not at version 11,
-  has an embedding index rebuild in progress, or has a v2 mail or agent
-  write in flight (a held row with no error, a proposal action with a live
-  lease, or a `drafts` send); it refuses a destination that already holds
-  rows in an imported table. Everything is copied in one transaction with
-  foreign keys enforced and `PRAGMA foreign_key_check` at the end, so a
-  failed copy leaves the destination without imported rows.
-  Carried with
-  their ids: mail accounts, mailboxes, messages and the learned mail data
-  (rules, corrections, decisions, flag decisions, live state and baseline,
-  snoozes, drafts, scans, commitments, open loops and overrides, packages
-  and their events, watch dismissals, rebalance and event candidates), the active
-  generation's message vectors and index row (URL, model and dimension
-  kept), settings and secrets (a secret row is readable only with the same
-  database key, since the database encrypts it; every source setting row
-  gets an action:
-  carried, dropped, renamed, moved to a host key or a compiled constant, or
-  reset for cutover; a shadowed row yields to its effective source pin;
-  unknown public rows are dropped by key name and an unknown nonempty secret
-  refuses the import by name), the `settings_audit` history (ids,
-  timestamps, keys, old and new values, secret marker, actor and source
-  unchanged, carried before the sanitized import entries), notification
-  channels,
-  push subscriptions and attention snoozes, knowledge records (their
-  `embedded_hash` cleared so vectors rebuild), projects, threads with their
-  messages, files, plans and queue, agent profile, skills, operator-edited
-  subagents, jobs, agent events, tasks, proposals, media
-  channels, the seen list and media state, and the usage rows of the import
-  calendar month only; older usage stays only in the v2 source. Converted
-  into effect-ledger rows with their old identity
-  preserved: v2 automatic actions and the resolutions that settle them, v2
-  agent writes with their resolutions, and v2 proposal actions. A service
-  credential whose owner has a connection record (qBittorrent, TMDB, EZTV,
-  Anthropic, Grafana, Notion) is written to that connection's credential
-  store and its source `secrets` row is dropped; the connection keeps the
-  source `set_at`/`set_by`.
-  Rebuilt: `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
-  (`runs`, `run_streams`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
-  `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
-  state (re-synced), knowledge and Notion
-  vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
-  handshakes, action links, the mail event log, ops
-  data, endpoint probes (the embed probe belongs to `service/embedding`),
-  integration health, nightly observations,
-  `db_key_history` (old backups are read with the old key),
-  `module_migrations` and the source's `schema_migrations`. References to
-  uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
-  the imported effect's run id, `threads.parent_run_id`, `jobs.last_run_id`,
-  `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
-  `thread_queue.run_id`). Jobs are converted: a cron job belongs to
-  `assistant` with no key; a nightly or built-in job takes the owner and
-  `declaration_key` of the catalog job with its name, keeps its schedule,
-  state and prompt override, loses any v2 lease, and is dropped
-  (`drop-retired-job`) when no catalog job has that name; a stored schedule
-  setting then replaces the carried schedule and recomputes `next_due`.
-  `job_run_threads`, `job_resource_leases` and `operation_audit` start
-  empty (`kept empty 0`), `read_revisions` is `derived`: the destination's
-  revision triggers count the imported rows per scope and no counter comes
-  from the source; a source that already has any of these tables is
-  refused, and a destination with an `operation_audit` row is refused like
-  any other populated destination. Imported `effect_resolutions` keep their
-  stored `source`. The importer prints one line per table with its
-  carried, rebuilt or dropped row count, one line per setting with its
-  action (carried, dropped, renamed, moved to a host key or a compiled
-  constant, or reset for cutover), one line per effective source pin and per
-  secret, and a totals line ending in `unmapped_operator_choices=0`; a
-  nonzero count fails the import. v1 data reaches v3 through v2: the v2
-  binary imports it first.
-  `taint_private` and `taint_web` are dormant: no longer
-  read or written, and kept because dropping them would rewrite the table.
+  A database with tables but no v3 marker is refused before any write. v2
+  data reaches v3 only through release `v3.0.0`, the last release that
+  carries the v2 importer: import there, then upgrade.
+  The `threads` columns `taint_private` and `taint_web` are dormant: no
+  longer read or written, and kept because dropping them would rewrite the
+  table.
 
 ### Audit and resolution
 - Every settings write and secret change appends
