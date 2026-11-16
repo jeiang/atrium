@@ -155,9 +155,6 @@ func TestServeRuntimeStartsEachMonitorOnce(t *testing.T) {
 	if n := titledNotices(t, d, "atrium: backup is stale"); n != 1 {
 		t.Errorf("%d stale backup notices, want 1", n)
 	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM pass_run_alerts"); n != 0 {
-		t.Errorf("%d pass_run_alerts rows, want none", n)
-	}
 	if n := titledNotices(t, d, "atrium: Embedding ") - embedNotices; n != 1 {
 		t.Errorf("%d embedding transition notices, want 1", n)
 	}

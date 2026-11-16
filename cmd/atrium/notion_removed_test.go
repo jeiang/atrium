@@ -24,7 +24,6 @@ func TestStoredNotionDataSurvivesTheRemoval(t *testing.T) {
 		"INSERT INTO settings (key, value) VALUES ('wiki_root', '0123456789abcdef0123456789abcdef'), ('export_notion_enabled', 'true'), ('export_notion_parent', '0123456789abcdef0123456789abcdef'), ('notion_enabled', 'true')",
 		"INSERT INTO jobs (name, prompt, schedule, tz, kind, state, next_due, created_by, created_at, module, declaration_key, activated_at) VALUES ('notion-sync', '', 'every 15m', 'UTC', 'builtin', 'active', 1, 'system', 1, 'notion', 'notion/notion-sync', 1)",
 		"INSERT INTO kb_records (title, body, scope, writer, origin, created_at, updated_at) VALUES ('Lisbon apartment lease', 'The lease renews every March.', 'personal', 'import', 'notion:0123456789abcdef0123456789abcdef', 1, 1)",
-		"INSERT INTO notion_pages (rid, id, title, path, url, markdown) VALUES (1, 'p1', 'Old page', 'Root', 'https://notion.example/p1', 'old')",
 		"INSERT INTO export_pages (target, record_id, remote_id, hash, updated_at) VALUES ('notion', 0, 'p1', 'h', 1)",
 	} {
 		if _, err := d.Write.Exec(stmt); err != nil {

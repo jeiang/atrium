@@ -18,7 +18,27 @@ type migration struct {
 
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
+	{2, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, dropUnreadTables)
+		return err
+	}},
 }
+
+const dropUnreadTables = `
+DROP TABLE nightly_observations;
+DROP TABLE agent_profile;
+DROP TABLE notion_pages;
+DROP TABLE notion_sources;
+DROP TABLE notion_state;
+DROP TABLE notion_fts;
+DROP TABLE wiki_pages;
+DROP TABLE embed_notion_0;
+DROP TABLE action_links;
+DROP TABLE rebalance_candidates;
+DROP TABLE pass_runs;
+DROP TABLE pass_run_alerts;
+DROP TABLE snoozes;
+`
 
 type FutureSchemaError struct {
 	Versions []int

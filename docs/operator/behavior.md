@@ -132,7 +132,13 @@ key. If the existing database cannot be opened with the configured key or the
 archive's key, restore refuses, because a running instance cannot be ruled out;
 `--replace-unopenable` replaces it and keeps the old database aside.
 Downgrading a binary does not reverse migrations and can require restoring a
-pre-upgrade database, losing later writes.
+pre-upgrade database, losing later writes. Schema version 2 drops tables no
+code reads (the old Notion copy and its search and vector indexes, the old
+pass run records, message snoozes, action links, rebalance candidates,
+nightly observations and the agent profile) and discards their rows. A release
+from before version 2 refuses a database at version 2: after that upgrade,
+recover by rolling forward to a fixed release or by restoring the backup taken
+before the upgrade, which loses every later write.
 
 ## Settings, connections, and modules
 

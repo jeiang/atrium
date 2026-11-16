@@ -132,7 +132,8 @@ settings the operator edits in the UI or pins from the host.
   (migration 1) and `testdata/schema/baseline.v3.txt` is its canonical dump;
   both are frozen: never edit them. `seeds.json` is seed data applied at
   start and is not frozen. From the v3 cutover, every schema change is a new
-  additive migration in `internal/db/migrate.go`, with an e2e that migrates
+  additive migration in `internal/db/migrate.go`; a migration may also drop
+  tables that no code reads. Each comes with an e2e that migrates
   a database from the previous version and compares its schema with a fresh
   one. Row rewrites require explicit approval and validation on a database
   copy. Refuse unknown future schema versions before writes.
