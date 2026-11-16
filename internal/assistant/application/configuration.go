@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/module"
 )
 
 const ConfigurationName application.Name = "assistant.configuration"
@@ -115,7 +114,7 @@ func Composer(ctx context.Context, in ComposerState) ComposerView {
 		Models: pricing.Models(), Model: in.Model, Known: known, Efforts: efforts, Effort: effort,
 		ContextLimits: limits, Context: limit, Thinking: thinking, ThinkingOptions: thinkingOptions,
 		EffortFixed: threads.EffortFixed(thinking), WebSearch: in.WebSearch, CostCap: in.CostCap,
-		Cliff: cliff, Coding: module.IsEnabled(ctx, "sandbox"), Live: in.Live,
+		Cliff: cliff, Live: in.Live,
 	}
 }
 

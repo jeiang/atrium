@@ -105,10 +105,7 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 		}
 	}
 	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := seed(ctx, tx, time.Now()); err != nil {
-			return err
-		}
-		return retire(ctx, tx)
+		return seed(ctx, tx, time.Now())
 	}); err != nil {
 		return err
 	}
