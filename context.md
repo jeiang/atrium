@@ -588,8 +588,8 @@ claims about the running application. Operator contracts are in
   module declaration catalog, and every command reads the same stored operator values.
   Each settings schema field carries `group`, its placement in the new
   interface (from `internal/settings/placement.go`), and `restart`, true when
-  a change applies only after serve restarts: the `<name>_enabled` module
-  flags and `tz`. `tz` (Settings › General) sets the day and month
+  a change applies only after serve restarts: only `tz` (module flags apply
+  live). `tz` (Settings › General) sets the day and month
   boundaries for schedules, calendar days and work hours, open loop
   reminders, package and mail reports, notifications, the Obsidian export
   and the attention view; serve reads it once at start. Budget months and

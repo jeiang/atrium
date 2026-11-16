@@ -233,7 +233,7 @@ func (s *Set) CheckSwitch(ctx context.Context, q db.Querier, id string, on bool)
 func (n *Snapshot) AppsOff() []AppLink {
 	var out []AppLink
 	for _, d := range n.set.decls {
-		if st, _ := n.Status(d.Name); d.App && st.State == Off {
+		if d.App && !n.TurnedOn(d.Name) {
 			out = append(out, AppLink{ID: d.Name, Name: cmp.Or(d.Title, d.Name)})
 		}
 	}
@@ -249,7 +249,7 @@ func (s *Set) Follow(ctx context.Context, q db.Querier) (bool, error) {
 		return false, err
 	}
 	if cur := s.Current(); cur != nil && slices.EqualFunc(cur.statuses, snap.statuses, func(a, b Status) bool {
-		return a.Name == b.Name && a.State == b.State && a.Err == b.Err && a.Reason() == b.Reason()
+		return a.Name == b.Name && a.On == b.On && a.State == b.State && a.Err == b.Err && a.Reason() == b.Reason()
 	}) {
 		return false, nil
 	}
