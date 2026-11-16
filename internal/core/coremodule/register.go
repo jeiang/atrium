@@ -199,6 +199,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
 		{Name: "budget", Title: "Monthly budget", Page: usagepages.URL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
+		{Name: "general", Title: "General", Keys: []string{config.KeyTZ}},
 	}
 }
 

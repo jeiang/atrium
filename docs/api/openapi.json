@@ -13411,6 +13411,12 @@
           "editable": {
             "type": "boolean"
           },
+          "group": {
+            "type": "string"
+          },
+          "help": {
+            "type": "string"
+          },
           "key": {
             "type": "string"
           },
@@ -13435,6 +13441,9 @@
           },
           "pin_source": {
             "type": "string"
+          },
+          "restart": {
+            "type": "boolean"
           },
           "secret": {
             "type": "boolean"
@@ -13479,7 +13488,9 @@
           "choices",
           "class",
           "editable",
-          "secret"
+          "secret",
+          "group",
+          "restart"
         ],
         "type": "object"
       },
