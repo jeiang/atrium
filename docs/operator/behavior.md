@@ -304,6 +304,18 @@ record or message. A link to something that no longer exists shows no title.
 Moving a task's reminder time to a new moment sends the reminder again; other
 edits do not.
 
+To do and Waiting come from one list, `GET /api/v1/commitments`: your tasks and
+the commitments from mail that you owe (To do), and the commitments other
+people owe you (Waiting). An item's `ref` is `task:<id>` or `commitment:<id>`,
+the same id the one inbox uses. Tasks disappear while the assistant is off and
+commitments while mail is off. Done, dismiss and reopen work on both and can be
+undone; a reopened commitment is not proposed as a reminder again. A commitment
+from mail cannot be edited or deleted, because the next mail scan would bring it
+back. The assistant lists both with `commitment_list` (commitments only in
+chat, scheduled and subagent runs), and in chat it can edit, complete or
+dismiss a task with `task_update` and `task_close`. It never changes a
+commitment from mail.
+
 Assistant runs use the Anthropic connection and a static supported-model
 catalog. A missing key or refused budget prevents a paid start before a new
 thread exists. Unknown models fail closed. Model-free jobs do not require a

@@ -114,7 +114,7 @@ func (p *snapshot) take(ctx context.Context, tx *sql.Tx, id int64, deleted *task
 			return err
 		}
 	}
-	links, err := linksOf(ctx, tx, *t)
+	links, err := LinksOf(ctx, tx, *t)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func DescribeAdd() application.Definition     { return describeAgent[AddInput](A
 func DescribeUpdate() application.Definition  { return describeAgent[UpdateInput](UpdateName) }
 func DescribeDone() application.Definition    { return describeAgent[IDInput](DoneName) }
 func DescribeReopen() application.Definition  { return describeOperator(ReopenName) }
-func DescribeDismiss() application.Definition { return describeOperator(DismissName) }
+func DescribeDismiss() application.Definition { return describeAgent[IDInput](DismissName) }
 func DescribeDelete() application.Definition  { return describeOperator(DeleteName) }
 
 func DescribeRemind() application.Definition {
@@ -200,7 +200,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 	if in.Links {
 		out.Links = make(map[int64][]tasks.Link, len(found))
 		for _, task := range found {
-			if out.Links[task.ID], err = linksOf(ctx, tx, task); err != nil {
+			if out.Links[task.ID], err = LinksOf(ctx, tx, task); err != nil {
 				return application.Read[List]{}, err
 			}
 		}
@@ -228,7 +228,7 @@ func (s *Service) Get(ctx context.Context, in IDInput) (application.Read[View], 
 	if task == nil {
 		return application.Read[View]{}, unknownTask()
 	}
-	links, err := linksOf(ctx, tx, *task)
+	links, err := LinksOf(ctx, tx, *task)
 	if err != nil {
 		return application.Read[View]{}, err
 	}

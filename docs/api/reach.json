@@ -299,6 +299,13 @@
     {
       "area": "tasks",
       "operations": [
+        "commitments.delete",
+        "commitments.dismiss",
+        "commitments.done",
+        "commitments.get",
+        "commitments.list",
+        "commitments.reopen",
+        "commitments.update",
         "tasks.add",
         "tasks.delete",
         "tasks.dismiss",
@@ -308,8 +315,8 @@
         "tasks.reopen",
         "tasks.update"
       ],
-      "required": 8,
-      "bound": 8
+      "required": 15,
+      "bound": 15
     },
     {
       "area": "threads",
@@ -402,7 +409,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 212,
-  "total_bound": 212,
+  "total_required": 219,
+  "total_bound": 219,
   "total_approval_reached": 11
 }

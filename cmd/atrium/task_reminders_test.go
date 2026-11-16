@@ -51,7 +51,7 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 		tasks++
 		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("add%d", tasks), "task_add", map[string]any{"title": title, "remind_at": remindAt})))
 		if done {
-			api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("done%d", tasks), "task_done", map[string]any{"id": tasks})))
+			api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("done%d", tasks), "task_close", map[string]any{"ref": fmt.Sprintf("task:%d", tasks)})))
 		}
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("added")))
 		if ran := runApp(t, "agent", "run", "--kind", "chat", "--text", "add a task"); ran.code != cli.ExitOK {

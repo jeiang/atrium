@@ -18,7 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/tasks"
 )
 
-func linksOf(ctx context.Context, q db.Querier, t tasks.Task) ([]tasks.Link, error) {
+func LinksOf(ctx context.Context, q db.Querier, t tasks.Task) ([]tasks.Link, error) {
 	if t.SourceKind == "" {
 		return []tasks.Link{}, nil
 	}
