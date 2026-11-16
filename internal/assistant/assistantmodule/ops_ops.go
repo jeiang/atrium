@@ -1,7 +1,10 @@
 package assistantmodule
 
 import (
+	"context"
+
 	"github.com/jeiang/atrium/internal/application"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	opsapp "github.com/jeiang/atrium/internal/serverops/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -19,4 +22,8 @@ func opsOperations() ([]application.Definition, []application.Binding) {
 		{Kind: application.Tool, Target: "worker_finding", Uses: uses(opsapp.ObservationsName)},
 		{Kind: application.Tool, Target: "ops_finding", Uses: uses(opsapp.FindingName)},
 	}
+}
+
+func dependencyToolService(ctx context.Context, tc *tool.Context) (*connectionsapp.Service, error) {
+	return connectionsapp.New(ctx, tc.DB)
 }

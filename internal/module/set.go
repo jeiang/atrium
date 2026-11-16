@@ -171,6 +171,7 @@ func (s *Set) store(snap *Snapshot) {
 		}
 	}
 	s.cur.Store(snap)
+	s.cat.conns.TouchUnits()
 	s.hooks.Lock()
 	s.halted = nil
 	s.hooks.Unlock()

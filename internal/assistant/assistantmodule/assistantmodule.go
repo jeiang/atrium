@@ -31,6 +31,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
+	dependencytools "github.com/jeiang/atrium/internal/assistant/tools/dependencies"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
 	kbtools "github.com/jeiang/atrium/internal/assistant/tools/kb"
 	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
@@ -214,6 +215,7 @@ func ToolDefinitions() []module.ToolDefinition {
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService, commitmentToolService),
 		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(opsToolService),
+		dependencytools.Tools(dependencyToolService),
 	} {
 		for _, t := range tools {
 			defs = append(defs, module.ToolDefinition{Tool: t})

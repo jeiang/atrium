@@ -201,7 +201,7 @@ func (r *Registry) Resolve(views []View) Dependencies {
 		case bound != nil:
 			b.Connection = bound.ID
 			b.State, b.Reason = CapabilityState(*bound, n.Capability)
-			if class := RepairClass(b.State); class != "" {
+			if class := RepairClass(b.State); class != "" && bound.Idle == "" {
 				b.Repair = RepairID(bound.ID, class)
 			}
 		case disabled:
@@ -226,7 +226,7 @@ func (r *Registry) Resolve(views []View) Dependencies {
 	for _, v := range views {
 		state, reason := CapabilityState(v, "")
 		class := RepairClass(state)
-		if class == "" {
+		if class == "" || v.Idle != "" {
 			continue
 		}
 		rep := Repair{ID: RepairID(v.ID, class), Connection: v.ID, Label: v.Label, Class: class, State: state, Reason: reason,

@@ -90,10 +90,11 @@ type Registry struct {
 	active func(string) bool
 	sync   *AccountSync
 	notify Notifier
+	units  chan struct{}
 }
 
 func Compile(defs []Definition, needs []Need, sync *AccountSync, notify Notifier) (*Registry, error) {
-	r := &Registry{defs: make(map[Kind]Definition, len(defs)), sync: sync, notify: notify}
+	r := &Registry{defs: make(map[Kind]Definition, len(defs)), sync: sync, notify: notify, units: make(chan struct{}, 1)}
 	for _, d := range defs {
 		if d.Kind == "" {
 			return nil, errors.New("connections: a definition needs a kind")
@@ -227,6 +228,7 @@ type View struct {
 	Results      []Result         `json:"results"`
 	GraceUntil   *time.Time       `json:"grace_until,omitempty"`
 	Dependents   []Dependent      `json:"dependents"`
+	Idle         string           `json:"idle,omitempty"`
 
 	revision  int64
 	transport transportOptions
