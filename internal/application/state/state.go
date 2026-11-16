@@ -35,9 +35,10 @@ const (
 	Attention   = "attention"
 	Ops         = "ops"
 	Auth        = "auth"
+	Automation  = "automation"
 )
 
-var scopes = []string{Knowledge, Tasks, Review, Effects, Calendar, Assistant, Jobs, Media, Mail, Settings, Connections, Notify, Attention, Ops, Auth}
+var scopes = []string{Knowledge, Tasks, Review, Effects, Calendar, Assistant, Jobs, Media, Mail, Settings, Connections, Notify, Attention, Ops, Auth, Automation}
 
 type Outcome string
 
@@ -232,6 +233,12 @@ type AuditRow struct {
 	Target      string
 	DetailsJSON string
 	CommandID   *string
+}
+
+func Audited(ctx context.Context, q db.Querier, operation, target string) (bool, error) {
+	var done bool
+	err := q.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM operation_audit WHERE operation = ? AND target = ?)", operation, target).Scan(&done)
+	return done, err
 }
 
 func (s *Store) AuditBefore(ctx context.Context, beforeTS float64, beforeID int64, limit int) ([]AuditRow, error) {

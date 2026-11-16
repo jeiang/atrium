@@ -241,6 +241,16 @@ claims about the running application. Operator contracts are in
   generated `action_link_key` secret, or the host file's
   `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
   fingerprints; host-file bytes are never copied into the database.
+- A background chat run that parks on `ask_operator` while no client
+  watches its event stream sends one assistant push "atrium: question
+  waiting" (`ask:<tool call id>`, linking `/chat/<thread>`; the question
+  text stays out of it), and answering marks that inbox row read. A
+  background chat run that fails unwatched, other than an operator stop,
+  sends one system push "atrium: run failed" (`run-failed:<run id>`) naming
+  the thread and a plain failure class. Synchronous runs report to their
+  caller and scheduled runs keep the job failure push, so a run pushes at
+  most once. Connection health notices link `/settings/connections`. None
+  of these count against the agent notify caps.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -298,15 +308,33 @@ claims about the running application. Operator contracts are in
   carry into the new month until they settle or expire. A memory job refused
   by the monthly budget stays queued until the first of the next month, a
   thread-cap refusal retries with the normal backoff, and only a run-cap
-  refusal fails the job. When the budget is
-  exhausted,
-  scheduled jobs that need no model call still run. Each model has its own run
-  cost cap, checked against the next request written cold at the thread's
-  cache lifetime, as is a $10 thread cost cap over all runs of a thread and
-  its subagent threads, lowered by the cost cap chosen in the composer when
-  the thread was created. A run's spend includes its subagent runs, and every
-  subagent request is also checked against each parent run's cap. An
-  Anthropic spend-cap 429 stops the run as a budget stop.
+  refusal fails the job. When the budget is exhausted, scheduled jobs that
+  need no model call still run. One run cost cap, `max_run_cost_usd`
+  (default $10), applies to every catalog model; it replaced the per-model
+  `max_run_cost_usd_haiku_5_5`, `_sonnet_5_5` and `_opus_5_5` ($2, $6, $10),
+  which are retired: stored rows are ignored and an environment pin is logged
+  and ignored. The cap is checked against the next request written cold at
+  the thread's cache lifetime, as is a $10 thread cost cap over all runs of a
+  thread and its subagent threads, lowered by the cost cap chosen in the
+  composer when the thread was created. A run's spend includes its subagent
+  runs, and every subagent request is also checked against each parent run's
+  cap. Admission checks, in order, the run cap of the run and each ancestor,
+  the thread cap, a caller's source monthly cap, then the monthly budget
+  share of the request's class; a refusal happens before any provider call.
+  An Anthropic spend-cap 429 stops the run as a budget stop.
+  `GET /spend` (`assistant.spend`, both prefixes) is the Spend page model:
+  the month's budget status, per-class headroom (chat, scheduled,
+  classification) and a `state` of `ok`, `near` (scheduled work refused) or
+  `exhausted` (chat refused), the caps in force with value, source and
+  whether the page edits them (`monthly_budget_usd`, `max_run_cost_usd`,
+  written through the settings operations), the month's committed and
+  settled spend by budget class, by usage kind (`chat`, `cron`, `nightly`
+  dreaming, `worker` server ops, `subagent` research and web search,
+  `classification`, `memory`) and by model, a day series in the configured
+  time zone, and the ten largest runs with thread and job ids. Money is
+  USD numbers as in `GET /usage`. Its revision follows the `assistant` and
+  `settings` topics listed in `topics`, so it answers 304 until a run
+  records cost or a setting changes. `GET /usage` stays.
   Starting a thread and sending a message go through one pipeline for the
   chat page, `/api/v1` and `atrium agent run`: the assistant module must be
   on and the Anthropic connection configured before a run starts (else
@@ -482,6 +510,20 @@ claims about the running application. Operator contracts are in
   prunes `atrium-*.backup` beyond the newest keep that are older than
   keep_days. No directory means `skipped_unconfigured`. `atrium backup`
   shares the job's claim. There is no backup unit or timer.
+  `GET /maintenance/backups` (operation `maintenance.backup.list`, operator
+  only, not an agent tool) and `atrium backup list [--json]` list the
+  regular files named `atrium-*.backup` directly in `core.backup_directory`,
+  newest modification first, capped by `limit` (default 50, at most 100;
+  the CLI shows 100) with the full `total`. Symlinks, directories and other
+  names are skipped, and files are opened through an `os.Root` on that
+  directory. Each item carries the name, size, modification time and the
+  unauthenticated archive header (format, created time, schema, encryption
+  and key id, file count) or a `problem` (`not_archive`, `old_format`,
+  `newer_format`). No path is returned. `location.state` is `ready`,
+  `unconfigured` (no host key) or `missing` (the directory does not exist),
+  with the host key and NixOS option that set it. Verify takes a listed
+  name; verify results are not recorded. `atrium backup list` lists; an
+  archive named `list` is written with `atrium backup ./list`.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -619,14 +661,52 @@ claims about the running application. Operator contracts are in
   remains explicit and keeps its inbox record.
 
 ### Modules, scheduling, and observability
-- `serve` runs supervised mail watches and scheduled work; `agent tick` is
-  a one-shot pass. The NixOS module ships `atrium.service`, the optional
-  `atrium-media-agent.service` and no atrium timers.
+- `serve` runs supervised mail watches and scheduled work and is the only
+  executor of declared jobs while it is up; `agent tick` is a one-shot pass
+  that refuses (75) when another process holds the serve lock. The NixOS
+  module ships `atrium.service`, the optional `atrium-media-agent.service`
+  and no atrium timers. `atrium job run <key>` (`internal/scheduler/jobcmd`)
+  inserts a `job_runs` row with status `requested`; serve's scheduler polls
+  for requested rows every 250 ms after its start-up recovery, claims one by
+  turning the row `running` under a `manual/<serve owner>` claim (manual
+  semantics: no backoff or coalescing), and marks a request it cannot take
+  `refused` with the running run's id. The CLI waits on the row, prints it as
+  JSON, withdraws an untaken or refused request, exits 69
+  (`cli.ExitUnavailable`) when `db.OtherServe` finds no serve, and a canceled
+  wait leaves the run in serve. A request older than a minute is refused.
+  `jobcmd.Delegating` wraps `sync`, `calendar sync`, `calendar candidates`,
+  `contacts sync` and `media poll|sweep`: with serve up they hand their
+  declared job to serve (input flags such as `--account` refuse), without it
+  they run in process as before.
+- Job rows own every schedule. The former `agent_schedule_*` settings are
+  retired; at start or tick a stored value that differs from the default
+  is carried once onto a job row still at its default, marked by an audit
+  row (actor `atrium`, source `migration`). `agent_schedule_min_interval_seconds`
+  stays a setting and is checked on writes only. Operator schedules
+  (`atrium schedule list|create|edit|delete|run`, `POST /schedules`,
+  `PATCH /schedules/{job_id}`, `POST /schedules/{job_id}/run`) are cron jobs
+  with `created_by = operator`; the agent's schedule tools neither list nor
+  edit them. `PATCH` takes any of schedule, prompt, name and enabled and an
+  optional `If-Match` against the per-job `revision` (412 when stale).
+  Definitions marked `Protected` (mail pass, backup) refuse disable and
+  delete. Run now inserts a `requested` row through `scheduler.RequestJob`
+  (404 unknown or deleted, 409 running with the run id, 503 without serve);
+  serve admits it through the same pause, module and budget gate as a
+  scheduled run and records a skip status when the gate refuses. A run that
+  ends `error` after a run that did not sends one System push
+  (`job-failed:<run id>`, linking its thread or `/scheduled?run=<id>`);
+  repeated failures push nothing until a success.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
-  metrics, checks, proposals, effect handlers and scheduled jobs; module
-  enablement gates the applicable runtime projections. Each owner declares
+  metrics, checks, proposals, effect handlers, review kinds and scheduled
+  jobs; module enablement gates the applicable runtime projections. The
+  review hub (`/review`, `/proposals/*`, `/activity*`, the queue) lives in
+  `internal/review`, which imports no unit: mail contributes its mode,
+  drafts and live actions and the `mail` activity category, and the
+  assistant contributes ops findings, through `ReviewKinds` and
+  `ActivityCategory`. With mail off its drafts leave the hub, while its past
+  live actions stay in Activity. Each owner declares
   its built-in jobs (assistant six, calendar candidates, media three, mail
   package tracking, Grafana ops sampler); compiling the catalog checks their
   owner, keys, names, schedules and policies and derives the schedule
@@ -687,7 +767,11 @@ claims about the running application. Operator contracts are in
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.
-  The claim transaction records a per-claim owner on the job, the running
+  An in-process fence (`scheduler/fence.go`, one entry per job id for the
+  whole process) is taken before the resource locks by the tick, recovery,
+  requested-run pickup and `RunNow`; a second claim in the same process is
+  refused with `*scheduler.Running` (the running run's id; it unwraps to
+  `*db.LockBusy`). The claim transaction records a per-claim owner on the job, the running
   run and a `job_resource_leases` row for every resource (sorted raw keys,
   `job/<id>` included); the lease lasts 90 seconds and the running job
   renews it every 20 seconds in one transaction that checks the job's
@@ -732,12 +816,14 @@ claims about the running application. Operator contracts are in
   atrium's own read-only CalDAV/CardDAV sync. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
-  calendar-candidate stage and notification sends are skipped (the mail pause
+  calendar-candidate stage and notification sends are skipped (the pause
   controls stay available), and its tables remain.
   On its first start the application seeds the module flags. A database
   that already holds operator data (settings, secrets, accounts, threads or
   usage rows) gets every module whose required settings are met enabled; an
-  empty database starts core only. `atrium settings set <name>_enabled true`
+  empty database starts core only. The platform checks settings, secrets and
+  usage rows; each module declares its own check (`HasOperatorData`: mail
+  checks accounts, the assistant checks threads). `atrium settings set <name>_enabled true`
   is refused with the unmet reasons. A module flag change takes effect after
   the atrium units restart: the running application has no control that
   writes a flag, a module's Settings page marks "Restart atrium to apply"
@@ -782,6 +868,26 @@ claims about the running application. Operator contracts are in
   after the publish lock and write connection are released; a failed
   starter marks its module unavailable with the error, is logged once per
   failure and is retried at the next publication.
+- One platform pause (`internal/pause`) covers all unattended work. Its state
+  is the `pause` file beside the database: the file's existence is the
+  pause, and its JSON body records who (`by`, `source`), when (`since`) and
+  an optional `reason`; an empty file written by an older binary reads as
+  paused since its modification time, and an older binary honors the new
+  file. Every check reads the file, so a pause set by a separate CLI process
+  stops a running `serve`: scheduled admission at its next tick (30 s),
+  run-now requests and each automatic mail write at once. A due job is
+  skipped as `skipped_pause` unless it runs while paused (backups, the mail
+  sync and scan passes, whose automatic writes the gate still refuses, and
+  the CalDAV/CardDAV mirrors); run-now of any other job is refused (409
+  `refused`). Chat stays available; the assistant's direct mailbox writes
+  are refused while paused. Mail's write gate delegates only its pause
+  check. `GET /automation/pause`, `POST /automation/pause` (optional
+  `reason`) and `POST /automation/resume` are operator-only on both
+  prefixes and never agent tools; the two commands are audited as
+  `automation.pause` and `automation.resume`, bump the `automation` event
+  topic and send the pause notice, and `GET /shell` carries the same state
+  as `pause`. `POST /api/v1/mail/live/pause` and `/resume` and `atrium live
+  pause|resume` are aliases of the same pause with unchanged shapes.
 - Module ownership is checked at build time. `tools/tableownership` keeps
   each table's SQL inside its owning module, and `tools/registrationownership`
   keeps every registration in the module catalog: it type-checks the
@@ -914,8 +1020,8 @@ claims about the running application. Operator contracts are in
   `module_disabled`) and again during execution (503 `module_disabled` with
   `Retry-After: 5`). A binary API relay owned by a module (media content and
   artwork, file downloads) answers 409 `module_disabled` before relaying when
-  that module is off. Only
-  `POST /api/v1/mail/live/pause` is unowned. The
+  that module is off. Only the pause aliases
+  `POST /api/v1/mail/live/pause` and `/resume` are unowned. The
   owner generation follows a pending mutation to ledger admission: a halted
   owner cannot start a new effect, an effect already started finishes
   recording its result, and re-enabling an owner does not make an old
@@ -975,10 +1081,14 @@ claims about the running application. Operator contracts are in
   opener or syncer passes through the module framework or the tool context.
   Mail binds its IMAP opener and post-proposal sync hook in its own module
   declaration, and its assistant tools take the opener from the same place.
-  `tools/adapterboundary` fails when `internal/module`, `internal/tool`,
-  `internal/ledger` or `internal/proposals` imports a unit package (mail,
-  media, calendar, contacts); the module flag's import of mail accounts is
-  the one recorded exception.
+  `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
+  `internal/tool`, `internal/ledger` or `internal/proposals` imports a unit
+  package (mail, media, calendar, contacts, kb, tasks, weather, grafana,
+  serverops, or the agent tools under `internal/assistant/tools`).
+  `internal/module` names only `core`; every other module name is a constant
+  in the leaf package `internal/unit`, the effect origins a module owns are
+  declared on its declaration (`EffectOrigins`), and the list of modules is
+  `internal/app/catalog.go`.
   Settlement continues on a cancellation-detached context. Resolving an
   unknown or partial effect appends actor, source, outcome, prior state and
   evidence to `effect_resolutions`; it does not rewrite the raw attempt.
@@ -1332,7 +1442,8 @@ claims about the running application. Operator contracts are in
   the web session key on `/web/v1`, and each server instance owns its
   counts. Static assets are served from content-hashed immutable URLs.
 - Client read models (both prefixes): `GET /shell` (navigation, sections
-  and tabs, Needs you count, mail mode and pause, module states, version),
+  and tabs, Needs you count, mail mode, the platform `pause` state (paused,
+  by, source, since, reason), module states, version),
   `GET /about` (version, VCS build when stamped, schema version, modules),
   `GET /settings/schema` (offered settings per page with type, choices,
   bounds, default, source, editable, secret; secret values are never sent),

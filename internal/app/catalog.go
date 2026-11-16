@@ -35,7 +35,7 @@ func Builtins(d Dependencies) []module.Builder {
 	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Classifier: classifierFor, Now: d.Now, Start: asstapp.ScheduledStart}
 	mailUnit := mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources}
 	return []module.Builder{
-		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now, Resources: d.Bindings.Resources, Jobs: jobs},
+		coremodule.Module{Version: d.Version, Guard: d.Guard, Now: d.Now, Resources: d.Bindings.Resources, Jobs: jobs},
 		contactsmodule.Module{Jobs: jobs},
 		mailUnit,
 		calendarmodule.Module{Jobs: jobs},

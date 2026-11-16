@@ -1,10 +1,13 @@
 package calendar
 
-import "github.com/jeiang/atrium/internal/settingspage"
+import (
+	"github.com/jeiang/atrium/internal/settingspage"
+	"github.com/jeiang/atrium/internal/unit"
+)
 
 func Sections() []settingspage.Section {
 	return []settingspage.Section{{
-		Name: "calendar", Title: "Calendar", Module: "calendar",
+		Name: "calendar", Title: "Calendar", Module: unit.Calendar,
 		Fields: []settingspage.Field{
 			{Key: AccountKey, Label: "Account"},
 			{Key: AppleIDKey, Label: "Apple ID"},

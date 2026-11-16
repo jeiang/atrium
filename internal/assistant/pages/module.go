@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -109,7 +110,7 @@ func bindAssistant(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		ctx, err := module.BindOwner(r.Context(), module.Assistant)
+		ctx, err := module.BindOwner(r.Context(), unit.Assistant)
 		if err != nil {
 			if web.IsAPI(r) {
 				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())

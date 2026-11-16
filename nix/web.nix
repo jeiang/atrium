@@ -129,16 +129,26 @@ in {
     nativeBuildInputs = [biome];
     command = "npm run lint && npm run check";
   };
-  web-e2e = check {
-    pname = "atrium-web-e2e";
-    env =
-      browserEnv
-      // {
-        ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";
-        ATRIUM_WEB_DIST = "${atrium-web}";
+  web-e2e = let
+    e2e = pname: args:
+      check {
+        inherit pname;
+        env =
+          browserEnv
+          // {
+            ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";
+            ATRIUM_WEB_DIST = "${atrium-web}";
+          };
+        command = "npm run e2e -- --reporter=line${args}";
       };
-    command = "npm run e2e -- --reporter=line";
-  };
+  in
+    (e2e "atrium-web-e2e" "").overrideAttrs (old: {
+      passthru =
+        (old.passthru or {})
+        // {
+          engines = lib.genAttrs ["chromium" "firefox" "webkit"] (engine: e2e "atrium-web-e2e-${engine}" " --project=${engine}");
+        };
+    });
   web-size = runCommand "atrium-web-size" {nativeBuildInputs = [nodejs_24];} ''
     node ${sizeSrc}/web/scripts/size.ts ${atrium-web} > report.txt 2>&1 || status=$?
     cat report.txt

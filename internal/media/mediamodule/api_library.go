@@ -17,6 +17,7 @@ import (
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -380,7 +381,7 @@ func mediaFilingRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 		api.Command(d, mediaapp.DescribeSweep(), mediaShape[MediaSwept](), "POST /media/sweep", func(ctx context.Context, _ struct{}) (application.Change[MediaSwept], error) {
 			var r application.Change[mediaapp.Swept]
 			var swept error
-			_, err := module.Invoke(mediaJobContext(ctx, d), d.DB, d.Cfg, module.Media+"/"+media.JobSweep, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+			_, err := module.Invoke(mediaJobContext(ctx, d), d.DB, d.Cfg, unit.Media+"/"+media.JobSweep, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 				r, swept = s.Sweep(ctx, mediaapp.SweepInput{})
 				if missing, ok := errors.AsType[config.NotConfigured](swept); ok {
 					return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil

@@ -7,66 +7,24 @@ import (
 	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
-	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
-	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
-	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-type ReviewOptions struct {
-	Application func(*web.Deps) *mailapp.Service
-	Clients     func(config.Config) mail.OpenFunc
-	Enabled     func(context.Context, db.Querier, string) (bool, error)
-	Tools       registry.Source
-}
 
 func recoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
 	_, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx)
 	return err
 }
 
-func ReviewServices(o ReviewOptions) func(*web.Deps) reviewpages.Services {
+func (m Module) reviewServices(tools registry.Source) func(*web.Deps) reviewpages.Services {
 	return func(d *web.Deps) reviewpages.Services {
-		open := imapclient.Opener(d.Cfg)
-		if o.Clients != nil {
-			open = o.Clients(d.Cfg)
-		}
-		now := mail.WallClock
-		cat := module.SetFrom(d.Ctx).Catalog()
-		effects, err := cat.Ledger(d.DB, d.Env, d.Cfg, now)
-		if err != nil {
-			panic(err)
-		}
-		d.DrainOnStop(effects.Drain)
-		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Cfg: d.Cfg, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
-			if d.ResumeRun == nil {
-				return proposals.ProposalError("the assistant module is not running")
-			}
-			return d.ResumeRun(ctx, runID)
-		}})
-		if err != nil {
-			panic(err)
-		}
-		liveSvc := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now}
-		draftStore := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now}
-		pipeline := &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled}
-		var mailService *mailapp.Service
-		if o.Application != nil {
-			mailService = o.Application(d).WithSender(draftStore).WithCommitments(commitmentsapp.New(d.DB, effects, now))
-		}
+		rt := hub.Compose(hub.ComposeOptions{Tools: tools})(d)
+		draftStore := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: rt.Ledger, Open: m.opener(d.Cfg), Now: rt.Now}
 		return reviewpages.Services{
-			Mail:   mailService,
-			Review: reviewapp.New(reviewapp.Deps{DB: d.DB, Ledger: effects, Drafts: draftStore, Live: liveSvc, Registry: registry, Pipeline: pipeline}),
+			Mail:   mailPageService(d).WithSender(draftStore).WithCommitments(commitmentsapp.New(d.DB, rt.Ledger, rt.Now)),
+			Review: rt.Review,
 		}
 	}
-}
-
-func ReviewReads(d *web.Deps) *reviewapp.Service {
-	return ReviewServices(ReviewOptions{})(d).Review
 }

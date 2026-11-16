@@ -12,6 +12,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func searchGroups(t *testing.T, data map[string]any) map[string][]map[string]any {
@@ -178,7 +179,7 @@ func TestSearchAllAPI(t *testing.T) {
 		t.Fatalf("search wrote: before %s after %s", before, after)
 	}
 
-	if off := runSettings(t, "set", module.FlagKey(module.Mail), "false"); off.code != 0 {
+	if off := runSettings(t, "set", module.FlagKey(unit.Mail), "false"); off.code != 0 {
 		t.Fatalf("mail off: %+v", off)
 	}
 	deadline := time.Now().Add(15 * time.Second)

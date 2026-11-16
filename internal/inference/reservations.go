@@ -246,7 +246,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 			}
 			return BudgetExceeded{
 				Text: fmt.Sprintf("%s: the next request would reserve $%s, with $%s of $%s already committed; raise %s to continue",
-					what, strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(committed)), strconvUSD(capUSD), RunCapKey(scope.Model)),
+					what, strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(committed)), strconvUSD(capUSD), RunCapKey),
 				Reason: reason, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
 			}
 		}

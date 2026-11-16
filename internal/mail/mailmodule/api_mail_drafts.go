@@ -13,9 +13,10 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -42,13 +43,13 @@ type DraftResolveRequest struct {
 	Outcome string `json:"outcome" api:"enum=sent|draft"`
 }
 type DraftResponse struct {
-	Draft reviewpages.Draft `json:"draft"`
+	Draft hub.Draft `json:"draft"`
 }
 type DraftSendResponse struct {
-	Draft      reviewpages.Draft `json:"draft"`
-	Filed      string            `json:"filed"`
-	FiledError string            `json:"filed_error,omitempty"`
-	Refused    []string          `json:"refused"`
+	Draft      hub.Draft `json:"draft"`
+	Filed      string    `json:"filed"`
+	FiledError string    `json:"filed_error,omitempty"`
+	Refused    []string  `json:"refused"`
 }
 type DraftsRequest struct {
 	Status drafts.Status `query:"status" json:"-" api:"enum=draft|unknown|sent|discarded|sending"`
@@ -56,8 +57,8 @@ type DraftsRequest struct {
 	Limit  api.Limit     `query:"limit" json:"-"`
 }
 type DraftsResponse struct {
-	Items      []reviewpages.Draft `json:"items"`
-	NextCursor *string             `json:"next_cursor" api:"nullable"`
+	Items      []hub.Draft `json:"items"`
+	NextCursor *string     `json:"next_cursor" api:"nullable"`
 }
 
 type draftAPI struct {
@@ -118,7 +119,7 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 	}
 	shape := func(t reflect.Type) application.APIShape { return application.APIShape{Area: "drafts", Response: t} }
 	return []application.Binding{
-		api.Query(d, mailapp.DescribeDraft(), shape(reflect.TypeFor[reviewpages.Draft]()), "GET /drafts/{draft_id}", func(ctx context.Context, in DraftRequest) (application.Read[reviewpages.Draft], error) {
+		api.Query(d, mailapp.DescribeDraft(), shape(reflect.TypeFor[hub.Draft]()), "GET /drafts/{draft_id}", func(ctx context.Context, in DraftRequest) (application.Read[hub.Draft], error) {
 			return s.read(ctx, in.ID)
 		}),
 		api.Query(d, mailapp.DescribeDrafts(), shape(reflect.TypeFor[DraftsResponse]()), "GET /drafts", func(ctx context.Context, in DraftsRequest) (application.Read[DraftsResponse], error) {
@@ -132,7 +133,7 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 				return application.Read[DraftsResponse]{}, &application.Error{Code: application.BadCursor, Message: "Invalid cursor"}
 			}
 			r, err := s.mail.Drafts(ctx, mailapp.DraftsInput{Status: in.Status, Offset: offset, Limit: int(in.Limit) + 1})
-			out := DraftsResponse{Items: []reviewpages.Draft{}}
+			out := DraftsResponse{Items: []hub.Draft{}}
 			if err != nil {
 				return application.Read[DraftsResponse]{}, err
 			}
@@ -141,17 +142,17 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 				cards = cards[:int(in.Limit)]
 				out.NextCursor = in.Cursor.Next(offset + len(cards))
 			}
-			wire := make([]reviewapp.DraftCard, len(cards))
+			wire := make([]review.Draft, len(cards))
 			for i, c := range cards {
-				wire[i] = reviewapp.DraftCard{Row: c.Row, Unexpected: c.Unexpected}
+				wire[i] = drafts.ReviewDraft(c.Row, c.Unexpected)
 			}
-			out.Items = reviewpages.DraftsOf(wire, reviewapp.AccountConfigured(ctx))
+			out.Items = hub.DraftsOf(wire, reviewapp.AccountConfigured(ctx))
 			return application.Read[DraftsResponse]{Revision: r.Revision, Data: out}, nil
 		}),
-		api.Command(d, mailapp.DescribeDraftUpdate(), shape(reflect.TypeFor[reviewpages.Draft]()), "PATCH /drafts/{draft_id}", func(ctx context.Context, in DraftUpdateRequest) (application.Change[reviewpages.Draft], error) {
+		api.Command(d, mailapp.DescribeDraftUpdate(), shape(reflect.TypeFor[hub.Draft]()), "PATCH /drafts/{draft_id}", func(ctx context.Context, in DraftUpdateRequest) (application.Change[hub.Draft], error) {
 			rev, err := s.draftRevision(ctx, in.ID, in.Revision, in.IfMatch)
 			if err != nil {
-				return application.Change[reviewpages.Draft]{}, err
+				return application.Change[hub.Draft]{}, err
 			}
 			fields := mailapp.DraftFields{Account: in.Account, Subject: in.Subject, Body: in.Body}
 			if in.To != nil {
@@ -161,7 +162,7 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 				fields.Cc = &mailapp.Recipients{Text: *in.Cc}
 			}
 			r, err := s.mail.DraftUpdate(ctx, mailapp.DraftUpdateInput{ID: in.ID, Revision: rev, Fields: fields})
-			out := application.Change[reviewpages.Draft]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
+			out := application.Change[hub.Draft]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
 			if err != nil {
 				e := *application.Classify(err)
 				if e.Code == application.Conflict {
@@ -235,20 +236,20 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 	}
 }
 
-func (s *draftAPI) read(ctx context.Context, id int64) (application.Read[reviewpages.Draft], error) {
+func (s *draftAPI) read(ctx context.Context, id int64) (application.Read[hub.Draft], error) {
 	found, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: id})
 	if err != nil {
-		return application.Read[reviewpages.Draft]{}, err
+		return application.Read[hub.Draft]{}, err
 	}
-	draft := reviewpages.DraftsOf([]reviewapp.DraftCard{{Row: found.Data.Row, Unexpected: found.Data.Unexpected}}, reviewapp.AccountConfigured(ctx))[0]
-	return application.Read[reviewpages.Draft]{Revision: servedRevision(mailapp.DraftName, draft), Data: draft}, nil
+	draft := hub.DraftsOf([]review.Draft{drafts.ReviewDraft(found.Data.Row, found.Data.Unexpected)}, reviewapp.AccountConfigured(ctx))[0]
+	return application.Read[hub.Draft]{Revision: servedRevision(mailapp.DraftName, draft), Data: draft}, nil
 }
 
 func servedRevision(name application.Name, data any) application.Revision {
 	return application.Revision(state.Revision(string(name), nil, data, "operator"))
 }
 
-func (s *draftAPI) currentDraft(ctx context.Context, id int64) reviewpages.Draft {
+func (s *draftAPI) currentDraft(ctx context.Context, id int64) hub.Draft {
 	found, err := s.read(ctx, id)
 	if err != nil {
 		panic(err)

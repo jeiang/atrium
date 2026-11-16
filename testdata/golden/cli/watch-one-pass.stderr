@@ -1,3 +1,3 @@
 usage: atrium [-h]
               {effects,proposals,settings,connections,auth,secrets,db,backup,restore,catalog,contacts,sync,rules,shadow-report,reindex,live,replay,deletions,loops,watches,packages,calendar,media,agent,memory,serve} ...
-atrium: error: argument command: invalid choice "watch" (choose from "effects", "proposals", "settings", "connections", "auth", "usage", "secrets", "db", "backup", "restore", "catalog", "contacts", "sync", "rules", "shadow-report", "reindex", "live", "replay", "deletions", "loops", "watches", "packages", "calendar", "media", "agent", "memory", "serve")
+atrium: error: argument command: invalid choice "watch" (choose from "effects", "proposals", "settings", "connections", "auth", "usage", "secrets", "db", "backup", "restore", "catalog", "job", "contacts", "sync", "rules", "shadow-report", "reindex", "live", "replay", "deletions", "loops", "watches", "packages", "calendar", "media", "agent", "memory", "schedule", "serve")

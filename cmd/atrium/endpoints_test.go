@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type fakeOpenAI struct {
@@ -78,7 +79,7 @@ func TestRemovedChatEndpointInputsAreRefusedAndAFailedEmbeddingTestDoesNotHoldMa
 	const embedKey = "sk-embed-endpoint-0123456789"
 	const chatSentinel = "sk-chat-file-sentinel-0123456789"
 	embed := newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	host := embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", embedKey)
 	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 	run := func(name, value string) appRun {
@@ -142,7 +143,7 @@ func TestRemovedChatEndpointInputsAreRefusedAndAFailedEmbeddingTestDoesNotHoldMa
 	if len(embed.seen("/v1/chat/completions")) != 0 {
 		t.Error("a chat completion request reached the embedding server")
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("enabling mail with no chat endpoint after a passing Test: %d %q", on.code, on.stderr)
 	}
 
@@ -152,10 +153,10 @@ func TestRemovedChatEndpointInputsAreRefusedAndAFailedEmbeddingTestDoesNotHoldMa
 	if failed := runApp(t, "connections", "test", "service/embedding"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
 		t.Fatalf("Test with an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
-	if off := runSettings(t, "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
+	if off := runSettings(t, "set", module.FlagKey(unit.Mail), "false"); off.code != cli.ExitOK {
 		t.Fatalf("disabling mail: %d %q", off.code, off.stderr)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("enabling mail with a failing Test: %d %q", on.code, on.stderr)
 	}
 }
@@ -165,7 +166,7 @@ func TestConnectionsTestUsesTheEmbedCA(t *testing.T) {
 	embed := newFakeOpenAI(t)
 	tlsEmbed := httptest.NewTLSServer(embed.Config.Handler)
 	t.Cleanup(tlsEmbed.Close)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, tlsEmbed.URL+"/v1", "embeddinggemma", ""))
 	if untrusted := runApp(t, "connections", "test", "service/embedding"); untrusted.code != cli.ExitError || !strings.Contains(untrusted.stdout+untrusted.stderr, "certificate") {
 		t.Fatalf("test without the embed CA: %d %q", untrusted.code, untrusted.stdout+untrusted.stderr)
@@ -181,7 +182,7 @@ func TestConnectionsTestUsesTheEmbedCA(t *testing.T) {
 	if failed := runApp(t, "connections", "test", "service/embedding"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
 		t.Fatalf("test with the CA and an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("enabling mail with a failing probe: %d %q", on.code, on.stderr)
 	}
 
@@ -202,7 +203,7 @@ func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *tes
 	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embed.URL+"/v1", "embeddinggemma", ""))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()

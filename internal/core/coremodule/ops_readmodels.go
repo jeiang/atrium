@@ -14,6 +14,7 @@ import (
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/web"
@@ -28,6 +29,7 @@ type Shell struct {
 	web.ShellFrame
 	Modules []ModuleState `json:"modules"`
 	Version string        `json:"version"`
+	Pause   pause.State   `json:"pause"`
 }
 
 type ModuleState struct {
@@ -94,7 +96,11 @@ func (m Module) readModelRoutes(d *web.Deps) []application.Binding {
 	return []application.Binding{
 		api.Query(d, describeCoreRead[Shell](ShellName), application.APIShape{Area: "home", Response: reflect.TypeFor[Shell]()},
 			"GET /shell", func(ctx context.Context, _ struct{}) (application.Read[Shell], error) {
-				return revised(Shell{ShellFrame: d.Render.Shell(ctx), Modules: moduleStates(ctx), Version: m.Version})
+				state, err := pause.Read(d.Cfg.PausePath())
+				if err != nil {
+					return application.Read[Shell]{}, err
+				}
+				return revised(Shell{ShellFrame: d.Render.Shell(ctx), Modules: moduleStates(ctx), Version: m.Version, Pause: state})
 			}),
 		api.Query(d, describeCoreRead[AppAbout](AboutName), application.APIShape{Area: "settings", Response: reflect.TypeFor[AppAbout]()},
 			"GET /about", func(ctx context.Context, _ struct{}) (application.Read[AppAbout], error) {

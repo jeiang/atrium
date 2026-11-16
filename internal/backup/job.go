@@ -65,7 +65,7 @@ func Job(env config.Env, create func(context.Context, string, func(context.Conte
 		Module: module.Core, Key: JobKey, Name: passrun.Backup, Kind: scheduler.JobBuiltin,
 		Prompt:   "Daily: write a verified backup archive to the backup directory, then prune old archives (no model run).",
 		Schedule: DefaultSchedule, ScheduleHost: KeySchedule, Persistent: true, RunsWhilePaused: true, Timeout: jobTimeout,
-		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, Resources: []string{passrun.Backup},
+		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, Resources: []string{passrun.Backup}, Protected: true,
 		Run: func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
 			return scheduled(ctx, env, run.Claim, time.Now(), create)
 		},

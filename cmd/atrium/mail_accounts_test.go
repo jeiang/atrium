@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type mailAccount struct {
@@ -61,7 +62,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	embed := embedstub.Server(t)
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	seedSettings(t, map[string]string{mail.KeyMode: "shadow", module.FlagKey(module.Mail): "true"})
+	seedSettings(t, map[string]string{mail.KeyMode: "shadow", module.FlagKey(unit.Mail): "true"})
 
 	home := mailtest.NewFakeClient()
 	inbox := home.AddBox("INBOX", mailtest.NewBox(7))

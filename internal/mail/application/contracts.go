@@ -32,9 +32,11 @@ import (
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/pause"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type (
@@ -132,10 +134,10 @@ func (s *Service) TriageRow(ctx context.Context, messageID int64) (*triage.Row, 
 	return triage.Get(ctx, s.db.Read, messageID)
 }
 
-func (s *Service) Paused() bool { return safety.IsPaused(s.cfg.PausePath()) }
+func (s *Service) Paused() bool { return pause.Paused(s.cfg.PausePath()) }
 
 func (s *Service) ScansEnabled(ctx context.Context) bool {
-	flag, err := settings.From(ctx).Resolve(ctx, s.db.Read, module.FlagKey(module.Mail))
+	flag, err := settings.From(ctx).Resolve(ctx, s.db.Read, module.FlagKey(unit.Mail))
 	if err != nil || flag.Value != "true" {
 		return false
 	}
@@ -165,4 +167,8 @@ func PassLocks(ctx context.Context, dbPath string) (context.Context, *db.LockSet
 
 func (s *Service) ManualScans(ctx context.Context, at float64) (map[string]any, error) {
 	return scans.Manual(ctx, s.db, s.cfg, s.Scans(at))
+}
+
+func ReviewDraft(row DraftRow, unexpected []string) review.Draft {
+	return drafts.ReviewDraft(row, unexpected)
 }

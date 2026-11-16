@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func plainHostConfig(t *testing.T, dir string) string {
@@ -87,7 +87,7 @@ func TestAHostTakeoverCannotMoveAStoredCredentialToAnotherEndpoint(t *testing.T)
 	t.Parallel()
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	operatorBoot(t, dir)
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
@@ -117,7 +117,7 @@ func TestAHostTakeoverWithTheSameEndpointKeepsTheStoredCredential(t *testing.T) 
 	t.Parallel()
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	operatorBoot(t, dir)
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
@@ -145,7 +145,7 @@ func TestAHostTakeoverWithACredentialFileForEverySlotIsAllowed(t *testing.T) {
 	t.Parallel()
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	operatorBoot(t, dir)
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")

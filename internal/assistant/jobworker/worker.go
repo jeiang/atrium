@@ -14,8 +14,9 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type Env struct {
@@ -54,7 +55,7 @@ func New(svc *service.Service, jobs []scheduler.Definition, o Options) *schedule
 				jobs[i].Run = owned(o.Own, jobs[i].Module, jobs[i].Run)
 			}
 		}
-		runCron = owned(o.Own, module.Assistant, runCron)
+		runCron = owned(o.Own, unit.Assistant, runCron)
 	}
 	now := func() float64 {
 		if svc.Now != nil {
@@ -90,6 +91,9 @@ func New(svc *service.Service, jobs []scheduler.Definition, o Options) *schedule
 		Notice: func(ctx context.Context, skip scheduler.Skipped, at float64) error {
 			return notifySkipped(ctx, svc, skip, at)
 		},
+		Failed: func(ctx context.Context, f scheduler.Failure) error {
+			return notifyFailed(ctx, svc, f, now())
+		},
 		RunCron:   runCron,
 		Enabled:   o.Enabled,
 		Beat:      o.Beat,
@@ -123,7 +127,7 @@ func owned(own Own, owner string, run func(context.Context, scheduler.Run) (sche
 }
 
 func gate(ctx context.Context, svc *service.Service, now float64) (scheduler.Gate, error) {
-	g := scheduler.Gate{Paused: safety.IsPaused(svc.Cfg.PausePath())}
+	g := scheduler.Gate{Paused: pause.Paused(svc.Cfg.PausePath())}
 	loc, err := config.From(ctx).Location(svc.Env)
 	if err != nil {
 		return g, err
@@ -181,6 +185,29 @@ func notifySkipped(ctx context.Context, svc *service.Service, skip scheduler.Ski
 		Now:        func() float64 { return now },
 		Occurrence: fmt.Sprintf("scheduler-skip:%d", skip.JobRunID),
 	})
+	return err
+}
+
+func notifyFailed(ctx context.Context, svc *service.Service, f scheduler.Failure, now float64) error {
+	if !notify.Enabled(ctx) {
+		return nil
+	}
+	body := f.Error
+	if body == "" {
+		body = "The run failed without an error message."
+	}
+	m := notify.Message{
+		Channel:    notify.System,
+		Title:      "Failed: " + f.Job.Name,
+		Body:       body,
+		Now:        func() float64 { return now },
+		Click:      fmt.Sprintf("/scheduled?run=%d", f.JobRunID),
+		Occurrence: fmt.Sprintf("job-failed:%d", f.JobRunID),
+	}
+	if f.ThreadID != nil {
+		m.ThreadID = *f.ThreadID
+	}
+	_, err := notify.Send(ctx, svc.DB, m)
 	return err
 }
 

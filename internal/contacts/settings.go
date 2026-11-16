@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -17,7 +18,7 @@ const (
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: DirKey, Module: "contacts", Type: settings.String},
+		{Key: DirKey, Module: unit.Contacts, Type: settings.String},
 	}
 }
 
@@ -35,7 +36,7 @@ type Source struct {
 }
 
 func Resolve(ctx context.Context, q db.Querier) (Source, error) {
-	on, err := settings.From(ctx).Resolve(ctx, q, module.FlagKey(module.Contacts))
+	on, err := settings.From(ctx).Resolve(ctx, q, module.FlagKey(unit.Contacts))
 	if err != nil {
 		return Source{}, err
 	}

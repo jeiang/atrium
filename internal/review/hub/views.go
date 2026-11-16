@@ -1,7 +1,7 @@
-package reviewpages
+package hub
 
 import (
-	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
@@ -81,31 +81,18 @@ type DraftView struct {
 	SMTPResult         *string  `json:"smtp_result"`
 }
 
-func draftViews(cards []reviewapp.DraftCard) []DraftView {
-	out := make([]DraftView, len(cards))
-	for i, c := range cards {
-		out[i] = draftView(c.Row, c.Unexpected)
+func draftViews(drafts []review.Draft) []DraftView {
+	out := make([]DraftView, len(drafts))
+	for i, d := range drafts {
+		out[i] = DraftViewOf(d)
 	}
 	return out
 }
 
-func draftView(row mailapp.DraftRow, unexpected []string) DraftView {
+func DraftViewOf(d review.Draft) DraftView {
 	return DraftView{
-		ID: row.ID, Status: string(row.Status), Revision: row.Revision, Account: row.Account, InReplyToMessageID: row.InReplyToMessageID, ThreadID: row.ThreadID,
-		UpdatedAt: row.UpdatedAt, Unexpected: unexpected, ToAddrs: row.ToAddrs, CcAddrs: row.CcAddrs, Subject: row.Subject,
-		Body: row.Body, SMTPResult: row.SMTPResult,
+		ID: d.ID, Status: d.Status, Revision: d.Revision, Account: d.Account, InReplyToMessageID: d.InReplyToMessageID, ThreadID: d.ThreadID,
+		UpdatedAt: d.UpdatedAt, Unexpected: d.Unexpected, ToAddrs: d.ToAddrs, CcAddrs: d.CcAddrs, Subject: d.Subject,
+		Body: d.Body, SMTPResult: d.SMTPResult,
 	}
-}
-
-type draftsPage struct {
-	Drafts     []DraftView     `json:"drafts"`
-	Status     string          `json:"status"`
-	Statuses   []string        `json:"statuses"`
-	Configured map[string]bool `json:"configured"`
-}
-
-type draftCardData struct {
-	D          DraftView       `json:"d"`
-	Configured map[string]bool `json:"configured"`
-	Partial    bool            `json:"partial"`
 }
