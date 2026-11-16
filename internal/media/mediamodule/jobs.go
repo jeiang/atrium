@@ -11,8 +11,8 @@ import (
 	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func skipped(err error) (map[string]any, bool) {
@@ -36,9 +36,9 @@ func sweepJob(ctx context.Context, svc *mediaapp.Service) (any, error) {
 
 func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, shutdown scheduler.ShutdownPolicy, run mediacmd.Job) scheduler.Definition {
 	return scheduler.Definition{
-		Module: module.Media, Key: module.Media + "/" + name, Name: name, Kind: scheduler.JobBuiltin, Prompt: prompt,
+		Module: unit.Media, Key: unit.Media + "/" + name, Name: name, Kind: scheduler.JobBuiltin, Prompt: prompt,
 		Schedule: schedule, ScheduleSetting: setting, Persistent: true, Timeout: timeout, Spend: scheduler.ModelFree,
-		Shutdown: shutdown, Resources: []string{resource}, Needs: []string{module.Media},
+		Shutdown: shutdown, Resources: []string{resource}, Needs: []string{unit.Media},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			svc, err := openService(ctx, e.Service.DB, e.Service.Env, e.Service.Cfg, e.Now)
 			if err == nil {

@@ -13,8 +13,8 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail/tracking"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
@@ -38,7 +38,7 @@ func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
 		t.Fatalf("live pause exit %d: %s", got.code, got.stderr)
 	}
 	due := float64(time.Now().Unix()) - 1
-	for _, key := range []string{backup.JobKey, davJobKeys[0], davJobKeys[1], module.Mail + "/" + tracking.JobPackageTracking} {
+	for _, key := range []string{backup.JobKey, davJobKeys[0], davJobKeys[1], unit.Mail + "/" + tracking.JobPackageTracking} {
 		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", due, key)
 	}
 	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", due, assistant.NightlyName)

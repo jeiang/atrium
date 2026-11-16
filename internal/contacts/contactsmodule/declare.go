@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -31,7 +32,7 @@ func ToolDefinitions() []module.ToolDefinition {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := contactsOperations()
 	return module.Declaration{
-		Name:       module.Contacts,
+		Name:       unit.Contacts,
 		Requires:   Requirements(),
 		Host:       contacts.HostSettings(),
 		Jobs:       []scheduler.Definition{CardDAVJob(m.Jobs)},

@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -122,7 +123,7 @@ func classify(err error) error {
 }
 
 func (s *Service) admit(ctx context.Context, run bool) (context.Context, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil || !run {
 		return ctx, err
 	}

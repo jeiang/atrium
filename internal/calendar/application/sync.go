@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const SyncName application.Name = "calendar.sync"
@@ -46,7 +47,7 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[dav
 func (s *Service) SyncManual(ctx context.Context, cfg config.Config) (application.Change[davmirror.Stats], error) {
 	var out application.Change[davmirror.Stats]
 	var syncErr error
-	_, err := module.Invoke(ctx, s.db, cfg, module.Calendar+"/"+passrun.CalDAV, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+	_, err := module.Invoke(ctx, s.db, cfg, unit.Calendar+"/"+passrun.CalDAV, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 		out, syncErr = s.Sync(ctx, SyncInput{})
 		if missing, ok := errors.AsType[config.NotConfigured](syncErr); ok {
 			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil

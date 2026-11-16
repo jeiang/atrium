@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestPassesRecordOutcomesInJobRuns(t *testing.T) {
@@ -110,7 +111,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 
 func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Notifications, "false"))
 	push, browser := pushRig(t, dir)
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
@@ -139,7 +140,7 @@ func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
 	if n := push.count(); n != 0 {
 		t.Fatalf("%d pushes sent while notifications are off", n)
 	}
-	if got := runApp(t, "settings", "set", module.FlagKey(module.Notifications), "true"); got.code != cli.ExitOK {
+	if got := runApp(t, "settings", "set", module.FlagKey(unit.Notifications), "true"); got.code != cli.ExitOK {
 		t.Fatalf("notifications_enabled true: exit %d stderr %q", got.code, got.stderr)
 	}
 	if notice := push.find(t, browser, "backup is stale"); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {

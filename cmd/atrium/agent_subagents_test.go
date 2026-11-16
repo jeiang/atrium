@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type subagentListing struct {
@@ -42,7 +43,7 @@ func TestAgentSubagentsCommandsManageDefinitions(t *testing.T) {
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	seedSettings(t, map[string]string{module.FlagKey(module.Assistant): "true"})
+	seedSettings(t, map[string]string{module.FlagKey(unit.Assistant): "true"})
 
 	if mail, ok := listSubagents(t)["mail"]; !ok || !mail.Builtin || !mail.Enabled {
 		t.Fatalf("built-in mail agent missing: %+v", mail)

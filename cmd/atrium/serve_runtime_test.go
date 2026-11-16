@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 var serveRuntimeServices = []string{"recovery", "embedding-index", "connection-health", "notifications-monitor", "assistant", "scheduler"}
@@ -234,7 +235,7 @@ func TestServeRuntimeDisablingAModuleStopsItsJobAndRestartsOneInstance(t *testin
 	waitUntil(t, 30*time.Second, "the weekly review request held inside serve", func() bool { return len(api.Requests()) > before })
 	waitUntil(t, 30*time.Second, "the assistant service", func() bool { return serviceStarts(logs, "assistant") == 1 })
 
-	asstSet(t, module.FlagKey(module.Assistant), "false")
+	asstSet(t, module.FlagKey(unit.Assistant), "false")
 	waitUntil(t, 30*time.Second, "the held weekly review to settle", schedulerTerminal(d, "weekly-review"))
 	status, text := schedulerStatus(t, d, "weekly-review")
 	if status != "skipped_module" || !strings.Contains(text, "the assistant module was disabled; start the action again") {
@@ -249,7 +250,7 @@ func TestServeRuntimeDisablingAModuleStopsItsJobAndRestartsOneInstance(t *testin
 		t.Errorf("service assistant started %d times while disabled, want 1", n)
 	}
 
-	asstSet(t, module.FlagKey(module.Assistant), "true")
+	asstSet(t, module.FlagKey(unit.Assistant), "true")
 	waitUntil(t, 30*time.Second, "the re-enabled assistant service", func() bool { return serviceStarts(logs, "assistant") >= 2 })
 	time.Sleep(2 * time.Second)
 	if n := serviceStarts(logs, "assistant"); n != 2 {

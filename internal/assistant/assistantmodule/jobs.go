@@ -11,9 +11,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untrusted + " Gather, then write the review as your reply, with these " +
@@ -34,8 +34,8 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 
 func assistantJob(name, kind, prompt, schedule, setting string, timeout time.Duration, spend scheduler.Spend) scheduler.Definition {
 	return scheduler.Definition{
-		Module: module.Assistant, Key: module.Assistant + "/" + name, Name: name, Kind: kind, Prompt: prompt,
-		Schedule: schedule, ScheduleSetting: setting, Persistent: true, Timeout: timeout, Spend: spend, Needs: []string{module.Assistant},
+		Module: unit.Assistant, Key: unit.Assistant + "/" + name, Name: name, Kind: kind, Prompt: prompt,
+		Schedule: schedule, ScheduleSetting: setting, Persistent: true, Timeout: timeout, Spend: spend, Needs: []string{unit.Assistant},
 	}
 }
 

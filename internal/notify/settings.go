@@ -6,6 +6,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	modules "github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -27,7 +28,7 @@ func Settings() []settings.Def {
 }
 
 func Enabled(ctx context.Context) bool {
-	return modules.IsEnabled(ctx, modules.Notifications)
+	return modules.IsEnabled(ctx, unit.Notifications)
 }
 
 func whole(ctx context.Context, q db.Querier, key string) (int, error) {

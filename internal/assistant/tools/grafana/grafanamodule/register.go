@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
 	opsapp "github.com/jeiang/atrium/internal/serverops/application"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type Module struct {
@@ -40,8 +41,8 @@ func ToolDefinitions() []module.ToolDefinition {
 func (m Module) Declare(module.Context) module.Declaration {
 	operations, bindings := opsOperations()
 	return module.Declaration{
-		Name:        module.Grafana,
-		Needs:       []string{module.Assistant},
+		Name:        unit.Grafana,
+		Needs:       []string{unit.Assistant},
 		Settings:    serverops.Settings(),
 		Host:        serverops.HostSettingDefs(),
 		Requires:    Requirements(),
@@ -66,16 +67,16 @@ func opsOperations() ([]application.Definition, []application.Binding) {
 		{Kind: application.Tool, Target: "grafana_alerts", Uses: uses(opsapp.AlertsName)},
 		{Kind: application.Tool, Target: "grafana_search_dashboards", Uses: uses(opsapp.DashboardSearchName)},
 		{Kind: application.Tool, Target: "atrium_self_diagnose", Uses: uses(opsapp.SelfDiagnoseName)},
-		{Kind: application.Job, Target: module.Grafana + "/" + grafanatools.JobSampler, Uses: uses(opsapp.SampleName)},
+		{Kind: application.Job, Target: unit.Grafana + "/" + grafanatools.JobSampler, Uses: uses(opsapp.SampleName)},
 	}
 }
 
 func samplerJob(deps jobworker.Dependencies, sample func(context.Context, jobworker.Env) error) scheduler.Definition {
 	return scheduler.Definition{
-		Module: module.Grafana, Key: module.Grafana + "/" + grafanatools.JobSampler, Name: grafanatools.JobSampler, Kind: scheduler.JobBuiltin,
+		Module: unit.Grafana, Key: unit.Grafana + "/" + grafanatools.JobSampler, Name: grafanatools.JobSampler, Kind: scheduler.JobBuiltin,
 		Prompt:   "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).",
 		Schedule: "*/15 * * * *", ScheduleSetting: grafanatools.KeyScheduleSampler, Persistent: true, Timeout: 5 * time.Minute,
-		Spend: scheduler.ModelFree, Needs: []string{module.Grafana, module.Assistant},
+		Spend: scheduler.ModelFree, Needs: []string{unit.Grafana, unit.Assistant},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			if err := sample(ctx, e); err != nil {
 				return jobworker.Result{}, err

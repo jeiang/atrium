@@ -4,7 +4,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func threadOperations() ([]application.Definition, []application.Binding) {
@@ -40,6 +40,6 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/history/{start}/{n}", Uses: uses(asstapp.ThreadHistoryName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/events", Uses: uses(asstapp.RunEventsName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/runs/{run_id}", Uses: uses(asstapp.RunDetailName, asstapp.ThreadTranscriptName)},
-			{Kind: application.Job, Target: module.Assistant + "/" + assistant.StreamRetentionName, Uses: uses(asstapp.StreamRetentionName)},
+			{Kind: application.Job, Target: unit.Assistant + "/" + assistant.StreamRetentionName, Uses: uses(asstapp.StreamRetentionName)},
 		}...)
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type (
@@ -135,7 +136,7 @@ func (s *Service) TriageRow(ctx context.Context, messageID int64) (*triage.Row, 
 func (s *Service) Paused() bool { return safety.IsPaused(s.cfg.PausePath()) }
 
 func (s *Service) ScansEnabled(ctx context.Context) bool {
-	flag, err := settings.From(ctx).Resolve(ctx, s.db.Read, module.FlagKey(module.Mail))
+	flag, err := settings.From(ctx).Resolve(ctx, s.db.Read, module.FlagKey(unit.Mail))
 	if err != nil || flag.Value != "true" {
 		return false
 	}

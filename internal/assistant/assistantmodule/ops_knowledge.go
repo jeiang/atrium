@@ -4,8 +4,8 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -45,7 +45,7 @@ func (m Module) knowledgeOperations() ([]application.Definition, []application.B
 			{Kind: application.HTML, Target: "POST /library/knowledge/runs/{run_id}/retract", Uses: []application.Name{kbapp.RetractRunName}},
 			{Kind: application.Tool, Target: "kb_search", Uses: []application.Name{kbapp.SearchName}},
 			{Kind: application.Tool, Target: "kb_get", Uses: []application.Name{kbapp.GetName}},
-			{Kind: application.Job, Target: module.Assistant + "/" + assistant.KnowledgeExportName, Uses: []application.Name{kbapp.ExportName}},
+			{Kind: application.Job, Target: unit.Assistant + "/" + assistant.KnowledgeExportName, Uses: []application.Name{kbapp.ExportName}},
 			{Kind: application.Tool, Target: "kb_write", Uses: []application.Name{kbapp.AgentWriteName}},
 			{Kind: application.Tool, Target: "kb_retract", Uses: []application.Name{kbapp.AgentRetractName}},
 		}...)

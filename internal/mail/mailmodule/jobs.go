@@ -15,17 +15,18 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const scanSchedule = "0 0 1 * *"
 
 func (m Module) syncJob(env config.Env) scheduler.Definition {
 	return scheduler.Definition{
-		Module: module.Mail, Key: run.SyncJobKey, Name: passrun.Sync, Kind: scheduler.JobBuiltin,
+		Module: unit.Mail, Key: run.SyncJobKey, Name: passrun.Sync, Kind: scheduler.JobBuiltin,
 		Prompt: "Every 15 minutes: sync the mailboxes, then route, flag and file mail under the mail safety gate (no assistant run).",
 		Every:  15 * time.Minute, InitialDelay: 2 * time.Minute, Timeout: 20 * time.Minute,
 		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, RunsWhilePaused: true,
-		Resources: []string{mail.PassResource}, Needs: []string{module.Mail},
+		Resources: []string{mail.PassResource}, Needs: []string{unit.Mail},
 		Run: func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 			d, cfg, err := m.Resources(ctx)
 			if err != nil {
@@ -45,11 +46,11 @@ func (m Module) syncJob(env config.Env) scheduler.Definition {
 
 func (m Module) scanJob(env config.Env) scheduler.Definition {
 	return scheduler.Definition{
-		Module: module.Mail, Key: scans.JobKey, Name: passrun.Scan, Kind: scheduler.JobBuiltin,
+		Module: unit.Mail, Key: scans.JobKey, Name: passrun.Scan, Kind: scheduler.JobBuiltin,
 		Prompt:   "Monthly: scan the mailboxes for deletion proposals.",
 		Schedule: scanSchedule, Persistent: true, Timeout: 2 * time.Hour,
 		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, RunsWhilePaused: true,
-		Resources: []string{mail.PassResource}, Needs: []string{module.Mail},
+		Resources: []string{mail.PassResource}, Needs: []string{unit.Mail},
 		Run: func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 			d, cfg, err := m.Resources(ctx)
 			if err != nil {
@@ -92,10 +93,10 @@ func (m Module) watchServices(env config.Env) func(context.Context) ([]module.Se
 
 func trackingJob(deps jobworker.Dependencies) scheduler.Definition {
 	return scheduler.Definition{
-		Module: module.Mail, Key: module.Mail + "/" + tracking.JobPackageTracking, Name: tracking.JobPackageTracking, Kind: scheduler.JobBuiltin,
+		Module: unit.Mail, Key: unit.Mail + "/" + tracking.JobPackageTracking, Name: tracking.JobPackageTracking, Kind: scheduler.JobBuiltin,
 		Prompt:   "Hourly: refresh active Ship24 package trackers (no model run).",
 		Schedule: "0 * * * *", ScheduleSetting: tracking.KeySchedulePackageTracking, Persistent: true, Timeout: 15 * time.Minute,
-		Spend: scheduler.ModelFree, Needs: []string{module.Mail},
+		Spend: scheduler.ModelFree, Needs: []string{unit.Mail},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			_, err := mailapp.New(e.Service.DB, e.Service.Cfg, e.Service.Env, e.Now).PollTrackers(ctx, struct{}{})
 			return jobworker.Result{}, err

@@ -30,6 +30,7 @@ type Catalog struct {
 	conns      *connections.Registry
 	hooks      proposals.Hooks
 	credential config.AccountCredentialFunc
+	origins    map[string]string
 	metrics    []ops.Metric
 	checks     []ops.Check
 	jobs       []scheduler.Definition
@@ -198,18 +199,7 @@ func (c *Catalog) Ledger(d *db.DB, env config.Env, cfg config.Config, now func()
 				owner = operations[undo.Op]
 			}
 			if owner == "" {
-				switch effect.Origin {
-				case "mail_auto", "operator_send":
-					owner = Mail
-				case "calendar":
-					owner = Calendar
-				case "media":
-					owner = Media
-				case "notify":
-					owner = Notifications
-				case "export", "agent", "local":
-					owner = Assistant
-				}
+				owner = c.origins[effect.Origin]
 			}
 			if owner == "" {
 				return ctx, ledger.Refused("the effect has no registered owner")

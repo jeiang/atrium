@@ -4,7 +4,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/tracking"
-	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func mailLoopOperations() ([]application.Definition, []application.Binding) {
@@ -29,6 +29,6 @@ func mailLoopOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.CLI, Target: "loops refresh", Uses: []application.Name{mailapp.RefreshLoopsName}},
 			{Kind: application.CLI, Target: "watches refresh", Uses: []application.Name{mailapp.RefreshWatchesName}},
 			{Kind: application.CLI, Target: "packages poll", Uses: []application.Name{mailapp.PollTrackersName}},
-			{Kind: application.Job, Target: module.Mail + "/" + tracking.JobPackageTracking, Uses: []application.Name{mailapp.PollTrackersName}},
+			{Kind: application.Job, Target: unit.Mail + "/" + tracking.JobPackageTracking, Uses: []application.Name{mailapp.PollTrackersName}},
 		}
 }
