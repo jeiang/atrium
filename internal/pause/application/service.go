@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/settings/audit"
@@ -26,6 +27,7 @@ type PauseInput struct {
 
 type Changed struct {
 	State       pause.State
+	AuditID     int64
 	NoticeError error
 }
 
@@ -71,15 +73,21 @@ func (s *Service) Pause(ctx context.Context, in PauseInput) (application.Change[
 	if in.Reason != nil {
 		reason = strings.TrimSpace(*in.Reason)
 	}
-	return s.settle(ctx, PauseName, true, reason)
+	changed, err := s.Set(ctx, true, reason)
+	return application.Change[pause.State]{Data: changed.State, AuditID: changed.AuditID}, err
 }
 
 func (s *Service) Resume(ctx context.Context, _ struct{}) (application.Change[pause.State], error) {
-	return s.settle(ctx, ResumeName, false, "")
+	changed, err := s.Set(ctx, false, "")
+	return application.Change[pause.State]{Data: changed.State, AuditID: changed.AuditID}, err
 }
 
-func (s *Service) settle(ctx context.Context, name application.Name, paused bool, reason string) (application.Change[pause.State], error) {
-	changed, err := s.Set(ctx, paused, reason)
+func (s *Service) Set(ctx context.Context, paused bool, reason string) (Changed, error) {
+	name := ResumeName
+	if paused {
+		name = PauseName
+	}
+	out, err := s.change(ctx, paused, reason)
 	outcome := state.OK
 	if err != nil {
 		outcome = state.Failed
@@ -88,10 +96,20 @@ func (s *Service) settle(ctx context.Context, name application.Name, paused bool
 	if auditErr != nil {
 		logx.Logger("pause").Warn("pause changed but audit failed", "operation", string(name), logx.Err, auditErr.Error())
 	}
-	return application.Change[pause.State]{Data: changed.State, AuditID: id}, err
+	out.AuditID = id
+	if err != nil {
+		return out, err
+	}
+	if set := module.SetFrom(ctx); set != nil && set.Current() == nil {
+		if rerr := set.Refresh(ctx, s.db.Read); rerr != nil {
+			logx.Logger("pause").Warn("pause changed but module state could not be read for its notice", logx.Err, rerr.Error())
+		}
+	}
+	out.NoticeError = notify.PauseChanged(ctx, s.db, s.env, paused)
+	return out, nil
 }
 
-func (s *Service) Set(ctx context.Context, paused bool, reason string) (Changed, error) {
+func (s *Service) change(ctx context.Context, paused bool, reason string) (Changed, error) {
 	path := s.cfg.PausePath()
 	var err error
 	if paused {
@@ -109,6 +127,5 @@ func (s *Service) Set(ctx context.Context, paused bool, reason string) (Changed,
 	if terr := s.state.Touch(context.WithoutCancel(ctx), state.Automation); terr != nil {
 		logx.Logger("pause").Warn("pause changed but its event topic was not bumped", logx.Err, terr.Error())
 	}
-	out.NoticeError = notify.PauseChanged(ctx, s.db, s.env, paused)
 	return out, nil
 }

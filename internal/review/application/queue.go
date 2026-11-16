@@ -69,6 +69,7 @@ type QueueItem struct {
 	ArrivedAt  float64     `json:"arrived_at"`
 	Due        *float64    `json:"due,omitempty"`
 	WaitingFor string      `json:"waiting_for" api:"enum=answer|permission|approval|send|resolve|review|due"`
+	LoopID     *int64      `json:"loop_id,omitempty"`
 	Module     string      `json:"module"`
 	rank       int
 	at         float64
@@ -280,6 +281,9 @@ func (s *Service) queueItems(ctx context.Context, q db.Querier, now float64) ([]
 		for _, a := range found.Items {
 			item := QueueItem{Kind: QueueAttention, Title: a.Title, Summary: a.Detail, Source: QueueSource{Type: a.Kind, ID: a.SourceID},
 				ArrivedAt: a.Created, Module: owned.Module}
+			if a.LoopID > 0 {
+				item.LoopID = new(a.LoopID)
+			}
 			switch {
 			case a.Kind == "question":
 				item.Kind, item.WaitingFor, item.rank, item.at = QueueAsk, WaitingAnswer, rankBlocksAssistant, a.Created

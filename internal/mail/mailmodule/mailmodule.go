@@ -77,7 +77,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
 		{Name: "loops", Title: "Open loops", Keys: []string{
-			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays,
+			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsRemindHour, mail.KeyLoopsSnoozeDefaultDays,
 		}},
 		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 	}
@@ -191,7 +191,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			return module.Effects{
 				Proposals: slices.Concat(e.Proposals(unit.Mail), r.Proposals(unit.Mail)),
-				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo()),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo(), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoCommitmentSnooze, d.Now)}),
 				Resolve:   live.Resolve(),
 				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),
 			}

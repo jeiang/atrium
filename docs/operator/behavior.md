@@ -502,9 +502,12 @@ waiting on, permission requests, pending proposals and those with an unknown
 outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
 items such as commitments, tasks and open loops. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
-`GET /api/v1/queue`. The Needs you page still lists only proposals and drafts;
-with mail off it and `GET /api/v1/pending` list no drafts, and Activity keeps
-showing past mail actions.
+`GET /api/v1/queue`, and `GET /api/v1/home` returns the count and the first
+three of them as `needs_you`. The Needs you page still lists only proposals and
+drafts; with mail off it and `GET /api/v1/pending` list no drafts, and Activity
+keeps showing past mail actions. A task or commitment can be snoozed until a
+later time with `POST /api/v1/commitments/{ref}/snooze`; it leaves Needs you
+until then, and the snooze can be undone.
 
 Tasks can be created, edited, completed, reopened, dismissed and deleted from
 `/api/v1/tasks`. Each of these can be undone: the response names one effect,
@@ -591,7 +594,8 @@ previous text, and undo restores the previous text. Its text follows the
 compiled base prompt in chat, cron and nightly requests. It is not part of the
 profile or retrieval, the assistant cannot change it, and it cannot be purged.
 A custom system prompt stored by an earlier version is carried into the page
-once. Subagent roles are fixed in code; the `/subagents` routes and the
+once. Subagent roles are fixed in code and readable at
+`GET /api/v1/assistant/subagent-roles`; the `/subagents` routes and the
 `agent subagents` commands are gone.
 
 The knowledge export is one-way and writes one Markdown folder, set by the

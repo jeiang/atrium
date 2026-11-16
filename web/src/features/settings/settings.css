@@ -1,0 +1,40 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .settings {
+    display: grid;
+    gap: var(--s-5);
+    min-inline-size: 0;
+  }
+
+  .settings__nav,
+  .settings__panel {
+    min-inline-size: 0;
+  }
+
+  @media (--desktop) {
+    .settings {
+      grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .settings__nav {
+      position: sticky;
+      inset-block-start: var(--s-4);
+    }
+  }
+
+  @media (--phone) {
+    .settings[data-index] .settings__panel,
+    .settings:not([data-index]) .settings__nav {
+      display: none;
+    }
+
+    .settings__back {
+      display: inline-flex;
+      align-items: center;
+      justify-self: start;
+      min-block-size: 44px;
+    }
+  }
+}
