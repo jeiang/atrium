@@ -35,9 +35,11 @@ claims about the running application. Operator contracts are in
   does not delete its data.
 
 ### Prompts, history, retrieval, and knowledge
-- The system prompt and subagent rules are operator-editable settings over
-  built-in defaults; the untrusted-data preamble is fixed in code and always
-  comes first. Edits apply to every thread's next request.
+- The system prompt and subagent rules (`prompt_system`, `prompt_subagent`)
+  are operator settings over built-in defaults, set with `atrium settings
+  set`; no settings page offers them, so the settings API refuses them. The
+  untrusted-data preamble is fixed in code and always comes first. Edits
+  apply to every thread's next request.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
   `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
@@ -114,8 +116,8 @@ claims about the running application. Operator contracts are in
   key is a generated secret (`webpush_vapid_private_key`) or the
   `service/webpush` connection's `credential_files.vapid_private` host file,
   and the subject comes from `webpush_subject`, edited on the Notifications page,
-  which the notifications module requires. A push carries the title, a body of at most 240 characters, a
-  URL path and, for phone actions, the action links; it is encrypted per
+  which the notifications module requires. A push carries the title, a body of at most 240 characters and a
+  URL path to the signed-in page for its subject; it has no action buttons and opening it writes nothing. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
@@ -143,20 +145,12 @@ claims about the running application. Operator contracts are in
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
   contacts/calendar concern and are not an open-loop source.
-- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain. Link minting limits do not suppress proposal inbox rows or pushes.
-- Phone actions are HMAC-signed links in a notification that approve or
-  dismiss a proposal: `phone_actions_enabled` (default off) and
-  `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot
-  be enabled. A link is valid for 12 hours, one use, with at most 20 links
-  minted per hour; `POST /actions/{token}` redeems it without a session, and
-  the resolution is recorded with source `phone` and shown as "approved via
-  phone" in `/activity`. The host file may bind `app_keys.action_link_key_file`;
-  its bytes sign and verify links and are never copied into the database.
-  Rotating the generated `action_link_key` invalidates
-  outstanding links; the phone action section of the Notifications settings
-  tab shows the outstanding count and revokes links. With a host-file key, revocation deletes outstanding links without rewriting the key.
-  A phone approval that meets a busy lock leaves the proposal pending and
-  the link usable.
+- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain.
+- A permission proposal sends an assistant notification whose push opens
+  `/proposals/{id}`, where the operator decides it while signed in. The
+  generated `action_link_key` secret, or the host file's
+  `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
+  fingerprints; host-file bytes are never copied into the database.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -437,18 +431,16 @@ claims about the running application. Operator contracts are in
   action touches no mailbox and appends actor, source, outcome and the prior
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
-  A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
-  `import`; it is the entry point that made the decision, so an `/api/v1`
-  approval records `api` and a web one `ui`. Approve, dismiss, undo and
+  A resolution source is `cli`, `ui`, `api`, `tool`, `job` or `import`; it
+  is the entry point that made the decision, so an `/api/v1` approval
+  records `api` and a web one `ui`. Rows recorded with source `phone` by the
+  retired phone action links stay in `/activity` as "phone action". Approve, dismiss, undo and
   resolve are the `review.*` operations shared by every entry point, each
   audited in `operation_audit` after the ledger settles, even after caller
   cancellation. Audit provenance comes only from the trusted invocation.
   Mail correction audits name only effects created under their own pass lock;
   move, folder-create, draft-send and draft-resolve audits link their ledger
   effects and retain unknown, partial and stale-revision conflict outcomes.
-  Phone approvals re-check the redeemed link inside the proposal claim, so
-  revocation during a pass-lock wait refuses the waiting tap; revoke re-stamps
-  every used link, including expired ones.
   Manual, scheduled and watch-admitted syncs share `mail.sync` and the
   `mail-pass` resource claim. Its result retains per-account sync statistics
   and committed, failed, skipped, partial and unknown forward effect ids.
@@ -458,8 +450,7 @@ claims about the running application. Operator contracts are in
   Replay, shadow reports and reindexing have typed operations too. Replay
   never contacts a mail server; default replay makes no external calls,
   while `--model` keeps paid classification on a disposable database copy.
-  Phone policy and changed-plan refusals are audited; invalid, expired and used tokens
-  are not. Undo and resolve preserve the explicit proposal, effect or mail
+  Changed-plan refusals are audited. Undo and resolve preserve the explicit proposal, effect or mail
   namespace, including unknown ids. A malformed
   approval selection is invalid input (`atrium proposals approve` exits 2,
   the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
@@ -467,7 +458,7 @@ claims about the running application. Operator contracts are in
   streamed run event writes do not); the append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`. Notification inbox, channel and device controls,
-  delivery, and phone policy commands use `notifications.*` operations. The
+  and delivery commands use `notifications.*` operations. The
   inbox read is bounded to 100 items (API default 50); failed push delivery
   remains explicit and keeps its inbox record.
 
@@ -639,8 +630,7 @@ claims about the running application. Operator contracts are in
   keeps every registration in the module catalog: it type-checks the
   production packages and fails, naming file and line, when an `init`
   function calls into another package (only the SQLite driver setup in
-  `internal/db/open_cgo.go` and the stopword table in
-  `internal/mail/rebalance/rebalance.go` may), when code outside
+  `internal/db/open_cgo.go` may), when code outside
   `internal/module` and `internal/app` builds or fills a registry
   (settings, connections, scheduled jobs, proposal kinds, the effect
   ledger's undo and resolve hooks, the assistant tool registry) or sets a
@@ -662,7 +652,7 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery and action links. The ops listener also serves
+  notification delivery. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   The host owns the scrape job and the traces endpoint.
@@ -702,18 +692,17 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
-- The library catalogue, `media_library_search`, library pages, episode
-  thumbnails and the `media-thumbnails` job read from the agent. The host key
+- The library catalogue, `media_library_search` and library pages read from
+  the agent. The host key
   `media_root` is refused at startup (exit 78) and at Nix evaluation, naming
   `services.atrium.mediaAgent.roots`. The media module requires the
   `service/media-agent` connection. One catalogue per process is refreshed by
   the noncritical `media-catalogue` service every minute and after each
   filing (complete scan snapshots only; 30 s bound). A failed refresh keeps
   the previous catalogue and marks it stale; with no catalogue yet, library
-  reads answer 503 rather than an empty library. The agent generates and
-  caches thumbnails and remembers a failed thumbnail for seven days;
-  `/apps/media/thumb/*` relays them behind login and shows the placeholder
-  when the agent has none or is unavailable.
+  reads answer 503 rather than an empty library. There are no episode
+  thumbnails; `mediaAgent.capabilities` still accepts `"thumbnail"` and
+  ignores it for one release.
 - VPN library links come from one host key, `media.media_vpn_base_url`
   (https origin; http only on loopback), as `<base>/library/{movies,tv}/<path>`,
   served by the agent's `[vpn]` listener: GET and HEAD only on those two
@@ -722,7 +711,7 @@ claims about the running application. Operator contracts are in
   refused. Signed public links are unchanged.
 - Bearer media file reads resolve opaque ids through catalogue detail before
   streaming through the agent. GET and HEAD content support byte ranges
-  without opening library paths in main; thumbnails, artwork and path-free
+  without opening library paths in main; artwork and path-free
   filing inspection are API resources. Torrent adds accept the JSON magnet
   form or multipart magnet or torrent input under shared upload admission
   and the torrent size cap.
@@ -800,8 +789,8 @@ claims about the running application. Operator contracts are in
   attempt unknown after 120 seconds without renewal. An unknown outcome
   blocks the target until the operator resolves it and is never retried. An
   undo is its own effect row. `atrium effects list|show|resolve|undo` inspects
-  and settles effects; `atrium writes` and `atrium live` are domain-filtered
-  views of the same rows.
+  and settles effects; `atrium live` is a domain-filtered view of the same
+  rows.
   Undo and resolve handlers come from the compiled module catalog at every
   entry point, including mail proposal effects and media effects; the effect
   state and the relevant write gate still determine whether an undo can run.
@@ -821,8 +810,10 @@ claims about the running application. Operator contracts are in
   effect before the IMAP or SMTP call. An unknown outcome stays blocked until
   the operator resolves it and is never retried automatically; an action the
   operator has undone is not applied again; moves use COPY, STORE Deleted and
-  UID EXPUNGE. A due snooze in shadow mode records a skipped effect and stays
-  pending. Proposal undo reverses completed effects newest first and stops at
+  UID EXPUNGE. Mail triage proposals only archive or label; a proposal item,
+  effect or undo plan of a removed kind (message snooze) stays readable,
+  is refused before any IMAP call, and cannot be undone. Proposal undo
+  reverses completed effects newest first and stops at
   the first reversal that does not complete.
 - Going live takes a baseline of the read, unflagged inbox messages present
   at that moment, and automatic filing and deletion never touch them. A
@@ -836,16 +827,16 @@ claims about the running application. Operator contracts are in
   is empty.
 - Calendar writes record an effect in the ledger before the external call. A
   write whose outcome is unknown stays blocked; further writes to the same
-  calendar are refused until the operator resolves it with `atrium writes
+  calendar are refused until the operator resolves it with `atrium effects
   resolve <id>` or the Activity page.
 - The knowledge export is export-only: a built-in job renders live,
   non-expired records into the Notion page named by
   `export_notion_parent` and overwrites the pages it created; a target with no
   destination is skipped. The Notion controls are a standalone section on the
-  Integrations page, the Obsidian folder has its own section, and the parent
+  Export settings page, the Obsidian folder has its own section, and the parent
   page accepts a pasted page URL or id stored as the normalized id. Each
   external write records an effect first; Notion mutations are not retried,
-  and an unknown outcome blocks the target until `atrium writes resolve
+  and an unknown outcome blocks the target until `atrium effects resolve
   <id>`. Pages the export did not create are never touched, and edits made in
   Notion are overwritten on the next run. The Obsidian export likewise
   writes and removes only the files it tracks. Private records are exported
@@ -903,11 +894,11 @@ claims about the running application. Operator contracts are in
   `/settings/usage`, which clears once the budget has room; a source cap
   refusal records no deferral. The sampler resolves a finding once its
   fact is back to normal; resolved findings are pruned after 30 days.
-  Findings of severity warning or critical appear in the attention view
-  and on Needs you. No worker run starts automatically and nothing
+  Findings of severity warning or critical are attention items, returned by
+  `GET /api/v1/review/items` and the `attention` tool; Needs you shows
+  proposals only. No worker run starts automatically and nothing
   restarts or changes a host.
-- The Notion page view is read-only, and `notion_link` and `notion_edit`
-  proposals from v2 stay readable and dismissable. Approvals are only for
+- The Notion page view is read-only. Approvals are only for
   external or costly actions.
 - Threads carry marks, recorded with `threads.tainted_at` as the first
   mark time. The set is a bitmask: `untrusted` (someone else wrote the
@@ -974,13 +965,12 @@ claims about the running application. Operator contracts are in
   at the parked call. An approval card's apply re-authorizes the
   originating thread against the current tool settings, permission table
   and marks at execution time, whichever entry point approved it (web
-  card, phone link or `atrium proposals approve`); a disabled tool or a
+  card or `atrium proposals approve`); a disabled tool or a
   tightened table fails the proposal instead of applying it. Cron, nightly
   and subagent runs never park: an ask without a card is a deny there. A
   tool that leaves the allow set is withdrawn from dispatch; the request
   keeps its tools array so the run's thinking stays valid, and only a
-  server tool that must go rebuilds the request. Phone action links never
-  approve or dismiss a permission request. Branches inherit the marks.
+  server tool that must go rebuilds the request. Branches inherit the marks.
   A thinking block is resent only while everything before it is
   unchanged.
 - `lookup` reads one source in a child subagent and returns typed
@@ -1108,7 +1098,7 @@ claims about the running application. Operator contracts are in
   and `/threads/{id}` answer the same way; each transcript page (`limit`,
   `cursor`) has its own tag, and a new message, run or card changes it. These reads
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
-  and `atrium writes list` go through the `review.*` operations in
+  go through the `review.*` operations in
   `internal/review/application`.
 - Every `/api/v1` route is a typed binding mounted through `internal/api`.
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
@@ -1152,7 +1142,7 @@ claims about the running application. Operator contracts are in
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

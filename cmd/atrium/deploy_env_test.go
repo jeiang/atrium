@@ -45,6 +45,48 @@ func TestRetiredSettingEnvironmentVariableWarns(t *testing.T) {
 	}
 }
 
+func TestRemovedPhoneActionSettingsDoNotBlockStartUp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	if r := runSettings(t, "set", "tz", "America/Barbados"); r.code != cli.ExitOK {
+		t.Fatalf("set tz: exit %d %q", r.code, r.stderr)
+	}
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = d.Write.Exec("INSERT INTO settings (key, value) VALUES ('phone_actions_enabled', 'true'), ('phone_actions_kinds', 'reminder')")
+	_ = d.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_ACTION_LINKS_PHONE_ACTIONS_ENABLED", "true")
+	setEnv(t, "ATRIUM_ACTION_LINKS_PHONE_ACTIONS_KINDS", "reminder")
+	logs := &lockedBuffer{}
+	previous := slog.Default()
+	logx.Setup(logs)
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	listed := runSettings(t, "list")
+	if listed.code != cli.ExitOK {
+		t.Fatalf("settings list with removed phone action settings: exit %d stderr %q", listed.code, listed.stderr)
+	}
+	if strings.Contains(listed.stdout, "phone_actions") {
+		t.Errorf("settings list still shows a phone action setting: %q", listed.stdout)
+	}
+	for _, name := range []string{"ATRIUM_ACTION_LINKS_PHONE_ACTIONS_ENABLED", "ATRIUM_ACTION_LINKS_PHONE_ACTIONS_KINDS"} {
+		if !strings.Contains(logs.String(), name) {
+			t.Errorf("the removed variable %s was not warned about: %q", name, logs.String())
+		}
+	}
+	var out, errs bytes.Buffer
+	if code := defaultApp(t).Run(context.Background(), []string{"shadow-report", "--since", "2026-01-01"}, &out, &errs); code != cli.ExitOK {
+		t.Fatalf("a command with removed phone action settings stored and pinned: exit %d %q", code, errs.String())
+	}
+}
+
 func TestFileSpellingOfACutoverKeyNamesTheFileVariable(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

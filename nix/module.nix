@@ -229,7 +229,7 @@
         label = "media agent";
         config.url = "http://${agent.listen}";
         transport = {};
-        inherit (agent) capabilities;
+        capabilities = lib.remove "thumbnail" agent.capabilities;
         credentialFiles.bearer = agent.bearerFile;
       };
     };
@@ -474,7 +474,7 @@
     description = "atrium media agent";
     after = ["network-online.target"];
     wants = ["network-online.target"];
-    path = [agent.ffmpegPackage pkgs.coreutils];
+    path = [pkgs.coreutils];
     unitConfig.StartLimitIntervalSec = 0;
     serviceConfig = {
       ExecStart = "${lib.getExe agent.package} media-agent --config ${agentConfigFile}";
@@ -527,6 +527,7 @@ in {
     (lib.mkRemovedOptionModule ["services" "atrium" "backup" "onCalendar"] "Use services.atrium.backup.schedule in the atrium schedule grammar (for example \"daily 03:00\"); translate a nondefault OnCalendar expression by hand.")
     (lib.mkRemovedOptionModule ["services" "atrium" "web" "local" "enable"] "Use services.atrium.web.emergency.enable; the emergency listener runs in atrium.service.")
     (lib.mkRemovedOptionModule ["services" "atrium" "web" "local" "port"] "Use services.atrium.web.emergency.port; the emergency listener runs in atrium.service.")
+    (lib.mkRemovedOptionModule ["services" "atrium" "mediaAgent" "ffmpegPackage"] "the media agent no longer runs ffmpeg; remove the option.")
     (lib.mkRemovedOptionModule ["services" "atrium" "modelServerUnits"] "use services.atrium.embeddingServerUnits for the service/embedding server; the local chat server is retired and mail classification uses the service/anthropic connection under monthly_budget_usd")
   ];
 
@@ -760,13 +761,6 @@ in {
         description = "Package whose atrium binary runs `atrium media-agent`.";
       };
 
-      ffmpegPackage = mkOption {
-        type = types.package;
-        default = pkgs.ffmpeg-headless;
-        defaultText = lib.literalExpression "pkgs.ffmpeg-headless";
-        description = "Package that provides ffmpeg and ffprobe on the agent unit's path for thumbnails.";
-      };
-
       user = mkOption {
         type = types.str;
         default = "atrium-media-agent";
@@ -794,8 +788,8 @@ in {
 
       capabilities = mkOption {
         type = types.listOf (types.enum ["scan" "thumbnail" "file" "stream"]);
-        default = ["scan" "thumbnail" "file" "stream"];
-        description = "Enabled capabilities of the service/media-agent connection: scan (library catalogue), thumbnail, file (filing and imports) and stream (signed library links).";
+        default = ["scan" "file" "stream"];
+        description = "Enabled capabilities of the service/media-agent connection: scan (library catalogue), file (filing and imports) and stream (signed library links). \"thumbnail\" is accepted and ignored; it will be removed in a later release.";
       };
 
       roots = {

@@ -15,7 +15,6 @@ var keyedOneShots = [][]string{
 	{"calendar", "candidates"},
 	{"media", "poll"},
 	{"effects", "list"},
-	{"writes", "list"},
 	{"proposals", "list"},
 	{"agent", "subagents", "list"},
 	{"connections", "list"},

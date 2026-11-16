@@ -392,7 +392,7 @@ func TestReviewZeroTargetsKeepTheirNamespace(t *testing.T) {
 	base := startServeIn(t, dir)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
-	for _, command := range []string{"effects", "writes", "live"} {
+	for _, command := range []string{"effects", "live"} {
 		for _, action := range []string{"undo", "resolve"} {
 			args := []string{command, action, "0"}
 			if action == "resolve" {

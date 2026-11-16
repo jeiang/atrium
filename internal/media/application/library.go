@@ -21,7 +21,6 @@ const (
 	LibraryDetailName application.Name = "media.library-detail"
 	ArtName           application.Name = "media.art"
 	FileName          application.Name = "media.file"
-	ThumbnailName     application.Name = "media.thumbnail"
 )
 
 type LibraryInput struct {
@@ -264,50 +263,6 @@ func relay(resp *http.Response) *FileRelay {
 	return &FileRelay{Status: resp.StatusCode, Header: h, Body: resp.Body}
 }
 
-type ThumbnailInput struct {
-	Rel             string
-	Method          string
-	IfNoneMatch     string
-	IfModifiedSince string
-}
-
-func DescribeThumbnail() application.Definition {
-	return application.Describe[ThumbnailInput, *FileRelay](ThumbnailName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
-}
-
-func (s *Service) Thumbnail(ctx context.Context, in ThumbnailInput) (*FileRelay, error) {
-	if in.Method != http.MethodGet && in.Method != http.MethodHead {
-		return nil, notFound("not found")
-	}
-	root, rel, ok := media.SplitRel(in.Rel)
-	if !ok {
-		return nil, notFound("not found")
-	}
-	set, err := s.settings(ctx)
-	if err != nil {
-		return nil, err
-	}
-	client, err := set.Agent(protocol.CapabilityStream)
-	if err != nil {
-		return nil, classify(err)
-	}
-	resp, err := client.Stream(ctx, agentclient.StreamRequest{
-		Resource: "thumbnail", Path: protocol.Path{Root: root, Rel: rel}, Method: in.Method,
-		IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince,
-	})
-	if err != nil {
-		return nil, &application.Error{Code: application.Unavailable, Message: "the media agent is unavailable", Cause: err}
-	}
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {
-		_ = resp.Body.Close()
-		if resp.StatusCode >= 500 {
-			return nil, &application.Error{Code: application.Unavailable, Message: "the media agent is unavailable"}
-		}
-		return nil, notFound("not found")
-	}
-	return relay(resp), nil
-}
-
 func (s *Service) File(ctx context.Context, in FileInput) (*FileRelay, error) {
 	if (in.Method != http.MethodGet && in.Method != http.MethodHead) || !s.d.Links.Verify(ctx, in.Rel, in.Exp, in.Sig, s.d.Now()) {
 		return nil, &application.Error{Code: application.Forbidden, Message: "the link is invalid or has expired"}
@@ -326,7 +281,7 @@ func (s *Service) File(ctx context.Context, in FileInput) (*FileRelay, error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	resp, err := client.Stream(ctx, agentclient.StreamRequest{
-		Resource: "file", Path: protocol.Path{Root: root, Rel: rel}, Method: in.Method,
+		Path: protocol.Path{Root: root, Rel: rel}, Method: in.Method,
 		Range: in.Range, IfRange: in.IfRange, IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince,
 	})
 	if err != nil {

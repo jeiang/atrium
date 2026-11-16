@@ -2,15 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -30,18 +25,7 @@ func agentConnectionState(t *testing.T, dir string) string {
 
 func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	bin := fakeFFmpeg(t, fakeThumbnailer)
-	agent := libraryAgent(t, dir, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	for i := 2; i <= 6; i++ {
-		writeMediaFile(t, filepath.Join(agent.roots["tv"], libraryShow, "Season 01", fmt.Sprintf("Lanterns - S01E%02d.mkv", i)), "episode")
-	}
-	for i := 1; i <= 6; i++ {
-		path := filepath.Join(libraryShow, "Season 01", fmt.Sprintf("Lanterns - S01E%02d.mkv", i))
-		resp, image := agent.get(t, "/v1/thumbnail?"+url.Values{"root": {"tv"}, "path": {path}}.Encode(), nil)
-		if resp.StatusCode != http.StatusOK || string(image) != fakeJPEG {
-			t.Fatalf("prepare thumbnail = %d %q", resp.StatusCode, image)
-		}
-	}
+	agent := libraryAgent(t, dir)
 	if ran := runApp(t, "connections", "test", "service/media-agent", "--json"); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, `"state": "ok"`) {
 		t.Fatalf("connection test = %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
@@ -101,24 +85,8 @@ func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
 	if strings.Contains(index, "Showing the library as of") {
 		t.Fatalf("a cancelled first load marked the catalogue stale: %s", index)
 	}
-	code, show, err := request(context.Background(), "/apps/media/library/tv/"+libraryShow)
-	if err != nil || code != http.StatusOK {
-		t.Fatalf("show page = %d %v", code, err)
-	}
-	thumbs := regexp.MustCompile(`src="(/apps/media/thumb/[^"]+)"`).FindAllStringSubmatch(show, -1)
-	if len(thumbs) < 6 {
-		t.Fatalf("show page thumbnails = %d", len(thumbs))
-	}
-	pause()
-	var wg sync.WaitGroup
-	for _, m := range thumbs {
-		wg.Go(func() { cancelled(m[1]) })
-	}
-	wg.Wait()
-	resume()
-	code, image, err := request(context.Background(), thumbs[0][1])
-	if err != nil || code != http.StatusOK || image != fakeJPEG {
-		t.Fatalf("thumbnail after the cancelled burst = %d %v %q", code, err, image)
+	if code, show, err := request(context.Background(), "/apps/media/library/tv/"+libraryShow); err != nil || code != http.StatusOK || strings.Contains(show, "/apps/media/thumb/") {
+		t.Fatalf("show page = %d %v %.300s", code, err, show)
 	}
 	if state := agentConnectionState(t, dir); state != "ok" {
 		t.Fatalf("cancelled requests left the agent connection %q", state)

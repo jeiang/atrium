@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -116,29 +113,6 @@ func TestSecretsRefuseAndReportAFileBackedAppKey(t *testing.T) {
 	var rows int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets WHERE name = ?", secrets.ActionLinkKey).Scan(&rows); err != nil || rows != 0 {
 		t.Errorf("secrets rows after delete = %d, %v; want 0", rows, err)
-	}
-}
-
-func TestPhoneRevokeWorksWhenAnAppKeyFileSuppliesTheKey(t *testing.T) {
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	keyPath := filepath.Join(dir, "action-link.key")
-	if err := os.WriteFile(keyPath, []byte("file-key\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigAppend(t, defaultHostConfig, dir, "host-app-key.toml",
-		"\n[app_keys]\naction_link_key_file = "+strconv.Quote(keyPath)+"\n"))
-	base, _, _ := startServeStoppable(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil); code != http.StatusOK {
-		t.Fatalf("notifications page = %d", code)
-	}
-	code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{})
-	if code != http.StatusOK {
-		t.Fatalf("rotate with an app key file: %d %q", code, body)
 	}
 }
 

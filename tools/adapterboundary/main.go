@@ -41,8 +41,6 @@ var adapters = []adapter{
 	{pattern: "internal/mail/mailcmd/*"},
 	{pattern: "internal/mail/run/command.go"},
 	{pattern: "internal/proposals/proposalscmd/*"},
-	{pattern: "internal/actionlink/handler.go"},
-	{pattern: "internal/actionlink/pages/*"},
 	{pattern: "internal/calendar/calendarcmd/*"},
 	{pattern: "internal/contacts/contactsmodule/adapters.go"},
 	{pattern: "internal/media/pages/*"},
@@ -61,7 +59,6 @@ var adapters = []adapter{
 	{pattern: "internal/db/dbcmd/*"},
 	{pattern: "internal/backup/*", marker: "cli.Command{"},
 	{pattern: "internal/ledger/ledgercmd/*"},
-	{pattern: "internal/writes/writescmd/*"},
 	{pattern: "internal/serverops/*", marker: "scheduler.Definition"},
 }
 

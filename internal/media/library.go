@@ -170,13 +170,6 @@ func (t Tuning) EpisodeFilesOf(snap Snapshot, name string) []string {
 	return out
 }
 
-func (t Tuning) EpisodeFiles(snap Snapshot) []string {
-	out := []string{}
-	for _, name := range dirsOf(snap, TV, "") {
-		out = append(out, t.EpisodeFilesOf(snap, name)...)
-	}
-	return out
-}
 func containsAll(hay string, words []string) bool {
 	for _, w := range words {
 		if !strings.Contains(hay, w) {

@@ -13,25 +13,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/actionlink"
-	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func permissionProposal(t *testing.T, d *db.DB) (int64, string) {
+func permissionProposal(t *testing.T, d *db.DB) int64 {
 	t.Helper()
 	var id int64
-	var fingerprint string
-	if err := d.Read.QueryRow("SELECT id, fingerprint FROM proposals WHERE kind = 'permission' ORDER BY id DESC LIMIT 1").
-		Scan(&id, &fingerprint); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = 'permission' ORDER BY id DESC LIMIT 1").
+		Scan(&id); err != nil {
 		t.Fatalf("permission proposal: %v", err)
 	}
-	return id, fingerprint
+	return id
 }
 
 func waitRunState(t *testing.T, d *db.DB, thread int64, want string) {
@@ -49,17 +45,16 @@ func waitRunState(t *testing.T, d *db.DB, thread int64, want string) {
 	}
 }
 
-func waitParkedPermission(t *testing.T, d *db.DB, thread int64) (int64, string) {
+func waitParkedPermission(t *testing.T, d *db.DB, thread int64) int64 {
 	t.Helper()
 	var state string
 	for deadline := time.Now().Add(20 * time.Second); ; {
 		var id int64
-		var fingerprint string
-		err := d.Read.QueryRow("SELECT id, fingerprint FROM proposals WHERE kind = 'permission' ORDER BY id DESC LIMIT 1").
-			Scan(&id, &fingerprint)
+		err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = 'permission' ORDER BY id DESC LIMIT 1").
+			Scan(&id)
 		_ = d.Read.QueryRow("SELECT state FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).Scan(&state)
 		if err == nil && state == "parked" {
-			return id, fingerprint
+			return id
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("no parked permission request: %v state %q", err, state)
@@ -92,7 +87,7 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	proposal, _ := waitParkedPermission(t, d, thread)
+	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); len(hits) != 1 || hits[0] != "/a" {
 		t.Fatalf("page fetches before the decision = %v, want /a only", hits)
 	}
@@ -132,7 +127,7 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	proposal, _ := waitParkedPermission(t, d, thread)
+	proposal := waitParkedPermission(t, d, thread)
 	var runID int64
 	var owner string
 	if err := d.Read.QueryRow("SELECT id, COALESCE(owner, '') FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).Scan(&runID, &owner); err != nil {
@@ -184,50 +179,6 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 	refusal := toolResultFor(t, requests[len(requests)-1], "f2")
 	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "the operator denied this request") {
 		t.Errorf("denied fetch returned %v, want an error result", refusal)
-	}
-}
-
-func TestPhoneLinkCannotApproveAPermissionRequest(t *testing.T) {
-	srv, pages := webPages(t)
-	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	seedSettings(t, map[string]string{policy.EnabledKey: "true", policy.KindsKey: "permission"})
-	warm(t, api)
-	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("waiting")))
-	text := "read " + srv.URL + "/a then " + srv.URL + "/b"
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	defer func() { _ = d.Close() }()
-	proposal, fingerprint := waitParkedPermission(t, d, thread)
-	ctx := settings.With(context.Background(), f.settings)
-	approve, _, err := actionlink.MintPair(ctx, d.Write, proposal, fingerprint, float64(time.Now().UnixNano())/1e9)
-	if err != nil {
-		t.Fatal(err)
-	}
-	code, body, _ := fetch(t, client, http.MethodPost, base+"/actions/"+approve, nil)
-	if code != http.StatusForbidden || !strings.Contains(body, "not allowed from the phone") {
-		t.Fatalf("phone approval of a permission request = %d: %s", code, body)
-	}
-	var status string
-	if err := d.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", proposal).Scan(&status); err != nil || status != "pending" {
-		t.Fatalf("proposal status = %q, %v, want pending", status, err)
-	}
-	waitRunState(t, d, thread, "parked")
-	if hits := pages.seen(); len(hits) != 1 || hits[0] != "/a" {
-		t.Errorf("page fetches = %v, want /a only", hits)
 	}
 }
 
@@ -317,7 +268,7 @@ func TestTaskWrittenFromAMarkedThreadMarksItsReader(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	waitRunState(t, d, reader, "parked")
-	if id, _ := permissionProposal(t, d); id == 0 {
+	if id := permissionProposal(t, d); id == 0 {
 		t.Error("no permission request after the gated fetch")
 	}
 }

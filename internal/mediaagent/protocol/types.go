@@ -10,10 +10,9 @@ const (
 )
 
 const (
-	CapabilityFile      = "file"
-	CapabilityScan      = "scan"
-	CapabilityThumbnail = "thumbnail"
-	CapabilityStream    = "stream"
+	CapabilityFile   = "file"
+	CapabilityScan   = "scan"
+	CapabilityStream = "stream"
 )
 
 type Path struct {

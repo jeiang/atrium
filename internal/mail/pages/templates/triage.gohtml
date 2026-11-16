@@ -50,11 +50,11 @@
         {{if .DeadlineOrPaymentDue}}<li class="badge" data-variant="outline">Deadline</li>{{end}}
         {{if .SecurityEvent}}<li class="badge" data-variant="outline">Security</li>{{end}}
         {{if isnil .LLMFlag}}
-        <li class="badge" data-variant="ghost">{{icon "circle-dot"}}9B pending</li>
+        <li class="badge" data-variant="ghost">{{icon "circle-dot"}}Model pending</li>
         {{else if .LLMFlag}}
-        <li class="badge border-warning/30 bg-warning/10 text-warning">{{icon "flag"}}9B flags</li>
+        <li class="badge border-warning/30 bg-warning/10 text-warning">{{icon "flag"}}Model flags</li>
         {{else}}
-        <li class="badge" data-variant="ghost">9B: no flag</li>
+        <li class="badge" data-variant="ghost">Model: no flag</li>
         {{end}}
       </ul>
     </li>

@@ -43,12 +43,6 @@ func TestV1LenientRequestsStayAccepted(t *testing.T) {
 		t.Fatalf("google client after partial updates: %d %s", setup.status, setup.body)
 	}
 
-	for _, body := range []map[string]any{{"enabled": false}, {}} {
-		if put := s.do(http.MethodPut, "/api/v1/permissions/phone", token, body); put.status != http.StatusNoContent {
-			t.Fatalf("phone policy %v: %d %s", body, put.status, put.body)
-		}
-	}
-
 	if _, err := d.Write.Exec("INSERT INTO notifications (ts, title, body, channel, delivered) VALUES (1, 'Compat', 'body', 'assistant', 0)"); err != nil {
 		t.Fatal(err)
 	}

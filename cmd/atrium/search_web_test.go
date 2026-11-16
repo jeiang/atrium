@@ -334,7 +334,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		}
 		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		defer func() { _ = d.Close() }()
-		proposal, _ := waitParkedPermission(t, d, thread)
+		proposal := waitParkedPermission(t, d, thread)
 		code, card := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
 		if code != http.StatusOK || !strings.Contains(card, "the warm thread") || !strings.Contains(card, "what did it say?") {
 			t.Fatalf("GET the card does not disclose the outgoing query and question = %d\n%s", code, card)
