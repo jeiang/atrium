@@ -72,6 +72,10 @@ func (r *Registry) Pinned(key string) (source string, pinned bool, err error) {
 	return source, pinned, nil
 }
 
+func StoredValue(ctx context.Context, q db.Querier, key string) (string, bool, error) {
+	return instanceValue(ctx, q, key)
+}
+
 func instanceValue(ctx context.Context, q db.Querier, key string) (string, bool, error) {
 	var value string
 	err := q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", key).Scan(&value)
@@ -79,10 +83,6 @@ func instanceValue(ctx context.Context, q db.Querier, key string) (string, bool,
 		return "", false, nil
 	}
 	return value, err == nil, err
-}
-
-func StoredValue(ctx context.Context, q db.Querier, key string) (string, bool, error) {
-	return instanceValue(ctx, q, key)
 }
 
 func (r *Registry) writable(key string) (Def, error) {

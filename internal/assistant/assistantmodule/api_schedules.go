@@ -34,7 +34,17 @@ type apiScheduleRuns struct {
 
 type apiSchedulePatch struct {
 	JobID    int64   `path:"job_id" api:"min=1" json:"-"`
-	Schedule *string `json:"schedule" api:"required"`
+	Schedule *string `json:"schedule,omitempty"`
+	Prompt   *string `json:"prompt,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	Enabled  *bool   `json:"enabled,omitempty"`
+	IfMatch  string  `header:"If-Match" json:"-"`
+}
+
+type apiScheduleCreate struct {
+	Name     string `json:"name" api:"required"`
+	Prompt   string `json:"prompt" api:"required"`
+	Schedule string `json:"schedule" api:"required"`
 }
 
 type apiScheduleEnabled struct {
@@ -43,8 +53,9 @@ type apiScheduleEnabled struct {
 }
 
 type apiScheduleChanged struct {
-	ID      int64 `json:"id"`
-	Enabled bool  `json:"enabled"`
+	ID      int64                `json:"id"`
+	Enabled bool                 `json:"enabled"`
+	Job     *asstapp.ScheduleJob `json:"job,omitempty"`
 }
 
 func pageAfter[T any, K cmp.Ordered](items []T, key func(T) K, cursor api.Cursor, limit api.Limit) (web.List[T], error) {
@@ -72,7 +83,7 @@ func pageAfter[T any, K cmp.Ordered](items []T, key func(T) K, cursor api.Cursor
 }
 
 func scheduleChanged(value asstapp.ScheduleChanged) apiScheduleChanged {
-	return apiScheduleChanged{ID: value.ID, Enabled: value.Enabled}
+	return apiScheduleChanged{ID: value.ID, Enabled: value.Enabled, Job: value.Job}
 }
 
 func scheduleAPIBindings(p *apiPages) []application.Binding {
@@ -82,6 +93,14 @@ func scheduleAPIBindings(p *apiPages) []application.Binding {
 	cancel := shape(application.NotFound, application.Refused)
 	cancel.Success = 204
 	cancel.Body = application.BodyNone
+	created := shape(application.Invalid, application.Refused)
+	created.Success = 201
+	patch := shape(application.Invalid, application.NotFound, application.Refused, application.Precondition)
+	patch.Description = "Changes any of schedule, prompt, name and enabled. If-Match is optional: send the schedule's revision to refuse the change with 412 when it changed since it was read; without it the change applies as before."
+	runNow := shape(application.NotFound, application.Conflict, application.Unavailable)
+	runNow.Success = 202
+	runNow.Body = application.BodyNone
+	runNow.Description = "Asks the running serve to run the schedule now, through the same pause, module and budget checks as a scheduled run, and answers at once with the requested run."
 	return []application.Binding{
 		apiQuery(p, asstapp.DescribeScheduleList(), shape(application.Invalid), "GET /schedules",
 			func(ctx context.Context, svc *asstapp.Service, in apiScheduleList) (application.Read[apiSchedules], error) {
@@ -117,13 +136,25 @@ func scheduleAPIBindings(p *apiPages) []application.Binding {
 				}
 				return application.Read[web.List[asstapp.ScheduleRun]]{Revision: read.Revision, Data: out}, nil
 			}),
-		apiCommand(p, asstapp.DescribeScheduleUpdate(), shape(application.Invalid, application.NotFound, application.Refused), "PATCH /schedules/{job_id}",
+		apiCommand(p, asstapp.DescribeScheduleAdd(), created, "POST /schedules",
+			func(ctx context.Context, svc *asstapp.Service, in apiScheduleCreate) (application.Change[apiScheduleChanged], error) {
+				result, err := svc.ScheduleAdd(ctx, asstapp.ScheduleAddInput{Name: in.Name, Prompt: in.Prompt, Schedule: in.Schedule})
+				return changeAs(result, err, scheduleChanged)
+			}),
+		apiCommand(p, asstapp.DescribeScheduleUpdate(), patch, "PATCH /schedules/{job_id}",
 			func(ctx context.Context, svc *asstapp.Service, in apiSchedulePatch) (application.Change[apiScheduleChanged], error) {
-				if in.Schedule == nil || strings.TrimSpace(*in.Schedule) == "" {
+				if in.Schedule == nil && in.Prompt == nil && in.Name == nil && in.Enabled == nil {
+					return application.Change[apiScheduleChanged]{}, invalidField("schedule", "Give a schedule, prompt, name or enabled to change.")
+				}
+				if in.Schedule != nil && strings.TrimSpace(*in.Schedule) == "" {
 					return application.Change[apiScheduleChanged]{}, invalidField("schedule", "Give the schedule a cron expression.")
 				}
-				result, err := svc.ScheduleUpdate(ctx, asstapp.ScheduleUpdateInput{ID: in.JobID, Schedule: in.Schedule})
+				result, err := svc.ScheduleUpdate(ctx, asstapp.ScheduleUpdateInput{ID: in.JobID, Schedule: in.Schedule, Prompt: in.Prompt, Name: in.Name, Enabled: in.Enabled, IfMatch: in.IfMatch})
 				return changeAs(result, err, scheduleChanged)
+			}),
+		apiCommand(p, asstapp.DescribeScheduleRunNow(), runNow, "POST /schedules/{job_id}/run",
+			func(ctx context.Context, svc *asstapp.Service, in apiScheduleID) (application.Change[asstapp.ScheduleRunStarted], error) {
+				return svc.ScheduleRunNow(ctx, asstapp.ScheduleRunNowInput{ID: in.JobID})
 			}),
 		apiCommand(p, asstapp.DescribeScheduleEnabled(), shape(application.Invalid, application.NotFound, application.Refused), "PUT /schedules/{job_id}/enabled",
 			func(ctx context.Context, svc *asstapp.Service, in apiScheduleEnabled) (application.Change[apiScheduleChanged], error) {

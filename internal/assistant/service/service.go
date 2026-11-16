@@ -334,6 +334,10 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 }
 
 func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error) {
+	return s.execute(ctx, runID, nil)
+}
+
+func (s *Service) execute(ctx context.Context, runID int64, settled func(context.Context, *journal.Run, error, bool)) (*journal.Run, error) {
 	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return nil, err
@@ -341,12 +345,16 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	client, err := s.ResolveClient(ctx)
 	var nc config.NotConfigured
 	if errors.As(err, &nc) {
+		watched := progress.Watched(runID)
 		if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
 			return nil, err
 		}
 		run, err := journal.GetRun(ctx, s.DB.Read, runID)
 		if err != nil {
 			return nil, err
+		}
+		if settled != nil && run != nil {
+			settled(ctx, run, nc, watched)
 		}
 		return run, nc
 	}
@@ -357,7 +365,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	if err != nil {
 		return nil, err
 	}
-	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference, Stop: s.stop})
+	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference, Stop: s.stop, Settled: settled})
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
@@ -414,7 +422,7 @@ func (s *Service) background(runID int64, done func()) {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
 			}
 		}()
-		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) || errors.Is(err, progress.ErrShutdown) {
+		if _, err := s.execute(s.base, runID, s.away); errors.Is(err, context.Canceled) || errors.Is(err, progress.ErrShutdown) {
 			log.Info(fmt.Sprintf("background run %d interrupted", runID), logx.RunID, runID)
 		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
