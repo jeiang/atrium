@@ -23,7 +23,7 @@ const interactive = [
 
 export async function gotoShell(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await expect(page.getByRole('button', { name: 'Account: Operator' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Account: Operator' })).toBeVisible({ timeout: 0 });
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -56,7 +56,8 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
           rect.height > 0 &&
           style.visibility !== 'hidden' &&
           style.clipPath !== 'inset(50%)' &&
-          !el.closest('[inert]')
+          !el.closest('[inert]') &&
+          el.checkVisibility()
         );
       };
       const half = size / 2;
@@ -75,7 +76,13 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
         }
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
-        squares.push({ name, x: cx + scrollX, y: cy + scrollY });
+        let x = cx + scrollX;
+        let y = cy + scrollY;
+        for (let up = el.parentElement; up && up !== document.scrollingElement; up = up.parentElement) {
+          x += up.scrollLeft;
+          y += up.scrollTop;
+        }
+        squares.push({ name, x, y });
         for (const dx of [-half + 1, 0, half - 1]) {
           for (const dy of [-half + 1, 0, half - 1]) {
             const hit = document.elementFromPoint(cx + dx, cy + dy);

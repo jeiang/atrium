@@ -62,7 +62,7 @@ export const simulatorHandlers = [
 
     const header = request.headers.get('Last-Event-ID');
     const cursor = parseCursor(header ?? url.searchParams.get('after'));
-    const total = script.events.length;
+    const total = script.events.filter((event) => 'id' in event && event.id !== undefined).length;
     if (cursor === undefined || cursor > total) return problem(400, 'bad_request', 'The cursor is not valid.');
     if (!script.parked && cursor >= total) return new HttpResponse(null, { status: 204 });
 
@@ -70,7 +70,9 @@ export const simulatorHandlers = [
     const step = speed > 0 ? STEP_MS / speed : 0;
     const drop = /^drop:([1-9][0-9]*)$/.exec(fault);
     const dropAfter = drop ? Number(drop[1]) : Number.POSITIVE_INFINITY;
-    const pending = script.events.slice(cursor);
+    const from =
+      cursor === 0 ? 0 : script.events.findIndex((event) => 'id' in event && event.id === String(cursor)) + 1;
+    const pending = script.events.slice(from);
 
     let sent = -1;
     const body = new ReadableStream<Uint8Array>(
