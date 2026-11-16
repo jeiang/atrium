@@ -1,9 +1,13 @@
 <script lang="ts">
   import type { WebSession } from '../contract';
+  import { device, setForget } from '../shared/device.svelte';
+  import { queryClient } from '../shared/query';
+  import { restore } from '../shared/readcache';
   import Icon from '../shared/ui/Icon.svelte';
+  import { toast } from '../shared/ui/toast.svelte';
   import { chats, settings } from './nav';
   import { p } from './router';
-  import { handleSignOut } from './session.svelte';
+  import { handleSignOut, session as current } from './session.svelte';
 
   interface Props {
     session: WebSession;
@@ -30,7 +34,7 @@
   );
 
   function items(): HTMLElement[] {
-    return [...(root?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    return [...(root?.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemcheckbox"]') ?? [])];
   }
 
   function close(refocus: boolean): void {
@@ -76,6 +80,14 @@
       pending = false;
     }
   }
+
+  function onForget(): void {
+    const on = !device.forget;
+    const verified = current.view.status === 'signed-in' && !current.view.cached;
+    setForget(on);
+    if (on) toast('Data on this device deleted.');
+    else void restore(queryClient, session, verified);
+  }
 </script>
 
 <svelte:window onpointerdown={onWindowPointer} />
@@ -109,6 +121,18 @@
       <a role="menuitem" class="account__item" href={p(settings.path)} onclick={() => close(false)}>
         <Icon name={settings.icon} /><span>{settings.label}</span>
       </a>
+      <button
+        role="menuitemcheckbox"
+        class="account__item"
+        type="button"
+        aria-checked={device.forget}
+        onclick={onForget}
+      >
+        <span class="account__check" aria-hidden="true">
+          {#if device.forget}<Icon name="check" />{/if}
+        </span>
+        <span>Don't keep data on this device</span>
+      </button>
       {#if session.sign_out}
         <button
           role="menuitem"

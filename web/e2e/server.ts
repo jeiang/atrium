@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import { readFile, stat } from 'node:fs/promises';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { extname, join, normalize, resolve } from 'node:path';
 import { brotliCompressSync, constants } from 'node:zlib';
@@ -42,14 +42,31 @@ async function file(root: string, pathname: string): Promise<string | undefined>
   return undefined;
 }
 
+export interface ServeState {
+  root?: string;
+  down?: boolean;
+}
+
+export type Handler = (req: IncomingMessage, res: ServerResponse, pathname: string) => boolean;
+
 export async function serve(
   dist: string,
-  { brotli = false, base = '/' }: { brotli?: boolean; base?: string } = {},
+  {
+    brotli = false,
+    base = '/',
+    state = {},
+    handle,
+  }: { brotli?: boolean; base?: string; state?: ServeState; handle?: Handler } = {},
 ): Promise<{ url: string; server: Server }> {
-  const root = resolve(dist);
   const packed = new Map<string, Buffer>();
   const server = createServer(async (req, res) => {
+    if (state.down) {
+      req.socket.destroy();
+      return;
+    }
+    const root = resolve(state.root ?? dist);
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+    if (handle?.(req, res, pathname)) return;
     const path = pathname.startsWith(base) ? await file(root, `/${pathname.slice(base.length)}`) : undefined;
     if (!path) {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');

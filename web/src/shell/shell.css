@@ -358,6 +358,46 @@
     background: var(--leaf-2);
   }
 
+  .account__check {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    inline-size: 20px;
+    block-size: 20px;
+  }
+
+  .status-slot:empty {
+    display: none;
+  }
+
+  .offline-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s-2) var(--s-4);
+    margin-block-end: var(--s-5);
+    padding: var(--s-3) var(--s-4);
+    border: 1px solid var(--honey-line);
+    border-radius: var(--r-md);
+    color: var(--ink);
+    background: var(--honey-soft);
+  }
+
+  .offline-status p {
+    margin: 0;
+  }
+
+  .offline-status__retry {
+    min-block-size: var(--target);
+    padding: 0 var(--s-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    font: inherit;
+    color: var(--ink);
+    background: var(--paper);
+    cursor: pointer;
+  }
+
   .account__version {
     margin: 0;
     padding: 0 var(--s-3) var(--s-1);

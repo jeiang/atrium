@@ -1170,6 +1170,25 @@ claims about the running application. Operator contracts are in
   `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
   and it never controls the old UI's pages, while it does see every request
   a `/next/` page makes, `/web/v1` writes included.
+- The `/next/` client registers `/next/sw.js` (scope `/next/`, production
+  build only, through the `atrium-sw` Trusted Types policy). The worker
+  precaches the shell and every hashed asset, lazy route chunks included,
+  answers `/next/assets/` cache-first and `/next/` navigations network-first
+  with a 3 s timeout and the cached shell as fallback, and passes everything
+  else through untouched, so `/web/v1`, `/api/v1`, streams, `/login` and
+  `/auth/` never reach its cache. Caches are named `next-shell-<build>`, not
+  `atrium-`, because the old UI worker deletes `atrium-*` caches. A new
+  worker waits; it activates at once only when the open page's own scripts
+  are in its precache list, otherwise on the next in-app navigation, which
+  becomes a full load. Activation deletes older `next-shell-*` caches.
+- Read models from queries that declare `meta.topics` or `meta.persist: true`
+  are kept for 7 days in the IndexedDB database `atrium-read-cache`, keyed to
+  the signed-in subject, with the session's identity but never its CSRF
+  token. Keys starting with `session`, `settings`, `connections`, `auth`,
+  `tokens` or `secrets` are never kept. Sign-out, a 401, a different subject,
+  a changed API contract hash or 7 days without a verified session delete
+  it; storage errors mean no cache. Writes refuse at once while the browser
+  is offline and are never queued.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open

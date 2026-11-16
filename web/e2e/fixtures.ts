@@ -37,16 +37,18 @@ export async function useScenario(page: Page, scenario: MockScenario): Promise<v
 const mockStreamAborted =
   /ServiceWorker intercepted the request and encountered an unexpected error.*mockServiceWorker\.js/;
 
-export const test = base.extend<{ problems: string[]; allowStatus: number[] }>({
+export const test = base.extend<{ problems: string[]; allowStatus: number[]; allowConsole: RegExp | undefined }>({
   allowStatus: [[], { option: true }],
+  allowConsole: [undefined, { option: true }],
   problems: [
-    async ({ page, allowStatus }, use) => {
+    async ({ page, allowStatus, allowConsole }, use) => {
       const problems: string[] = [];
       page.on('console', (message) => {
         if (message.type() !== 'error') return;
         const status = /status of (\d+)/.exec(message.text())?.[1];
         if (status && allowStatus.includes(Number(status))) return;
         if (mockStreamAborted.test(message.text())) return;
+        if (allowConsole?.test(message.text())) return;
         problems.push(`console error: ${message.text()}`);
       });
       page.on('pageerror', (error) => problems.push(`uncaught: ${error.message}`));

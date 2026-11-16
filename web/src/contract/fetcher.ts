@@ -7,6 +7,9 @@ const NON_JSON_SUCCESS = ['application/octet-stream', 'text/event-stream'];
 
 let csrfToken: string | undefined;
 let unauthorized: ((signIn: WebSignIn | undefined) => void) | undefined;
+let reached: ((ok: boolean) => void) | undefined;
+
+export const OFFLINE_MESSAGE = 'You are offline. Nothing was sent.';
 
 export function setCsrfToken(token: string | undefined): void {
   csrfToken = token;
@@ -14,6 +17,10 @@ export function setCsrfToken(token: string | undefined): void {
 
 export function onUnauthorized(handler: (signIn: WebSignIn | undefined) => void): void {
   unauthorized = handler;
+}
+
+export function onReachability(handler: (ok: boolean) => void): void {
+  reached = handler;
 }
 
 function signInOf(body: unknown): WebSignIn | undefined {
@@ -29,10 +36,18 @@ export async function webFetch(url: string, init: RequestInit = {}): Promise<Res
   if (typeof init.body === 'string' && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const method = (init.method ?? 'GET').toUpperCase();
   if (UNSAFE[method]) {
+    if (!navigator.onLine) throw new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } });
     if (!headers.has('Idempotency-Key')) headers.set('Idempotency-Key', crypto.randomUUID());
     if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
   }
-  const res = await fetch(API_BASE + url, { ...init, headers, credentials: 'same-origin' });
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + url, { ...init, headers, credentials: 'same-origin' });
+  } catch (error) {
+    if (!init.signal?.aborted) reached?.(false);
+    throw error;
+  }
+  reached?.(true);
   if (res.status === 401 && !url.startsWith('/session') && unauthorized) {
     const type = res.headers.get('Content-Type') ?? '';
     const body = type.includes('json')

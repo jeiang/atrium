@@ -2,6 +2,7 @@
   import { useQueryClient } from '@tanstack/svelte-query';
   import { Router } from 'sv-router';
   import { announce } from '../shared/announce.svelte';
+  import { device } from '../shared/device.svelte';
   import LiveRegion from '../shared/LiveRegion.svelte';
   import Icon from '../shared/ui/Icon.svelte';
   import Toaster from '../shared/ui/Toaster.svelte';
@@ -20,12 +21,15 @@
     shownApps,
   } from './nav';
   import { isActive, p, route, routeTitle } from './router';
+  import OfflineStatus from './OfflineStatus.svelte';
   import SessionState, { stateTitle } from './SessionState.svelte';
   import { session } from './session.svelte';
 
   const client = useQueryClient();
 
   const signedIn = $derived(session.view.status === 'signed-in' ? session.view.session : undefined);
+  const cached = $derived(session.view.status === 'signed-in' && session.view.cached === true);
+  const abnormal = $derived(signedIn !== undefined && (cached || !device.online || !device.reachable));
   const shell = useShell(() => signedIn !== undefined);
 
   const frame = $derived(signedIn ? shell.data : undefined);
@@ -35,7 +39,7 @@
   const visible = $derived(destinations.filter((item) => moduleOn(frame, item.module)));
 
   $effect(() => {
-    if (!signedIn) return;
+    if (!signedIn || cached) return;
     let stop: (() => void) | undefined;
     let ended = false;
     Promise.all([import('../contract/events'), import('../shared/live')]).then(
@@ -141,6 +145,9 @@
     </div>
   </header>
   <main id="main" class="main" tabindex="-1">
+    <div class="status-slot" role="status">
+      {#if abnormal}<OfflineStatus {cached} />{/if}
+    </div>
     {#if signedIn && shell.isPending}
       <p class="frame-note">Loading atrium. Home, your plan and the inbox appear here in a moment.</p>
     {:else if signedIn}

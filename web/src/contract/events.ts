@@ -38,23 +38,28 @@ function parse(event: SseEvent): AppNotice | undefined {
   return undefined;
 }
 
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  const handle = setTimeout(resolve, ms);
-  signal.addEventListener(
-    'abort',
-    () => {
-      clearTimeout(handle);
-      resolve();
-    },
-    { once: true },
-  );
+function sleep(ms: number, signal: AbortSignal): Promise<boolean> {
+  const { promise, resolve } = Promise.withResolvers<boolean>();
+  const done = new AbortController();
+  const finish = (online: boolean): void => {
+    clearTimeout(timer);
+    done.abort();
+    resolve(online);
+  };
+  const timer = navigator.onLine ? setTimeout(() => finish(false), ms) : undefined;
+  addEventListener('online', () => finish(true), { once: true, signal: done.signal });
+  signal.addEventListener('abort', () => finish(false), { once: true, signal: done.signal });
   return promise;
 }
 
 async function stream(signal: AbortSignal, emit: (notice: AppNotice) => void): Promise<void> {
   let delay = MIN_DELAY_MS;
   while (!signal.aborted) {
+    if (!navigator.onLine) {
+      await sleep(0, signal);
+      delay = MIN_DELAY_MS;
+      continue;
+    }
     let synced = false;
     let busy = false;
     try {
@@ -78,8 +83,8 @@ async function stream(signal: AbortSignal, emit: (notice: AppNotice) => void): P
     }
     if (synced) delay = MIN_DELAY_MS;
     const wait = busy ? Math.max(delay, BUSY_DELAY_MS) : delay;
-    await sleep(wait * (0.8 + Math.random() * 0.4), signal);
-    delay = Math.min(delay * 2, MAX_DELAY_MS);
+    if (await sleep(wait * (0.8 + Math.random() * 0.4), signal)) delay = MIN_DELAY_MS;
+    else delay = Math.min(delay * 2, MAX_DELAY_MS);
   }
 }
 

@@ -4,6 +4,7 @@ import './shell/shell.css';
 import { mount } from 'svelte';
 import App from './shell/App.svelte';
 import { loadSession } from './shell/session.svelte';
+import { startWorker } from './shared/worker';
 
 if (import.meta.env.MODE === 'mock') {
   const { startMocks } = await import('./mocks/browser');
@@ -19,3 +20,4 @@ const target = document.getElementById('app');
 if (!target) throw new Error('#app is missing from index.html');
 target.replaceChildren();
 mount(App, { target });
+if (import.meta.env.MODE !== 'mock') void startWorker();

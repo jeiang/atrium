@@ -3,7 +3,7 @@ import type { AppNotice } from '../contract';
 
 declare module '@tanstack/svelte-query' {
   interface Register {
-    queryMeta: { topics?: readonly string[] };
+    queryMeta: { topics?: readonly string[]; persist?: boolean };
   }
 }
 
