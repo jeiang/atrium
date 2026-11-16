@@ -511,19 +511,25 @@ claims about the running application. Operator contracts are in
   keep_days. No directory means `skipped_unconfigured`. `atrium backup`
   shares the job's claim. There is no backup unit or timer.
   `GET /maintenance/backups` (operation `maintenance.backup.list`, operator
-  only, not an agent tool) and `atrium backup list [--json]` list the
-  regular files named `atrium-*.backup` directly in `core.backup_directory`,
-  newest modification first, capped by `limit` (default 50, at most 100;
-  the CLI shows 100) with the full `total`. Symlinks, directories and other
-  names are skipped, and files are opened through an `os.Root` on that
-  directory. Each item carries the name, size, modification time and the
-  unauthenticated archive header (format, created time, schema, encryption
-  and key id, file count) or a `problem` (`not_archive`, `old_format`,
-  `newer_format`). No path is returned. `location.state` is `ready`,
-  `unconfigured` (no host key) or `missing` (the directory does not exist),
-  with the host key and NixOS option that set it. Verify takes a listed
-  name; verify results are not recorded. `atrium backup list` lists; an
-  archive named `list` is written with `atrium backup ./list`.
+  only, not an agent tool) and `atrium backup list [--json]` list every
+  atrium archive directly in `core.backup_directory`: the regular files,
+  without a leading dot, whose tar header entry parses as an archive header.
+  Scheduled and API archives (`atrium-*.backup`, `prunable: true`) and named
+  archives such as `pre-<deploy>-<stamp>.archive` from `atrium backup PATH`
+  (`prunable: false`; pruning never counts or deletes them) are listed
+  together, newest modification first, capped by `limit` (default 50, at
+  most 100; the CLI shows 100) with the full `total`. At most the newest
+  1000 candidate files are examined; `unexamined` counts the rest. Other
+  files, symlinks and directories are skipped silently, and files are opened
+  through an `os.Root` on that directory. Each item carries the name, size,
+  modification time, `prunable` and the unauthenticated archive header
+  (format, created time, schema, encryption and key id, file count) or a
+  `problem` (`old_format`, `newer_format`). No path is returned.
+  `location.state` is `ready`, `unconfigured` (no host key) or `missing`
+  (the directory does not exist), with the host key and NixOS option that
+  set it. Verify takes a listed name; verify results are not recorded.
+  `atrium backup list` lists; an archive named `list` is written with
+  `atrium backup ./list`.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
