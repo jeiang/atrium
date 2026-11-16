@@ -3,20 +3,19 @@ package candidates
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/classify"
-	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 var log = logx.Logger("atrium.event_candidates")
@@ -30,6 +29,8 @@ const (
 	StatusProposed Status = "proposed"
 	StatusNone     Status = "none"
 )
+
+const invitationCap = 16 << 20
 
 var calendarTypes = map[string]bool{"text/calendar": true, "application/ics": true}
 
@@ -57,46 +58,78 @@ type Item struct {
 }
 
 func Queued(ctx context.Context, q db.Querier, limit int) ([]Item, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT e.message_id, m.account, e.reason FROM event_candidates e"+mail.JoinClause("m", "m.id = e.message_id")+
-			" WHERE e.status = ? ORDER BY e.ts, e.message_id LIMIT ?", string(StatusQueued), limit)
+	rows, err := q.QueryContext(ctx, "SELECT message_id, reason FROM event_candidates WHERE status = ? ORDER BY ts, message_id",
+		string(StatusQueued))
 	if err != nil {
 		return nil, err
 	}
-	items, err := db.Collect(rows, func(r *sql.Rows) (Item, error) {
+	found, err := db.Collect(rows, func(r *sql.Rows) (Item, error) {
 		var item Item
-		return item, r.Scan(&item.MessageID, &item.Account, &item.Reason)
+		return item, r.Scan(&item.MessageID, &item.Reason)
 	})
-	if items == nil {
-		items = []Item{}
+	items := []Item{}
+	if err != nil || len(found) == 0 {
+		return items, err
 	}
-	return items, err
-}
-
-type row struct {
-	id       int64
-	account  string
-	subject  string
-	fromName string
-	fromAddr string
-	rawPath  string
-}
-
-func pending(ctx context.Context, d *db.DB, account string, after int64, limit int) ([]row, error) {
-	rows, err := d.Read.QueryContext(ctx,
-		"SELECT m.id, m.account, m.subject, m.from_name, m.from_addr, m.raw_path FROM "+mail.FromClause("m")+" WHERE m.account = ? AND m.in_inbox = 1 "+
-			"AND m.seen = 0 AND m.sent = 0 AND m.gone_at IS NULL AND m.id > ? AND NOT EXISTS (SELECT 1 FROM event_candidates e WHERE e.message_id = m.id) "+
-			"ORDER BY m.id LIMIT ?", account, after, limit)
+	ids := make([]int64, len(found))
+	for i, item := range found {
+		ids[i] = item.MessageID
+	}
+	messages, err := module.Communications(ctx).Messages(ctx, q, communications.Query{IDs: ids})
 	if err != nil {
-		return nil, err
+		return items, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (row, error) {
-		var out row
-		var raw sql.NullString
-		err := r.Scan(&out.id, &out.account, &out.subject, &out.fromName, &out.fromAddr, &raw)
-		out.rawPath = raw.String
-		return out, err
-	})
+	accounts := make(map[int64]string, len(messages))
+	for _, m := range messages {
+		accounts[m.ID] = m.Account
+	}
+	for _, item := range found {
+		if limit >= 0 && len(items) >= limit {
+			break
+		}
+		account, ok := accounts[item.MessageID]
+		if !ok {
+			continue
+		}
+		item.Account = account
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func pending(ctx context.Context, feed communications.Feed, q db.Querier, account string, after int64, limit int) ([]communications.Message, error) {
+	for {
+		page, err := feed.Messages(ctx, q, communications.Query{Account: account, Inbox: true, Unseen: true, Received: true,
+			Present: true, AfterID: after, Limit: limit})
+		if err != nil || len(page) == 0 {
+			return nil, err
+		}
+		ids := make([]int64, len(page))
+		for i, m := range page {
+			ids[i] = m.ID
+		}
+		encoded, err := json.Marshal(ids)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := q.QueryContext(ctx, "SELECT message_id FROM event_candidates WHERE message_id IN (SELECT value FROM json_each(?))",
+			string(encoded))
+		if err != nil {
+			return nil, err
+		}
+		marked, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
+			var id int64
+			return id, r.Scan(&id)
+		})
+		if err != nil {
+			return nil, err
+		}
+		out := slices.DeleteFunc(page, func(m communications.Message) bool { return slices.Contains(marked, m.ID) })
+		if len(out) > 0 {
+			return out, nil
+		}
+		after = ids[len(ids)-1]
+	}
 }
 
 func defaultCalendar(ctx context.Context, account string) calendar.Target {
@@ -106,53 +139,46 @@ func defaultCalendar(ctx context.Context, account string) calendar.Target {
 	return calendar.ICloud
 }
 
-func rowInvites(cfg config.Config, r row, now time.Time) ([]calendar.Invite, error) {
-	path, ok := message.RawFile(cfg.CacheDir, r.rawPath)
-	if !ok {
-		return nil, nil
-	}
-	data, err := os.ReadFile(path)
+func messageInvites(ctx context.Context, feed communications.Feed, q db.Querier, m communications.Message, now time.Time) ([]calendar.Invite, error) {
+	parts, err := feed.Parts(ctx, q, m.ID)
 	if err != nil {
 		return nil, err
 	}
-	msg := mime.Parse(data)
 	var out []calendar.Invite
 	seen := map[string]bool{}
-	var walk func(part *mime.Message)
-	walk = func(part *mime.Message) {
-		collect(part, now, seen, &out)
-		for _, sub := range part.Parts() {
-			walk(sub)
+	for _, part := range parts {
+		if !calendarTypes[part.ContentType] && !strings.HasSuffix(strings.ToLower(part.Filename), ".ics") {
+			continue
+		}
+		data, err := feed.Part(ctx, q, m.ID, part.ID, invitationCap)
+		if errors.Is(err, communications.ErrTooLarge) {
+			log.Warn(fmt.Sprintf("message %d: calendar part %s skipped: larger than %d bytes", m.ID, part.ID, invitationCap))
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if len(data) == 0 {
+			continue
+		}
+		for _, invite := range calendar.InvitesIn(data, part.Params["method"], now) {
+			if !seen[invite.UID] {
+				seen[invite.UID] = true
+				out = append(out, invite)
+			}
 		}
 	}
-	walk(msg)
 	return out, nil
 }
 
-func collect(part *mime.Message, now time.Time, seen map[string]bool, out *[]calendar.Invite) {
-	if !calendarTypes[part.ContentType()] && !strings.HasSuffix(strings.ToLower(part.Filename()), ".ics") {
-		return
-	}
-	data := part.Payload()
-	if len(data) == 0 {
-		return
-	}
-	for _, invite := range calendar.InvitesIn(data, part.Param("method"), now) {
-		if !seen[invite.UID] {
-			seen[invite.UID] = true
-			*out = append(*out, invite)
-		}
-	}
-}
-
-func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites []calendar.Invite) (int, error) {
+func proposeInvites(ctx context.Context, p *calendar.Proposals, m communications.Message, invites []calendar.Invite) (int, error) {
 	made := 0
 	for _, invite := range invites {
-		source := map[string]any{"message_id": r.id, "subject": r.subject, "from": r.fromAddr, "invitation": true}
-		_, created, err := p.Propose(ctx, invite.Raw(defaultCalendar(ctx, r.account)), source, "ics:"+invite.UID)
+		source := map[string]any{"message_id": m.ID, "subject": m.Subject, "from": m.From.Addr, "invitation": true}
+		_, created, err := p.Propose(ctx, invite.Raw(defaultCalendar(ctx, m.Account)), source, "ics:"+invite.UID)
 		var refused calendar.ProposalError
 		if errors.As(err, &refused) {
-			log.Warn(fmt.Sprintf("message %d: invitation %s skipped: %s", r.id, invite.UID, refused))
+			log.Warn(fmt.Sprintf("message %d: invitation %s skipped: %s", m.ID, invite.UID, refused))
 			continue
 		}
 		if err != nil {
@@ -165,17 +191,30 @@ func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites [
 	return made, nil
 }
 
+type Verdict int
+
+const (
+	Skip Verdict = iota
+	Waiting
+	NoAnswer
+	NoEvent
+	Event
+)
+
+type Judge interface {
+	Stopped() bool
+	JudgeEvent(ctx context.Context, m communications.Message, body string) (Verdict, error)
+}
+
 type scanner struct {
 	d         *db.DB
-	cfg       config.Config
-	account   string
-	judge     *classify.Service
-	paid      *classify.Deferral
+	feed      communications.Feed
+	judge     Judge
 	proposals *calendar.Proposals
 	now       func() float64
 }
 
-func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge *classify.Service, paid *classify.Deferral, env config.Env, now func() float64) (proposed, flagged int, err error) {
+func ScanAccount(ctx context.Context, d *db.DB, account string, judge Judge, env config.Env, now func() float64) (proposed, flagged int, err error) {
 	if env == nil {
 		env = config.OS
 	}
@@ -186,20 +225,21 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil {
 		return 0, 0, err
 	}
-	s := scanner{d: d, cfg: cfg, account: account, judge: judge, paid: paid, proposals: &calendar.Proposals{DB: d, Now: now, Env: env}, now: now}
+	feed := module.Communications(ctx)
+	s := scanner{d: d, feed: feed, judge: judge, proposals: &calendar.Proposals{DB: d, Now: now, Env: env}, now: now}
 	var after int64
 	processed := 0
 	for processed < limit {
-		rows, err := pending(ctx, d, account, after, limit)
-		if err != nil || len(rows) == 0 {
+		messages, err := pending(ctx, feed, d.Read, account, after, limit)
+		if err != nil || len(messages) == 0 {
 			return proposed, flagged, err
 		}
-		for _, r := range rows {
+		for _, m := range messages {
 			if processed >= limit {
 				break
 			}
-			after = r.id
-			made, event, waiting, err := s.scan(ctx, r)
+			after = m.ID
+			made, event, waiting, err := s.scan(ctx, m)
 			proposed += made
 			if event {
 				flagged++
@@ -215,47 +255,40 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	return proposed, flagged, nil
 }
 
-func (s scanner) scan(ctx context.Context, r row) (proposed int, flagged, waiting bool, err error) {
-	invites, err := rowInvites(s.cfg, r, time.Unix(0, int64(s.now()*1e9)))
+func (s scanner) scan(ctx context.Context, m communications.Message) (proposed int, flagged, waiting bool, err error) {
+	invites, err := messageInvites(ctx, s.feed, s.d.Read, m, time.Unix(0, int64(s.now()*1e9)))
 	if err != nil {
 		return 0, false, false, err
 	}
 	if len(invites) > 0 {
-		made, err := proposeInvites(ctx, s.proposals, r, invites)
+		made, err := proposeInvites(ctx, s.proposals, m, invites)
 		if err != nil {
 			return made, false, false, err
 		}
-		return made, false, false, set(ctx, s.d, r.id, StatusProposed, "calendar invitation", s.now())
+		return made, false, false, set(ctx, s.d, m.ID, StatusProposed, "calendar invitation", s.now())
 	}
-	if s.paid.Stopped() {
+	if s.judge.Stopped() {
 		return 0, false, false, nil
 	}
-	body, err := message.Body(ctx, s.d.Read, r.id)
+	body, err := s.feed.Body(ctx, s.d.Read, m.ID)
 	if err != nil {
 		return 0, false, false, err
 	}
-	hasEvent, err := s.judge.JudgeEvent(ctx, classify.MessageItem(s.account, r.id),
-		classify.Message{Subject: r.subject, FromName: r.fromName, FromAddr: r.fromAddr}, body)
-	if s.paid.Note(err) {
-		return 0, false, false, nil
+	verdict, err := s.judge.JudgeEvent(ctx, m, body)
+	if err != nil {
+		return 0, false, false, err
 	}
-	if classify.Waiting(err) {
+	switch verdict {
+	case Skip:
+		return 0, false, false, nil
+	case Waiting:
 		return 0, false, true, nil
+	case NoAnswer:
+		return 0, false, false, set(ctx, s.d, m.ID, StatusNone, "model gave no usable answer", s.now())
+	case Event:
+		return 0, true, false, set(ctx, s.d, m.ID, StatusQueued, "model flagged an event", s.now())
 	}
-	if final, unanswered := classify.Unanswered(err); unanswered {
-		if final {
-			return 0, false, false, set(ctx, s.d, r.id, StatusNone, "model gave no usable answer", s.now())
-		}
-		return 0, false, false, nil
-	}
-	if err != nil {
-		return 0, false, false, err
-	}
-	status, reason := StatusNone, ""
-	if hasEvent {
-		status, reason = StatusQueued, "model flagged an event"
-	}
-	return 0, hasEvent, false, set(ctx, s.d, r.id, status, reason, s.now())
+	return 0, false, false, set(ctx, s.d, m.ID, StatusNone, "", s.now())
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }

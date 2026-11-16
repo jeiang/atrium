@@ -84,6 +84,7 @@ var allowed = map[string]bool{
 }
 
 var platform = map[string]bool{
+	"internal/communications":         true,
 	"internal/module":                 true,
 	"internal/unit":                   true,
 	"internal/tool":                   true,
@@ -105,7 +106,16 @@ var platform = map[string]bool{
 const (
 	dayContract  = "internal/day"
 	calendarUnit = module + "/internal/calendar"
+	mailUnit     = "internal/mail"
 )
+
+var mailImporters = map[string]string{
+	"cmd/atrium":                       "composition root",
+	"internal/app":                     "composition root",
+	"internal/assistant/tools/mail":    "P13.2b moves the mail tools into the Mail app",
+	"internal/commitments/application": "P12.1b moves commitments into signals",
+	"internal/config":                  "P13.3 moves account rows into the Mail app",
+}
 
 var units = []string{
 	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
@@ -128,8 +138,9 @@ func main() {
 
 func scan() ([]string, error) {
 	var edges []string
+	importing := map[string]bool{}
 	fset := token.NewFileSet()
-	err := filepath.WalkDir("internal", func(file string, entry fs.DirEntry, err error) error {
+	walk := func(file string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}
@@ -144,9 +155,7 @@ func scan() ([]string, error) {
 		platformFile := platform[path.Dir(file)] || strings.HasPrefix(file, dayContract+"/")
 		adapterFile := isAdapter(file, src)
 		dayReader := strings.HasPrefix(file, "internal/assistant/") && !strings.HasPrefix(file, "internal/assistant/tools/")
-		if !platformFile && !adapterFile && !dayReader {
-			return nil
-		}
+		outsideMail := !strings.HasPrefix(file, mailUnit+"/")
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
 		if err != nil {
 			return err
@@ -165,11 +174,28 @@ func scan() ([]string, error) {
 			if dayReader && (imp == calendarUnit || strings.HasPrefix(imp, calendarUnit+"/")) {
 				edges = append(edges, "core assistant package imports calendar instead of reading the day contract: "+file+"\t"+imp)
 			}
+			if outsideMail && (imp == module+"/"+mailUnit || strings.HasPrefix(imp, module+"/"+mailUnit+"/")) {
+				if _, ok := mailImporters[path.Dir(file)]; ok {
+					importing[path.Dir(file)] = true
+				} else {
+					edges = append(edges, "package outside Mail imports a mail package instead of reading internal/communications: "+file+"\t"+imp)
+				}
+			}
 		}
 		return nil
-	})
+	}
+	for _, root := range []string{"internal", "cmd"} {
+		if err := filepath.WalkDir(root, walk); err != nil {
+			return nil, err
+		}
+	}
+	for dir, reason := range mailImporters {
+		if !importing[dir] {
+			edges = append(edges, "mail import exception no longer needed, remove it: "+dir+" ("+reason+")")
+		}
+	}
 	slices.Sort(edges)
-	return slices.Compact(edges), err
+	return slices.Compact(edges), nil
 }
 
 func isAdapter(file string, src []byte) bool {

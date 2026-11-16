@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/attention"
-	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -23,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/mail/attentionsources"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/executors"
@@ -151,6 +151,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		HasOperatorData: accounts.ExistsAny,
 		EffectOrigins:   []module.EffectOrigin{{Name: ledger.AutoOrigin}, {Name: "operator_send"}, {Name: "tracking", Direct: true}},
 		Refs:            Refs(),
+		Communications:  feed{env: mc.Env},
 		Attachments:     []module.Attachment{draftAttachment()},
 		Settings:        slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:            mail.HostSettings(),

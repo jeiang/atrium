@@ -36,6 +36,31 @@ claims about the running application. Operator contracts are in
   when no calendar is configured. `tools/adapterboundary` fails when a
   package under `internal/assistant` other than the agent tools imports
   `internal/calendar`, or when `internal/day` imports any unit.
+- Core reads stored messages only through the read-only `communications`
+  feed (`internal/communications`): a message summary (id, account, sender,
+  recipients, subject, date, seen, flagged, inbox, sent and gone flags, and
+  thread hints: Message-ID, In-Reply-To, References, Gmail thread id), a
+  filtered list in id order (account, ids, inbox, unseen, received, present,
+  after an id, limit), the indexed plain-text body, the MIME part list in
+  pre-order (part id `1`, `1.1`, ...; content type and parameters, file name,
+  attachment disposition) and a size-capped fetch of one decoded part. A unit
+  sets `Communications` on its declaration; `module.Compile` fails start when
+  two units provide it. Mail is the one provider, over its message store and
+  MIME parser; the feed has no write method, so mail writes stay behind
+  Mail's write gate. `module.Communications` answers the enabled provider;
+  with Mail off every feed call returns nothing and no error, so a task's
+  message link has no title, a new message link is refused as missing, a
+  lookup report's `mail_message` id is unknown, and queued event candidates
+  are not listed. Event candidates read invitations and message bodies from
+  the feed; the mail pass still calls them, passing its paid event judge.
+  The drafts, loops, commitments and packages attention sources live in
+  `internal/mail/attentionsources`. `tools/adapterboundary` fails when a Go
+  file outside `internal/mail` (under `internal` or `cmd`) imports a mail
+  package, except the listed exceptions with the slice that removes each
+  (the composition roots `cmd/atrium` and `internal/app`; the agent mail
+  tools until P13.2b; commitments until P12.1b; account rows in
+  `internal/config` until P13.3), and when an exception no longer imports
+  mail; it also treats `internal/communications` as platform.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.

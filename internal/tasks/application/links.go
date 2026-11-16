@@ -2,8 +2,6 @@ package application
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"net/mail"
 	"slices"
 	"strconv"
@@ -13,7 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
-	mailstore "github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tasks"
 )
@@ -64,14 +62,11 @@ func linkTitle(ctx context.Context, q db.Querier, kind, id string) (*string, err
 		}
 		return &r.Title, nil
 	case tasks.LinkMessage:
-		subject, err := mailstore.Subject(ctx, q, n)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		if err != nil {
+		m, err := module.Communications(ctx).Message(ctx, q, n)
+		if m == nil || err != nil {
 			return nil, err
 		}
-		return &subject, nil
+		return &m.Subject, nil
 	case tasks.LinkProposal:
 		p, err := proposals.Get(ctx, q, n)
 		if err != nil || p == nil {
