@@ -1191,9 +1191,10 @@ claims about the running application. Operator contracts are in
   `review.approve` and are listed separately in `reach.json`. The run event
   stream is documented in `docs/api/run-stream.md` (heartbeats,
   `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
-  retention); it sends a heartbeat every 15 seconds and allows 4 streams per
-  subject and 16 per server. Static assets are served from content-hashed
-  immutable URLs.
+  retention, `tool_done.results` with web search sources, live-only
+  `tool_progress` from sub-agent tools); it sends a heartbeat every 15
+  seconds and allows 4 streams per subject and 16 per server. Static assets
+  are served from content-hashed immutable URLs.
 - The generated spec declares bearer security, leaves response schemas open
   and closes request schemas (`<Name>Input` when a type is used both ways),
   bounds response integers at 2^53-1, marks null-sent pointers nullable, keeps

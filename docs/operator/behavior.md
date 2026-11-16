@@ -373,7 +373,8 @@ Paged resources use opaque cursors, normally 50 rows by default and at most
 legacy thread/transcript/inbox cursors are supported; old cursors missing a
 path scope are refused as `bad_cursor`.
 
-The assistant event stream is durable and reconnectable with `Last-Event-ID`.
+The assistant event stream is durable and reconnectable with `Last-Event-ID`;
+only the progress lines of sub-agent tools are live and are not replayed.
 It is not a separate run. It sends a heartbeat every 15 seconds. At most 4
 streams per credential and 16 per server are open at once; more get 429.
 Finished streams are kept for 30 days. Multipart file requests share four upload slots;
