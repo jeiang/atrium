@@ -231,7 +231,7 @@ test.describe('inbox on a desktop', () => {
     await expect(card(page, 'proposal:14').getByRole('button', { name: 'Approve' })).toBeVisible();
     await expect
       .poll(() => storedKeys(page))
-      .toEqual(expect.arrayContaining(['["inbox","pending"]', '["inbox","item","proposal:14"]']));
+      .toEqual(expect.arrayContaining(['["inbox","queue"]', '["inbox","item","proposal:14"]']));
     expect((await storedKeys(page)).filter((key) => key.startsWith('["session'))).toEqual([]);
   });
 
