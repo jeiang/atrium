@@ -234,7 +234,7 @@ test.describe('inbox on a desktop', () => {
     await expect(card(page, 'proposal:14').getByRole('button', { name: 'Approve' })).toBeVisible();
     await expect
       .poll(() => storedKeys(page))
-      .toEqual(expect.arrayContaining(['["inbox","pending"]', '["inbox","item","proposal:14"]']));
+      .toEqual(expect.arrayContaining(['["inbox","queue"]', '["inbox","item","proposal:14"]']));
     expect((await storedKeys(page)).filter((key) => key.startsWith('["session'))).toEqual([]);
   });
 
@@ -325,4 +325,117 @@ test.describe('inbox design checks', () => {
     await expect(card(page, 'draft:7').locator('.approval__row')).not.toHaveAttribute('inert');
     expect(await expectFocusVisible(page, 'main')).toBeGreaterThanOrEqual(3);
   });
+});
+
+test.describe('every queue kind in the inbox', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowStatus: [404] });
+
+  test('the table lists asks, proposals, drafts and reminders with the queue counts and the badge agrees', async ({
+    page,
+  }) => {
+    await useScenario(page, { inbox: { mix: true } });
+    await gotoShell(page, '/inbox');
+    await expect(page.getByText('7 items waiting on you')).toBeVisible();
+    await expect(page.getByText('1 ask, 2 proposals, 1 draft, 3 reminders')).toBeVisible();
+    await waiting(page, 7);
+    const table = page.getByRole('table', { name: 'Needs you' });
+    await expect(table.getByRole('row')).toHaveCount(8);
+    await expect(table.getByRole('row').nth(1)).toContainText('Which room should the garden meeting use?');
+    await expect(table.getByRole('row', { name: /Renew the library card/ })).toContainText('Due');
+  });
+
+  test('an off app hides its items, its counts and the badge drops with them', async ({ page }) => {
+    await useScenario(page, { inbox: { mix: true }, modules: { calendar: 'off', assistant: 'off' } });
+    await gotoShell(page, '/inbox');
+    await expect(page.getByText('3 items waiting on you')).toBeVisible();
+    await waiting(page, 3);
+    await expect(page.getByText(/\bask\b/)).toHaveCount(0);
+    const table = page.getByRole('table', { name: 'Needs you' });
+    await expect(table.getByRole('row', { name: /Which room/ })).toHaveCount(0);
+    await expect(table.getByRole('row', { name: /Seed swap/ })).toHaveCount(0);
+    await expect(table.getByRole('row', { name: /Move the dentist/ })).toHaveCount(0);
+  });
+
+  test('a due task is marked done from the inbox, then undone', async ({ page }) => {
+    await useScenario(page, { inbox: { mix: true } });
+    await gotoShell(page, '/inbox/task:31');
+    const item = page.locator('[data-item="task:31"]');
+    await expect(item).toContainText('Renew the library card');
+    await expect(item).toContainText('Chat: Weekend errands');
+    await expect(item.getByRole('button', { name: 'Snooze' })).toHaveCount(0);
+    await item.getByRole('button', { name: 'Done' }).click();
+    await expect(item).toContainText('Marked done');
+    await waiting(page, 6);
+    await item.getByRole('button', { name: 'Undo' }).click();
+    await expect(item.getByRole('button', { name: 'Done' })).toBeVisible();
+    await waiting(page, 7);
+    const sent = await requests(page);
+    expect(sent.map((r) => `${r.method} ${r.path}`)).toEqual([
+      'POST /web/v1/commitments/task:31/done',
+      'POST /web/v1/undo/write:900',
+    ]);
+    expect(new Set(sent.map((r) => r.key)).size).toBe(2);
+    for (const r of sent) expect(r.key).toMatch(uuid);
+  });
+
+  test('a question takes an answer once', async ({ page }) => {
+    await useScenario(page, { inbox: { mix: true } });
+    await gotoShell(page, '/inbox/question:42');
+    const item = page.locator('[data-item="question:42"]');
+    await item.getByRole('textbox', { name: 'Your answer' }).fill('The library room, please.');
+    await item.getByRole('button', { name: 'Send answer' }).click();
+    await expect(item).toContainText('Answer sent');
+    await waiting(page, 6);
+    expect((await requests(page)).map((r) => r.path)).toEqual(['/web/v1/threads/42/answer']);
+  });
+
+  test.describe('refusals', () => {
+    test.use({ allowStatus: [404, 409] });
+
+    test('a question answered elsewhere says so', async ({ page }) => {
+      await useScenario(page, { inbox: { mix: true, decide: 'conflict' } });
+      await gotoShell(page, '/inbox/question:42');
+      const item = page.locator('[data-item="question:42"]');
+      await item.getByRole('textbox', { name: 'Your answer' }).fill('The hall.');
+      await item.getByRole('button', { name: 'Send answer' }).click();
+      await expect(item).toContainText('Already answered');
+    });
+
+    test('a reminder done elsewhere says it was handled', async ({ page }) => {
+      await useScenario(page, { inbox: { mix: true } });
+      await gotoShell(page, '/inbox/commitment:8');
+      const item = page.locator('[data-item="commitment:8"]');
+      await expect(item.getByRole('button', { name: 'Done' })).toBeVisible();
+      await streamOpen(page);
+      await page.evaluate(() => {
+        const channel = new BroadcastChannel('atrium-mock-events');
+        channel.postMessage({ topic: 'tasks', decide: 'commitment:8' });
+        channel.postMessage({ topic: 'attention' });
+        channel.close();
+      });
+      await expect(page.getByRole('heading', { name: 'Handled elsewhere' })).toBeVisible();
+    });
+  });
+
+  test('an item with no operation shows its details and no invented action', async ({ page }) => {
+    await useScenario(page, { inbox: { mix: true } });
+    await gotoShell(page, '/inbox/event_candidate:9001');
+    const item = page.locator('[data-item="event_candidate:9001"]');
+    await expect(item).toContainText('Seed swap on Saturday at ten');
+    await expect(item.getByRole('button')).toHaveCount(0);
+  });
+
+  for (const layout of layouts) {
+    test(`the mixed inbox passes the design checks at ${layout.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await useScenario(page, { inbox: { mix: true } });
+      await gotoShell(page, '/inbox/task:31');
+      await expect(page.locator('[data-item="task:31"]')).toContainText('Renew the library card');
+      await expectNoHorizontalScroll(page);
+      await expectRoundedSurfaces(page, edges);
+      if (layout.touch) await expectTouchTargets(page);
+      await expectNoBlue(page);
+      await expectNoSeriousAxeFindings(page);
+    });
+  }
 });

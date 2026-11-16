@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/api"
@@ -45,6 +46,7 @@ type KnowledgeEditRequest struct {
 	Private *bool     `json:"private,omitempty"`
 	Marks   *[]string `json:"marks,omitempty"`
 	Pinned  *bool     `json:"pinned,omitempty"`
+	IfMatch string    `header:"If-Match" json:"-"`
 }
 
 type KnowledgeSelectedRequest struct {
@@ -433,7 +435,7 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 				}
 				return knowledgeChange(svc().Create(ctx, record))
 			}),
-		api.Command(d, kbapp.DescribeEdit(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid, application.NotFound, application.Refused}},
+		api.Command(d, kbapp.DescribeEdit(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid, application.NotFound, application.Refused, application.Conflict}},
 			"PATCH /knowledge/{record_id}", func(ctx context.Context, in KnowledgeEditRequest) (application.Change[KnowledgeChanged], error) {
 				stored, err := svc().Detail(ctx, kbapp.DetailInput{ID: in.ID})
 				if err != nil {
@@ -569,6 +571,17 @@ func (f KnowledgeFields) input() (kbapp.RecordInput, error) {
 }
 
 func (in KnowledgeEditRequest) merge(rec kbapp.Record) (kbapp.RecordInput, error) {
+	if in.IfMatch != "" {
+		tag := strings.Trim(strings.TrimPrefix(in.IfMatch, "W/"), "\"")
+		at, err := time.Parse(time.RFC3339Nano, tag)
+		if err != nil {
+			return kbapp.RecordInput{}, &application.Error{Code: application.Invalid, Message: "If-Match must be the record's updated_at",
+				Fields: []application.Field{{Name: "If-Match", Code: "invalid", Message: "If-Match must be the record's updated_at"}}}
+		}
+		if !at.Equal(seconds(rec.UpdatedAt)) {
+			return kbapp.RecordInput{}, &application.Error{Code: application.Conflict, Reason: "stale", Message: "The record changed since it was read."}
+		}
+	}
 	out := kbapp.RecordInput{Title: rec.Title, Body: rec.Body, Aliases: rec.Aliases, Scope: rec.Scope, Private: rec.Private, Marks: rec.Marks, Pinned: rec.Pinned}
 	if in.Title != nil {
 		out.Title = *in.Title

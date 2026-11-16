@@ -27,13 +27,13 @@
   import ToolCard from '../../shared/assistant/ToolCard.svelte';
   import type { ToolCall } from '../../shared/assistant/types';
   import { refusedOffline, unreachable } from '../../shared/device.svelte';
+  import Markdown from '../../shared/markdown/Markdown.svelte';
   import { queryClient } from '../../shared/query';
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
-  import Markdown from './Markdown.svelte';
   import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';
@@ -178,6 +178,43 @@
 
   $effect(() => {
     lastY = window.scrollY;
+    let touchY = 0;
+    // True when an element under the input can still move that way itself, so the page will not scroll.
+    const inner = (target: EventTarget | null, up: boolean): boolean => {
+      for (
+        let node = target instanceof Element ? target : null;
+        node && node !== document.body;
+        node = node.parentElement
+      ) {
+        const overflow = getComputedStyle(node).overflowY;
+        if (overflow !== 'auto' && overflow !== 'scroll') continue;
+        if (up ? node.scrollTop > 0 : node.scrollTop + node.clientHeight < node.scrollHeight) return true;
+      }
+      return false;
+    };
+    // Upward operator input stops following before its first scroll step, which can land inside the slack.
+    const scrolledUp = (target: EventTarget | null): void => {
+      if (window.scrollY === 0 || dock?.contains(target as Node) || inner(target, true)) return;
+      following = false;
+    };
+    const onWheel = (event: WheelEvent): void => {
+      if (event.deltaY < 0) scrolledUp(event.target);
+    };
+    const onTouchStart = (event: TouchEvent): void => {
+      touchY = event.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (event: TouchEvent): void => {
+      const y = event.touches[0]?.clientY ?? touchY;
+      if (y > touchY) scrolledUp(event.target);
+      touchY = y;
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select')))
+        return;
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey))
+        scrolledUp(target);
+    };
     const onScroll = (): void => {
       const y = window.scrollY;
       const bottom = atBottom();
@@ -191,15 +228,17 @@
         sessionStorage.setItem(storageKey, String(Math.round(window.scrollY)));
       });
     };
-    const onWheel = (event: WheelEvent): void => {
-      if (event.deltaY >= 0 || dock?.contains(event.target as Node)) return;
-      if (document.documentElement.scrollHeight > window.innerHeight) following = false;
-    };
+    addEventListener('touchstart', onTouchStart, { passive: true });
+    addEventListener('touchmove', onTouchMove, { passive: true });
+    addEventListener('keydown', onKey);
     addEventListener('scroll', onScroll, { passive: true });
     addEventListener('wheel', onWheel, { passive: true });
     return () => {
-      removeEventListener('scroll', onScroll);
       removeEventListener('wheel', onWheel);
+      removeEventListener('touchstart', onTouchStart);
+      removeEventListener('touchmove', onTouchMove);
+      removeEventListener('keydown', onKey);
+      removeEventListener('scroll', onScroll);
       cancelAnimationFrame(scrollFrame);
     };
   });

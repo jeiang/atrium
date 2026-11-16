@@ -6,9 +6,12 @@
   import Approvals from './sections/Approvals.svelte';
   import Assistant from './sections/Assistant.svelte';
   import Collections from './sections/Collections.svelte';
+  import Connections from './sections/Connections.svelte';
   import Forms from './sections/Forms.svelte';
   import Foundations from './sections/Foundations.svelte';
+  import Knowledge from './sections/Knowledge.svelte';
   import Overlays from './sections/Overlays.svelte';
+  import Prose from './sections/Prose.svelte';
   import Simulator from './sections/Simulator.svelte';
   import States from './sections/States.svelte';
   import Status from './sections/Status.svelte';
@@ -35,9 +38,12 @@
   <Collections />
   <States />
   <Overlays />
+  <Connections />
   <Widgets />
   <Approvals />
   <Tools />
   <Assistant />
+  <Prose />
+  <Knowledge />
   <Simulator />
 </Page>

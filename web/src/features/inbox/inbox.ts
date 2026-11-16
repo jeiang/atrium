@@ -1,36 +1,64 @@
 import { createQuery, type QueryClient } from '@tanstack/svelte-query';
 import {
   ApiError,
-  type Approval as ApprovalRow,
+  assistantRunAnswer,
   type Draft,
   mailDraft,
   mailDraftDiscard,
   mailDraftSend,
   ok,
   type ProposalDetail,
+  type QueueCounts,
+  type QueueItem,
+  type QueueItemKind,
+  type QueueItemWaitingFor,
   reviewApprove,
   reviewDismiss,
   reviewEffects,
-  reviewPending,
   reviewProposal,
+  reviewQueue,
+  reviewQueueItem,
   reviewUndoEffect,
 } from '../../contract';
-import type { InboxId, InboxType } from '../../shared/assistant/inboxId';
+import type { InboxId } from '../../shared/assistant/inboxId';
 import { proposalToApproval } from '../../shared/assistant/proposalApproval';
 import type { Approval, DecidedElsewhere, Decision } from '../../shared/assistant/types';
 
-const PENDING_TOPICS = ['review', 'effects', 'mail'] as const;
+const QUEUE_TOPICS = [
+  'review',
+  'effects',
+  'mail',
+  'attention',
+  'assistant',
+  'tasks',
+  'calendar',
+  'ops',
+  'settings',
+  'connections',
+] as const;
 const PROPOSAL_TOPICS = ['review', 'effects'] as const;
 const DRAFT_TOPICS = ['mail', 'review'] as const;
+const QUEUE_PAGE = 100;
 
 export interface InboxRow {
   key: string;
-  type: InboxType;
-  id: number;
+  type: string;
+  id: string;
+  kind: QueueItemKind;
   title: string;
-  kind: string;
+  label: string;
+  summary: string;
   created: number;
+  due?: number;
+  waitingFor: QueueItemWaitingFor;
+  module: string;
   blocked: boolean;
+}
+
+export interface Queue {
+  rows: InboxRow[];
+  total: number;
+  counts: QueueCounts;
 }
 
 export interface InboxItem {
@@ -45,30 +73,69 @@ export function inboxKey(item: InboxId): string {
   return `${item.type}:${item.id}`;
 }
 
-function row(type: InboxType, id: number, title: string, kind: string, created: number, blocked: boolean): InboxRow {
-  return { key: `${type}:${id}`, type, id, title, kind, created, blocked };
+const waitingWords: Record<QueueItemWaitingFor, string> = {
+  answer: 'Question',
+  permission: 'Permission',
+  approval: 'Approval',
+  send: 'Email',
+  resolve: 'Stuck',
+  review: 'Review',
+  due: 'Due',
+};
+
+export function queueRow(item: QueueItem): InboxRow {
+  return {
+    key: item.id,
+    type: item.source.type,
+    id: item.source.id,
+    kind: item.kind,
+    title: item.title || '(no title)',
+    label: waitingWords[item.waiting_for],
+    summary: item.summary,
+    created: item.arrived_at,
+    due: item.due ?? undefined,
+    waitingFor: item.waiting_for,
+    module: item.module,
+    blocked: item.waiting_for === 'resolve',
+  };
 }
 
-function proposalRow(item: ApprovalRow, blocked: boolean): InboxRow {
-  return row('proposal', item.id, item.title, item.kind_label, item.created_at, blocked);
-}
-
-export function usePending() {
+export function useQueue() {
   return createQuery(() => ({
-    queryKey: ['inbox', 'pending'],
-    queryFn: async ({ signal }) => {
-      const body = ok(await reviewPending({ signal }));
-      const rows = [
-        ...body.approvals.map((item) => proposalRow(item, false)),
-        ...body.drafts.map((draft) =>
-          row('draft', draft.id, draft.subject || '(no subject)', 'Email', draft.created_at, false),
-        ),
-        ...body.blocked.map((item) => proposalRow(item, true)),
-      ];
-      return rows.sort((a, b) => Number(a.blocked) - Number(b.blocked) || a.created - b.created);
+    queryKey: ['inbox', 'queue'],
+    queryFn: async ({ signal }): Promise<Queue> => {
+      let page = ok(await reviewQueue({ limit: QUEUE_PAGE }, { signal })).data;
+      const items = [...page.items];
+      while (page.next_cursor) {
+        page = ok(await reviewQueue({ limit: QUEUE_PAGE, cursor: page.next_cursor }, { signal })).data;
+        items.push(...page.items);
+      }
+      return { rows: items.map(queueRow), total: page.total, counts: page.counts };
     },
-    meta: { topics: PENDING_TOPICS },
+    meta: { topics: QUEUE_TOPICS },
   }));
+}
+
+export function useQueueItem(item: () => InboxId) {
+  return createQuery(() => {
+    const key = inboxKey(item());
+    return {
+      queryKey: ['inbox', 'queued', key],
+      queryFn: async ({ signal }): Promise<QueueItem | null> => {
+        try {
+          return ok(await reviewQueueItem(key, { signal })).data;
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) return null;
+          throw error;
+        }
+      },
+      meta: { topics: QUEUE_TOPICS },
+    };
+  });
+}
+
+export async function handleAnswer(threadId: number, text: string): Promise<void> {
+  ok(await assistantRunAnswer(threadId, { text }, oneGesture()));
 }
 
 function iso(seconds: number): string {
@@ -170,7 +237,8 @@ function draftItem(key: string, draft: Draft): InboxItem {
 
 export function useInboxItem(item: () => InboxId) {
   return createQuery(() => {
-    const { type, id } = item();
+    const { type } = item();
+    const id = Number(item().id);
     const key = `${type}:${id}`;
     return {
       queryKey: ['inbox', 'item', key],
@@ -195,16 +263,16 @@ function oneGesture(): RequestInit {
 
 export async function handleApprove(item: InboxId, revision: number | undefined): Promise<string | undefined> {
   if (item.type === 'draft') {
-    const sent = ok(await mailDraftSend(item.id, revision === undefined ? {} : { revision }, oneGesture()));
+    const sent = ok(await mailDraftSend(Number(item.id), revision === undefined ? {} : { revision }, oneGesture()));
     return sent.refused.length > 0 ? `The server refused ${sent.refused.join(', ')}.` : undefined;
   }
-  const done = ok(await reviewApprove(item.id, {}, oneGesture()));
+  const done = ok(await reviewApprove(Number(item.id), {}, oneGesture()));
   return done.outcome === 'applied' ? undefined : (done.error ?? 'atrium could not apply it.');
 }
 
 export async function handleDecline(item: InboxId): Promise<undefined> {
-  if (item.type === 'draft') ok(await mailDraftDiscard(item.id, oneGesture()));
-  else ok(await reviewDismiss(item.id, {}, oneGesture()));
+  if (item.type === 'draft') ok(await mailDraftDiscard(Number(item.id), oneGesture()));
+  else ok(await reviewDismiss(Number(item.id), {}, oneGesture()));
 }
 
 export async function handleUndo(item: InboxId): Promise<void> {

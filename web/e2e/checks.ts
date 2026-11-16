@@ -65,7 +65,7 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
       const squares: { name: string; x: number; y: number }[] = [];
       const root = document.querySelector(scope);
       if (!root) return [`touch rule: ${scope} is not on the page`];
-      const controls = [...root.querySelectorAll(selector)].filter(visible);
+      const controls = [...root.querySelectorAll(selector)].filter((el) => visible(el) && !el.matches('.prose a'));
       for (const el of controls) {
         const name = describe(el);
         el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });

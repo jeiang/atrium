@@ -1,11 +1,13 @@
 import { HttpResponse, http, type JsonBodyType } from 'msw';
-import type { Approval, Draft, PendingBody, ProposalDetail } from '../contract';
+import type { Approval, Draft, PendingBody, ProposalDetail, QueueItem } from '../contract';
 import { API_BASE } from '../contract';
+import { planAttention } from './plan';
 
 export interface InboxScenario {
   decide?: 'ok' | 'conflict' | 'stale' | 'network';
   empty?: boolean;
   fail?: boolean;
+  mix?: boolean;
 }
 
 interface MockEffect {
@@ -42,8 +44,9 @@ const letter = [
   'Sam',
 ].join('\n');
 
-function seed(): { proposals: ProposalDetail[]; drafts: Draft[]; effects: MockEffect[] } {
+function seed(): { proposals: ProposalDetail[]; drafts: Draft[]; effects: MockEffect[]; questions: number[] } {
   return {
+    questions: [42],
     proposals: [
       {
         id: 12,
@@ -120,6 +123,7 @@ function seed(): { proposals: ProposalDetail[]; drafts: Draft[]; effects: MockEf
 
 let store = seed();
 let read = '';
+let off = new Set<string>();
 
 function scenario(): InboxScenario {
   try {
@@ -128,7 +132,8 @@ function scenario(): InboxScenario {
       read = raw;
       store = seed();
     }
-    const parsed: { inbox?: InboxScenario } = JSON.parse(raw);
+    const parsed: { inbox?: InboxScenario; modules?: Record<string, string> } = JSON.parse(raw);
+    off = new Set(Object.entries(parsed.modules ?? {}).flatMap(([name, state]) => (state === 'off' ? [name] : [])));
     return parsed.inbox ?? {};
   } catch {
     return {};
@@ -164,9 +169,75 @@ function waiting(): { proposals: ProposalDetail[]; drafts: Draft[] } {
   };
 }
 
-export function inboxCount(): number {
+function extras(): QueueItem[] {
+  return [
+    ...store.questions.map(
+      (thread): QueueItem => ({
+        id: `question:${thread}`,
+        kind: 'ask',
+        title: 'Which room should the garden meeting use?',
+        summary: 'The assistant is waiting: the library room seats twelve, the community hall seats forty.',
+        source: { type: 'question', id: String(thread) },
+        arrived_at: NOW - 600,
+        waiting_for: 'answer',
+        module: 'assistant',
+      }),
+    ),
+    {
+      id: 'event_candidate:9001',
+      kind: 'attention',
+      title: 'Seed swap on Saturday at ten',
+      summary: 'Found in mail from the garden club',
+      source: { type: 'event_candidate', id: '9001' },
+      arrived_at: NOW - 3000,
+      waiting_for: 'review',
+      module: 'calendar',
+    },
+    ...planAttention(),
+  ];
+}
+
+const rank = (item: QueueItem): number =>
+  item.waiting_for === 'answer' || item.waiting_for === 'permission' ? 0 : item.due ? 1 : 2;
+
+export function queue(): QueueItem[] {
+  const state = scenario();
   const open = waiting();
-  return open.proposals.filter((item) => !item.blocked).length + open.drafts.length;
+  const items: QueueItem[] = [
+    ...open.proposals.map((item): QueueItem => {
+      const approval = row(item);
+      return {
+        id: `proposal:${item.id}`,
+        kind: 'proposal',
+        title: item.title,
+        summary: approval.kind_label,
+        source: { type: 'proposal', id: String(item.id) },
+        arrived_at: item.created_at,
+        waiting_for: item.blocked ? 'resolve' : 'approval',
+        module: approval.module,
+      };
+    }),
+    ...open.drafts.map(
+      (item): QueueItem => ({
+        id: `draft:${item.id}`,
+        kind: 'draft',
+        title: item.subject || '(no subject)',
+        summary: `To ${item.to}`,
+        source: { type: 'draft', id: String(item.id) },
+        arrived_at: item.created_at,
+        waiting_for: 'send',
+        module: 'mail',
+      }),
+    ),
+    ...(state.mix && !state.empty ? extras() : []),
+  ];
+  return items
+    .filter((item) => !off.has(item.module))
+    .sort((a, b) => rank(a) - rank(b) || (a.due ?? 0) - (b.due ?? 0) || a.arrived_at - b.arrived_at);
+}
+
+export function inboxCount(): number {
+  return queue().length;
 }
 
 function decide(key: string, approve: boolean): void {
@@ -189,7 +260,8 @@ function decide(key: string, approve: boolean): void {
 
 export function decideElsewhere(key: string): void {
   scenario();
-  decide(key, true);
+  if (key.startsWith('question:')) store.questions = store.questions.filter((id) => `question:${id}` !== key);
+  else decide(key, true);
 }
 
 function record(request: Request): void {
@@ -228,6 +300,22 @@ function draft(id: unknown): Draft | undefined {
 }
 
 export const inboxHandlers = [
+  http.get(`*${API_BASE}/queue`, ({ request }) => {
+    if (scenario().fail) return refusal(500, 'internal', 'The review store did not answer.');
+    const all = queue();
+    const kind = new URL(request.url).searchParams.get('kind');
+    const counts = { ask: 0, proposal: 0, draft: 0, attention: 0 };
+    for (const item of all) counts[item.kind] += 1;
+    return HttpResponse.json({
+      data: { items: kind ? all.filter((item) => item.kind === kind) : all, total: all.length, counts },
+      revision: 1,
+    });
+  }),
+  http.get(`*${API_BASE}/queue/:id`, ({ params }) => {
+    const item = queue().find((entry) => entry.id === params.id);
+    if (!item) return refusal(404, 'not_found', 'It no longer waits on you.');
+    return HttpResponse.json({ data: item, revision: 1 });
+  }),
   http.get(`*${API_BASE}/pending`, () => {
     if (scenario().fail) return refusal(500, 'internal', 'The review store did not answer.');
     const open = waiting();
@@ -279,5 +367,18 @@ export const inboxHandlers = [
     const item = proposal(effect.proposal_id);
     if (item) item.undone_at = effect.undone_at;
     return HttpResponse.json({ undone: true });
+  }),
+];
+
+export const inboxAskHandlers = [
+  http.post(`*${API_BASE}/threads/:thread/answer`, ({ params, request }) => {
+    const state = scenario();
+    if (!state.mix) return undefined;
+    record(request);
+    if (state.decide === 'conflict' || !store.questions.includes(Number(params.thread))) {
+      return refusal(409, 'no_question', 'There is no question to answer.');
+    }
+    store.questions = store.questions.filter((id) => id !== Number(params.thread));
+    return HttpResponse.json({ run_id: 77 }, { status: 202 });
   }),
 ];
