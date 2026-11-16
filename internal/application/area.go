@@ -5,7 +5,7 @@ import "slices"
 type Area string
 
 var Areas = []Area{
-	"home", "threads", "composer", "files", "projects", "review", "proposals", "permissions", "drafts", "activity", "knowledge",
+	"home", "threads", "composer", "files", "review", "proposals", "permissions", "drafts", "activity", "knowledge",
 	"tasks", "schedules", "mail", "media", "inbox", "devices", "settings", "integrations", "usage", "search",
 }
 

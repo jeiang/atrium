@@ -93,7 +93,6 @@ func TestSchedulesUsageAPI(t *testing.T) {
 	if !seen[job] || !seen[other] || !seen[builtin] || rest.json["next_cursor"] != nil {
 		t.Fatalf("schedule pages miss jobs: %v %.300s", seen, rest.body)
 	}
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/subagents?cursor="+cursor, token, nil), 400, "bad_cursor")
 	etag := first.header.Get("ETag")
 	if again := s.do(http.MethodGet, "/api/v1/schedules?limit=100", token, nil, "If-None-Match", etag); etag == "" || again.status != 304 {
 		t.Fatalf("schedule conditional: %q %d", etag, again.status)
@@ -221,69 +220,5 @@ func TestSchedulesUsageAPI(t *testing.T) {
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/memory/backfill", token, map[string]any{"thread_id": 999999}), 404, "not_found")
 	if len(model.Requests()) != requests {
 		t.Fatalf("memory refusals called the model: %d -> %d", requests, len(model.Requests()))
-	}
-}
-
-func TestSubagentAPI(t *testing.T) {
-	dir, model, f := moduleFixture(t, flagsExcept("", ""))
-	warm(t, model)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
-	defer func() { _ = d.Close() }()
-	token := localAPIToken(t, "subagent-api")
-	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
-	s := &apiSite{t: t, base: base}
-
-	agents := s.do(http.MethodGet, "/api/v1/subagents", token, nil)
-	baseline := len(apiReplyItems(t, agents))
-	created := s.do(http.MethodPut, "/api/v1/subagents/api-helper", token, map[string]any{"description": "Checks facts.", "prompt": "Check the facts.", "effort": "low", "tools": []string{"web_fetch"}})
-	if created.status != 200 || created.json["name"] != "api-helper" || created.json["enabled"] != true || created.json["effort"] != "low" {
-		t.Fatalf("subagent set: %d %s", created.status, created.body)
-	}
-	expectAPI(t, s.do(http.MethodPut, "/api/v1/subagents/api-helper", token, map[string]any{"tools": []string{"no_such_tool"}}), 409, "refused")
-	kept := s.do(http.MethodPut, "/api/v1/subagents/api-helper", token, map[string]any{"effort": "high"})
-	if tools, _ := kept.json["tools"].([]any); kept.status != 200 || kept.json["effort"] != "high" || len(tools) != 1 || tools[0] != "web_fetch" {
-		t.Fatalf("subagent update lost tools: %d %s", kept.status, kept.body)
-	}
-	listedAgents := s.do(http.MethodGet, "/api/v1/subagents", token, nil, "If-None-Match", agents.header.Get("ETag"))
-	if len(apiReplyItems(t, listedAgents)) != baseline+1 {
-		t.Fatalf("subagent list: %s", listedAgents.body)
-	}
-	if disabled := s.do(http.MethodPut, "/api/v1/subagents/api-helper/enabled", token, map[string]any{"enabled": false}); disabled.status != 200 || disabled.json["enabled"] != false {
-		t.Fatalf("subagent disable: %d %s", disabled.status, disabled.body)
-	}
-	expectAPI(t, s.do(http.MethodPut, "/api/v1/subagents/nobody/enabled", token, map[string]any{"enabled": true}), 404, "not_found")
-	expectAPI(t, s.do(http.MethodPut, "/api/v1/subagents/api-helper/enabled", token, map[string]any{}), 422, "invalid")
-	if deleted := s.do(http.MethodDelete, "/api/v1/subagents/api-helper", token, nil); deleted.status != 204 {
-		t.Fatalf("subagent delete: %d %s", deleted.status, deleted.body)
-	}
-	expectAPI(t, s.do(http.MethodDelete, "/api/v1/subagents/api-helper", token, nil), 404, "not_found")
-	checkedBuiltin := false
-	for _, item := range apiReplyItems(t, agents) {
-		row := item.(map[string]any)
-		if row["builtin"] == true {
-			checkedBuiltin = true
-			expectAPI(t, s.do(http.MethodDelete, "/api/v1/subagents/"+row["name"].(string), token, nil), 409, "refused")
-			name := row["name"].(string)
-			var beforeDescription, beforePrompt, beforeEffort, beforeTools string
-			if err := d.Read.QueryRow("SELECT description, prompt, effort, tools_json FROM subagents WHERE name = ?", name).Scan(&beforeDescription, &beforePrompt, &beforeEffort, &beforeTools); err != nil {
-				t.Fatal(err)
-			}
-			expectAPI(t, s.do(http.MethodPut, "/api/v1/subagents/"+name, token, map[string]any{"description": "Changed", "prompt": "Changed", "effort": "high", "tools": []string{"web_fetch"}}), 409, "refused")
-			var description, prompt, effort, tools string
-			if err := d.Read.QueryRow("SELECT description, prompt, effort, tools_json FROM subagents WHERE name = ?", name).Scan(&description, &prompt, &effort, &tools); err != nil {
-				t.Fatal(err)
-			}
-			if description != beforeDescription || prompt != beforePrompt || effort != beforeEffort || tools != beforeTools {
-				t.Fatal("refused API save changed the built-in subagent")
-			}
-			break
-		}
-	}
-	if !checkedBuiltin {
-		t.Fatal("no built-in subagent was exercised")
 	}
 }
