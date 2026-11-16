@@ -242,7 +242,7 @@ func (c *conn) login(ctx context.Context) error {
 				return err
 			}
 		} else if err := c.cl.Login(c.user, c.password).Wait(); err != nil {
-			return imapErr(err)
+			return loginErr(err)
 		}
 	}
 	c.caps = c.cl.Caps()
@@ -257,7 +257,7 @@ func (c *conn) authenticate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return imapErr(c.cl.Authenticate(&xoauth2{user: c.user, token: token}))
+	return loginErr(c.cl.Authenticate(&xoauth2{user: c.user, token: token}))
 }
 
 func (c *conn) shutdown() {

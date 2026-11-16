@@ -370,12 +370,12 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 		}
 		return nil, err
 	}
+	if res.status == http.StatusUnauthorized || res.status == http.StatusForbidden {
+		q.observe(ctx, connections.NeedsReauth, qbitRefusal(q.key))
+		return nil, &QbitStatusError{Path: path, Status: res.status}
+	}
 	if res.status != http.StatusOK {
-		state := connections.Failing
-		if res.status == http.StatusUnauthorized || res.status == http.StatusForbidden {
-			state = connections.NeedsReauth
-		}
-		q.observe(ctx, state, fmt.Sprintf("qBittorrent answered %d", res.status))
+		q.observe(ctx, connections.Failing, fmt.Sprintf("qBittorrent answered %d", res.status))
 		return nil, &QbitStatusError{Path: path, Status: res.status}
 	}
 	return res.body, nil
@@ -385,6 +385,13 @@ func (q *Qbit) observe(ctx context.Context, state connections.State, reason stri
 	if q.report != nil {
 		q.report(ctx, state, reason)
 	}
+}
+
+func qbitRefusal(key string) string {
+	if key == "" {
+		return "qBittorrent requires an API key"
+	}
+	return "qBittorrent refused the API key"
 }
 
 func (q *Qbit) post(ctx context.Context, path string, form []param) error {

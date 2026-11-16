@@ -46,6 +46,7 @@ type Token struct {
 	ExpiresAt   *time.Time
 	LastUsedAt  *time.Time
 	RevokedAt   *time.Time
+	Agent       bool
 }
 
 type Issued struct {
@@ -67,7 +68,7 @@ type IssueCommit func(context.Context, *sql.Tx, Token) error
 
 type RevokeCommit func(ctx context.Context, tx *sql.Tx, tok Token, changed bool) error
 
-func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time, commit IssueCommit) (Issued, error) {
+func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time, agent bool, commit IssueCommit) (Issued, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || utf8.RuneCountInString(name) > maxName {
 		return Issued{}, ErrName
@@ -90,8 +91,8 @@ func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time, 
 	secret := Prefix + base64.RawURLEncoding.EncodeToString(raw)
 	var tok Token
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, "INSERT INTO auth_bearers (token_hash, kind, name, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-			hashSecret(secret), kindLocal, name, unix(now), stored)
+		res, err := tx.ExecContext(ctx, "INSERT INTO auth_bearers (token_hash, kind, name, created_at, expires_at, agent) VALUES (?, ?, ?, ?, ?, ?)",
+			hashSecret(secret), kindLocal, name, unix(now), stored, agent)
 		if err != nil {
 			return err
 		}
@@ -99,7 +100,7 @@ func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time, 
 		if err != nil {
 			return err
 		}
-		tok = Token{ID: id, Kind: kindLocal, Name: name, CreatedAt: now, ExpiresAt: expires}
+		tok = Token{ID: id, Kind: kindLocal, Name: name, CreatedAt: now, ExpiresAt: expires, Agent: agent}
 		return commit(ctx, tx, tok)
 	})
 	if err != nil {
@@ -110,7 +111,7 @@ func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time, 
 
 func (s *Service) List(ctx context.Context) ([]Token, error) {
 	rows, err := s.d.Read.QueryContext(ctx,
-		"SELECT id, kind, name, subject, created_at, expires_at, last_used_at, revoked_at FROM auth_bearers ORDER BY id")
+		"SELECT id, kind, name, subject, created_at, expires_at, last_used_at, revoked_at, agent FROM auth_bearers ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func (s *Service) List(ctx context.Context) ([]Token, error) {
 		var tok Token
 		var created float64
 		var expires, used, revoked sql.NullFloat64
-		err := r.Scan(&tok.ID, &tok.Kind, &tok.Name, &tok.Subject, &created, &expires, &used, &revoked)
+		err := r.Scan(&tok.ID, &tok.Kind, &tok.Name, &tok.Subject, &created, &expires, &used, &revoked, &tok.Agent)
 		if err != nil {
 			return Token{}, err
 		}
@@ -263,8 +264,8 @@ func load(ctx context.Context, q db.Querier, hash string) (Token, error) {
 	var created float64
 	var expires, used, revoked sql.NullFloat64
 	err := q.QueryRowContext(ctx,
-		"SELECT id, kind, name, subject, created_at, expires_at, last_used_at, revoked_at FROM auth_bearers WHERE token_hash = ?", hash).
-		Scan(&tok.ID, &tok.Kind, &tok.Name, &tok.Subject, &created, &expires, &used, &revoked)
+		"SELECT id, kind, name, subject, created_at, expires_at, last_used_at, revoked_at, agent FROM auth_bearers WHERE token_hash = ?", hash).
+		Scan(&tok.ID, &tok.Kind, &tok.Name, &tok.Subject, &created, &expires, &used, &revoked, &tok.Agent)
 	if err != nil {
 		return Token{}, err
 	}

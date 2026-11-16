@@ -19,6 +19,7 @@ type migration struct {
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
 	{2, dropUnreadTables},
+	{3, addUsageCounters},
 }
 
 const (
@@ -37,7 +38,17 @@ DROP TABLE pass_run_alerts;
 DROP TABLE snoozes;
 `
 	notionVectorTables = "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'embed_notion_[0-9]*' AND name NOT GLOB 'embed_notion_*[^0-9]*' AND sql LIKE 'CREATE VIRTUAL TABLE%' ORDER BY name"
+	usageCountersDDL   = `
+CREATE TABLE usage_counters (day TEXT NOT NULL, surface TEXT NOT NULL, method TEXT NOT NULL, route TEXT NOT NULL, agent INTEGER NOT NULL CHECK (agent IN (0, 1)), count INTEGER NOT NULL CHECK (count >= 0), PRIMARY KEY (day, surface, method, route, agent));
+ALTER TABLE auth_bearers ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1));
+ALTER TABLE auth_sessions ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1));
+`
 )
+
+func addUsageCounters(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, usageCountersDDL)
+	return err
+}
 
 func dropUnreadTables(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, notionVectorTables)

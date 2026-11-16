@@ -234,6 +234,15 @@ watchdog, `TimeoutStartSec=45min`, `TimeoutStopSec=150s`, `KillMode=mixed`, and
 to 120 seconds. All listeners bind before readiness. Exit codes and failure
 semantics are detailed in [Behavior](behavior.md#start-stop-and-restart).
 
+Before serve starts, the unit runs `atrium connections check --changed` as
+`ExecStartPre` with its failure ignored (`-` prefix). It migrates the database
+and reconciles the host file, checks only the connections that were added or
+whose host declaration changed, and prints one line per checked connection to
+the unit journal, so `journalctl -u atrium` shows a broken edit right after the
+deploy. A failing result notifies as usual and never fails the unit. Serve then
+starts without rechecking those connections. A restart with no host change
+prints `no connection to check`.
+
 The application and `atrium-run` share:
 
 - `User`, `Group`, `StateDirectory`, state mode 0750, and umask 0027.

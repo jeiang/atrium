@@ -286,7 +286,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
 		return
 	}
-	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName, Expires: tok.ExpiresAt}
+	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName, Expires: tok.ExpiresAt, Agent: tok.Agent || markedAgent(r)}
 	if isUnsafe(r.Method) && !sameOrigin(r) {
 		APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
 		return

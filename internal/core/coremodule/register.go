@@ -61,6 +61,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/webusage"
 )
 
 type Module struct {
@@ -84,7 +85,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
 	readModelOps, readModelBindings := m.readModelOperations()
 	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
+	commitmentOps, commitmentBindings := commitmentOperations()
+	operations, bindings = append(operations, commitmentOps...), append(bindings, commitmentBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
+	operations = append(operations, webusage.DescribeRoutes())
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "usage routes", Uses: []application.Name{webusage.RoutesName}})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanDeletionsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
@@ -128,7 +133,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return err
 		})},
 		Attention:         AttentionSources(),
-		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics()),
+		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
 		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
@@ -157,6 +162,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
 				m.readModelRoutes(d)
+				commitmentRoutes(d, m.commitmentService(d))
 			}},
 		},
 		Groups:     SettingGroups(),
@@ -170,6 +176,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),
+			webusage.Command(mc.Env),
 			secretscmd.Command(openSettings),
 			dbcmd.Command(maintenance),
 			dbcmd.BackupCommand(maintenance),

@@ -39,20 +39,26 @@ func IdentityOf(ctx context.Context) (Identity, bool) {
 }
 
 func (g *Guard) identify(r *http.Request) (Identity, error) {
+	agent := markedAgent(r)
 	if g.auth.Local() {
-		return Identity{Source: SourceLocal}, nil
+		return Identity{Source: SourceLocal, Agent: agent}, nil
 	}
 	if g.auth.Proxy() {
 		if _, trusted, _ := g.peer(r); trusted && hasGroup(r.Header.Get("Remote-Groups"), group) {
-			return Identity{Source: SourceProxy}, nil
+			return Identity{Source: SourceProxy, Agent: agent}, nil
 		}
 	}
 	if g.auth.OIDC() {
 		if token := cookieValue(r, sessionCookie, g.secure(r)); token != "" {
 			s, err := g.sessions.Authenticate(r.Context(), token)
+			if err == nil && agent && !s.Agent {
+				if err = g.sessions.MarkAgent(r.Context(), token); err == nil {
+					s.Agent = true
+				}
+			}
 			switch {
 			case err == nil:
-				return Identity{Source: SourceOIDC, Subject: s.Subject, Email: s.Email, Name: s.Name}, nil
+				return Identity{Source: SourceOIDC, Subject: s.Subject, Email: s.Email, Name: s.Name, Agent: s.Agent}, nil
 			case errors.Is(err, oidc.ErrRevoked):
 				return Identity{}, errRevoked
 			case errors.Is(err, oidc.ErrNoSession):
@@ -65,6 +71,8 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 	}
 	return Identity{}, errAnonymous
 }
+
+func markedAgent(r *http.Request) bool { return r.Header.Get(AgentHeader) == "1" }
 
 func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why error) {
 	if !g.auth.OIDC() {

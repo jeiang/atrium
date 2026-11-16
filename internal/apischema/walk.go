@@ -56,6 +56,8 @@ var pinnedNames = map[string]string{
 	atrium + "mail/replay.Line":                        "ReplayLine",
 	atrium + "assistant/threads.Listed":                "ThreadListing",
 	atrium + "attention.Result":                        "AttentionResult",
+	atrium + "tasks.Link":                              "TaskLink",
+	atrium + "tasks.Counts":                            "TaskCounts",
 	atrium + "connections.Result":                      "ConnectionResult",
 	atrium + "connections.View":                        "ConnectionView",
 	atrium + "application/commands.Status":             "CommandStatus",

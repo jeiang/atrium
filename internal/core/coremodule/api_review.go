@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/permission"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
@@ -68,6 +69,40 @@ type ProposalsPage struct {
 
 type ProposalRequest struct {
 	ProposalID int64 `path:"proposal_id" json:"-"`
+}
+
+type QueueRequest struct {
+	Kind   string     `query:"kind" json:"-" api:"enum=ask|proposal|draft|attention"`
+	Cursor api.Cursor `query:"cursor" json:"-"`
+	Limit  api.Limit  `query:"limit" json:"-"`
+}
+
+type QueuePage struct {
+	Items      []reviewapp.QueueItem `json:"items"`
+	NextCursor *string               `json:"next_cursor" api:"nullable"`
+	Total      int                   `json:"total"`
+	Counts     reviewapp.QueueCounts `json:"counts"`
+}
+
+type QueueItemRequest struct {
+	ItemID string `path:"item_id" json:"-"`
+}
+
+const queueTopics = "Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due."
+
+const queueDescription = "The one inbox: everything that waits for the operator, in one order with one count. " +
+	"`total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `cursor` and `limit` are. " +
+	"Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. " +
+	"Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. " + queueTopics
+
+const queueItemDescription = "One queue item by `id`. `proposal:<proposal_id>` and `draft:<draft_id>` are the items behind `/proposals/{proposal_id}` and `/drafts/{draft_id}`. " +
+	"Not found means the item no longer waits for the operator; read the proposal or draft for its outcome. " + queueTopics
+
+func withModules(ctx context.Context, d *web.Deps) context.Context {
+	if module.SetFrom(ctx) == nil {
+		return module.WithSet(ctx, module.SetFrom(d.Ctx))
+	}
+	return ctx
 }
 
 type ProposalDetail struct {
@@ -177,6 +212,29 @@ func pathless(s string) string {
 func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Binding {
 	registerPayload()
 	return append([]application.Binding{
+		api.Query(d, reviewapp.DescribeOne(reviewapp.QueueName), application.APIShape{Area: "review", Description: queueDescription, Errors: []application.Code{application.Invalid}},
+			"GET /queue", func(ctx context.Context, in QueueRequest) (application.Read[QueuePage], error) {
+				input := reviewapp.QueueInput{Kind: in.Kind, Limit: int(in.Limit)}
+				if in.Cursor.Set() {
+					input.After = &reviewapp.QueueKey{}
+					if err := in.Cursor.Last(input.After); err != nil {
+						return application.Read[QueuePage]{}, err
+					}
+				}
+				found, err := svc().Queue(withModules(ctx, d), input)
+				if err != nil {
+					return application.Read[QueuePage]{}, err
+				}
+				page := QueuePage{Items: found.Data.Items, Total: found.Data.Total, Counts: found.Data.Counts}
+				if found.Data.Next != nil {
+					page.NextCursor = in.Cursor.Next(found.Data.Next)
+				}
+				return application.Read[QueuePage]{Revision: found.Revision, Data: page}, nil
+			}),
+		api.Query(d, reviewapp.DescribeOne(reviewapp.QueueItemName), application.APIShape{Area: "review", Description: queueItemDescription, Errors: []application.Code{application.NotFound}},
+			"GET /queue/{item_id}", func(ctx context.Context, in QueueItemRequest) (application.Read[reviewapp.QueueItem], error) {
+				return svc().QueueItem(withModules(ctx, d), reviewapp.QueueItemInput{ID: in.ItemID})
+			}),
 		api.Query(d, reviewapp.DescribeOne(reviewapp.ProposalsName), application.APIShape{Area: "proposals", Errors: []application.Code{application.Invalid}},
 			"GET /proposals", func(ctx context.Context, in ProposalsRequest) (application.Read[ProposalsPage], error) {
 				var before int64
