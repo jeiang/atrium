@@ -36,6 +36,7 @@ type Date struct {
 }
 
 type Card struct {
+	UID    string   `json:"uid,omitempty"`
 	Name   string   `json:"name"`
 	Emails []string `json:"emails"`
 	Phones []string `json:"phones"`
@@ -49,10 +50,10 @@ type rawDate struct {
 }
 
 type card struct {
-	fn, n, org     string
-	emails, phones []string
-	dates          []rawDate
-	labels         map[string]string
+	uid, fn, n, org string
+	emails, phones  []string
+	dates           []rawDate
+	labels          map[string]string
 }
 
 func Unfold(text string) string {
@@ -176,6 +177,8 @@ func Parse(text string) []Card {
 
 func (c *card) collect(name, value, group string) {
 	switch name {
+	case "UID":
+		c.uid = unescape(value)
 	case "FN":
 		c.fn = unescape(value)
 	case "N":
@@ -213,7 +216,7 @@ func (c *card) collect(name, value, group string) {
 }
 
 func (c *card) finish() Card {
-	out := Card{Name: c.fn, Emails: []string{}, Phones: []string{}, Org: c.org, Dates: []Date{}}
+	out := Card{UID: c.uid, Name: c.fn, Emails: []string{}, Phones: []string{}, Org: c.org, Dates: []Date{}}
 	out.Emails = append(out.Emails, c.emails...)
 	out.Phones = append(out.Phones, c.phones...)
 	switch {

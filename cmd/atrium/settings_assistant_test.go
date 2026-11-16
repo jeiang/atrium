@@ -46,46 +46,27 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused("budget_unattended_share must be at most budget_chat_share (0.3)", "set", "budget_unattended_share", "0.35")
 	accepted("set", "budget_chat_share", "0.5")
 
-	for _, gone := range []string{"agent_clear_share", "agent_compact_share", "agent_preflight_share", "prompt_summary"} {
+	for _, gone := range []string{"agent_clear_share", "agent_compact_share", "agent_preflight_share", "prompt_summary", "agent_schedule_weekly_review", "agent_schedule_media_sweep"} {
 		if r := runSettings(t, "set", gone, "0.9"); r.code != cli.ExitUsage || !strings.Contains(r.stderr, `unknown key "`+gone+`"`) {
 			t.Errorf("set %s: exit %d stderr %q, want an unknown key refusal", gone, r.code, r.stderr)
 		}
 	}
-	refused("agent_schedule_weekly_review", "set", "agent_schedule_weekly_review", "*/5 * * * *")
-
-	token := localAPIToken(t, "settings-schedules")
-	base := startServeIn(t, dir)
-	sweep := func() string {
-		t.Helper()
-		reply := (&apiSite{t: t, base: base}).do(http.MethodGet, "/api/v1/schedules?limit=100", token, nil)
-		items, _ := reply.json["items"].([]any)
-		for _, item := range items {
-			if row := item.(map[string]any); row["name"] == "media-sweep" {
-				return row["schedule"].(string)
-			}
-		}
-		return ""
-	}
-	waitFor(t, func() bool { return sweep() == "*/10 * * * *" })
-	accepted("set", "agent_schedule_media_sweep", "*/20 * * * *")
-	if got := sweep(); got != "*/10 * * * *" {
-		t.Errorf("a schedule read must not sync builtin schedules; the scheduler worker does: %q", got)
-	}
 }
 
-func TestOwnerScheduleSettingRoundTripsThroughTheScheduledPage(t *testing.T) {
+func TestOwnerScheduleEditOnTheScheduledPageWritesOnlyTheJobRow(t *testing.T) {
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_CONFIG", "")
 
-	if r := runSettings(t, "set", "agent_schedule_package_tracking", "*/45 * * * *"); r.code != cli.ExitOK {
-		t.Fatalf("set the tracking schedule: exit %d stderr %q", r.code, r.stderr)
+	if r := runSettings(t, "set", "agent_schedule_min_interval_seconds", "3600"); r.code != cli.ExitOK {
+		t.Fatalf("set the schedule floor: exit %d stderr %q", r.code, r.stderr)
 	}
+
 	w := asstBrowse(t, startServeIn(t, dir))
 	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "package-tracking", "*/45 * * * *", "calendar-candidates", "ops-sampler")
+	w.want(code, http.StatusOK, page, "package-tracking", "0 * * * *", "calendar-candidates", "ops-sampler")
 
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var id, n int64
@@ -97,7 +78,11 @@ func TestOwnerScheduleSettingRoundTripsThroughTheScheduledPage(t *testing.T) {
 	}
 	code, body, _ := w.post("/scheduled/"+strconv.FormatInt(id, 10)+"/schedule", url.Values{"schedule": {"*/50 * * * *"}}, true)
 	w.want(code, http.StatusOK, body, "*/50 * * * *")
-	if row := runSettings(t, "get", "agent_schedule_package_tracking").row(t); row.Value == nil || *row.Value != "*/50 * * * *" {
-		t.Errorf("agent_schedule_package_tracking = %+v, want the schedule edited on the page", row)
+	var schedule string
+	if err := d.Read.QueryRow("SELECT schedule FROM jobs WHERE id = ?", id).Scan(&schedule); err != nil || schedule != "*/50 * * * *" {
+		t.Errorf("package-tracking schedule = %q (%v), want the schedule edited on the page", schedule, err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings WHERE key = 'agent_schedule_package_tracking'").Scan(&n); err != nil || n != 0 {
+		t.Errorf("%d settings rows for the retired schedule key (%v), want none", n, err)
 	}
 }

@@ -115,15 +115,29 @@
         "knowledge.create",
         "knowledge.detail",
         "knowledge.edit",
+        "knowledge.instructions",
+        "knowledge.link",
+        "knowledge.links",
         "knowledge.list",
+        "knowledge.map",
         "knowledge.profile",
         "knowledge.purge",
         "knowledge.restore",
         "knowledge.retract",
-        "knowledge.retract-run"
+        "knowledge.retract-run",
+        "knowledge.space.archive",
+        "knowledge.space.create",
+        "knowledge.space.detail",
+        "knowledge.space.edit",
+        "knowledge.space.file.delete",
+        "knowledge.space.file.upload",
+        "knowledge.space.list",
+        "knowledge.subject",
+        "knowledge.subjects",
+        "knowledge.unlink"
       ],
-      "required": 17,
-      "bound": 17
+      "required": 31,
+      "bound": 31
     },
     {
       "area": "mail",
@@ -211,20 +225,6 @@
       "bound": 2
     },
     {
-      "area": "projects",
-      "operations": [
-        "assistant.project-file.delete",
-        "assistant.project-file.upload",
-        "assistant.project.archive",
-        "assistant.project.create",
-        "assistant.project.detail",
-        "assistant.project.edit",
-        "assistant.project.list"
-      ],
-      "required": 7,
-      "bound": 7
-    },
-    {
       "area": "proposals",
       "operations": [
         "review.approve",
@@ -250,31 +250,30 @@
     {
       "area": "schedules",
       "operations": [
+        "assistant.schedule.add",
         "assistant.schedule.cancel",
         "assistant.schedule.enabled",
         "assistant.schedule.history",
         "assistant.schedule.list",
+        "assistant.schedule.run_now",
         "assistant.schedule.update"
       ],
-      "required": 5,
-      "bound": 5
+      "required": 7,
+      "bound": 7
     },
     {
       "area": "search",
       "operations": [
-        "assistant.search"
+        "assistant.search",
+        "search.all"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "settings",
       "operations": [
         "assistant.defaults-set",
-        "assistant.subagent.delete",
-        "assistant.subagent.enabled",
-        "assistant.subagent.list",
-        "assistant.subagent.set",
         "auth.bearer-issue",
         "auth.bearer-list",
         "auth.bearer-revoke",
@@ -282,6 +281,7 @@
         "auth.identity",
         "core.about",
         "maintenance.backup",
+        "maintenance.backup.list",
         "maintenance.check",
         "maintenance.verify-archive",
         "settings.read",
@@ -291,8 +291,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 20,
-      "bound": 20
+      "required": 17,
+      "bound": 17
     },
     {
       "area": "tasks",
@@ -344,10 +344,11 @@
     {
       "area": "usage",
       "operations": [
+        "assistant.spend",
         "assistant.usage"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     }
   ],
   "approval_reached": [
@@ -396,7 +397,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 213,
-  "total_bound": 213,
+  "total_required": 221,
+  "total_bound": 221,
   "total_approval_reached": 11
 }

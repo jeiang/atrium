@@ -29,7 +29,7 @@ func CandidatesJob(deps jobworker.Dependencies) scheduler.Definition {
 	return scheduler.Definition{
 		Module: unit.Calendar, Key: unit.Calendar + "/" + calendar.JobCandidates, Name: calendar.JobCandidates, Kind: scheduler.JobBuiltin,
 		Prompt:   "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).",
-		Schedule: "0 * * * *", ScheduleSetting: calendar.KeyScheduleCandidates, Persistent: true, Timeout: 30 * time.Minute,
+		Schedule: "0 * * * *", CarriedSetting: calendar.KeyScheduleCandidates, Persistent: true, Timeout: 30 * time.Minute,
 		Spend: scheduler.ConditionalSpends, Needs: []string{unit.Calendar, unit.Mail, unit.Assistant},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			out, err := draftCandidates(ctx, e, calapp.DraftCandidatesInput{})

@@ -75,7 +75,7 @@ func samplerJob(deps jobworker.Dependencies, sample func(context.Context, jobwor
 	return scheduler.Definition{
 		Module: unit.Grafana, Key: unit.Grafana + "/" + grafanatools.JobSampler, Name: grafanatools.JobSampler, Kind: scheduler.JobBuiltin,
 		Prompt:   "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).",
-		Schedule: "*/15 * * * *", ScheduleSetting: grafanatools.KeyScheduleSampler, Persistent: true, Timeout: 5 * time.Minute,
+		Schedule: "*/15 * * * *", CarriedSetting: grafanatools.KeyScheduleSampler, Persistent: true, Timeout: 5 * time.Minute,
 		Spend: scheduler.ModelFree, Needs: []string{unit.Grafana, unit.Assistant},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			if err := sample(ctx, e); err != nil {

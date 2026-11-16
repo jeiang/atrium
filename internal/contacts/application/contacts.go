@@ -32,6 +32,7 @@ type LookupInput struct {
 type Lookup struct {
 	Value map[string]any `json:"value"`
 	PII   bool           `json:"-"`
+	UIDs  []string       `json:"-"`
 }
 
 type SyncInput struct{}
@@ -68,6 +69,7 @@ func (s *Service) Lookup(ctx context.Context, in LookupInput) (application.Read[
 	}
 	found := contacts.Search(src.Dir, in.Query, int(limit))
 	results := make([]any, len(found))
+	uids := make([]string, len(found))
 	pii := false
 	for i, c := range found {
 		card := map[string]any{}
@@ -98,14 +100,14 @@ func (s *Service) Lookup(ctx context.Context, in LookupInput) (application.Read[
 			card["dates"] = dates
 			pii = true
 		}
-		results[i] = card
+		results[i], uids[i] = card, c.UID
 	}
-	out := Lookup{Value: map[string]any{"results": results}, PII: pii}
+	out := Lookup{Value: map[string]any{"results": results}, PII: pii, UIDs: uids}
 	counters, err := s.state.Read(ctx, nil, []string{state.Settings})
 	if err != nil {
 		return application.Read[Lookup]{}, err
 	}
-	rev := state.Revision(string(LookupName), counters, map[string]any{"input": in, "data": out.Value}, "")
+	rev := state.Revision(string(LookupName), counters, map[string]any{"input": in, "data": out.Value, "uids": uids}, "")
 	return application.Read[Lookup]{Revision: application.Revision(rev), Data: out}, nil
 }
 

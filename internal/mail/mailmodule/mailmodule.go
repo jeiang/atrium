@@ -30,12 +30,14 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	"github.com/jeiang/atrium/internal/mail/run"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/unit"
@@ -103,7 +105,7 @@ func (m Module) ProposeKinds() []proposals.Definition {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := m.mailCommands(mc.Env)
 	cmds := []*cli.Command{
-		mailCmds.SyncCommand(),
+		jobcmd.Delegating(mailCmds.SyncCommand(), run.SyncJobKey, "account"),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
@@ -151,6 +153,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Settings:        slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:            mail.HostSettings(),
 		Attention:       AttentionSources(),
+		Search:          SearchSources(),
 		Jobs:            []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
 		ServiceSets:     m.watchServices(mc.Env),
 		ServiceSetName:  "mail/watch",

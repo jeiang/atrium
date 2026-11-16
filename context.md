@@ -14,14 +14,15 @@ claims about the running application. Operator contracts are in
   external services, reverse proxy configuration, credentials, persistence,
   and off-host backups. Updating this repository does not update a host's pin.
 - The application joins mail, calendar, contacts, media, notifications,
-  and read-only Grafana access with assistant chat, files, projects,
+  and read-only Grafana access with assistant chat, files, spaces,
   knowledge, tasks, scheduled work, and research children. Skills and code
   execution are not active assistant capabilities.
 - Today is home at `/chat`. Its initial response includes Needs you, the agenda,
   and recent activity. A new home message starts a thread. Review holds
   decisions and history; Library holds knowledge, files, rules, and
-  schedules. Projects group threads and can restrict their content to a
-  private project. Draft and proposal cards in chat use the same send and
+  schedules. Spaces in Knowledge hold a former project's instructions,
+  files, threads and tasks, and can restrict their content to a private
+  space. Draft and proposal cards in chat use the same send and
   approval services as their dedicated views. The `/chat/agenda` fragment
   answers 404 when the calendar module is off and 503 `unavailable` when the
   calendar cannot be listed, for example when no calendar is configured.
@@ -35,11 +36,21 @@ claims about the running application. Operator contracts are in
   does not delete its data.
 
 ### Prompts, history, retrieval, and knowledge
-- The system prompt and subagent rules (`prompt_system`, `prompt_subagent`)
-  are operator settings over built-in defaults, set with `atrium settings
-  set`; no settings page offers them, so the settings API refuses them. The
-  untrusted-data preamble is fixed in code and always comes first. Edits
-  apply to every thread's next request.
+- The base system prompt and the subagent rules are compiled into the
+  binary. The operator's standing instructions are one pinned knowledge
+  page (origin `atrium:instructions`, title "Standing instructions") that
+  the assistant module creates at service start; `GET /knowledge/instructions`
+  opens it, the knowledge edit verb changes it, its history lists each
+  change with its author and previous text, and undo restores the previous
+  text. Chat, cron and nightly requests carry its body after the base prompt
+  while it is live and non-empty; subagent and worker requests do not. The
+  page stays out of the profile and retrieval, the assistant cannot edit or
+  retract it, and nobody can purge it. A non-default stored `prompt_system`
+  value is carried into the page once, with one settings audit row; the
+  retired `prompt_system` and `prompt_subagent` rows stay in the settings
+  table unread. Subagent roles (`calendar`, `mail`, `observability`) are
+  declared in code with fixed tools; there is no role CRUD. The
+  untrusted-data preamble is fixed in code and always comes first.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
   `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
@@ -99,8 +110,49 @@ claims about the running application. Operator contracts are in
   attention item. Notion, its wiki view and the one-shot `kb import` are
   removed; records imported from Notion keep their `notion:` origin and stay
   readable and searchable.
+- Knowledge opens on a subject page. Every live record is a subject;
+  its kind comes from existing data (`lesson` for a `Lesson: ` title,
+  `wiki` for a `notion:` origin, otherwise `fact`). Its facts are the
+  records, retracted ones marked superseded, whose title, aliases or body
+  contain its title or an alias of at least three characters, the
+  retrieval exact-match rule; at most 200 are returned. The page text is
+  the stored body, split into heading sections of paragraph, item,
+  numbered, quote and code blocks, never HTML. Related subjects are the
+  live records the body mentions and records from the same run. The map
+  is the subject's live neighborhood one or two steps out over mentions
+  and same-run edges, capped at 50 nodes with a `truncated` flag. These
+  operator reads show private records with their flag, like the record
+  list, and change nothing the assistant retrieves.
+- The operator links a record to another record, a task, a contact
+  (by vCard `UID`) or a space with one relation: `about`, `part_of`, `works_with`,
+  `depends_on` or `see_also`. Kinds and relations are checked in code, so
+  new ones need no migration. Linking needs a live source and an existing
+  target; an identical live link is a no-op, removing a link keeps the row,
+  and both are undoable. The subject page lists links after mentions and
+  same-run records with a direction, a target state (`live`, `retracted`,
+  `done`, `dismissed`, `archived` for an archived space, `missing` or
+  `unavailable` when contacts are off) and a client address
+  (`/knowledge/{id}`, `/tasks/{id}`, `/contacts/{uid}`,
+  `/knowledge/spaces/{id}`); the map adds record-to-record links as edges named by
+  the relation. Purging a record deletes the links from and to it; a
+  deleted task or contact leaves its links showing as missing. Links are
+  never read by retrieval and the assistant has no link tool.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
+- A space is a `projects` row presented in Knowledge; the table, its
+  columns and the thread, file, record and task `project_id` links are
+  unchanged, so nothing moves. `/api/v1/knowledge/spaces` lists them and
+  creates one, `/knowledge/spaces/{id}` reads the space page (fields, the
+  instructions split into sections like a subject page, files, chat
+  threads, tasks whose source is `project`/id, records linked to it, and
+  counts), edits name, instructions, effort, context limit and the private
+  flag, and `/archive` archives or restores it; files live under
+  `/knowledge/spaces/{id}/files`. The `/projects*` API is removed. A
+  record links to a space with target kind `space` (state `live` or
+  `archived`, address `/knowledge/spaces/{id}`). The instructions still
+  reach a space thread's prompt in the `<project_instructions>` block,
+  and audit targets stay `project:{id}`. The older `/projects/...` HTML
+  pages edit the same rows.
 
 ### Notifications, attention, and mail
 - Notifications are recorded in an in-app inbox first and pushed best
@@ -189,6 +241,16 @@ claims about the running application. Operator contracts are in
   generated `action_link_key` secret, or the host file's
   `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
   fingerprints; host-file bytes are never copied into the database.
+- A background chat run that parks on `ask_operator` while no client
+  watches its event stream sends one assistant push "atrium: question
+  waiting" (`ask:<tool call id>`, linking `/chat/<thread>`; the question
+  text stays out of it), and answering marks that inbox row read. A
+  background chat run that fails unwatched, other than an operator stop,
+  sends one system push "atrium: run failed" (`run-failed:<run id>`) naming
+  the thread and a plain failure class. Synchronous runs report to their
+  caller and scheduled runs keep the job failure push, so a run pushes at
+  most once. Connection health notices link `/settings/connections`. None
+  of these count against the agent notify caps.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -246,15 +308,33 @@ claims about the running application. Operator contracts are in
   carry into the new month until they settle or expire. A memory job refused
   by the monthly budget stays queued until the first of the next month, a
   thread-cap refusal retries with the normal backoff, and only a run-cap
-  refusal fails the job. When the budget is
-  exhausted,
-  scheduled jobs that need no model call still run. Each model has its own run
-  cost cap, checked against the next request written cold at the thread's
-  cache lifetime, as is a $10 thread cost cap over all runs of a thread and
-  its subagent threads, lowered by the cost cap chosen in the composer when
-  the thread was created. A run's spend includes its subagent runs, and every
-  subagent request is also checked against each parent run's cap. An
-  Anthropic spend-cap 429 stops the run as a budget stop.
+  refusal fails the job. When the budget is exhausted, scheduled jobs that
+  need no model call still run. One run cost cap, `max_run_cost_usd`
+  (default $10), applies to every catalog model; it replaced the per-model
+  `max_run_cost_usd_haiku_5_5`, `_sonnet_5_5` and `_opus_5_5` ($2, $6, $10),
+  which are retired: stored rows are ignored and an environment pin is logged
+  and ignored. The cap is checked against the next request written cold at
+  the thread's cache lifetime, as is a $10 thread cost cap over all runs of a
+  thread and its subagent threads, lowered by the cost cap chosen in the
+  composer when the thread was created. A run's spend includes its subagent
+  runs, and every subagent request is also checked against each parent run's
+  cap. Admission checks, in order, the run cap of the run and each ancestor,
+  the thread cap, a caller's source monthly cap, then the monthly budget
+  share of the request's class; a refusal happens before any provider call.
+  An Anthropic spend-cap 429 stops the run as a budget stop.
+  `GET /spend` (`assistant.spend`, both prefixes) is the Spend page model:
+  the month's budget status, per-class headroom (chat, scheduled,
+  classification) and a `state` of `ok`, `near` (scheduled work refused) or
+  `exhausted` (chat refused), the caps in force with value, source and
+  whether the page edits them (`monthly_budget_usd`, `max_run_cost_usd`,
+  written through the settings operations), the month's committed and
+  settled spend by budget class, by usage kind (`chat`, `cron`, `nightly`
+  dreaming, `worker` server ops, `subagent` research and web search,
+  `classification`, `memory`) and by model, a day series in the configured
+  time zone, and the ten largest runs with thread and job ids. Money is
+  USD numbers as in `GET /usage`. Its revision follows the `assistant` and
+  `settings` topics listed in `topics`, so it answers 304 until a run
+  records cost or a setting changes. `GET /usage` stays.
   Starting a thread and sending a message go through one pipeline for the
   chat page, `/api/v1` and `atrium agent run`: the assistant module must be
   on and the Anthropic connection configured before a run starts (else
@@ -273,10 +353,10 @@ claims about the running application. Operator contracts are in
   (unknown 404, subagent thread `read_only_thread`) and then the connection.
   Stopping in an unknown thread answers 404 on the chat page as in the API.
   An action that changed state and then failed is audited `failed`.
-  Project file uploads and deletes, and agent `file_write`, each write one
-  `operation_audit` row (`assistant.project-file.upload|delete`,
-  `assistant.file.write` naming its effect); a project upload over the body
-  cap is refused with 422 before the project is looked up.
+  Space file uploads and deletes, and agent `file_write`, each write one
+  `operation_audit` row (`knowledge.space.file.upload|delete`,
+  `assistant.file.write` naming its effect); a space upload over the body
+  cap is refused with 422 before the space is looked up.
   Saving the chat defaults on `/settings/assistant` runs
   `assistant.defaults-set`: the stored settings are unchanged, and it writes
   one `operation_audit` row (`invalid` when the model, effort or context limit
@@ -371,7 +451,8 @@ claims about the running application. Operator contracts are in
   none.
 - `atrium connections check` runs the silent check of every configured
   connection, and `--changed` only those never checked since they were
-  added or their host declaration changed. It exits non-zero when a
+  added, declared again, or their host declaration changed (including a
+  credential file slot added, removed or moved). It exits non-zero when a
   checked connection is failing (in its window or not) or needs reauth.
   The NixOS unit runs `connections check --changed` as `ExecStartPre`
   with failure ignored, so a deploy reports changed connections in the
@@ -429,6 +510,20 @@ claims about the running application. Operator contracts are in
   prunes `atrium-*.backup` beyond the newest keep that are older than
   keep_days. No directory means `skipped_unconfigured`. `atrium backup`
   shares the job's claim. There is no backup unit or timer.
+  `GET /maintenance/backups` (operation `maintenance.backup.list`, operator
+  only, not an agent tool) and `atrium backup list [--json]` list the
+  regular files named `atrium-*.backup` directly in `core.backup_directory`,
+  newest modification first, capped by `limit` (default 50, at most 100;
+  the CLI shows 100) with the full `total`. Symlinks, directories and other
+  names are skipped, and files are opened through an `os.Root` on that
+  directory. Each item carries the name, size, modification time and the
+  unauthenticated archive header (format, created time, schema, encryption
+  and key id, file count) or a `problem` (`not_archive`, `old_format`,
+  `newer_format`). No path is returned. `location.state` is `ready`,
+  `unconfigured` (no host key) or `missing` (the directory does not exist),
+  with the host key and NixOS option that set it. Verify takes a listed
+  name; verify results are not recorded. `atrium backup list` lists; an
+  archive named `list` is written with `atrium backup ./list`.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -503,6 +598,8 @@ claims about the running application. Operator contracts are in
   drop.
   Migration 3 adds the `usage_counters` table and an `agent` column
   (default 0) on `auth_bearers` and `auth_sessions`, with no row rewrite.
+  Migration 4 adds the `record_links` table, its indexes and its revision
+  triggers on the `knowledge` scope, with no row rewrite.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
@@ -564,9 +661,41 @@ claims about the running application. Operator contracts are in
   remains explicit and keeps its inbox record.
 
 ### Modules, scheduling, and observability
-- `serve` runs supervised mail watches and scheduled work; `agent tick` is
-  a one-shot pass. The NixOS module ships `atrium.service`, the optional
-  `atrium-media-agent.service` and no atrium timers.
+- `serve` runs supervised mail watches and scheduled work and is the only
+  executor of declared jobs while it is up; `agent tick` is a one-shot pass
+  that refuses (75) when another process holds the serve lock. The NixOS
+  module ships `atrium.service`, the optional `atrium-media-agent.service`
+  and no atrium timers. `atrium job run <key>` (`internal/scheduler/jobcmd`)
+  inserts a `job_runs` row with status `requested`; serve's scheduler polls
+  for requested rows every 250 ms after its start-up recovery, claims one by
+  turning the row `running` under a `manual/<serve owner>` claim (manual
+  semantics: no backoff or coalescing), and marks a request it cannot take
+  `refused` with the running run's id. The CLI waits on the row, prints it as
+  JSON, withdraws an untaken or refused request, exits 69
+  (`cli.ExitUnavailable`) when `db.OtherServe` finds no serve, and a canceled
+  wait leaves the run in serve. A request older than a minute is refused.
+  `jobcmd.Delegating` wraps `sync`, `calendar sync`, `calendar candidates`,
+  `contacts sync` and `media poll|sweep`: with serve up they hand their
+  declared job to serve (input flags such as `--account` refuse), without it
+  they run in process as before.
+- Job rows own every schedule. The former `agent_schedule_*` settings are
+  retired; at start or tick a stored value that differs from the default
+  is carried once onto a job row still at its default, marked by an audit
+  row (actor `atrium`, source `migration`). `agent_schedule_min_interval_seconds`
+  stays a setting and is checked on writes only. Operator schedules
+  (`atrium schedule list|create|edit|delete|run`, `POST /schedules`,
+  `PATCH /schedules/{job_id}`, `POST /schedules/{job_id}/run`) are cron jobs
+  with `created_by = operator`; the agent's schedule tools neither list nor
+  edit them. `PATCH` takes any of schedule, prompt, name and enabled and an
+  optional `If-Match` against the per-job `revision` (412 when stale).
+  Definitions marked `Protected` (mail pass, backup) refuse disable and
+  delete. Run now inserts a `requested` row through `scheduler.RequestJob`
+  (404 unknown or deleted, 409 running with the run id, 503 without serve);
+  serve admits it through the same pause, module and budget gate as a
+  scheduled run and records a skip status when the gate refuses. A run that
+  ends `error` after a run that did not sends one System push
+  (`job-failed:<run id>`, linking its thread or `/scheduled?run=<id>`);
+  repeated failures push nothing until a success.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -638,7 +767,11 @@ claims about the running application. Operator contracts are in
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.
-  The claim transaction records a per-claim owner on the job, the running
+  An in-process fence (`scheduler/fence.go`, one entry per job id for the
+  whole process) is taken before the resource locks by the tick, recovery,
+  requested-run pickup and `RunNow`; a second claim in the same process is
+  refused with `*scheduler.Running` (the running run's id; it unwraps to
+  `*db.LockBusy`). The claim transaction records a per-claim owner on the job, the running
   run and a `job_resource_leases` row for every resource (sorted raw keys,
   `job/<id>` included); the lease lasts 90 seconds and the running job
   renews it every 20 seconds in one transaction that checks the job's
@@ -1304,7 +1437,7 @@ claims about the running application. Operator contracts are in
   bounds, default, source, editable, secret; secret values are never sent),
   `GET /connections/schema` (kinds and per-connection fields with secret
   and host-owned flags, no credential values) and `GET /files` (the
-  thread and project file library, newest first, keyset cursor). `GET
+  thread and space file library, newest first, keyset cursor). `GET
   /home` always carries a `weather` card with a `state`: `off` (no weather
   connection, or its forecast capability disabled), `unconfigured` (no
   location), `loading` (no reading yet), `failed` (no reading, last fetch
@@ -1381,6 +1514,21 @@ claims about the running application. Operator contracts are in
 - Multipart bodies containing file parts share four in-process upload slots; excess uploads return 429 with `Retry-After: 1`. A multipart body counts as carrying files unless its first 1 MiB holds every part and the closing boundary with no file part; a malformed or truncated body counts as carrying files. Multipart bodies have a 30-second idle read deadline from their first byte and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.
 - Multipart thread options match JSON options, including finite, nonnegative `cost_cap_usd`. Keyed multipart retries fingerprint parsed names, values, file names, content types and bytes rather than MIME boundaries; duplicate parts retain their per-field order. File and project API lists use stable keyset cursors. Previously issued thread-list and transcript cursors remain accepted. Disabled assistant commands refuse before reading bodies; the legacy stop route still ignores its optional body. Text downloads declare UTF-8. API assistant refusals use fixed operator-safe messages; unexpected failures return `internal` with a diagnostic ID.
 - Search has its own `assistant.search` operation; its cursors are shared with `/threads?q=…`. New cursors bind the operation, filters and path parameters; legacy thread and inbox cursors remain accepted. Schedule history remains readable for cancelled jobs and returns not_found for absent jobs on every page. API subagent saves refuse built-in definitions without changing the CLI's editing behavior. OpenAPI marks handler-required schedule and enabled fields as required, while queued memory work remains optional.
+- One search, `search.all` at `GET /search/all` (core module, operator
+  authority, never writes), covers threads, mail messages, knowledge records,
+  tasks and library files. `types` (comma list of `thread`, `message`,
+  `record`, `task`, `file`) narrows it; `limit` (1 to 20, default 5) is per
+  type. Each type comes from the module that owns it and only while that
+  module is on; messages come only from enabled accounts. The answer holds a
+  group per type in its own best-match order, a `top` list of at most five
+  (every type's first hit, then every type's second, newest first within a
+  rank), plain snippets with UTF-16 match offsets, and `partial` naming a
+  type that failed, ran past the four-second budget, or answered without
+  semantic matching. A cursor pages one type and is issued only when `types`
+  names a single type. Threads, messages and records use their full-text
+  indexes (records keep the retrieval ranking and include private records,
+  flagged `private`); tasks match title or notes and files match library
+  names by substring, since neither has a text index.
 - Code execution is not part of the application. There is no code-mode
   worker; coding may return as an external module.
 
@@ -1400,7 +1548,7 @@ claims about the running application. Operator contracts are in
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
 - **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
-- **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
+- **Scheduled runs** are managed from chat, with a list in Library. **Projects** became **spaces** in Knowledge. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.

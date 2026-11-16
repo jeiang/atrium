@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
@@ -20,10 +21,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/schedulecmd"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
@@ -47,6 +48,7 @@ import (
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/kb"
@@ -80,7 +82,7 @@ type Module struct {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	knowledgeOps, knowledgeBindings := m.knowledgeOperations()
 	taskOps, taskBindings := m.taskOperations()
-	projectOps, projectBindings := projectOperations()
+	projectOps, projectBindings := spaceOperations()
 	threadOps, threadBindings := threadOperations()
 	fileOps, fileBindings := fileOperations()
 	scheduleOps, scheduleBindings := scheduleOperations()
@@ -101,11 +103,15 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Operations:       slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
 		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
-			prompts.Settings(), registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
+			registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
-		Host:      export.HostSettings(),
+		Host: export.HostSettings(),
+		Recover: func(ctx context.Context, d *db.DB, _ config.Config) error {
+			return kb.EnsureInstructions(ctx, d, prompts.System, assistant.Now())
+		},
 		Sections:  export.Sections(),
 		Attention: AttentionSources(mc.Env),
+		Search:    SearchSources(),
 		Metrics:   opsmetrics.Metrics(),
 		ReviewKinds: func(module.ReviewDeps) review.Kinds {
 			return review.Kinds{Findings: serverops.ReviewKindFindings}
@@ -118,7 +124,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI(mc.Tools), Home: func(d *web.Deps) func(context.Context) (any, any, error) {
+			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI, Home: func(d *web.Deps) func(context.Context) (any, any, error) {
 				reader := hub.Reads(d)
 				return func(ctx context.Context) (any, any, error) {
 					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
@@ -143,7 +149,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, agentOpen(m.Open), subagentCLIService(mc.Env, mc.Tools, m.Now), agentTick(m.Open)), memorycmd.Command(memoryCLIService(mc.Env, m.Now))},
+		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), schedulecmd.Command(scheduleCLIService(mc.Env, m.Now))},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
@@ -179,7 +185,7 @@ func AttentionSources(env config.Env) []attention.Source {
 
 func SettingGroups() []settings.Group {
 	return []settings.Group{
-		{Name: "spending", Title: "Spending", Keys: append([]string{inference.ThreadCapKey}, append(runCaps(), assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD}},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 			memory.ModelKey, memory.EffortKey,
@@ -200,13 +206,4 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 		}
 	}
 	return append(defs, research.Definition(), lookup.Definition(), websearch.Definition(), report.Definition())
-}
-
-func runCaps() []string {
-	models := pricing.Models()
-	keys := make([]string, len(models))
-	for i, m := range models {
-		keys[i] = inference.RunCapKey(m.ID)
-	}
-	return keys
 }

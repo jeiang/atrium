@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/notify"
 )
 
 type attachmentRows struct {
@@ -665,6 +666,9 @@ func (s *Service) Answer(ctx context.Context, threadID int64, text string) error
 		return err
 	}
 	if err := journal.FinishToolCall(ctx, s.DB.Write, q.CallID, journal.OK, s.now(), nil, nil, &text); err != nil {
+		return err
+	}
+	if err := notify.Withdraw(ctx, s.DB.Write, questionOccurrence(q.CallID), s.now()); err != nil {
 		return err
 	}
 	return s.StartResume(ctx, q.RunID)
