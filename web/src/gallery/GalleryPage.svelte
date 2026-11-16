@@ -11,6 +11,7 @@
   import Simulator from './sections/Simulator.svelte';
   import States from './sections/States.svelte';
   import Status from './sections/Status.svelte';
+  import Widgets from './sections/Widgets.svelte';
 
   let scheme = $state<string>(document.documentElement.dataset.theme ?? 'auto');
 
@@ -32,6 +33,7 @@
   <Collections />
   <States />
   <Overlays />
+  <Widgets />
   <Simulator />
 </Page>
 <Toaster />
