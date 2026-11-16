@@ -1,59 +1,149 @@
 <script lang="ts">
-  import { createQuery } from '@tanstack/svelte-query';
+  import { useQueryClient } from '@tanstack/svelte-query';
   import { Router } from 'sv-router';
-  import { authIdentity, ok } from '../contract';
+  import { startAppEvents } from '../contract';
   import { announce } from '../shared/announce.svelte';
   import LiveRegion from '../shared/LiveRegion.svelte';
-  import { isActive, p, pages, route, routeTitle } from './router';
+  import { topicInvalidator } from '../shared/live';
+  import Icon from '../shared/ui/Icon.svelte';
+  import Toaster from '../shared/ui/Toaster.svelte';
+  import AccountMenu from './AccountMenu.svelte';
+  import { useShell } from './frame';
+  import {
+    appsDestination,
+    chats,
+    type DestinationPath,
+    destinations,
+    home,
+    inbox,
+    mailStatus,
+    moduleOn,
+    shownApps,
+  } from './nav';
+  import { isActive, p, route, routeTitle } from './router';
+  import SessionState, { stateTitle } from './SessionState.svelte';
+  import { loadSession, session } from './session.svelte';
 
-  const mock = import.meta.env.MODE === 'mock';
+  const client = useQueryClient();
+  void loadSession();
 
-  const identity = createQuery(() => ({
-    queryKey: ['auth.identity'],
-    queryFn: async ({ signal }) => ok(await authIdentity({ signal })),
-  }));
+  const signedIn = $derived(session.view.status === 'signed-in' ? session.view.session : undefined);
+  const shell = useShell(() => signedIn !== undefined);
 
-  const status = $derived(
-    identity.isPending ? 'Connecting' : identity.isSuccess ? `Signed in as ${identity.data.name}` : 'Not connected',
-  );
+  const frame = $derived(signedIn ? shell.data : undefined);
+  const waiting = $derived(frame?.needs_you ?? 0);
+  const appRows = $derived(shownApps(frame));
+  const visible = $derived(destinations.filter((item) => moduleOn(frame, item.module)));
+
+  $effect(() => {
+    if (!signedIn) return;
+    return startAppEvents({ onNotice: topicInvalidator(client) });
+  });
+
+  const title = $derived(signedIn ? routeTitle() : stateTitle(session.view));
 
   let announced = false;
   $effect(() => {
-    const title = routeTitle(route.pathname);
-    document.title = `${title} · atrium`;
+    const current = title;
+    void route.pathname;
+    document.title = `${current} · atrium`;
     if (announced) {
-      announce(title);
+      announce(current);
       const heading = document.querySelector<HTMLElement>('main h1');
       if (heading) {
         heading.tabIndex = -1;
         heading.focus();
       }
     }
-    announced = true;
+    announced = signedIn !== undefined || session.view.status !== 'loading';
   });
+
+  const current = (path: DestinationPath): 'page' | undefined =>
+    (path === '/' ? isActive('/') : isActive.startsWith(path)) ? 'page' : undefined;
+  const spacesCurrent = $derived(
+    !isActive('/') && !isActive.startsWith('/inbox') && !isActive.startsWith('/chat') ? 'page' : undefined,
+  );
 </script>
 
-<div class="shell">
-  <header class="bar">
-    <span class="brand">atrium</span>
-    <nav aria-label="Main">
-      <ul class="nav">
-        {#each pages as page (page.path)}
-          <li>
-            <a href={p(page.path)} aria-current={isActive(page.path) ? 'page' : undefined}>{page.title}</a>
-          </li>
-        {/each}
-      </ul>
-    </nav>
-    <span class="status" data-state={identity.status}>
-      {status}
-      {#if mock}
-        <span class="mode">mock</span>
+<a class="skip" href="#main">Skip to content</a>
+<div class="frame">
+  <nav class="rail" aria-label="Main">
+    <a class="brand" href={p('/')}><Icon name="home" /><span>atrium</span></a>
+    <ul class="rail__list">
+      <li>
+        <a class="rail-link" href={p('/')} aria-current={current('/')}>
+          <Icon name={home.icon} /><span class="rail-link__text">{home.label}</span>
+        </a>
+      </li>
+      <li>
+        <a class="rail-link" href={p('/inbox')} aria-current={current('/inbox')}>
+          <Icon name={inbox.icon} /><span class="rail-link__text">{inbox.label}</span>
+          {#if waiting > 0}
+            <span class="rail-link__count" aria-hidden="true">{waiting}</span>
+            <span class="visually-hidden">, {waiting} waiting</span>
+          {/if}
+        </a>
+      </li>
+      {#each visible.filter((item) => item !== home) as item (item.path)}
+        <li>
+          <a class="rail-link" href={p(item.path)} aria-current={current(item.path)}>
+            <Icon name={item.icon} /><span class="rail-link__text">{item.label}</span>
+          </a>
+          {#if item === appsDestination && appRows.length > 0}
+            <ul class="rail__sub">
+              {#each appRows as app (app.id)}
+                {@const (status = app.id === 'mail' ? mailStatus(frame) : undefined)}
+                <li>
+                  <a
+                    class="rail-link rail-link--sub"
+                    href={p('/apps/:app', { params: { app: app.id } })}
+                    aria-current={isActive('/apps/:app', { app: app.id }) ? 'page' : undefined}
+                  >
+                    <Icon name={app.icon} /><span class="rail-link__text">{app.title}</span>
+                    {#if status}
+                      <span class="rail-link__meta">{status}</span>
+                    {/if}
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+    <div class="rail__foot">
+      {#if signedIn}
+        <AccountMenu session={signedIn} version={frame?.version} placement="rail" />
       {/if}
-    </span>
+    </div>
+  </nav>
+  <header class="topbar">
+    <a class="brand" href={p('/')}><Icon name="home" /><span>atrium</span></a>
+    <div class="topbar__account">
+      {#if signedIn}
+        <AccountMenu session={signedIn} version={frame?.version} placement="topbar" />
+      {/if}
+    </div>
   </header>
-  <main class="main">
-    <Router />
+  <main id="main" class="main" tabindex="-1">
+    {#if signedIn}
+      <Router />
+    {:else}
+      <SessionState view={session.view} />
+    {/if}
   </main>
+  <nav class="tabbar" aria-label="Tabs">
+    <a href={p('/')} aria-current={current('/')}><Icon name={home.icon} /><span>{home.label}</span></a>
+    <a href={p('/inbox')} aria-current={current('/inbox')}>
+      <Icon name={inbox.icon} /><span>Decide</span>
+      {#if waiting > 0}
+        <span class="tabbar__count" aria-hidden="true">{waiting}</span>
+        <span class="visually-hidden">, {waiting} waiting</span>
+      {/if}
+    </a>
+    <a href={p('/chat')} aria-current={current('/chat')}><Icon name={chats.icon} /><span>{chats.label}</span></a>
+    <a href={p('/spaces')} aria-current={spacesCurrent}><Icon name="apps" /><span>Spaces</span></a>
+  </nav>
 </div>
 <LiveRegion />
+<Toaster />

@@ -1,7 +1,6 @@
 <script lang="ts">
   import Page from '../shared/ui/Page.svelte';
   import Segmented from '../shared/ui/Segmented.svelte';
-  import Toaster from '../shared/ui/Toaster.svelte';
   import { schemeOptions } from './fixtures';
   import Actions from './sections/Actions.svelte';
   import Collections from './sections/Collections.svelte';
@@ -34,4 +33,3 @@
   <Overlays />
   <Simulator />
 </Page>
-<Toaster />

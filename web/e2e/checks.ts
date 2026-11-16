@@ -23,7 +23,7 @@ const interactive = [
 
 export async function gotoShell(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await expect(page.getByText('Signed in as Operator')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Account: Operator' })).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 }
 
@@ -51,7 +51,13 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
       const visible = (el: Element): boolean => {
         const rect = el.getBoundingClientRect();
         const style = getComputedStyle(el);
-        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && !el.closest('[inert]');
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.visibility !== 'hidden' &&
+          style.clipPath !== 'inset(50%)' &&
+          !el.closest('[inert]')
+        );
       };
       const half = size / 2;
       const found: string[] = [];

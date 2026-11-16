@@ -1,4 +1,5 @@
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
+import type { MockScenario } from '../src/mocks/handlers.ts';
 
 export { expect };
 
@@ -22,16 +23,27 @@ export const galleryLayouts: readonly Layout[] = [
 ];
 
 export const routes = [
-  { path: '/', title: 'Today' },
+  { path: '/', title: 'Home' },
+  { path: '/inbox', title: 'Inbox' },
   { path: '/apps', title: 'Apps' },
+  { path: '/spaces', title: 'Spaces' },
+  { path: '/settings', title: 'Settings' },
 ] as const;
 
-export const test = base.extend<{ problems: string[] }>({
+export async function useScenario(page: Page, scenario: MockScenario): Promise<void> {
+  await page.addInitScript((value) => localStorage.setItem('atrium.mock', value), JSON.stringify(scenario));
+}
+
+export const test = base.extend<{ problems: string[]; allowStatus: number[] }>({
+  allowStatus: [[], { option: true }],
   problems: [
-    async ({ page }, use) => {
+    async ({ page, allowStatus }, use) => {
       const problems: string[] = [];
       page.on('console', (message) => {
-        if (message.type() === 'error') problems.push(`console error: ${message.text()}`);
+        if (message.type() !== 'error') return;
+        const status = /status of (\d+)/.exec(message.text())?.[1];
+        if (status && allowStatus.includes(Number(status))) return;
+        problems.push(`console error: ${message.text()}`);
       });
       page.on('pageerror', (error) => problems.push(`uncaught: ${error.message}`));
       await page.addInitScript(() => {

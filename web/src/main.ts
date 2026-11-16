@@ -11,4 +11,5 @@ if (import.meta.env.MODE === 'mock') {
 
 const target = document.getElementById('app');
 if (!target) throw new Error('#app is missing from index.html');
+target.replaceChildren();
 mount(App, { target });
