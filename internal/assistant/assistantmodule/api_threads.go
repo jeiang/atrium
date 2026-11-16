@@ -1,6 +1,7 @@
 package assistantmodule
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -25,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -427,6 +429,13 @@ type apiHome struct {
 	Defaults threads.Options      `json:"defaults"`
 	Composer asstapp.ComposerView `json:"composer"`
 	Weather  asstapp.HomeWeather  `json:"weather"`
+	NeedsYou *apiNeedsYou         `json:"needs_you,omitempty"`
+}
+
+type apiNeedsYou struct {
+	Total  int                   `json:"total"`
+	Counts reviewapp.QueueCounts `json:"counts"`
+	Items  []reviewapp.QueueItem `json:"items"`
 }
 
 type apiAgenda struct {
@@ -762,9 +771,13 @@ func apiBindings(p *apiPages) []application.Binding {
 				h := read.Data
 				out := apiHome{Threads: h.Threads, Q: h.Q, View: h.View, Welcome: h.Welcome, Date: h.Date, Digest: h.Digest,
 					Agenda: h.Agenda, About: h.About, Defaults: h.Defaults, Composer: h.Composer, Weather: svc.HomeWeather(ctx)}
-				rev := read.Revision
+				queue, err := reviewapp.New(reviewapp.Deps{DB: p.deps.DB}).Queue(module.WithSet(ctx, cmp.Or(module.SetFrom(ctx), module.SetFrom(p.deps.Ctx))), reviewapp.QueueInput{Limit: homeNeedsLimit})
+				if err != nil {
+					return application.Read[apiHome]{}, err
+				}
+				out.NeedsYou = &apiNeedsYou{Total: queue.Data.Total, Counts: queue.Data.Counts, Items: queue.Data.Items}
 				card, _ := json.Marshal(out.Weather)
-				rev = application.Revision(fmt.Sprintf("%x", sha256.Sum256(append([]byte(rev), card...))))
+				rev := application.Revision(fmt.Sprintf("%x", sha256.Sum256(append([]byte(read.Revision+"|"+queue.Revision+"|"), card...))))
 				return application.Read[apiHome]{Revision: rev, Data: out}, nil
 			}),
 		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", ID: "assistant.agenda"}, "GET /agenda",
@@ -823,3 +836,5 @@ func historyOut(v asstapp.History) apiHistory {
 	}
 	return out
 }
+
+const homeNeedsLimit = 3
