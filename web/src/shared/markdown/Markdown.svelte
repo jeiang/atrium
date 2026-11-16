@@ -85,7 +85,9 @@
     {:else if block.t === 'hr'}
       <hr>
     {:else}
-      <div class="md-table">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling table needs keyboard access -->
+      <section class="md-table" aria-label="Table" tabindex="0">
         <table>
           <thead>
             <tr>
@@ -108,7 +110,7 @@
             </tbody>
           {/if}
         </table>
-      </div>
+      </section>
     {/if}
   {/each}
 {/snippet}

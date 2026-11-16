@@ -34,7 +34,7 @@ const deviations: Record<string, string> = {
 };
 
 const allowedTags =
-  'p h3 h4 h5 h6 div span pre code blockquote ul ol li hr br table thead tbody tr th td strong em del a svg path';
+  'section p h3 h4 h5 h6 div span pre code blockquote ul ol li hr br table thead tbody tr th td strong em del a svg path';
 const allowedAttributes = 'class href title target rel start role aria-label aria-hidden tabindex viewBox focusable d';
 
 const hostile = [
@@ -246,7 +246,7 @@ test.describe('markdown safety', () => {
     await expect(sample.getByText('<div onclick="x()">A raw HTML block stays text.</div>')).toBeVisible();
     await expect(sample.getByRole('heading', { level: 3, name: 'Winter tyre quotes' })).toBeVisible();
     await expect(sample.getByRole('heading', { level: 4, name: 'Setext heading' })).toBeVisible();
-    await expect(sample.locator('.md-table table')).toBeVisible();
+    await expect(sample.getByRole('region', { name: 'Table' })).toHaveAttribute('tabindex', '0');
     await expect(sample).toContainText('© & © 🚗');
     expect(remote).toEqual([]);
   });
