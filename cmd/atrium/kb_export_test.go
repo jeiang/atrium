@@ -233,7 +233,7 @@ func TestExportIgnoresRemovedTargetRowsAndUpdatesInPlace(t *testing.T) {
 		t.Errorf("personal folder after two runs = %v, %v; want one file beside the standing instructions", names, err)
 	}
 	var notion, folder int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE target = 'notion'), COUNT(*) FILTER (WHERE target = 'obsidian') FROM export_pages " +
+	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE target = 'notion'), COUNT(*) FILTER (WHERE target = 'obsidian') FROM export_pages "+
 		"WHERE record_id NOT IN (SELECT id FROM kb_records WHERE origin = 'atrium:instructions')").Scan(&notion, &folder); err != nil {
 		t.Fatal(err)
 	}
