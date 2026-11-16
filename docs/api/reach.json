@@ -278,7 +278,6 @@
         "auth.identity",
         "maintenance.backup",
         "maintenance.check",
-        "maintenance.db-backup",
         "maintenance.verify-archive",
         "settings.read",
         "settings.secret-delete",
@@ -287,8 +286,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 20,
-      "bound": 20
+      "required": 19,
+      "bound": 19
     },
     {
       "area": "tasks",
@@ -381,7 +380,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 203,
-  "total_bound": 203,
+  "total_required": 197,
+  "total_bound": 197,
   "total_approval_reached": 11
 }
