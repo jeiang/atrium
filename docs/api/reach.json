@@ -241,10 +241,12 @@
       "area": "review",
       "operations": [
         "attention.read",
-        "review.pending"
+        "review.pending",
+        "review.queue",
+        "review.queue.item"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "schedules",
@@ -396,7 +398,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 206,
-  "total_bound": 206,
+  "total_required": 208,
+  "total_bound": 208,
   "total_approval_reached": 11
 }

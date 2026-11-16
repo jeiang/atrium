@@ -10117,6 +10117,138 @@
         ],
         "type": "object"
       },
+      "QueueCounts": {
+        "properties": {
+          "ask": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "attention": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "draft": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "proposal": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ask",
+          "proposal",
+          "draft",
+          "attention"
+        ],
+        "type": "object"
+      },
+      "QueueItem": {
+        "properties": {
+          "arrived_at": {
+            "type": "number"
+          },
+          "due": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ask",
+              "proposal",
+              "draft",
+              "attention"
+            ],
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/QueueSource"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "waiting_for": {
+            "enum": [
+              "answer",
+              "permission",
+              "approval",
+              "send",
+              "resolve",
+              "review",
+              "due"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "summary",
+          "source",
+          "arrived_at",
+          "waiting_for",
+          "module"
+        ],
+        "type": "object"
+      },
+      "QueuePage": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/QueueCounts"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "counts"
+        ],
+        "type": "object"
+      },
+      "QueueSource": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id"
+        ],
+        "type": "object"
+      },
       "Queued": {
         "properties": {
           "created_at": {
@@ -10634,6 +10766,36 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/ProposalsPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadQueueItem": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QueueItem"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadQueuePage": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/QueuePage"
           },
           "revision": {
             "type": "string"
@@ -38508,6 +38670,301 @@
           "proposals"
         ],
         "x-atrium-area": "proposals",
+        "x-atrium-module": "core"
+      }
+    },
+    "/queue": {
+      "get": {
+        "description": "The one inbox: everything that waits for the operator, in one order with one count. `total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `cursor` and `limit` are. Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
+        "operationId": "review.queue",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "enum": [
+                "ask",
+                "proposal",
+                "draft",
+                "attention"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadQueuePage"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "review"
+        ],
+        "x-atrium-area": "review",
+        "x-atrium-module": "core"
+      }
+    },
+    "/queue/{item_id}": {
+      "get": {
+        "description": "One queue item by `id`. `proposal:<proposal_id>` and `draft:<draft_id>` are the items behind `/proposals/{proposal_id}` and `/drafts/{draft_id}`. Not found means the item no longer waits for the operator; read the proposal or draft for its outcome. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
+        "operationId": "review.queue.item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadQueueItem"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "review"
+        ],
+        "x-atrium-area": "review",
         "x-atrium-module": "core"
       }
     },

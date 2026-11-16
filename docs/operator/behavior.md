@@ -288,6 +288,13 @@ services as their dedicated views. `/chat/agenda` returns 404 when the calendar
 module is off and 503 when the calendar cannot be listed, for example when none
 is configured. Full page navigations are not conditional fragment responses.
 
+The Needs you count is the size of the one inbox: questions the assistant is
+waiting on, permission requests, pending proposals and those with an unknown
+outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
+items such as commitments, tasks and open loops. Items of a module that is off
+are not counted. Clients list the same items, in the same order, from
+`GET /api/v1/queue`. The Needs you page still lists only proposals and drafts.
+
 Assistant runs use the Anthropic connection and a static supported-model
 catalog. A missing key or refused budget prevents a paid start before a new
 thread exists. Unknown models fail closed. Model-free jobs do not require a

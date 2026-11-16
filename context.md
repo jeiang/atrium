@@ -1152,6 +1152,22 @@ claims about the running application. Operator contracts are in
   /home` carries a `weather` card (current, today, hourly) or null when no
   location is set or the weather connection is off; the forecast call is
   capped at 3 seconds and a failure only drops the card.
+- The one inbox is `GET /queue` (both prefixes): parked `ask_operator`
+  questions and permission requests (`ask`), pending and outcome-unknown
+  proposals (`proposal`), drafts to send or resolve (`draft`), and
+  overdue, due-soon and needs-decision attention items (`attention`;
+  waiting-on-them loops and packages are left out). Order: asks oldest
+  first, then items with a due time by due, then the rest oldest first,
+  ties on id. A module that is off hides only its own items. `total` and
+  `counts` ignore the filter and page and are the Needs you count of
+  `/shell` and the web badge, computed by the same function
+  (`reviewapp.Service.NeedsCount`). Item ids are
+  `<source type>:<source id>`; `GET /queue/{item_id}` returns one item, so
+  `proposal:<id>` and `draft:<id>` resolve the old proposal and draft
+  addresses. `GET /pending` keeps its older proposals-plus-drafts count.
+  Operations may carry an OpenAPI `description`
+  (`application.APIShape.Description`); the queue's lists the topics to
+  refetch on.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open
