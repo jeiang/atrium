@@ -4072,6 +4072,35 @@
         ],
         "type": "object"
       },
+      "Group": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            },
+            "type": "array"
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "thread",
+              "message",
+              "record",
+              "task",
+              "file"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "items",
+          "more"
+        ],
+        "type": "object"
+      },
       "GroupResult": {
         "properties": {
           "count": {
@@ -4163,6 +4192,61 @@
           "n",
           "state",
           "leaf"
+        ],
+        "type": "object"
+      },
+      "Hit": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/Span"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "thread",
+              "message",
+              "record",
+              "task",
+              "file"
+            ],
+            "type": "string"
+          },
+          "when": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "title",
+          "detail",
+          "snippet",
+          "matches",
+          "when",
+          "path",
+          "private"
         ],
         "type": "object"
       },
@@ -8826,6 +8910,33 @@
         ],
         "type": "object"
       },
+      "Partial": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "failed",
+              "timeout",
+              "semantic_unavailable"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "thread",
+              "message",
+              "record",
+              "task",
+              "file"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "reason"
+        ],
+        "type": "object"
+      },
       "PauseResult": {
         "properties": {
           "paused": {
@@ -10649,6 +10760,21 @@
         ],
         "type": "object"
       },
+      "ReadResult": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Result"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadRuleVocabulary": {
         "properties": {
           "data": {
@@ -10903,6 +11029,48 @@
           "effective_outcome",
           "prior_state",
           "prior_error"
+        ],
+        "type": "object"
+      },
+      "Result": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/Group"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partial": {
+            "items": {
+              "$ref": "#/components/schemas/Partial"
+            },
+            "type": "array"
+          },
+          "query": {
+            "type": "string"
+          },
+          "top": {
+            "items": {
+              "$ref": "#/components/schemas/Hit"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "top",
+          "groups",
+          "partial"
         ],
         "type": "object"
       },
@@ -13173,6 +13341,23 @@
       "SpaceUpload": {
         "additionalProperties": false,
         "properties": {},
+        "type": "object"
+      },
+      "Span": {
+        "properties": {
+          "end": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "start": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
         "type": "object"
       },
       "Started": {
@@ -40569,6 +40754,146 @@
         ],
         "x-atrium-area": "search",
         "x-atrium-module": "assistant"
+      }
+    },
+    "/search/all": {
+      "get": {
+        "operationId": "search.all",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "types",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {}
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "search"
+        ],
+        "x-atrium-area": "search",
+        "x-atrium-module": "core"
       }
     },
     "/session": {

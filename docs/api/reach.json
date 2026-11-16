@@ -260,10 +260,11 @@
     {
       "area": "search",
       "operations": [
-        "assistant.search"
+        "assistant.search",
+        "search.all"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "settings",
@@ -379,7 +380,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 203,
-  "total_bound": 203,
+  "total_required": 204,
+  "total_bound": 204,
   "total_approval_reached": 11
 }

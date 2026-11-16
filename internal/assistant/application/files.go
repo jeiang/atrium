@@ -50,6 +50,19 @@ const libraryFilesQuery = "SELECT f.id, f.name, f.media_type, f.bytes, f.created
 	"WHERE (f.thread_id IS NOT NULL OR f.project_id IS NOT NULL) AND (? = 0 OR f.created_at < ? OR (f.created_at = ? AND f.id < ?)) " +
 	"ORDER BY f.created_at DESC, f.id DESC LIMIT ?"
 
+const findLibraryQuery = "SELECT f.id, f.name, f.media_type, f.bytes, f.created_at, f.thread_id, t.title, f.project_id, p.name " +
+	"FROM thread_files f LEFT JOIN threads t ON t.id = f.thread_id LEFT JOIN projects p ON p.id = f.project_id " +
+	"WHERE (f.thread_id IS NOT NULL OR f.project_id IS NOT NULL) AND instr(lower(f.name), lower(?)) > 0 " +
+	"ORDER BY f.created_at DESC, f.id DESC LIMIT ? OFFSET ?"
+
+func FindLibraryFiles(ctx context.Context, q db.Querier, text string, limit, offset int) ([]LibraryEntry, error) {
+	rows, err := q.QueryContext(ctx, findLibraryQuery, text, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, scanLibraryEntry)
+}
+
 var (
 	nameRe        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	markdownTypes = []string{"text/markdown", "text/x-markdown"}

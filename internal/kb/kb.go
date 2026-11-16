@@ -132,13 +132,18 @@ func privateClause(alias string, project int64) (string, []any) {
 	return "NOT ((" + alias + ".private = 1 OR COALESCE(p.private, 0) = 1) AND (" + alias + ".project_id IS NULL OR " + alias + ".project_id != ?))", []any{project}
 }
 
-func liveWhere(alias string, project int64, now float64, scope string) (string, []any) {
+func liveBase(alias string, now float64, scope string) (string, []any) {
 	where := alias + ".retracted_at IS NULL AND (" + alias + ".expires_at IS NULL OR " + alias + ".expires_at > ?)"
 	args := []any{now}
 	if scope != "" {
 		where += " AND " + alias + ".scope = ?"
 		args = append(args, scope)
 	}
+	return where, args
+}
+
+func liveWhere(alias string, project int64, now float64, scope string) (string, []any) {
+	where, args := liveBase(alias, now, scope)
 	clause, pargs := privateClause(alias, project)
 	return where + " AND " + clause, append(args, pargs...)
 }

@@ -29,12 +29,20 @@ func semanticSkipped(ctx context.Context, operation, reason string) {
 }
 
 type SearchFilter struct {
-	Query     string
-	Scope     string
-	Limit     int
-	ProjectID int64
-	Now       float64
-	Embed     func(ctx context.Context, texts []string) ([][]float64, error)
+	Query          string
+	Scope          string
+	Limit          int
+	ProjectID      int64
+	IncludePrivate bool
+	Now            float64
+	Embed          func(ctx context.Context, texts []string) ([][]float64, error)
+}
+
+func (f SearchFilter) live() (string, []any) {
+	if f.IncludePrivate {
+		return liveBase("r", f.Now, f.Scope)
+	}
+	return liveWhere("r", f.ProjectID, f.Now, f.Scope)
 }
 
 type Hit struct {
@@ -44,8 +52,9 @@ type Hit struct {
 }
 
 type Result struct {
-	Hits     []Hit `json:"results"`
-	Semantic bool  `json:"semantic"`
+	Hits     []Hit  `json:"results"`
+	Semantic bool   `json:"semantic"`
+	Skipped  string `json:"-"`
 }
 
 type exactRow struct {
@@ -55,7 +64,7 @@ type exactRow struct {
 }
 
 func exactMatches(ctx context.Context, q db.Querier, f SearchFilter) ([]int64, error) {
-	where, liveArgs := liveWhere("r", f.ProjectID, f.Now, f.Scope)
+	where, liveArgs := f.live()
 	rows, err := q.QueryContext(ctx, "SELECT r.id, r.title, r.aliases"+fromClause()+" WHERE "+where, liveArgs...)
 	if err != nil {
 		return nil, err
@@ -108,7 +117,7 @@ type lexicalHit struct {
 }
 
 func lexical(ctx context.Context, q db.Querier, match string, f SearchFilter) ([]lexicalHit, error) {
-	where, args := liveWhere("r", f.ProjectID, f.Now, f.Scope)
+	where, args := f.live()
 	args = append([]any{match}, args...)
 	args = append(args, lexicalLimit)
 	rows, err := q.QueryContext(ctx,
@@ -146,7 +155,7 @@ func visibleIDs(ctx context.Context, q db.Querier, ids []int64, f SearchFilter) 
 	if err != nil {
 		return nil, err
 	}
-	where, args := liveWhere("r", f.ProjectID, f.Now, f.Scope)
+	where, args := f.live()
 	args = append(args, string(raw))
 	rows, err := q.QueryContext(ctx, "SELECT r.id"+fromClause()+" WHERE "+where+" AND r.id IN (SELECT value FROM json_each(?))", args...)
 	if err != nil {
@@ -172,7 +181,7 @@ func hydrate(ctx context.Context, q db.Querier, ids []int64, f SearchFilter) (ma
 	if err != nil {
 		return nil, err
 	}
-	where, args := liveWhere("r", f.ProjectID, f.Now, f.Scope)
+	where, args := f.live()
 	args = append(args, string(raw))
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+fromClause()+" WHERE "+where+" AND r.id IN (SELECT value FROM json_each(?))", args...)
 	if err != nil {
@@ -214,7 +223,7 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 		snippets[h.id] = h.snippet
 	}
 	var sem []int64
-	semantic := false
+	semantic, skipped := false, ""
 	if f.Embed != nil {
 		idx, ierr := embed.Active(ctx, q)
 		if err := ctx.Err(); err != nil {
@@ -232,15 +241,15 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 			}
 			switch {
 			case expired:
-				semanticSkipped(ctx, "kb_search", "timeout")
+				skipped = "timeout"
 			case verr != nil:
 				var unavailable *httpx.ServiceUnavailable
 				if !errors.As(verr, &unavailable) && !errors.Is(verr, httpx.ErrPayload) && !errors.Is(verr, httpx.ErrMissing) {
 					return Result{}, verr
 				}
-				semanticSkipped(ctx, "kb_search", "unavailable")
+				skipped = "unavailable"
 			case len(vectors) == 0 || len(vectors[0]) == 0:
-				semanticSkipped(ctx, "kb_search", "no_vector")
+				skipped = "no_vector"
 			default:
 				near, kerr := knn(ctx, q, idx, embed.Serialize(vectors[0]), semanticLimit)
 				if kerr != nil {
@@ -256,6 +265,9 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 					}
 				}
 				semantic = true
+			}
+			if skipped != "" {
+				semanticSkipped(ctx, "kb_search", skipped)
 			}
 		}
 	}
@@ -292,5 +304,5 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 		}
 		hits = append(hits, Hit{Record: r, Cite: Cite(r.ID), Snippet: snippet})
 	}
-	return Result{Hits: hits, Semantic: semantic}, nil
+	return Result{Hits: hits, Semantic: semantic, Skipped: skipped}, nil
 }

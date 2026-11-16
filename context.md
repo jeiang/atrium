@@ -1318,6 +1318,21 @@ claims about the running application. Operator contracts are in
 - Multipart bodies containing file parts share four in-process upload slots; excess uploads return 429 with `Retry-After: 1`. A multipart body counts as carrying files unless its first 1 MiB holds every part and the closing boundary with no file part; a malformed or truncated body counts as carrying files. Multipart bodies have a 30-second idle read deadline from their first byte and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.
 - Multipart thread options match JSON options, including finite, nonnegative `cost_cap_usd`. Keyed multipart retries fingerprint parsed names, values, file names, content types and bytes rather than MIME boundaries; duplicate parts retain their per-field order. File and project API lists use stable keyset cursors. Previously issued thread-list and transcript cursors remain accepted. Disabled assistant commands refuse before reading bodies; the legacy stop route still ignores its optional body. Text downloads declare UTF-8. API assistant refusals use fixed operator-safe messages; unexpected failures return `internal` with a diagnostic ID.
 - Search has its own `assistant.search` operation; its cursors are shared with `/threads?q=…`. New cursors bind the operation, filters and path parameters; legacy thread and inbox cursors remain accepted. Schedule history remains readable for cancelled jobs and returns not_found for absent jobs on every page. API subagent saves refuse built-in definitions without changing the CLI's editing behavior. OpenAPI marks handler-required schedule and enabled fields as required, while queued memory work remains optional.
+- One search, `search.all` at `GET /search/all` (core module, operator
+  authority, never writes), covers threads, mail messages, knowledge records,
+  tasks and library files. `types` (comma list of `thread`, `message`,
+  `record`, `task`, `file`) narrows it; `limit` (1 to 20, default 5) is per
+  type. Each type comes from the module that owns it and only while that
+  module is on; messages come only from enabled accounts. The answer holds a
+  group per type in its own best-match order, a `top` list of at most five
+  (every type's first hit, then every type's second, newest first within a
+  rank), plain snippets with UTF-16 match offsets, and `partial` naming a
+  type that failed, ran past the four-second budget, or answered without
+  semantic matching. A cursor pages one type and is issued only when `types`
+  names a single type. Threads, messages and records use their full-text
+  indexes (records keep the retrieval ranking and include private records,
+  flagged `private`); tasks match title or notes and files match library
+  names by substring, since neither has a text index.
 - Code execution is not part of the application. There is no code-mode
   worker; coding may return as an external module.
 
