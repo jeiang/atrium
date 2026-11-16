@@ -131,7 +131,7 @@ func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('max_run_cost_usd_haiku_5_5', '0.0001')"); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('max_run_cost_usd', '0.0001')"); err != nil {
 		t.Fatal(err)
 	}
 	long := `[{"type":"text","text":"` + strings.Repeat("evidence ", 100) + `"}]`

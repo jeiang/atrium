@@ -88,6 +88,9 @@ var Retired = []RetiredKey{
 	{Module: "notion", Key: "wiki_log_title"},
 	{Module: "notion", Key: "wiki_root"},
 	{Module: "core", Key: "pass_run_retention_days"},
+	{Module: "assistant", Key: "max_run_cost_usd_haiku_5_5"},
+	{Module: "assistant", Key: "max_run_cost_usd_sonnet_5_5"},
+	{Module: "assistant", Key: "max_run_cost_usd_opus_5_5"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

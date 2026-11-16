@@ -309,10 +309,12 @@ the hosted model leaves the host.
 Spending is reserved before dispatch: the full cold prompt, the maximum output,
 8,000 input tokens per allowed web search, and the search fees. The monthly
 budget defaults to $150. Scheduled work stops at 80% of it, chat at its own
-share capped at 95%, and the last 5% is kept for classification. Each model has
-a per-run cap that also covers subagent runs, and every subagent request must
-fit each ancestor run's cap. A thread cap (default $10, lower if the composer
-set one) covers a thread and its subagent threads. An attempt with an unknown
+share capped at 95%, and the last 5% is kept for classification. One run cap,
+`max_run_cost_usd` (default $10), applies to every model and also covers
+subagent runs, and every subagent request must fit each ancestor run's cap.
+The old per-model run caps are retired and ignored. A thread cap (default $10,
+lower if the composer set one) covers a thread and its subagent threads. An
+attempt with an unknown
 outcome stays reserved and expires to an estimated charge after 24 hours. A
 stream stopped mid-generation is charged for what it delivered, never below the
 usage the provider reported. Reservations keep their calendar month, so a time
@@ -320,6 +322,13 @@ zone change does not move spend, and earlier-month reservations count until
 they settle or expire. A memory job refused by the monthly budget waits for the
 next month, a run-cap refusal fails it, and other refusals back off. A provider
 spend-cap reply stops the run as a budget stop.
+
+`GET /spend` gives the Spend page in one answer: the month's budget, committed,
+reserved and remaining spend, what is refused now (scheduled work when the
+state is `near`, chat as well when it is `exhausted`), every spending cap with
+its value and source, the month split by budget class, run kind, model and
+day in the configured time zone, and the largest runs with their thread and
+job. The monthly budget and the run cap are ordinary settings.
 
 Tool permissions, run-kind limits, and approval are enforced in code. A fixed
 untrusted-data preamble comes before the editable system prompt. Each tool has

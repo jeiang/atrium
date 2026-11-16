@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
@@ -167,7 +166,7 @@ func AttentionSources(env config.Env) []attention.Source {
 
 func SettingGroups() []settings.Group {
 	return []settings.Group{
-		{Name: "spending", Title: "Spending", Keys: append([]string{inference.ThreadCapKey}, append(runCaps(), assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD}},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 			memory.ModelKey, memory.EffortKey,
@@ -188,13 +187,4 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 		}
 	}
 	return append(defs, research.Definition(), lookup.Definition(), websearch.Definition(), report.Definition())
-}
-
-func runCaps() []string {
-	models := pricing.Models()
-	keys := make([]string, len(models))
-	for i, m := range models {
-		keys[i] = inference.RunCapKey(m.ID)
-	}
-	return keys
 }

@@ -117,9 +117,7 @@ Operator settings are stored in the database and edited in the application. They
 | `digest_notify` | bool | `true` | ui |
 | `dreaming_max_cost_usd` | float | `0.30` | ui |
 | `dreaming_monthly_usd` | float | `3` | ui |
-| `max_run_cost_usd_haiku_5_5` | float | `2` | ui |
-| `max_run_cost_usd_opus_5_5` | float | `10` | ui |
-| `max_run_cost_usd_sonnet_5_5` | float | `6` | ui |
+| `max_run_cost_usd` | float | `10` | ui |
 | `monthly_budget_usd` | float | `150` | ui |
 | `ops_worker_max_run_usd` | float | `0.10` | ui |
 | `ops_worker_monthly_usd` | float | `5` | ui |
