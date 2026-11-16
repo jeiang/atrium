@@ -226,4 +226,26 @@ test.describe('knowledge spaces', () => {
       await expectNoSeriousAxeFindings(page);
     });
   }
+
+  // The base has no shared offline state for writes: a write that cannot reach the server rejects with a
+  // TypeError. The mock service worker answers even when the context is offline, so fetch is made to fail.
+  test('a write that cannot reach the server keeps the dialog and its text', async ({ page }) => {
+    await openGarden(page);
+    await page.evaluate(() => {
+      const real = window.fetch;
+      window.fetch = (input, init) =>
+        init?.method && init.method !== 'GET' ? Promise.reject(new TypeError('Failed to fetch')) : real(input, init);
+    });
+    await page.getByRole('button', { name: 'Rename' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Rename Shared garden' });
+    await dialog.getByLabel('Name').fill('Garden');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+    await expect(dialog.getByText('You are offline. Nothing was renamed.')).toBeVisible();
+    await expect(dialog.getByLabel('Name')).toHaveValue('Garden');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Take Shared garden project out of Shared garden' }).click();
+    await expect(page.locator('.toast__text', { hasText: 'You are offline. Nothing changed.' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Subjects in this space' }).getByRole('listitem')).toHaveCount(1);
+    expect(await sent(page)).toEqual([]);
+  });
 });

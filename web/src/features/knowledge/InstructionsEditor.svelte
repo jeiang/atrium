@@ -1,6 +1,7 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
   import { blockNavigation } from 'sv-router';
+  import { tick } from 'svelte';
   import { announce } from '../../shared/announce.svelte';
   import { formatClock, formatDayTime, plural } from '../../shared/assistant/format';
   import Badge from '../../shared/ui/Badge.svelte';
@@ -36,6 +37,7 @@
   let leaving = $state(false);
   let settle: ((leave: boolean) => void) | undefined;
   let editButton = $state<HTMLButtonElement>();
+  let refocus = false;
 
   const data = $derived(instructions.data);
   const record = $derived(data?.record);
@@ -75,6 +77,9 @@
 
   function onLeaveClosed(): void {
     answer(false);
+    // The dialog hands focus back to its opener when it closes; after a discard that opener is gone.
+    if (refocus) editButton?.focus();
+    refocus = false;
   }
 
   function who(by: string): string {
@@ -109,11 +114,14 @@
   }
 
   async function onCancel(): Promise<void> {
-    if (dirty && !(await ask())) return;
+    const asked = dirty;
+    if (asked && !(await ask())) return;
+    refocus = asked;
     editing = false;
     restoring = undefined;
     staleText = undefined;
     error = undefined;
+    await tick();
     editButton?.focus();
   }
 

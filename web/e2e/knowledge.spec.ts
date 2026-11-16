@@ -154,15 +154,18 @@ test.describe('knowledge', () => {
     await expect(banner).toBeHidden();
   });
 
-  test('standing instructions open on their own route; map and spaces are reserved', async ({ page }) => {
+  test('instructions, map and spaces each open on their own route', async ({ page }) => {
     await gotoShell(page, '/knowledge/instructions');
     await expect(page.getByRole('heading', { level: 1, name: 'Standing instructions' })).toBeVisible();
     await expect(page.getByText('The assistant reads this page on every run.')).toBeVisible();
-    for (const path of ['/knowledge/map', '/knowledge/spaces']) {
-      await gotoShell(page, path);
-      await expect(page.getByText('This page does not exist')).toHaveCount(0);
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    }
+    await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
+    await gotoShell(page, '/knowledge/1');
+    await expect(page.getByRole('list', { name: 'Versions' })).toBeVisible();
+    await gotoShell(page, '/knowledge/map?subject=21');
+    await expect(page.getByRole('heading', { level: 1, name: 'Map of Ilse de Wit' })).toBeVisible();
+    await gotoShell(page, '/knowledge/spaces');
+    await expect(page.getByRole('heading', { level: 1, name: 'Spaces' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Spaces' }).getByRole('listitem')).toHaveCount(2);
   });
 
   test('an empty store says so', async ({ page }) => {
