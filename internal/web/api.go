@@ -23,6 +23,7 @@ import (
 
 const (
 	APIPrefix       = "/api/v1"
+	WebPrefix       = "/web/v1"
 	SourceBearer    = "bearer"
 	RequestIDHeader = "Atrium-Request-Id"
 	ProblemPrefix   = "urn:atrium:problem:"
@@ -56,6 +57,7 @@ type surface struct {
 
 var surfaces = [...]surface{
 	{prefix: APIPrefix, scope: "/api", guard: (*Guard).api},
+	{prefix: WebPrefix, scope: "/web", guard: (*Guard).web},
 }
 
 func surfaceOf(r *http.Request) (surface, bool) {
@@ -67,7 +69,7 @@ func surfaceOf(r *http.Request) (surface, bool) {
 	return surface{}, false
 }
 
-func isAPI(r *http.Request) bool {
+func IsAPI(r *http.Request) bool {
 	_, ok := surfaceOf(r)
 	return ok
 }
@@ -285,53 +287,12 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		return
 	}
 	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName, Expires: tok.ExpiresAt}
-	if isUnsafe(r.Method) {
-		if !sameOrigin(r) {
-			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
-			return
-		}
-		var shape *application.APIShape
-		if g.apiShape != nil {
-			shape = g.apiShape(r)
-		}
-		if shape != nil && shape.BeforeBody != nil {
-			if err := shape.BeforeBody(r.Context()); err != nil {
-				APIFail(w, err)
-				return
-			}
-		}
-		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		multipart := mediaType == "multipart/form-data" && shape != nil && shape.Body == application.BodyMultipart
-		if r.ContentLength != 0 && (shape == nil || !shape.IgnoreBody) {
-			if (mediaType != jsonType && !multipart) || (mediaType == jsonType && shape != nil && shape.Body == application.BodyMultipart && !shape.AllowJSON) {
-				APIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send application/json.")
-				return
-			}
-		}
-		limit := defaultBodyCap
-		if g.bodyCap != nil {
-			if limit, err = g.bodyCap(r.Context()); err != nil {
-				log.Error("body cap setting failed", logx.Err, err.Error())
-				APIError(w, http.StatusInternalServerError, "internal", "Internal error.")
-				return
-			}
-		}
-		cap := int64(limit)
-		if multipart {
-			cap = shape.BodyLimit
-		}
-		if r.ContentLength > cap && (shape == nil || !shape.IgnoreBody) {
-			APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, cap)
-	} else if g.apiShape != nil {
-		if shape := g.apiShape(r); shape != nil && shape.Body == application.BodyBinary && shape.BeforeBody != nil {
-			if err := shape.BeforeBody(r.Context()); err != nil {
-				APIFail(w, err)
-				return
-			}
-		}
+	if isUnsafe(r.Method) && !sameOrigin(r) {
+		APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
+		return
+	}
+	if !g.admitBody(w, r, g.shapeOf(r)) {
+		return
 	}
 	who.BearerID = tok.ID
 	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
@@ -339,6 +300,58 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		return err
 	})
 	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (g *Guard) shapeOf(r *http.Request) *application.APIShape {
+	if g.apiShape == nil {
+		return nil
+	}
+	return g.apiShape(r)
+}
+
+func (g *Guard) admitBody(w http.ResponseWriter, r *http.Request, shape *application.APIShape) bool {
+	if !isUnsafe(r.Method) {
+		if shape != nil && shape.Body == application.BodyBinary && shape.BeforeBody != nil {
+			if err := shape.BeforeBody(r.Context()); err != nil {
+				APIFail(w, err)
+				return false
+			}
+		}
+		return true
+	}
+	if shape != nil && shape.BeforeBody != nil {
+		if err := shape.BeforeBody(r.Context()); err != nil {
+			APIFail(w, err)
+			return false
+		}
+	}
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	multipart := mediaType == "multipart/form-data" && shape != nil && shape.Body == application.BodyMultipart
+	if r.ContentLength != 0 && (shape == nil || !shape.IgnoreBody) {
+		if (mediaType != jsonType && !multipart) || (mediaType == jsonType && shape != nil && shape.Body == application.BodyMultipart && !shape.AllowJSON) {
+			APIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send application/json.")
+			return false
+		}
+	}
+	limit := defaultBodyCap
+	if g.bodyCap != nil {
+		var err error
+		if limit, err = g.bodyCap(r.Context()); err != nil {
+			log.Error("body cap setting failed", logx.Err, err.Error())
+			APIError(w, http.StatusInternalServerError, "internal", "Internal error.")
+			return false
+		}
+	}
+	cap := int64(limit)
+	if multipart {
+		cap = shape.BodyLimit
+	}
+	if r.ContentLength > cap && (shape == nil || !shape.IgnoreBody) {
+		APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+		return false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, cap)
+	return true
 }
 
 type originKey struct{}

@@ -32,7 +32,7 @@ var (
 )
 
 var transportCodes = []string{
-	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "command_interrupted", "command_result_withheld", "cross_origin", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "module_disabled", "no_active_run", "no_question", "not_answered", "nothing_to_edit", "project_archived", "read_only_thread", "reference_refused", "run_active", "stream_expired", "too_large", "unsupported_media_type",
+	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "bearer_refused", "command_interrupted", "command_result_withheld", "cross_origin", "csrf_failed", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "module_disabled", "no_active_run", "no_question", "not_answered", "nothing_to_edit", "project_archived", "read_only_thread", "reference_refused", "run_active", "stream_expired", "too_large", "unsupported_media_type",
 }
 
 const contractRules = "Prose fields written by the model or the operator, such as message and answer text and the `text` and `thinking` run stream events, are raw markdown: render CommonMark with tables, strikethrough and autolinks, and escape raw HTML. Within v1, responses change only additively: clients ignore unknown error codes, run stream event names and response fields."
@@ -93,18 +93,78 @@ func openAPI(cat *module.Catalog) (object, error) {
 		}
 		item[strings.ToLower(method)] = op
 	}
+	if err := webSessionPaths(w, paths); err != nil {
+		return nil, err
+	}
 	w.schemas[errorName] = w.errorSchema()
 	return object{
-		"openapi":  "3.1.0",
-		"info":     object{"title": "atrium API", "version": "1", "description": contractRules},
-		"servers":  []any{object{"url": web.APIPrefix}},
-		"security": []any{object{"bearer": []any{}}},
+		"openapi": "3.1.0",
+		"info":    object{"title": "atrium API", "version": "1", "description": contractRules},
+		"servers": []any{
+			object{"url": web.APIPrefix, "description": "Native clients. Bearer token only; session cookies and proxy headers are ignored."},
+			object{"url": web.WebPrefix, "description": "The embedded web client. Web session only; a request with an Authorization header is refused."},
+		},
+		"security": []any{object{"bearer": []any{}}, object{"webSession": []any{}}},
 		"paths":    paths,
 		"components": object{
-			"schemas":         w.schemas,
-			"securitySchemes": object{"bearer": object{"type": "http", "scheme": "bearer"}},
+			"schemas": w.schemas,
+			"securitySchemes": object{
+				"bearer":     object{"type": "http", "scheme": "bearer", "description": "Applies to " + web.APIPrefix + " only."},
+				"webSession": object{"type": "apiKey", "in": "cookie", "name": "__Host-atrium_session", "description": webSessionRules},
+			},
 		},
 	}, nil
+}
+
+const webSessionRules = "Applies to " + web.WebPrefix + " only. The identity is the web sign-in: the OIDC session cookie (`__Host-atrium_session`, or `atrium_session` without HTTPS), a proxy identity from a trusted peer, or the loopback local identity. Every request sends `Atrium-Client: web` (binary content reads may omit it) and no `Authorization` header; `Sec-Fetch-Site`, when sent, is `same-origin`. Unsafe requests also send `X-CSRF-Token` with the `csrf_token` from `GET " + web.WebSessionPath + "` and an `Origin` equal to the host."
+
+func webSessionPaths(w *walker, paths object) error {
+	session, err := w.ref(reflect.TypeFor[web.WebSession]())
+	if err != nil {
+		return err
+	}
+	signIn, err := w.ref(reflect.TypeFor[web.WebSignIn]())
+	if err != nil {
+		return err
+	}
+	servers := []any{object{"url": web.WebPrefix}}
+	security := []any{object{"webSession": []any{}}}
+	failures := func(statuses ...int) object {
+		out := object{}
+		for _, status := range statuses {
+			out[strconv.Itoa(status)] = object{"description": http.StatusText(status), "content": object{"application/json": object{"schema": errorRef}}}
+		}
+		out["401"] = object{"description": "Not signed in. `sign_in` says how to start.", "content": object{"application/json": object{"schema": object{"allOf": []any{errorRef, object{
+			"type": "object", "required": []any{"sign_in"}, "properties": object{"sign_in": signIn},
+		}}}}}}
+		return out
+	}
+	get := failures(400, 403, 429, 503)
+	get["200"] = object{"description": http.StatusText(http.StatusOK), "content": object{"application/json": object{"schema": session}}}
+	logout := failures(400, 403, 429, 500, 503)
+	logout["204"] = object{"description": http.StatusText(http.StatusNoContent)}
+	for _, p := range []struct {
+		path, method, id, summary string
+		responses                 object
+	}{
+		{strings.TrimPrefix(web.WebSessionPath, web.WebPrefix), "get", "web.session", "Who is signed in, the CSRF token, and how to sign out.", get},
+		{strings.TrimPrefix(web.WebLogoutPath, web.WebPrefix), "post", "web.session.logout", "End the OIDC session for the web client and the server-rendered pages. Present only in OIDC sign-in.", logout},
+	} {
+		if _, ok := paths[p.path]; ok {
+			return fmt.Errorf("apischema: web session path %s collides with an operation", p.path)
+		}
+		paths[p.path] = object{p.method: object{
+			"operationId":      p.id,
+			"summary":          p.summary,
+			"servers":          servers,
+			"tags":             []any{"session"},
+			"x-atrium-surface": "web",
+			"security":         security,
+			"parameters":       []any{},
+			"responses":        p.responses,
+		}}
+	}
+	return nil
 }
 
 func operation(w *walker, b module.Binding, kind application.Kind, method string) (object, error) {

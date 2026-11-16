@@ -3232,12 +3232,14 @@
                       "auth_unavailable",
                       "bad_cursor",
                       "bad_request",
+                      "bearer_refused",
                       "budget_exceeded",
                       "canceled",
                       "command_interrupted",
                       "command_result_withheld",
                       "conflict",
                       "cross_origin",
+                      "csrf_failed",
                       "effect_partial",
                       "effect_unknown",
                       "forbidden",
@@ -8310,6 +8312,25 @@
         ],
         "type": "object"
       },
+      "Principal": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "email",
+          "name"
+        ],
+        "type": "object"
+      },
       "Project": {
         "properties": {
           "archived": {
@@ -12228,6 +12249,72 @@
         ],
         "type": "object"
       },
+      "WebSession": {
+        "properties": {
+          "auth_mode": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/Principal"
+          },
+          "sign_out": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WebSignOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "auth_mode",
+          "identity",
+          "csrf_token",
+          "sign_out"
+        ],
+        "type": "object"
+      },
+      "WebSignIn": {
+        "properties": {
+          "csrf_token": {
+            "type": "string"
+          },
+          "login_url": {
+            "type": "string"
+          },
+          "modes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "modes",
+          "csrf_token"
+        ],
+        "type": "object"
+      },
+      "WebSignOut": {
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "url"
+        ],
+        "type": "object"
+      },
       "WikiPages": {
         "properties": {
           "pages": {
@@ -12318,8 +12405,15 @@
     },
     "securitySchemes": {
       "bearer": {
+        "description": "Applies to /api/v1 only.",
         "scheme": "bearer",
         "type": "http"
+      },
+      "webSession": {
+        "description": "Applies to /web/v1 only. The identity is the web sign-in: the OIDC session cookie (`__Host-atrium_session`, or `atrium_session` without HTTPS), a proxy identity from a trusted peer, or the loopback local identity. Every request sends `Atrium-Client: web` (binary content reads may omit it) and no `Authorization` header; `Sec-Fetch-Site`, when sent, is `same-origin`. Unsafe requests also send `X-CSRF-Token` with the `csrf_token` from `GET /web/v1/session` and an `Origin` equal to the host.",
+        "in": "cookie",
+        "name": "__Host-atrium_session",
+        "type": "apiKey"
       }
     }
   },
@@ -37623,6 +37717,205 @@
         "x-atrium-module": "assistant"
       }
     },
+    "/session": {
+      "get": {
+        "operationId": "web.session",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebSession"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "properties": {
+                        "sign_in": {
+                          "$ref": "#/components/schemas/WebSignIn"
+                        }
+                      },
+                      "required": [
+                        "sign_in"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Not signed in. `sign_in` says how to start."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "/web/v1"
+          }
+        ],
+        "summary": "Who is signed in, the CSRF token, and how to sign out.",
+        "tags": [
+          "session"
+        ],
+        "x-atrium-surface": "web"
+      }
+    },
+    "/session/logout": {
+      "post": {
+        "operationId": "web.session.logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    },
+                    {
+                      "properties": {
+                        "sign_in": {
+                          "$ref": "#/components/schemas/WebSignIn"
+                        }
+                      },
+                      "required": [
+                        "sign_in"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Not signed in. `sign_in` says how to start."
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "webSession": []
+          }
+        ],
+        "servers": [
+          {
+            "url": "/web/v1"
+          }
+        ],
+        "summary": "End the OIDC session for the web client and the server-rendered pages. Present only in OIDC sign-in.",
+        "tags": [
+          "session"
+        ],
+        "x-atrium-surface": "web"
+      }
+    },
     "/settings": {
       "get": {
         "operationId": "settings.read",
@@ -44901,11 +45194,19 @@
   "security": [
     {
       "bearer": []
+    },
+    {
+      "webSession": []
     }
   ],
   "servers": [
     {
+      "description": "Native clients. Bearer token only; session cookies and proxy headers are ignored.",
       "url": "/api/v1"
+    },
+    {
+      "description": "The embedded web client. Web session only; a request with an Authorization header is refused.",
+      "url": "/web/v1"
     }
   ]
 }
