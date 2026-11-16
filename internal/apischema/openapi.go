@@ -265,7 +265,11 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 			schema = object{"type": "string", "format": "binary"}
 		case application.BodyEventStream:
 			media = "text/event-stream"
-			schema = w.runStreamEvent()
+			if shape.Stream == application.AppStream {
+				schema = w.appEvent()
+			} else {
+				schema = w.runStreamEvent()
+			}
 			op["x-atrium-stream-event"] = schema
 		default:
 			var err error
@@ -283,12 +287,13 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	if shape.Body == application.BodyMultipart {
 		op["x-atrium-body-limit"] = shape.BodyLimit
 	}
-	if shape.Body == application.BodyEventStream {
+	switch {
+	case shape.Stream == application.RunStream:
 		responses["204"] = object{"description": http.StatusText(http.StatusNoContent)}
 		responses["410"] = object{"description": http.StatusText(http.StatusGone), "content": object{"application/json": object{"schema": object{"allOf": []any{errorRef, object{
 			"type": "object", "required": []any{"run_id"}, "properties": object{"run_id": w.integer(true)},
 		}}}}}}
-	} else if kind == application.Query && !unsafe && !shape.Uncached {
+	case shape.Body != application.BodyEventStream && kind == application.Query && !unsafe && !shape.Uncached:
 		responses["304"] = object{"description": http.StatusText(http.StatusNotModified), "headers": object{"ETag": object{"schema": object{"type": "string"}}}}
 	}
 	statuses := slices.Clone(guardSafe)

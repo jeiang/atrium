@@ -1131,8 +1131,15 @@ claims about the running application. Operator contracts are in
   stream is documented in `docs/api/run-stream.md` (heartbeats,
   `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
   retention); it sends a heartbeat every 15 seconds and allows 4 streams per
-  subject and 16 per server. Static assets are served from content-hashed
-  immutable URLs.
+  subject and 16 per server. The app event stream `GET /events`
+  (`docs/api/app-events.md`) sends a `sync` of every visible
+  `read_revisions` topic on connect and a `change` `{topic, revision}` when
+  one moves, with no content and no replay; topics of disabled modules are
+  not sent. A committed `DB.WithTx` wakes it, and a 2-second check catches
+  other writers. It allows 2 streams per subject and 8 per server, counted
+  apart from run streams; the subject is the bearer token on `/api/v1` and
+  the web session key on `/web/v1`, and each server instance owns its
+  counts. Static assets are served from content-hashed immutable URLs.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open

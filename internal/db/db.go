@@ -155,7 +155,11 @@ func (d *DB) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	if err := fn(tx); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed()
+	return nil
 }
 
 type Lock struct{ f *os.File }

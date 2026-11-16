@@ -64,10 +64,11 @@
         "assistant.home",
         "assistant.today.ensure",
         "calendar.find-slot",
-        "calendar.list"
+        "calendar.list",
+        "state.events"
       ],
-      "required": 5,
-      "bound": 5
+      "required": 6,
+      "bound": 6
     },
     {
       "area": "inbox",
@@ -396,7 +397,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 206,
-  "total_bound": 206,
+  "total_required": 207,
+  "total_bound": 207,
   "total_approval_reached": 11
 }
