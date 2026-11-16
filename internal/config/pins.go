@@ -97,7 +97,7 @@ func refuseEnvName(env Env, reg *settings.Registry, module, key string) error {
 	if value == "" && file == "" {
 		return nil
 	}
-	entry, known := settings.ImportEntryFor(key)
+	entry, known := settings.EntryFor(key)
 	if known && entry.Module == "db" && entry.Key == "key" {
 		return nil
 	}

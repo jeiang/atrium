@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -249,45 +248,4 @@ func PushTest(ctx context.Context, d *db.DB) (int, string, error) {
 		return 0, "", err
 	}
 	return pushAll(ctx, d, testWakeup())
-}
-
-func ImportDevices(ctx context.Context, src db.Querier, dst db.Querier) (int64, []string, error) {
-	rows, err := src.QueryContext(ctx, "SELECT id, endpoint, p256dh, auth, label, created_ts, last_ok_ts, failure_count, last_error FROM push_subscriptions ORDER BY id")
-	if err != nil {
-		return 0, nil, err
-	}
-	type legacy struct {
-		id                     int64
-		endpoint, p256dh, auth string
-		label                  string
-		created                float64
-		lastOK                 *float64
-		failures               int64
-		lastError              *string
-	}
-	sources, err := db.Collect(rows, func(r *sql.Rows) (legacy, error) {
-		var l legacy
-		return l, r.Scan(&l.id, &l.endpoint, &l.p256dh, &l.auth, &l.label, &l.created, &l.lastOK, &l.failures, &l.lastError)
-	})
-	if err != nil {
-		return 0, nil, err
-	}
-	var carried int64
-	var notes []string
-	for _, l := range sources {
-		creds, err := checkWebPush(l.endpoint, l.p256dh, l.auth)
-		if err != nil {
-			notes = append(notes, fmt.Sprintf("push_subscriptions row %d rejected: %s", l.id, err))
-			continue
-		}
-		if _, err := dst.ExecContext(ctx, "INSERT INTO notification_devices (id, transport, label, created_ts, last_ok_ts, failure_count, last_error, bearer_id) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
-			l.id, TransportWebPush, Plain(l.label, pushLabelChars), l.created, l.lastOK, l.failures, l.lastError); err != nil {
-			return carried, notes, err
-		}
-		if _, err := dst.ExecContext(ctx, "INSERT INTO webpush_devices (device_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)", l.id, creds.endpoint, creds.key, creds.secret); err != nil {
-			return carried, notes, err
-		}
-		carried++
-	}
-	return carried, notes, nil
 }

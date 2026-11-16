@@ -136,11 +136,9 @@ settings the operator edits in the UI or pins from the host.
   a database from the previous version and compares its schema with a fresh
   one. Row rewrites require explicit approval and validation on a database
   copy. Refuse unknown future schema versions before writes.
-  `atrium db import-v2` is the only path from v2 data into a fresh v3
-  database, carrying the rows its table plan selects (mail state, rules,
-  threads, knowledge records, proposals, usage, settings, the settings audit,
-  secrets and connection credentials) and dropping run, memory, Notion and
-  operation history.
+  v2 data is no longer imported by current releases. Release `v3.0.0` is
+  the last that carries `atrium db import-v2`; restore a v2 database into
+  that release, then upgrade.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names (`atrium.service`), environment variable names, and
