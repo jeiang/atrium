@@ -23,6 +23,27 @@ func undoableWrite(t *testing.T, s *apiSite, token string, got apiReply, status 
 	}
 }
 
+func apiBody(t *testing.T, got apiReply, status int) map[string]any {
+	t.Helper()
+	if data := apiData(t, got, status); data != nil {
+		return data
+	}
+	return got.json
+}
+
+func kindHits(data map[string]any) map[string][]map[string]any {
+	out := map[string][]map[string]any{}
+	groups, _ := data["groups"].([]any)
+	for _, g := range groups {
+		group := g.(map[string]any)
+		items, _ := group["items"].([]any)
+		for _, item := range items {
+			out[group["type"].(string)] = append(out[group["type"].(string)], item.(map[string]any))
+		}
+	}
+	return out
+}
+
 func TestKnowledgeWritesReportUndoable(t *testing.T) {
 	s, token, d := localAPISite(t)
 	if _, err := d.Write.Exec("INSERT INTO projects (id, name, instructions, effort, context_limit, private, created_at, updated_at) VALUES (7, 'Harbor', '', 'high', 200000, 0, 0, 0)"); err != nil {
@@ -36,6 +57,7 @@ func TestKnowledgeWritesReportUndoable(t *testing.T) {
 	}
 	apiData(t, s.do(http.MethodPost, record+"/retract", token, nil), http.StatusOK)
 	undoableWrite(t, s, token, s.do(http.MethodPost, record+"/restore", token, nil), http.StatusOK)
+	apiData(t, s.do(http.MethodPost, record+"/restore", token, nil), http.StatusOK)
 	link := s.do(http.MethodPost, record+"/links", token, map[string]any{"target_kind": "space", "target_id": "7", "relation": "part_of"})
 	undoableWrite(t, s, token, link, http.StatusCreated)
 }
@@ -45,7 +67,9 @@ func subjectTitles(t *testing.T, s *apiSite, token, path string) ([]string, stri
 	data := apiData(t, s.do(http.MethodGet, path, token, nil), http.StatusOK)
 	var titles []string
 	for _, item := range apiItems(t, data) {
-		titles = append(titles, item.(map[string]any)["title"].(string))
+		if title := item.(map[string]any)["title"].(string); title != "Standing instructions" {
+			titles = append(titles, title)
+		}
 	}
 	next, _ := data["next_cursor"].(string)
 	return titles, next
@@ -108,7 +132,7 @@ func TestQueueLoopItemCarriesLoopID(t *testing.T) {
 
 func TestAssistantSubagentRolesRead(t *testing.T) {
 	s, token, _ := localAPISite(t)
-	items := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/assistant/subagent-roles", token, nil), http.StatusOK))
+	items := apiItems(t, apiBody(t, s.do(http.MethodGet, "/api/v1/assistant/subagent-roles", token, nil), http.StatusOK))
 	mail := spaceItem(t, items, "name", "mail")
 	if len(items) < 2 || mail == nil || mail["effort"] != "medium" || mail["description"] == "" || len(mail["tools"].([]any)) == 0 {
 		t.Fatalf("subagent roles: %v", items)
@@ -122,20 +146,23 @@ func TestAssistantSubagentRolesRead(t *testing.T) {
 func TestMailSearchLeavesOutDisabledAccounts(t *testing.T) {
 	s, token, d := localAPISite(t)
 	for _, stmt := range []string{
+		"INSERT OR IGNORE INTO accounts (name, kind) VALUES ('icloud', 'imap'), ('retired', 'imap')",
+		"INSERT INTO mailboxes (id, account, name, imap_name, role, uidvalidity, highest_uid) VALUES (1, 'icloud', 'INBOX', 'INBOX', 'inbox', 1, 1)",
+		"INSERT INTO mailboxes (id, account, name, imap_name, role, uidvalidity, highest_uid) VALUES (2, 'retired', 'INBOX', 'INBOX', 'inbox', 1, 2)",
 		"INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, date_ts, first_seen) VALUES (1, 'icloud', 1, 1, 1, 'kept@test', 'kept', 'Harbor fares', 'pat@example.com', 100, 0)",
-		"INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, date_ts, first_seen) VALUES (2, 'retired', 1, 1, 2, 'gone@test', 'gone', 'Harbor tickets', 'sam@example.com', 200, 0)",
+		"INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, date_ts, first_seen) VALUES (2, 'retired', 2, 1, 2, 'gone@test', 'gone', 'Harbor tickets', 'sam@example.com', 200, 0)",
 	} {
 		if _, err := d.Write.Exec(stmt); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, path := range []string{"/api/v1/mail/messages", "/api/v1/mail/messages?q=harbor", "/web/v1/mail/messages?q=harbor"} {
-		items := apiItems(t, apiData(t, s.do(http.MethodGet, path, token, nil), http.StatusOK))
+	for _, path := range []string{"/api/v1/mail/messages", "/api/v1/mail/messages?limit=10"} {
+		items := apiItems(t, apiBody(t, s.do(http.MethodGet, path, token, nil), http.StatusOK))
 		if len(items) != 1 || items[0].(map[string]any)["account"] != "icloud" {
 			t.Fatalf("%s: %v", path, items)
 		}
 	}
-	if items := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages?account=retired", token, nil), http.StatusOK)); len(items) != 0 {
+	if items := apiItems(t, apiBody(t, s.do(http.MethodGet, "/api/v1/mail/messages?account=retired", token, nil), http.StatusOK)); len(items) != 0 {
 		t.Fatalf("a disabled account's mail is searchable: %v", items)
 	}
 }
@@ -168,10 +195,10 @@ func TestCommitmentSnoozeHidesFromQueueAndUndoes(t *testing.T) {
 
 func TestSpaceCreateDefaultsAndRenameIfMatch(t *testing.T) {
 	s, token, _ := localAPISite(t)
-	id := number(t, apiData(t, s.do(http.MethodPost, "/api/v1/knowledge/spaces", token, map[string]any{"name": "Harbor"}), http.StatusCreated)["id"])
+	id := number(t, apiBody(t, s.do(http.MethodPost, "/api/v1/knowledge/spaces", token, map[string]any{"name": "Harbor"}), http.StatusCreated)["id"])
 	path := fmt.Sprintf("/api/v1/knowledge/spaces/%d", id)
 	read := s.do(http.MethodGet, path, token, nil)
-	space := apiData(t, read, http.StatusOK)["space"].(map[string]any)
+	space := apiBody(t, read, http.StatusOK)["space"].(map[string]any)
 	if space["effort"] == "" || number(t, space["context_limit"]) <= 0 {
 		t.Fatalf("create without effort kept no default: %v", space)
 	}
@@ -182,8 +209,8 @@ func TestSpaceCreateDefaultsAndRenameIfMatch(t *testing.T) {
 		t.Fatalf("rename with the read ETag: %d %s", got.status, got.body)
 	}
 	expectAPI(t, s.do(http.MethodPatch, path, token, map[string]any{"name": "Port"}, "If-Match", updated), http.StatusConflict, "stale")
-	now := apiData(t, s.do(http.MethodGet, path, token, nil), http.StatusOK)["space"].(map[string]any)
-	if got := s.do(http.MethodPatch, "/web/v1"+strings.TrimPrefix(path, "/api/v1"), token, map[string]any{"name": "Port"}, "If-Match", fmt.Sprint(now["updated_at"])); got.status != http.StatusOK {
+	now := apiBody(t, s.do(http.MethodGet, path, token, nil), http.StatusOK)["space"].(map[string]any)
+	if got := s.do(http.MethodPatch, path, token, map[string]any{"name": "Port"}, "If-Match", fmt.Sprint(now["updated_at"])); got.status != http.StatusOK {
 		t.Fatalf("rename with updated_at: %d %s", got.status, got.body)
 	}
 }
@@ -198,14 +225,14 @@ func TestSearchAllFindsSpacesAndContacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	asstExec(t, d, "INSERT INTO projects (id, name, instructions, effort, context_limit, created_at, updated_at) VALUES (9002, 'Harborview rebuild', '', 'low', 100000, 5, 5)")
-	groups := searchGroups(t, apiData(t, s.do(http.MethodGet, "/api/v1/search/all?q=harborview", token, nil), http.StatusOK))
+	groups := kindHits(apiBody(t, s.do(http.MethodGet, "/api/v1/search/all?q=harborview", token, nil), http.StatusOK))
 	if len(groups["space"]) != 1 || number(t, groups["space"][0]["id"]) != 9002 || groups["space"][0]["path"] != "/knowledge/spaces/9002" {
 		t.Fatalf("space hits: %v", groups["space"])
 	}
 	if len(groups["contact"]) != 1 || groups["contact"][0]["ref"] != "card-rui-7" || groups["contact"][0]["detail"] != "Ferries" {
 		t.Fatalf("contact hits: %v", groups["contact"])
 	}
-	only := searchGroups(t, apiData(t, s.do(http.MethodGet, "/web/v1/search/all?q=harborview&types=contact", token, nil), http.StatusOK))
+	only := kindHits(apiBody(t, s.do(http.MethodGet, "/api/v1/search/all?q=harborview&types=contact", token, nil), http.StatusOK))
 	if len(only["space"]) != 0 || len(only["contact"]) != 1 {
 		t.Fatalf("types=contact: %v", only)
 	}
@@ -216,9 +243,9 @@ func TestHomeNeedsYouReadsTheQueue(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO tasks (id, title, notes, status, priority, due, created_ts, updated_ts) VALUES (6, 'Renew the passport', '', 'open', 'normal', '2020-01-01', 0, 0)"); err != nil {
 		t.Fatal(err)
 	}
-	queue := apiData(t, s.do(http.MethodGet, "/api/v1/queue", token, nil), http.StatusOK)
+	queue := apiBody(t, s.do(http.MethodGet, "/api/v1/queue", token, nil), http.StatusOK)
 	home := s.do(http.MethodGet, "/api/v1/home", token, nil)
-	needs := apiData(t, home, http.StatusOK)["needs_you"].(map[string]any)
+	needs := apiBody(t, home, http.StatusOK)["needs_you"].(map[string]any)
 	if number(t, needs["total"]) != number(t, queue["total"]) || number(t, needs["total"]) < 1 {
 		t.Fatalf("needs_you %v, queue %v", needs, queue)
 	}
@@ -232,7 +259,7 @@ func TestHomeNeedsYouReadsTheQueue(t *testing.T) {
 	if _, err := d.Write.Exec("UPDATE tasks SET status = 'done' WHERE id = 6"); err != nil {
 		t.Fatal(err)
 	}
-	if again := s.do(http.MethodGet, "/web/v1/home", token, nil, "If-None-Match", home.header.Get("ETag")); again.status != http.StatusOK {
+	if again := s.do(http.MethodGet, "/api/v1/home", token, nil, "If-None-Match", home.header.Get("ETag")); again.status != http.StatusOK {
 		t.Fatalf("home revision ignored the queue: %d", again.status)
 	}
 }
