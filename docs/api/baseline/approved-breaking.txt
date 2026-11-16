@@ -14,3 +14,4 @@ api-path-removed-without-deprecation GET /subagents ruling 1; roles are fixed in
 api-path-removed-without-deprecation DELETE /subagents/{name} ruling 1; roles are fixed in code (P7.3, #902)
 api-path-removed-without-deprecation PUT /subagents/{name} ruling 1; roles are fixed in code (P7.3, #902)
 api-path-removed-without-deprecation PUT /subagents/{name}/enabled ruling 1; roles are fixed in code (P7.3, #902)
+response-body-any-of-added GET /events document corrected to match the wire since v3.0.0

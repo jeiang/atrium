@@ -129,7 +129,7 @@ func (s *Service) Configuration(ctx context.Context) (application.Read[Configura
 	if err != nil {
 		return application.Read[Configuration]{}, err
 	}
-	out := Configuration{Configured: s.oidc != nil}
+	out := Configuration{Configured: s.oidc != nil, Origins: []string{}}
 	if s.oidc != nil {
 		cfg, err := s.oidc.Config(ctx)
 		if err != nil {

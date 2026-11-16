@@ -18,7 +18,7 @@ func (w *walker) appEvent() object {
 		name := appEvent + camel(e.name)
 		w.schemas[name] = object{"type": "object", "required": []any{"event", "data"}, "properties": object{
 			"event": object{"type": "string", "const": e.name},
-			"data":  e.data,
+			"data":  object{"type": "string", "contentMediaType": "application/json", "contentSchema": e.data},
 		}}
 		ref := "#/components/schemas/" + name
 		mapping[e.name] = ref
@@ -26,7 +26,7 @@ func (w *walker) appEvent() object {
 	}
 	w.schemas[appEvent] = object{"anyOf": []any{
 		object{"oneOf": variants, "discriminator": object{"propertyName": "event", "mapping": mapping}},
-		object{"type": "object", "required": []any{"event", "data"}, "properties": object{"event": str, "data": object{"type": "object"}}},
+		object{"type": "object", "required": []any{"event", "data"}, "properties": object{"event": str, "data": object{"type": "string", "contentMediaType": "application/json"}}},
 	}}
 	return object{"$ref": "#/components/schemas/" + appEvent}
 }
