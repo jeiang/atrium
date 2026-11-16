@@ -91,16 +91,42 @@ test.describe('home on desktop', () => {
     await expect(page.locator('.home__weather')).toContainText(/Last updated (3 hours|1[5-9]\d minutes) ago/);
   });
 
-  test('no forecast shows one quiet hint with the location setting', async ({ page }) => {
-    await useScenario(page, { home: { weather: 'none' } });
+  test('no location shows one quiet hint', async ({ page }) => {
+    await useScenario(page, { home: { weather: 'unconfigured' } });
     await gotoHome(page);
     const card = page.locator('.home__weather');
     await expect(card.getByRole('heading', { level: 2, name: 'Weather' })).toBeVisible();
-    await expect(card.getByRole('link', { name: 'Set a location in the current interface' })).toHaveAttribute(
-      'href',
-      '/settings/assistant',
-    );
+    await expect(card).toContainText('Set a weather location to see the forecast here.');
     await expect(card).not.toContainText('°');
+  });
+
+  test('weather off shows no card', async ({ page }) => {
+    await useScenario(page, { home: { weather: 'off' } });
+    await gotoHome(page);
+    await expect(page.locator('.home__digest')).toBeVisible();
+    await expect(page.locator('.home__weather')).toHaveCount(0);
+  });
+
+  test('a failed fetch names the reason in plain words', async ({ page }) => {
+    await useScenario(page, { home: { weather: 'failed' } });
+    await gotoHome(page);
+    const card = page.locator('.home__weather');
+    await expect(card.getByRole('heading', { level: 2, name: 'Weather in Hillfield' })).toBeVisible();
+    await expect(card).toContainText('The weather service took too long to answer.');
+    await expect(card).not.toContainText('°');
+  });
+
+  test('a loading forecast keeps its size and fills in after the assistant topic changes', async ({ page }) => {
+    await useScenario(page, { home: { weather: 'loading' } });
+    await gotoHome(page);
+    const skeleton = page.locator('.home__weather .home__skeleton');
+    await expect(skeleton).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Number(Reflect.get(globalThis, 'atriumMockStreams') ?? 0))).toBe(1);
+    await postTopic(page, 'assistant', { home: { weather: 'ok' } });
+    await expect(page.getByRole('heading', { level: 2, name: 'Weather in Hillfield' })).toBeVisible();
+    await expect(skeleton).toHaveCount(0);
+    await postTopic(page, 'settings', { home: { weather: 'unconfigured' } });
+    await expect(page.locator('.home__weather')).toContainText('Set a weather location');
   });
 
   test('the assistant off hides the composer, the weather and the digest', async ({ page }) => {
@@ -135,12 +161,12 @@ test.describe('home on desktop', () => {
     await expect(list).toContainText('3 waiting');
     const rows = list.getByRole('list', { name: 'Waiting for you' }).getByRole('link');
     await expect(rows).toHaveCount(3);
-    await expect(rows.nth(0)).toHaveAttribute('href', '/inbox/proposal:12');
-    await expect(rows.nth(1)).toHaveAttribute('href', '/inbox/proposal:14');
-    await expect(rows.nth(2)).toHaveAttribute('href', '/inbox/draft:7');
+    await expect(rows.nth(0)).toHaveAttribute('href', '/inbox/proposal%3A12');
+    await expect(rows.nth(1)).toHaveAttribute('href', '/inbox/proposal%3A14');
+    await expect(rows.nth(2)).toHaveAttribute('href', '/inbox/draft%3A7');
     await expect(list.getByRole('link', { name: 'All in Inbox' })).toHaveAttribute('href', '/inbox');
     await rows.nth(0).click();
-    await expect(page).toHaveURL(/\/inbox\/proposal:12$/);
+    await expect(page).toHaveURL(/\/inbox\/proposal(:|%3A)12$/);
     await expect(page.getByRole('heading', { name: 'Move the dentist visit to Friday' }).first()).toBeVisible();
   });
 
@@ -265,7 +291,8 @@ test.describe('home design checks', () => {
   test('the empty, off and failed states pass axe', async ({ page }) => {
     await page.setViewportSize(desktop);
     for (const scenario of [
-      { needsYou: 0, home: { digest: 0, weather: 'none' as const } },
+      { needsYou: 0, home: { digest: 0, weather: 'unconfigured' as const } },
+      { home: { weather: 'failed' as const } },
       { modules: { assistant: 'off' as const } },
     ]) {
       await useScenario(page, scenario);

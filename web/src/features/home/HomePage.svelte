@@ -13,7 +13,7 @@
   import { useShell } from '../../shell/frame';
   import { moduleOn } from '../../shell/nav';
   import { navigate, p } from '../../shell/router';
-  import { ageMinutes, ageText, STALE_MINUTES } from './weather';
+  import { ageText, failureText } from './weather';
   import './home.css';
 
   const HOME_TOPICS = ['assistant', 'settings', 'calendar', 'tasks', 'attention', 'mail', 'knowledge'] as const;
@@ -30,7 +30,6 @@
   const NEEDS_LIMIT = 5;
   const DIGEST_LIMIT = 5;
   const digestRows = Array.from({ length: DIGEST_LIMIT }, (_, index) => index);
-  const LOCATION_SETTINGS = '/settings/assistant';
 
   const client = useQueryClient();
   const shell = useShell();
@@ -86,9 +85,12 @@
   });
   const reservedRows = $derived(Array.from({ length: Math.min(waiting, NEEDS_LIMIT) }, (_, index) => index));
 
-  const weather = $derived(home.data?.weather ?? null);
-  const age = $derived(weather ? ageMinutes(weather.current.time, weather.timezone, new Date()) : undefined);
-  const stale = $derived(age !== undefined && age > STALE_MINUTES ? age : undefined);
+  const weather = $derived(home.data?.weather);
+  const staleMinutes = $derived(
+    weather?.state === 'stale' && weather.fetched_at
+      ? Math.max(0, Math.floor((Date.now() / 1000 - weather.fetched_at) / 60))
+      : undefined,
+  );
 
   const offline = (query: { isPending: boolean; fetchStatus: string }): boolean =>
     query.isPending && query.fetchStatus === 'paused';
@@ -158,28 +160,42 @@
     </Section>
   </div>
 
-  {#if assistantOn}
+  {#snippet weatherSkeleton()}
+    <section class="card weather home__skeleton" aria-busy="true" aria-label="Loading the weather">
+      <span class="skel home__skel-head"></span>
+      <span class="skel home__skel-figure"></span>
+      <span class="skel home__skel-facts"></span>
+      <span class="skel"></span>
+    </section>
+  {/snippet}
+
+  {#if assistantOn && weather?.state !== 'off'}
     <div class="home__weather">
-      {#if home.data}
-        {#if weather}
-          <WeatherCard {weather} level={2}>
-            {#snippet note()}
-              {#if stale !== undefined}
-                <p class="weather__plan home__stale">Last updated {ageText(stale)}.</p>
-              {/if}
-            {/snippet}
-          </WeatherCard>
-        {:else}
-          <WeatherCard weather={null} level={2}>
-            {#snippet note()}
-              <p class="weather__plan">
-                No forecast right now. Set a location to see it here; if one is set, the forecast service did not answer
-                and Home tries again on the next refresh.
-              </p>
-              <a class="link home__setting" href={LOCATION_SETTINGS}>Set a location in the current interface</a>
-            {/snippet}
-          </WeatherCard>
-        {/if}
+      {#if weather?.state === 'loading'}
+        {@render weatherSkeleton()}
+      {:else if weather?.state === 'unconfigured'}
+        <WeatherCard weather={null} level={2}>
+          {#snippet note()}
+            <p class="weather__plan">Set a weather location to see the forecast here.</p>
+          {/snippet}
+        </WeatherCard>
+      {:else if weather?.state === 'failed'}
+        <WeatherCard {weather} level={2}>
+          {#snippet note()}
+            <p class="weather__plan home__failed">
+              {failureText(weather.failure)}
+              Home tries again on the next refresh.
+            </p>
+          {/snippet}
+        </WeatherCard>
+      {:else if weather}
+        <WeatherCard {weather} level={2}>
+          {#snippet note()}
+            {#if staleMinutes !== undefined}
+              <p class="weather__plan home__stale">Last updated {ageText(staleMinutes)}.</p>
+            {/if}
+          {/snippet}
+        </WeatherCard>
       {:else if home.isError}
         <ViewState kind="error" title="Home did not load" level={2}>
           {home.error?.message}
@@ -192,15 +208,12 @@
           The weather and the digest appear when the connection is back.
         </ViewState>
       {:else}
-        <section class="card weather home__skeleton" aria-busy="true" aria-label="Loading the weather">
-          <span class="skel home__skel-head"></span>
-          <span class="skel home__skel-figure"></span>
-          <span class="skel home__skel-facts"></span>
-          <span class="skel"></span>
-        </section>
+        {@render weatherSkeleton()}
       {/if}
     </div>
+  {/if}
 
+  {#if assistantOn}
     {#if home.data}
       <div class="home__digest card">
         <Digest

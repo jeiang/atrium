@@ -45,13 +45,6 @@
     font-weight: 700;
   }
 
-  .home__setting {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    min-block-size: var(--row);
-  }
-
   .home__stale {
     font-size: var(--t-sm);
     color: var(--ink-3);

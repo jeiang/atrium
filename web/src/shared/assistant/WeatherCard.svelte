@@ -23,11 +23,11 @@
 <section class="card weather" aria-labelledby="{uid}-title">
   <div class="card__head">
     <svelte:element this={`h${level}`} class="card__title" id="{uid}-title"
-      >Weather{weather ? ` in ${weather.location}` : ''}</svelte:element
+      >Weather{weather?.location ? ` in ${weather.location}` : ''}</svelte:element
     >
     {@render toggle?.()}
   </div>
-  {#if weather}
+  {#if weather?.current}
     <div class="weather__now">
       <span class="weather__temp">{degrees(weather.current.temperature_c)}</span>
       <span>{weather.current.condition}</span>

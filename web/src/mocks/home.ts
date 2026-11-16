@@ -1,11 +1,19 @@
 import { delay, HttpResponse, http } from 'msw';
-import type { Approval, ComposerView, Draft, Home, NewThread, PendingBody } from '../contract';
+import type {
+  Approval,
+  ComposerView,
+  Draft,
+  Home,
+  HomeWeather,
+  HomeWeatherState,
+  NewThread,
+  PendingBody,
+} from '../contract';
 import { API_BASE } from '../contract';
-import { wallClock } from '../features/home/weather';
 import { digestLines, weather } from '../gallery/assistant-fixtures';
 
 export interface HomeScenario {
-  weather?: 'ok' | 'stale' | 'none';
+  weather?: HomeWeatherState;
   digest?: number;
   delayMs?: number;
   fail?: boolean;
@@ -113,9 +121,6 @@ const composer: ComposerView = {
 
 function homeBody(state: HomeScenario): Home {
   const lines = [...digestLines, ...extraDigest.map((text) => ({ text }))].slice(0, state.digest ?? 7);
-  const kind = state.weather ?? 'ok';
-  const observed = new Date(Date.now() - (kind === 'stale' ? STALE_HOURS * 3_600_000 : 0));
-  observed.setUTCMinutes(Math.floor(observed.getUTCMinutes() / 15) * 15, 0, 0);
   return {
     threads: [],
     q: '',
@@ -127,11 +132,34 @@ function homeBody(state: HomeScenario): Home {
     about: null,
     defaults: { model: 'mock-model', effort: 'medium', context_limit: 0, thinking: 'off', web_search: true },
     composer,
-    weather:
-      kind === 'none'
-        ? null
-        : { ...weather, current: { ...weather.current, time: wallClock(weather.timezone, observed) } },
+    weather: weatherBody(state.weather ?? 'ok'),
   };
+}
+
+function weatherBody(state: HomeWeatherState): HomeWeather {
+  const now = Math.floor(Date.now() / 1000);
+  const empty = {
+    location: null,
+    timezone: null,
+    current: null,
+    today: null,
+    hours: [],
+    fetched_at: null,
+    failure: null,
+  };
+  switch (state) {
+    case 'off':
+    case 'unconfigured':
+      return { ...empty, state };
+    case 'loading':
+      return { ...empty, state, location: weather.location, timezone: weather.timezone };
+    case 'failed':
+      return { ...empty, state, location: weather.location, timezone: weather.timezone, failure: 'timeout' };
+    case 'stale':
+      return { ...weather, state, fetched_at: now - STALE_HOURS * 3600 };
+    default:
+      return { ...weather, state: 'ok', fetched_at: now };
+  }
 }
 
 export function homeHandlers(scenario: () => { home?: HomeScenario; needsYou?: number }) {
