@@ -67,10 +67,22 @@ administrator role or remote emergency bypass.
 - Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
   Such a peer must send exactly one valid value; otherwise the request is 400.
   Other forwarded-address headers do not choose a rate-limit identity.
+- `/web/v1` is the browser surface for the same API operations. It admits the
+  same identities as the pages (proxy from a trusted peer, an OIDC session, or
+  local on a loopback listener, the emergency listener included) and never a
+  bearer token: a request with an `Authorization` header gets 400
+  `bearer_refused`. Requests need `Atrium-Client: web` (binary content reads
+  excepted) and a `same-origin` `Sec-Fetch-Site` when the browser sends one;
+  writes also need a same-origin `Origin` and the CSRF token from
+  `GET /web/v1/session`, or get 403 `cross_origin` or `csrf_failed`. Signed
+  out, every `/web/v1` request gets 401 with the sign-in URL; sign-in itself
+  is still `/login`. `POST /web/v1/session/logout` signs an OIDC session out
+  of the pages too.
 
 Public requests are limited in process by token buckets owned by each listener:
-10 sign-in requests a minute per client address, 120 `/api/v1` requests a minute
-per address and 60 a minute per bearer token. A refused request returns 429 with
+10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`
+requests a minute per address and 60 a minute per bearer token or web session.
+A refused request returns 429 with
 `Retry-After` and `no-store` and changes nothing. The limits are code constants,
 not settings, and a restart clears them. The emergency listener has its own
 limiter, not a separate database or token store.
@@ -345,7 +357,10 @@ shows its secret once. API responses evolve additively within v1; generated
 an operator can call directly (`operator` or `operator_send` authority) has its
 own typed route, and no other operation does. Operations that run only after
 approval are reached through the approval route
-(`POST /api/v1/approvals/{id}/approve`).
+(`POST /api/v1/approvals/{id}/approve`). `/web/v1` serves every one of these
+routes to the web client under the same rules, authenticated by the web
+session instead of a bearer token (see Access); the same OpenAPI document
+describes both prefixes.
 
 Commands use typed outcomes and durable command receipts. Supply an
 `Idempotency-Key` to replay a matching completed request instead of executing

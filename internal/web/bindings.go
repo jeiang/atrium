@@ -10,6 +10,7 @@ func BuiltinBindings(oidc bool) []application.Binding {
 		{Kind: application.ProtocolOnly, Target: "GET /", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "GET /healthz", Reason: "transport"},
 		{Kind: application.ProtocolOnly, Target: "* /static/*", Reason: "static"},
+		{Kind: application.HTML, Target: "GET " + WebSessionPath, Uses: []application.Name{authapp.IdentityName}},
 	}
 	if oidc {
 		out = append(out,
@@ -17,6 +18,7 @@ func BuiltinBindings(oidc bool) []application.Binding {
 			application.Binding{Kind: application.HTML, Target: "POST /login", Uses: []application.Name{authapp.SigninStartName}},
 			application.Binding{Kind: application.HTML, Target: "GET /auth/callback", Uses: []application.Name{authapp.SigninCompleteName}},
 			application.Binding{Kind: application.HTML, Target: "POST /logout", Uses: []application.Name{authapp.LogoutName}},
+			application.Binding{Kind: application.HTML, Target: "POST " + WebLogoutPath, Uses: []application.Name{authapp.LogoutName}},
 		)
 	}
 	return out

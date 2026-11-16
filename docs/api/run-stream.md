@@ -1,6 +1,6 @@
 # Run event stream
 
-`GET /api/v1/threads/{thread_id}/runs/{run_id}/events` (bearer) and `GET /chat/{thread_id}/events?run={run_id}` (session) read the same durable stream with the same encoder.
+`GET /api/v1/threads/{thread_id}/runs/{run_id}/events` (bearer), `GET /web/v1/threads/{thread_id}/runs/{run_id}/events` (web session, the same binding) and `GET /chat/{thread_id}/events?run={run_id}` (session) read the same durable stream with the same encoder.
 
 ## Cursor
 
@@ -14,7 +14,7 @@ Each run has its own stream. `id:` is the decimal sequence number in that stream
 | cursor at or after the terminal event | 204 |
 | otherwise | 200 `text/event-stream` |
 
-A 200 starts with `retry: 1000`, then replays every event after the cursor in order and follows new events. `: heartbeat` is sent after 15 seconds without traffic; each heartbeat re-checks the bearer token or browser session and closes the stream when it is no longer valid. Open streams are limited to 4 per credential and 16 per server (429 `rate_limited`). The credential is the bearer token on `/api/v1`, the session on OIDC sign-in, and the browser (its CSRF cookie) under proxy or local authentication, which carry no per-session identity. The route answers no `ETag`, ignores `If-None-Match` and never answers 304.
+A 200 starts with `retry: 1000`, then replays every event after the cursor in order and follows new events. `: heartbeat` is sent after 15 seconds without traffic; each heartbeat re-checks the bearer token or browser session and closes the stream when it is no longer valid. Open streams are limited to 4 per credential and 16 per server (429 `rate_limited`). The credential is the bearer token on `/api/v1`, and on `/web/v1` and the pages the session on OIDC sign-in, and the browser (its CSRF cookie) under proxy or local authentication, which carry no per-session identity. The route answers no `ETag`, ignores `If-None-Match` and never answers 304.
 
 ## Events
 
