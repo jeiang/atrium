@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -79,6 +80,9 @@ type Declaration struct {
 	Recover           func(context.Context, *db.DB, config.Config) error
 	HasOperatorData   func(context.Context, db.Querier) (bool, error)
 	Metrics           []ops.Metric
+	Queues            []ops.Queue
+	Corpora           []embed.Corpus
+	ProposalScan      *proposals.Scan
 	Checks            []ops.Check
 	Operations        []application.Definition
 	Bindings          []application.Binding

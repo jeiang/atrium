@@ -32,6 +32,7 @@ type Catalog struct {
 	hooks      proposals.Hooks
 	credential config.AccountCredentialFunc
 	regs       registries
+	kinds      []proposals.Definition
 	metrics    []ops.Metric
 	checks     []ops.Check
 	jobs       []scheduler.Definition
@@ -159,13 +160,7 @@ func (c *Catalog) Approvals() []tool.Tool {
 	return out
 }
 
-func (c *Catalog) ProposeKinds() []proposals.Definition {
-	var out []proposals.Definition
-	for _, decl := range c.decls {
-		out = append(out, decl.ProposeKinds...)
-	}
-	return out
-}
+func (c *Catalog) ProposeKinds() []proposals.Definition { return slices.Clone(c.kinds) }
 
 func (c *Catalog) ReviewKinds(deps ReviewDeps) []review.Contribution {
 	var out []review.Contribution

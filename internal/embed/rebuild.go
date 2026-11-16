@@ -11,13 +11,13 @@ import (
 
 type Probe func(ctx context.Context, url, model string) (reason string, dim int)
 
-func Rebuild(ctx context.Context, d *db.DB, url, model string, s endpoint.Settings, probe Probe) (bool, error) {
+func Rebuild(ctx context.Context, d *db.DB, corpora []Corpus, url, model string, s endpoint.Settings, probe Probe) (bool, error) {
 	active, err := Active(ctx, d.Read)
 	if err != nil {
 		return false, err
 	}
 	serves := func(i Index) bool { return i.URL == url && i.Model == model }
-	build, ok, err := Building(ctx, d)
+	build, ok, err := Building(ctx, d, corpora)
 	if err != nil {
 		return false, err
 	}
@@ -38,13 +38,13 @@ func Rebuild(ctx context.Context, d *db.DB, url, model string, s endpoint.Settin
 		if active.URL == "" && dim == active.Dimension {
 			return false, active.Adopt(ctx, d, url, model)
 		}
-		if build, err = Create(ctx, d, url, model, dim); err != nil {
+		if build, err = Create(ctx, d, corpora, url, model, dim); err != nil {
 			return false, err
 		}
 	}
 	s.EmbedModel, s.Dim = model, build.Dimension
 	ctx = endpoint.With(ctx, s)
-	n, err := Fill(ctx, d, url, build.Index, nil)
+	n, err := Fill(ctx, d, corpora, url, build.Index, nil)
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}

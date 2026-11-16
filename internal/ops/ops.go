@@ -82,6 +82,25 @@ type Metric struct {
 	Collect func(ctx context.Context, q db.Querier) ([]Sample, error)
 }
 
+type Queue struct {
+	Name  string
+	Count func(context.Context, db.Querier) (int, error)
+}
+
+func QueueDepth(queues []Queue) Metric {
+	return Metric{Name: "atrium_queue_depth", Help: "Open items in each attention queue.", Type: "gauge", Collect: func(ctx context.Context, q db.Querier) ([]Sample, error) {
+		out := make([]Sample, 0, len(queues))
+		for _, queue := range queues {
+			n, err := queue.Count(ctx, q)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, Sample{Labels: [][2]string{{"queue", queue.Name}}, Value: float64(n)})
+		}
+		return out, nil
+	}}
+}
+
 type Check struct {
 	Name     string
 	Critical bool

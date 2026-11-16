@@ -72,11 +72,10 @@ import (
 )
 
 type Module struct {
-	ProposeKinds []proposals.Definition
-	Now          func() float64
-	Jobs         jobworker.Dependencies
-	Open         func(context.Context) (context.Context, *service.Service, func(), error)
-	Start        func(context.Context) error
+	Now   func() float64
+	Jobs  jobworker.Dependencies
+	Open  func(context.Context) (context.Context, *service.Service, func(), error)
+	Start func(context.Context) error
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -150,7 +149,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
 		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), schedulecmd.Command(scheduleCLIService(mc.Env, m.Now))},
-		Tools:    ToolDefinitions(m.ProposeKinds),
+		Tools:    ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
@@ -193,8 +192,8 @@ func SettingGroups() []settings.Group {
 	}
 }
 
-func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
-	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
+func ToolDefinitions() []module.ToolDefinition {
+	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Declared()}
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),

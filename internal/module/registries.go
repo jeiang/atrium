@@ -8,7 +8,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/review"
 )
 
@@ -70,6 +74,9 @@ type registries struct {
 	refs        map[string]RefKind
 	attachments []Attachment
 	categories  []review.Category
+	corpora     []embed.Corpus
+	queues      []ops.Queue
+	scans       []proposals.Scan
 }
 
 type claims map[string]string
@@ -87,9 +94,35 @@ func compileRegistries(decls []Declaration) (registries, error) {
 	channels := claims{SystemChannel: platformOwner}
 	refs, tools, hubs, pages := claims{}, claims{}, claims{}, claims{}
 	categories := claims{review.CategorySettings: platformOwner, review.CategoryOperations: platformOwner}
-	operations := claims{}
+	operations, corpora, queues := claims{}, claims{}, claims{}
 	fallback := ""
 	for _, d := range decls {
+		for _, c := range d.Corpora {
+			if strings.TrimSpace(c.Name) == "" {
+				return registries{}, &InvalidDeclaration{Module: d.Name, Field: "corpora"}
+			}
+			if err := corpora.take("embedding corpus", c.Name, d.Name); err != nil {
+				return registries{}, err
+			}
+			r.corpora = append(r.corpora, c)
+		}
+		for _, q := range d.Queues {
+			if strings.TrimSpace(q.Name) == "" || q.Count == nil {
+				return registries{}, &InvalidDeclaration{Module: d.Name, Field: "queues"}
+			}
+			if err := queues.take("queue", q.Name, d.Name); err != nil {
+				return registries{}, err
+			}
+			r.queues = append(r.queues, q)
+		}
+		if s := d.ProposalScan; s != nil {
+			if s.Run == nil || len(s.Uses) == 0 {
+				return registries{}, &InvalidDeclaration{Module: d.Name, Field: "proposal scan"}
+			}
+			scan := *s
+			scan.Module = d.Name
+			r.scans = append(r.scans, scan)
+		}
 		for _, origin := range d.EffectOrigins {
 			if err := claims(r.origins).take("effect origin", origin.Name, d.Name); err != nil {
 				return registries{}, err
@@ -168,6 +201,8 @@ func compileRegistries(decls []Declaration) (registries, error) {
 	slices.Sort(r.channels)
 	r.channels = append(r.channels, SystemChannel)
 	slices.SortFunc(r.categories, func(a, b review.Category) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(r.queues, func(a, b ops.Queue) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(r.scans, func(a, b proposals.Scan) int { return strings.Compare(a.Module, b.Module) })
 	return r, nil
 }
 
@@ -183,3 +218,28 @@ func (c *Catalog) Ref(kind string) (RefKind, bool) {
 func (c *Catalog) Attachments() []Attachment { return slices.Clone(c.regs.attachments) }
 
 func (c *Catalog) ActivityCategories() []review.Category { return slices.Clone(c.regs.categories) }
+
+func (c *Catalog) Corpora() []embed.Corpus { return slices.Clone(c.regs.corpora) }
+
+func (c *Catalog) ProposalScans() []proposals.Scan { return slices.Clone(c.regs.scans) }
+
+func bindScans(decls []Declaration, scans []proposals.Scan) []Declaration {
+	var uses []application.Name
+	for _, s := range scans {
+		uses = append(uses, s.Uses...)
+	}
+	out := slices.Clone(decls)
+	for i, d := range out {
+		if d.Name != Core {
+			continue
+		}
+		bindings := slices.Clone(d.Bindings)
+		for j, b := range bindings {
+			if b.Kind == application.CLI && b.Target == proposals.ScanCommand {
+				bindings[j].Uses = slices.Concat(b.Uses, uses)
+			}
+		}
+		out[i].Bindings = bindings
+	}
+	return out
+}

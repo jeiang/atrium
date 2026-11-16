@@ -2,8 +2,6 @@ package module
 
 import (
 	"errors"
-
-	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/runtime"
@@ -83,6 +81,12 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			kinds[k.Kind.Name] = true
 		}
 	}
+	regs, err := compileRegistries(decls)
+	if err != nil {
+		return nil, err
+	}
+	decls = bindScans(decls, regs.scans)
+	decls, proposeKinds := collectKinds(decls)
 	commands := map[string]bool{}
 	sectionNames := map[string]bool{}
 	var sections []settingspage.Section
@@ -199,12 +203,15 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	regs, err := compileRegistries(decls)
-	if err != nil {
-		return nil, err
+	if len(regs.queues) > 0 {
+		depth := ops.QueueDepth(regs.queues)
+		if metrics[depth.Name] {
+			return nil, &DuplicateMetric{Name: depth.Name}
+		}
+		allMetrics = append(allMetrics, depth)
 	}
-	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
-		conns: conns, hooks: hooks, credential: credential, regs: regs, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
+	return &Catalog{decls: decls, optional: optional, settings: reg, sections: sections,
+		conns: conns, hooks: hooks, credential: credential, regs: regs, kinds: proposeKinds, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
 		operations: operations, bindings: bindings}, nil
 }
 

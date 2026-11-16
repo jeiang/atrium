@@ -51,6 +51,10 @@ func definition(kinds []asstapp.ProposalDefinition) tool.Tool {
 	}
 }
 
+func Declared() module.ToolDefinition {
+	return module.ToolDefinition{Tool: tool.Tool{Name: Name}, Collect: Definition}
+}
+
 func Definition(kinds []asstapp.ProposalDefinition) module.ToolDefinition {
 	return module.ToolDefinition{Tool: definition(kinds), Bind: func(ctx context.Context, _ asstapp.Querier, _ tool.Tool) (tool.Tool, bool, error) {
 		var enabled []asstapp.ProposalDefinition
