@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -29,19 +30,23 @@ func mediaAudit(t *testing.T, d *db.DB, operation, want string) map[string]int {
 	return counts
 }
 
-func TestMediaEmptyPollAndSweepAuditNoop(t *testing.T) {
+func TestMediaEmptyPollSkipsAndEmptySweepAuditsNoop(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	_, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
-	for _, command := range []string{"poll", "sweep"} {
-		if got := runApp(t, "media", command); got.code != cli.ExitOK {
-			t.Fatalf("%s: %d %s", command, got.code, got.stderr)
-		}
-		mediaAudit(t, d, "media."+command, "noop")
+	if got := runApp(t, "media", "poll"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "no show is followed") {
+		t.Fatalf("poll with nothing followed: %d %q %s", got.code, got.stdout, got.stderr)
 	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'media.poll'"); n != 0 {
+		t.Fatalf("%d media.poll audit rows for a skipped poll, want 0", n)
+	}
+	if got := runApp(t, "media", "sweep"); got.code != cli.ExitOK {
+		t.Fatalf("sweep: %d %s", got.code, got.stderr)
+	}
+	mediaAudit(t, d, "media.sweep", "noop")
 }
 
 func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
