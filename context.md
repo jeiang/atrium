@@ -383,8 +383,9 @@ claims about the running application. Operator contracts are in
   `weather` tool: current conditions and an hourly/daily forecast for the
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
-  `weather_longitude` and `weather_location_name`), validated in range and
-  read-only when the host file declares them. Without a location name or
+  `weather_longitude` and `weather_location_name`), validated in range,
+  offered in the Assistant settings' Weather group and on the `/next/`
+  weather connection, and read-only when the host file declares them. Without a location name or
   both coordinates, the weather connection checks as `unconfigured` and
   probes nothing. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent

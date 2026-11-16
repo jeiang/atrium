@@ -167,13 +167,13 @@ func AttentionSources(env config.Env) []attention.Source {
 }
 
 func SettingGroups() []settings.Group {
-	return []settings.Group{
+	return append([]settings.Group{
 		{Name: "spending", Title: "Spending", Keys: append([]string{inference.ThreadCapKey}, append(runCaps(), assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 			memory.ModelKey, memory.EffortKey,
 		}},
-	}
+	}, weather.SettingGroups()...)
 }
 
 func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
