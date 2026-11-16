@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/tool"
@@ -78,7 +77,6 @@ type Executor struct {
 	Env      config.Env
 	Now      func() float64
 	Ledger   *ledger.Store
-	MailOpen mail.OpenFunc
 	Tools    []tool.Tool
 	Registry registry.Source
 }
@@ -119,7 +117,7 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 		proposalID := p.ID
 		tc := &tool.Context{
 			DB: e.DB, Env: e.Env, Kind: payload.RunKind, ThreadID: payload.ThreadID, RunID: payload.RunID,
-			ProposalID: &proposalID, AllowedURLs: map[string]struct{}{}, Now: e.now, Ledger: e.Ledger, MailOpen: e.MailOpen,
+			ProposalID: &proposalID, AllowedURLs: map[string]struct{}{}, Now: e.now, Ledger: e.Ledger,
 		}
 		if e.Registry == nil {
 			return nil, proposals.ProposalError("no tool registry is available to re-authorize " + t.Name)

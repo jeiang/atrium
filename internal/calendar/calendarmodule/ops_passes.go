@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
@@ -72,12 +71,11 @@ func (m Module) calendarCLI(env config.Env, tools registry.Source) calendarcmd.O
 		if err := config.Boot(ctx, env, d, cfg); err != nil {
 			return fail(err)
 		}
-		open := imapclient.Opener(cfg)
-		store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, open, assistant.Now)
+		store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, cfg, assistant.Now)
 		if err != nil {
 			return fail(err)
 		}
-		r, err := runner.New(tools, store, open)
+		r, err := runner.New(tools, store)
 		if err != nil {
 			return fail(err)
 		}

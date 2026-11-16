@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
@@ -107,12 +106,11 @@ func (b *Bindings) OpenAssistant(ctx context.Context) (context.Context, *service
 }
 
 func (a *App) bindLive(ctx context.Context, tools registry.Source, now func() float64) error {
-	open := imapclient.Opener(a.config)
-	store, err := a.catalog.Ledger(a.db, a.env, open, assistant.Now)
+	store, err := a.catalog.Ledger(a.db, a.env, a.config, assistant.Now)
 	if err != nil {
 		return err
 	}
-	run, err := runner.New(tools, store, open)
+	run, err := runner.New(tools, store)
 	if err != nil {
 		return err
 	}
