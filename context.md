@@ -423,7 +423,8 @@ claims about the running application. Operator contracts are in
   none.
 - `atrium connections check` runs the silent check of every configured
   connection, and `--changed` only those never checked since they were
-  added or their host declaration changed. It exits non-zero when a
+  added, declared again, or their host declaration changed (including a
+  credential file slot added, removed or moved). It exits non-zero when a
   checked connection is failing (in its window or not) or needs reauth.
   The NixOS unit runs `connections check --changed` as `ExecStartPre`
   with failure ignored, so a deploy reports changed connections in the

@@ -17,12 +17,13 @@ import (
 const HostConfigEnv = "ATRIUM_HOST_CONFIG"
 
 type HostConnection struct {
-	Kind            string
-	Label           string
-	Config          map[string]string
-	Transport       map[string]string
-	Capabilities    []string
-	CredentialFiles map[string]string
+	Kind                    string
+	Label                   string
+	Config                  map[string]string
+	Transport               map[string]string
+	Capabilities            []string
+	CredentialFiles         map[string]string
+	DeclaredCredentialFiles map[string]string
 }
 
 type Host struct {
@@ -309,6 +310,7 @@ func (h *Host) readConnections(env Env, path string, raw any) error {
 		if c.Transport, err = expandMap(env, path, id, "transport", c.Transport); err != nil {
 			return err
 		}
+		c.DeclaredCredentialFiles = c.CredentialFiles
 		if c.CredentialFiles, err = expandMap(env, path, id, "credential_files", c.CredentialFiles); err != nil {
 			return err
 		}
