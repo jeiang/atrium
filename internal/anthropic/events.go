@@ -23,6 +23,12 @@ type ToolDoneEvent struct {
 	ID      string
 	OK      bool
 	Preview string
+	Results []WebResult
+}
+
+type WebResult struct {
+	URL   string
+	Title string
 }
 
 func (ThinkingEvent) event()  {}
@@ -46,7 +52,11 @@ func eventOf(acc *sdk.BetaMessage, ev sdk.BetaRawMessageStreamEventUnion) Event 
 			return ToolStartEvent{ID: block.ID, Name: block.Name, Input: block.Input}
 		case "web_search_tool_result":
 			results := block.Content.OfBetaWebSearchResultBlockArray
-			return ToolDoneEvent{ID: block.ToolUseID, OK: block.Content.ErrorCode == "", Preview: fmt.Sprintf("%d results", len(results))}
+			found := make([]WebResult, len(results))
+			for i, r := range results {
+				found[i] = WebResult{URL: r.URL, Title: r.Title}
+			}
+			return ToolDoneEvent{ID: block.ToolUseID, OK: block.Content.ErrorCode == "", Preview: fmt.Sprintf("%d results", len(results)), Results: found}
 		}
 	}
 	return nil

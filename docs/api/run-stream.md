@@ -25,12 +25,17 @@ A 200 starts with `retry: 1000`, then replays every event after the cursor in or
 | `run_start` | `thread_id`, `thread_kind`, `role` (string or null), `title` (string or null), `effort`, `parent_run_id` (integer or null) |
 | `thinking`, `text` | `text`: the next chunk of raw markdown |
 | `tool_start` | `id`, `name`, `args` (the clipped arguments) |
-| `tool_done` | `id`, `ok`, `preview` |
+| `tool_progress` | `id`, `text`: what the running tool call `id` is doing now; live only, see below |
+| `tool_done` | `id`, `ok`, `preview`, optional `results`: `[{url,title}]` |
 | `user` | `text`, `queue_id`: a queued message the run took up |
 | `plan` | `items`: `[{text,done}]`, the whole plan |
 | `run_done` | `state`, `error` (string or null); written once when a run ends |
 
 Text is markdown: render CommonMark with tables, strikethrough and autolinks, and escape raw HTML.
+
+`tool_progress` is sent only for a tool that runs a sub-agent (`search_web`, `research`, `lookup`): each tool the sub-agent starts sends one event for the calling run, whose `text` is the tool name and its clipped arguments, as in the sub-agent's own `tool_start`. Other tools send none. It is live only: it has no `id:`, is never stored or replayed, does not move the cursor, and reaches only streams open in the process that runs the tool while it runs. The next `tool_progress` or the `tool_done` of the same `id` supersedes it. The sub-agent's own durable events are copied into the stream as well, under its `run_id`.
+
+`results` is the list the transcript shows on the finished step, so a client can draw sources without refetching: on the `tool_done` of a `web_search` call, written as soon as the search returns and before the run's answer, the search results (possibly empty); on a successful `search_web`, its verified sources. Other tool calls have no `results`. A missing title is the URL. Titles and URLs come from the web: treat them as untrusted text and link only `http` and `https` URLs.
 
 Terminal events are durable and written exactly once, only to the run's own stream:
 

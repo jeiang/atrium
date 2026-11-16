@@ -10023,6 +10023,7 @@
                 "text": "#/components/schemas/RunStreamEventText",
                 "thinking": "#/components/schemas/RunStreamEventThinking",
                 "tool_done": "#/components/schemas/RunStreamEventToolDone",
+                "tool_progress": "#/components/schemas/RunStreamEventToolProgress",
                 "tool_start": "#/components/schemas/RunStreamEventToolStart",
                 "user": "#/components/schemas/RunStreamEventUser"
               },
@@ -10040,6 +10041,9 @@
               },
               {
                 "$ref": "#/components/schemas/RunStreamEventToolStart"
+              },
+              {
+                "$ref": "#/components/schemas/RunStreamEventToolProgress"
               },
               {
                 "$ref": "#/components/schemas/RunStreamEventToolDone"
@@ -10470,6 +10474,24 @@
               "preview": {
                 "type": "string"
               },
+              "results": {
+                "items": {
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url",
+                    "title"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
               "run_id": {
                 "format": "int64",
                 "maximum": 9007199254740991,
@@ -10496,6 +10518,40 @@
         "required": [
           "event",
           "id",
+          "data"
+        ],
+        "type": "object"
+      },
+      "RunStreamEventToolProgress": {
+        "properties": {
+          "data": {
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "run_id": {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "run_id",
+              "id",
+              "text"
+            ],
+            "type": "object"
+          },
+          "event": {
+            "const": "tool_progress",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
           "data"
         ],
         "type": "object"

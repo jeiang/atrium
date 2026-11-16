@@ -12,10 +12,7 @@ func OpenFile(path string, key Key) (*sql.DB, error) {
 	if strings.ContainsAny(path, "?#") {
 		return nil, fmt.Errorf("db: path %q contains '?' or '#'", path)
 	}
-	s, err := dsn(path, false, key)
-	if err != nil {
-		return nil, err
-	}
+	s := dsn(path, false, key)
 	if err := guardFile(path, key); err != nil {
 		return nil, err
 	}
@@ -29,10 +26,7 @@ func OpenFile(path string, key Key) (*sql.DB, error) {
 }
 
 func Export(ctx context.Context, src *sql.DB, dest string, key Key) (err error) {
-	uri, err := dsn(dest, false, key)
-	if err != nil {
-		return err
-	}
+	uri := dsn(dest, false, key)
 	conn, err := src.Conn(ctx)
 	if err != nil {
 		return err
@@ -86,7 +80,7 @@ func Backup(ctx context.Context, src *sql.DB, dest string, key Key) (err error) 
 		return err
 	}
 	defer func() { err = errors.Join(err, dst.Close()) }()
-	if err := backupConns(ctx, src, dst, dest); err != nil {
+	if err := backupConns(ctx, src, dst); err != nil {
 		return err
 	}
 	_, err = dst.ExecContext(ctx, "PRAGMA journal_mode = DELETE")

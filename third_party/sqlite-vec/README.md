@@ -17,6 +17,3 @@ Vendored for the cgo build of `internal/db` (github.com/mattn/go-sqlite3).
 driver's symbols and registers it with `sqlite3_auto_extension`. Flags:
 `-D__COSMOPOLITAN__` on Linux (musl lacks `u_int8_t`), `-mavx
 -DSQLITE_VEC_ENABLE_AVX` on linux/amd64, `-DSQLITE_VEC_ENABLE_NEON` on arm64.
-
-The pure-Go fallback (`go build -tags modernc`) uses `modernc.org/sqlite/vec`
-instead, which bundles the same 0.1.9.
