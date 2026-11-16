@@ -4495,14 +4495,7 @@
             "type": "string"
           },
           "weather": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/HomeWeather"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/HomeWeather"
           },
           "welcome": {
             "type": "boolean"
@@ -4517,14 +4510,49 @@
           "digest",
           "agenda",
           "defaults",
-          "composer"
+          "composer",
+          "weather"
         ],
         "type": "object"
       },
       "HomeWeather": {
         "properties": {
           "current": {
-            "$ref": "#/components/schemas/Current"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Current"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unreachable",
+                  "timeout",
+                  "no_match",
+                  "bad_reply",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "hours": {
             "items": {
@@ -4533,10 +4561,35 @@
             "type": "array"
           },
           "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "off",
+              "unconfigured",
+              "loading",
+              "failed",
+              "stale",
+              "ok"
+            ],
             "type": "string"
           },
           "timezone": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "today": {
             "anyOf": [
@@ -4550,9 +4603,7 @@
           }
         },
         "required": [
-          "location",
-          "timezone",
-          "current",
+          "state",
           "hours"
         ],
         "type": "object"

@@ -2,6 +2,9 @@ package state
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"slices"
 
 	"github.com/jeiang/atrium/internal/application"
 )
@@ -25,4 +28,14 @@ func DescribeEvents() application.Definition {
 
 func (s *Store) All(ctx context.Context) ([]Counter, error) {
 	return s.Read(ctx, nil, scopes)
+}
+
+func (s *Store) Touch(ctx context.Context, scope string) error {
+	if !slices.Contains(scopes, scope) {
+		return fmt.Errorf("state: unknown revision scope %q", scope)
+	}
+	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "INSERT INTO read_revisions(scope,value) VALUES(?,1) ON CONFLICT(scope) DO UPDATE SET value=value+1", scope)
+		return err
+	})
 }
