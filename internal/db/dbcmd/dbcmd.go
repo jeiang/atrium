@@ -22,7 +22,6 @@ func Command(maintenance *maintenanceapp.Service) *cli.Command {
 			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
 			{Name: "check", Help: "verify database integrity and report FTS5 and vec0 table counts", Setup: s.check},
-			{Name: "import-v2", Help: "copy a v2 database into this fresh v3 database", Setup: s.importV2},
 		},
 	}
 }
@@ -104,22 +103,6 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 		}
 		r := res.Data
 		_, _ = fmt.Fprintf(e.Stdout, "rekeyed %s: key id %s -> %s\n", r.Database, r.From, r.To)
-		return cli.ExitOK
-	}
-}
-
-func (s *service) importV2(a *cli.Args) cli.Handler {
-	source := a.Arg("path", cli.Opt{Help: "path to the v2 database to import into this fresh v3 database"})
-	sourceConfig := a.String("source-config", "", cli.Opt{Metavar: "PATH", Help: "v2 configuration file holding pinned settings, as the v2 ATRIUM_CONFIG file did"})
-	sourceEnv := a.String("source-env", "", cli.Opt{Metavar: "PATH", Help: "file of v2 ATRIUM_* environment pins, one NAME=VALUE per line"})
-	return func(e *cli.Env) int {
-		res, err := s.maintenance.ImportV2(e.Ctx, maintenanceapp.ImportV2Input{Source: *source, SourceConfig: *sourceConfig, SourceEnv: *sourceEnv})
-		if err != nil {
-			return cli.Fail(e, err)
-		}
-		for _, line := range res.Data.Lines {
-			_, _ = fmt.Fprintln(e.Stdout, line)
-		}
 		return cli.ExitOK
 	}
 }

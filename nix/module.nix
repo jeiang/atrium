@@ -675,7 +675,7 @@ in {
     initialTimezone = mkOption {
       type = types.nullOr types.str;
       default = config.time.timeZone;
-      description = "Time zone stored as the operator tz value when a fresh database has none; a stored or imported value wins.";
+      description = "Time zone stored as the operator tz value when a fresh database has none; a stored value wins.";
     };
 
     environmentFiles = mkOption {

@@ -28,7 +28,7 @@ no default; a `null` default is not a usable credential or listener value.
 | `mailAccounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections and password credentials; fields are below. |
 | `secretFiles` | attribute set of strings | `{}` | App signing key file paths, delivered through `LoadCredential`. Only `action_links.action_link_key` and `media.link_key` are accepted. |
 | `database.keyFile` | null or string | `null` | Absolute host key-file path, delivered as the `db-key` credential. |
-| `initialTimezone` | null or string | `config.time.timeZone` | Seeds `tz` only when no operator/imported value exists. |
+| `initialTimezone` | null or string | `config.time.timeZone` | Seeds `tz` only when no operator value exists. |
 | `environmentFiles` | list of strings | `[]` | `EnvironmentFile` paths for the application service and `atrium-run`, not the agent. Accepted environment inputs still undergo startup validation. |
 | `embeddingServerUnits` | list of strings | `[]` | Adds embedding-service units to the application's `After` and `Wants`. |
 
@@ -323,7 +323,7 @@ The second fragment extends an enabled application configuration. Evaluation
 is not proof that host files, TLS names, permissions, network interfaces, or
 systemd activation work at runtime.
 
-## Import boundary and retired host contracts
+## Retired host contracts
 
 The v3 module has one application unit, not separate web, watch, sync, scan,
 mirror, scheduler, or backup services or timers. The module does not remove
@@ -343,9 +343,8 @@ The removed `web.local.enable`/`.port`, `modelServerUnits`, and
 There is no `settings`, `mediaRoot`, or `web.local.port` input in this option
 reference. Legacy service credential keys are not accepted app signing files.
 
-An existing v2 database is imported with `atrium db import-v2` into a fresh
-path after its writers stop. It is not opened and upgraded in place. The
-importer accepts schema 11, carries durable state and write evidence, drops
-transient histories/sessions/mirrors, reports host requirements, and resets
-mail to shadow. It refuses a non-empty destination or unsafe in-flight source
-writes. Details are in [Behavior](behavior.md#importing-an-existing-database).
+An existing v2 database is not opened or upgraded in place; this release
+refuses it before any write. v2 data reaches v3 only through release
+`v3.0.0`, the last release that carries the v2 importer: import the v2
+database with that release into a fresh path after its writers stop, then
+upgrade.

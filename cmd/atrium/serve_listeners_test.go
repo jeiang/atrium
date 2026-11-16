@@ -261,7 +261,7 @@ func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
 		if status, body, _ := fetch(t, public, http.MethodPost, fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {decision + ": read " + srv.URL + "/a then " + srv.URL + "/b"}}); status >= http.StatusBadRequest {
 			t.Fatalf("%s: POST message = %d: %s", decision, status, body)
 		}
-		proposal, _ := waitParkedPermission(t, d, thread)
+		proposal := waitParkedPermission(t, d, thread)
 		code, body := hxFetch(t, local, http.MethodPost, emergency+fmt.Sprintf("/proposals/%d/%s", proposal, decision), form)
 		if code != http.StatusOK || strings.Contains(body, "the assistant module is not running") {
 			t.Fatalf("%s on the emergency listener = %d: %s", decision, code, body)

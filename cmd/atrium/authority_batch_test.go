@@ -220,7 +220,7 @@ func TestServerWebSearchResultMarksBeforeTheSameResponseClientTool(t *testing.T)
 	}
 	thread := latestThread(t, dir)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	proposal, _ := waitParkedPermission(t, d, thread)
+	proposal := waitParkedPermission(t, d, thread)
 	var title string
 	if err := d.Read.QueryRow("SELECT title FROM proposals WHERE id = ?", proposal).Scan(&title); err != nil {
 		t.Fatal(err)
@@ -297,7 +297,7 @@ func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	proposal, _ := waitParkedPermission(t, d, thread)
+	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
 	}
@@ -350,7 +350,7 @@ func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	proposal, _ := waitParkedPermission(t, d, thread)
+	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); len(hits) != 0 {
 		t.Fatalf("page fetches before the decision = %v, want none", hits)
 	}
@@ -530,7 +530,7 @@ func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	proposal, _ := waitParkedPermission(t, d, thread)
+	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
 	}

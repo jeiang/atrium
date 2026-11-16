@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"slices"
 	"strconv"
@@ -44,7 +43,6 @@ type ActivityEntry struct {
 	Mail      *MailActivity      `json:"mail,omitempty"`
 	Write     *WriteActivity     `json:"write,omitempty"`
 	Settings  *SettingsActivity  `json:"settings,omitempty"`
-	Phone     *PhoneActivity     `json:"phone,omitempty"`
 	Operation *OperationActivity `json:"operation,omitempty"`
 }
 
@@ -58,13 +56,6 @@ type OperationActivity struct {
 	RunID     *int64  `json:"run_id"`
 	CommandID *string `json:"command_id"`
 	EffectIDs []int64 `json:"effect_ids"`
-}
-
-type PhoneActivity struct {
-	Actor  string `json:"actor"`
-	Kind   string `json:"kind"`
-	Status string `json:"status"`
-	Target string `json:"target"`
 }
 
 type MailActivity struct {
@@ -164,7 +155,7 @@ type ActivityKey struct {
 	Source string  `json:"s"`
 }
 
-var activitySources = []string{SourceOperation, SourceMail, "phone", SourceSettings, "effect"}
+var activitySources = []string{SourceOperation, SourceMail, SourceSettings, "effect"}
 
 func (k ActivityKey) Valid() bool {
 	return k.TS >= 0 && !math.IsInf(k.TS, 0) && k.ID > 0 && k.ID < math.MaxInt64 && slices.Contains(activitySources, k.Source)
@@ -393,21 +384,7 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, err
 			mail.saw(keyOf(e), len(actions), fetch)
 			mail.entries = append(mail.entries, e)
 		}
-		ts, id = in.bound("phone")
-		found, err := ledger.ResolutionsBefore(ctx, q, "phone", ts, id, fetch)
-		if err != nil {
-			return Activity{}, err
-		}
-		var phone sourcePage
-		for _, r := range found {
-			e := ActivityEntry{
-				ID: r.ID, TS: r.TS, Source: "phone", Category: CategoryMail,
-				Phone: &PhoneActivity{Actor: r.Actor, Kind: phoneKind(r), Status: r.Outcome, Target: phoneTarget(r)},
-			}
-			phone.saw(keyOf(e), len(found), fetch)
-			phone.entries = append(phone.entries, e)
-		}
-		pages = append(pages, mail, phone)
+		pages = append(pages, mail)
 	}
 	if category == "" || category == CategorySettings {
 		ts, id := in.bound(SourceSettings)
@@ -469,25 +446,6 @@ func merge(pages []sourcePage, limit int) Activity {
 	}
 	out.Entries = append(out.Entries, entries...)
 	return out
-}
-
-func phoneKind(r ledger.ResolutionRow) string {
-	if r.EffectID == nil {
-		return "proposal"
-	}
-	return r.Operation
-}
-
-func phoneTarget(r ledger.ResolutionRow) string {
-	switch {
-	case r.EffectID == nil && r.ProposalID != nil:
-		return fmt.Sprintf("proposal %d", *r.ProposalID)
-	case r.EffectID != nil && r.Origin == ledger.AutoOrigin:
-		return fmt.Sprintf("mail %d", *r.EffectID)
-	case r.EffectID != nil:
-		return fmt.Sprintf("%s %d", r.Operation, *r.EffectID)
-	}
-	return ""
 }
 
 func EffectEntry(e ledger.Effect) ActivityEntry {

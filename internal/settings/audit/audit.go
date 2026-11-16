@@ -17,14 +17,13 @@ const (
 	API       Source = "api"
 	Tool      Source = "tool"
 	Job       Source = "job"
-	Phone     Source = "phone"
 	Import    Source = "import"
 	Migration Source = "migration"
 )
 
 func (s Source) Valid() bool {
 	switch s {
-	case CLI, UI, API, Tool, Job, Phone, Import, Migration:
+	case CLI, UI, API, Tool, Job, Import, Migration:
 		return true
 	}
 	return false

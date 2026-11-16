@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
-	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
@@ -103,7 +102,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanRebalanceName, mailapp.ScanDeletionsName, mailapp.ScanGmailLabelsName}, Composite: true})
-	maintenance := maintenanceapp.New(mc.Env, m.Now)
+	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
 	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
@@ -154,9 +153,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
 			}},
-			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Phone: actionlink.Handler, Routes: func(d *web.Deps, svc *reviewapp.Service) {
+			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Routes: func(d *web.Deps, svc *reviewapp.Service) {
 				reviewRoutes(d, func() *reviewapp.Service { return svc })
-			}}), Templates: reviewpages.Templates(), Public: actionlinkPublic, Nav: []web.NavItem{
+			}}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},

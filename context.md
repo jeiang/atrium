@@ -114,8 +114,8 @@ claims about the running application. Operator contracts are in
   key is a generated secret (`webpush_vapid_private_key`) or the
   `service/webpush` connection's `credential_files.vapid_private` host file,
   and the subject comes from `webpush_subject`, edited on the Notifications page,
-  which the notifications module requires. A push carries the title, a body of at most 240 characters, a
-  URL path and, for phone actions, the action links; it is encrypted per
+  which the notifications module requires. A push carries the title, a body of at most 240 characters and a
+  URL path to the signed-in page for its subject; it has no action buttons and opening it writes nothing. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
@@ -143,20 +143,12 @@ claims about the running application. Operator contracts are in
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
   contacts/calendar concern and are not an open-loop source.
-- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain. Link minting limits do not suppress proposal inbox rows or pushes.
-- Phone actions are HMAC-signed links in a notification that approve or
-  dismiss a proposal: `phone_actions_enabled` (default off) and
-  `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot
-  be enabled. A link is valid for 12 hours, one use, with at most 20 links
-  minted per hour; `POST /actions/{token}` redeems it without a session, and
-  the resolution is recorded with source `phone` and shown as "approved via
-  phone" in `/activity`. The host file may bind `app_keys.action_link_key_file`;
-  its bytes sign and verify links and are never copied into the database.
-  Rotating the generated `action_link_key` invalidates
-  outstanding links; the phone action section of the Notifications settings
-  tab shows the outstanding count and revokes links. With a host-file key, revocation deletes outstanding links without rewriting the key.
-  A phone approval that meets a busy lock leaves the proposal pending and
-  the link usable.
+- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain.
+- A permission proposal sends an assistant notification whose push opens
+  `/proposals/{id}`, where the operator decides it while signed in. The
+  generated `action_link_key` secret, or the host file's
+  `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
+  fingerprints; host-file bytes are never copied into the database.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -295,7 +287,7 @@ claims about the running application. Operator contracts are in
   endpoint can keep its credentials. Issuer and provider preset changes also
   count as endpoint identity changes. Endpoint URLs cannot contain userinfo,
   and `host`/`*_host` fields accept only a host name or IP literal with an
-  optional port, including during v2 import and host reconciliation; refusals
+  optional port, including during host reconciliation; refusals
   name the connection and field, never the value. A host declaration refused
   at boot is a permanent configuration refusal (exit 78). The health watch
   records a stored row that fails these rules as failing without sending a
@@ -339,15 +331,12 @@ claims about the running application. Operator contracts are in
   audited. A completed `atrium db encrypt` or `atrium db rekey` writes one
   `maintenance.encrypt` or `maintenance.rekey` row (key ids only) into the new
   copy before it replaces the database, if that database has
-  `operation_audit`. A completed `atrium db import-v2` writes one
-  `maintenance.import-v2` row in the import transaction. A refused or failed
-  encrypt, rekey or import writes nothing, so the database is unchanged and
-  the import target stays fresh. Each `atrium db shell` session writes one
+  `operation_audit`. A refused or failed encrypt or rekey writes nothing, so
+  the database is unchanged. Each `atrium db shell` session writes one
   `maintenance.sql` row after the input ends, once any transaction the session
   left open is rolled back: statement and failure counts only, never the SQL.
   The outcome is `failed` if any statement failed. Backup, restore and shell
-  audits are skipped on a database without `operation_audit`, and the import
-  freshness check ignores `maintenance.*` audit rows.
+  audits are skipped on a database without `operation_audit`.
   The persistent serve job `core/backup` (host keys `core.backup_directory`,
   `core.backup_schedule` default `daily 03:00`, `core.backup_keep` default
   5, `core.backup_keep_days` default 14; resource `backup`, 2 h, drained on
@@ -422,87 +411,12 @@ claims about the running application. Operator contracts are in
   at an unknown future schema version is refused
   before any write. A binary downgrade does not reverse a migration and can
   require restoring an earlier database, losing later writes.
-  A database with tables but no v3 marker is refused before any write with
-  a message naming `atrium db import-v2`.
-
-### Database import
-- `atrium db import-v2 <path>`
-  copies a v2 database at schema version 11 into the configured database,
-  which must be a fresh v3 database (created through the normal boot path
-  when absent); the source is opened read-only and never written.
-  `--source-config` names the v2 `ATRIUM_CONFIG` file and `--source-env` a
-  `NAME=VALUE` file, and their pins decide the effective source value before
-  a shadowed row. It
-  refuses a source that is the destination file, already has the v3 marker, is not at version 11,
-  has an embedding index rebuild in progress, or has a v2 mail or agent
-  write in flight (a held row with no error, a proposal action with a live
-  lease, or a `drafts` send); it refuses a destination that already holds
-  rows in an imported table. Everything is copied in one transaction with
-  foreign keys enforced and `PRAGMA foreign_key_check` at the end, so a
-  failed copy leaves the destination without imported rows.
-  Carried with
-  their ids: mail accounts, mailboxes, messages and the learned mail data
-  (rules, corrections, decisions, flag decisions, live state and baseline,
-  snoozes, drafts, scans, commitments, open loops and overrides, packages
-  and their events, watch dismissals, rebalance and event candidates), the active
-  generation's message vectors and index row (URL, model and dimension
-  kept), settings and secrets (a secret row is readable only with the same
-  database key, since the database encrypts it; every source setting row
-  gets an action:
-  carried, dropped, renamed, moved to a host key or a compiled constant, or
-  reset for cutover; a shadowed row yields to its effective source pin;
-  unknown public rows are dropped by key name and an unknown nonempty secret
-  refuses the import by name), the `settings_audit` history (ids,
-  timestamps, keys, old and new values, secret marker, actor and source
-  unchanged, carried before the sanitized import entries), notification
-  channels,
-  push subscriptions and attention snoozes, knowledge records (their
-  `embedded_hash` cleared so vectors rebuild), projects, threads with their
-  messages, files, plans and queue, agent profile, skills, operator-edited
-  subagents, jobs, agent events, tasks, proposals, media
-  channels, the seen list and media state, and the usage rows of the import
-  calendar month only; older usage stays only in the v2 source. Converted
-  into effect-ledger rows with their old identity
-  preserved: v2 automatic actions and the resolutions that settle them, v2
-  agent writes with their resolutions, and v2 proposal actions. A service
-  credential whose owner has a connection record (qBittorrent, TMDB, EZTV,
-  Anthropic, Grafana, Notion) is written to that connection's credential
-  store and its source `secrets` row is dropped; the connection keeps the
-  source `set_at`/`set_by`.
-  Rebuilt: `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
-  (`runs`, `run_streams`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
-  `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
-  state (re-synced), knowledge and Notion
-  vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
-  handshakes, action links, the mail event log, ops
-  data, endpoint probes (the embed probe belongs to `service/embedding`),
-  integration health, nightly observations,
-  `db_key_history` (old backups are read with the old key),
-  `module_migrations` and the source's `schema_migrations`. References to
-  uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
-  the imported effect's run id, `threads.parent_run_id`, `jobs.last_run_id`,
-  `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
-  `thread_queue.run_id`). Jobs are converted: a cron job belongs to
-  `assistant` with no key; a nightly or built-in job takes the owner and
-  `declaration_key` of the catalog job with its name, keeps its schedule,
-  state and prompt override, loses any v2 lease, and is dropped
-  (`drop-retired-job`) when no catalog job has that name; a stored schedule
-  setting then replaces the carried schedule and recomputes `next_due`.
-  `job_run_threads`, `job_resource_leases` and `operation_audit` start
-  empty (`kept empty 0`), `read_revisions` is `derived`: the destination's
-  revision triggers count the imported rows per scope and no counter comes
-  from the source; a source that already has any of these tables is
-  refused, and a destination with an `operation_audit` row is refused like
-  any other populated destination. Imported `effect_resolutions` keep their
-  stored `source`. The importer prints one line per table with its
-  carried, rebuilt or dropped row count, one line per setting with its
-  action (carried, dropped, renamed, moved to a host key or a compiled
-  constant, or reset for cutover), one line per effective source pin and per
-  secret, and a totals line ending in `unmapped_operator_choices=0`; a
-  nonzero count fails the import. v1 data reaches v3 through v2: the v2
-  binary imports it first.
-  `taint_private` and `taint_web` are dormant: no longer
-  read or written, and kept because dropping them would rewrite the table.
+  A database with tables but no v3 marker is refused before any write. v2
+  data reaches v3 only through release `v3.0.0`, the last release that
+  carries the v2 importer: import there, then upgrade.
+  The `threads` columns `taint_private` and `taint_web` are dormant: no
+  longer read or written, and kept because dropping them would rewrite the
+  table.
 
 ### Audit and resolution
 - Every settings write and secret change appends
@@ -740,7 +654,7 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery and action links. The ops listener also serves
+  notification delivery. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   The host owns the scrape job and the traces endpoint.
@@ -1057,8 +971,7 @@ claims about the running application. Operator contracts are in
   and subagent runs never park: an ask without a card is a deny there. A
   tool that leaves the allow set is withdrawn from dispatch; the request
   keeps its tools array so the run's thinking stays valid, and only a
-  server tool that must go rebuilds the request. Phone action links never
-  approve or dismiss a permission request. Branches inherit the marks.
+  server tool that must go rebuilds the request. Branches inherit the marks.
   A thinking block is resent only while everything before it is
   unchanged.
 - `lookup` reads one source in a child subagent and returns typed

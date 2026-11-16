@@ -127,7 +127,7 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 		t.Fatalf("calendar callback: %d %q %s", code, hdr.Get("Location"), body)
 	}
 	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
-	token := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'")
+	token := queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'")
 	if token != "refresh-1" {
 		t.Fatalf("calendar refresh token = %q", token)
 	}
@@ -138,7 +138,7 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	if code != http.StatusSeeOther || !strings.HasSuffix(hdr.Get("Location"), "?connected=gmail") {
 		t.Fatalf("gmail paste-back: %d %q", code, hdr.Get("Location"))
 	}
-	token = importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/gmail/refresh'")
+	token = queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/gmail/refresh'")
 	if token != "refresh-1" {
 		t.Fatalf("gmail refresh token = %q", token)
 	}

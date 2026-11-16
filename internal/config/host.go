@@ -54,7 +54,7 @@ func HostFile(env Env) string { return stripped(env, HostConfigEnv) }
 
 func refuseRemovedSelectors(env Env) error {
 	for _, key := range []string{"oidc_access_group", "oidc_admin_group", "oidc_admin_emails", "oidc_admin_domains"} {
-		entry, removed := settings.ImportEntryFor(key)
+		entry, removed := settings.EntryFor(key)
 		if !removed {
 			continue
 		}
@@ -242,14 +242,14 @@ func hostKeyOf(keys map[string]settings.HostDef, name string) (d settings.HostDe
 }
 
 func hostKeyRefusal(path, module, name string) error {
-	entry, ok := settings.ImportEntryFor(name)
+	entry, ok := settings.EntryFor(name)
 	if base, cut := strings.CutSuffix(name, "_file"); !ok && cut {
-		entry, ok = settings.ImportEntryFor(base)
+		entry, ok = settings.EntryFor(base)
 	}
 	if !ok || entry.Module != module {
 		return nil
 	}
-	if entry.Retired || entry.Action == settings.ImportDrop && entry.Class == settings.ImportOperator {
+	if entry.Retired || entry.Action == settings.ActionDrop && entry.Class == settings.ClassOperator {
 		return fmt.Errorf("config: %s: %s.%s was removed; use %s", path, module, name, settings.Destination(entry))
 	}
 	if entry.Module == "db" && entry.Key == "key" {
