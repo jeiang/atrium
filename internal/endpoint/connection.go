@@ -43,6 +43,7 @@ type EmbeddingView struct {
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:            connections.Kind(KindEmbedding),
+		Offers:          []string{"embeddings"},
 		CredentialSlots: []string{"bearer"},
 		Validate:        validateEmbedding,
 		Grace:           connections.UnreachableGrace,

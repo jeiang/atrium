@@ -47,7 +47,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Operations: operations, Bindings: bindings,
 		Name:          unit.Notifications,
 		Title:         "Notifications",
-		Needs:         []module.Need{{Kind: notify.KindWebPush, Soft: true}},
+		Needs:         []module.Need{{Kind: notify.KindWebPush, Soft: true, Capability: "delivery", Features: []string{"push notifications"}}},
 		EffectOrigins: []module.EffectOrigin{{Name: "notify", Direct: true}},
 		Requires:      []module.Requirement{module.ConnectionHealth(string(notify.KindWebPush))},
 		Settings:      notify.Settings(),

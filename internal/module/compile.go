@@ -263,6 +263,7 @@ func compileJobs(decls []Declaration, byName map[string]Declaration) ([]schedule
 func compileConnections(decls []Declaration) (*connections.Registry, proposals.Hooks, config.AccountCredentialFunc, error) {
 	var (
 		defs        []connections.Definition
+		needs       []connections.Need
 		sync        *connections.AccountSync
 		notice      connections.Notifier
 		credential  config.AccountCredentialFunc
@@ -274,6 +275,9 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 	)
 	for _, d := range decls {
 		defs = append(defs, d.Connections...)
+		for _, n := range d.Needs {
+			needs = append(needs, connections.Need{Module: d.Name, Kind: n.Kind, Capability: n.Capability, Soft: n.Soft, Features: n.Features})
+		}
 		if d.AccountSync != nil {
 			if syncOwner != "" {
 				return nil, proposals.Hooks{}, nil, &DuplicateHook{Hook: "account sync", Modules: []string{syncOwner, d.Name}}
@@ -299,7 +303,7 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 			created, createdBy = d.ProposalCreated, d.Name
 		}
 	}
-	reg, err := connections.Compile(defs, sync, notice)
+	reg, err := connections.Compile(defs, needs, sync, notice)
 	if err != nil {
 		return nil, proposals.Hooks{}, nil, err
 	}

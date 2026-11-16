@@ -86,6 +86,7 @@
       "operations": [
         "calendar.draft-candidates",
         "calendar.sync",
+        "connections.dependencies",
         "connections.disconnect",
         "connections.list",
         "connections.oauth-complete",
@@ -98,8 +99,8 @@
         "contacts.lookup",
         "contacts.sync"
       ],
-      "required": 13,
-      "bound": 13
+      "required": 14,
+      "bound": 14
     },
     {
       "area": "knowledge",
@@ -397,7 +398,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 221,
-  "total_bound": 221,
+  "total_required": 222,
+  "total_bound": 222,
   "total_approval_reached": 11
 }

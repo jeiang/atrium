@@ -209,7 +209,7 @@ func outcome(capability string, err error) (connections.Result, bool) {
 }
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: KindICloud, CredentialSlots: []string{"mail/*/password"}, Validate: validateICloud, Test: testICloud}}
+	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Validate: validateICloud, Test: testICloud}}
 }
 
 func validateICloud(c connections.Candidate) error {

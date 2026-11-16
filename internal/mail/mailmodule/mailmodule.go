@@ -145,10 +145,15 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
-		Name:     unit.Mail,
-		Title:    "Mail",
-		App:      true,
-		Needs:    []module.Need{{Kind: connections.Kind(endpoint.KindEmbedding)}, {Kind: mailconn.Kind, Soft: true}, {Kind: tracking.KindShip24, Soft: true}},
+		Name:  unit.Mail,
+		Title: "Mail",
+		App:   true,
+		Needs: []module.Need{
+			{Kind: connections.Kind(endpoint.KindEmbedding), Capability: "embeddings", Features: []string{"mail search"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilityIMAP, Features: []string{"mail sync"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilitySMTP, Features: []string{"mail sending"}},
+			{Kind: tracking.KindShip24, Soft: true, Capability: "api", Features: []string{"package tracking"}},
+		},
 		Packages: []string{"internal/assistant/tools/mail", "internal/mail"},
 		Tables: []string{"accounts", "commitments", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state", "loop_overrides",
 			"mail_scans", "mailboxes", "message_fts", "messages", "open_loops", "package_events", "packages", "rules", "watch_dismissed"},

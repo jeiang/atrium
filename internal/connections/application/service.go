@@ -53,7 +53,7 @@ func CLI(env config.Env) Open {
 }
 
 func (s *Service) revision(ctx context.Context, name application.Name, input any) (application.Revision, error) {
-	counters, err := s.state.Read(ctx, nil, []string{state.Connections})
+	counters, err := s.state.Read(ctx, nil, []string{state.Connections, state.Settings})
 	if err != nil {
 		return "", err
 	}

@@ -1037,6 +1037,68 @@
         ],
         "type": "object"
       },
+      "Binding": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "availability": {
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "connection": {
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "met": {
+            "type": "boolean"
+          },
+          "module": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "repair": {
+            "type": "string"
+          },
+          "soft": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "module",
+          "active",
+          "kind",
+          "capability",
+          "soft",
+          "features",
+          "candidates",
+          "state",
+          "met",
+          "availability"
+        ],
+        "type": "object"
+      },
       "BirthdayItem": {
         "properties": {
           "date": {
@@ -3064,6 +3126,12 @@
             },
             "type": "array"
           },
+          "dependents": {
+            "items": {
+              "$ref": "#/components/schemas/Dependent"
+            },
+            "type": "array"
+          },
           "enabled": {
             "type": "boolean"
           },
@@ -3116,7 +3184,8 @@
           "credentials",
           "state",
           "reason",
-          "results"
+          "results",
+          "dependents"
         ],
         "type": "object"
       },
@@ -3501,6 +3570,57 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "Dependencies": {
+        "properties": {
+          "needs": {
+            "items": {
+              "$ref": "#/components/schemas/Binding"
+            },
+            "type": "array"
+          },
+          "repairs": {
+            "items": {
+              "$ref": "#/components/schemas/Repair"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "needs",
+          "repairs"
+        ],
+        "type": "object"
+      },
+      "Dependent": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "module": {
+            "type": "string"
+          },
+          "soft": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "module",
+          "active",
+          "capability",
+          "soft",
+          "features"
+        ],
         "type": "object"
       },
       "DeviceRegistration": {
@@ -11026,6 +11146,21 @@
         ],
         "type": "object"
       },
+      "ReadDependencies": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Dependencies"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadEvents": {
         "properties": {
           "data": {
@@ -11591,6 +11726,56 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "Repair": {
+        "properties": {
+          "class": {
+            "type": "string"
+          },
+          "connection": {
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "fix": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "connection",
+          "label",
+          "class",
+          "state",
+          "reason",
+          "owner",
+          "severity",
+          "features",
+          "fix"
         ],
         "type": "object"
       },
@@ -19763,6 +19948,128 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReadConnections"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "integrations"
+        ],
+        "x-atrium-area": "integrations",
+        "x-atrium-module": "core"
+      }
+    },
+    "/connections/dependencies": {
+      "get": {
+        "operationId": "connections.dependencies",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadDependencies"
                 }
               }
             },

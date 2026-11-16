@@ -48,10 +48,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	command := jobcmd.DelegatingSubs(calendarcmd.Command(m.calendarCLI(mc.Env, mc.Tools), connectionsapp.CLI(mc.Env)), map[string]string{"sync": unit.Calendar + "/" + passrun.CalDAV, "candidates": unit.Calendar + "/" + calendar.JobCandidates})
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
-		Name:          unit.Calendar,
-		Title:         "Calendar",
-		App:           true,
-		Needs:         []module.Need{{Kind: davmirror.KindICloud, Soft: true}, {Kind: connections.KindGoogle, Soft: true}},
+		Name:  unit.Calendar,
+		Title: "Calendar",
+		App:   true,
+		Needs: []module.Need{
+			{Kind: davmirror.KindICloud, Soft: true, Capability: davmirror.CapabilityCalDAV, Features: []string{"iCloud calendar sync"}},
+			{Kind: connections.KindGoogle, Soft: true, Capability: connections.GoogleCalendar, Features: []string{"Google calendar sync"}},
+		},
 		Packages:      []string{"internal/assistant/tools/calendar", "internal/calendar"},
 		Tables:        []string{"agent_events", "event_candidates"},
 		EffectOrigins: []module.EffectOrigin{{Name: "calendar", Direct: true}},

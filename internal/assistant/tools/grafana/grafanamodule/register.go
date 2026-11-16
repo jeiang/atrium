@@ -45,7 +45,7 @@ func (m Module) Declare(module.Context) module.Declaration {
 		Title:       "Server ops",
 		App:         true,
 		Depends:     []string{unit.Assistant},
-		Needs:       []module.Need{{Kind: grafanatools.KindGrafana}},
+		Needs:       []module.Need{{Kind: grafanatools.KindGrafana, Capability: "viewer", Features: []string{"server health", "server tools"}}},
 		Packages:    []string{"internal/assistant/tools/grafana", "internal/assistant/tools/ops", "internal/grafana", "internal/serverops"},
 		Tables:      []string{"ops_findings", "ops_samples"},
 		Settings:    serverops.Settings(),

@@ -81,7 +81,14 @@ func NewSet(cat *Catalog, reg *settings.Registry, env config.Env, open Opener) (
 	if err != nil {
 		return nil, err
 	}
-	return &Set{cat: cat, reg: reg, env: env, decls: ordered, opener: open, transitions: map[int]Transition{}}, nil
+	s := &Set{cat: cat, reg: reg, env: env, decls: ordered, opener: open, transitions: map[int]Transition{}}
+	if cat.conns != nil {
+		cat.conns.Activate(func(name string) bool {
+			snap := s.Current()
+			return snap == nil || snap.Enabled(name)
+		})
+	}
+	return s, nil
 }
 
 func byDepends(decls []Declaration) ([]Declaration, error) {

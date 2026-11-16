@@ -96,8 +96,10 @@ type Declaration struct {
 }
 
 type Need struct {
-	Kind connections.Kind
-	Soft bool
+	Kind       connections.Kind
+	Soft       bool
+	Capability string
+	Features   []string
 }
 
 type SetService struct {

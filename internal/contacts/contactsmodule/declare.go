@@ -37,7 +37,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:       unit.Contacts,
 		Title:      "Contacts",
-		Needs:      []module.Need{{Kind: davmirror.KindICloud, Soft: true}},
+		Needs:      []module.Need{{Kind: davmirror.KindICloud, Soft: true, Capability: davmirror.CapabilityCardDAV, Features: []string{"contacts sync"}}},
 		Packages:   []string{"internal/contacts"},
 		Requires:   Requirements(),
 		Host:       contacts.HostSettings(),
