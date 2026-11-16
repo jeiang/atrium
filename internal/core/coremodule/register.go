@@ -61,6 +61,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/webusage"
 )
 
 type Module struct {
@@ -85,6 +86,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	readModelOps, readModelBindings := m.readModelOperations()
 	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
+	operations = append(operations, webusage.DescribeRoutes())
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "usage routes", Uses: []application.Name{webusage.RoutesName}})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanDeletionsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
@@ -92,6 +95,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
 	eventOps, eventBindings := eventOperations()
 	operations, bindings = append(operations, eventOps...), append(bindings, eventBindings...)
+	searchOps, searchBindings := searchOperations(m.Now)
+	operations, bindings = append(operations, searchOps...), append(bindings, searchBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -128,7 +133,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return err
 		})},
 		Attention:         AttentionSources(),
-		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics()),
+		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
 		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
@@ -157,6 +162,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
 				m.readModelRoutes(d)
+				searchRoutes(d, m.Now)
 			}},
 		},
 		Groups:     SettingGroups(),
@@ -170,6 +176,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),
+			webusage.Command(mc.Env),
 			secretscmd.Command(openSettings),
 			dbcmd.Command(maintenance),
 			dbcmd.BackupCommand(maintenance),

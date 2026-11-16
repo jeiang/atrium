@@ -7,6 +7,8 @@ import (
 	"net"
 
 	"github.com/emersion/go-imap/v2"
+
+	"github.com/jeiang/atrium/internal/mail"
 )
 
 var (
@@ -57,4 +59,16 @@ func imapErr(err error) error {
 		return pyAbort("%s", err.Error())
 	}
 	return err
+}
+
+func loginErr(err error) error {
+	var e *imap.Error
+	if !errors.As(err, &e) || e.Type != imap.StatusResponseTypeNo {
+		return imapErr(err)
+	}
+	switch e.Code {
+	case "", imap.ResponseCodeAuthenticationFailed, imap.ResponseCodeAuthorizationFailed, imap.ResponseCodeExpired:
+		return &failure{Err: errors.Join(ErrProtocol, mail.ErrLoginRefused), Msg: e.Text}
+	}
+	return imapErr(err)
 }

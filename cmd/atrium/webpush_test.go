@@ -591,6 +591,55 @@ func (s *signedInSite) post(path string, form url.Values) (int, string) {
 	return code, body
 }
 
+func (f *fakePush) find(t *testing.T, b pushBrowser, want string) map[string]any {
+	t.Helper()
+	for n := 1; ; n++ {
+		body := b.decrypt(t, f.wait(t, n).body)
+		if strings.Contains(fmt.Sprint(body["title"])+"\n"+fmt.Sprint(body["body"]), want) {
+			return body
+		}
+	}
+}
+
+func (f *fakePush) titled(t *testing.T, b pushBrowser, want string) int {
+	t.Helper()
+	f.mu.Lock()
+	got := append([]pushRequest(nil), f.received...)
+	f.mu.Unlock()
+	n := 0
+	for _, p := range got {
+		if strings.Contains(fmt.Sprint(b.decrypt(t, p.body)["title"]), want) {
+			n++
+		}
+	}
+	return n
+}
+
+func clearBootNotices(t *testing.T, d *db.DB) {
+	t.Helper()
+	waitFor(t, func() bool {
+		var n int
+		return d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'connections.observe-health'").Scan(&n) == nil && n > 0
+	})
+	count := func() int {
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	for last := -1; ; time.Sleep(200 * time.Millisecond) {
+		n := count()
+		if n == last {
+			break
+		}
+		last = n
+	}
+	if _, err := d.Write.Exec("DELETE FROM notifications"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testing.T) {
 	srv, _ := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
@@ -598,6 +647,7 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	s := newSignedInSite(t, dir)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
+	clearBootNotices(t, d)
 	if code, _ := s.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
 		t.Fatalf("subscribe = %d", code)
 	}

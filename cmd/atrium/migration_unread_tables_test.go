@@ -75,8 +75,8 @@ func TestMigrationTwoDropsUnreadTablesAndKeepsCarriedRows(t *testing.T) {
 	stop()
 
 	d := mustConnect(t, path, db.Key{})
-	if n := count(d, "SELECT MAX(version) FROM schema_migrations"); n != 2 {
-		t.Fatalf("schema version %d after start, want 2", n)
+	if n := count(d, "SELECT COUNT(*) FROM schema_migrations WHERE version = 2"); n != 1 {
+		t.Fatalf("migration 2 is recorded %d times after start, want once", n)
 	}
 	for _, table := range unreadTables {
 		if n := count(d, "SELECT COUNT(*) FROM sqlite_master WHERE tbl_name = '"+table+"' OR name = '"+table+"' OR name LIKE '"+table+"\\_%' ESCAPE '\\'"); n != 0 {
@@ -98,7 +98,7 @@ func TestMigrationTwoDropsUnreadTablesAndKeepsCarriedRows(t *testing.T) {
 	if n := count(d, "SELECT COUNT(*) FROM attention_snoozes WHERE kind = 'task' AND source_id = '42'"); n != 1 {
 		t.Errorf("the carried attention snooze is gone")
 	}
-	if n := count(d, "SELECT COUNT(*) FROM kb_records"); n != records {
+	if n := count(d, "SELECT COUNT(*) FROM kb_records WHERE origin IS NOT 'atrium:instructions'"); n != records {
 		t.Errorf("%d knowledge records, want %d", n, records)
 	}
 	if n := count(d, "SELECT COUNT(*) FROM pragma_foreign_key_check"); n != 0 {

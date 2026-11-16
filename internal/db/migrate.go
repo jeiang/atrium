@@ -19,6 +19,8 @@ type migration struct {
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
 	{2, dropUnreadTables},
+	{3, addUsageCounters},
+	{4, addRecordLinks},
 }
 
 const (
@@ -37,7 +39,30 @@ DROP TABLE pass_run_alerts;
 DROP TABLE snoozes;
 `
 	notionVectorTables = "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'embed_notion_[0-9]*' AND name NOT GLOB 'embed_notion_*[^0-9]*' AND sql LIKE 'CREATE VIRTUAL TABLE%' ORDER BY name"
+	usageCountersDDL   = `
+CREATE TABLE usage_counters (day TEXT NOT NULL, surface TEXT NOT NULL, method TEXT NOT NULL, route TEXT NOT NULL, agent INTEGER NOT NULL CHECK (agent IN (0, 1)), count INTEGER NOT NULL CHECK (count >= 0), PRIMARY KEY (day, surface, method, route, agent));
+ALTER TABLE auth_bearers ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1));
+ALTER TABLE auth_sessions ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1));
+`
+	recordLinksDDL = `
+CREATE TABLE record_links (id INTEGER PRIMARY KEY, record_id INTEGER NOT NULL REFERENCES kb_records(id) ON DELETE CASCADE, target_kind TEXT NOT NULL, target_id TEXT NOT NULL, relation TEXT NOT NULL, writer TEXT NOT NULL CHECK (writer IN ('operator', 'assistant')), run_id INTEGER, created_at REAL NOT NULL, retracted_at REAL, CHECK ((writer = 'assistant') = (run_id IS NOT NULL)));
+CREATE UNIQUE INDEX record_links_live ON record_links (record_id, target_kind, target_id, relation) WHERE retracted_at IS NULL;
+CREATE INDEX record_links_target ON record_links (target_kind, target_id);
+CREATE TRIGGER IF NOT EXISTS record_links_read_insert AFTER INSERT ON record_links BEGIN INSERT INTO read_revisions(scope,value) VALUES('knowledge',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+CREATE TRIGGER IF NOT EXISTS record_links_read_update AFTER UPDATE ON record_links BEGIN INSERT INTO read_revisions(scope,value) VALUES('knowledge',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+CREATE TRIGGER IF NOT EXISTS record_links_read_delete AFTER DELETE ON record_links BEGIN INSERT INTO read_revisions(scope,value) VALUES('knowledge',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+`
 )
+
+func addUsageCounters(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, usageCountersDDL)
+	return err
+}
+
+func addRecordLinks(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, recordLinksDDL)
+	return err
+}
 
 func dropUnreadTables(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, notionVectorTables)
@@ -148,11 +173,6 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 		if err := applyPending(ctx, d, path); err != nil {
 			return err
 		}
-	}
-	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		return seed(ctx, tx, time.Now())
-	}); err != nil {
-		return err
 	}
 	return Ready(ctx, d)
 }

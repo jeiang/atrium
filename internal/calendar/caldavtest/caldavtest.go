@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -25,6 +26,7 @@ type Server struct {
 	Deleted      []string
 	User         string
 	Password     string
+	Unavailable  atomic.Bool
 }
 
 const header = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`
@@ -75,6 +77,10 @@ func (s *Server) Objects() map[string]string {
 func calendarPath(i int) string { return fmt.Sprintf("/calendars/cal%d/", i) }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
+	if s.Unavailable.Load() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	if user, pass, ok := r.BasicAuth(); !ok || user != s.User || pass != s.Password {
 		w.WriteHeader(http.StatusUnauthorized)
 		return

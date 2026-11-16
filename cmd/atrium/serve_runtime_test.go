@@ -134,6 +134,10 @@ func TestServeRuntimeStartsEachMonitorOnce(t *testing.T) {
 		t.Fatal("a backup into a missing directory succeeded")
 	}
 	embedder.setStatus(http.StatusInternalServerError)
+	if _, err := d.Write.Exec("UPDATE connections SET state = 'failing', results_json = json_array(json_object('capability', 'embeddings', 'state', 'failing', 'reason', 'HTTP 500', 'grace_until', ?)), checked_at = checked_at - 90000 WHERE id = 'service/embedding'",
+		time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
 	embedNotices := titledNotices(t, d, "atrium: Embedding ")
 	if n := titledNotices(t, d, "atrium: backup is stale"); n != 0 {
 		t.Fatalf("%d stale backup notices before serve, want 0", n)
@@ -141,7 +145,7 @@ func TestServeRuntimeStartsEachMonitorOnce(t *testing.T) {
 
 	_, logs := startServeLogged(t, dir)
 	waitUntil(t, 30*time.Second, "the stale backup notice", func() bool { return titledNotices(t, d, "atrium: backup is stale") > 0 })
-	waitUntil(t, 30*time.Second, "the embedding connection to fail", func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
+	waitUntil(t, 30*time.Second, "the embedding failure notice after its grace window", func() bool { return titledNotices(t, d, "atrium: Embedding ") > embedNotices })
 	waitUntil(t, 30*time.Second, "every service to start", func() bool {
 		for _, name := range serveRuntimeServices {
 			if serviceStarts(logs, name) == 0 {

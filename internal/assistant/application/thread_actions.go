@@ -146,7 +146,7 @@ func (s *Service) ThreadProject(ctx context.Context, in MoveInput) (application.
 				return err
 			}
 			if found == nil {
-				return notFound(unknownProject)
+				return notFound(unknownSpace)
 			}
 			if err := archivedProject(found, "move chats into it"); err != nil {
 				return err

@@ -175,11 +175,23 @@ type current func(ctx context.Context, q *sql.Tx) (kb.Record, bool, error)
 
 type step func(ctx context.Context, tx *sql.Tx) (kb.Record, ledger.Result, error)
 
-func (s *Service) command(ctx context.Context, name application.Name, operation string, id int64, unchanged current, apply step) (application.Change[Changed], error) {
-	var (
-		rec              kb.Record
-		effectID, auditN int64
-	)
+type done[T any] struct {
+	value            T
+	id               int64
+	effectID, auditN int64
+}
+
+func changeOf[T, O any](d done[T], data O) application.Change[O] {
+	out := application.Change[O]{Data: data, AuditID: d.auditN}
+	if d.effectID > 0 {
+		out.EffectIDs = []int64{d.effectID}
+	}
+	return out
+}
+
+func transact[T any](ctx context.Context, s *Service, name application.Name, operation string, id int64,
+	unchanged func(context.Context, *sql.Tx) (T, bool, error), apply func(context.Context, *sql.Tx) (T, ledger.Result, error), idOf func(T) int64) (done[T], error) {
+	var out done[T]
 	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		if unchanged != nil {
 			found, same, err := unchanged(ctx, tx)
@@ -187,34 +199,39 @@ func (s *Service) command(ctx context.Context, name application.Name, operation 
 				return err
 			}
 			if same {
-				rec = found
-				auditN, err = s.audit(ctx, tx, name, id, state.Noop, 0)
+				out.value = found
+				out.auditN, err = s.audit(ctx, tx, name, id, state.Noop, 0)
 				return err
 			}
 		}
 		effect, err := s.ledger.ApplyLocalTx(ctx, tx, kb.Effect(operation, id), func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 			next, res, err := apply(ctx, tx)
-			rec = next
+			out.value = next
 			return res, err
 		})
 		if err != nil {
 			return err
 		}
-		effectID = effect.ID
+		out.effectID = effect.ID
 		if id == 0 {
-			id = rec.ID
+			id = idOf(out.value)
 		}
-		auditN, err = s.audit(ctx, tx, name, id, state.OK, effectID)
+		out.auditN, err = s.audit(ctx, tx, name, id, state.OK, out.effectID)
 		return err
 	})
+	out.id = id
 	if err != nil {
-		return application.Change[Changed]{}, s.reject(ctx, name, id, err)
-	}
-	out := application.Change[Changed]{Data: Changed{ID: id, Record: recordOf(rec)}, AuditID: auditN}
-	if effectID > 0 {
-		out.EffectIDs = []int64{effectID}
+		return out, s.reject(ctx, name, id, err)
 	}
 	return out, nil
+}
+
+func (s *Service) command(ctx context.Context, name application.Name, operation string, id int64, unchanged current, apply step) (application.Change[Changed], error) {
+	d, err := transact[kb.Record](ctx, s, name, operation, id, unchanged, apply, func(r kb.Record) int64 { return r.ID })
+	if err != nil {
+		return application.Change[Changed]{}, err
+	}
+	return changeOf(d, Changed{ID: d.id, Record: recordOf(d.value)}), nil
 }
 
 func (s *Service) Create(ctx context.Context, in RecordInput) (application.Change[Changed], error) {

@@ -77,6 +77,7 @@ var owners = map[string]string{
 	"notification_devices":               "notify",
 	"webpush_devices":                    "notify",
 	"read_revisions":                     "application",
+	"record_links":                       "kb",
 	"rules":                              "mail",
 	"run_events":                         "assistant",
 	"run_streams":                        "assistant",
@@ -97,6 +98,7 @@ var owners = map[string]string{
 	"tool_calls":                         "assistant",
 	"tool_results":                       "assistant",
 	"usage":                              "inference",
+	"usage_counters":                     "webusage",
 	"watch_dismissed":                    "mail",
 }
 
@@ -155,6 +157,7 @@ var invalidates = map[string]string{
 	"proposals":                          "review",
 	"notification_devices":               "notify",
 	"webpush_devices":                    "notify",
+	"record_links":                       "knowledge",
 	"rules":                              "mail",
 	"runs":                               "assistant",
 	"secrets":                            "settings",
@@ -186,6 +189,7 @@ var revisionExempt = map[string]string{
 	"operation_audit":     "the operation audit itself",
 	"commands":            "API command bookkeeping; commands.status derives its revision from the row",
 	"read_revisions":      "the revision counters themselves",
+	"usage_counters":      "usage counters, read by no live view",
 	"run_events":          "stream sequences are their own revision",
 	"run_streams":         "stream sequences are their own revision",
 	"schema_migrations":   "runtime bookkeeping",

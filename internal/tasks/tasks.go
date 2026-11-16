@@ -95,6 +95,15 @@ func KeyOf(t Task) ListKey {
 	return k
 }
 
+func Find(ctx context.Context, q db.Querier, text string, limit, offset int) ([]Task, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM tasks WHERE instr(lower(title), lower(?1)) > 0 OR instr(lower(notes), lower(?1)) > 0 "+
+		"ORDER BY instr(lower(title), lower(?1)) > 0 DESC, updated_ts DESC, id DESC LIMIT ?2 OFFSET ?3", text, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Task, error) { return scan(r) })
+}
+
 func List(ctx context.Context, q db.Querier, status string, limit int, after *ListKey) ([]Task, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -112,6 +121,15 @@ func List(ctx context.Context, q db.Querier, status string, limit int, after *Li
 	query += " ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(remind_at, 1e18), created_ts, id LIMIT ?"
 	args = append(args, limit)
 	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Task, error) { return scan(r) })
+}
+
+func OfSource(ctx context.Context, q db.Querier, kind, id string) ([]Task, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM tasks WHERE source_kind = ? AND source_id = ? "+
+		"ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(remind_at, 1e18), created_ts, id", kind, id)
 	if err != nil {
 		return nil, err
 	}

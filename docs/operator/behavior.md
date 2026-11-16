@@ -101,6 +101,28 @@ separate from the operator routes and serves `/metrics`, `/readyz`, `/livez`,
 `degraded`, or `not_ready` with 503. `/livez` answers 503 when serve is stalled.
 `/healthz` reports the runtime state. Public operator routes do not expose these.
 
+`atrium_scheduler_job_runs_total{scheduled_job,status}` counts finished job runs
+from the stored run history, so a restart does not reset it. Operator schedules
+share the `operator_schedule` label.
+
+Requests to the operator listeners are also counted per day, surface (`page`,
+`api` for `/api/v1`, `web` for `/web/v1`), method and route pattern, never the
+raw path; unknown paths count as `unmatched`, and static files and `/healthz`
+are not counted. Counts are batched in memory and saved every minute and at
+shutdown, in one transaction that also deletes days older than 400. They are
+exported as `atrium_http_route_requests_total{surface,method,route,agent}`,
+summed from the saved rows, so the metric lags by up to a minute and survives
+restarts. `atrium usage routes [--days N] [--json]` lists the last 30 days by
+default, with operator and agent requests in separate columns.
+
+A request counts as agent traffic when its bearer token was issued with
+`atrium auth token issue --agent` (or the Agent box under Settings › Sign-in),
+or when it carries the header `Atrium-Agent: 1`. Under OIDC sign-in, that header
+marks the sign-in session itself, and every later request on the session counts
+as agent traffic. The mark grants and removes nothing: it only separates the
+counts. The token list and `/web/v1/session` show it; use a separate browser
+profile for agent sessions, because a marked session stays marked until it ends.
+
 Every command can export OTLP/HTTP traces when the host sets
 `otel_traces_endpoint`. Span attributes are an allowlist of ids, counts,
 durations and bounded names; string values are scrubbed of known secrets and
@@ -156,7 +178,12 @@ pass run records, message snoozes, action links, rebalance candidates,
 nightly observations and the agent profile) and discards their rows. A release
 from before version 2 refuses a database at version 2: after that upgrade,
 recover by rolling forward to a fixed release or by restoring the backup taken
-before the upgrade, which loses every later write.
+before the upgrade, which loses every later write. Schema version 3 only adds
+the request usage table and the agent mark columns on tokens and sign-in
+sessions; a release from before version 3 refuses a database at version 3, with
+the same recovery. Schema version 4 only adds the knowledge link table; a
+release from before version 4 refuses a database at version 4, with the same
+recovery.
 
 ## Settings, connections, and modules
 
@@ -190,6 +217,65 @@ characters are refused. A host-declared connection refused at boot stops
 `serve` with exit 78. The background health check sends no request for a
 stored row that fails these rules; it records the connection as failing with
 the field named.
+
+At start and then hourly, the health watch checks every enabled connection
+that was never checked (new and host-changed rows first) or was last checked
+more than 24 hours ago, so restarts do not reset that clock; at start it also
+rechecks failing and needs-reauth connections. A failed
+request to a connection triggers a check at most once every 5 minutes in any
+state except disabled, and a successful request to a failing connection
+triggers a check within a minute. A connection's first failing result
+notifies once, including the first result after a host change; an unchanged
+failing result does not notify again. A host-declared connection removed from
+the host file is disabled with the reason `removed from host configuration`,
+keeps its row and credentials, and is announced once.
+
+qBittorrent and the embedding endpoint ride out short outages: a failure that
+follows an `ok` or `expiring` state starts a 6-hour grace window. The stored
+state stays `failing`, but the CLI, the Connections page and the module
+settings header show `away until <time UTC>`, and the connection read model
+carries `grace_until`. Nothing is sent inside the window, and a recovery inside
+it is silent. The first check after the window that still fails shows
+`failing` and notifies once; the hourly watch rechecks these rows, so the
+notice arrives within about an hour of the window ending. A failure from any
+other state, such as the first check after a host change, has no window.
+Other connection kinds have no window.
+
+`atrium connections check` runs the silent check of every configured
+connection and records the result; `--changed` checks only connections that
+were added or whose host declaration changed since their last check, and
+prints `no connection to check` when there are none. Each checked connection
+prints its id, state (or `away until <time UTC>`) and reason. The command
+exits 1 when a checked connection is failing, in its window or not, or needs
+reauth. `connections test <id>` keeps the explicit test, which may have
+visible side effects such as a diagnostic push. `connections test --all` runs
+the silent check of every configured connection instead, so it sends no push;
+giving both an id and `--all`, or neither, is a usage error.
+
+Mail and iCloud connections also learn from real use while `serve` runs. An
+IMAP session that cannot connect marks the mail connection's `imap`
+capability failing, and a login the server refuses marks it as needing reauth,
+as the scheduled check does. An SMTP session that cannot connect or greet marks
+`smtp` failing, and a refused login (codes 530 to 535) marks it as needing
+reauth. A
+contacts or calendar mirror sync that the server refuses (401 or 403) marks
+`carddav` or `caldav` as needing reauth, and a server error, network error or
+TLS error marks it failing. A later session or sync that works marks the
+capability ok again. These four have no grace window, so the first failure
+notifies at once and the recovery notifies once. Errors about one message,
+such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
+not change the connection. Only a change of state class is written: a repeated
+failure or a repeated success writes nothing and sends no notice. A one-shot
+CLI command does not record these outcomes.
+
+A connection that lacks what it needs checks as `unconfigured`, not `ok` or
+`failing`: Anthropic without an API key, web push without a subject or VAPID
+key, and weather without a location name or both coordinates. Mail, the
+assistant and notifications keep running while their connection
+(`service/embedding`, `service/anthropic`, `service/webpush`) is unconfigured,
+failing, disabled or needs reauth; the module's settings header names the
+connection and its state, and the line clears once a check passes. A failed
+Test does not hold mail.
 
 Module flags are restart-only. Change `<name>_enabled` through `atrium settings
 set` or host configuration, then restart serve. Settings pages show module
@@ -294,8 +380,9 @@ buttons, carries no token, and opening it writes nothing.
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
 response. A new home message starts a thread. Review keeps decisions and
-history; Library holds knowledge, files, rules, and schedules. Projects
-group threads. Draft and proposal cards in chat call the same send/approval
+history; Library holds knowledge, files, rules, and schedules. Spaces in
+Knowledge hold a former project's instructions, files, threads and tasks,
+and records can link to them. Draft and proposal cards in chat call the same send/approval
 services as their dedicated views. `/chat/agenda` returns 404 when the calendar
 module is off and 503 when the calendar cannot be listed, for example when none
 is configured. Full page navigations are not conditional fragment responses.
@@ -340,10 +427,20 @@ provenance; an edit can only add marks. Confirmed and operator/import-written
 records are protected from agent edits and retraction. Confirmation clears
 `untrusted` but keeps `pii` and `messages`, so such records stay out of the
 profile. Eligible pinned, confirmed, unmarked records form the assistant
-profile. Private projects restrict their content to that project, and nightly
+profile. Private spaces restrict their content to that space, and nightly
 dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.
+
+Standing instructions are one pinned knowledge page, created at service start
+and opened with `GET /api/v1/knowledge/instructions`. The operator edits it with
+the knowledge edit verb; its history shows each change, who made it and the
+previous text, and undo restores the previous text. Its text follows the
+compiled base prompt in chat, cron and nightly requests. It is not part of the
+profile or retrieval, the assistant cannot change it, and it cannot be purged.
+A custom system prompt stored by an earlier version is carried into the page
+once. Subagent roles are fixed in code; the `/subagents` routes and the
+`agent subagents` commands are gone.
 
 The knowledge export is one-way and writes one Markdown folder, set by the
 host. It overwrites only the files it tracks and never touches other files;
