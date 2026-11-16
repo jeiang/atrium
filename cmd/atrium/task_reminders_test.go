@@ -93,31 +93,48 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	healthNotice := func(p map[string]any) bool {
+		body := fmt.Sprint(p["body"])
+		return strings.Contains(body, ": failing") || strings.Contains(body, ": needs_reauth")
+	}
 	runOnce := func() map[string]any {
 		t.Helper()
 		cancel, done := start()
-		select {
-		case p := <-push.arrived:
-			time.Sleep(300 * time.Millisecond)
-			cancel()
-			<-done
-			return browser.decrypt(t, p.body)
-		case <-time.After(5 * time.Second):
-			cancel()
-			ran := <-done
-			t.Fatalf("no reminder was posted: exit %d stderr %s", ran.code, ran.stderr)
-			return nil
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case p := <-push.arrived:
+				payload := browser.decrypt(t, p.body)
+				if healthNotice(payload) {
+					continue
+				}
+				time.Sleep(300 * time.Millisecond)
+				cancel()
+				<-done
+				return payload
+			case <-deadline:
+				cancel()
+				ran := <-done
+				t.Fatalf("no reminder was posted: exit %d stderr %s", ran.code, ran.stderr)
+				return nil
+			}
 		}
 	}
 	runNone := func() {
 		t.Helper()
 		cancel, done := start()
-		select {
-		case p := <-push.arrived:
-			cancel()
-			<-done
-			t.Fatalf("unexpected reminder: %v", browser.decrypt(t, p.body))
-		case <-time.After(2 * time.Second):
+		deadline := time.After(2 * time.Second)
+		for waiting := true; waiting; {
+			select {
+			case p := <-push.arrived:
+				if payload := browser.decrypt(t, p.body); !healthNotice(payload) {
+					cancel()
+					<-done
+					t.Fatalf("unexpected reminder: %v", payload)
+				}
+			case <-deadline:
+				waiting = false
+			}
 		}
 		cancel()
 		<-done
