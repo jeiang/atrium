@@ -69,7 +69,13 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
         }
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
-        squares.push({ name, x: cx + scrollX, y: cy + scrollY });
+        let x = cx + scrollX;
+        let y = cy + scrollY;
+        for (let up = el.parentElement; up && up !== document.scrollingElement; up = up.parentElement) {
+          x += up.scrollLeft;
+          y += up.scrollTop;
+        }
+        squares.push({ name, x, y });
         for (const dx of [-half + 1, 0, half - 1]) {
           for (const dy of [-half + 1, 0, half - 1]) {
             const hit = document.elementFromPoint(cx + dx, cy + dy);
