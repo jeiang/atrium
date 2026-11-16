@@ -189,6 +189,22 @@
           "restart": false
         },
         {
+          "key": "openloops_remind_hour",
+          "label": "Reminder hour (0 to 23)",
+          "module": "mail",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "9",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "plan.options",
+          "restart": false
+        },
+        {
           "key": "openloops_snooze_default_days",
           "label": "Default snooze (days)",
           "module": "mail",

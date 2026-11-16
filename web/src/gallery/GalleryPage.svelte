@@ -12,6 +12,7 @@
   import Knowledge from './sections/Knowledge.svelte';
   import Overlays from './sections/Overlays.svelte';
   import Prose from './sections/Prose.svelte';
+  import Settings from './sections/Settings.svelte';
   import Simulator from './sections/Simulator.svelte';
   import States from './sections/States.svelte';
   import Status from './sections/Status.svelte';
@@ -37,6 +38,7 @@
   <Status />
   <Collections />
   <States />
+  <Settings />
   <Overlays />
   <Connections />
   <Widgets />

@@ -158,12 +158,17 @@
   }
 
   function fieldErrors(error: ApiError): Record<string, string> {
-    const env = (error.body as { error?: { fields?: { loc?: unknown[]; msg?: string }[] } } | undefined)?.error;
+    const body = error.body;
+    const env = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined;
+    const list =
+      typeof env === 'object' && env !== null && 'fields' in env && Array.isArray(env.fields) ? env.fields : [];
     const out: Record<string, string> = {};
-    for (const item of env?.fields ?? []) {
-      const key = item.loc?.[1];
-      if (typeof key !== 'string' || !item.msg) continue;
-      out[key] = item.msg.startsWith(`${key}: `) ? item.msg.slice(key.length + 2) : item.msg;
+    for (const item of list) {
+      if (typeof item !== 'object' || item === null) continue;
+      const key = 'loc' in item && Array.isArray(item.loc) ? item.loc[1] : undefined;
+      const msg = 'msg' in item ? item.msg : undefined;
+      if (typeof key !== 'string' || typeof msg !== 'string') continue;
+      out[key] = msg.startsWith(`${key}: `) ? msg.slice(key.length + 2) : msg;
     }
     return out;
   }
@@ -304,7 +309,7 @@
         <Button variant="secondary" onclick={onRetry}>Retry</Button>
       {/snippet}
     </ViewState>
-  {:else if !schema.data || !values.data}
+  {:else if !schema.data || !values.data || shown !== scope}
     <Skeleton lines={4} label="Loading the settings" />
   {:else if fields.length === 0}
     <ViewState kind="empty" title="No settings here">atrium offers no settings for this page.</ViewState>
