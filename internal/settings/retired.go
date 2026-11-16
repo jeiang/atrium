@@ -102,6 +102,10 @@ var Retired = []RetiredKey{
 	{Module: "assistant", Key: "max_run_cost_usd_haiku_5_5"},
 	{Module: "assistant", Key: "max_run_cost_usd_sonnet_5_5"},
 	{Module: "assistant", Key: "max_run_cost_usd_opus_5_5"},
+	{Module: "assistant", Key: "prompt_system"},
+	{Module: "assistant", Key: "prompt_subagent"},
+	{Module: "assistant", Key: "agent_subagent_description_chars"},
+	{Module: "assistant", Key: "agent_subagent_prompt_chars"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

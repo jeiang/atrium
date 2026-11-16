@@ -559,7 +559,7 @@ func asstThreadRow(t *testing.T, d *db.DB, id int64) (project *int64, effort str
 	return project, effort, limit
 }
 
-func TestAsstProjectsGiveDefaultsAndArchivedProjectsRefuseNewContent(t *testing.T) {
+func TestAsstSpacesGiveDefaultsAndArchivedSpacesRefuseNewContent(t *testing.T) {
 	t.Parallel()
 	_, _, d, w := asstServe(t)
 
@@ -890,7 +890,7 @@ func TestBranchKeepsRunOptions(t *testing.T) {
 	}
 }
 
-func TestProjectFilesStayInTheirProjectAndAreAudited(t *testing.T) {
+func TestSpaceFilesStayInTheirSpaceAndAreAudited(t *testing.T) {
 	t.Parallel()
 	_, _, d, w := asstServe(t)
 	project := func(name string) string {
@@ -938,9 +938,9 @@ func TestProjectFilesStayInTheirProjectAndAreAudited(t *testing.T) {
 		t.Errorf("the deleted file remains on disk: %v", err)
 	}
 	for _, want := range []struct{ operation, outcome, project string }{
-		{"assistant.project-file.upload", "ok", home},
-		{"assistant.project-file.delete", "not_found", other},
-		{"assistant.project-file.delete", "ok", home},
+		{"knowledge.space.file.upload", "ok", home},
+		{"knowledge.space.file.delete", "not_found", other},
+		{"knowledge.space.file.delete", "ok", home},
 	} {
 		if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", want.operation, want.outcome, "project:"+want.project); n != 1 {
 			t.Errorf("%s %s audits for project %s: %d, want 1", want.operation, want.outcome, want.project, n)

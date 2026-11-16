@@ -692,21 +692,27 @@ type HistoryRow struct {
 	ID       int64
 	TS       float64
 	Tool     string
+	Origin   string
+	Before   json.RawMessage
 	UndoneAt *float64
 }
 
 func History(ctx context.Context, q db.Querier, target string) ([]HistoryRow, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT e.id, e.created_at, e.operation, (SELECT u.settled_at FROM effects u WHERE u.id = e.undone_by) "+
+		"SELECT e.id, e.created_at, e.operation, e.origin, e.before_json, (SELECT u.settled_at FROM effects u WHERE u.id = e.undone_by) "+
 			"FROM effects e WHERE e.direction = 'forward' AND e.target = ? ORDER BY e.id DESC", target)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (HistoryRow, error) {
 		var h HistoryRow
+		var before sql.NullString
 		var undone sql.NullFloat64
-		if err := r.Scan(&h.ID, &h.TS, &h.Tool, &undone); err != nil {
+		if err := r.Scan(&h.ID, &h.TS, &h.Tool, &h.Origin, &before, &undone); err != nil {
 			return h, err
+		}
+		if before.Valid {
+			h.Before = json.RawMessage(before.String)
 		}
 		if undone.Valid {
 			h.UndoneAt = &undone.Float64
