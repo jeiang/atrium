@@ -3141,6 +3141,12 @@
           "name": {
             "type": "string"
           },
+          "owner": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
+          },
           "present": {
             "type": "boolean"
           },
@@ -3547,6 +3553,12 @@
           },
           "file_ref": {
             "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
           },
           "present": {
             "type": "boolean"
@@ -4414,6 +4426,7 @@
                       "not_configured",
                       "not_found",
                       "nothing_to_edit",
+                      "pinned",
                       "precondition_failed",
                       "project_archived",
                       "rate_limited",
@@ -11972,6 +11985,9 @@
             "type": "array"
           },
           "fix": {
+            "type": "string"
+          },
+          "hint": {
             "type": "string"
           },
           "id": {

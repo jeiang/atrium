@@ -3,7 +3,9 @@ package connections
 import (
 	"context"
 	"database/sql"
+	"slices"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -35,6 +37,48 @@ func (r *Registry) UnitsChanged() <-chan struct{} {
 		return nil
 	}
 	return r.units
+}
+
+func (r *Registry) Rechecks() <-chan ID {
+	if r == nil {
+		return nil
+	}
+	return r.rechecks
+}
+
+func (s *Store) Rechecks() <-chan ID { return s.reg.Rechecks() }
+
+func (s *Store) recheckSharers(ctx context.Context, owner ID, slots []string) {
+	if s.reg == nil || s.reg.rechecks == nil || len(slots) == 0 {
+		return
+	}
+	rows, err := s.q.QueryContext(ctx, "SELECT id, kind FROM connections WHERE enabled = 1 ORDER BY id")
+	if err != nil {
+		return
+	}
+	type row struct {
+		id   ID
+		kind Kind
+	}
+	all, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
+		var out row
+		return out, r.Scan(&out.id, &out.kind)
+	})
+	if err != nil {
+		return
+	}
+	for _, r := range all {
+		def, ok := s.reg.Lookup(r.kind)
+		if !ok || def.Shares == nil || r.id == owner {
+			continue
+		}
+		if from, slot := def.Shares(r.id); from == owner && slices.Contains(slots, slot) {
+			select {
+			case s.reg.rechecks <- r.id:
+			default:
+			}
+		}
+	}
 }
 
 func (s *Store) SyncUnits(ctx context.Context) error {

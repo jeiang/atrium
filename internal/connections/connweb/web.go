@@ -43,6 +43,8 @@ func (p pageData) URL(v connectionsapp.View) string {
 	return m["url"]
 }
 
+func (p pageData) Hint(v connectionsapp.View) string { return connectionsapp.Hint(v) }
+
 func Page(service func(*web.Deps) (*connectionsapp.Service, error)) web.Page {
 	return web.Page{
 		Module:    Module(service),

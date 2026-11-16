@@ -202,6 +202,37 @@ test.describe('a connection page', () => {
     await expect(page.locator('#connection-fields')).toContainText('Not set.');
   });
 
+  test('a pinned slot has no entry box and a shared slot links to its owner', async ({ page }) => {
+    await useScenario(page, { connections: { sharedSlot: true } });
+    await openConnection(page, 'mail/harbor', 'Harbor mail');
+    const fields = page.locator('#connection-fields');
+    await expect(fields).toContainText('Provided by the host from /run/secrets/harbor-mail.');
+    await expect(fields.locator('input[type="password"]')).toHaveCount(0);
+    await expect(page.getByText('The credential is changed in host configuration.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open Connections in the current interface' })).toHaveCount(0);
+
+    await openConnection(page, 'icloud/harbor', 'Harbor calendar');
+    await expect(fields).toContainText('Uses the credential of mail/harbor. It is set in host configuration.');
+    await expect(fields.locator('input[type="password"]')).toHaveCount(0);
+    await expect(fields.getByRole('button', { name: 'Test and save' })).toHaveCount(0);
+    await expect(fields).not.toContainText('/run/secrets/harbor-mail');
+    await expect(page.getByText('This connection uses the credential of mail/harbor.')).toBeVisible();
+    await fields.getByRole('link', { name: 'Open mail/harbor' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Harbor mail' })).toBeVisible();
+  });
+
+  test('a save over a pinned slot is refused and saves nothing', async ({ page }) => {
+    await useScenario(page, { connections: { pinnedRace: true } });
+    await openConnection(page, 'mail/garden-club', 'Garden club mail');
+    const fields = page.locator('#connection-fields');
+    await fields.getByLabel('Password', { exact: true }).fill(secret);
+    await fields.getByRole('button', { name: 'Test and save' }).click();
+    await expect(fields.getByText('This credential is set in host configuration')).toBeVisible();
+    await expect(fields).toContainText('atrium saved nothing.');
+    await expect(fields.getByText('This connection changed since it loaded')).toHaveCount(0);
+    expect(await page.locator('body').innerText()).not.toContain(secret);
+  });
+
   test('disconnect asks first, then clears the operator connection', async ({ page }) => {
     await openConnection(page, 'service/ship24', 'Ship24 parcels');
     await page.getByRole('button', { name: 'Disconnect Ship24 parcels' }).click();
@@ -335,6 +366,19 @@ test.describe('connections design checks', () => {
         if (layout.touch) await expectTouchTargets(page, 'dialog[open]');
         await expectNoSeriousAxeFindings(page);
       });
+
+      for (const path of ['/settings/connections/mail/harbor', '/settings/connections/icloud/harbor']) {
+        test(`${path} with a pinned or shared slot fits, rounds, stays off blue and passes axe`, async ({ page }) => {
+          await useScenario(page, { connections: { sharedSlot: true } });
+          await gotoShell(page, path);
+          await expect(page.locator('[data-state]:visible').first()).toBeVisible();
+          await expectNoHorizontalScroll(page);
+          await expectRoundedSurfaces(page, edges);
+          if (layout.touch) await expectTouchTargets(page);
+          await expectNoBlue(page);
+          await expectNoSeriousAxeFindings(page);
+        });
+      }
     });
   }
 });

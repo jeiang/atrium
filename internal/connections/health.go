@@ -31,6 +31,7 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 		return
 	}
 	label := string(id)
+	hint := ""
 	if view, err := s.Get(context.WithoutCancel(ctx), id); err == nil {
 		if view.Idle != "" {
 			return
@@ -38,20 +39,81 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 		if view.Label != "" {
 			label = view.Label
 		}
+		if next == NeedsReauth {
+			hint = RepairHint(view)
+		}
 	}
 	state := strings.ReplaceAll(string(next), "_", " ")
 	body := label + ": " + state
 	if reason != "" {
 		body += ": " + reason
 	}
+	if hint != "" {
+		body += "; " + hint
+	}
 	if RepairClass(next) != "" {
 		if features := s.affectedFeatures(context.WithoutCancel(ctx), id); len(features) > 0 {
 			body += "; affects " + strings.Join(features, ", ")
 		}
 	}
-	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil {
+	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil && !errors.Is(err, ErrNoticeDeferred) {
 		log.Warn("connection notification failed", logx.Integration, string(id), logx.Err, err.Error())
 	}
+}
+
+var ErrNoticeDeferred = errors.New("connections: notices are not available in this context yet")
+
+func (s *Store) flushReplaced(ctx context.Context) {
+	if s.reg == nil {
+		return
+	}
+	s.reg.pendingMu.Lock()
+	pending := s.reg.pending
+	s.reg.pending = nil
+	s.reg.pendingMu.Unlock()
+	for i, p := range pending {
+		if !s.noticeReplaced(ctx, p) {
+			s.reg.pendingMu.Lock()
+			s.reg.pending = append(pending[i:], s.reg.pending...)
+			s.reg.pendingMu.Unlock()
+			return
+		}
+	}
+}
+
+func (s *Store) noticeReplaced(ctx context.Context, p PinnedCredential) bool {
+	if s.reg == nil || s.reg.notify == nil || s.d == nil {
+		return true
+	}
+	label := string(p.ID)
+	if view, err := s.Get(context.WithoutCancel(ctx), p.ID); err == nil && view.Label != "" {
+		label = view.Label
+	}
+	body := label + ": the host credential file replaced the " + p.Slot + " value saved in atrium; " + PinnedHint
+	err := s.reg.notify(context.WithoutCancel(ctx), s.d, "atrium: "+label+" credential replaced", body)
+	if errors.Is(err, ErrNoticeDeferred) {
+		return false
+	}
+	if err != nil {
+		log.Warn("connection notification failed", logx.Integration, string(p.ID), logx.Err, err.Error())
+	}
+	return true
+}
+
+const PinnedHint = "the credential is changed in host configuration"
+
+func RepairHint(v View) string {
+	for _, c := range v.Credentials {
+		switch {
+		case c.Owner != "" && c.Pinned:
+			return "it uses the credential of " + string(c.Owner) + "; " + PinnedHint
+		case c.Owner != "":
+			return "it uses the credential of " + string(c.Owner) + "; change it there"
+		case c.Pinned:
+			return PinnedHint
+		}
+	}
+	return ""
 }
 
 // CheckOne re-verifies one connection, using its silent check when the

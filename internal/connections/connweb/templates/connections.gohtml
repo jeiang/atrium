@@ -5,16 +5,16 @@
 <div class="flex flex-col gap-3">
   {{with $d.Error}}<section class="set-group" data-error><p class="px-4 py-2 text-sm text-destructive" role="alert">{{.}}</p></section>{{end}}
   {{range $d.Connections}}{{$v := .}}
-  <form method="post" action="{{$.Path}}/test" class="set-group" data-connection="{{$v.ID}}" data-state="{{$v.State}}" autocomplete="off">
+  <form method="post" action="{{$.Path}}/test" class="set-group" id="connection-{{$v.ID}}" data-connection="{{$v.ID}}" data-state="{{$v.State}}" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
     <input type="hidden" name="id" value="{{$v.ID}}">
     <div class="set-row">
-      <span class="flex min-w-0 flex-col"><span class="font-medium">{{$v.Label}}</span><span class="truncate font-mono text-xs text-ink-3">{{$v.ID}}</span>{{with $v.Reason}}<span class="text-xs text-ink-3">{{.}}</span>{{end}}</span>
+      <span class="flex min-w-0 flex-col"><span class="font-medium">{{$v.Label}}</span><span class="truncate font-mono text-xs text-ink-3">{{$v.ID}}</span>{{with $v.Reason}}<span class="text-xs text-ink-3">{{.}}</span>{{end}}{{with $d.Hint $v}}<span class="text-xs text-ink-3" data-hint>{{.}}</span>{{end}}</span>
       <span class="badge" data-variant="outline">{{$v.Kind}}</span>
       <span class="badge" data-variant="{{if eq $v.State "ok"}}secondary{{else if $v.GraceUntil}}outline{{else if or (eq $v.State "failing") (eq $v.State "needs_reauth")}}destructive{{else}}outline{{end}}">{{replace "_" " " $v.Status}}</span>
     </div>
     {{with $d.URL $v}}<div role="group" class="set-row"><label for="{{$v.ID}}-url">URL</label><input id="{{$v.ID}}-url" name="url" class="input" value="{{.}}" autocomplete="off" spellcheck="false"></div>{{end}}
-    {{range $v.Credentials}}<div role="group" class="set-row"><label for="{{$v.ID}}-{{.Slot}}">{{replace "_" " " .Slot}}</label><input id="{{$v.ID}}-{{.Slot}}" name="credential.{{.Slot}}" type="password" class="input" autocomplete="new-password"></div>{{end}}
+    {{range $v.Credentials}}<div role="group" class="set-row"><label for="{{$v.ID}}-{{.Slot}}">{{replace "_" " " .Slot}}</label>{{if .Owner}}<span id="{{$v.ID}}-{{.Slot}}" class="text-sm" data-owner="{{.Owner}}">Uses the credential of <a class="underline" href="{{$.Path}}#connection-{{.Owner}}">{{.Owner}}</a></span>{{else if .Pinned}}<code id="{{$v.ID}}-{{.Slot}}" class="set-pinned" data-pinned>{{icon "lock"}}Set in host configuration</code>{{else}}<input id="{{$v.ID}}-{{.Slot}}" name="credential.{{.Slot}}" type="password" class="input" autocomplete="new-password">{{end}}</div>{{end}}
     <footer>
       <button type="submit" class="btn" data-size="sm" data-variant="outline">Test and save</button>
       <button type="submit" class="btn text-danger" data-size="sm" data-variant="ghost" formaction="{{$.Path}}/disconnect" formnovalidate data-confirm-submit="Disconnect {{$v.Label}}? Its stored credentials are deleted.">Disconnect</button>

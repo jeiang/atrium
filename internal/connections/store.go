@@ -237,9 +237,11 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 		state State
 	}
 	var removed []dropped
+	var replaced []PinnedCredential
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		replaced = nil
 		for _, id := range sortedKeys(s.host.Connections) {
-			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id]); err != nil {
+			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id], &replaced); err != nil {
 				return err
 			}
 		}
@@ -285,6 +287,11 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 		log.Warn("a host-declared connection was removed from the host configuration and is disabled", logx.Integration, string(row.id))
 		s.announce(ctx, row.id, row.state, Disabled, reasonRemovedFromHost)
 	}
+	if s.reg != nil {
+		s.reg.pendingMu.Lock()
+		s.reg.pending = append(s.reg.pending, replaced...)
+		s.reg.pendingMu.Unlock()
+	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reload != nil {
 		return s.reg.sync.Reload(ctx, s)
 	}
@@ -328,7 +335,7 @@ func (s *Store) disableUnknownKinds(ctx context.Context, tx *sql.Tx) error {
 
 const reasonRemovedFromHost = "removed from host configuration"
 
-func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.HostConnection) error {
+func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.HostConnection, replaced *[]PinnedCredential) error {
 	def, ok := s.reg.Lookup(Kind(hc.Kind))
 	if !ok {
 		return UnknownKind(hc.Kind)
@@ -458,7 +465,15 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 			continue
 		}
 		if prior == "database" {
-			log.Info("the host credential file replaces the database credential", logx.Integration, string(id), "SLOT", slot)
+			log.Warn("the host credential file replaces the database credential", logx.Integration, string(id), "SLOT", slot)
+			actx := ctx
+			if !audit.HasActor(actx) {
+				actx = audit.With(ctx, "host", audit.Job)
+			}
+			if err := audit.Record(actx, tx, audit.Entry{Key: "connection." + string(id) + "." + slot, Secret: true}); err != nil {
+				return err
+			}
+			*replaced = append(*replaced, PinnedCredential{ID: id, Slot: slot})
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot); err != nil {
 			return err
@@ -632,6 +647,7 @@ func endpointIdentity(key, value string) (string, bool) {
 }
 
 func (s *Store) List(ctx context.Context) ([]View, error) {
+	s.flushReplaced(ctx)
 	rows, err := s.q.QueryContext(ctx,
 		"SELECT id, kind, label, config_source, config_json, transport_json, revision, enabled, state, reason, checked_at, last_ok_at, expires_at, reauth_at, results_json "+
 			"FROM connections ORDER BY id")
@@ -746,6 +762,9 @@ func (s *Store) fill(ctx context.Context, v *View) error {
 		return err
 	}
 	v.Credentials = creds
+	if err := s.fillShared(ctx, v); err != nil {
+		return err
+	}
 	v.Dependents = []Dependent{}
 	if s.reg != nil {
 		v.Dependents = s.reg.dependents(*v)
@@ -753,6 +772,46 @@ func (s *Store) fill(ctx context.Context, v *View) error {
 	if v.Enabled && s.reg != nil && s.reg.idle(v.Dependents) {
 		v.Idle = ReasonUnitOff
 	}
+	return nil
+}
+
+func (s *Store) shares(id ID, kind Kind) (ID, string) {
+	if s.reg == nil {
+		return "", ""
+	}
+	def, ok := s.reg.Lookup(kind)
+	if !ok || def.Shares == nil {
+		return "", ""
+	}
+	return def.Shares(id)
+}
+
+func (s *Store) fillShared(ctx context.Context, v *View) error {
+	owner, slot := s.shares(v.ID, v.Kind)
+	if owner == "" || owner == v.ID {
+		return nil
+	}
+	creds, err := s.credentials(ctx, s.q, owner, false)
+	if err != nil {
+		return err
+	}
+	from := CredentialView{Slot: slot}
+	if _, declared := s.host.Connections[string(owner)].CredentialFiles[slot]; declared {
+		from.Source, from.Pinned = "host_file", true
+	}
+	for _, c := range creds {
+		if c.Slot == slot {
+			from = c
+		}
+	}
+	from.Owner, from.FileRef = owner, ""
+	for i, c := range v.Credentials {
+		if c.Slot == slot {
+			v.Credentials[i] = from
+			return nil
+		}
+	}
+	v.Credentials = append(v.Credentials, from)
 	return nil
 }
 
@@ -799,9 +858,11 @@ func (s *Store) credentials(ctx context.Context, q db.Querier, id ID, withValues
 			return nil, err
 		}
 		c.FileRef = fileRef.String
+		_, declared := s.host.Connections[string(id)].CredentialFiles[c.Slot]
 		if c.Source == "host_file" {
 			c.FileRef = s.host.Connections[string(id)].CredentialFiles[c.Slot]
 		}
+		c.Pinned = c.Source == "host_file" || declared
 		c.Present = value.Valid && value.String != "" || c.FileRef != ""
 		if expires.Valid {
 			t := fromUnix(&expires.Float64)
@@ -825,6 +886,7 @@ func (s *Store) open(ctx context.Context, q db.Querier, id ID) (*Lease, error) {
 }
 
 func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisabled bool) (*Lease, error) {
+	s.flushReplaced(ctx)
 	var (
 		v          View
 		configJSON string
@@ -868,12 +930,19 @@ func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisable
 		enabledCaps = append(enabledCaps, Capability(c))
 	}
 	if s.d != nil {
-		if changed := s.rotate(id, creds); changed {
+		if rotated := s.rotate(id, creds); len(rotated) > 0 {
 			if _, err := s.d.Write.ExecContext(ctx,
 				"UPDATE connections SET revision = revision + 1, state = 'untested', reason = '', checked_at = NULL, last_ok_at = NULL, results_json = '{}' WHERE id = ?", id); err != nil {
 				return nil, err
 			}
 			revision++
+			for _, slot := range rotated {
+				if _, err := s.d.Write.ExecContext(ctx,
+					"UPDATE connection_credentials SET set_at = ? WHERE connection_id = ? AND slot = ? AND source = 'host_file'", s.stamp(), id, slot); err != nil {
+					return nil, err
+				}
+			}
+			s.recheckSharers(ctx, id, rotated)
 		}
 	}
 	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds}
@@ -882,8 +951,8 @@ func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisable
 	return lease, nil
 }
 
-func (s *Store) rotate(id ID, creds map[string]credential) bool {
-	changed := false
+func (s *Store) rotate(id ID, creds map[string]credential) []string {
+	var rotated []string
 	for slot, c := range creds {
 		if c.source != "host_file" {
 			continue
@@ -898,10 +967,10 @@ func (s *Store) rotate(id ID, creds map[string]credential) bool {
 		s.digests[key] = digest
 		s.mu.Unlock()
 		if seen && previous != digest {
-			changed = true
+			rotated = append(rotated, slot)
 		}
 	}
-	return changed
+	return rotated
 }
 
 func (s *Store) loadCredentials(ctx context.Context, q db.Querier, id ID) (map[string]credential, error) {
@@ -1181,6 +1250,19 @@ func (l *Lease) Transport() (*http.Client, error) {
 	return l.newClient(transport.Options{}, nil)
 }
 
+func (l *Lease) OwnerCredential(ctx context.Context) (string, error) {
+	owner, slot := l.store.shares(l.id, l.kind)
+	if owner == "" {
+		return "", MissingCredential{}
+	}
+	lease, err := l.store.open(ctx, l.store.q, owner)
+	if err != nil {
+		return "", err
+	}
+	defer lease.Close()
+	return lease.Credential(slot)
+}
+
 func (l *Lease) Credential(slot string) (string, error) {
 	c, ok := l.creds[slot]
 	if !ok || c.source == "host_file" && c.fileRef == "" {
@@ -1319,6 +1401,27 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 	return s.afterWrite(ctx, id)
 }
 
+func (s *Store) refusePinned(current View, cand Candidate) error {
+	for _, in := range cand.Credentials {
+		if in.Value == "" {
+			continue
+		}
+		if _, declared := s.host.Connections[string(current.ID)].CredentialFiles[in.Slot]; declared {
+			return &PinnedCredential{ID: current.ID, Slot: in.Slot}
+		}
+		for _, c := range current.Credentials {
+			if c.Slot != in.Slot || !c.Pinned {
+				continue
+			}
+			if c.Owner != "" {
+				return &PinnedCredential{ID: c.Owner, Slot: in.Slot}
+			}
+			return &PinnedCredential{ID: current.ID, Slot: in.Slot}
+		}
+	}
+	return nil
+}
+
 // Save writes operator-owned configuration and credentials without running a
 // test. It is used by the consent flows, which obtain a grant before any test
 // can succeed.
@@ -1328,6 +1431,9 @@ func (s *Store) Save(ctx context.Context, id ID, cand Candidate, commits ...Comm
 	}
 	current, err := s.Get(ctx, id)
 	if err != nil {
+		return View{}, err
+	}
+	if err := s.refusePinned(current, cand); err != nil {
 		return View{}, err
 	}
 	def, ok := s.reg.Lookup(current.Kind)
@@ -1365,6 +1471,9 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate, commits 
 	}
 	current, err := s.Get(ctx, id)
 	if err != nil {
+		return View{}, err
+	}
+	if err := s.refusePinned(current, cand); err != nil {
 		return View{}, err
 	}
 	def, ok := s.reg.Lookup(current.Kind)
@@ -1468,6 +1577,13 @@ func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, r
 		return err
 	}
 	s.announce(ctx, id, previous, state, reason)
+	var slots []string
+	for _, cred := range cand.Credentials {
+		if cred.Value != "" {
+			slots = append(slots, cred.Slot)
+		}
+	}
+	s.recheckSharers(ctx, id, slots)
 	return nil
 }
 

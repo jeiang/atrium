@@ -74,6 +74,7 @@ type Definition struct {
 	Kind            Kind
 	Offers          []string
 	CredentialSlots []string
+	Shares          func(ID) (owner ID, slot string)
 	Defaults        map[string]string
 	Validate        func(Candidate) error
 	Grace           time.Duration
@@ -84,18 +85,21 @@ type Definition struct {
 }
 
 type Registry struct {
-	mu     sync.RWMutex
-	defs   map[Kind]Definition
-	needs  []Need
-	active func(string) bool
-	on     func(string) bool
-	sync   *AccountSync
-	notify Notifier
-	units  chan struct{}
+	mu        sync.RWMutex
+	defs      map[Kind]Definition
+	needs     []Need
+	active    func(string) bool
+	on        func(string) bool
+	sync      *AccountSync
+	notify    Notifier
+	units     chan struct{}
+	rechecks  chan ID
+	pendingMu sync.Mutex
+	pending   []PinnedCredential
 }
 
 func Compile(defs []Definition, needs []Need, sync *AccountSync, notify Notifier) (*Registry, error) {
-	r := &Registry{defs: make(map[Kind]Definition, len(defs)), sync: sync, notify: notify, units: make(chan struct{}, 1)}
+	r := &Registry{defs: make(map[Kind]Definition, len(defs)), sync: sync, notify: notify, units: make(chan struct{}, 1), rechecks: make(chan ID, 16)}
 	for _, d := range defs {
 		if d.Kind == "" {
 			return nil, errors.New("connections: a definition needs a kind")
@@ -209,6 +213,8 @@ type CredentialView struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	SetAt     *time.Time `json:"set_at,omitempty"`
 	SetBy     string     `json:"set_by,omitempty"`
+	Pinned    bool       `json:"pinned,omitempty"`
+	Owner     ID         `json:"owner,omitempty"`
 }
 
 type View struct {
@@ -360,6 +366,15 @@ type MissingCredential struct{ Slot string }
 
 func (e MissingCredential) Error() string {
 	return "connections: credential " + e.Slot + " is not set"
+}
+
+type PinnedCredential struct {
+	ID   ID
+	Slot string
+}
+
+func (e *PinnedCredential) Error() string {
+	return "connections: " + string(e.ID) + " credential " + e.Slot + " is pinned by host configuration; change it there"
 }
 
 type NotConfigured struct{ ID ID }

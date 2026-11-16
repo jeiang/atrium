@@ -127,9 +127,7 @@ func ICloudLogin(ctx context.Context, login Login) (config.CalDAVLogin, error) {
 	}
 	password := ""
 	if login.DAV != nil && login.DAV.ID() == ICloudID(account.Name) {
-		if value, err := login.DAV.Credential("mail/" + account.Name + "/password"); err == nil {
-			password = value
-		}
+		password, _ = icloudPassword(ctx, login.DAV, account.Name)
 	}
 	if password == "" {
 		password, _ = config.From(ctx).Password(account.Name)
@@ -209,7 +207,12 @@ func outcome(capability string, err error) (connections.Result, bool) {
 }
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Validate: validateICloud, Test: testICloud}}
+	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Shares: sharedPassword, Validate: validateICloud, Test: testICloud}}
+}
+
+func sharedPassword(id connections.ID) (connections.ID, string) {
+	account := strings.TrimPrefix(string(id), "icloud/")
+	return connections.ID("mail/" + account), "mail/" + account + "/password"
 }
 
 func validateICloud(c connections.Candidate) error {
@@ -239,7 +242,11 @@ func validateICloud(c connections.Candidate) error {
 }
 
 func icloudPassword(ctx context.Context, lease *connections.Lease, account string) (string, error) {
-	password, err := lease.Credential("mail/" + account + "/password")
+	password, err := lease.OwnerCredential(ctx)
+	if err == nil && password != "" {
+		return password, nil
+	}
+	password, err = lease.Credential("mail/" + account + "/password")
 	if err == nil && password != "" {
 		return password, nil
 	}
