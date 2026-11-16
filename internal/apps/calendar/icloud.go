@@ -86,14 +86,18 @@ func (c *icloudCalendar) remove(ctx context.Context, uid string) error {
 		if err != nil || !hasUID(cal, uid) {
 			continue
 		}
-		if err := c.client.Delete(ctx, object.URL); err != nil {
-			var status *davmirror.StatusError
-			if errors.As(err, &status) && status.Status == http.StatusNotFound {
-				return nil
-			}
-			return err
+		return deleteObject(ctx, c.client, object.URL)
+	}
+	return nil
+}
+
+func deleteObject(ctx context.Context, client *davmirror.Client, path *url.URL) error {
+	if err := client.Delete(ctx, path); err != nil {
+		var status *davmirror.StatusError
+		if errors.As(err, &status) && status.Status == http.StatusNotFound {
+			return nil
 		}
-		return nil
+		return err
 	}
 	return nil
 }
