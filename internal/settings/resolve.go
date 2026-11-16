@@ -81,6 +81,10 @@ func instanceValue(ctx context.Context, q db.Querier, key string) (string, bool,
 	return value, err == nil, err
 }
 
+func StoredValue(ctx context.Context, q db.Querier, key string) (string, bool, error) {
+	return instanceValue(ctx, q, key)
+}
+
 func (r *Registry) writable(key string) (Def, error) {
 	d, pins, err := r.lookup(key)
 	if err != nil {

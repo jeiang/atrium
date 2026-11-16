@@ -316,16 +316,6 @@ func (r *Registry) Authorize(ctx context.Context, q db.Querier, kind tool.Kind, 
 	return t, decision, nil
 }
 
-func (r *Registry) SubagentPool() ([]tool.Tool, error) {
-	all, err := r.All()
-	if err != nil {
-		return nil, err
-	}
-	return slices.DeleteFunc(all, func(t tool.Tool) bool {
-		return t.Name == "report" || t.Name == WebSearchName || t.Effect != tool.Read || !t.Contexts.Has(tool.Sub)
-	}), nil
-}
-
 func (r *Registry) enabled(ctx context.Context, q db.Querier, name string) (bool, error) {
 	key := settingKey(name)
 	if _, ok := r.settings.Lookup(key); !ok || q == nil {
