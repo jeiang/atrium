@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	KindTMDB        connections.Kind = "service/tmdb"
-	KindEZTV        connections.Kind = "service/eztv"
-	KindMediaAgent  connections.Kind = "service/media-agent"
+	KindTMDB       connections.Kind = "service/tmdb"
+	KindEZTV       connections.Kind = "service/eztv"
+	KindMediaAgent connections.Kind = "service/media-agent"
 )
 
 const eztvProbeIMDb = "tt0000001"

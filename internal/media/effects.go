@@ -44,7 +44,6 @@ func validateOp(name string) func(json.RawMessage) error {
 	}
 }
 
-
 type agentUndo struct {
 	Op         string `json:"op"`
 	AgentID    string `json:"agent_id"`

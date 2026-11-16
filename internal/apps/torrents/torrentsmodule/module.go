@@ -15,8 +15,8 @@ import (
 )
 
 type Module struct {
-	App       *torrents.App
-	Now       func() float64
+	App *torrents.App
+	Now func() float64
 }
 
 func Requirements() []module.Requirement {
@@ -60,8 +60,8 @@ func operations() ([]application.Definition, []application.Binding) {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	ops, bindings := operations()
 	return module.Declaration{
-		Name:  unit.Torrents,
-		Title: "Torrents",
+		Name:     unit.Torrents,
+		Title:    "Torrents",
 		App:      true,
 		Inherits: unit.Media,
 		Needs: []module.Need{
