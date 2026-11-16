@@ -3,16 +3,19 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 func Declared(defs []Definition, job Job) (Definition, bool) {
@@ -38,53 +41,79 @@ func SpendOf(defs []Definition, job Job) Spend {
 
 var hostWarned sync.Map
 
-func declaredSchedule(ctx context.Context, q db.Querier, def Definition) (string, bool, error) {
+const CarryOperation = "scheduler.schedule.carry"
+
+func declaredSchedule(ctx context.Context, q db.Querier, def Definition) string {
 	switch {
 	case def.Every > 0:
-		return EveryText(def.Every), false, nil
-	case def.ScheduleHost != "":
-		value := strings.TrimSpace(config.HostValueFrom(ctx, def.ScheduleHost))
-		if value == "" {
-			hostWarned.Delete(def.ScheduleHost)
-			return def.Schedule, false, nil
-		}
-		err := RecurringSchedule(value)
-		if err == nil {
-			_, _, err = Validate(ctx, q, value, "UTC", 0, true)
-		}
-		if err == nil {
-			hostWarned.Delete(def.ScheduleHost)
-			return value, false, nil
-		}
-		if last, seen := hostWarned.Swap(def.ScheduleHost, value); !seen || last != value {
-			log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
-		}
-		return def.Schedule, false, nil
-	case def.ScheduleSetting == "":
-		return def.Schedule, false, nil
+		return EveryText(def.Every)
+	case def.ScheduleHost == "":
+		return def.Schedule
 	}
-	found, err := settings.From(ctx).Resolve(ctx, q, def.ScheduleSetting)
-	return found.Value, found.Origin != settings.FromDefault, err
+	value := strings.TrimSpace(config.HostValueFrom(ctx, def.ScheduleHost))
+	if value == "" {
+		hostWarned.Delete(def.ScheduleHost)
+		return def.Schedule
+	}
+	err := RecurringSchedule(value)
+	if err == nil {
+		_, _, err = Validate(ctx, q, value, "UTC", 0, true)
+	}
+	if err == nil {
+		hostWarned.Delete(def.ScheduleHost)
+		return value
+	}
+	if last, seen := hostWarned.Swap(def.ScheduleHost, value); !seen || last != value {
+		log.Warn(fmt.Sprintf("host schedule %s not applied: %s; using %s", def.ScheduleHost, err, def.Schedule))
+	}
+	return def.Schedule
 }
 
-func syncSchedule(ctx context.Context, q db.Querier, def Definition, job Job, now float64) (bool, error) {
-	schedule, explicit, err := declaredSchedule(ctx, q, def)
-	if err != nil || schedule == job.Schedule {
-		return false, err
+func syncSchedule(ctx context.Context, tx *sql.Tx, def Definition, job Job, now float64) error {
+	if def.CarriedSetting != "" {
+		return carry(ctx, tx, def, job, now)
 	}
-	if def.ScheduleSetting == "" {
-		return true, resetSchedule(ctx, q, job, schedule, now)
+	if schedule := declaredSchedule(ctx, tx, def); schedule != job.Schedule {
+		return resetSchedule(ctx, tx, job, schedule, now)
 	}
-	if !explicit {
-		return false, nil
+	return nil
+}
+
+func carry(ctx context.Context, tx *sql.Tx, def Definition, job Job, now float64) error {
+	value, found, err := settings.StoredValue(ctx, tx, def.CarriedSetting)
+	if err != nil || !found {
+		return err
 	}
-	_, err = UpdateJob(ctx, q, job.ID, now, JobUpdate{Schedule: &schedule, Actor: Operator})
-	var refused Error
-	if errors.As(err, &refused) {
-		log.Warn(fmt.Sprintf("schedule setting for %s not applied: %s", job.Name, refused), logx.Job, job.ID)
-		return false, nil
+	value = strings.TrimSpace(value)
+	if value == "" || value == def.Schedule {
+		return nil
 	}
-	return err == nil, err
+	target := "job:" + def.Key
+	if done, err := state.Audited(ctx, tx, CarryOperation, target); err != nil || done {
+		return err
+	}
+	applied, reason := job.Schedule == value, ""
+	if job.Schedule == def.Schedule {
+		_, err := UpdateJob(ctx, tx, job.ID, now, JobUpdate{Schedule: &value, Actor: Operator, Floor: def.PromptRun})
+		var refused Error
+		switch {
+		case errors.As(err, &refused):
+			reason = refused.Error()
+			log.Warn(fmt.Sprintf("carried schedule %s for %s not applied: %s", def.CarriedSetting, job.Name, refused), logx.Job, job.ID)
+		case err != nil:
+			return err
+		default:
+			applied = true
+		}
+	}
+	details, err := json.Marshal(map[string]any{"key": def.CarriedSetting, "value": value, "applied": applied, "refused": reason})
+	if err != nil {
+		return err
+	}
+	_, err = state.New(nil).Audit(ctx, tx, state.Entry{
+		Operation: CarryOperation, Actor: "atrium", Source: audit.Migration, Outcome: state.OK, Target: target, DetailsJSON: string(details),
+	})
+	return err
 }
 
 func declaredJob(ctx context.Context, q db.Querier, key string) (*Job, error) {
@@ -99,8 +128,8 @@ func declaredJob(ctx context.Context, q db.Querier, key string) (*Job, error) {
 	return &j, nil
 }
 
-func Ensure(ctx context.Context, q db.Querier, defs []Definition, tz string, now float64) error {
-	rows, err := q.QueryContext(ctx, "SELECT declaration_key FROM jobs WHERE declaration_key IS NOT NULL AND state != ?", StateCancelled)
+func Ensure(ctx context.Context, tx *sql.Tx, defs []Definition, tz string, now float64) error {
+	rows, err := tx.QueryContext(ctx, "SELECT declaration_key FROM jobs WHERE declaration_key IS NOT NULL AND state != ?", StateCancelled)
 	if err != nil {
 		return err
 	}
@@ -112,20 +141,22 @@ func Ensure(ctx context.Context, q db.Querier, defs []Definition, tz string, now
 		return err
 	}
 	for _, def := range defs {
-		job, err := declaredJob(ctx, q, def.Key)
+		job, err := declaredJob(ctx, tx, def.Key)
 		if err != nil {
 			return err
 		}
 		if job == nil {
-			if err := createDeclared(ctx, q, tz, now, def); err != nil {
+			if err := createDeclared(ctx, tx, tz, now, def); err != nil {
 				return err
 			}
-			continue
+			if job, err = declaredJob(ctx, tx, def.Key); err != nil {
+				return err
+			}
 		}
 		if job.State == StateCancelled {
 			continue
 		}
-		if _, err := syncSchedule(ctx, q, def, *job, now); err != nil {
+		if err := syncSchedule(ctx, tx, def, *job, now); err != nil {
 			return err
 		}
 	}
@@ -133,7 +164,7 @@ func Ensure(ctx context.Context, q db.Querier, defs []Definition, tz string, now
 		if slices.ContainsFunc(defs, func(d Definition) bool { return d.Key == key }) {
 			continue
 		}
-		if _, err := q.ExecContext(ctx, "UPDATE jobs SET state = ?, next_due = NULL WHERE declaration_key = ? AND state != ?", StateCancelled, key, StateCancelled); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE jobs SET state = ?, next_due = NULL WHERE declaration_key = ? AND state != ?", StateCancelled, key, StateCancelled); err != nil {
 			return err
 		}
 	}
@@ -141,12 +172,8 @@ func Ensure(ctx context.Context, q db.Querier, defs []Definition, tz string, now
 }
 
 func createDeclared(ctx context.Context, q db.Querier, tz string, now float64, def Definition) error {
-	schedule, _, err := declaredSchedule(ctx, q, def)
-	if err != nil {
-		return err
-	}
-	_, err = CreateJob(ctx, q, NewJob{
-		Name: def.Name, Prompt: def.Prompt, Schedule: schedule, TZ: tz, Now: now,
+	_, err := CreateJob(ctx, q, NewJob{
+		Name: def.Name, Prompt: def.Prompt, Schedule: declaredSchedule(ctx, q, def), TZ: tz, Now: now,
 		CreatedBy: Operator, Kind: def.Kind, Module: def.Module, Key: def.Key,
 	})
 	return err

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 )
 
 func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
@@ -29,14 +30,14 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 	run := asstLastRun(t, d, thread)
 	owner := liveRun(t, d, run)
 
-	tick := func(what string) {
+	tick := func(what string, want int) {
 		t.Helper()
 		next, stderr := tickProcess(t)
-		if code := exitCode(next.Wait()); code != 0 {
-			t.Fatalf("%s tick exit %d: %s", what, code, stderr)
+		if code := exitCode(next.Wait()); code != want {
+			t.Fatalf("%s tick exit %d, want %d: %s", what, code, want, stderr)
 		}
 	}
-	tick("live")
+	tick("live", cli.ExitTempFail)
 	if n := len(api.Requests()) - before; n != 1 {
 		t.Fatalf("%d model requests after a tick while serve holds the chat run, want 1", n)
 	}
@@ -53,7 +54,7 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 	asstExec(t, d, "UPDATE runs SET lease_until = ? WHERE id = ? AND state = 'running'", unixNow()-1, run)
 
 	api.Push(asstReply("resumed reply"))
-	tick("restart")
+	tick("restart", cli.ExitOK)
 	if state, text := asstSettle(t, d, run); state != "done" {
 		t.Fatalf("chat run %s %s after the restart tick, want done", state, text)
 	}
@@ -63,7 +64,7 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 	w = asstBrowse(t, startServeIn(t, dir))
 	code, body, _ := w.post(fmt.Sprintf("/chat/%d/runs/%d/resume", thread, run), url.Values{}, true)
 	w.want(code, http.StatusConflict, body, "run is not interrupted")
-	tick("settled")
+	tick("settled", cli.ExitTempFail)
 	if n := len(api.Requests()) - before; n != 2 {
 		t.Fatalf("%d model requests after serve restarted and a tick on the settled run, want 2", n)
 	}

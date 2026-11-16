@@ -43,7 +43,7 @@ func memoryOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			asstapp.DescribeMemoryTree(), asstapp.DescribeMemoryView(), asstapp.DescribeMemoryEstimate(),
 			asstapp.DescribeMemoryWork(), asstapp.DescribeMemoryBackfill(), asstapp.DescribeMemoryZoom(),
-			asstapp.DescribeMemorySearch(), asstapp.DescribeResultRecall(), asstapp.DescribeUsage(),
+			asstapp.DescribeMemorySearch(), asstapp.DescribeResultRecall(), asstapp.DescribeUsage(), asstapp.DescribeSpend(),
 		}, append(memoryAPIBindings(nil), []application.Binding{
 			{Kind: application.CLI, Target: "memory tree", Uses: uses(asstapp.MemoryTreeName)},
 			{Kind: application.CLI, Target: "memory view", Uses: uses(asstapp.MemoryViewName)},

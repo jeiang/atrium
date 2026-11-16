@@ -165,21 +165,38 @@ func Check(ctx context.Context, q db.Querier, now float64, loc *time.Location, u
 	return found, nil
 }
 
-const RunCapPrefix = "max_run_cost_usd_"
-
-func RunCapKey(model string) string {
-	return RunCapPrefix + strings.ReplaceAll(strings.TrimPrefix(model, "claude-"), "-", "_")
-}
+const RunCapKey = "max_run_cost_usd"
 
 func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
 	if _, err := pricing.Lookup(model); err != nil {
 		return 0, err
 	}
-	found, err := settings.From(ctx).Resolve(ctx, q, RunCapKey(model))
+	found, err := settings.From(ctx).Resolve(ctx, q, RunCapKey)
 	if err != nil {
 		return 0, err
 	}
 	return found.Float()
+}
+
+type Headroom struct {
+	Class       Class   `json:"class"`
+	CeilingUSD  float64 `json:"ceiling_usd"`
+	HeadroomUSD float64 `json:"headroom_usd"`
+	Refused     bool    `json:"refused"`
+}
+
+func HeadroomOf(s Status) []Headroom {
+	used := s.CommittedUSD + s.CarryInUSD
+	out := []Headroom{
+		{Class: Interactive, CeilingUSD: s.InteractiveCeilingUSD},
+		{Class: Unattended, CeilingUSD: s.UnattendedCeilingUSD},
+		{Class: Classification, CeilingUSD: s.BudgetUSD},
+	}
+	for i := range out {
+		out[i].HeadroomUSD = math.Max(0, out[i].CeilingUSD-used)
+		out[i].Refused = used >= out[i].CeilingUSD
+	}
+	return out
 }
 
 const SpendCapText = "Anthropic spend limit reached: the organization's API usage cap refused the request. Raise the cap or wait for it to reset in the Anthropic console."
@@ -229,18 +246,11 @@ func CommittedOnThreads(ctx context.Context, q db.Querier, threadIDs []int64) (i
 	return n, err
 }
 
-func registerRunCaps() []settings.Def {
-	var defs []settings.Def
-	for _, m := range pricing.Models() {
-		defs = append(defs, settings.Value(settings.UI, settings.Def{
-			Key: RunCapKey(m.ID), Label: "Run cost cap, " + m.Name + " (USD)", Module: "assistant", Type: settings.Float, Default: strconv.FormatFloat(m.RunCapUSD, 'f', -1, 64),
-			Check: settings.Above(0)}))
-	}
-	return defs
-}
-
 func Settings() []settings.Def {
-	return append(registerRunCaps(),
+	return []settings.Def{
+		settings.Value(settings.UI, settings.Def{
+			Key: RunCapKey, Label: "Run cost cap (USD)", Module: "assistant", Type: settings.Float, Default: strconv.FormatFloat(pricing.DefaultRunCapUSD, 'f', -1, 64),
+			Check: settings.Above(0)}),
 		settings.Value(settings.UI, settings.Def{
 			Key: BudgetKey, Label: "Monthly budget (USD)", Module: "assistant", Type: settings.Float, Default: "150",
 			Check: settings.Above(0)}),
@@ -250,5 +260,5 @@ func Settings() []settings.Def {
 		settings.Value(settings.UI, settings.Def{
 			Key: ThreadCapKey, Label: "Thread cost cap (USD)", Module: "assistant", Type: settings.Float, Default: "10",
 			Check: settings.Above(0)}),
-	)
+	}
 }
