@@ -142,10 +142,10 @@ func (r *Registry) Needs() []Need {
 	return slices.Clone(r.needs)
 }
 
-func (r *Registry) Activate(active func(module string) bool) {
+func (r *Registry) Activate(active, on func(module string) bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.active = active
+	r.active, r.on = active, on
 }
 
 func (r *Registry) isActive(module string) bool {
@@ -153,6 +153,25 @@ func (r *Registry) isActive(module string) bool {
 	active := r.active
 	r.mu.RUnlock()
 	return active == nil || active(module)
+}
+
+func (r *Registry) isOn(module string) bool {
+	r.mu.RLock()
+	on := r.on
+	r.mu.RUnlock()
+	return on == nil || on(module)
+}
+
+func (r *Registry) idle(deps []Dependent) bool {
+	if len(deps) == 0 {
+		return false
+	}
+	for _, d := range deps {
+		if r.isOn(d.Module) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Registry) dependents(v View) []Dependent {
@@ -201,7 +220,7 @@ func (r *Registry) Resolve(views []View) Dependencies {
 		case bound != nil:
 			b.Connection = bound.ID
 			b.State, b.Reason = CapabilityState(*bound, n.Capability)
-			if class := RepairClass(b.State); class != "" {
+			if class := RepairClass(b.State); class != "" && bound.Idle == "" {
 				b.Repair = RepairID(bound.ID, class)
 			}
 		case disabled:
@@ -226,7 +245,7 @@ func (r *Registry) Resolve(views []View) Dependencies {
 	for _, v := range views {
 		state, reason := CapabilityState(v, "")
 		class := RepairClass(state)
-		if class == "" {
+		if class == "" || v.Idle != "" {
 			continue
 		}
 		rep := Repair{ID: RepairID(v.ID, class), Connection: v.ID, Label: v.Label, Class: class, State: state, Reason: reason,

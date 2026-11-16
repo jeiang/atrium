@@ -193,7 +193,7 @@ func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (app
 	}
 	var ids, checked []ID
 	for _, v := range views {
-		if !checkable(v) || in.ID != "" && !wanted(v, in) || in.ID == "" && !due(v, in.Start) {
+		if !checkable(v) || v.Idle != "" || in.ID != "" && !wanted(v, in) || in.ID == "" && !due(v, in.Start) {
 			continue
 		}
 		if v.CheckedAt == nil {
@@ -220,7 +220,7 @@ func (s *Service) Check(ctx context.Context, in CheckInput) (application.Change[
 	}
 	var ids []ID
 	for _, v := range views {
-		if checkable(v) && (!in.Changed || v.CheckedAt == nil) {
+		if checkable(v) && v.Idle == "" && (!in.Changed || v.CheckedAt == nil) {
 			ids = append(ids, v.ID)
 		}
 	}

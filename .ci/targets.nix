@@ -31,12 +31,11 @@
         then each "web-e2e" "web-e2e.engines" all.web-e2e.engines
         else []
       )
+      ++ [(group "go" (have (builtins.filter (name: name != "go-test") direct)))]
       ++ (
         if onRunner
         then []
-        else
-          [(group "go" (have (builtins.filter (name: name != "go-test") direct)))]
-          ++ each "go-test" "go-test.shards" all.go-test.shards
+        else each "go-test" "go-test.shards" all.go-test.shards
       )
     );
 in {
