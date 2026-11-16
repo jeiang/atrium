@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -14,14 +16,18 @@ import (
 // Notifier delivers one operator notification for a health state transition.
 type Notifier func(ctx context.Context, d *db.DB, title, body string) error
 
-// announce reports a state change after its write committed. The first
-// observation of a connection is evidence, not a transition, so it is silent.
 func (s *Store) announce(ctx context.Context, id ID, previous, next State, reason string) {
 	var n Notifier
 	if s.reg != nil {
 		n = s.reg.notify
 	}
-	if n == nil || s.d == nil || previous == next || previous == "" || previous == Untested || next == Untested {
+	if n == nil || s.d == nil || previous == next || next == Untested || next == Away {
+		return
+	}
+	if (previous == "" || previous == Untested) && next != Failing && next != NeedsReauth && next != Disabled {
+		return
+	}
+	if previous == Away && (next == OK || next == Expiring) {
 		return
 	}
 	label := string(id)
@@ -59,7 +65,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 		if !errors.As(err, &invalid) {
 			return View{}, err
 		}
-		return s.record(ctx, id, lease.revision, []Result{{State: Failing, Reason: err.Error()}}, false, commits...)
+		return s.record(ctx, id, lease.revision, 0, []Result{{State: Failing, Reason: err.Error()}}, commits...)
 	}
 	action := def.Test
 	if def.Silent != nil {
@@ -69,7 +75,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, results, false, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
 }
 
 type HealthState struct {
@@ -89,21 +95,108 @@ func HealthStates(ctx context.Context, q db.Querier) ([]HealthState, error) {
 	})
 }
 
-type failure struct {
+type outcome struct {
 	ID       ID
 	Revision int64
+	OK       bool
 }
 
-var failures = make(chan failure, 64)
+type RuntimeReport struct {
+	ID       ID
+	revision int64
+	store    *Store
+	result   Result
+}
 
-// Failed reports a runtime request that suggests the connection is unhealthy.
-func Failed() <-chan failure { return failures }
+type observedKey struct {
+	store      *Store
+	id         ID
+	capability string
+}
 
-func report(id ID, revision int64) {
+type observation struct {
+	state State
+	at    int64
+}
+
+var (
+	outcomes  = make(chan outcome, 64)
+	succeeded sync.Map
+	observed  sync.Map
+	reporters sync.Map
+)
+
+func Outcomes() <-chan outcome { return outcomes }
+
+func report(id ID, revision int64, ok bool) {
+	if ok {
+		now := time.Now().UnixNano()
+		if last, seen := succeeded.Load(id); seen && now-last.(int64) < int64(time.Minute) {
+			return
+		}
+		succeeded.Store(id, now)
+	}
 	select {
-	case failures <- failure{ID: id, Revision: revision}:
+	case outcomes <- outcome{ID: id, Revision: revision, OK: ok}:
 	default:
 	}
+}
+
+func Reports(d *db.DB) (<-chan RuntimeReport, func()) {
+	ch := make(chan RuntimeReport, 64)
+	reporters.Store(d, ch)
+	return ch, func() { reporters.CompareAndDelete(d, ch) }
+}
+
+func (l *Lease) Report(r Result) {
+	if l.store == nil || l.store.d == nil || r.Capability == "" {
+		return
+	}
+	ch, ok := reporters.Load(l.store.d)
+	if !ok {
+		return
+	}
+	key := observedKey{store: l.store, id: l.id, capability: r.Capability}
+	now := time.Now().UnixNano()
+	if last, seen := observed.Load(key); seen {
+		if prev := last.(observation); prev.state == r.State && now-prev.at < int64(time.Minute) {
+			return
+		}
+	}
+	select {
+	case ch.(chan RuntimeReport) <- RuntimeReport{ID: l.id, revision: l.revision, store: l.store, result: r}:
+		observed.Store(key, observation{state: r.State, at: now})
+	default:
+	}
+}
+
+func (r RuntimeReport) Record(ctx context.Context) error {
+	current, err := r.store.Get(ctx, r.ID)
+	if err != nil || !changes(current, r.result) {
+		return err
+	}
+	if err := r.store.Observe(ctx, r.ID, r.revision, r.result); err != nil && !errors.As(err, new(*Conflict)) {
+		return err
+	}
+	return nil
+}
+
+func changes(current View, r Result) bool {
+	if current.State == Unconfigured || current.State == Disabled {
+		return false
+	}
+	for _, p := range current.Results {
+		if p.Capability == r.Capability {
+			return !same(p.State, r.State)
+		}
+	}
+	return r.State != OK
+}
+
+func same(a, b State) bool {
+	healthy := func(s State) bool { return s == OK || s == Expiring }
+	failed := func(s State) bool { return s == Failing || s == NeedsReauth }
+	return a == b || healthy(a) && healthy(b) || failed(a) && failed(b)
 }
 
 type reporter struct {
@@ -114,8 +207,11 @@ type reporter struct {
 
 func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := r.next.RoundTrip(req)
-	if err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500) {
-		report(r.id, r.revision)
+	switch {
+	case err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500):
+		report(r.id, r.revision, false)
+	case err == nil && resp.StatusCode < http.StatusBadRequest:
+		report(r.id, r.revision, true)
 	}
 	return resp, err
 }

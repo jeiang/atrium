@@ -226,6 +226,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		"x-atrium-module": b.Module,
 		"parameters":      params,
 	}
+	if shape.Description != "" {
+		op["description"] = shape.Description
+	}
 	if id != string(b.Uses[0]) {
 		op["x-atrium-operation"] = string(b.Uses[0])
 	}

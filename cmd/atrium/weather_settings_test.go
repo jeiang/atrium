@@ -40,16 +40,38 @@ func TestWeatherLocationSettingsSaveAndRefuseOutOfRangeValues(t *testing.T) {
 	}
 }
 
-func TestWeatherConnectionTestCoversForecastAndGeocoding(t *testing.T) {
+func TestWeatherConnectionIsUnconfiguredUntilALocationIsSetThenCoversForecastAndGeocoding(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fakeOpenMeteo(t, dir)
+	for _, key := range []string{weather.KeyLocationName, weather.KeyLatitude, weather.KeyLongitude} {
+		if got := runSettings(t, "unset", key); got.code != cli.ExitOK {
+			t.Fatalf("unset %s: exit %d stderr %q", key, got.code, got.stderr)
+		}
+	}
+	unlocated := runApp(t, "connections", "test", "service/weather")
+	if unlocated.code == cli.ExitOK || !strings.Contains(unlocated.stdout+unlocated.stderr, "no weather location is set") {
+		t.Fatalf("weather test without a location: exit %d stdout %q stderr %q", unlocated.code, unlocated.stdout, unlocated.stderr)
+	}
+	if got := connectionState(t, dir, "service/weather"); got != "unconfigured" {
+		t.Fatalf("weather connection state without a location = %q, want unconfigured", got)
+	}
+	setTestLocation(t)
 	tested := runApp(t, "connections", "test", "service/weather")
 	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "ok") {
 		t.Fatalf("connections test service/weather: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
 	}
 	if got := connectionState(t, dir, "service/weather"); got != "ok" {
 		t.Fatalf("weather connection state = %q", got)
+	}
+}
+
+func setTestLocation(t *testing.T) {
+	t.Helper()
+	for key, value := range map[string]string{weather.KeyLatitude: "1.5", weather.KeyLongitude: "2.5"} {
+		if got := runSettings(t, "set", key, value); got.code != cli.ExitOK {
+			t.Fatalf("set %s: exit %d stderr %q", key, got.code, got.stderr)
+		}
 	}
 }
 
@@ -61,6 +83,7 @@ func TestWeatherConnectionTestReportsAFailedRequest(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, srv.URL+"/v1/forecast", srv.URL+"/v1/search"))
+	setTestLocation(t)
 	tested := runApp(t, "connections", "test", "service/weather")
 	if tested.code == cli.ExitOK || !strings.Contains(tested.stdout+tested.stderr, "failing") {
 		t.Fatalf("a failing weather endpoint reported success: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)

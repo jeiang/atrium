@@ -1,7 +1,10 @@
 package smtp
 
 import (
+	"crypto/tls"
+	"errors"
 	"fmt"
+	"net"
 	"strings"
 )
 
@@ -75,4 +78,24 @@ const (
 
 func osError(err error) error {
 	return err
+}
+
+func SessionFailure(err error) (failed, credentials bool) {
+	if err == nil || errors.As(err, new(*OutcomeUnknown)) {
+		return false, false
+	}
+	if response, ok := errors.AsType[*ResponseError](err); ok {
+		switch response.Kind {
+		case "SMTPAuthenticationError":
+			return true, response.Code >= 530 && response.Code <= 535
+		case "SMTPConnectError", "SMTPHeloError":
+			return true, false
+		}
+		return false, false
+	}
+	if failure, ok := errors.AsType[*Failure](err); ok {
+		return failure.Kind == disconnected, false
+	}
+	return errors.As(err, new(net.Error)) || errors.As(err, new(*tls.CertificateVerificationError)) ||
+		errors.As(err, new(tls.AlertError)) || errors.As(err, new(tls.RecordHeaderError)), false
 }

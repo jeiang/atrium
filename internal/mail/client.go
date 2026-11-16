@@ -164,6 +164,8 @@ var ErrReadOnly = errors.New("mail: write on a read-only IMAP session")
 
 var ErrSentOnly = errors.New("mail: a Sent-copy session only appends to the operator-send mailbox")
 
+var ErrLoginRefused = errors.New("mail: the server refused the login")
+
 func Gated(ctx context.Context, opts OpenOptions, dial func() (Conn, error)) (Client, error) {
 	var lock *db.LockSet
 	if !opts.ReadOnly && !opts.SentOnly {

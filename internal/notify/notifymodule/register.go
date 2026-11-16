@@ -45,6 +45,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Operations: operations, Bindings: bindings,
 		Name:     module.Notifications,
+		Requires: []module.Requirement{module.ConnectionHealth(string(notify.KindWebPush))},
 		Settings: notify.Settings(),
 		Pages: []web.Page{{Module: notifypages.Module(factory), Templates: notifypages.Templates(), Nav: []web.NavItem{
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},

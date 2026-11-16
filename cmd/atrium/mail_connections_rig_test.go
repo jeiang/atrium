@@ -70,13 +70,25 @@ func (f *strictSMTP) handle(c net.Conn) {
 		case upper == "QUIT":
 			write("221 bye")
 			return
+		case upper == "DATA":
+			write("354 go ahead")
+			for {
+				body, err := r.ReadString('\n')
+				if err != nil {
+					return
+				}
+				if body == ".\r\n" {
+					break
+				}
+			}
+			write("250 queued")
 		default:
 			write("250 OK")
 		}
 	}
 }
 
-func strictSMTPRig(t *testing.T, creds map[string]string) {
+func strictSMTPRig(t *testing.T, creds map[string]string) *strictSMTP {
 	t.Helper()
 	ca := smtpCert(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -96,6 +108,13 @@ func strictSMTPRig(t *testing.T, creds map[string]string) {
 	}()
 	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
 	t.Setenv("ATRIUM_SMTP_CA", ca)
+	return server
+}
+
+func (f *strictSMTP) setPassword(login, password string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.creds[login] = password
 }
 
 func strictIMAPRig(t *testing.T, creds map[string]string, fakes map[string]*mailtest.FakeClient) {

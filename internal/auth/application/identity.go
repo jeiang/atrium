@@ -16,6 +16,7 @@ type Principal struct {
 	Email    string     `json:"email"`
 	Name     string     `json:"name"`
 	Expires  *time.Time `json:"-"`
+	Agent    bool       `json:"agent"`
 }
 
 type principalKey struct{}

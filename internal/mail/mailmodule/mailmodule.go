@@ -58,9 +58,7 @@ func Requirements() []module.Requirement {
 		{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
 			return endpoint.EmbeddingConfigured(ctx, p.Q)
 		}},
-		{Name: "service/embedding test", Check: func(ctx context.Context, p module.Probe) (string, error) {
-			return mail.EmbeddingTestFailure(ctx, p.Q)
-		}},
+		module.ConnectionHealth(endpoint.EmbeddingID),
 	}
 }
 

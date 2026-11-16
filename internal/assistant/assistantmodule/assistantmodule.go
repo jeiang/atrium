@@ -89,6 +89,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
+		Requires:   []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
 		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
 		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
@@ -180,7 +181,7 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
-		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
+		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService, commitmentToolService),
 		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(opsToolService),
 	} {
 		for _, t := range tools {

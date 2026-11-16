@@ -251,7 +251,7 @@ func TestTaskWrittenFromAMarkedThreadMarksItsReader(t *testing.T) {
 
 	start := len(api.Requests())
 	api.Push(
-		anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "task_list", map[string]any{})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "commitment_list", map[string]any{})),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": "https://example.com/"})),
 		anthropictest.Reply("end_turn", anthropictest.Text("listed")),
 	)

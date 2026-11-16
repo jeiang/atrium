@@ -118,9 +118,11 @@ func TestMorningDigestPostsToTodayAndPushes(t *testing.T) {
 			t.Errorf("digest shows %q", bad)
 		}
 	}
-	body := browser.decrypt(t, push.wait(t, 1).body)
-	if !strings.Contains(fmt.Sprint(body["body"]), "Send invoice") {
-		t.Errorf("push body = %v, want the commitment title", body["body"])
+	for n := 1; ; n++ {
+		body := browser.decrypt(t, push.wait(t, n).body)
+		if strings.Contains(fmt.Sprint(body["body"]), "Send invoice") {
+			break
+		}
 	}
 }
 

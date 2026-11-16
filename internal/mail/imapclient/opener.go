@@ -32,7 +32,9 @@ func Opener(_ config.Config) mail.OpenFunc {
 				return nil, errors.New("missing credentials for " + opts.Account)
 			}
 		}
-		return mail.Gated(ctx, opts, func() (mail.Conn, error) {
+		dialed := false
+		client, err := mail.Gated(ctx, opts, func() (mail.Conn, error) {
+			dialed = true
 			var conn mail.Conn
 			if method == config.AuthXOAUTH2 {
 				c := NewXOAUTH2(host, spec.Login, source.Token, source.Invalidate)
@@ -49,5 +51,9 @@ func Opener(_ config.Config) mail.OpenFunc {
 			}
 			return conn, nil
 		})
+		if dialed && ctx.Err() == nil {
+			lease.Report(mailconn.IMAPOutcome(err))
+		}
+		return client, err
 	}
 }

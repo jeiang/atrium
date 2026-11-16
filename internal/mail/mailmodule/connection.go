@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/gmailauth"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailconn"
@@ -157,7 +158,7 @@ func testSMTP(ctx context.Context, lease *connections.Lease, spec config.Account
 
 func classify(err error) connections.State {
 	var refused *smtp.ResponseError
-	if errors.As(err, &refused) && refused.Code >= 530 && refused.Code <= 535 {
+	if errors.Is(err, mail.ErrLoginRefused) || errors.As(err, &refused) && refused.Code >= 530 && refused.Code <= 535 {
 		return connections.NeedsReauth
 	}
 	message := strings.ToLower(err.Error())

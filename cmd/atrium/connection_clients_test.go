@@ -101,14 +101,15 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	for i := range 5 {
 		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+"+strconv.Itoa(i), nil)
 	}
+	baseRows, baseNoop, _ := observed()
 	if _, err := d.Write.Exec("UPDATE connections SET state = 'ok', checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-time.Hour).Unix())); err != nil {
 		t.Fatal(err)
 	}
 	status.Store(http.StatusForbidden)
 	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+forbidden", nil)
-	waitFor(t, func() bool { rows, _, _ := observed(); return rows > 0 })
+	waitFor(t, func() bool { rows, _, _ := observed(); return rows > baseRows })
 	rows, noop, foreign := observed()
-	if rows != 1 || noop != 0 || foreign != 0 {
-		t.Fatalf("observe-health audit after six failed requests and one recheck: %d rows, %d noop, %d not by the health service", rows, noop, foreign)
+	if rows-baseRows != 1 || noop != baseNoop || foreign != 0 {
+		t.Fatalf("observe-health audit after six failed requests and one recheck: %d rows, %d noop, %d not by the health service", rows-baseRows, noop-baseNoop, foreign)
 	}
 }
