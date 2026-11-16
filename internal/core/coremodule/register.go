@@ -100,6 +100,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
 	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	readModelOps, readModelBindings := m.readModelOperations()
+	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanRebalanceName, mailapp.ScanDeletionsName, mailapp.ScanGmailLabelsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env)
@@ -169,6 +171,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
+				m.readModelRoutes(d)
 			}},
 		},
 		Groups:     SettingGroups(),

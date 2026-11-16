@@ -1133,6 +1133,17 @@ claims about the running application. Operator contracts are in
   retention); it sends a heartbeat every 15 seconds and allows 4 streams per
   subject and 16 per server. Static assets are served from content-hashed
   immutable URLs.
+- Client read models (both prefixes): `GET /shell` (navigation, sections
+  and tabs, Needs you count, mail mode and pause, module states, version),
+  `GET /about` (version, VCS build when stamped, schema version, modules),
+  `GET /settings/schema` (offered settings per page with type, choices,
+  bounds, default, source, editable, secret; secret values are never sent),
+  `GET /connections/schema` (kinds and per-connection fields with secret
+  and host-owned flags, no credential values) and `GET /files` (the
+  thread and project file library, newest first, keyset cursor). `GET
+  /home` carries a `weather` card (current, today, hourly) or null when no
+  location is set or the weather connection is off; the forecast call is
+  capped at 3 seconds and a failure only drops the card.
 - The generated spec lists both prefixes as servers and declares `bearer`
   and the `webSession` cookie scheme; the two session operations carry a
   `/web/v1` server of their own. It leaves response schemas open

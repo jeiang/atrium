@@ -41,6 +41,41 @@ type apiThreadFiles struct {
 	Limit    api.Limit  `query:"limit" json:"-"`
 	Cursor   api.Cursor `query:"cursor" json:"-"`
 }
+type apiLibraryFiles struct {
+	Limit  api.Limit  `query:"limit" json:"-"`
+	Cursor api.Cursor `query:"cursor" json:"-"`
+}
+
+type libraryCursor struct {
+	At float64 `json:"at"`
+	ID int64   `json:"id"`
+}
+
+func (c libraryCursor) Valid() bool { return c.ID > 0 && c.At > 0 }
+
+func libraryPage(ctx context.Context, svc *asstapp.Service, limit api.Limit, cursor api.Cursor) (application.Read[web.List[asstapp.LibraryEntry]], error) {
+	in := asstapp.FileListInput{Limit: int(limit) + 1}
+	if cursor.Set() {
+		var last libraryCursor
+		if err := cursor.Last(&last); err != nil {
+			return application.Read[web.List[asstapp.LibraryEntry]]{}, err
+		}
+		in.After, in.AfterAt = last.ID, last.At
+	}
+	read, err := svc.FileList(ctx, in)
+	if err != nil {
+		return application.Read[web.List[asstapp.LibraryEntry]]{}, err
+	}
+	rows := read.Data.Library
+	page := web.List[asstapp.LibraryEntry]{}
+	if len(rows) > int(limit) {
+		rows = rows[:int(limit)]
+		end := rows[len(rows)-1]
+		page.NextCursor = cursor.Next(libraryCursor{At: end.CreatedAt, ID: end.ID})
+	}
+	page.Items = append([]asstapp.LibraryEntry{}, rows...)
+	return application.Read[web.List[asstapp.LibraryEntry]]{Revision: read.Revision, Data: page}, nil
+}
 
 func filePage(ctx context.Context, svc *asstapp.Service, in asstapp.FileListInput, limit api.Limit, cursor api.Cursor) (application.Read[web.List[files.Summary]], error) {
 	after, err := cursorAfter(cursor)
@@ -73,7 +108,9 @@ func fileAPIBindings(p *apiPages) []application.Binding {
 	bodyless.Area = "projects"
 	bodyless.Body = application.BodyNone
 	bodyless.Success = 204
-	threadList, threadPreview := shape, shape
+	threadList, threadPreview, library := shape, shape, shape
+	library.Errors = errs(application.Invalid)
+	library.ID = "assistant.file.library"
 	threadList.ID = "assistant.file.thread.list"
 	threadPreview.ID = "assistant.file.thread.preview"
 	out := []application.Binding{
@@ -88,6 +125,9 @@ func fileAPIBindings(p *apiPages) []application.Binding {
 		}),
 		apiQuery(p, asstapp.DescribeFileList(), threadList, "GET /threads/{thread_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiThreadFiles) (application.Read[web.List[files.Summary]], error) {
 			return filePage(ctx, svc, asstapp.FileListInput{ThreadID: in.ThreadID}, in.Limit, in.Cursor)
+		}),
+		apiQuery(p, asstapp.DescribeFileList(), library, "GET /files", func(ctx context.Context, svc *asstapp.Service, in apiLibraryFiles) (application.Read[web.List[asstapp.LibraryEntry]], error) {
+			return libraryPage(ctx, svc, in.Limit, in.Cursor)
 		}),
 		apiQuery(p, asstapp.DescribeFilePreview(), shape, "GET /projects/{project_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Read[asstapp.FileView], error) {
 			return svc.FilePreview(ctx, asstapp.FileInput{ProjectID: in.ProjectID, FileID: in.FileID})

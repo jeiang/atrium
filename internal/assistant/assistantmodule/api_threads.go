@@ -2,8 +2,10 @@ package assistantmodule
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -429,6 +431,7 @@ type apiHome struct {
 	About    *asstapp.About       `json:"about"`
 	Defaults threads.Options      `json:"defaults"`
 	Composer asstapp.ComposerView `json:"composer"`
+	Weather  *asstapp.HomeWeather `json:"weather"`
 }
 
 type apiAgenda struct {
@@ -754,10 +757,18 @@ func apiBindings(p *apiPages) []application.Binding {
 		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", Errors: errs(application.Invalid)}, "GET /home",
 			func(ctx context.Context, svc *asstapp.Service, in apiHomeRequest) (application.Read[apiHome], error) {
 				read, err := svc.Home(ctx, asstapp.HomeInput{Q: in.Q, View: in.View, About: in.About, Limit: config.TuningChatThreadLimit})
-				return readAs(read, err, func(h asstapp.Home) apiHome {
-					return apiHome{Threads: h.Threads, Q: h.Q, View: h.View, Welcome: h.Welcome, Date: h.Date, Digest: h.Digest,
-						Agenda: h.Agenda, About: h.About, Defaults: h.Defaults, Composer: h.Composer}
-				})
+				if err != nil {
+					return application.Read[apiHome]{}, err
+				}
+				h := read.Data
+				out := apiHome{Threads: h.Threads, Q: h.Q, View: h.View, Welcome: h.Welcome, Date: h.Date, Digest: h.Digest,
+					Agenda: h.Agenda, About: h.About, Defaults: h.Defaults, Composer: h.Composer, Weather: svc.HomeWeather(ctx)}
+				rev := read.Revision
+				if out.Weather != nil {
+					card, _ := json.Marshal(out.Weather)
+					rev = application.Revision(fmt.Sprintf("%x", sha256.Sum256(append([]byte(rev), card...))))
+				}
+				return application.Read[apiHome]{Revision: rev, Data: out}, nil
 			}),
 		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", ID: "assistant.agenda"}, "GET /agenda",
 			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[apiAgenda], error) {

@@ -295,6 +295,41 @@
         ],
         "type": "object"
       },
+      "AppAbout": {
+        "properties": {
+          "api_version": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "build": {
+            "type": "string"
+          },
+          "go_version": {
+            "type": "string"
+          },
+          "modules": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleState"
+            },
+            "type": "array"
+          },
+          "schema_version": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "go_version",
+          "api_version",
+          "schema_version",
+          "modules"
+        ],
+        "type": "object"
+      },
       "Applied": {
         "properties": {
           "error": {
@@ -2199,6 +2234,38 @@
         ],
         "type": "object"
       },
+      "ConnectionField": {
+        "properties": {
+          "host_owned": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "text",
+              "url",
+              "secret"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "secret",
+          "host_owned",
+          "present"
+        ],
+        "type": "object"
+      },
       "ConnectionFields": {
         "additionalProperties": false,
         "properties": {
@@ -2216,6 +2283,24 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ConnectionKindSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionField"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "fields"
+        ],
         "type": "object"
       },
       "ConnectionResult": {
@@ -2238,6 +2323,32 @@
         "required": [
           "capability",
           "state"
+        ],
+        "type": "object"
+      },
+      "ConnectionSchema": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionField"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "fields"
         ],
         "type": "object"
       },
@@ -2344,6 +2455,27 @@
           }
         },
         "required": [
+          "connections"
+        ],
+        "type": "object"
+      },
+      "ConnectionsSchema": {
+        "properties": {
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionSchema"
+            },
+            "type": "array"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionKindSchema"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kinds",
           "connections"
         ],
         "type": "object"
@@ -2520,6 +2652,54 @@
         ],
         "type": "object"
       },
+      "Current": {
+        "properties": {
+          "apparent_c": {
+            "type": "number"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "humidity": {
+            "type": "number"
+          },
+          "is_day": {
+            "type": "boolean"
+          },
+          "precipitation_mm": {
+            "type": "number"
+          },
+          "temperature_c": {
+            "type": "number"
+          },
+          "time": {
+            "type": "string"
+          },
+          "weather_code": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "wind_direction": {
+            "type": "number"
+          },
+          "wind_kmh": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "temperature_c",
+          "apparent_c",
+          "humidity",
+          "precipitation_mm",
+          "weather_code",
+          "condition",
+          "wind_kmh",
+          "wind_direction",
+          "is_day"
+        ],
+        "type": "object"
+      },
       "DatabaseCheck": {
         "properties": {
           "encryption": {
@@ -2543,6 +2723,44 @@
           "opened",
           "intact",
           "tables"
+        ],
+        "type": "object"
+      },
+      "Day": {
+        "properties": {
+          "condition": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "high_c": {
+            "type": "number"
+          },
+          "low_c": {
+            "type": "number"
+          },
+          "precipitation_probability": {
+            "type": "number"
+          },
+          "sunrise": {
+            "type": "string"
+          },
+          "sunset": {
+            "type": "string"
+          },
+          "weather_code": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "high_c",
+          "low_c",
+          "precipitation_probability",
+          "weather_code",
+          "condition"
         ],
         "type": "object"
       },
@@ -3860,6 +4078,16 @@
           "view": {
             "type": "string"
           },
+          "weather": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomeWeather"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "welcome": {
             "type": "boolean"
           }
@@ -3874,6 +4102,70 @@
           "agenda",
           "defaults",
           "composer"
+        ],
+        "type": "object"
+      },
+      "HomeWeather": {
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/Current"
+          },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/Hour"
+            },
+            "type": "array"
+          },
+          "location": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "today": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Day"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "location",
+          "timezone",
+          "current",
+          "hours"
+        ],
+        "type": "object"
+      },
+      "Hour": {
+        "properties": {
+          "condition": {
+            "type": "string"
+          },
+          "precipitation_probability": {
+            "type": "number"
+          },
+          "temperature_c": {
+            "type": "number"
+          },
+          "time": {
+            "type": "string"
+          },
+          "weather_code": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "time",
+          "temperature_c",
+          "precipitation_probability",
+          "weather_code",
+          "condition"
         ],
         "type": "object"
       },
@@ -4738,6 +5030,53 @@
         },
         "type": "object"
       },
+      "LibraryEntry": {
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "project_name": {
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "thread_title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "media_type",
+          "bytes",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "ListEffect": {
         "properties": {
           "items": {
@@ -4767,6 +5106,30 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/FileSummary"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ListLibraryEntry": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LibraryEntry"
             },
             "type": "array"
           },
@@ -7416,6 +7779,30 @@
           "efforts",
           "context_limits",
           "composer"
+        ],
+        "type": "object"
+      },
+      "ModuleState": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "enabled",
+              "off",
+              "needs-settings",
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "state"
         ],
         "type": "object"
       },
@@ -10948,6 +11335,21 @@
         ],
         "type": "object"
       },
+      "SettingChoice": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "type": "object"
+      },
       "SettingSet": {
         "additionalProperties": false,
         "properties": {
@@ -10978,6 +11380,323 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "SettingsSchema": {
+        "properties": {
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsSchemaPage"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pages"
+        ],
+        "type": "object"
+      },
+      "SettingsSchemaField": {
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/SettingChoice"
+            },
+            "type": "array"
+          },
+          "class": {
+            "type": "string"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "max": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "min": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "module": {
+            "type": "string"
+          },
+          "multi": {
+            "type": "boolean"
+          },
+          "pin_source": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "enum": [
+              "string",
+              "int",
+              "float",
+              "bool",
+              "enum"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "module",
+          "type",
+          "multi",
+          "choices",
+          "class",
+          "editable",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "SettingsSchemaPage": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SettingsSchemaField"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "group",
+              "section",
+              "module"
+            ],
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "module",
+          "name",
+          "title",
+          "url",
+          "fields"
+        ],
+        "type": "object"
+      },
+      "Shell": {
+        "properties": {
+          "brand_url": {
+            "type": "string"
+          },
+          "footer": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ShellGroup"
+            },
+            "type": "array"
+          },
+          "mail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShellMail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modules": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleState"
+            },
+            "type": "array"
+          },
+          "needs_you": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "notify_failing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ShellSection"
+            },
+            "type": "array"
+          },
+          "settings": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "settings_url": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "groups",
+          "sections",
+          "settings",
+          "settings_url",
+          "footer",
+          "brand_url",
+          "needs_you",
+          "notify_failing",
+          "modules",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ShellGroup": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "items"
+        ],
+        "type": "object"
+      },
+      "ShellLink": {
+        "properties": {
+          "icon": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url",
+          "page"
+        ],
+        "type": "object"
+      },
+      "ShellMail": {
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "paused": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode",
+          "paused"
+        ],
+        "type": "object"
+      },
+      "ShellSection": {
+        "properties": {
+          "badge": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tabs": {
+            "items": {
+              "$ref": "#/components/schemas/ShellLink"
+            },
+            "type": "array"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "icon",
+          "url",
+          "badge",
+          "tabs"
         ],
         "type": "object"
       },
@@ -12424,6 +13143,128 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/about": {
+      "get": {
+        "operationId": "core.about",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAbout"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core"
+      }
+    },
     "/activity": {
       "get": {
         "operationId": "review.activity",
@@ -15842,6 +16683,129 @@
         "x-atrium-module": "core"
       }
     },
+    "/connections/schema": {
+      "get": {
+        "operationId": "connections.schema",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionsSchema"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "integrations"
+        ],
+        "x-atrium-area": "integrations",
+        "x-atrium-module": "core",
+        "x-atrium-operation": "connections.list"
+      }
+    },
     "/connections/{kind}/{name}": {
       "delete": {
         "operationId": "connections.disconnect",
@@ -18951,6 +19915,157 @@
         "x-atrium-area": "activity",
         "x-atrium-module": "core",
         "x-atrium-operation": "review.undo"
+      }
+    },
+    "/files": {
+      "get": {
+        "operationId": "assistant.file.library",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListLibraryEntry"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "x-atrium-area": "files",
+        "x-atrium-module": "assistant",
+        "x-atrium-operation": "assistant.file.list"
       }
     },
     "/home": {
@@ -38063,6 +39178,129 @@
         "x-atrium-module": "core"
       }
     },
+    "/settings/schema": {
+      "get": {
+        "operationId": "settings.schema",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSchema"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core",
+        "x-atrium-operation": "settings.read"
+      }
+    },
     "/settings/secrets": {
       "get": {
         "operationId": "settings.secret-status",
@@ -38846,6 +40084,128 @@
           "settings"
         ],
         "x-atrium-area": "settings",
+        "x-atrium-module": "core"
+      }
+    },
+    "/shell": {
+      "get": {
+        "operationId": "core.shell",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Shell"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "home"
+        ],
+        "x-atrium-area": "home",
         "x-atrium-module": "core"
       }
     },
