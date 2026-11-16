@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -23,25 +24,48 @@ const (
 	SourceWrite        = "write"
 	SourceSettings     = "settings"
 	SourceOperation    = "operation"
-	CategoryAssistant  = "assistant"
-	CategoryKnowledge  = "knowledge"
-	CategoryMedia      = "media"
-	CategorySettings   = "settings"
-	CategoryOperations = "operations"
+	CategorySettings   = review.CategorySettings
+	CategoryOperations = review.CategoryOperations
 	ActivityPage       = 50
 	snippetLimit       = 800
 )
 
-var platformCategories = []string{CategoryAssistant, CategoryKnowledge, CategoryMedia, CategorySettings}
+func (s *Service) catalog(ctx context.Context) *module.Catalog {
+	set := module.SetFrom(ctx)
+	if set == nil {
+		set = s.modules
+	}
+	if set == nil {
+		return nil
+	}
+	return set.Catalog()
+}
 
-func (s *Service) Categories() []string {
+func (s *Service) effectCategories(ctx context.Context) []review.Category {
+	if c := s.catalog(ctx); c != nil {
+		return c.ActivityCategories()
+	}
+	return nil
+}
+
+func (s *Service) directOrigins(ctx context.Context) []string {
+	if c := s.catalog(ctx); c != nil {
+		return c.DirectOrigins()
+	}
+	return nil
+}
+
+func (s *Service) Categories(ctx context.Context) []string {
 	var out []string
 	for _, c := range s.kinds {
 		if c.Kinds.Actions != nil && c.Category != "" {
 			out = append(out, c.Category)
 		}
 	}
-	return append(out, platformCategories...)
+	for _, c := range s.effectCategories(ctx) {
+		out = append(out, c.Name)
+	}
+	return append(out, CategorySettings)
 }
 
 type ActivityEntry struct {
@@ -205,7 +229,7 @@ func (in ActivityInput) bound(source string) (float64, int64) {
 }
 
 func (s *Service) Activity(ctx context.Context, in ActivityInput) (application.Read[Activity], error) {
-	if in.Category != "" && !slices.Contains(s.Categories(), in.Category) {
+	if in.Category != "" && !slices.Contains(s.Categories(ctx), in.Category) {
 		return application.Read[Activity]{}, invalid("category", "unknown category")
 	}
 	if in.After != nil && !in.After.Valid() {
@@ -288,29 +312,38 @@ func (p *sourcePage) saw(k ActivityKey, rows, fetch int) {
 	}
 }
 
-var writeCategoryPrefixes = []struct{ Prefix, Category string }{
-	{"kb", CategoryKnowledge},
-	{"media", CategoryMedia},
-}
-
-func writeCategory(tool string) string {
-	for _, prefix := range writeCategoryPrefixes {
-		if strings.HasPrefix(tool, prefix.Prefix) {
-			return prefix.Category
+func writeCategory(categories []review.Category, operation string) string {
+	fallback := ""
+	for _, c := range categories {
+		if len(c.Operations) == 0 {
+			fallback = c.Name
+		}
+		for _, prefix := range c.Operations {
+			if strings.HasPrefix(operation, prefix) {
+				return c.Name
+			}
 		}
 	}
-	return CategoryAssistant
+	return fallback
 }
 
-func effectFilter(category string, limit int) ledger.Filter {
-	f := ledger.Filter{Origins: DirectOrigins, Limit: limit}
-	switch category {
-	case CategoryKnowledge:
-		f.OperationLike = []string{"kb%"}
-	case CategoryMedia:
-		f.OperationLike = []string{"media%"}
-	case CategoryAssistant:
-		f.OperationNotLike = []string{"kb%", "media%"}
+func effectFilter(categories []review.Category, origins []string, category string, limit int) ledger.Filter {
+	f := ledger.Filter{Origins: origins, Limit: limit}
+	for _, c := range categories {
+		if c.Name != category {
+			continue
+		}
+		if len(c.Operations) > 0 {
+			for _, prefix := range c.Operations {
+				f.OperationLike = append(f.OperationLike, prefix+"%")
+			}
+			continue
+		}
+		for _, other := range categories {
+			for _, prefix := range other.Operations {
+				f.OperationNotLike = append(f.OperationNotLike, prefix+"%")
+			}
+		}
 	}
 	return f
 }
@@ -419,8 +452,9 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, err
 		}
 		pages = append(pages, settings)
 	}
-	if !slices.Contains(contributed, category) && category != CategorySettings && s.ledger != nil {
-		filter := effectFilter(category, fetch)
+	categories, origins := s.effectCategories(ctx), s.directOrigins(ctx)
+	if !slices.Contains(contributed, category) && category != CategorySettings && s.ledger != nil && len(origins) > 0 {
+		filter := effectFilter(categories, origins, category, fetch)
 		filter.ByTime = true
 		filter.BeforeTS, filter.BeforeID = in.bound("effect")
 		effects, err := s.ledger.List(ctx, filter)
@@ -433,7 +467,7 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput) (Activity, err
 			if effect.Direction != "forward" || effect.ThreadID != nil && hidden.threads[*effect.ThreadID] {
 				continue
 			}
-			writes.entries = append(writes.entries, EffectEntry(effect))
+			writes.entries = append(writes.entries, effectEntry(categories, effect))
 		}
 		pages = append(pages, writes)
 	}
@@ -485,7 +519,11 @@ func phoneTarget(r ledger.ResolutionRow) string {
 	return ""
 }
 
-func EffectEntry(e ledger.Effect) ActivityEntry {
+func (s *Service) EffectEntry(ctx context.Context, e ledger.Effect) ActivityEntry {
+	return effectEntry(s.effectCategories(ctx), e)
+}
+
+func effectEntry(categories []review.Category, e ledger.Effect) ActivityEntry {
 	before, _ := Snippet(RawText(e.Before))
 	after, _ := Snippet(RawText(e.After))
 	var errorText *string
@@ -493,7 +531,7 @@ func EffectEntry(e ledger.Effect) ActivityEntry {
 		errorText = &e.Error
 	}
 	return ActivityEntry{
-		Source: "effect", ID: e.ID, Category: writeCategory(e.Operation), TS: e.CreatedAt,
+		Source: "effect", ID: e.ID, Category: writeCategory(categories, e.Operation), TS: e.CreatedAt,
 		Write: &WriteActivity{
 			Tool: e.Operation, Target: e.Target, ThreadID: e.ThreadID, UndoneAt: e.UndoneAt,
 			Before: before, After: after, State: string(e.State), Error: errorText, Undoable: e.Undoable,

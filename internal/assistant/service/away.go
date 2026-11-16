@@ -37,7 +37,7 @@ func (s *Service) away(ctx context.Context, run *journal.Run, cause error, watch
 			return
 		}
 		m = notify.Message{
-			Channel: notify.Assistant, Title: "atrium: question waiting",
+			Channel: notify.Default, Title: "atrium: question waiting",
 			Body:       "The assistant is waiting for your answer in " + s.threadName(ctx, run.ThreadID) + ".",
 			Occurrence: questionOccurrence(q.CallID),
 		}

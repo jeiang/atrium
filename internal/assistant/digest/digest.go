@@ -102,7 +102,7 @@ func Run(ctx context.Context, svc *service.Service, nowFn func() float64, jobRun
 			occurrence = fmt.Sprintf("digest:%d", jobRunID)
 		}
 		if _, err := notify.Send(ctx, svc.DB, notify.Message{
-			Channel: notify.Assistant, Title: "Morning digest", Body: strings.Join(body, "\n"),
+			Channel: notify.Default, Title: "Morning digest", Body: strings.Join(body, "\n"),
 			Now: func() float64 { return now }, Occurrence: occurrence,
 		}); err != nil {
 			return false, err

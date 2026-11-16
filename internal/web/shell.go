@@ -54,17 +54,17 @@ func (rd *Renderer) Shell(ctx context.Context) ShellFrame {
 		Footer: shellLinks(f.Footer), BrandURL: f.BrandURL, NeedsYou: f.PendingCount, NotifyFailing: append([]string{}, f.NotifyFailing...),
 	}
 	for _, g := range f.Nav {
-		if g.Label == "" && len(g.Items) > 0 && g.Items[0].Section == "" && isHub(g.Items[0].Page) {
+		if g.Label == "" && len(g.Items) > 0 && g.Items[0].Section == "" && nav.isHub(g.Items[0].Page) {
 			continue
 		}
 		out.Groups = append(out.Groups, ShellGroup{Label: g.Label, Items: shellLinks(g.Items)})
 	}
-	for _, h := range hubs {
-		tabs := nav.sections[h.section]
+	for _, h := range nav.hubs {
+		tabs := nav.sections[h.Page]
 		if len(tabs) == 0 {
 			continue
 		}
-		out.Sections = append(out.Sections, ShellSection{Key: h.section, Label: h.label, Icon: h.icon, URL: tabs[0].URL, Badge: h.badge, Tabs: shellLinks(tabs)})
+		out.Sections = append(out.Sections, ShellSection{Key: h.Page, Label: h.Label, Icon: h.Icon, URL: tabs[0].URL, Badge: h.Badge, Tabs: shellLinks(tabs)})
 	}
 	if f.Mode != "" {
 		out.Mail = &ShellMail{Mode: f.Mode, Paused: f.Paused}
@@ -72,9 +72,9 @@ func (rd *Renderer) Shell(ctx context.Context) ShellFrame {
 	return out
 }
 
-func isHub(page string) bool {
-	for _, h := range hubs {
-		if h.section == page {
+func (v navView) isHub(page string) bool {
+	for _, h := range v.hubs {
+		if h.Page == page {
 			return true
 		}
 	}

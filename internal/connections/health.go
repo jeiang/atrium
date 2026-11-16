@@ -39,6 +39,11 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 	if reason != "" {
 		body += ": " + reason
 	}
+	if RepairClass(next) != "" {
+		if features := s.affectedFeatures(context.WithoutCancel(ctx), id); len(features) > 0 {
+			body += "; affects " + strings.Join(features, ", ")
+		}
+	}
 	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil {
 		log.Warn("connection notification failed", logx.Integration, string(id), logx.Err, err.Error())
 	}

@@ -24,7 +24,7 @@ func connectionsOperations() ([]application.Definition, []application.Binding) {
 
 func connectionsDeclared() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
-			connectionsapp.DescribeList(), connectionsapp.DescribeOAuthSetup(), connectionsapp.DescribeTestSave(), connectionsapp.DescribeSaveFields(), connectionsapp.DescribeDisconnect(), connectionsapp.DescribeOAuthConfigure(), connectionsapp.DescribeOAuthStart(), connectionsapp.DescribeOAuthComplete(), connectionsapp.DescribeTest(), connectionsapp.DescribeObserveHealth(), connectionsapp.DescribeCheck(),
+			connectionsapp.DescribeList(), connectionsapp.DescribeDependencies(), connectionsapp.DescribeOAuthSetup(), connectionsapp.DescribeTestSave(), connectionsapp.DescribeSaveFields(), connectionsapp.DescribeDisconnect(), connectionsapp.DescribeOAuthConfigure(), connectionsapp.DescribeOAuthStart(), connectionsapp.DescribeOAuthComplete(), connectionsapp.DescribeTest(), connectionsapp.DescribeObserveHealth(), connectionsapp.DescribeCheck(),
 		}, []application.Binding{
 			{Kind: application.CLI, Target: "connections list", Uses: []application.Name{connectionsapp.ListName}},
 			{Kind: application.CLI, Target: "connections test", Uses: []application.Name{connectionsapp.TestName}},
@@ -131,6 +131,14 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 				}
 				read, err := s.List(ctx, connectionsapp.ListInput{})
 				return application.Read[Connections]{Revision: read.Revision, Data: Connections{Connections: read.Data}}, err
+			}),
+		api.Query(d, connectionsapp.DescribeDependencies(), application.APIShape{Area: area},
+			"GET /connections/dependencies", func(ctx context.Context, _ struct{}) (application.Read[connectionsapp.Dependencies], error) {
+				s, err := svc()
+				if err != nil {
+					return application.Read[connectionsapp.Dependencies]{}, err
+				}
+				return s.Dependencies(ctx, connectionsapp.DependenciesInput{})
 			}),
 		api.Command(d, connectionsapp.DescribeTest(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable},
 			"POST /connections/{kind}/{name}/test", func(ctx context.Context, in ConnectionRef) (application.Change[Connections], error) {

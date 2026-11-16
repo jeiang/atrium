@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
-	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
-	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 )
 
 const (
@@ -28,13 +26,9 @@ type Index struct {
 	Error      string `json:"error"`
 }
 
-func (i Index) MessageTable() string {
-	return fmt.Sprintf("embed_message_%d", i.Generation)
-}
+func (i Index) MessageTable() string { return i.Table("message") }
 
-func (i Index) KBTable() string {
-	return fmt.Sprintf("embed_kb_%d", i.Generation)
-}
+func (i Index) KBTable() string { return i.Table("kb") }
 
 type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -58,17 +52,30 @@ func Active(ctx context.Context, q rowQuerier) (Index, error) {
 	return i, err
 }
 
-func Building(ctx context.Context, d *db.DB) (*Build, bool, error) {
+func Building(ctx context.Context, d *db.DB, corpora []Corpus) (*Build, bool, error) {
 	i, ok, err := lookup(ctx, d.Read, StateBuilding)
 	if err != nil || !ok {
 		return nil, ok, err
 	}
-	return &Build{Index: i, d: d}, true, nil
+	return &Build{Index: i, d: d, corpora: corpora}, true, nil
+}
+
+func Indexes(ctx context.Context, q rowQuerier) ([]Index, error) {
+	active, err := Active(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	building, ok, err := lookup(ctx, q, StateBuilding)
+	if err != nil || !ok {
+		return []Index{active}, err
+	}
+	return []Index{active, building}, nil
 }
 
 type Build struct {
 	Index
-	d *db.DB
+	d       *db.DB
+	corpora []Corpus
 }
 
 func (b *Build) building() error {
@@ -82,7 +89,7 @@ func (b *Build) Record(ctx context.Context, failure string) error {
 	if err := b.building(); err != nil {
 		return err
 	}
-	done, total, err := counts(ctx, b.d.Read, b.Index)
+	done, total, err := counts(ctx, b.d.Read, b.Index, b.corpora)
 	if err != nil {
 		return err
 	}
@@ -96,7 +103,7 @@ func (b *Build) Swap(ctx context.Context) (bool, error) {
 	}
 	swapped := false
 	err := b.d.WithTx(ctx, func(tx *sql.Tx) error {
-		done, total, err := counts(ctx, tx, b.Index)
+		done, total, err := counts(ctx, tx, b.Index, b.corpora)
 		if err != nil || done < total {
 			return err
 		}
@@ -104,7 +111,7 @@ func (b *Build) Swap(ctx context.Context) (bool, error) {
 		if err != nil {
 			return err
 		}
-		if err := drop(ctx, tx, old); err != nil {
+		if err := drop(ctx, tx, old, b.corpora); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, "UPDATE embed_index SET state = ?, done = ?, total = ?, error = '' WHERE generation = ?",
@@ -122,13 +129,15 @@ func (b *Build) Discard(ctx context.Context) error {
 		return err
 	}
 	return b.d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := mailembedding.ClearIn(ctx, tx, b.MessageTable()); err != nil {
-			return err
+		for _, c := range b.corpora {
+			if c.clear == nil {
+				continue
+			}
+			if err := c.clear(ctx, tx, b.Table(c.Name)); err != nil {
+				return err
+			}
 		}
-		if err := kbembedding.ClearIn(ctx, tx, b.KBTable()); err != nil {
-			return err
-		}
-		return drop(ctx, tx, b.Index)
+		return drop(ctx, tx, b.Index, b.corpora)
 	})
 }
 
@@ -185,16 +194,14 @@ func DeleteMessages(ctx context.Context, q execer, ids []int64) error {
 	return nil
 }
 
-func Create(ctx context.Context, d *db.DB, url, model string, dim int) (*Build, error) {
+func Create(ctx context.Context, d *db.DB, corpora []Corpus, url, model string, dim int) (*Build, error) {
 	i := Index{State: StateBuilding, URL: url, Model: model, Dimension: dim}
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(generation), 0) + 1 FROM embed_index").Scan(&i.Generation); err != nil {
 			return err
 		}
-		for _, stmt := range []string{
-			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(account TEXT PARTITION KEY, embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.MessageTable(), dim),
-			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.KBTable(), dim),
-		} {
+		for _, c := range corpora {
+			stmt := fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(%sembedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.Table(c.Name), c.columns, dim)
 			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return err
 			}
@@ -206,12 +213,12 @@ func Create(ctx context.Context, d *db.DB, url, model string, dim int) (*Build, 
 	if err != nil {
 		return nil, err
 	}
-	return &Build{Index: i, d: d}, nil
+	return &Build{Index: i, d: d, corpora: corpora}, nil
 }
 
-func drop(ctx context.Context, tx *sql.Tx, i Index) error {
-	for _, stmt := range []string{"DROP TABLE IF EXISTS " + i.MessageTable(), "DROP TABLE IF EXISTS " + i.KBTable()} {
-		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+func drop(ctx context.Context, tx *sql.Tx, i Index, corpora []Corpus) error {
+	for _, c := range corpora {
+		if _, err := tx.ExecContext(ctx, "DROP TABLE IF EXISTS "+i.Table(c.Name)); err != nil {
 			return err
 		}
 	}
@@ -219,14 +226,13 @@ func drop(ctx context.Context, tx *sql.Tx, i Index) error {
 	return err
 }
 
-func counts(ctx context.Context, q db.Querier, i Index) (done, total int, err error) {
-	messageDone, messageTotal, err := mailembedding.Counts(ctx, q, i.MessageTable())
-	if err != nil {
-		return 0, 0, err
+func counts(ctx context.Context, q db.Querier, i Index, corpora []Corpus) (done, total int, err error) {
+	for _, c := range corpora {
+		cDone, cTotal, err := c.counts(ctx, q, i.Table(c.Name))
+		if err != nil {
+			return 0, 0, err
+		}
+		done, total = done+cDone, total+cTotal
 	}
-	kbDone, kbTotal, err := kbembedding.Counts(ctx, q, i.KBTable())
-	if err != nil {
-		return 0, 0, err
-	}
-	return messageDone + kbDone, messageTotal + kbTotal, nil
+	return done, total, nil
 }

@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
@@ -156,4 +159,57 @@ func TestCatalogProposeHidesDisabledMailTriage(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'review.propose' AND outcome = 'invalid' AND source = 'tool' AND details_json = '{}'").Scan(&audits); err != nil || audits != 1 {
 		t.Fatalf("proposal refusal audits = %d: %v", audits, err)
 	}
+}
+
+func TestCatalogProposeKindsAreSorted(t *testing.T) {
+	_, api, _ := moduleFixture(t, allFlagsTrue())
+	start := warm(t, api)
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", "hello"); ran.code != cli.ExitOK {
+		t.Fatalf("agent: %d %s", ran.code, ran.stderr)
+	}
+	reqs := api.Requests()[start:]
+	if len(reqs) == 0 {
+		t.Fatal("no model request")
+	}
+	tools, _ := reqs[0].JSON(t)["tools"].([]any)
+	for _, raw := range tools {
+		entry, _ := raw.(map[string]any)
+		if entry["name"] != "propose" {
+			continue
+		}
+		var schema struct {
+			Properties struct {
+				Kind struct {
+					Enum []string `json:"enum"`
+				} `json:"kind"`
+			} `json:"properties"`
+		}
+		b, _ := json.Marshal(entry["input_schema"])
+		if err := json.Unmarshal(b, &schema); err != nil {
+			t.Fatal(err)
+		}
+		kinds := schema.Properties.Kind.Enum
+		if len(kinds) == 0 || !slices.IsSorted(kinds) {
+			t.Fatalf("propose kinds not sorted: %v", kinds)
+		}
+		doc, err := os.ReadFile("../../docs/tools.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var documented []string
+		for _, line := range strings.Split(string(doc), "\n") {
+			if _, kindsText, ok := strings.Cut(line, "| `propose` |"); ok {
+				_, listed, _ := strings.Cut(kindsText, "Kinds: ")
+				for _, m := range regexp.MustCompile(`([a-z_]+) \{`).FindAllStringSubmatch(listed, -1) {
+					documented = append(documented, m[1])
+				}
+			}
+		}
+		if !slices.Equal(kinds, documented) {
+			t.Fatalf("offered propose kinds %v, tools document lists %v", kinds, documented)
+		}
+		return
+	}
+	t.Fatal("propose tool not offered")
 }

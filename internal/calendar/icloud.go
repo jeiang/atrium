@@ -20,26 +20,15 @@ type icloudCalendar struct {
 	path   *url.URL
 }
 
-func davHTTP(ctx context.Context, set Settings) (*http.Client, error) {
-	login, err := ICloudLogin(ctx, set)
-	if err != nil {
-		return nil, err
-	}
-	base := &http.Client{Timeout: remoteTimeout}
-	if set.DAV != nil {
-		if client, err := set.DAV.Transport(); err == nil {
-			base = client
-		}
-	}
-	return davmirror.BasicClient(base, login.AppleID, login.Password), nil
-}
-
 func icloudCalendars(ctx context.Context, env config.Env, set Settings) (*davmirror.Client, []davmirror.CollectionRef, error) {
-	httpClient, err := davHTTP(ctx, set)
+	httpClient, err := davmirror.HTTPClient(ctx, set.Login)
+	if missing, ok := errors.AsType[config.NotConfigured](err); ok {
+		return nil, nil, NotConfigured(missing)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
-	client, err := davmirror.New(httpClient, EndpointsFrom(env).CalDAV)
+	client, err := davmirror.New(httpClient, davmirror.EndpointsFrom(env).CalDAV)
 	if err != nil {
 		return nil, nil, remote(err)
 	}

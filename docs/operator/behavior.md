@@ -294,7 +294,20 @@ enables it as `untested` with its earlier results cleared, so the next check
 tests it. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
 announce it. Connection notices open the Connections settings page,
-`/settings/connections`.
+`/settings/connections`. A failing or needs-reauth notice ends with
+`; affects <features>` when features of an enabled module depend on that
+connection and no other connection serves them; the title is unchanged, and
+recovery sends the same single notice as before.
+
+Every enabled connection row is owned by exactly one side: the host file owns
+the connections it declares, and the Connections page owns the rest. The ops
+listener's `/readyz` runs a non-critical `connection owners` check that
+reports `degraded` and names any row whose owner disagrees with the host file.
+
+When a connection a job needs is unavailable and the run did no work,
+package tracking and media channels record `skipped_dependency` (shown as
+"Skipped (connection unavailable)"), with an error that names the repair, for
+example `repair connection:service/eztv:unreachable at /settings/connections`.
 
 qBittorrent and the embedding endpoint ride out short outages: a failure that
 follows an `ok` or `expiring` state starts a 6-hour grace window. The stored

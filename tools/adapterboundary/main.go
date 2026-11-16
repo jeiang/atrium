@@ -83,28 +83,18 @@ var allowed = map[string]bool{
 	"internal/review/hub":         true,
 }
 
-var platform = map[string]bool{
-	"internal/module":             true,
-	"internal/unit":               true,
-	"internal/tool":               true,
-	"internal/ledger":             true,
-	"internal/proposals":          true,
-	"internal/review":             true,
-	"internal/review/application": true,
-	"internal/review/hub":         true,
-}
-
-var units = []string{
-	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
-	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
-}
-
 func main() {
 	edges, err := scan()
+	if err == nil {
+		var more []string
+		more, err = unitEdges()
+		edges = append(edges, more...)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "adapterboundary:", err)
 		os.Exit(1)
 	}
+	slices.Sort(edges)
 	for _, e := range edges {
 		fmt.Fprintln(os.Stderr, e)
 	}
@@ -128,9 +118,7 @@ func scan() ([]string, error) {
 		if err != nil {
 			return err
 		}
-		platformFile := platform[path.Dir(file)]
-		adapterFile := isAdapter(file, src)
-		if !platformFile && !adapterFile {
+		if !isAdapter(file, src) {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
@@ -142,11 +130,8 @@ func scan() ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if adapterFile && forbidden(imp) {
+			if forbidden(imp) {
 				edges = append(edges, "adapter imports a forbidden package: "+file+"\t"+imp)
-			}
-			if platformFile && unitImport(imp) {
-				edges = append(edges, "platform package imports a unit: "+file+"\t"+imp)
 			}
 		}
 		return nil
@@ -163,19 +148,6 @@ func isAdapter(file string, src []byte) bool {
 	}
 	for _, a := range adapters {
 		if matches(a.pattern, file) && (a.marker == "" || bytes.Contains(src, []byte(a.marker))) {
-			return true
-		}
-	}
-	return false
-}
-
-func unitImport(imp string) bool {
-	rel, ok := strings.CutPrefix(imp, module+"/")
-	if !ok {
-		return false
-	}
-	for _, unit := range units {
-		if rel == unit || strings.HasPrefix(rel, unit+"/") {
 			return true
 		}
 	}

@@ -25,6 +25,9 @@ func Poll(ctx context.Context, svc *mediaapp.Service) (any, error) {
 	if err != nil {
 		return polled.Data.Result.Dict(), err
 	}
+	if unmet := polled.Data.Result.Unmet; unmet != nil {
+		return polled.Data.Result.Dict(), unmet
+	}
 	return polled.Data.Result.Dict(), nil
 }
 

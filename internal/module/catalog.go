@@ -31,7 +31,8 @@ type Catalog struct {
 	conns      *connections.Registry
 	hooks      proposals.Hooks
 	credential config.AccountCredentialFunc
-	origins    map[string]string
+	regs       registries
+	kinds      []proposals.Definition
 	metrics    []ops.Metric
 	checks     []ops.Check
 	jobs       []scheduler.Definition
@@ -159,13 +160,7 @@ func (c *Catalog) Approvals() []tool.Tool {
 	return out
 }
 
-func (c *Catalog) ProposeKinds() []proposals.Definition {
-	var out []proposals.Definition
-	for _, decl := range c.decls {
-		out = append(out, decl.ProposeKinds...)
-	}
-	return out
-}
+func (c *Catalog) ProposeKinds() []proposals.Definition { return slices.Clone(c.kinds) }
 
 func (c *Catalog) ReviewKinds(deps ReviewDeps) []review.Contribution {
 	var out []review.Contribution
@@ -210,7 +205,7 @@ func (c *Catalog) Ledger(d *db.DB, env config.Env, cfg config.Config, now func()
 				owner = operations[undo.Op]
 			}
 			if owner == "" {
-				owner = c.origins[effect.Origin]
+				owner = c.regs.origins[effect.Origin]
 			}
 			if owner == "" {
 				return ctx, ledger.Refused("the effect has no registered owner")

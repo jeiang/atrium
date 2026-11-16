@@ -2,8 +2,6 @@ package module
 
 import (
 	"errors"
-
-	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/runtime"
@@ -24,6 +22,9 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	for _, d := range decls {
 		if strings.TrimSpace(d.Name) == "" {
 			return nil, &InvalidDeclaration{Module: d.Name, Field: "name"}
+		}
+		if strings.TrimSpace(d.Title) == "" {
+			return nil, &InvalidDeclaration{Module: d.Name, Field: "title"}
 		}
 		if _, ok := byName[d.Name]; ok {
 			return nil, DuplicateModule(d.Name)
@@ -47,16 +48,23 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		return nil, &InvalidCore{Module: core, Reason: "must be named " + Core}
 	}
 	for _, d := range decls {
-		if d.Core && (len(d.Needs) > 0 || len(d.Requires) > 0) {
+		if d.Core && (d.App || len(d.Depends) > 0 || len(d.Needs) > 0 || len(d.Requires) > 0) {
 			return nil, &InvalidCore{Module: d.Name}
 		}
-		for _, dep := range d.Needs {
-			if _, ok := byName[dep]; !ok {
+		for _, dep := range d.Depends {
+			target, ok := byName[dep]
+			if !ok {
 				return nil, &UnknownDependency{Module: d.Name, Dependency: dep}
+			}
+			if !d.App && target.App {
+				return nil, &InvalidDependency{Module: d.Name, Dependency: dep}
 			}
 		}
 	}
-	if _, err := byNeeds(decls); err != nil {
+	if _, err := byDepends(decls); err != nil {
+		return nil, err
+	}
+	if err := checkContract(decls); err != nil {
 		return nil, err
 	}
 	jobs, err := compileJobs(decls, byName)
@@ -67,7 +75,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, err := compileSettings(decls, jobs)
+	reg, err := compileSettings(decls)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +91,12 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			kinds[k.Kind.Name] = true
 		}
 	}
+	regs, err := compileRegistries(decls)
+	if err != nil {
+		return nil, err
+	}
+	decls = bindScans(decls, regs.scans)
+	decls, proposeKinds := collectKinds(decls)
 	commands := map[string]bool{}
 	sectionNames := map[string]bool{}
 	var sections []settingspage.Section
@@ -147,29 +161,22 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			}
 		}
 	}
-	metrics := map[string]bool{}
+	metrics := map[string]string{}
 	checks := map[string]bool{}
 	var allMetrics []ops.Metric
 	var allChecks []ops.Check
 	tools := map[string]bool{}
 	scratch := registry.New(settings.NewFrom(nil))
 	var optional []string
-	origins := map[string]string{}
 	for _, d := range decls {
 		if !d.Core {
 			optional = append(optional, d.Name)
 		}
-		for _, origin := range d.EffectOrigins {
-			if owner, ok := origins[origin]; ok {
-				return nil, &DuplicateHook{Hook: "effect origin " + origin, Modules: []string{owner, d.Name}}
-			}
-			origins[origin] = d.Name
-		}
 		for _, m := range d.Metrics {
-			if metrics[m.Name] {
-				return nil, &DuplicateMetric{Name: m.Name}
+			if owner, ok := metrics[m.Name]; ok {
+				return nil, &DuplicateHook{Hook: "metric " + m.Name, Modules: []string{owner, d.Name}}
 			}
-			metrics[m.Name] = true
+			metrics[m.Name] = d.Name
 			allMetrics = append(allMetrics, m)
 		}
 		for _, c := range d.Checks {
@@ -206,8 +213,15 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
-		conns: conns, hooks: hooks, credential: credential, origins: origins, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
+	if len(regs.queues) > 0 {
+		depth := ops.QueueDepth(regs.queues)
+		if owner, ok := metrics[depth.Name]; ok {
+			return nil, &DuplicateHook{Hook: "metric " + depth.Name, Modules: []string{owner, platformOwner}}
+		}
+		allMetrics = append(allMetrics, depth)
+	}
+	return &Catalog{decls: decls, optional: optional, settings: reg, sections: sections,
+		conns: conns, hooks: hooks, credential: credential, regs: regs, kinds: proposeKinds, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
 		operations: operations, bindings: bindings}, nil
 }
 
@@ -249,6 +263,7 @@ func compileJobs(decls []Declaration, byName map[string]Declaration) ([]schedule
 func compileConnections(decls []Declaration) (*connections.Registry, proposals.Hooks, config.AccountCredentialFunc, error) {
 	var (
 		defs        []connections.Definition
+		needs       []connections.Need
 		sync        *connections.AccountSync
 		notice      connections.Notifier
 		credential  config.AccountCredentialFunc
@@ -260,6 +275,9 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 	)
 	for _, d := range decls {
 		defs = append(defs, d.Connections...)
+		for _, n := range d.Needs {
+			needs = append(needs, connections.Need{Module: d.Name, Kind: n.Kind, Capability: n.Capability, Soft: n.Soft, Features: n.Features})
+		}
 		if d.AccountSync != nil {
 			if syncOwner != "" {
 				return nil, proposals.Hooks{}, nil, &DuplicateHook{Hook: "account sync", Modules: []string{syncOwner, d.Name}}
@@ -285,14 +303,14 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 			created, createdBy = d.ProposalCreated, d.Name
 		}
 	}
-	reg, err := connections.Compile(defs, sync, notice)
+	reg, err := connections.Compile(defs, needs, sync, notice)
 	if err != nil {
 		return nil, proposals.Hooks{}, nil, err
 	}
 	return reg, proposals.Hooks{Created: created}, credential, nil
 }
 
-func compileSettings(decls []Declaration, jobs []scheduler.Definition) (*settings.Registry, error) {
+func compileSettings(decls []Declaration) (*settings.Registry, error) {
 	defs := make([]settings.Def, 0, len(decls))
 	hosts := make([]settings.HostDef, 0, len(decls))
 	owner := make(map[string]string, len(decls))
@@ -313,12 +331,6 @@ func compileSettings(decls []Declaration, jobs []scheduler.Definition) (*setting
 		}
 		defs = append(defs, FlagDef(d.Name))
 		hosts = append(hosts, FlagHostDef(d.Name))
-	}
-	if len(jobs) > 0 {
-		for _, def := range scheduler.Settings() {
-			owner[def.Key] = def.Module
-			defs = append(defs, def)
-		}
 	}
 	reg, err := settings.Compile(defs, hosts)
 	if err != nil {

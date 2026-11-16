@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	mailapp "github.com/jeiang/atrium/internal/mail/application"
-
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/jsonx"
@@ -31,9 +29,9 @@ type Options struct {
 }
 
 type Runtime struct {
-	Reads   *reviewapp.Service
-	Review  func() *reviewapp.Service
-	Scanner func(func() float64) *mailapp.Service
+	Reads  *reviewapp.Service
+	Review func() *reviewapp.Service
+	Scan   func(context.Context, func() float64) ([]proposalsapp.ScanResult, bool, error)
 }
 
 func (o Options) now() float64 {
@@ -129,22 +127,18 @@ func Command(o Options) *cli.Command {
 	return &cli.Command{Name: "proposals", Commands: []*cli.Command{
 		o.leaf("scan-all", func(*cli.Args) body {
 			return func(x *exec) error {
-				scanner := x.Scanner(x.Now)
-				if !scanner.ScansEnabled(x.Ctx) {
-					return nil
-				}
-				out, err := scanner.ManualScans(x.Ctx, x.Now())
-				if err != nil {
+				out, ran, err := x.Scan(x.Ctx, x.Now)
+				if err != nil || !ran {
 					return err
 				}
 				var b strings.Builder
 				b.WriteByte('{')
-				for i, s := range mailapp.ScanKinds {
+				for i, s := range out {
 					if i > 0 {
 						b.WriteByte(',')
 					}
 					key, _ := json.Marshal(s.Key)
-					value, _ := json.Marshal(out[s.Key])
+					value, _ := json.Marshal(s.Value)
 					b.Write(key)
 					b.WriteByte(':')
 					b.Write(value)

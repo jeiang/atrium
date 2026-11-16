@@ -19,13 +19,16 @@ const (
 	TestName          application.Name = "connections.test"
 	ObserveHealthName application.Name = "connections.observe-health"
 	CheckName         application.Name = "connections.check"
+	DependenciesName  application.Name = "connections.dependencies"
 )
 
 type ID = connections.ID
 type View = connections.View
 type GoogleGrant = connections.GoogleGrant
+type Dependencies = connections.Dependencies
 
 type ListInput struct{}
+type DependenciesInput struct{}
 type TestSaveInput struct {
 	ID          ID
 	Label       string
@@ -55,6 +58,9 @@ type CheckInput struct {
 func DescribeList() application.Definition {
 	return application.Describe[ListInput, []View](ListName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
 }
+func DescribeDependencies() application.Definition {
+	return application.Describe[DependenciesInput, Dependencies](DependenciesName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
+}
 func DescribeTestSave() application.Definition {
 	return application.Describe[TestSaveInput, View](TestSaveName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
 }
@@ -81,6 +87,15 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[[]Vi
 	}
 	revision, err := s.revision(ctx, ListName, in)
 	return application.Read[[]View]{Revision: revision, Data: views}, err
+}
+
+func (s *Service) Dependencies(ctx context.Context, in DependenciesInput) (application.Read[Dependencies], error) {
+	deps, err := s.store.Dependencies(ctx)
+	if err != nil {
+		return application.Read[Dependencies]{}, err
+	}
+	revision, err := s.revision(ctx, DependenciesName, in)
+	return application.Read[Dependencies]{Revision: revision, Data: deps}, err
 }
 
 func (s *Service) TestSave(ctx context.Context, in TestSaveInput) (application.Change[View], error) {

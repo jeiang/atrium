@@ -21,17 +21,19 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
-	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 )
 
-const draftCreate = "draft_email_create"
+type attachmentRows struct {
+	def  module.Attachment
+	rows map[int64]map[string]any
+}
 
 const (
 	ItemUser       = "user"
 	ItemActivity   = "activity"
 	ItemAssistant  = "assistant"
-	ItemDraft      = "draft"
 	ItemProposal   = "proposal"
 	ItemCompaction = "compaction"
 )
@@ -234,7 +236,7 @@ func draftKey(v any) (int64, bool) {
 	return 0, false
 }
 
-func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int64]map[string]any) ([]*Item, error) {
+func Items(messages []journal.Message, calls []journal.ToolCall, rows map[string]attachmentRows) ([]*Item, error) {
 	byKey := make(map[journal.CallKey]journal.ToolCall, len(calls))
 	for _, c := range calls {
 		byKey[journal.CallKey{RunID: c.RunID, ToolUseID: c.ToolUseID}] = c
@@ -354,11 +356,11 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 				for _, r := range progress.ToolResults(found.Name, content) {
 					found.Results = append(found.Results, SearchResult{URL: r.URL, Title: r.Title})
 				}
-				if found.Name == draftCreate {
-					if id, ok := draftKey(get(detail, "draft_id", nil)); ok {
-						if draft, ok := drafts[id]; ok {
+				if a, ok := rows[found.Name]; ok {
+					if id, ok := draftKey(get(detail, a.def.Key, nil)); ok {
+						if row, ok := a.rows[id]; ok {
 							item := base
-							item.Kind, item.Draft = ItemDraft, draft
+							item.Kind, item.Draft = a.def.Kind, row
 							items = append(items, &item)
 						}
 					}
@@ -454,8 +456,32 @@ func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, e
 	return inference.SpendOnThreads(ctx, q, append([]int64{threadID}, children...), 0)
 }
 
-func DraftsOf(ctx context.Context, q db.Querier, threadID int64) ([]map[string]any, error) {
-	return drafts.DictsForThread(ctx, q, threadID)
+func attachmentsOf(ctx context.Context, q db.Querier, threadID int64) (map[string]attachmentRows, []map[string]any, error) {
+	out, all := map[string]attachmentRows{}, []map[string]any{}
+	set := module.SetFrom(ctx)
+	if set == nil {
+		return out, all, nil
+	}
+	for _, def := range set.Catalog().Attachments() {
+		rows, err := def.Load(ctx, q, threadID)
+		if err != nil {
+			return nil, nil, err
+		}
+		byID := make(map[int64]map[string]any, len(rows))
+		for _, row := range rows {
+			if id, ok := draftKey(get(row, "id", nil)); ok {
+				byID[id] = row
+			}
+		}
+		out[def.Tool] = attachmentRows{def: def, rows: byID}
+		all = append(all, rows...)
+	}
+	return out, all, nil
+}
+
+func AttachmentsOf(ctx context.Context, q db.Querier, threadID int64) ([]map[string]any, error) {
+	_, all, err := attachmentsOf(ctx, q, threadID)
+	return all, err
 }
 
 func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]map[string]any, error) {
@@ -512,17 +538,11 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	if err != nil {
 		return nil, err
 	}
-	rows, err := DraftsOf(ctx, q, threadID)
+	attached, _, err := attachmentsOf(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
-	drafts := make(map[int64]map[string]any, len(rows))
-	for _, d := range rows {
-		if id, ok := draftKey(get(d, "id", nil)); ok {
-			drafts[id] = d
-		}
-	}
-	if v.Items, err = Items(history.Messages, history.Calls, drafts); err != nil {
+	if v.Items, err = Items(history.Messages, history.Calls, attached); err != nil {
 		return nil, err
 	}
 	if v.Runs, err = journal.RunsOf(ctx, q, threadID); err != nil {

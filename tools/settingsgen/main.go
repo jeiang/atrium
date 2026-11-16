@@ -15,13 +15,19 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-var derivedHost = map[string]string{
-	"calendar.calendar_dir":      "services.atrium.stateDir",
-	"contacts.contacts_dir":      "services.atrium.stateDir",
-	"core.otel_traces_endpoint":  "services.atrium.observability.tracesEndpoint",
-	"db.key":                     "services.atrium.database.keyFile",
-	"export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
-	"mail.mail_accounts_file":    "services.atrium.mailAccounts",
+var platformHostOptions = map[string]string{
+	"db.key":                  "services.atrium.database.keyFile",
+	"mail.mail_accounts_file": "services.atrium.mailAccounts",
+}
+
+func derivedHost(host []settings.HostDef) map[string]string {
+	out := maps.Clone(platformHostOptions)
+	for _, d := range host {
+		if d.NixOption != "" {
+			out[d.Module+"."+d.Key] = d.NixOption
+		}
+	}
+	return out
 }
 
 func main() {
@@ -116,12 +122,13 @@ type hostInput struct {
 func hostInputs(entries []settings.Entry, byKey map[string]settings.Def, host []settings.HostDef) []hostInput {
 	var out []hostInput
 	seen := map[string]bool{}
+	derived := derivedHost(host)
 	for _, entry := range entries {
 		dotted := entry.Module + "." + entry.Key
 		if entry.Class != settings.ClassHost || entry.Runtime || entry.Retired {
 			continue
 		}
-		if _, ok := derivedHost[dotted]; ok {
+		if _, ok := derived[dotted]; ok {
 			continue
 		}
 		def, registered := byKey[entry.Key]
@@ -160,6 +167,7 @@ func schemaJSON(entries []settings.Entry, byKey map[string]settings.Def, host []
 	classes := map[string]string{}
 	destinations := map[string]string{}
 	derived := map[string]string{}
+	targets := derivedHost(host)
 	var cutover, secrets []string
 	for _, entry := range entries {
 		dotted := entry.Module + "." + entry.Key
@@ -170,7 +178,7 @@ func schemaJSON(entries []settings.Entry, byKey map[string]settings.Def, host []
 		if def, ok := byKey[entry.Key]; ok && def.IsSecret() {
 			secrets = append(secrets, dotted)
 		}
-		if target, ok := derivedHost[dotted]; ok {
+		if target, ok := targets[dotted]; ok {
 			derived[dotted] = target
 			destinations[dotted] = target
 		}

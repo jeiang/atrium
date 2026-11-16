@@ -24,7 +24,7 @@ const TracesEndpointKey = "otel_traces_endpoint"
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: TracesEndpointKey, Module: "core", Type: settings.String, Default: "", Check: checkEndpoint},
+		{Key: TracesEndpointKey, Module: "core", Type: settings.String, Default: "", Check: checkEndpoint, NixOption: "services.atrium.observability.tracesEndpoint"},
 	}
 }
 

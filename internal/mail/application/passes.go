@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/module"
@@ -67,7 +68,7 @@ func (s *Service) reindex(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return embed.Reindex(ctx, s.db, url)
+	return embed.Reindex(ctx, s.db, url, mailembedding.Corpus)
 }
 
 type SyncInput struct {

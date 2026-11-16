@@ -28,8 +28,6 @@ const (
 	findingsLimit = 20
 )
 
-var DirectOrigins = []string{"agent", "local", "calendar", "export", "tracking", "media", "notify"}
-
 var pendingScopes = []string{state.Review, state.Effects, state.Mail, state.Calendar, state.Tasks, state.Assistant, state.Settings, state.Connections}
 
 type Arg struct {
@@ -418,7 +416,8 @@ func (s *Service) undoable(ctx context.Context, in UndoableInput) (Undoable, err
 		propWhere = append(propWhere, "json_extract(payload, '$.run_id') = ?")
 		propArgs = append(propArgs, *in.RunID)
 	}
-	filter := ledger.Filter{Origins: DirectOrigins, Limit: limit + 1, ThreadID: in.ThreadID, RunID: in.RunID}
+	origins := s.directOrigins(ctx)
+	filter := ledger.Filter{Origins: origins, Limit: limit + 1, ThreadID: in.ThreadID, RunID: in.RunID}
 	if c := in.After; c != nil {
 		propWhere = append(propWhere, "(COALESCE(applied_ts, created_ts) < ? OR (COALESCE(applied_ts, created_ts) = ? AND ? = 1 AND id < ?))")
 		propArgs = append(propArgs, c.TS, c.TS, c.Source, c.ID)
@@ -429,9 +428,12 @@ func (s *Service) undoable(ctx context.Context, in UndoableInput) (Undoable, err
 			filter.BeforeID = c.ID
 		}
 	}
-	found, err := s.ledger.List(ctx, filter)
-	if err != nil {
-		return Undoable{}, err
+	var found []ledger.Effect
+	if len(origins) > 0 {
+		var err error
+		if found, err = s.ledger.List(ctx, filter); err != nil {
+			return Undoable{}, err
+		}
 	}
 	written := make([]UndoEntry, 0, len(found))
 	for _, e := range found {

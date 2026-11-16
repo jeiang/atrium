@@ -347,7 +347,7 @@ func work(ctx context.Context, q db.Querier, threadID int64, now float64) (Work,
 	if w.Files, err = files.OfThread(ctx, q, threadID); err != nil {
 		return Work{}, err
 	}
-	if w.Drafts, err = service.DraftsOf(ctx, q, threadID); err != nil {
+	if w.Drafts, err = service.AttachmentsOf(ctx, q, threadID); err != nil {
 		return Work{}, err
 	}
 	pending, err := proposals.PendingInThread(ctx, q, threadID)

@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
@@ -22,6 +23,7 @@ import (
 
 const (
 	DownloadsPage = "/apps/media/downloads"
+	NotifyChannel = "media"
 	Import        = "import"
 
 	stateKey = "channels"
@@ -64,6 +66,7 @@ type Added struct {
 type PollResult struct {
 	Added  []Added
 	Errors []string
+	Unmet  *connections.Unmet `json:"-"`
 }
 
 type PollOptions struct {
@@ -312,6 +315,8 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 	if err != nil {
 		return result, err
 	}
+	var polled, feedFailed, addFailed int
+	var feedErr, addErr error
 	for _, rule := range channels {
 		if opts.Only != nil && rule.ID != *opts.Only {
 			continue
@@ -319,7 +324,12 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 		regex, err := settings.CompilePattern(rule.Pattern, rule.CaseSensitive)
 		var releases []Release
 		if err == nil {
+			polled++
 			releases, err = settings.FetchReleases(ctx, rule.IMDB)
+			if errors.As(err, new(EztvError)) {
+				feedFailed++
+				feedErr = err
+			}
 		}
 		if err != nil {
 			var channelErr ChannelError
@@ -359,6 +369,8 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 						return result, err
 					}
 					result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: %v", rule.Name, t.Title, err))
+					addFailed++
+					addErr = err
 					continue
 				}
 				result.Added = append(result.Added, Added{Channel: rule.Name, Title: t.Title, Hash: t.Hash, SizeBytes: t.SizeBytes})
@@ -389,7 +401,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 			for i, a := range result.Added {
 				hashes[i] = a.Hash
 			}
-			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media,
+			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: NotifyChannel,
 				Occurrence: "media-added:" + strings.Join(hashes, ",")}
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage
@@ -412,6 +424,12 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 	}
 	for _, line := range result.Errors {
 		log.Warn("channels: " + line)
+	}
+	switch {
+	case polled > 0 && feedFailed == polled:
+		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindEZTV), "indexer", fmt.Errorf("every channel feed failed: %w", feedErr))
+	case addFailed > 0 && len(result.Added) == 0:
+		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindQbittorrent), "api", fmt.Errorf("every add failed: %w", addErr))
 	}
 	return result, nil
 }

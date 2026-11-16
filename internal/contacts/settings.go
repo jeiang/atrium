@@ -18,7 +18,7 @@ const (
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: DirKey, Module: unit.Contacts, Type: settings.String},
+		{Key: DirKey, Module: unit.Contacts, Type: settings.String, NixOption: "services.atrium.stateDir"},
 	}
 }
 

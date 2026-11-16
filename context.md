@@ -23,9 +23,19 @@ claims about the running application. Operator contracts are in
   schedules. Spaces in Knowledge hold a former project's instructions,
   files, threads and tasks, and can restrict their content to a private
   space. Draft and proposal cards in chat use the same send and
-  approval services as their dedicated views. The `/chat/agenda` fragment
-  answers 404 when the calendar module is off and 503 `unavailable` when the
-  calendar cannot be listed, for example when no calendar is configured.
+  approval services as their dedicated views. The agenda (`/chat/agenda`,
+  `GET /agenda`, and the `agenda` flag of `GET /home`) reads the core `day`
+  contract (`internal/day`): a unit sets `Day` on its declaration to a
+  provider of dated entries (start, end or all-day, title, location, kind,
+  an `event:`-style reference that `Refs` resolves) for a time range, and
+  `module.Compile` fails start when two units claim one entry kind. Home
+  merges the providers of enabled units by start time, then title. Calendar
+  is the only provider (kind `event`); tasks due stay attention items and
+  birthdays stay under mail. The agenda answers 404 when no provider's unit
+  is on and 503 `unavailable` when the calendar cannot be listed, for example
+  when no calendar is configured. `tools/adapterboundary` fails when an
+  assistant package imports `internal/calendar` outside its listed
+  exceptions, or when `internal/day` imports any unit.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.
@@ -478,6 +488,20 @@ claims about the running application. Operator contracts are in
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
   Test exchanges it, and a 400 or 401
   marks the integration needs-reauth.
+- Capability model (`internal/connections/needs.go`): each kind declares
+  `Offers`, the capability names its test reports; each module declares
+  `Needs` (kind, capability, soft, features), checked at compile. Bindings,
+  repairs and dependents are derived from those declarations and the stored
+  rows, with no table: the binding is the first healthy serving connection
+  by id, else the first; a repair (`connection:<id>:<auth|unreachable|config>`)
+  exists for every enabled connection in needs-reauth, failing or
+  unconfigured and lists the features of unmet active needs it could serve.
+  `GET /api/v1/connections/dependencies` (`connections.dependencies`) is the
+  read model; connection views add `dependents`. Failure notices append
+  `; affects <features>`. Connection read revisions also follow the settings
+  counter so module toggles refresh `active`; no connection write takes
+  `If-Match`. The `connection owners` readiness check (non-critical) requires
+  `config_source = 'host'` exactly for enabled rows the host file declares.
 
 ### State, backups, settings, and keys
 - SQLite holds application records, configuration stored by the application,
@@ -772,6 +796,14 @@ claims about the running application. Operator contracts are in
   consecutive unattended threadless unconfigured skips with the same error
   coalesce into the newest run's row, which keeps the first start time, so
   an audit row never names a later run of another job.
+  Two builtin jobs record `skipped_dependency` instead of `ok` when a
+  connection they need is unavailable and the run did no work:
+  `mail/package_tracking` (Ship24 absent while packages wait, or every
+  tracker request failed) and `media/channels` (every EZTV feed failed, or
+  every qBittorrent add failed with nothing added). The run error names
+  the capability, the connection and the repair id. These rows do not
+  coalesce. The `packages poll` CLI and the channels poll API keep their
+  results.
   Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
@@ -832,7 +864,13 @@ claims about the running application. Operator contracts are in
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
-  atrium's own read-only CalDAV/CardDAV sync. A disabled
+  atrium's own read-only CalDAV/CardDAV sync. The DAV login, discovery and
+  mirror sync are platform code (`internal/davmirror`, which imports no unit),
+  and `icloud` is a platform connection kind like `google`: one
+  `icloud/<account>` row and the iCloud mail account's password serve the
+  `caldav` capability for calendar and the `carddav` capability for contacts.
+  Turning either module off leaves the row enabled and the other module
+  syncing; contacts import no other unit. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
   calendar-candidate stage and notification sends are skipped (the pause
@@ -909,9 +947,26 @@ claims about the running application. Operator contracts are in
   pause|resume` are aliases of the same pause with unchanged shapes: each
   gesture records one `automation.*` audit row and, with notifications on,
   one notice.
-- Module ownership is checked at build time. `tools/tableownership` keeps
-  each table's SQL inside its owning module, and `tools/registrationownership`
-  keeps every registration in the module catalog: it type-checks the
+- Each `module.Declaration` states its contract: `Name` (the stable id),
+  `Title`, `Core` (the platform core), `App` (a switchable app; units with
+  `App` false are core units), `Depends` (other units it needs on),
+  `Needs` (connection kinds, hard or `Soft`), `Packages` (the `internal/`
+  package roots it owns; the longest matching root wins) and `Tables`.
+  `module.Compile` fails start on an empty title, a core declaration that is
+  an app or declares dependencies, an unknown dependency, a core unit that
+  depends on an app, a dependency cycle (named in order), a need for a
+  connection kind that no module declares, or a table or package root that
+  two units claim. Notifications and core claim no packages, so every
+  unclaimed package is platform.
+- Module ownership is checked at build time from those declarations, by
+  `just verify` and `just check-quick`. `tools/tableownership` takes each
+  unit's tables from its declaration and the platform tables from a fixed
+  list, fails on a schema table with no owner, an owned table the schema
+  does not create, or a table with two owners, and keeps each table's SQL
+  inside its owner's packages. `tools/registrationownership` fails when a
+  `module.Declaration` sits outside the packages of the unit it names (a
+  platform declaration must sit in a platform package), and keeps every
+  registration in the module catalog: it type-checks the
   production packages and fails, naming file and line, when an `init`
   function calls into another package (only the SQLite driver setup in
   `internal/db/open_cgo.go` may), when code outside
@@ -1102,14 +1157,35 @@ claims about the running application. Operator contracts are in
   opener or syncer passes through the module framework or the tool context.
   Mail binds its IMAP opener and post-proposal sync hook in its own module
   declaration, and its assistant tools take the opener from the same place.
-  `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
-  `internal/tool`, `internal/ledger` or `internal/proposals` imports a unit
-  package (mail, media, calendar, contacts, kb, tasks, weather, grafana,
-  serverops, or the agent tools under `internal/assistant/tools`).
+  `tools/adapterboundary` fails when a platform package (any package no
+  unit claims, apart from the composition roots `internal/app` and `cmd`)
+  imports a unit, or when a unit imports another unit other than through
+  that unit's `<root>/contract` package and a declared `Depends`. Each
+  remaining edge is a listed exception, package to package, that names the
+  slice that removes it; an exception that matches no import fails.
   `internal/module` names only `core`; every other module name is a constant
-  in the leaf package `internal/unit`, the effect origins a module owns are
-  declared on its declaration (`EffectOrigins`), and the list of modules is
-  `internal/app/catalog.go`.
+  in the leaf package `internal/unit`, and the list of modules is
+  `internal/app/catalog.go`. Platform lookups read registries that units fill
+  on their declarations and `module.Compile` collects, failing start with
+  both module names when two claim one key: effect origins (`EffectOrigins`,
+  with `Direct` marking the origins listed in Activity and the undo list),
+  notification channels (`Channels`; `system` stays the platform's), the
+  Review, Library and Apps hubs (core's `Hub` nav items), reference kinds for
+  chat "about" links (`Refs`), thread attachments such as mail drafts
+  (`Attachments`), Activity write categories (`EffectCategories`, keyed by
+  operation prefix with one default), embedding corpora (`Corpora`: mail's
+  `message` and the assistant's `kb`, one vec0 table each per index
+  generation), attention queues (`Queues`, served as the samples of
+  `atrium_queue_depth` sorted by queue name), metrics (`Metrics`), and the
+  `proposals scan-all` scans (`ProposalScan`, run in module-name order). The
+  `propose` tool lists every declared proposal kind sorted by name, so its
+  schema does not depend on module order; each request still offers only the
+  enabled modules' kinds. The schedule floor
+  `agent_schedule_min_interval_seconds` is declared by the assistant, and a
+  host setting names its derived NixOS option on its own `settings.HostDef`
+  (`NixOption`); `settingsgen` keeps only `db.key` and
+  `mail.mail_accounts_file` as platform host options. Each registry covers
+  every declared unit, enabled or not.
   Settlement continues on a cancellation-detached context. Resolving an
   unknown or partial effect appends actor, source, outcome, prior state and
   evidence to `effect_resolutions`; it does not rewrite the raw attempt.

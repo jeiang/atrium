@@ -45,7 +45,7 @@ const declaredSlots: Record<string, string[]> = {
 };
 
 function seed(): ConnectionView[] {
-  return [
+  const rows: Omit<ConnectionView, 'dependents'>[] = [
     {
       id: 'service/anthropic',
       kind: 'service/anthropic',
@@ -254,6 +254,7 @@ function seed(): ConnectionView[] {
       expires_at: iso(5 * 24 * HOUR),
     },
   ];
+  return rows.map((row) => ({ ...row, dependents: [] }));
 }
 
 interface Store {

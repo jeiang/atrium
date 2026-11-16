@@ -184,7 +184,7 @@ func (e *UnknownLeaf) Error() string {
 type DependencyCycle struct{ Modules []string }
 
 func (e *DependencyCycle) Error() string {
-	return "module: dependency cycle among " + strings.Join(e.Modules, ", ")
+	return "module: dependency cycle " + strings.Join(e.Modules, " depends on ")
 }
 
 type InvalidLeaf struct{ Module, Path string }
@@ -212,7 +212,7 @@ func (e *InvalidCore) Error() string {
 		return "module: " + e.Reason
 	}
 	if e.Reason == "" {
-		return "module: core module " + e.Module + " cannot declare needs or requirements"
+		return "module: core module " + e.Module + " cannot be an app or declare dependencies, needs or requirements"
 	}
 	return "module: core module " + e.Module + " " + e.Reason
 }
@@ -237,10 +237,6 @@ func (e *DeclarationError) Error() string {
 }
 
 func (e *DeclarationError) Unwrap() error { return e.Err }
-
-type DuplicateMetric struct{ Name string }
-
-func (e *DuplicateMetric) Error() string { return "module: duplicate metric " + e.Name }
 
 type DuplicateCheck struct{ Name string }
 

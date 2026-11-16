@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
@@ -47,13 +48,16 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/kb"
+	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/review/hub"
@@ -71,11 +75,10 @@ import (
 )
 
 type Module struct {
-	ProposeKinds []proposals.Definition
-	Now          func() float64
-	Jobs         jobworker.Dependencies
-	Open         func(context.Context) (context.Context, *service.Service, func(), error)
-	Start        func(context.Context) error
+	Now   func() float64
+	Jobs  jobworker.Dependencies
+	Open  func(context.Context) (context.Context, *service.Service, func(), error)
+	Start func(context.Context) error
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -92,15 +95,29 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	opsOps, opsBindings := opsOperations()
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
-		Name:            unit.Assistant,
-		EffectOrigins:   []string{"export", "agent", "local"},
-		HasOperatorData: threads.HasRows,
-		Requires:        []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
-		Operations:      slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
-		Bindings:        slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
+		Name:  unit.Assistant,
+		Title: "Assistant",
+		Needs: []module.Need{
+			{Kind: anthropicconn.Kind, Soft: true, Capability: "models", Features: []string{"assistant chat", "scheduled runs", "web search"}},
+			{Kind: webfetch.KindWebfetch, Soft: true, Capability: "egress", Features: []string{"web fetch"}},
+			{Kind: weather.KindWeather, Soft: true, Capability: "forecast", Features: []string{"weather"}},
+			{Kind: weather.KindWeather, Soft: true, Capability: "geocoding", Features: []string{"weather place lookup"}},
+		},
+		Packages: []string{"internal/assistant", "internal/attention/application", "internal/attention/sources", "internal/commitments", "internal/kb", "internal/tasks", "internal/weather"},
+		Tables: []string{"context_ledger", "context_projections", "export_pages", "kb_fts", "kb_records", "memory_fts", "memory_jobs", "memory_nodes", "memory_state", "memory_views",
+			"projects", "record_links", "run_events", "run_streams", "runs", "skills", "subagents", "tasks", "thread_files", "thread_fts", "thread_messages", "thread_plans",
+			"thread_queue", "threads", "tool_calls", "tool_results"},
+		EffectOrigins:    []module.EffectOrigin{{Name: "export", Direct: true}, {Name: "agent", Direct: true}, {Name: "local", Direct: true}},
+		Channels:         []string{notify.Default},
+		EffectCategories: []review.Category{{Name: unit.Assistant}, {Name: "knowledge", Operations: []string{"kb"}}},
+		Refs:             asstapp.Refs(),
+		HasOperatorData:  threads.HasRows,
+		Requires:         []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
+		Operations:       slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
+		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), digest.Settings(),
 			registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
-			export.Settings(), weather.SettingsDefs()),
+			export.Settings(), weather.SettingsDefs(), scheduler.Settings(unit.Assistant)),
 		Host: export.HostSettings(),
 		Recover: func(ctx context.Context, d *db.DB, _ config.Config) error {
 			return kb.EnsureInstructions(ctx, d, prompts.System, assistant.Now())
@@ -109,6 +126,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Attention: AttentionSources(mc.Env),
 		Search:    SearchSources(),
 		Metrics:   opsmetrics.Metrics(),
+		Queues:    []ops.Queue{{Name: "thread_queue", Count: journal.QueueDepth}},
+		Corpora:   []embed.Corpus{kbembedding.Corpus},
 		ReviewKinds: func(module.ReviewDeps) review.Kinds {
 			return review.Kinds{Findings: serverops.ReviewKindFindings}
 		},
@@ -146,7 +165,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
 		Commands: []*cli.Command{jobcmd.DelegatingSubs(agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), map[string]string{"tick": ""}), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), schedulecmd.Command(scheduleCLIService(mc.Env, m.Now))},
-		Tools:    ToolDefinitions(m.ProposeKinds),
+		Tools:    ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
@@ -189,8 +208,8 @@ func SettingGroups() []settings.Group {
 	}, weather.SettingGroups()...)
 }
 
-func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
-	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
+func ToolDefinitions() []module.ToolDefinition {
+	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Declared()}
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),

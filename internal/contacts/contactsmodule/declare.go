@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
@@ -35,6 +36,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := contactsOperations()
 	return module.Declaration{
 		Name:       unit.Contacts,
+		Title:      "Contacts",
+		Needs:      []module.Need{{Kind: davmirror.KindICloud, Soft: true, Capability: davmirror.CapabilityCardDAV, Features: []string{"contacts sync"}}},
+		Packages:   []string{"internal/contacts"},
 		Requires:   Requirements(),
 		Host:       contacts.HostSettings(),
 		Jobs:       []scheduler.Definition{CardDAVJob(m.Jobs)},

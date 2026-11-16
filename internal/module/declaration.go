@@ -10,9 +10,11 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -45,8 +47,13 @@ func (c Context) Tools() (*registry.Registry, error) {
 
 type Declaration struct {
 	Name              string
+	Title             string
 	Core              bool
-	Needs             []string
+	App               bool
+	Depends           []string
+	Needs             []Need
+	Packages          []string
+	Tables            []string
 	Requires          []Requirement
 	Settings          []settings.Def
 	Host              []settings.HostDef
@@ -60,7 +67,12 @@ type Declaration struct {
 	Effects           func(EffectDeps) Effects
 	ReviewKinds       func(ReviewDeps) review.Kinds
 	ActivityCategory  string
-	EffectOrigins     []string
+	EffectCategories  []review.Category
+	EffectOrigins     []EffectOrigin
+	Channels          []string
+	Refs              []RefKind
+	Day               DayProvider
+	Attachments       []Attachment
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync
 	AccountCredential config.AccountCredentialFunc
@@ -75,9 +87,19 @@ type Declaration struct {
 	Recover           func(context.Context, *db.DB, config.Config) error
 	HasOperatorData   func(context.Context, db.Querier) (bool, error)
 	Metrics           []ops.Metric
+	Queues            []ops.Queue
+	Corpora           []embed.Corpus
+	ProposalScan      *proposalsapp.Scan
 	Checks            []ops.Check
 	Operations        []application.Definition
 	Bindings          []application.Binding
+}
+
+type Need struct {
+	Kind       connections.Kind
+	Soft       bool
+	Capability string
+	Features   []string
 }
 
 type SetService struct {

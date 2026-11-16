@@ -16,7 +16,9 @@ import (
 	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -46,8 +48,18 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	command := jobcmd.DelegatingSubs(calendarcmd.Command(m.calendarCLI(mc.Env, mc.Tools), connectionsapp.CLI(mc.Env)), map[string]string{"sync": unit.Calendar + "/" + passrun.CalDAV, "candidates": unit.Calendar + "/" + calendar.JobCandidates})
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
-		Name:          unit.Calendar,
-		EffectOrigins: []string{"calendar"},
+		Name:  unit.Calendar,
+		Title: "Calendar",
+		App:   true,
+		Needs: []module.Need{
+			{Kind: davmirror.KindICloud, Soft: true, Capability: davmirror.CapabilityCalDAV, Features: []string{"iCloud calendar sync"}},
+			{Kind: connections.KindGoogle, Soft: true, Capability: connections.GoogleCalendar, Features: []string{"Google calendar sync"}},
+		},
+		Packages:      []string{"internal/assistant/tools/calendar", "internal/calendar"},
+		Tables:        []string{"agent_events", "event_candidates"},
+		EffectOrigins: []module.EffectOrigin{{Name: "calendar", Direct: true}},
+		Refs:          []module.RefKind{eventRef(mc.Env)},
+		Day:           dayProvider{env: mc.Env},
 		Settings:      slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
 		Host:          calendar.HostSettings(),
 		Sections:      calendar.Sections(),
@@ -67,30 +79,29 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				Undo:      slices.Concat(p.Undo(), calapp.Undo(d.Ledger, d.Env)),
 			}
 		},
-		Connections: calendar.Connections(),
-		Operations:  operations,
-		Bindings:    bindings,
-		Pages:       []web.Page{{Module: func(_ chi.Router, d *web.Deps) { m.calendarRoutes(d) }}},
+		Operations: operations,
+		Bindings:   bindings,
+		Pages:      []web.Page{{Module: func(_ chi.Router, d *web.Deps) { m.calendarRoutes(d) }}},
 	}
 }
 
 func credentials(ctx context.Context, p module.Probe) (string, error) {
-	icloud, err := p.Settings.Resolve(ctx, p.Q, calendar.AppleIDKey)
+	icloud, err := p.Settings.Resolve(ctx, p.Q, davmirror.AppleIDKey)
 	if err != nil {
 		return "", err
 	}
-	if err := p.Settings.Validate(calendar.AppleIDKey, icloud.Value); err != nil {
+	if err := p.Settings.Validate(davmirror.AppleIDKey, icloud.Value); err != nil {
 		var invalid settings.Invalid
 		if !errors.As(err, &invalid) {
 			return "", err
 		}
 		icloud.Value = ""
 	}
-	account, err := p.Settings.Resolve(ctx, p.Q, calendar.AccountKey)
+	account, err := p.Settings.Resolve(ctx, p.Q, davmirror.AccountKey)
 	if err != nil {
 		return "", err
 	}
-	_, icloudErr := calendar.ICloudLogin(ctx, calendar.Settings{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
+	_, icloudErr := davmirror.ICloudLogin(ctx, davmirror.Login{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
 	if icloudErr == nil {
 		return "", nil
 	}

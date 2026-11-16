@@ -223,7 +223,7 @@ func recordPush(ctx context.Context, q db.Querier, id int64, out Delivery) error
 
 func deliverPush(ctx context.Context, d *db.DB, id int64, m delivery, link string) (tried, delivered bool, failure string, err error) {
 	if m.channel == "" {
-		m.channel = Assistant
+		m.channel = Default
 	}
 	if n, err := deviceCount(ctx, d.Read); err != nil || n == 0 {
 		return false, false, "", err

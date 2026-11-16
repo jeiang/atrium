@@ -39,7 +39,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Operations: operations, Bindings: bindings,
 		Name:          unit.Notifications,
-		EffectOrigins: []string{"notify"},
+		Title:         "Notifications",
+		Needs:         []module.Need{{Kind: notify.KindWebPush, Soft: true, Capability: "delivery", Features: []string{"push notifications"}}},
+		EffectOrigins: []module.EffectOrigin{{Name: "notify", Direct: true}},
 		Requires:      []module.Requirement{module.ConnectionHealth(string(notify.KindWebPush))},
 		Pages: []web.Page{{Module: notifypages.Module(factory), Templates: notifypages.Templates(), Nav: []web.NavItem{
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
@@ -69,7 +71,7 @@ func proposalCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 		return
 	}
 	_, _ = notify.Send(ctx, d, notify.Message{
-		Channel: notify.Assistant, Title: "atrium: " + p.Kind + " proposal", Body: fmt.Sprintf("Proposal #%d (%s) is waiting for a decision.", p.ID, p.Kind),
+		Channel: notify.Default, Title: "atrium: " + p.Kind + " proposal", Body: fmt.Sprintf("Proposal #%d (%s) is waiting for a decision.", p.ID, p.Kind),
 		Click: fmt.Sprintf("/proposals/%d", p.ID), Occurrence: fmt.Sprintf("proposal:%d", p.ID),
 	})
 }

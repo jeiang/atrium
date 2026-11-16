@@ -523,12 +523,13 @@ func Refresh(ctx context.Context, d *db.DB, now float64, t Target, s Settings, e
 }
 
 type PollResult struct {
-	Checked     int      `json:"checked"`
-	Updated     int      `json:"updated"`
-	Events      int      `json:"events"`
-	Notified    int      `json:"notified"`
-	RateLimited bool     `json:"rate_limited,omitempty"`
-	Errors      []string `json:"errors,omitempty"`
+	Checked     int                `json:"checked"`
+	Updated     int                `json:"updated"`
+	Events      int                `json:"events"`
+	Notified    int                `json:"notified"`
+	RateLimited bool               `json:"rate_limited,omitempty"`
+	Errors      []string           `json:"errors,omitempty"`
+	Unmet       *connections.Unmet `json:"-"`
 }
 
 func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResult, error) {
@@ -562,12 +563,14 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 	if err != nil {
 		var missing config.NotConfigured
 		if errors.As(err, &missing) {
-			return PollResult{}, nil
+			return PollResult{Unmet: connections.Unavailable(ctx, d.Read, ConnectionID, "api", missing)}, nil
 		}
 		return PollResult{}, err
 	}
 	defer client.Close()
 	var out PollResult
+	failed := 0
+	var lastErr error
 	for _, t := range targets {
 		out.Checked++
 		tracking, err := client.Results(ctx, t.TrackerID)
@@ -584,6 +587,8 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 					return out, nil
 				}
 				out.Errors = append(out.Errors, err.Error())
+				failed++
+				lastErr = err
 			}
 			continue
 		}
@@ -597,6 +602,9 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 		if notified {
 			out.Notified++
 		}
+	}
+	if failed > 0 && failed == out.Checked {
+		out.Unmet = connections.Unavailable(ctx, d.Read, ConnectionID, "api", fmt.Errorf("every tracker request failed: %w", lastErr))
 	}
 	return out, nil
 }
@@ -660,7 +668,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 			body = "Status " + advanced
 		}
 		if _, err := notify.Send(ctx, d, notify.Message{
-			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
+			Title: title, Body: body, Channel: notify.Default, Now: func() float64 { return now },
 			Occurrence: fmt.Sprintf("package:%d:%s:%g", id, advanced, now),
 			Mark: func(ctx context.Context, tx *sql.Tx) error {
 				_, err := tx.ExecContext(ctx, "UPDATE packages SET notified_status = ? WHERE id = ?", advanced, id)

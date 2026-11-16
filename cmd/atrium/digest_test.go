@@ -10,8 +10,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func runAppContext(t *testing.T, f *fixture, ctx context.Context, args ...string) appRun {
@@ -61,9 +59,7 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	}
 	cancel()
 	<-done
-	if err := notify.EnsureChannels(settings.With(context.Background(), f.settings), d.Write); err != nil {
-		t.Fatal(err)
-	}
+	exec("INSERT OR IGNORE INTO ntfy_channels (name, topic, created_at) VALUES ('assistant', '', 0)")
 	exec("UPDATE ntfy_channels SET content = 'full' WHERE name = 'assistant'")
 	exec("UPDATE jobs SET next_due = NULL WHERE name != 'daily-nudges'")
 	exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE name = 'daily-nudges'", now-1)
