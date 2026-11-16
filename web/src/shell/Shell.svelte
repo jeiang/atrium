@@ -20,8 +20,8 @@
     moduleOn,
     shownApps,
   } from './nav';
-  import { isActive, p, route, routeTitle } from './router';
   import OfflineStatus from './OfflineStatus.svelte';
+  import { isActive, p, route, routeTitle } from './router';
   import SessionState, { stateTitle } from './SessionState.svelte';
   import { session } from './session.svelte';
 
@@ -146,7 +146,9 @@
   </header>
   <main id="main" class="main" tabindex="-1">
     <div class="status-slot" role="status">
-      {#if abnormal}<OfflineStatus {cached} />{/if}
+      {#if abnormal}
+        <OfflineStatus {cached} />
+      {/if}
     </div>
     {#if signedIn && shell.isPending}
       <p class="frame-note">Loading atrium. Home, your plan and the inbox appear here in a moment.</p>

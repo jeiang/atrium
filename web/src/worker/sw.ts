@@ -67,7 +67,8 @@ worker.addEventListener('message', (event) => {
   const urls: unknown[] | undefined = 'urls' in data && Array.isArray(data.urls) ? data.urls : undefined;
   const current =
     urls === undefined ||
-    (urls.length > 0 && urls.every((url) => typeof url === 'string' && precached.has(new URL(url, worker.location.href).pathname)));
+    (urls.length > 0 &&
+      urls.every((url) => typeof url === 'string' && precached.has(new URL(url, worker.location.href).pathname)));
   if (current) {
     event.waitUntil(worker.skipWaiting());
   } else {

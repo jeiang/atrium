@@ -41,11 +41,7 @@ function shellWorker(base: string): Plugin {
       const precache = [base, ...assets.map((name) => `${base}${name}`)];
       const shell = bundle['index.html'];
       if (shell?.type !== 'asset') throw new Error('atrium-shell-worker: index.html is missing from the bundle');
-      const version = createHash('sha256')
-        .update(precache.join('\n'))
-        .update(shell.source)
-        .digest('hex')
-        .slice(0, 16);
+      const version = createHash('sha256').update(precache.join('\n')).update(shell.source).digest('hex').slice(0, 16);
       const { code } = await transformWithOxc(readFileSync(workerSource, 'utf8'), workerSource, { lang: 'ts' });
       this.emitFile({
         type: 'asset',

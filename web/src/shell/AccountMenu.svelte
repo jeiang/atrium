@@ -7,7 +7,7 @@
   import { toast } from '../shared/ui/toast.svelte';
   import { chats, settings } from './nav';
   import { p } from './router';
-  import { handleSignOut, session as current } from './session.svelte';
+  import { session as current, handleSignOut } from './session.svelte';
 
   interface Props {
     session: WebSession;
@@ -129,7 +129,9 @@
         onclick={onForget}
       >
         <span class="account__check" aria-hidden="true">
-          {#if device.forget}<Icon name="check" />{/if}
+          {#if device.forget}
+            <Icon name="check" />
+          {/if}
         </span>
         <span>Don't keep data on this device</span>
       </button>

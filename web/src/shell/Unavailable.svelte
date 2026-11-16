@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Page from '../shared/ui/Page.svelte';
   import { device } from '../shared/device.svelte';
+  import Page from '../shared/ui/Page.svelte';
 </script>
 
 <Page title="Not available">

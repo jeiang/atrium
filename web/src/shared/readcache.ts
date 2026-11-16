@@ -143,7 +143,11 @@ export async function restore(client: QueryClient, session: CachedSession, verif
   if (!enabled) return;
   const known = await current();
   const same = known.format === FORMAT && known.session?.identity.subject === session.identity.subject;
-  const stored: CachedSession = { auth_mode: session.auth_mode, identity: session.identity, sign_out: session.sign_out };
+  const stored: CachedSession = {
+    auth_mode: session.auth_mode,
+    identity: session.identity,
+    sign_out: session.sign_out,
+  };
   const loaded = same
     ? []
     : client

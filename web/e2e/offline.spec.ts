@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import type { ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expectNoHorizontalScroll, expectNoSeriousAxeFindings, expectTouchTargets } from './checks.ts';
 import { test as base, expect, layouts } from './fixtures.ts';
-import type { ServerResponse } from 'node:http';
 import { type Handler, type ServeState, serve } from './server.ts';
 
 const dist = resolve(process.env.ATRIUM_WEB_DIST ?? 'dist');
@@ -59,7 +59,9 @@ function json(res: ServerResponse, status: number, body?: unknown): true {
   if (body === undefined) {
     res.writeHead(status).end();
   } else {
-    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body));
+    res
+      .writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      .end(JSON.stringify(body));
   }
   return true;
 }
@@ -452,7 +454,7 @@ test.describe('the read cache', () => {
         const cache = await caches.open(key);
         for (const request of await cache.keys()) {
           texts.push(request.url);
-          if (!request.url.endsWith('.woff2')) texts.push(await (await cache.match(request))?.text() ?? '');
+          if (!request.url.endsWith('.woff2')) texts.push((await (await cache.match(request))?.text()) ?? '');
         }
       }
       return texts.join('\n');
@@ -480,4 +482,3 @@ test.describe('the offline status layout', () => {
     });
   }
 });
-
