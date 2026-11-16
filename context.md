@@ -431,18 +431,16 @@ claims about the running application. Operator contracts are in
   action touches no mailbox and appends actor, source, outcome and the prior
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
-  A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
-  `import`; it is the entry point that made the decision, so an `/api/v1`
-  approval records `api` and a web one `ui`. Approve, dismiss, undo and
+  A resolution source is `cli`, `ui`, `api`, `tool`, `job` or `import`; it
+  is the entry point that made the decision, so an `/api/v1` approval
+  records `api` and a web one `ui`. Rows recorded with source `phone` by the
+  retired phone action links stay in `/activity` as "phone action". Approve, dismiss, undo and
   resolve are the `review.*` operations shared by every entry point, each
   audited in `operation_audit` after the ledger settles, even after caller
   cancellation. Audit provenance comes only from the trusted invocation.
   Mail correction audits name only effects created under their own pass lock;
   move, folder-create, draft-send and draft-resolve audits link their ledger
   effects and retain unknown, partial and stale-revision conflict outcomes.
-  Phone approvals re-check the redeemed link inside the proposal claim, so
-  revocation during a pass-lock wait refuses the waiting tap; revoke re-stamps
-  every used link, including expired ones.
   Manual, scheduled and watch-admitted syncs share `mail.sync` and the
   `mail-pass` resource claim. Its result retains per-account sync statistics
   and committed, failed, skipped, partial and unknown forward effect ids.
@@ -452,8 +450,7 @@ claims about the running application. Operator contracts are in
   Replay, shadow reports and reindexing have typed operations too. Replay
   never contacts a mail server; default replay makes no external calls,
   while `--model` keeps paid classification on a disposable database copy.
-  Phone policy and changed-plan refusals are audited; invalid, expired and used tokens
-  are not. Undo and resolve preserve the explicit proposal, effect or mail
+  Changed-plan refusals are audited. Undo and resolve preserve the explicit proposal, effect or mail
   namespace, including unknown ids. A malformed
   approval selection is invalid input (`atrium proposals approve` exits 2,
   the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
@@ -461,7 +458,7 @@ claims about the running application. Operator contracts are in
   streamed run event writes do not); the append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`. Notification inbox, channel and device controls,
-  delivery, and phone policy commands use `notifications.*` operations. The
+  and delivery commands use `notifications.*` operations. The
   inbox read is bounded to 100 items (API default 50); failed push delivery
   remains explicit and keeps its inbox record.
 
@@ -968,7 +965,7 @@ claims about the running application. Operator contracts are in
   at the parked call. An approval card's apply re-authorizes the
   originating thread against the current tool settings, permission table
   and marks at execution time, whichever entry point approved it (web
-  card, phone link or `atrium proposals approve`); a disabled tool or a
+  card or `atrium proposals approve`); a disabled tool or a
   tightened table fails the proposal instead of applying it. Cron, nightly
   and subagent runs never park: an ask without a card is a deny there. A
   tool that leaves the allow set is withdrawn from dispatch; the request
