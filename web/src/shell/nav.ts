@@ -1,4 +1,3 @@
-import { type AppDefinition, apps } from '../apps';
 import type { Shell } from '../contract';
 import type { IconName } from '../shared/ui/Icon.svelte';
 
@@ -51,15 +50,6 @@ export function moduleOn(shell: Shell | undefined, module: string | undefined): 
   if (!shell) return true;
   const state = shell.modules.find((item) => item.name === module)?.state;
   return state !== undefined && state !== 'off';
-}
-
-export function shownApps(shell: Shell | undefined): AppDefinition[] {
-  if (!shell) return [];
-  return apps.filter((app) => moduleOn(shell, app.module));
-}
-
-export function appById(id: string): AppDefinition | undefined {
-  return apps.find((app) => app.id === id);
 }
 
 export function mailStatus(shell: Shell | undefined): string | undefined {

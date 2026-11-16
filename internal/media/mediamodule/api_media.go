@@ -16,39 +16,16 @@ type MediaPageInput struct {
 	Limit  api.Limit  `query:"limit" json:"-"`
 	Cursor api.Cursor `query:"cursor" json:"-"`
 }
-type MediaTorrent struct {
-	Hash     string  `json:"hash"`
-	Name     string  `json:"name"`
-	State    string  `json:"state"`
-	Tags     string  `json:"tags"`
-	Progress float64 `json:"progress"`
-	Size     *int64  `json:"size"`
+type MediaQueueItem struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Torrent bool   `json:"torrent"`
+	Error   string `json:"error,omitempty"`
 }
-type MediaTorrents struct {
-	Items       []MediaTorrent `json:"items"`
-	Next        *string        `json:"next,omitempty"`
-	Unavailable bool           `json:"unavailable"`
-}
-type MediaHashInput struct {
-	Hash   string     `path:"hash" json:"-"`
-	Limit  api.Limit  `query:"limit" json:"-"`
-	Cursor api.Cursor `query:"cursor" json:"-"`
-}
-type MediaFiles struct {
-	Items []media.TorrentFile `json:"items"`
-	Next  *string             `json:"next,omitempty"`
-}
-type MediaAddInput struct {
-	Magnet  string            `json:"magnet"`
-	Torrent *mediaapp.Torrent `json:"-"`
-}
-type MediaAdded struct {
-	Hash string `json:"hash"`
-}
-type MediaSelectInput struct {
-	Hash   string `path:"hash" json:"-"`
-	Index  int64  `json:"index"`
-	Wanted bool   `json:"wanted"`
+type MediaQueue struct {
+	Items []MediaQueueItem `json:"items"`
+	Next  *string          `json:"next,omitempty"`
+	Error string           `json:"error,omitempty"`
 }
 type MediaChannels struct {
 	Items []media.Channel `json:"items"`
@@ -126,67 +103,30 @@ func mediaCursorError() error {
 
 func mediaRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 	routes := []application.Binding{
-		api.Query(d, mediaapp.DescribeDownloads(), mediaShape[MediaTorrents](), "GET /media/torrents", func(ctx context.Context, in MediaPageInput) (application.Read[MediaTorrents], error) {
-			r, err := s.Downloads(ctx, mediaapp.DownloadsInput{})
-			if err != nil {
-				return application.Read[MediaTorrents]{}, err
+		api.Query(d, mediaapp.DescribeQueue(), mediaShape[MediaQueue](), "GET /media/queue", func(ctx context.Context, in MediaPageInput) (application.Read[MediaQueue], error) {
+			r, e := s.Queue(ctx, mediaapp.QueueInput{})
+			if e != nil {
+				return application.Read[MediaQueue]{}, e
 			}
-			sort.Slice(r.Data.Torrents, func(i, j int) bool { return r.Data.Torrents[i].Hash < r.Data.Torrents[j].Hash })
+			sort.Slice(r.Data.Queue, func(i, j int) bool { return r.Data.Queue[i].Item.ID < r.Data.Queue[j].Item.ID })
 			last := ""
 			if in.Cursor.Set() {
-				if err := in.Cursor.Last(&last); err != nil {
-					return application.Read[MediaTorrents]{}, mediaCursorError()
+				if e := in.Cursor.Last(&last); e != nil {
+					return application.Read[MediaQueue]{}, mediaCursorError()
 				}
 			}
-			out := MediaTorrents{Items: []MediaTorrent{}, Unavailable: r.Data.TorrentsError != nil}
-			for _, t := range r.Data.Torrents {
-				if t.Hash <= last {
+			out := MediaQueue{Items: []MediaQueueItem{}, Error: r.Data.QueueError}
+			for _, w := range r.Data.Queue {
+				if w.Item.ID <= last {
 					continue
 				}
 				if len(out.Items) == int(in.Limit) {
-					out.Next = in.Cursor.Next(out.Items[len(out.Items)-1].Hash)
+					out.Next = in.Cursor.Next(out.Items[len(out.Items)-1].ID)
 					break
 				}
-				out.Items = append(out.Items, MediaTorrent{Hash: t.Hash, Name: t.Name, State: t.State, Tags: t.Tags, Progress: t.Progress, Size: t.Size})
+				out.Items = append(out.Items, MediaQueueItem{ID: w.Item.ID, Name: w.Item.Name, Torrent: w.Item.Torrent, Error: w.Item.Error})
 			}
 			return mediaRead(r, out), nil
-		}),
-		api.Query(d, mediaapp.DescribeTorrentFiles(), mediaShape[MediaFiles](), "GET /media/torrents/{hash}/files", func(ctx context.Context, in MediaHashInput) (application.Read[MediaFiles], error) {
-			r, e := s.TorrentFiles(ctx, mediaapp.TorrentFilesInput{Hash: in.Hash})
-			out := MediaFiles{Items: []media.TorrentFile{}}
-			if e != nil {
-				return mediaRead(r, out), e
-			}
-			sort.Slice(r.Data.Files, func(i, j int) bool { return r.Data.Files[i].Index < r.Data.Files[j].Index })
-			last := -1
-			if in.Cursor.Set() {
-				if err := in.Cursor.Last(&last); err != nil {
-					return mediaRead(r, out), mediaCursorError()
-				}
-			}
-			for _, f := range r.Data.Files {
-				if f.Index <= last {
-					continue
-				}
-				if len(out.Items) == int(in.Limit) {
-					out.Next = in.Cursor.Next(out.Items[len(out.Items)-1].Index)
-					break
-				}
-				out.Items = append(out.Items, f)
-			}
-			return mediaRead(r, out), nil
-		}),
-		api.Command(d, mediaapp.DescribeAdd(), mediaAddShape(), "POST /media/torrents", func(ctx context.Context, in MediaAddInput) (application.Change[MediaAdded], error) {
-			input := mediaapp.AddInput{Media: true, Torrent: in.Torrent}
-			if in.Magnet != "" {
-				input.Magnet = &mediaapp.Magnet{URI: in.Magnet}
-			}
-			r, e := s.Add(ctx, input)
-			return mediaChange(r, MediaAdded{Hash: r.Data.Hash}), e
-		}),
-		api.Command(d, mediaapp.DescribeSelectFiles(), mediaShape[MediaAdded](), "PUT /media/torrents/{hash}/files", func(ctx context.Context, in MediaSelectInput) (application.Change[MediaAdded], error) {
-			r, e := s.SelectFiles(ctx, mediaapp.SelectFilesInput{Hash: in.Hash, Index: in.Index, Wanted: in.Wanted})
-			return mediaChange(r, MediaAdded{Hash: r.Data.Hash}), e
 		}),
 		api.Query(d, mediaapp.DescribeChannels(), mediaShape[MediaChannels](), "GET /media/channels", func(ctx context.Context, in MediaPageInput) (application.Read[MediaChannels], error) {
 			r, e := s.Channels(ctx, mediaapp.ChannelsInput{})

@@ -6,7 +6,10 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/apps/torrents"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const AddName application.Name = "media.add"
@@ -45,7 +48,7 @@ func CheckMagnet(uri string) (string, error) {
 	if !strings.HasPrefix(uri, "magnet:?") {
 		return "", invalid("magnet", "That is not a magnet link.")
 	}
-	hash, ok := media.MagnetHash(uri)
+	hash, ok := torrents.MagnetHash(uri)
 	if !ok {
 		return "", invalid("magnet", "The magnet link has no v1 info hash (xt=urn:btih:...).")
 	}
@@ -77,20 +80,17 @@ func (s *Service) add(ctx context.Context, in AddInput) (Added, error) {
 			{Name: "torrent", Code: "invalid", Message: "Give a magnet link or a .torrent file, not both."},
 		}}
 	}
-	set, err := s.settings(ctx)
-	if err != nil {
-		return out, err
-	}
-	req := media.AddRequest{}
-	if in.Media {
-		req.Tags = media.TagMedia
+	var err error
+	req := contract.AddRequest{Scope: s.scope(ctx, in.ProposalID)}
+	if in.Media && module.IsEnabled(ctx, unit.Media) {
+		req.Label = contract.TagLegacy
 	}
 	if in.Torrent != nil {
-		data, err := decodeTorrent(in.Torrent.Encoded, set.TorrentUpload)
+		data, err := decodeTorrent(in.Torrent.Encoded, torrents.TuningMediaTorrentUploadBytes)
 		if err != nil {
 			return out, err
 		}
-		if out.Hash, err = media.TorrentHash(data); err != nil {
+		if out.Hash, err = torrents.TorrentHash(data); err != nil {
 			return out, invalid("torrent", err.Error())
 		}
 		req.Data, req.Name = data, strings.TrimSpace(in.Torrent.Name)
@@ -111,18 +111,12 @@ func (s *Service) add(ctx context.Context, in AddInput) (Added, error) {
 		}
 		req.Magnet = uri
 	}
-	if in.ProposalID != nil {
-		if inv, ok := application.InvocationOf(ctx); ok {
-			req.Scope = media.Scope{ProposalID: in.ProposalID, ThreadID: &inv.ThreadID, RunID: &inv.RunID}
-		} else {
-			req.Scope = media.Scope{ProposalID: in.ProposalID}
-		}
-	}
-	if _, err := set.Add(ctx, s.d.Ledger, set, req); err != nil {
+	intake := s.intake()
+	if _, err := intake.Add(ctx, req); err != nil {
 		return out, classifyWrite(err)
 	}
-	if in.Media {
-		if _, err := set.SelectFiles(ctx, s.d.Ledger, set, req.Scope, nil); err != nil {
+	if consumer, ok := s.d.App.Consumer(req.Label); ok && consumer.Added != nil {
+		if err := consumer.Added(ctx, s.contractDeps(), intake, req.Scope); err != nil {
 			return out, &application.Error{Code: application.Partial, Message: "Torrent added, but file selection failed.", Cause: err}
 		}
 	}

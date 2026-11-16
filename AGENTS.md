@@ -169,7 +169,10 @@ settings the operator edits in the UI or pins from the host.
 - Public request limits are in-process code constants owned by each server
   instance. Do not move them into settings, a shared process, or a dependency,
   and never trust a forwarded client address from an untrusted peer.
-- Media writes touch only torrents tagged media. Preserve library group
+- Torrent writes go through `torrents.Intake` only. The operator may change
+  any torrent; agents and jobs change only torrents tagged `atrium` or
+  `media`, never remove a tag, and jobs remove only consumed, stopped
+  torrents. Preserve library group
   permissions and expiring signed file links; public links still check Host.
 - The `*.sql` files in `internal/db/schema/` are the v3 baseline
   (migration 1) and `testdata/schema/baseline.v3.txt` is its canonical dump;

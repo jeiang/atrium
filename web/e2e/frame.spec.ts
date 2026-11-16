@@ -98,14 +98,14 @@ test.describe('signed in', () => {
   });
 
   test('a module that is off hides its destination and its apps', async ({ page }) => {
-    await useScenario(page, { modules: { assistant: 'off', media: 'off' } });
+    await useScenario(page, { modules: { assistant: 'off' }, apps: { off: ['media'] } });
     await gotoShell(page, '/');
     const rail = page.getByRole('navigation', { name: 'Main' });
     await expect(rail.getByRole('link', { name: 'Mail' })).toBeVisible();
-    for (const name of ['Plan', 'Knowledge', 'Assistant', 'Downloads', 'Library']) {
+    for (const name of ['Plan', 'Knowledge', 'Assistant', 'Media']) {
       await expect(rail.getByRole('link', { name, exact: true })).toHaveCount(0);
     }
-    await gotoShell(page, '/apps/library');
+    await gotoShell(page, '/apps/media');
     await expect(page.getByRole('heading', { level: 1, name: 'Not found' })).toBeVisible();
   });
 
@@ -224,20 +224,20 @@ test.describe('signed out', () => {
 test.describe('phone', () => {
   test.use(phone);
 
-  test('the tab bar shows Home, Decide, Chats and Spaces with the inbox count', async ({ page }) => {
+  test('the tab bar shows Home, Decide, Chats and Apps with the inbox count', async ({ page }) => {
     await gotoShell(page, '/');
     const tabs = page.getByRole('navigation', { name: 'Tabs' });
-    for (const name of ['Home', 'Decide', 'Chats', 'Spaces']) {
+    for (const name of ['Home', 'Decide', 'Chats', 'Apps']) {
       await expect(tabs.getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
     }
     await expect(tabs.getByRole('link', { name: /^Decide\W+3 waiting$/ })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Main' })).toBeHidden();
-    await tabs.getByRole('link', { name: 'Spaces' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Spaces' })).toBeFocused();
-    await expect(tabs.getByRole('link', { name: 'Spaces' })).toHaveAttribute('aria-current', 'page');
+    await tabs.getByRole('link', { name: 'Apps' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Apps' })).toBeFocused();
+    await expect(tabs.getByRole('link', { name: 'Apps' })).toHaveAttribute('aria-current', 'page');
     await page.getByRole('link', { name: 'Knowledge' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Ilse de Wit' })).toBeVisible();
-    await expect(tabs.getByRole('link', { name: 'Spaces' })).toHaveAttribute('aria-current', 'page');
+    await expect(tabs.getByRole('link', { name: 'Apps' })).toHaveAttribute('aria-current', 'page');
     await expectTouchTargets(page);
     await page.getByRole('button', { name: 'Account: Operator' }).click();
     await expect(page.getByRole('menuitem', { name: 'Settings' })).toBeVisible();
@@ -250,7 +250,7 @@ test.describe('prerendered frame', () => {
     const html = await (await request.get('/plan')).text();
     expect(html).toContain('<nav class="rail" aria-label="Main">');
     expect(html).toContain('<nav class="tabbar" aria-label="Tabs">');
-    for (const label of ['Home', 'Inbox', 'Plan', 'Knowledge', 'Apps', 'Assistant', 'Decide', 'Chats', 'Spaces']) {
+    for (const label of ['Home', 'Inbox', 'Plan', 'Knowledge', 'Apps', 'Assistant', 'Decide', 'Chats']) {
       expect(html).toContain(`>${label}</span>`);
     }
     expect(html).not.toMatch(/\sstyle=/);

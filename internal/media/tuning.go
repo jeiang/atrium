@@ -1,21 +1,19 @@
 package media
 
 const (
-	TuningMediaArtworkMissTtlSeconds     = 604800
-	TuningMediaArtworkShowSearchLimit    = 5
-	TuningMediaChannelNameChars          = 120
-	TuningMediaChannelPatternChars       = 300
-	TuningMediaChannelSeenTtlSeconds     = 7776000
-	TuningMediaChildLimit                = 500
-	TuningMediaEztvLimit                 = 100
-	TuningMediaEztvTimeoutSeconds        = 30
-	TuningMediaQbittorrentTimeoutSeconds = 15
-	TuningMediaSearchLimit               = 50
-	TuningMediaSubtitleExtensions        = ".srt,.sub,.idx,.ass,.ssa,.vtt"
-	TuningMediaTmdbSearchLimit           = 8
-	TuningMediaTmdbTimeoutSeconds        = 15
-	TuningMediaTorrentUploadBytes        = 1048576
-	TuningMediaVideoExtensions           = ".mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv"
+	TuningMediaArtworkMissTtlSeconds  = 604800
+	TuningMediaArtworkShowSearchLimit = 5
+	TuningMediaChannelNameChars       = 120
+	TuningMediaChannelPatternChars    = 300
+	TuningMediaChannelSeenTtlSeconds  = 7776000
+	TuningMediaChildLimit             = 500
+	TuningMediaEztvLimit              = 100
+	TuningMediaEztvTimeoutSeconds     = 30
+	TuningMediaSearchLimit            = 50
+	TuningMediaSubtitleExtensions     = ".srt,.sub,.idx,.ass,.ssa,.vtt"
+	TuningMediaTmdbSearchLimit        = 8
+	TuningMediaTmdbTimeoutSeconds     = 15
+	TuningMediaVideoExtensions        = ".mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv"
 )
 
 func DefaultTuning() Tuning {
@@ -33,6 +31,5 @@ func DefaultTuning() Tuning {
 		ChildLimit:      TuningMediaChildLimit,
 		VideoExts:       video,
 		SubtitleExts:    subtitle,
-		TorrentUpload:   TuningMediaTorrentUploadBytes,
 	}
 }
