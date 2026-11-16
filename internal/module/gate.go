@@ -63,6 +63,11 @@ func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (sett
 			view.Error = st.Err
 		}
 	}
+	if view.On && view.Error == "" {
+		if view.Degraded, err = s.degraded(ctx, q, name); err != nil {
+			return settings.ModuleView{}, err
+		}
+	}
 	source, pinned, err := s.reg.Pinned(FlagKey(name))
 	if pinned {
 		view.Pinned = source

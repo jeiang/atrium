@@ -179,6 +179,15 @@ failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
 keeps its row and credentials, and is announced once.
 
+A connection that lacks what it needs checks as `unconfigured`, not `ok` or
+`failing`: Anthropic without an API key, web push without a subject or VAPID
+key, and weather without a location name or both coordinates. Mail, the
+assistant and notifications keep running while their connection
+(`service/embedding`, `service/anthropic`, `service/webpush`) is unconfigured,
+failing, disabled or needs reauth; the module's settings header names the
+connection and its state, and the line clears once a check passes. A failed
+Test does not hold mail.
+
 Module flags are restart-only. Change `<name>_enabled` through `atrium settings
 set` or host configuration, then restart serve. Settings pages show module
 state and a restart notice when the stored flag differs; they do not toggle

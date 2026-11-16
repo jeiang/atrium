@@ -90,6 +90,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
+		Requires:   []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
 		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
 		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),

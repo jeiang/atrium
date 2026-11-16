@@ -5,11 +5,13 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -241,7 +243,7 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 	}
 }
 
-func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
+func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testing.T) {
 	embed := newFakeOpenAI(t)
 	dir, api, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
@@ -283,6 +285,9 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 		var next float64
 		return d.Read.QueryRow("SELECT checked_at FROM connections WHERE id = 'service/embedding'").Scan(&next) == nil && next > checked
 	})
+	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
+		t.Fatalf("mail shows a degraded requirement before the outage: %q", degraded)
+	}
 
 	embed.setStatus(http.StatusInternalServerError)
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 600 WHERE id = 'service/embedding'"); err != nil {
@@ -292,6 +297,9 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
 	if n := connectionNotices(t, dir, "Embedding"); n != 1 {
 		t.Fatalf("%d notices after the automatic failure, want 1", n)
+	}
+	if degraded := moduleDegraded(t, s, "mail"); !strings.Contains(degraded, "service/embedding is failing") {
+		t.Fatalf("mail requirement during the outage: %q", degraded)
 	}
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("mail held by an automatic failure: %d %q", on.code, on.stderr)
@@ -308,9 +316,28 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 	s.stop()
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
+	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
+		t.Fatalf("mail requirement after recovery: %q", degraded)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 2 {
+		t.Fatalf("%d notices after one outage and one recovery, want 2", n)
+	}
 }
 
-func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing.T) {
+func moduleDegraded(t *testing.T, s *connectionSite, page string) string {
+	t.Helper()
+	code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/"+page, nil)
+	if code != http.StatusOK {
+		t.Fatalf("%s settings page: %d", page, code)
+	}
+	m := regexp.MustCompile(`data-degraded>([^<]*)<`).FindStringSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	return html.UnescapeString(m[1])
+}
+
+func TestAFailedEmbeddingTestDoesNotHoldMailAndAnAutomaticPassClearsIt(t *testing.T) {
 	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
@@ -321,38 +348,56 @@ func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing
 	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitError {
 		t.Fatalf("failing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code == cli.ExitOK {
-		t.Fatalf("mail enabled after an explicit failure: %q", on.stdout)
-	} else if !strings.Contains(on.stderr+on.stdout, "embed endpoint probe failed") {
-		t.Fatalf("the hold message: %q", on.stderr+on.stdout)
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("mail held by a failed Test: %d %q", on.code, on.stderr)
 	}
 
 	embed.setStatus(0)
-	s := &connectionSite{t: t, dir: dir}
-	s.start()
-	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code == cli.ExitOK {
-		t.Fatalf("an automatic pass released the hold: %q", on.stdout)
-	}
-	s.stop()
-
-	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK {
-		t.Fatalf("passing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
-	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
-		t.Fatalf("mail not released after a passing Test: %d %q", on.code, on.stderr)
-	}
-
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 90000 WHERE id = 'service/embedding'"); err != nil {
 		t.Fatal(err)
 	}
-	embed.setStatus(http.StatusInternalServerError)
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	defer s.stop()
-	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
-		t.Fatalf("an automatic failure held mail: %d %q", on.code, on.stderr)
+	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
+	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
+		t.Fatalf("mail requirement after an automatic pass: %q", degraded)
+	}
+}
+
+func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
+	t.Parallel()
+	requireCipher(t)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, "http://grafana.invalid", "http://anthropic.invalid"))
+
+	if got := runApp(t, "connections", "test", "service/anthropic"); got.code == cli.ExitOK || !strings.Contains(got.stdout+got.stderr, "unconfigured") {
+		t.Fatalf("anthropic test without a key: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if state := connectionState(t, dir, "service/anthropic"); state != "unconfigured" {
+		t.Fatalf("anthropic state without a key = %q, want unconfigured", state)
+	}
+
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	defer s.stop()
+	if degraded := moduleDegraded(t, s, "assistant"); !strings.Contains(degraded, "service/anthropic is unconfigured") {
+		t.Fatalf("assistant requirement without a key: %q", degraded)
+	}
+	moduleDegraded(t, s, "notifications")
+	if got := runApp(t, "connections", "test", "service/webpush"); got.code == cli.ExitOK {
+		t.Fatalf("web push test without a subject: exit %d stdout %q", got.code, got.stdout)
+	}
+	if state := connectionState(t, dir, "service/webpush"); state != "unconfigured" {
+		t.Fatalf("web push state without a subject = %q, want unconfigured", state)
+	}
+	if degraded := moduleDegraded(t, s, "notifications"); !strings.Contains(degraded, "service/webpush is unconfigured") {
+		t.Fatalf("notifications requirement without a subject: %q", degraded)
+	}
+	if on := runSettings(t, "set", module.FlagKey(module.Notifications), "true"); on.code != cli.ExitOK {
+		t.Fatalf("an unconfigured connection held notifications: %d %q", on.code, on.stderr)
 	}
 }
 

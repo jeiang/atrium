@@ -185,13 +185,8 @@ type View struct {
 	ReauthAt     *time.Time       `json:"reauth_at,omitempty"`
 	Results      []Result         `json:"results"`
 
-	revision           int64
-	failedTestRevision int64
-	transport          transportOptions
-}
-
-func (v View) TestFailed() bool {
-	return v.failedTestRevision != 0 && v.failedTestRevision == v.revision
+	revision  int64
+	transport transportOptions
 }
 
 func (v View) Configured() bool {

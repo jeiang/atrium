@@ -270,10 +270,12 @@ claims about the running application. Operator contracts are in
   OpenAI-compatible endpoint, local or hosted, with a CA bundle, proxy and
   host-file bearer. The endpoint package carries the resolved embed model,
   compiled body-character and batch constants and the dimension through the
-  request context. Each connection's Test records whether it works, and mail
-  is held in needs-settings only while an explicit Test of the current
-  embedding configuration fails; automatic health checks and runtime failures
-  update the connection's health without changing that hold. Connected content sent to a hosted model leaves
+  request context. Each connection's Test, boot check and daily sweep record
+  whether it works. Mail needs `service/embedding` configured; its health is
+  a soft need: while the connection is failing, unconfigured, disabled or
+  needs reauth, the mail settings header says why semantic features are
+  degraded, mail stays on, and the line clears when a check passes. No Test
+  result holds mail. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
@@ -319,7 +321,9 @@ claims about the running application. Operator contracts are in
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
   `weather_longitude` and `weather_location_name`), validated in range and
-  read-only when the host file declares them. The Integrations page also has a Google OAuth wizard:
+  read-only when the host file declares them. Without a location name or
+  both coordinates, the weather connection checks as `unconfigured` and
+  probes nothing. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier
@@ -587,7 +591,11 @@ claims about the running application. Operator contracts are in
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
   read-only. A module is on only when its flag is true
-  and its required settings are met (an `needs-settings` state otherwise);
+  and its required settings are met (an `needs-settings` state otherwise).
+  A soft need never holds a module: mail on `service/embedding`, the
+  assistant on `service/anthropic` and notifications on `service/webpush`
+  show the connection's state (for example `unconfigured`) on the module's
+  settings header while it is not healthy;
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by

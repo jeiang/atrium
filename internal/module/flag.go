@@ -33,8 +33,24 @@ var operatorData = []func(context.Context, db.Querier) (bool, error){
 }
 
 func (s *Set) unmet(ctx context.Context, p Probe, r Declaration, states map[string]State) ([]Unmet, error) {
+	out, err := checkRequirements(ctx, p, r, false)
+	if err != nil {
+		return nil, err
+	}
+	for _, dep := range r.Needs {
+		if states[dep] != Enabled {
+			out = append(out, Unmet{Name: dep, Reason: "needs " + dep + " (" + string(states[dep]) + ")"})
+		}
+	}
+	return out, nil
+}
+
+func checkRequirements(ctx context.Context, p Probe, r Declaration, soft bool) ([]Unmet, error) {
 	var out []Unmet
 	for _, rq := range r.Requires {
+		if rq.Soft != soft {
+			continue
+		}
 		reason, err := rq.Check(ctx, p)
 		if err != nil {
 			return nil, &requirementError{name: rq.Name, err: err}
@@ -43,12 +59,18 @@ func (s *Set) unmet(ctx context.Context, p Probe, r Declaration, states map[stri
 			out = append(out, Unmet{Name: rq.Name, Reason: reason})
 		}
 	}
-	for _, dep := range r.Needs {
-		if states[dep] != Enabled {
-			out = append(out, Unmet{Name: dep, Reason: "needs " + dep + " (" + string(states[dep]) + ")"})
-		}
-	}
 	return out, nil
+}
+
+func (s *Set) degraded(ctx context.Context, q db.Querier, name string) (string, error) {
+	for _, r := range s.decls {
+		if r.Name != name {
+			continue
+		}
+		unmet, err := checkRequirements(ctx, Probe{Settings: s.reg, Q: q, Env: s.env}, r, true)
+		return joinReasons(unmet), err
+	}
+	return "", nil
 }
 
 func seeded(ctx context.Context, q db.Querier) (bool, error) {
