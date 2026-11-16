@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func disabledMailFixture(t *testing.T) (*db.DB, float64) {
@@ -28,7 +29,7 @@ func disabledMailFixture(t *testing.T) (*db.DB, float64) {
 		t.Fatal(err)
 	}
 	kv := allFlagSettings()
-	kv[module.FlagKey(module.Mail)] = "false"
+	kv[module.FlagKey(unit.Mail)] = "false"
 	seedSettingsAt(t, path, kv)
 	return seed, float64(time.Now().UnixNano()) / 1e9
 }
@@ -87,7 +88,7 @@ func TestOperatorResolveOfAMailWriteWaitsForTheOwnerToBeEnabled(t *testing.T) {
 	if resolutions != 0 {
 		t.Fatalf("refused resolve recorded %d resolutions, want 0", resolutions)
 	}
-	asstSet(t, module.FlagKey(module.Mail), "true")
+	asstSet(t, module.FlagKey(unit.Mail), "true")
 	if got := runApp(t, "proposals", "resolve", idArg, "--outcome", "applied"); got.code != cli.ExitOK {
 		t.Fatalf("resolve after re-enabling mail = %d %q %q, want success", got.code, got.stdout, got.stderr)
 	}

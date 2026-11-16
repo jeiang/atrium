@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -22,18 +23,18 @@ const (
 
 func SettingsDefs() []settings.Def {
 	return []settings.Def{
-		settings.Value(settings.UI, settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String}),
-		settings.Value(settings.UI, settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String}),
-		settings.Value(settings.UI, settings.Def{Key: ICloudCalendarKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: AppleIDKey, Module: unit.Calendar, Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: AccountKey, Module: unit.Calendar, Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: ICloudCalendarKey, Module: unit.Calendar, Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{
-			Key: DefaultMinutesKey, Module: "calendar", Type: settings.Int, Default: defaultEventMinutes,
+			Key: DefaultMinutesKey, Module: unit.Calendar, Type: settings.Int, Default: defaultEventMinutes,
 			Check: settings.Between(5, 1440)}),
 	}
 }
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: CalendarDirKey, Module: "calendar", Type: settings.String},
+		{Key: CalendarDirKey, Module: unit.Calendar, Type: settings.String},
 	}
 }
 

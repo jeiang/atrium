@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -151,7 +152,7 @@ func (s *Service) Home(ctx context.Context, in HomeInput) (application.Read[Home
 		if out.Digest, err = digestLines(ctx, q, day); err != nil {
 			return err
 		}
-		out.Agenda = module.IsEnabled(ctx, module.Calendar)
+		out.Agenda = module.IsEnabled(ctx, unit.Calendar)
 		if out.About, err = s.about(ctx, q, in.About); err != nil {
 			return err
 		}
@@ -238,7 +239,7 @@ func agendaOf(rows []calendar.Row, tz *time.Location, now time.Time) []AgendaEve
 }
 
 func (s *Service) agenda(ctx context.Context, q db.Querier, day time.Time) (*Agenda, error) {
-	if !module.IsEnabled(ctx, module.Calendar) {
+	if !module.IsEnabled(ctx, unit.Calendar) {
 		return nil, notFound("calendar is off")
 	}
 	tz, err := calendar.Zone(ctx, s.env)
@@ -267,7 +268,7 @@ func (s *Service) agenda(ctx context.Context, q db.Querier, day time.Time) (*Age
 func (s *Service) aboutEvent(ctx context.Context, q db.Querier, rest string) (*About, error) {
 	day, uid, _ := strings.Cut(rest, ":")
 	start, err := time.Parse(time.DateOnly, day)
-	if err != nil || EventRef(day, uid) == "" || !module.IsEnabled(ctx, module.Calendar) {
+	if err != nil || EventRef(day, uid) == "" || !module.IsEnabled(ctx, unit.Calendar) {
 		return nil, nil
 	}
 	set, err := calendar.LoadSettings(ctx, q)

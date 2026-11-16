@@ -72,6 +72,7 @@ var allowed = map[string]bool{
 	"internal/tool":               true,
 	"internal/logx":               true,
 	"internal/module":             true,
+	"internal/unit":               true,
 	"internal/textx":              true,
 	"internal/timex":              true,
 	"internal/jsonx":              true,
@@ -82,15 +83,15 @@ var allowed = map[string]bool{
 
 var platform = map[string]bool{
 	"internal/module":    true,
+	"internal/unit":      true,
 	"internal/tool":      true,
 	"internal/ledger":    true,
 	"internal/proposals": true,
 }
 
-var units = []string{"internal/mail", "internal/media", "internal/calendar", "internal/contacts"}
-
-var platformPending = map[string]bool{
-	"internal/module/flag.go\tinternal/mail/accounts": true,
+var units = []string{
+	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
+	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
 }
 
 func main() {
@@ -139,7 +140,7 @@ func scan() ([]string, error) {
 			if adapterFile && forbidden(imp) {
 				edges = append(edges, "adapter imports a forbidden package: "+file+"\t"+imp)
 			}
-			if platformFile && unitImport(file, imp) {
+			if platformFile && unitImport(imp) {
 				edges = append(edges, "platform package imports a unit: "+file+"\t"+imp)
 			}
 		}
@@ -163,9 +164,9 @@ func isAdapter(file string, src []byte) bool {
 	return false
 }
 
-func unitImport(file, imp string) bool {
+func unitImport(imp string) bool {
 	rel, ok := strings.CutPrefix(imp, module+"/")
-	if !ok || platformPending[file+"\t"+rel] {
+	if !ok {
 		return false
 	}
 	for _, unit := range units {

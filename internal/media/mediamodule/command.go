@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func mediaCommand(cfgEnv config.Env, clock func() float64) *cli.Command {
@@ -37,7 +38,7 @@ func mediaRun(cfgEnv config.Env, clock func() float64) mediacmd.Runner {
 			return nil, err
 		}
 		var out any
-		_, err = module.Invoke(ctx, d, cfg, module.Media+"/"+name, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+		_, err = module.Invoke(ctx, d, cfg, unit.Media+"/"+name, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 			svc, err := openService(ctx, d, cfgEnv, cfg, clock)
 			if err == nil {
 				out, err = run(ctx, svc)

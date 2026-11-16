@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
@@ -51,7 +52,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 	if !initiallyOffered {
 		t.Fatal("mail_read was not offered before disable")
 	}
-	asstSet(t, module.FlagKey(module.Mail), "false")
+	asstSet(t, module.FlagKey(unit.Mail), "false")
 	releaseOnce.Do(func() { close(release) })
 	if state, detail := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 		t.Fatalf("disabled run: %s %s", state, detail)
@@ -64,7 +65,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 	}
 
 	for _, enabled := range []bool{false, true} {
-		asstSet(t, module.FlagKey(module.Mail), fmt.Sprint(enabled))
+		asstSet(t, module.FlagKey(unit.Mail), fmt.Sprint(enabled))
 		start := len(api.Requests())
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
 		code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "hello", "edit": ""}, nil, true)
@@ -105,7 +106,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 }
 
 func TestRefreshCommandsExitZeroWhileMailIsOff(t *testing.T) {
-	f := newFixture(t, loadGoldenData(t), map[string]string{flagEnv(module.Mail): "false"}, "")
+	f := newFixture(t, loadGoldenData(t), map[string]string{flagEnv(unit.Mail): "false"}, "")
 	for _, argv := range [][]string{{"loops", "refresh"}, {"watches", "refresh"}} {
 		code, stdout, stderr := f.Run(context.Background(), argv...)
 		if code != cli.ExitOK || stdout != "" {

@@ -9,8 +9,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func memoryToolService(tc *tool.Context) *asstapp.Service {
@@ -49,7 +49,7 @@ func memoryOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.CLI, Target: "memory view", Uses: uses(asstapp.MemoryViewName)},
 			{Kind: application.CLI, Target: "memory work", Uses: uses(asstapp.MemoryWorkName)},
 			{Kind: application.CLI, Target: "memory backfill", Uses: uses(asstapp.MemoryEstimateName, asstapp.MemoryBackfillName)},
-			{Kind: application.Job, Target: module.Assistant + "/" + assistant.MemoryWorkName, Uses: uses(asstapp.MemoryWorkName)},
+			{Kind: application.Job, Target: unit.Assistant + "/" + assistant.MemoryWorkName, Uses: uses(asstapp.MemoryWorkName)},
 			{Kind: application.Tool, Target: "zoom", Uses: uses(asstapp.MemoryZoomName)},
 			{Kind: application.Tool, Target: "search_threads", Uses: uses(asstapp.MemorySearchName)},
 			{Kind: application.Tool, Target: "recall", Uses: uses(asstapp.ResultRecallName)},
