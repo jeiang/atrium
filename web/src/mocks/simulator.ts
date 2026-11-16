@@ -1,6 +1,6 @@
 import { HttpResponse, http } from 'msw';
 import { API_BASE, type RunStreamEvent } from '../contract';
-import { type RunScript, runScripts } from './runs';
+import { extraRunScripts, type RunScript, runScripts } from './runs';
 
 const encoder = new TextEncoder();
 const STEP_MS = 400;
@@ -45,7 +45,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 export function findRunScript(thread: number, run: number): RunScript | undefined {
-  return runScripts.find((script) => script.thread === thread && script.run === run);
+  return [...runScripts, ...extraRunScripts].find((script) => script.thread === thread && script.run === run);
 }
 
 export const simulatorHandlers = [

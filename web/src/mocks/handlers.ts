@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
+import { type ChatScenario, chatHandlers } from './chats';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -10,13 +11,14 @@ export interface MockScenario {
   needsYou?: number;
   modules?: Record<string, ModuleStateState>;
   mail?: { mode: string; paused: boolean };
+  chat?: ChatScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
 export const MOCK_EVENTS = 'atrium-mock-events';
 const CSRF = 'mock-csrf-token';
 const MODULES = ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'];
-const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections'];
+const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant'];
 const encoder = new TextEncoder();
 
 function scenario(): MockScenario {
@@ -129,5 +131,6 @@ export const handlers = [
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' },
     });
   }),
+  ...chatHandlers,
   ...simulatorHandlers,
 ];
