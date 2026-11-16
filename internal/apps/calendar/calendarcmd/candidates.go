@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
 	"github.com/jeiang/atrium/internal/cli"
 )
 

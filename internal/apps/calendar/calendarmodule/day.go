@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/apps/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/day"
 	"github.com/jeiang/atrium/internal/db"

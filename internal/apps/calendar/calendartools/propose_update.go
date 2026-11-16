@@ -3,7 +3,7 @@ package calendartools
 import (
 	"context"
 
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 

@@ -2,7 +2,7 @@ package calendarmodule
 
 import (
 	"github.com/jeiang/atrium/internal/application"
-	calapp "github.com/jeiang/atrium/internal/calendar/application"
+	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
 )
 
 func (m Module) calendarOperations() ([]application.Definition, []application.Binding) {

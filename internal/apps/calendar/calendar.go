@@ -15,6 +15,8 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
+func Now() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+
 const (
 	ICloud        = "icloud"
 	Google        = "google"

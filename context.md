@@ -34,7 +34,7 @@ claims about the running application. Operator contracts are in
   birthdays stay under mail. The agenda answers 404 when no provider's unit
   is on and 503 `unavailable` when the calendar cannot be listed, for example
   when no calendar is configured. `tools/adapterboundary` fails when an
-  assistant package imports `internal/calendar` outside its listed
+  assistant package imports `internal/apps/calendar` outside its listed
   exceptions, or when `internal/day` imports any unit.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
@@ -951,7 +951,12 @@ claims about the running application. Operator contracts are in
   `Title`, `Core` (the platform core), `App` (a switchable app; units with
   `App` false are core units), `Depends` (other units it needs on),
   `Needs` (connection kinds, hard or `Soft`), `Packages` (the `internal/`
-  package roots it owns; the longest matching root wins) and `Tables`.
+  package roots it owns; the longest matching root wins; every package under
+  `internal/apps/<name>` belongs to the unit `<name>`) and `Tables`. The
+  Calendar app lives in `internal/apps/calendar` (providers, mirror, ICS and
+  recurrence, proposals and undo, invitations, its tools, CLI, HTTP
+  operations, `day` provider and `event:` resolver); only the candidate
+  queue stays in `internal/calendar/candidates` until the candidates move.
   `module.Compile` fails start on an empty title, a core declaration that is
   an app or declares dependencies, an unknown dependency, a core unit that
   depends on an app, a dependency cycle (named in order), a need for a
