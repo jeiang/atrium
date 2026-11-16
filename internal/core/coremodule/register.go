@@ -134,10 +134,12 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			_, err := maintenance.Backup(ctx, maintenanceapp.BackupInput{Dest: dest, Forget: forget})
 			return err
 		})},
-		Attention:         AttentionSources(),
-		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
-		Queues:            collectors.Queues(),
-		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
+		Attention: AttentionSources(),
+		Metrics:   slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
+		Queues:    collectors.Queues(),
+		Checks: slices.Concat(ops.Checks(), passrun.Checks(), []ops.Check{{Name: "connection owners", Run: func(ctx context.Context, d *db.DB) error {
+			return connections.CheckOwners(ctx, d.Read, config.From(ctx).Host())
+		}}}),
 		Connections:       slices.Concat(connections.Connections(), davmirror.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{

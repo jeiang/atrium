@@ -2,10 +2,13 @@ package connections
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -212,8 +215,10 @@ func (r *Registry) Resolve(views []View) Dependencies {
 		default:
 			b.Availability = FeatureUnavailable
 		}
-		if b.Repair != "" && b.Active {
-			affected[b.Connection] = append(affected[b.Connection], b)
+		if !b.Met && b.Active {
+			for _, id := range b.Candidates {
+				affected[id] = append(affected[id], b)
+			}
 		}
 		out.Needs = append(out.Needs, b)
 	}
@@ -298,4 +303,43 @@ func Unavailable(ctx context.Context, q db.Querier, id ID, capability, reason st
 		out.Repair = RepairID(id, RepairUnreachable)
 	}
 	return out
+}
+
+type OwnerMismatch struct{ IDs []ID }
+
+func (e *OwnerMismatch) Error() string {
+	ids := make([]string, len(e.IDs))
+	for i, id := range e.IDs {
+		ids[i] = string(id)
+	}
+	return "connections owned by the wrong side (host rows must be exactly the host file's connections): " + strings.Join(ids, ", ")
+}
+
+func CheckOwners(ctx context.Context, q db.Querier, host config.Host) error {
+	rows, err := q.QueryContext(ctx, "SELECT id, config_source FROM connections WHERE enabled = 1 ORDER BY id")
+	if err != nil {
+		return err
+	}
+	type row struct {
+		id     ID
+		source string
+	}
+	all, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
+		var out row
+		return out, r.Scan(&out.id, &out.source)
+	})
+	if err != nil {
+		return err
+	}
+	var wrong []ID
+	for _, r := range all {
+		_, declared := host.Connections[string(r.id)]
+		if (r.source == SourceHost) != declared {
+			wrong = append(wrong, r.id)
+		}
+	}
+	if len(wrong) > 0 {
+		return &OwnerMismatch{IDs: wrong}
+	}
+	return nil
 }
