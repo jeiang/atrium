@@ -140,7 +140,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, agentOpen(m.Open), agentTick(m.Open)), memorycmd.Command(memoryCLIService(mc.Env, m.Now))},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
-			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
+			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
 				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
 				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger)),

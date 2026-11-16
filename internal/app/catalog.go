@@ -33,13 +33,14 @@ type Dependencies struct {
 
 func Builtins(d Dependencies) []module.Builder {
 	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Classifier: classifierFor, Now: d.Now, Start: asstapp.ScheduledStart}
+	mailUnit := mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources}
 	return []module.Builder{
 		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now, Resources: d.Bindings.Resources, Jobs: jobs},
 		contactsmodule.Module{Jobs: jobs},
-		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
+		mailUnit,
 		calendarmodule.Module{Jobs: jobs},
 		mediamodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
-		assistantmodule.Module{Now: d.Now, ProposeKinds: mailmodule.ProposeKinds(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
+		assistantmodule.Module{Now: d.Now, ProposeKinds: mailUnit.ProposeKinds(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
 		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},
 		grafanamodule.Module{Jobs: jobs},
 	}

@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 )
 
 type Args map[string]any
@@ -85,7 +84,6 @@ type Context struct {
 	Client      *anthropic.Client
 	Progress    *progress.Writer
 	Ledger      *ledger.Store
-	MailOpen    mail.OpenFunc
 	Sources     []int64
 }
 
