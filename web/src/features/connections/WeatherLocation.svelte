@@ -1,6 +1,6 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
-  import { ApiError } from '../../contract';
+  import { ApiError, ok, settingsPatch } from '../../contract';
   import { refusedOffline, unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
@@ -8,15 +8,7 @@
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import TextField from '../../shared/ui/TextField.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import {
-    coordinate,
-    refreshSettings,
-    saveWeather,
-    stale,
-    useWeatherSettings,
-    WEATHER_KEYS,
-    when,
-  } from './connections';
+  import { coordinate, refreshSettings, stale, useWeatherSettings, WEATHER_KEYS, when } from './connections';
 
   type Key = keyof typeof WEATHER_KEYS;
   const order: Key[] = ['name', 'latitude', 'longitude'];
@@ -86,7 +78,13 @@
     pending = true;
     result = undefined;
     try {
-      await saveWeather(data.revision, set, unset);
+      const headers = { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `W/"${data.revision}"` };
+      ok(
+        await settingsPatch(
+          { ...(Object.keys(set).length > 0 ? { set } : {}), ...(unset.length > 0 ? { unset } : {}) },
+          { headers },
+        ),
+      );
       draft = Object.fromEntries(order.map((key) => [key, draft[key].trim()])) as Record<Key, string>;
       result = {
         tone: 'ok',

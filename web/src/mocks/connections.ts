@@ -424,17 +424,14 @@ export function connectionHandlers(read: () => { connections?: ConnectionsScenar
     http.get(`*${API_BASE}/connections/schema`, () => {
       scenario(read);
       return HttpResponse.json({
-        data: {
-          kinds: Object.entries(declaredSlots).map(([kind, slots]) => ({
-            kind,
-            fields: [
-              { name: 'label', type: 'text', secret: false, host_owned: false, present: false },
-              ...slots.map((name) => ({ name, type: 'secret', secret: true, host_owned: false, present: false })),
-            ],
-          })),
-          connections: store.rows.map((row) => ({ id: row.id, kind: row.kind, label: row.label, fields: fields(row) })),
-        },
-        revision: '3',
+        kinds: Object.entries(declaredSlots).map(([kind, slots]) => ({
+          kind,
+          fields: [
+            { name: 'label', type: 'text', secret: false, host_owned: false, present: false },
+            ...slots.map((name) => ({ name, type: 'secret', secret: true, host_owned: false, present: false })),
+          ],
+        })),
+        connections: store.rows.map((row) => ({ id: row.id, kind: row.kind, label: row.label, fields: fields(row) })),
       });
     }),
     http.post(`*${API_BASE}/connections/:kind/:name/test`, async ({ params, request }) => {

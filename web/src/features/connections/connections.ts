@@ -4,15 +4,10 @@ import {
   type ConnectionField,
   type ConnectionSchema,
   type ConnectionView,
-  connectionsDisconnect,
   connectionsList,
-  connectionsSaveFields,
   connectionsSchema,
-  connectionsTest,
-  connectionsTestSave,
   ok,
   type Setting,
-  settingsPatch,
   settingsRead,
 } from '../../contract';
 import type { Tone } from '../../shared/ui/Badge.svelte';
@@ -97,7 +92,7 @@ export function splitId(id: string): { kind: string; name: string } {
 }
 
 export function slotLabel(slot: string): string {
-  const text = slot.replaceAll('_', ' ');
+  const text = slot.replaceAll('_', ' ').replace(/\b(api|url|vapid)\b/g, (word) => word.toUpperCase());
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
@@ -129,7 +124,7 @@ export function useConnections() {
 export function useSchema() {
   return createQuery(() => ({
     queryKey: ['connections', 'schema'],
-    queryFn: async ({ signal }) => ok(await connectionsSchema({ signal })).data,
+    queryFn: async ({ signal }) => ok(await connectionsSchema({ signal })),
     meta: { topics: CONNECTION_TOPICS },
   }));
 }
@@ -159,7 +154,7 @@ export function fieldsFor(schema: { connections: ConnectionSchema[] } | undefine
   return schema?.connections.find((item) => item.id === id)?.fields ?? [];
 }
 
-function gesture(): RequestInit {
+export function gesture(): RequestInit {
   return { headers: { 'Idempotency-Key': crypto.randomUUID() } };
 }
 
@@ -169,45 +164,13 @@ export interface Draft {
   credentials: Record<string, string>;
 }
 
-function body(draft: Draft) {
+export function fieldsBody(draft: Draft) {
   const credentials = Object.fromEntries(Object.entries(draft.credentials).filter(([, value]) => value !== ''));
   return {
     ...(draft.label !== undefined ? { label: draft.label } : {}),
     ...(draft.url !== undefined ? { url: draft.url } : {}),
     ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
   };
-}
-
-export async function testAndSave(id: string, draft: Draft): Promise<ConnectionView> {
-  const { kind, name } = splitId(id);
-  return normalized(ok(await connectionsTestSave(kind, name, body(draft), gesture())).data);
-}
-
-export async function saveFields(id: string, draft: Draft): Promise<ConnectionView> {
-  const { kind, name } = splitId(id);
-  return normalized(ok(await connectionsSaveFields(kind, name, body(draft), gesture())).data);
-}
-
-export async function testNow(id: string): Promise<ConnectionView | undefined> {
-  const { kind, name } = splitId(id);
-  const views = ok(await connectionsTest(kind, name, gesture())).data.connections;
-  const found = views.find((view) => view.id === id);
-  return found ? normalized(found) : undefined;
-}
-
-export async function disconnect(id: string): Promise<void> {
-  const { kind, name } = splitId(id);
-  ok(await connectionsDisconnect(kind, name, gesture()));
-}
-
-export async function saveWeather(revision: string, set: Record<string, string>, unset: string[]): Promise<string> {
-  const headers = { 'Idempotency-Key': crypto.randomUUID(), 'If-Match': `W/"${revision}"` };
-  return ok(
-    await settingsPatch(
-      { ...(Object.keys(set).length ? { set } : {}), ...(unset.length ? { unset } : {}) },
-      { headers },
-    ),
-  ).data.revision;
 }
 
 export function stale(error: unknown): boolean {

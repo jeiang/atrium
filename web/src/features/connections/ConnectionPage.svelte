@@ -1,6 +1,14 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
-  import { ApiError, type ConnectionView } from '../../contract';
+  import {
+    ApiError,
+    type ConnectionView,
+    connectionsDisconnect,
+    connectionsSaveFields,
+    connectionsTest,
+    connectionsTestSave,
+    ok,
+  } from '../../contract';
   import { refusedOffline, unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import DataTable, { type Column } from '../../shared/ui/DataTable.svelte';
@@ -17,19 +25,18 @@
   import {
     configEntries,
     type Draft,
-    disconnect,
+    fieldsBody,
     fieldsFor,
+    gesture,
     graceText,
     hostSlot,
+    normalized,
     ownerText,
     reasonText,
     refreshConnections,
     remember,
-    saveFields,
     slotLabel,
     stale,
-    testAndSave,
-    testNow,
     useConnections,
     useSchema,
     WEATHER_ID,
@@ -46,7 +53,9 @@
   const client = useQueryClient();
   const list = useConnections();
   const schema = useSchema();
-  const id = $derived(`${route.params.kind ?? ''}/${route.params.name ?? ''}`);
+  const kind = $derived(route.params.kind ?? '');
+  const name = $derived(route.params.name ?? '');
+  const id = $derived(`${kind}/${name}`);
   const view = $derived(list.data?.find((row) => row.id === id));
   const fields = $derived(fieldsFor(schema.data, id));
   const offline = $derived(unreachable(list));
@@ -150,7 +159,8 @@
     busy = 'test-save';
     saved = undefined;
     try {
-      settle(await testAndSave(view.id, draft()), 'Tested and saved');
+      const stored = ok(await connectionsTestSave(kind, name, fieldsBody(draft()), gesture())).data;
+      settle(normalized(stored), 'Tested and saved');
     } catch (error) {
       saved =
         error instanceof ApiError && error.status === 422
@@ -166,7 +176,7 @@
     busy = 'save';
     saved = undefined;
     try {
-      const next = await saveFields(view.id, draft());
+      const next = normalized(ok(await connectionsSaveFields(kind, name, fieldsBody(draft()), gesture())).data);
       settle(next, 'Saved without testing');
     } catch (error) {
       saved = failure(error, 'save');
@@ -180,7 +190,9 @@
     busy = 'test';
     tested = undefined;
     try {
-      const next = await testNow(view.id);
+      const views = ok(await connectionsTest(kind, name, gesture())).data.connections;
+      const found = views.find((row) => row.id === id);
+      const next = found ? normalized(found) : undefined;
       if (!next) {
         refreshConnections(client);
         tested = {
@@ -221,12 +233,12 @@
     if (!view || busy) return;
     busy = 'disconnect';
     removeFailed = undefined;
-    const name = view.label;
+    const gone = view.label;
     try {
-      await disconnect(view.id);
+      ok(await connectionsDisconnect(kind, name, gesture()));
       confirming = false;
       refreshConnections(client);
-      toast(`Disconnected ${name}. Its stored credentials are deleted.`, { tone: 'ok' });
+      toast(`Disconnected ${gone}. Its stored credentials are deleted.`);
       void navigate('/settings/connections');
     } catch (error) {
       const outcome = failure(error, 'disconnect');
