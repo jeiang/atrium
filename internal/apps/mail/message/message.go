@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/apps/mail/features"
 	"github.com/jeiang/atrium/internal/apps/mail/mime"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/features"
 )
 
 const (

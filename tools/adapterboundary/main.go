@@ -32,11 +32,12 @@ var adapters = []adapter{
 	{pattern: "internal/assistant/webfetch/tool.go"},
 	{pattern: "internal/assistant/subagents/*/*", marker: "tool.Tool{"},
 	{pattern: "internal/kb/export/job.go"},
-	{pattern: "internal/mail/pages/*"},
-	{pattern: "internal/mail/reviewpages/*"},
-	{pattern: "internal/mail/accountpages/*"},
-	{pattern: "internal/mail/mailcmd/*"},
-	{pattern: "internal/mail/run/command.go"},
+	{pattern: "internal/apps/mail/pages/*"},
+	{pattern: "internal/apps/mail/reviewpages/*"},
+	{pattern: "internal/apps/mail/accountpages/*"},
+	{pattern: "internal/apps/mail/mailcmd/*"},
+	{pattern: "internal/apps/mail/mailtools/*"},
+	{pattern: "internal/apps/mail/run/command.go"},
 	{pattern: "internal/proposals/proposalscmd/*"},
 	{pattern: "internal/calendar/calendarcmd/*"},
 	{pattern: "internal/contacts/contactsmodule/adapters.go"},
@@ -109,7 +110,11 @@ const (
 	signalsUnit  = "internal/signals"
 )
 
-var mailUnits = []string{"internal/mail", "internal/apps/mail"}
+const (
+	mailUnit    = "internal/apps/mail"
+	mailTools   = "internal/apps/mail/mailtools"
+	oldMailTree = "internal/mail"
+)
 
 var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live", "internal/apps/mail/drafts", "internal/apps/mail/smtp"}
 
@@ -119,14 +124,13 @@ const (
 )
 
 var mailImporters = map[string]string{
-	"cmd/atrium":                    "composition root",
-	"internal/app":                  "composition root",
-	"internal/assistant/tools/mail": "P13.2b moves the mail tools into the Mail app",
-	"internal/config":               "P13.3 moves account rows into the Mail app",
+	"cmd/atrium":      "composition root",
+	"internal/app":    "composition root",
+	"internal/config": "P13.3 moves account rows into the Mail app",
 }
 
 var units = []string{
-	"internal/mail", "internal/apps/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
+	"internal/apps/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
 	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
 }
 
@@ -164,6 +168,9 @@ func scan() ([]string, error) {
 		adapterFile := isAdapter(file, src)
 		dayReader := strings.HasPrefix(file, "internal/assistant/") && !strings.HasPrefix(file, "internal/assistant/tools/")
 		outsideMail := !inMail(file)
+		if strings.HasPrefix(file, oldMailTree+"/") {
+			edges = append(edges, "mail code outside the Mail app; it belongs in "+mailUnit+": "+file)
+		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
 		if err != nil {
 			return err
@@ -184,6 +191,9 @@ func scan() ([]string, error) {
 			}
 			if !outsideMail && (imp == module+"/"+signalsUnit || strings.HasPrefix(imp, module+"/"+signalsUnit+"/")) {
 				edges = append(edges, "mail package imports signals instead of calling the platform hook: "+file+"\t"+imp)
+			}
+			if rel, ok := strings.CutPrefix(imp, module+"/"); ok && under(file, []string{mailTools}) && under(rel, mailWritePath) {
+				edges = append(edges, "mail tools import the mail write path: "+file+"\t"+imp)
 			}
 			if rel, ok := strings.CutPrefix(imp, module+"/"); outsideMail && ok && inMail(rel) {
 				_, excepted := mailImporters[path.Dir(file)]
@@ -217,7 +227,7 @@ func scan() ([]string, error) {
 }
 
 func inMail(rel string) bool {
-	return under(rel, mailUnits)
+	return rel == mailUnit || strings.HasPrefix(rel, mailUnit+"/")
 }
 
 func under(rel string, dirs []string) bool {

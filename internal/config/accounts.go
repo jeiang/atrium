@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/accounts"
 )
 
 type AccountSpec struct {
