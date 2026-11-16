@@ -51,12 +51,19 @@ func newService(o Options, d *web.Deps) *service {
 	return &service{mail: built.Mail, deps: d, review: built.Review}
 }
 
+func (s *service) needs(ctx context.Context) (int, error) {
+	if module.SetFrom(ctx) == nil {
+		ctx = module.WithSet(ctx, module.SetFrom(s.deps.Ctx))
+	}
+	return s.review.NeedsCount(ctx)
+}
+
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		s := newService(o, d)
 
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-			n, err := s.review.NeedsCount(ctx)
+			n, err := s.needs(ctx)
 			f.PendingCount = n
 			return err
 		})

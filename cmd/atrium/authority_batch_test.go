@@ -452,7 +452,7 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		srv, pages := webPages(t)
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 		if made := runApp(t, "agent", "subagents", "set", "batch", "--description", "Batch test reader",
-			"--prompt", "Read and report.", "--tool", "task_list", "--tool", "web_fetch"); made.code != cli.ExitOK {
+			"--prompt", "Read and report.", "--tool", "commitment_list", "--tool", "web_fetch"); made.code != cli.ExitOK {
 			t.Fatalf("subagents set: %d %s", made.code, made.stderr)
 		}
 		warm(t, api)
@@ -472,7 +472,7 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		api.Push(
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "research", map[string]any{"role": "batch", "task": "read " + srv.URL + "/a"})),
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": 1})),
-			anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "task_list", map[string]any{})),
+			anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "commitment_list", map[string]any{})),
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 			anthropictest.Reply("end_turn", anthropictest.Text("digest")),
 			anthropictest.Reply("end_turn", anthropictest.Text("done")),

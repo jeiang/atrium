@@ -48,6 +48,7 @@ type APIShape struct {
 	OptionalBody         bool
 	BeforeBody           func(context.Context) error
 	ID                   string
+	Description          string
 	Uncached             bool
 	ReadOnlyPost         bool
 	Sensitive            bool

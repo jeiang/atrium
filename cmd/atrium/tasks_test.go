@@ -57,12 +57,12 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	nightly := runApp(t, "agent", "run", "--kind", "nightly", "--text", "hi")
 	nightlyNames := offeredTools(t, api, nightly)
-	for _, name := range []string{"task_list", "task_add"} {
+	for _, name := range []string{"commitment_list", "task_add"} {
 		if !containsName(cronNames, name) || !containsName(nightlyNames, name) {
 			t.Fatalf("%s missing from cron/nightly: %v %v", name, cronNames, nightlyNames)
 		}
 	}
-	for _, name := range []string{"task_propose", "task_update", "task_done", "draft_email_create", "draft_email_update", "file_write",
+	for _, name := range []string{"task_propose", "task_update", "task_close", "draft_email_create", "draft_email_update", "file_write",
 		"mail_folder_create", "mail_move", "profile_set", "schedule_cancel", "schedule_create", "schedule_update"} {
 		if containsName(cronNames, name) || containsName(nightlyNames, name) {
 			t.Fatalf("%s offered to an unattended run", name)
@@ -149,7 +149,7 @@ func TestTaskUpdateAbsentFieldsKeepValues(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Renew passport'").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t2", "task_update", map[string]any{"id": id, "title": "Renew both passports"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t2", "task_update", map[string]any{"ref": "task:" + strconv.FormatInt(id, 10), "title": "Renew both passports"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("updated")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "rename it"); ran.code != cli.ExitOK {
 		t.Fatalf("task_update run: %d %s", ran.code, ran.stderr)
@@ -169,7 +169,7 @@ func TestTaskUpdateAbsentFieldsKeepValues(t *testing.T) {
 			t.Errorf("%s ok audit rows = %d (%v), want 1", op, n, err)
 		}
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("missing", "task_done", map[string]any{"id": 999999})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("missing", "task_close", map[string]any{"ref": "task:999999"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("not found")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "finish the missing task"); ran.code != cli.ExitOK {
 		t.Fatalf("missing task run: %d %s", ran.code, ran.stderr)
