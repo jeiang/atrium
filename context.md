@@ -430,6 +430,8 @@ claims about the running application. Operator contracts are in
   `export_pages` and `attention_snoozes` stay; `skills` and
   `effect_import_refs` are read by nothing and are candidates for a later
   drop.
+  Migration 3 adds the `usage_counters` table and an `agent` column
+  (default 0) on `auth_bearers` and `auth_sessions`, with no row rewrite.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
@@ -677,7 +679,20 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery. The ops listener also serves
+  notification delivery, and `atrium_scheduler_job_runs_total{scheduled_job,status}`,
+  which counts finished runs from the stored run history at scrape time, so it
+  survives restarts; operator schedules share the label `operator_schedule`,
+  consecutive identical skips stored as one run count once, and within one
+  process the value never falls below what it last reported. Requests are
+  also counted per day, surface (`page`, `api`, `web`), method, route
+  pattern (`unmatched` for unknown paths, static files and `/healthz` skipped)
+  and agent mark in `usage_counters`: batched in memory, saved every minute
+  and at shutdown in one transaction that prunes days older than 400, exported
+  as `atrium_http_route_requests_total{surface,method,route,agent}` from the
+  saved rows, and listed by `atrium usage routes`. A request is agent traffic
+  when its bearer token was issued with `--agent`, or it sends
+  `Atrium-Agent: 1`, which under OIDC also marks the session row for good; the
+  mark grants nothing and shows in the token list and `/web/v1/session`. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   Pass staleness (the `passes` readiness check, `atrium_job_stale`,
