@@ -11,6 +11,7 @@
       (root + "/tools/tableownership")
       (root + "/tools/registrationownership")
       (root + "/tools/adapterboundary")
+      (root + "/tools/internal")
       (root + "/tools/e2e-loopback")
       (root + "/tools/go-test-shard")
       (root + "/tools/openapi-diff")
