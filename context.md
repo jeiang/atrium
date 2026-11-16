@@ -30,8 +30,8 @@ claims about the running application. Operator contracts are in
   an `event:`-style reference that `Refs` resolves) for a time range, and
   `module.Compile` fails start when two units claim one entry kind. Home
   merges the providers of enabled units by start time, then title. Calendar
-  is the only provider (kind `event`); tasks due stay attention items and
-  birthdays stay under mail. The agenda answers 404 when no provider's unit
+  is the only provider (kind `event`, including the derived Birthdays
+  calendar); tasks due stay attention items. The agenda answers 404 when no provider's unit
   is on and 503 `unavailable` when the calendar cannot be listed, for example
   when no calendar is configured. `tools/adapterboundary` fails when an
   assistant package imports `internal/apps/calendar` outside its listed
@@ -268,7 +268,10 @@ claims about the running application. Operator contracts are in
   id and an iCloud or Gmail preset, declared as `mail/<id>` connections by the
   host (`services.atrium.mailAccounts`) or added, tested and removed on the
   Mail settings page (stored in the database, password only on an encrypted
-  database). A Gmail account can use an app password or XOAUTH2; XOAUTH2 uses
+  database). A host account's password comes from its `passwordFile`, which
+  replaces a value entered in the UI at every process start; without a
+  `passwordFile` the operator enters it in the UI and it stays in the
+  database. A Gmail account can use an app password or XOAUTH2; XOAUTH2 uses
   the Google OAuth wizard's Gmail refresh token, refreshes the access token
   once for concurrent callers, reconnects or retries AUTH once after a
   rejected token, and reports needs-reauth or expiring health.
@@ -1331,14 +1334,15 @@ claims about the running application. Operator contracts are in
   `contacts_lookup` returns name and organisation and marks nothing;
   emails, phones and dates come back only through `include` and mark
   `pii`. Empty results of `mail_search`, `calendar_list`, `file_search`,
-  `search_threads`, `packages`, `open_loops`,
-  `upcoming_birthdays` and `attention` mark nothing. `mail_read` marks
+  `search_threads`, `packages`, `open_loops`
+  and `attention` mark nothing. `mail_read` marks
   `pii` for headers and `messages`/`untrusted` for a body or attachment
   names; `mail_search` marks `pii` for addresses and
   `messages`/`untrusted` for subjects and snippets; `open_loops` and
   `packages` mark the fields they return the same way; `commitment_list`
   adds `messages` and `untrusted` for commitments and `pii` for a counterpart.
-  A non-empty `calendar_list` marks `messages` and `untrusted`; `find_slot`
+  A non-empty `calendar_list` marks `messages` and `untrusted`, and `pii`
+  when it includes Birthdays entries; `find_slot`
   marks `messages`. `file_read` and a non-empty `file_search` mark
   `messages` and `untrusted`. `search_threads` and `zoom` mark `messages`
   plus the marks of the threads they read. `recall` marks nothing: it only
@@ -1729,7 +1733,16 @@ claims about the running application. Operator contracts are in
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
 - **An iOS app** through the `/api/v1` JSON API. Chat with attachments, the run stream, the inbox, approvals, undo entries and drafts are implemented; APNs push registration is deferred.
-- **Birthdays** have no page; the agent keeps access.
+- **Birthdays** are the read-only Birthdays calendar of the Calendar app
+  (calendar id `birthdays`), derived at read time from contact dates of kind
+  `birthday` in the contacts mirror: an all-day entry titled
+  `Birthday: <name>`, with `(turns N)` when the birth year is known, and a
+  Feb 29 birthday on Feb 28 in common years. `calendar_list` and
+  `GET /calendar/events` include it (filter `birthdays`) and Today shows it,
+  only while Calendar is on and the contacts directory exists;
+  `calendar_update`, `calendar_rsvp` and `calendar_delete` refuse its entries
+  (change the date on the contact). Anniversaries are not listed. Contacts
+  keep their dates with Calendar off.
 - **Open loops** cover only mail addressed to the owner that needs a reply.
 
 ### Other

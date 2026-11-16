@@ -258,7 +258,10 @@ The Connections page shows configuration, credential presence, and observed
 health. Credentials are write-only. Database credentials require encryption;
 host file credentials stay files. Host-declared connections cannot be edited as
 operator-owned rows. Mail accounts have stable ids; account creation tests
-before saving, and deployment-pinned accounts cannot be removed.
+before saving, and deployment-pinned accounts cannot be removed. A host file
+credential replaces a value entered in the UI for the same slot at the next
+process start. A deployment-pinned mail account declared without a password
+file takes its password from the UI, and that value stays.
 
 A stored credential never follows a connection to a different endpoint. A
 URL/host change must replace every retained credential in that request, or the
@@ -704,8 +707,8 @@ so the same request can be tried later. A disabled owner at admission returns
 creates proposals. Rule preview and unpaid replay are read-only POST routes
 without command/idempotency admission; paid replay is not offered by the API.
 
-Reads expose ETags where supported. The nine mail resource projections for
-message, rules, rules export, accounts, loops, commitments, packages, birthdays,
+Reads expose ETags where supported. The eight mail resource projections for
+message, rules, rules export, accounts, loops, commitments, packages,
 and single draft track the actual served payload. Draft PATCH and send accept
 that draft's ETag in `If-Match`; revision compare-and-swap still protects the
 write. Knowledge PATCH does not support `If-Match`.

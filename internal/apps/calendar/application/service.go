@@ -105,6 +105,8 @@ func outcomeOf(err error) state.Outcome {
 	return state.Failed
 }
 
+func RefuseReadOnly(uid string) error { return classify(calendar.RefuseBirthday(uid)) }
+
 func classify(err error) error {
 	var known *application.Error
 	var missing calendar.NotConfigured
@@ -113,9 +115,12 @@ func classify(err error) error {
 	var refused ledger.Refused
 	var partial *calendar.Partial
 	var remote *calendar.Remote
+	var readOnly calendar.ReadOnly
 	switch {
 	case err == nil, errors.As(err, &known):
 		return err
+	case errors.As(err, &readOnly):
+		return &application.Error{Code: application.Refused, Message: readOnly.Error(), Cause: err}
 	case errors.As(err, &missing):
 		return &application.Error{Code: application.NotConfigured, Message: missing.Error(), Cause: err}
 	case errors.As(err, &proposal):

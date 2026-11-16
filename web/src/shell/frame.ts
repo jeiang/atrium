@@ -1,7 +1,7 @@
 import { createQuery } from '@tanstack/svelte-query';
 import { coreShell, ok } from '../contract';
 
-const SHELL_TOPICS = ['review', 'attention', 'mail', 'settings', 'notify'] as const;
+const SHELL_TOPICS = ['review', 'attention', 'mail', 'settings', 'notify', 'automation'] as const;
 
 export const shellQuery = {
   queryKey: ['shell'],
