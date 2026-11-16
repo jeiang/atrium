@@ -154,9 +154,6 @@ func activityItemOf(e reviewapp.ActivityEntry) ActivityItem {
 		out.Operation, out.Origin, out.Outcome = "mail."+e.Mail.Kind, e.Mail.Account, e.Mail.State
 		out.EffectiveOutcome = cmp.Or(e.Mail.EffectiveOutcome, e.Mail.State)
 		out.Target = "message:" + strconv.FormatInt(e.Mail.MessageID, 10)
-	case e.Phone != nil:
-		out.Operation, out.Actor, out.Origin, out.Outcome, out.EffectiveOutcome = "phone."+e.Phone.Kind, e.Phone.Actor, "phone", e.Phone.Status, e.Phone.Status
-		out.Target = e.Phone.Target
 	case e.Settings != nil:
 		out.Operation, out.Actor, out.Origin, out.Outcome, out.EffectiveOutcome = "settings.set", e.Settings.Actor, e.Settings.Origin, "ok", "ok"
 		out.Target = e.Settings.Tool

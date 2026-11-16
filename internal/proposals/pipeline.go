@@ -473,14 +473,9 @@ func (p *Pipeline) Dismiss(ctx context.Context, id int64, status string, who Res
 	return nil
 }
 
-func (p *Pipeline) claim(ctx context.Context, id int64, status string, who Resolver, check func(context.Context, db.Querier) error) (bool, error) {
+func (p *Pipeline) claim(ctx context.Context, id int64, status string, who Resolver) (bool, error) {
 	var claimed bool
 	err := p.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if check != nil {
-			if err := check(ctx, tx); err != nil {
-				return err
-			}
-		}
 		blocked, err := ledger.ProposalBlocked(ctx, tx, id)
 		if err != nil || blocked {
 			return err
@@ -540,7 +535,7 @@ func scope(ctx context.Context, id int64) context.Context {
 	return safety.ApprovedWrites(ctx, strconv.FormatInt(id, 10))
 }
 
-func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any, who Resolver, check func(context.Context, db.Querier) error) (*Proposal, error) {
+func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any, who Resolver) (*Proposal, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
 		return nil, err
@@ -580,7 +575,7 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 		defer func() { _ = set.Close() }()
 		ctx = db.WithHeld(ctx, set)
 	}
-	claimed, err := p.claim(ctx, id, Approved, who, check)
+	claimed, err := p.claim(ctx, id, Approved, who)
 	if err != nil {
 		return nil, err
 	}

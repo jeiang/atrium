@@ -40,8 +40,6 @@ type Entry struct {
 
 var manifest = []Entry{
 	{Module: "action_links", Key: "action_link_key", Class: ClassOperator, Action: ActionCarry, Target: "secrets.action_link_key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true},
-	{Module: "action_links", Key: "phone_actions_enabled", Class: ClassOperator, Action: ActionCarry, Target: "settings.phone_actions_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
-	{Module: "action_links", Key: "phone_actions_kinds", Class: ClassOperator, Action: ActionCarry, Target: "settings.phone_actions_kinds", Default: "reminder,triage_label,triage_archive,triage_snooze,memory,profile", Type: String, Choices: nil, Cutover: false},
 	{Module: "anthropic", Key: "anthropic_api_key", Class: ClassOperator, Action: ActionRename, Target: "service/anthropic credential api_key", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "agent_effort_cron", Class: ClassOperator, Action: ActionCarry, Target: "settings.agent_effort_cron", Default: "high", Type: Enum, Choices: []string{"low", "medium", "high", "xhigh", "max"}, Cutover: false},
 	{Module: "assistant", Key: "agent_effort_nightly", Class: ClassOperator, Action: ActionCarry, Target: "settings.agent_effort_nightly", Default: "high", Type: Enum, Choices: []string{"low", "medium", "high", "xhigh", "max"}, Cutover: false},

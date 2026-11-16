@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -9,52 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/jeiang/atrium/internal/actionlink"
-	"github.com/jeiang/atrium/internal/actionlink/policy"
-	"github.com/jeiang/atrium/internal/settings"
 )
-
-func TestServePhoneCalendarApprovalDoesNotBorrowCLIActor(t *testing.T) {
-	dir, _ := davFixture(t)
-	seedSettings(t, map[string]string{policy.EnabledKey: "true", policy.KindsKey: "calendar_delete"})
-	id := proposalID(t, toolResult(t, "calendar_delete", map[string]any{"uid": "untracked"}))
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
-	defer func() { _ = d.Close() }()
-	var fingerprint string
-	if err := d.Read.QueryRow("SELECT fingerprint FROM proposals WHERE id = ?", id).Scan(&fingerprint); err != nil {
-		t.Fatal(err)
-	}
-	pid, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := settings.With(context.Background(), fixtureFor(t).settings)
-	approve, _, err := actionlink.MintPair(ctx, d.Write, pid, fingerprint, float64(time.Now().UnixNano())/1e9)
-	if err != nil {
-		t.Fatal(err)
-	}
-	base, _, _ := startServeStoppable(t, dir)
-	code, body, _ := fetch(t, &http.Client{}, http.MethodPost, base+"/actions/"+approve, nil)
-	if code != http.StatusOK || strings.Contains(body, `"code"`) {
-		t.Fatalf("phone approval = %d: %s", code, body)
-	}
-	var status, result string
-	if err := d.Read.QueryRow("SELECT status, json_extract(result, '$.error') FROM proposals WHERE id = ?", id).Scan(&status, &result); err != nil {
-		t.Fatal(err)
-	}
-	if status != "failed" || result == "" || strings.HasPrefix(result, "{") {
-		t.Fatalf("phone approval result = %s %q", status, result)
-	}
-	var actor, source string
-	if err := d.Read.QueryRow("SELECT actor, source FROM operation_audit WHERE operation = 'calendar.request-delete' ORDER BY id DESC LIMIT 1").Scan(&actor, &source); err != nil {
-		t.Fatal(err)
-	}
-	if actor == "operator" && source == "cli" {
-		t.Fatalf("public phone request borrowed %s/%s", actor, source)
-	}
-}
 
 func TestCalendarAuditEntryPointsAndPlainApprovalFailures(t *testing.T) {
 	for _, surface := range []string{"cli", "ui", "api"} {

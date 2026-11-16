@@ -96,7 +96,7 @@ func (s *Service) Test(ctx context.Context, _ Empty) (application.Change[TestRes
 	return application.Change[TestResult]{Data: TestResult{Sent: n, Failure: failure, Outcome: outcome}, AuditID: id}, err
 }
 func (s *Service) Resend(ctx context.Context, in ResendInput) (application.Change[Delivery], error) {
-	sent, err := notify.Resend(ctx, s.db, in.ID, s.present)
+	sent, err := notify.Resend(ctx, s.db, in.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = &application.Error{Code: application.NotFound, Message: "No such notification.", Cause: err}
 	}

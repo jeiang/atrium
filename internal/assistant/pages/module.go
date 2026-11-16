@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
-	"strings"
 	"sync"
 
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
@@ -112,7 +111,7 @@ func bindAssistant(next http.Handler) http.Handler {
 		}
 		ctx, err := module.BindOwner(r.Context(), module.Assistant)
 		if err != nil {
-			if strings.HasPrefix(r.URL.Path, web.APIPrefix+"/") {
+			if web.IsAPI(r) {
 				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
 			} else {
 				http.Error(w, err.Error(), http.StatusConflict)

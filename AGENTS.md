@@ -115,14 +115,31 @@ settings the operator edits in the UI or pins from the host.
   grant URL access or widen tool permissions. Arbitrary web fetches use the
   shared allowlist and SSRF protections on every redirect.
 - Preserve proxy authentication, Host validation, CSRF, same-origin checks,
-  CSP, and loopback listener defaults. Accept forwarded identity headers only
-  from peers in the trusted proxy list.
+  CSP, and loopback listener defaults on every browser-reachable route,
+  `/web/v1` included. Accept forwarded identity headers only from peers in
+  the trusted proxy list. The CSP carries no `'unsafe-inline'` script,
+  `'unsafe-eval'`, nonce or remote source.
 - Every admitted proxy, OIDC or local identity is the one principal with full
   authority; do not add an administrator role, login links, or a remote
   emergency bypass.
 - `/api/v1` is bearer-only: never read session cookies or proxy headers
   there. Bearer tokens are persisted by hash and pass one revocation and usage
-  gate. Within v1, responses change only additively.
+  gate.
+- `/web/v1` is the browser surface: it authenticates only by the web identity
+  (proxy, OIDC session or local), never reads `Authorization` and refuses a
+  request that carries it, and sends no CORS headers. An unsafe request there
+  needs the `Atrium-Client: web` header, an `Origin` equal to Host,
+  `Sec-Fetch-Site: same-origin` when the browser sends it, and the CSRF
+  token. A JSON read needs the `Atrium-Client` header.
+- The guard picks the authenticator from the path prefix before it reads any
+  credential. Never choose it from request headers, and never add a route
+  that accepts both.
+- Both prefixes are mounted by one loop over the same typed bindings and
+  described by one generated `docs/api/openapi.json`. Do not register a route
+  under one prefix only; the session routes listed in `internal/web` are the
+  only exception. Within v1, responses on both prefixes change only
+  additively, and clients ignore unknown fields, error codes, event names and
+  preview kinds.
 - Public request limits are in-process code constants owned by each server
   instance. Do not move them into settings, a shared process, or a dependency,
   and never trust a forwarded client address from an untrusted peer.

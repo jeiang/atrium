@@ -114,8 +114,8 @@ claims about the running application. Operator contracts are in
   key is a generated secret (`webpush_vapid_private_key`) or the
   `service/webpush` connection's `credential_files.vapid_private` host file,
   and the subject comes from `webpush_subject`, edited on the Notifications page,
-  which the notifications module requires. A push carries the title, a body of at most 240 characters, a
-  URL path and, for phone actions, the action links; it is encrypted per
+  which the notifications module requires. A push carries the title, a body of at most 240 characters and a
+  URL path to the signed-in page for its subject; it has no action buttons and opening it writes nothing. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
@@ -143,20 +143,12 @@ claims about the running application. Operator contracts are in
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
   contacts/calendar concern and are not an open-loop source.
-- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain. Link minting limits do not suppress proposal inbox rows or pushes.
-- Phone actions are HMAC-signed links in a notification that approve or
-  dismiss a proposal: `phone_actions_enabled` (default off) and
-  `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot
-  be enabled. A link is valid for 12 hours, one use, with at most 20 links
-  minted per hour; `POST /actions/{token}` redeems it without a session, and
-  the resolution is recorded with source `phone` and shown as "approved via
-  phone" in `/activity`. The host file may bind `app_keys.action_link_key_file`;
-  its bytes sign and verify links and are never copied into the database.
-  Rotating the generated `action_link_key` invalidates
-  outstanding links; the phone action section of the Notifications settings
-  tab shows the outstanding count and revokes links. With a host-file key, revocation deletes outstanding links without rewriting the key.
-  A phone approval that meets a busy lock leaves the proposal pending and
-  the link usable.
+- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain.
+- A permission proposal sends an assistant notification whose push opens
+  `/proposals/{id}`, where the operator decides it while signed in. The
+  generated `action_link_key` secret, or the host file's
+  `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
+  fingerprints; host-file bytes are never copied into the database.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -662,7 +654,7 @@ claims about the running application. Operator contracts are in
   active; logs go to journald, with no OTLP log pipeline. The metrics include
   LLM tokens and cost by model and run kind, run steps and duration, tool
   calls and duration, mail sync counts, queue depths, integration health,
-  notification delivery and action links. The ops listener also serves
+  notification delivery. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   The host owns the scrape job and the traces endpoint.
@@ -979,8 +971,7 @@ claims about the running application. Operator contracts are in
   and subagent runs never park: an ask without a card is a deny there. A
   tool that leaves the allow set is withdrawn from dispatch; the request
   keeps its tools array so the run's thinking stays valid, and only a
-  server tool that must go rebuilds the request. Phone action links never
-  approve or dismiss a permission request. Branches inherit the marks.
+  server tool that must go rebuilds the request. Branches inherit the marks.
   A thinking block is resent only while everything before it is
   unchanged.
 - `lookup` reads one source in a child subagent and returns typed
@@ -1069,13 +1060,13 @@ claims about the running application. Operator contracts are in
   file is moved into the database on first use. In-process token buckets, owned by each server
   instance, bound public requests: 10 sign-in requests a minute per client
   address, 120 API requests a minute per address and 60 a minute per bearer
-  token. A refusal is `429` with `Retry-After` and `no-store` and changes
+  token or web session. A refusal is `429` with `Retry-After` and `no-store` and changes
   nothing. The client address is the socket peer, unless the peer is in the
   host's `web.trusted_proxy_cidrs` list, in which case exactly one valid
   `CF-Connecting-IP` names it; other forwarded headers are ignored.
 - The Sign-in settings tab shows the OIDC connection and session settings, and issues, lists and revokes API bearer tokens.
   Issue and revoke write one `operation_audit` row each (`auth.bearer-issue`, `auth.bearer-revoke`; token id and kind only, never the secret) and, in the same transaction, the `settings_audit` row (`auth_token.issue`, `auth_token.revoke`; id, name and kind) that the Activity page lists; an invalid name or expiry answers 422.
-- `/api/v1` is a JSON API for a native client, available in every listener.
+- `/api/v1` is the JSON API for native clients, available in every listener.
   It accepts nothing but a bearer token: a locally issued `atr_` token, or,
   when `oidc_api_client_id` names the client, an RFC 9068 access token from
   the configured issuer (audience and `client_id` equal to that client, expiry
@@ -1110,7 +1101,29 @@ claims about the running application. Operator contracts are in
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
   and `atrium writes list` go through the `review.*` operations in
   `internal/review/application`.
-- Every `/api/v1` route is a typed binding mounted through `internal/api`.
+- `/web/v1` is the same JSON API for the embedded web client, available in
+  every listener. It is mounted from the same typed bindings and described by
+  the same OpenAPI document. It accepts only the web identity (proxy
+  `Remote-Groups` from a trusted peer, an OIDC session, or local); a bearer
+  token grants nothing there and a request carrying `Authorization` is
+  refused with 400 `bearer_refused`. Every request except a binary content
+  read sends `Atrium-Client: web`, and `Sec-Fetch-Site`, when sent, must be
+  `same-origin`. Unsafe requests also need an `Origin` equal to Host (or,
+  without `Origin`, `Sec-Fetch-Site: same-origin`) and `X-CSRF-Token` equal to
+  the HttpOnly `atrium_csrf` cookie, whose value `GET /web/v1/session`
+  returns. Refusals are 403 `cross_origin` or `csrf_failed`; there are no CORS
+  headers. Commands, idempotency keys, ETags, cursors, body caps, content
+  types, the error envelope and limits are those of `/api/v1`, with the
+  per-token rate limit and stream limit keyed by the OIDC session (or the
+  CSRF cookie under proxy and local sign-in); requests are audited with the UI
+  source. Two routes exist only there: `GET /web/v1/session` returns
+  `auth_mode`, `identity`, `csrf_token` and `sign_out` (the logout method and
+  URL for OIDC sessions, otherwise null), and `POST /web/v1/session/logout`
+  (OIDC only) ends the session for the web client and the pages alike. Any
+  401 there carries `sign_in` (`modes`, `login_url` under OIDC, `csrf_token`);
+  sign-in itself stays `/login` and the OIDC callback.
+- Every typed binding is mounted through `internal/api` under both `/api/v1`
+  and `/web/v1` by one loop in `internal/web`.
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
   catalog (`atrium catalog openapi --output docs/api`, drift-checked by
   `--check`). Approval-only operations count as reached through
@@ -1120,7 +1133,9 @@ claims about the running application. Operator contracts are in
   retention); it sends a heartbeat every 15 seconds and allows 4 streams per
   subject and 16 per server. Static assets are served from content-hashed
   immutable URLs.
-- The generated spec declares bearer security, leaves response schemas open
+- The generated spec lists both prefixes as servers and declares `bearer`
+  and the `webSession` cookie scheme; the two session operations carry a
+  `/web/v1` server of their own. It leaves response schemas open
   and closes request schemas (`<Name>Input` when a type is used both ways),
   bounds response integers at 2^53-1, marks null-sent pointers nullable, keeps
   the error `code` enum open, and types run stream frames as the open union

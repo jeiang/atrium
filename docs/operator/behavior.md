@@ -62,15 +62,27 @@ administrator role or remote emergency bypass.
 - Requests still enforce accepted Host, CSRF, same-origin, and CSP rules. A
   Host outside the accepted list gets 400 `Bad Host header`; `GET /healthz` is
   the only exception (HEAD is not exempt). CSRF and same-origin failures get
-  403. Signed media and phone action links have narrowly scoped credentials,
-  not general operator sessions.
+  403. Signed media links have narrowly scoped credentials, not general
+  operator sessions.
 - Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
   Such a peer must send exactly one valid value; otherwise the request is 400.
   Other forwarded-address headers do not choose a rate-limit identity.
+- `/web/v1` is the browser surface for the same API operations. It admits the
+  same identities as the pages (proxy from a trusted peer, an OIDC session, or
+  local on a loopback listener, the emergency listener included) and never a
+  bearer token: a request with an `Authorization` header gets 400
+  `bearer_refused`. Requests need `Atrium-Client: web` (binary content reads
+  excepted) and a `same-origin` `Sec-Fetch-Site` when the browser sends one;
+  writes also need a same-origin `Origin` and the CSRF token from
+  `GET /web/v1/session`, or get 403 `cross_origin` or `csrf_failed`. Signed
+  out, every `/web/v1` request gets 401 with the sign-in URL; sign-in itself
+  is still `/login`. `POST /web/v1/session/logout` signs an OIDC session out
+  of the pages too.
 
 Public requests are limited in process by token buckets owned by each listener:
-10 sign-in requests a minute per client address, 120 `/api/v1` requests a minute
-per address and 60 a minute per bearer token. A refused request returns 429 with
+10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`
+requests a minute per address and 60 a minute per bearer token or web session.
+A refused request returns 429 with
 `Retry-After` and `no-store` and changes nothing. The limits are code constants,
 not settings, and a restart clears them. The emergency listener has its own
 limiter, not a separate database or token store.
@@ -220,8 +232,7 @@ go-live eligibility.
 The mail scan job holds the shared `mail-pass` resource for up to two hours;
 mail sync has a 20-minute bound. Approvals, assistant moves, and undo wait five
 seconds before returning busy. They have not thereby approved, moved, or undone
-the item and can be retried after the pass. A busy phone Approve returns 503,
-leaves the proposal pending, and leaves the link usable.
+the item and can be retried after the pass.
 
 API sync and scans use their declared job claims. API apply-deletions,
 rebaseline, and loops/watches refresh instead take the resource lock alone,
@@ -259,16 +270,9 @@ releases the block and governs later undo. Resolving a draft as sent updates
 the draft but leaves its original SMTP attempt unknown; it does not resend.
 A partial undo must be checked and resolved rather than repeatedly invoked.
 
-Phone action links are off by default. `phone_actions_enabled` turns them on
-and `phone_actions_kinds` lists the proposal kinds that may be approved or
-dismissed from a notification; web-only kinds cannot be enabled, and phone
-links never decide a permission request. One stored nonce mints an Approve and
-a Dismiss link. A link is valid for 12 hours and one use, and at most 20 links
-are minted per hour. `POST /actions/<token>` needs no session but still checks
-Host. A phone approval that meets a busy lock answers 503, leaves the proposal
-pending and keeps the link usable. Revoke removes unused links and stamps used
-rows, including expired ones. Link minting limits do not drop the proposal's
-inbox notification or prevent a push without action links.
+A push notification carries only a title, a body and the path of the
+signed-in page for its subject, such as `/proposals/<id>`. It has no action
+buttons, carries no token, and opening it writes nothing.
 
 ## Assistant and daily work
 
@@ -349,7 +353,10 @@ shows its secret once. API responses evolve additively within v1; generated
 an operator can call directly (`operator` or `operator_send` authority) has its
 own typed route, and no other operation does. Operations that run only after
 approval are reached through the approval route
-(`POST /api/v1/approvals/{id}/approve`).
+(`POST /api/v1/approvals/{id}/approve`). `/web/v1` serves every one of these
+routes to the web client under the same rules, authenticated by the web
+session instead of a bearer token (see Access); the same OpenAPI document
+describes both prefixes.
 
 Commands use typed outcomes and durable command receipts. Supply an
 `Idempotency-Key` to replay a matching completed request instead of executing

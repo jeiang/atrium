@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/application"
 	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
@@ -21,13 +23,13 @@ import (
 
 const (
 	APIPrefix       = "/api/v1"
+	WebPrefix       = "/web/v1"
 	SourceBearer    = "bearer"
 	RequestIDHeader = "Atrium-Request-Id"
 	ProblemPrefix   = "urn:atrium:problem:"
 
-	apiPrefix = "/api/"
-	jsonType  = "application/json"
-	realm     = `Bearer realm="atrium"`
+	jsonType = "application/json"
+	realm    = `Bearer realm="atrium"`
 )
 
 type apiError struct {
@@ -47,8 +49,29 @@ func newAPIError(w http.ResponseWriter, status int, code, message string) apiErr
 	return apiError{Code: code, Message: message, Type: ProblemPrefix + code, Status: status, Instance: w.Header().Get(RequestIDHeader)}
 }
 
-func isAPI(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, apiPrefix) || r.URL.Path == strings.TrimSuffix(apiPrefix, "/")
+type surface struct {
+	prefix string
+	scope  string
+	guard  func(*Guard, http.ResponseWriter, *http.Request, http.Handler)
+}
+
+var surfaces = [...]surface{
+	{prefix: APIPrefix, scope: "/api", guard: (*Guard).api},
+	{prefix: WebPrefix, scope: "/web", guard: (*Guard).web},
+}
+
+func surfaceOf(r *http.Request) (surface, bool) {
+	for _, s := range surfaces {
+		if r.URL.Path == s.scope || strings.HasPrefix(r.URL.Path, s.scope+"/") {
+			return s, true
+		}
+	}
+	return surface{}, false
+}
+
+func IsAPI(r *http.Request) bool {
+	_, ok := surfaceOf(r)
+	return ok
 }
 
 const (
@@ -174,13 +197,6 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, optional bool) bo
 	return false
 }
 
-func (d *Deps) apiRoute(method, pattern string, h http.HandlerFunc) {
-	if d.commands != nil && isUnsafe(method) {
-		h = d.commands(APIPrefix+pattern, h).ServeHTTP
-	}
-	d.route(method, APIPrefix+pattern, accessDefault, h)
-}
-
 func (d *Deps) Command(pattern string, h http.HandlerFunc) http.HandlerFunc {
 	if d.commands == nil {
 		return h
@@ -188,13 +204,33 @@ func (d *Deps) Command(pattern string, h http.HandlerFunc) http.HandlerFunc {
 	return d.commands(pattern, h).ServeHTTP
 }
 
+type operation struct {
+	router  chi.Router
+	owner   string
+	method  string
+	pattern string
+	shape   application.APIShape
+	handler http.HandlerFunc
+}
+
 func MountAPI(d *Deps, method, pattern string, shape application.APIShape, h http.HandlerFunc) {
-	if shape.ReadOnlyPost {
-		d.route(method, APIPrefix+pattern, accessDefault, h)
-	} else {
-		d.apiRoute(method, pattern, h)
+	if d.registrations.sealed {
+		panic(ErrRegistrarSealed)
 	}
-	(*d.routes)[len(*d.routes)-1].api = &shape
+	*d.operations = append(*d.operations, operation{router: d.router, owner: d.owner, method: method, pattern: pattern, shape: shape, handler: h})
+}
+
+func (d *Deps) mountSurface(s surface) {
+	for i := range *d.operations {
+		op := &(*d.operations)[i]
+		pattern := s.prefix + op.pattern
+		h := op.handler
+		if d.commands != nil && isUnsafe(op.method) && !op.shape.ReadOnlyPost {
+			h = d.commands(pattern, h).ServeHTTP
+		}
+		op.router.Method(op.method, pattern, h)
+		*d.routes = append(*d.routes, routeRule{method: op.method, pattern: pattern, access: accessDefault, owner: op.owner, api: &op.shape})
+	}
 }
 
 func bearerToken(r *http.Request) (string, bool) {
@@ -251,53 +287,12 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		return
 	}
 	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName, Expires: tok.ExpiresAt}
-	if isUnsafe(r.Method) {
-		if !sameOrigin(r) {
-			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
-			return
-		}
-		var shape *application.APIShape
-		if g.apiShape != nil {
-			shape = g.apiShape(r)
-		}
-		if shape != nil && shape.BeforeBody != nil {
-			if err := shape.BeforeBody(r.Context()); err != nil {
-				APIFail(w, err)
-				return
-			}
-		}
-		mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		multipart := mediaType == "multipart/form-data" && shape != nil && shape.Body == application.BodyMultipart
-		if r.ContentLength != 0 && (shape == nil || !shape.IgnoreBody) {
-			if (mediaType != jsonType && !multipart) || (mediaType == jsonType && shape != nil && shape.Body == application.BodyMultipart && !shape.AllowJSON) {
-				APIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send application/json.")
-				return
-			}
-		}
-		limit := defaultBodyCap
-		if g.bodyCap != nil {
-			if limit, err = g.bodyCap(r.Context()); err != nil {
-				log.Error("body cap setting failed", logx.Err, err.Error())
-				APIError(w, http.StatusInternalServerError, "internal", "Internal error.")
-				return
-			}
-		}
-		cap := int64(limit)
-		if multipart {
-			cap = shape.BodyLimit
-		}
-		if r.ContentLength > cap && (shape == nil || !shape.IgnoreBody) {
-			APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, cap)
-	} else if g.apiShape != nil {
-		if shape := g.apiShape(r); shape != nil && shape.Body == application.BodyBinary && shape.BeforeBody != nil {
-			if err := shape.BeforeBody(r.Context()); err != nil {
-				APIFail(w, err)
-				return
-			}
-		}
+	if isUnsafe(r.Method) && !sameOrigin(r) {
+		APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
+		return
+	}
+	if !g.admitBody(w, r, g.shapeOf(r)) {
+		return
 	}
 	who.BearerID = tok.ID
 	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
@@ -305,6 +300,58 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		return err
 	})
 	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (g *Guard) shapeOf(r *http.Request) *application.APIShape {
+	if g.apiShape == nil {
+		return nil
+	}
+	return g.apiShape(r)
+}
+
+func (g *Guard) admitBody(w http.ResponseWriter, r *http.Request, shape *application.APIShape) bool {
+	if !isUnsafe(r.Method) {
+		if shape != nil && shape.Body == application.BodyBinary && shape.BeforeBody != nil {
+			if err := shape.BeforeBody(r.Context()); err != nil {
+				APIFail(w, err)
+				return false
+			}
+		}
+		return true
+	}
+	if shape != nil && shape.BeforeBody != nil {
+		if err := shape.BeforeBody(r.Context()); err != nil {
+			APIFail(w, err)
+			return false
+		}
+	}
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	multipart := mediaType == "multipart/form-data" && shape != nil && shape.Body == application.BodyMultipart
+	if r.ContentLength != 0 && (shape == nil || !shape.IgnoreBody) {
+		if (mediaType != jsonType && !multipart) || (mediaType == jsonType && shape != nil && shape.Body == application.BodyMultipart && !shape.AllowJSON) {
+			APIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send application/json.")
+			return false
+		}
+	}
+	limit := defaultBodyCap
+	if g.bodyCap != nil {
+		var err error
+		if limit, err = g.bodyCap(r.Context()); err != nil {
+			log.Error("body cap setting failed", logx.Err, err.Error())
+			APIError(w, http.StatusInternalServerError, "internal", "Internal error.")
+			return false
+		}
+	}
+	cap := int64(limit)
+	if multipart {
+		cap = shape.BodyLimit
+	}
+	if r.ContentLength > cap && (shape == nil || !shape.IgnoreBody) {
+		APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+		return false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, cap)
+	return true
 }
 
 type originKey struct{}
