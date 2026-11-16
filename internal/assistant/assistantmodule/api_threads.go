@@ -115,9 +115,9 @@ type apiItem struct {
 	CreatedAt  float64            `json:"created_at"`
 	Kind       string             `json:"kind"`
 	Text       string             `json:"text"`
-	Files      []apiAttachment    `json:"files"`
-	Steps      []*apiStep         `json:"steps"`
-	Citations  []service.Citation `json:"citations"`
+	Files      []apiAttachment    `json:"files" api:"nullable"`
+	Steps      []*apiStep         `json:"steps" api:"nullable"`
+	Citations  []service.Citation `json:"citations" api:"nullable"`
 	DraftID    *int64             `json:"draft_id,omitempty"`
 	ProposalID *int64             `json:"proposal_id,omitempty"`
 }
@@ -201,27 +201,27 @@ func itemOut(item *service.Item) apiItem {
 }
 
 type apiAttachment struct {
-	ID        json.RawMessage `json:"id"`
-	Name      json.RawMessage `json:"name"`
-	MediaType json.RawMessage `json:"media_type"`
-	Kind      json.RawMessage `json:"kind"`
+	ID        json.RawMessage `json:"id" api:"type=integer"`
+	Name      json.RawMessage `json:"name" api:"type=string"`
+	MediaType json.RawMessage `json:"media_type" api:"type=string"`
+	Kind      json.RawMessage `json:"kind" api:"type=string"`
 }
 type apiSearchResult struct {
-	URL   json.RawMessage `json:"url"`
-	Title json.RawMessage `json:"title"`
+	URL   json.RawMessage `json:"url" api:"type=string"`
+	Title json.RawMessage `json:"title" api:"type=string"`
 }
 type apiStep struct {
 	Kind          string            `json:"kind"`
 	Text          string            `json:"text"`
-	ID            json.RawMessage   `json:"id"`
+	ID            json.RawMessage   `json:"id" api:"type=string,nullable"`
 	Name          string            `json:"name"`
 	Args          string            `json:"args"`
 	State         *string           `json:"state"`
 	Result        *string           `json:"result"`
 	IsError       bool              `json:"is_error"`
-	ChildThreadID json.RawMessage   `json:"child_thread_id"`
+	ChildThreadID json.RawMessage   `json:"child_thread_id" api:"type=integer,nullable"`
 	Results       []apiSearchResult `json:"results"`
-	Error         json.RawMessage   `json:"error"`
+	Error         json.RawMessage   `json:"error" api:"type=string,nullable"`
 }
 
 func apiRaw(v any) json.RawMessage {
@@ -399,7 +399,7 @@ type apiWork struct {
 	Sources   []workspace.Source `json:"sources"`
 	Subagents []subagents.Card   `json:"subagents"`
 	Files     []files.Summary    `json:"files"`
-	Drafts    []json.RawMessage  `json:"drafts"`
+	Drafts    []json.RawMessage  `json:"drafts" api:"type=object"`
 	Code      []json.RawMessage  `json:"code"`
 }
 
@@ -424,7 +424,7 @@ type apiHome struct {
 	View     string               `json:"view"`
 	Welcome  bool                 `json:"welcome"`
 	Date     string               `json:"date"`
-	Digest   []block.DigestLine   `json:"digest"`
+	Digest   []block.DigestLine   `json:"digest" api:"nullable"`
 	Agenda   bool                 `json:"agenda"`
 	About    *asstapp.About       `json:"about"`
 	Defaults threads.Options      `json:"defaults"`

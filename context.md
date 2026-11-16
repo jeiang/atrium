@@ -1198,6 +1198,12 @@ claims about the running application. Operator contracts are in
   retention); it sends a heartbeat every 15 seconds and allows 4 streams per
   subject and 16 per server. Static assets are served from content-hashed
   immutable URLs.
+- The generated spec declares bearer security, leaves response schemas open
+  and closes request schemas (`<Name>Input` when a type is used both ways),
+  bounds response integers at 2^53-1, marks null-sent pointers nullable, keeps
+  the error `code` enum open, and types run stream frames as the open union
+  `RunStreamEvent`. Component names are bare Go type names; collisions fail
+  generation until a name is pinned in `internal/apischema/walk.go`.
 - Draft PATCH and send accept the resource ETag through `If-Match` and still
   compare revisions; knowledge PATCH has no `If-Match`. Opaque cursors bind
   the operation, filters and path parameters and are at most 2,048
