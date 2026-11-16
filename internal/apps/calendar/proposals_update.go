@@ -119,8 +119,18 @@ func eventOf(cal *ical.Calendar) *ical.Component {
 
 var updatedProps = []string{ical.PropSummary, ical.PropDateTimeStart, ical.PropDateTimeEnd, ical.PropLocation, ical.PropDescription, ical.PropDateTimeStamp}
 
-func planICloudUpdate(ctx context.Context, env config.Env, set Settings, spec Spec, tz *time.Location) (func() (undoPlan, error), error) {
-	obj, err := findICloud(ctx, env, set, spec.UID)
+type editFunc func(current func() (Event, error)) (Spec, error)
+
+func fixed(spec Spec) editFunc {
+	return func(func() (Event, error)) (Spec, error) { return spec, nil }
+}
+
+func planICloudUpdate(ctx context.Context, env config.Env, set Settings, uid string, tz *time.Location, edit editFunc) (func() (undoPlan, error), error) {
+	obj, err := findICloud(ctx, env, set, uid)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := edit(func() (Event, error) { return icloudEvent(obj.cal, uid, tz) })
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +163,11 @@ func planICloudUpdate(ctx context.Context, env config.Env, set Settings, spec Sp
 		if err := obj.put(ctx, copied); err != nil {
 			return undoPlan{}, err
 		}
-		return undoPlan{Op: RestoreOp, Calendar: string(ICloud), UID: spec.UID, ICS: obj.raw}, nil
+		undo := undoPlan{Op: RestoreOp, Calendar: string(ICloud), UID: uid, ICS: obj.raw}
+		if written, err := icloudEvent(copied, uid, tz); err == nil {
+			undo.after = &written
+		}
+		return undo, nil
 	}, nil
 }
 
@@ -195,16 +209,20 @@ func googleSnapshot(ev *gcal.Event) (string, error) {
 	return string(raw), err
 }
 
-func planGoogleUpdate(ctx context.Context, env config.Env, set Settings, spec Spec, tz *time.Location) (func() (undoPlan, error), error) {
+func planGoogleUpdate(ctx context.Context, env config.Env, set Settings, uid string, tz *time.Location, edit editFunc) (func() (undoPlan, error), error) {
 	svc, err := googleService(ctx, env, set)
 	if err != nil {
 		return nil, err
 	}
-	current, err := svc.Events.Get("primary", spec.UID).Context(ctx).Do()
+	current, err := svc.Events.Get("primary", uid).Context(ctx).Do()
 	if err != nil {
-		return nil, remote(err)
+		return nil, googleMissing(err, uid)
 	}
 	snapshot, err := googleSnapshot(current)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := edit(func() (Event, error) { return googleEvent(current, tz) })
 	if err != nil {
 		return nil, err
 	}
@@ -215,10 +233,15 @@ func planGoogleUpdate(ctx context.Context, env config.Env, set Settings, spec Sp
 	body.Id, body.Attendees = "", nil
 	body.ForceSendFields = []string{"Location", "Description"}
 	return func() (undoPlan, error) {
-		if _, err := svc.Events.Patch("primary", spec.UID, body).SendUpdates("none").Context(ctx).Do(); err != nil {
+		written, err := svc.Events.Patch("primary", uid, body).SendUpdates("none").Context(ctx).Do()
+		if err != nil {
 			return undoPlan{}, remote(err)
 		}
-		return undoPlan{Op: RestoreOp, Calendar: string(Google), UID: spec.UID, Google: snapshot}, nil
+		undo := undoPlan{Op: RestoreOp, Calendar: string(Google), UID: uid, Google: snapshot}
+		if after, err := googleEvent(written, tz); err == nil {
+			undo.after = &after
+		}
+		return undo, nil
 	}, nil
 }
 
@@ -354,9 +377,9 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 	var plan func() (undoPlan, error)
 	switch target {
 	case ICloud:
-		plan, err = planICloudUpdate(ctx, env, set, spec, tz)
+		plan, err = planICloudUpdate(ctx, env, set, spec.UID, tz, fixed(spec))
 	case Google:
-		plan, err = planGoogleUpdate(ctx, env, set, spec, tz)
+		plan, err = planGoogleUpdate(ctx, env, set, spec.UID, tz, fixed(spec))
 	default:
 		err = targetError()
 	}
@@ -364,7 +387,7 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 		return nil, err
 	}
 	action := actionPayload{Type: UpdateKind, Calendar: string(target), UID: spec.UID}
-	ticket, err := p.begin(ctx, prop, UpdateKind, target, spec.UID, action, nil, nil)
+	ticket, err := p.begin(ctx, &prop.ID, UpdateKind, target, spec.UID, action, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +429,7 @@ func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _
 		return nil, err
 	}
 	action := actionPayload{Type: RSVPKind, Calendar: string(target), UID: info.UID, Response: info.Response}
-	ticket, err := p.begin(ctx, prop, RSVPKind, target, info.UID, action, nil, nil)
+	ticket, err := p.begin(ctx, &prop.ID, RSVPKind, target, info.UID, action, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -433,10 +456,30 @@ func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (any, err
 	if err := p.guard(ctx, target, info.UID); err != nil {
 		return nil, err
 	}
+	unchanged := func(current func() (Event, error)) error {
+		if info.Revision == "" {
+			return nil
+		}
+		event, err := current()
+		if err != nil {
+			return err
+		}
+		if event.Revision != info.Revision {
+			return Error("the event changed after this edit, so undo would overwrite that change")
+		}
+		return nil
+	}
+	tz, err := Zone(ctx, p.env())
+	if err != nil {
+		return nil, err
+	}
 	switch target {
 	case ICloud:
 		obj, err := findICloud(ctx, p.env(), set, info.UID)
 		if err != nil {
+			return nil, err
+		}
+		if err := unchanged(func() (Event, error) { return icloudEvent(obj.cal, info.UID, tz) }); err != nil {
 			return nil, err
 		}
 		original, err := decodeICS([]byte(info.ICS))
@@ -450,6 +493,15 @@ func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (any, err
 		svc, err := googleService(ctx, p.env(), set)
 		if err != nil {
 			return nil, err
+		}
+		if info.Revision != "" {
+			current, err := svc.Events.Get("primary", info.UID).Context(ctx).Do()
+			if err != nil {
+				return nil, remote(err)
+			}
+			if err := unchanged(func() (Event, error) { return googleEvent(current, tz) }); err != nil {
+				return nil, err
+			}
 		}
 		var body gcal.Event
 		if err := json.Unmarshal([]byte(info.Google), &body); err != nil {

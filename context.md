@@ -1246,6 +1246,23 @@ claims about the running application. Operator contracts are in
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium effects
   resolve <id>` or the Activity page.
+- The operator creates, edits and deletes events in either provider through
+  `GET`/`PATCH`/`DELETE /calendar/events/{calendar}/{uid}` and
+  `POST /calendar/events` on both `/api/v1` and `/web/v1`
+  (`calendar.event`, `calendar.event-create`, `calendar.event-update`,
+  `calendar.event-delete`). These operations have operator authority only
+  and no tool binding, so agents keep the proposal path. They share the
+  proposal write path per provider: each write records an effect first, an
+  edit or delete reads the live event on the same fetch that plans the
+  write, and the event's revision (a hash of its calendar, uid, title,
+  start, end, all-day flag, location and notes) is its ETag. Edits require
+  `If-Match` and deletes accept it; a stale revision gets 412 with nothing
+  written. Undo deletes a created event, restores an edited event only while
+  it still has the revision the edit left, and puts a deleted event back
+  (the recorded ICS object for iCloud, the recorded fields for Google). An
+  unknown outcome refuses further operator writes to that event until it is
+  resolved. Birthdays and `birthday-` uids are refused as read-only. Pause
+  does not block these writes: they are operator consent.
 - The knowledge export is export-only and has one destination, a Markdown
   folder declared by the host (`export.export_obsidian_dir`). The daily
   `knowledge-export` job renders live, non-expired records into it and
