@@ -55,18 +55,6 @@ func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
 		t.Fatalf("effect target = %q, want the task id", effects[0].Target)
 	}
 
-	wlist := runApp(t, "writes", "list", "--operation", "task_add")
-	if wlist.code != cli.ExitOK {
-		t.Fatalf("writes list: %d %s", wlist.code, wlist.stderr)
-	}
-	var writes []ledger.Effect
-	if err := json.Unmarshal([]byte(wlist.stdout), &writes); err != nil {
-		t.Fatalf("writes list output %q: %v", wlist.stdout, err)
-	}
-	if len(writes) != 1 || writes[0].ID != effectID {
-		t.Fatalf("writes list = %+v, want effect %d", writes, effectID)
-	}
-
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
 	jar, _ := cookiejar.New(nil)
@@ -76,9 +64,9 @@ func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
 		t.Fatalf("activity page = %d, want one effect undo: %.400s", code, body)
 	}
 
-	undone := runApp(t, "writes", "undo", strconv.FormatInt(effectID, 10))
+	undone := runApp(t, "effects", "undo", strconv.FormatInt(effectID, 10))
 	if undone.code != cli.ExitOK {
-		t.Fatalf("writes undo: %d %s", undone.code, undone.stderr)
+		t.Fatalf("effects undo: %d %s", undone.code, undone.stderr)
 	}
 	var undo ledger.Effect
 	if err := json.Unmarshal([]byte(undone.stdout), &undo); err != nil {

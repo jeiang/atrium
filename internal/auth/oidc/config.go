@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -80,7 +79,7 @@ func (s *Service) assemble(ctx context.Context, conn Connection) (Config, error)
 	name := vals.Preset
 	preset, ok := presetNamed(name)
 	if !ok {
-		problems = append(problems, "unknown preset "+strconv.Quote(name))
+		problems = append(problems, unknownPreset(name))
 	}
 	secret, err := conn.Credential(cfgClientSecret)
 	if err != nil {
@@ -100,9 +99,6 @@ func (s *Service) assemble(ctx context.Context, conn Connection) (Config, error)
 		AccessDomains: list(strings.ToLower(vals.AccessDomains)),
 		Idle:          days(KeyIdleDays, 24*time.Hour, 1, 365),
 		Max:           days(KeyMaxDays, 24*time.Hour, 1, 365),
-	}
-	if preset.Issuer != "" && c.Issuer == "" {
-		c.Issuer = preset.Issuer
 	}
 	if len(c.Scopes) == 0 {
 		c.Scopes = slices.Clone(preset.Scopes)

@@ -154,7 +154,7 @@ var manifest = []Entry{
 	{Module: "auth", Key: "oidc_client_secret", Class: ClassHost, Action: ActionRename, Target: "service/oidc host credential client_secret", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_groups_claim", Class: ClassHost, Action: ActionDropHost, Target: "host.auth.oidc_groups_claim", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_issuer", Class: ClassHost, Action: ActionDropHost, Target: "host.auth.oidc_issuer", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "auth", Key: "oidc_preset", Class: ClassHost, Action: ActionDropHost, Target: "host.auth.oidc_preset", Default: "generic", Type: Enum, Choices: []string{"generic", "pocket_id", "authelia", "authentik", "keycloak", "google", "entra"}, Cutover: false},
+	{Module: "auth", Key: "oidc_preset", Class: ClassHost, Action: ActionDropHost, Target: "host.auth.oidc_preset", Default: "generic", Type: Enum, Choices: []string{"generic", "pocket_id"}, Cutover: false},
 	{Module: "auth", Key: "oidc_recheck_minutes", Class: ClassTuning, Action: ActionDropTuning, Target: "internal/auth/oidc/tuning.go:TuningOidcRecheckMinutes", Default: "60", Type: Int, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_scopes", Class: ClassHost, Action: ActionDropHost, Target: "host.auth.oidc_scopes", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_session_idle_days", Class: ClassOperator, Action: ActionCarry, Target: "settings.oidc_session_idle_days", Default: "7", Type: Int, Choices: nil, Cutover: false},

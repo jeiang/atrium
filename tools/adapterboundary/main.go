@@ -61,7 +61,6 @@ var adapters = []adapter{
 	{pattern: "internal/db/dbcmd/*"},
 	{pattern: "internal/backup/*", marker: "cli.Command{"},
 	{pattern: "internal/ledger/ledgercmd/*"},
-	{pattern: "internal/writes/writescmd/*"},
 	{pattern: "internal/serverops/*", marker: "scheduler.Definition"},
 }
 
