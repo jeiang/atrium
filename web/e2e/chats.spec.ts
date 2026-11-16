@@ -433,6 +433,13 @@ test.describe('scrolling', () => {
     await page.mouse.wheel(0, -400);
     const jump = page.getByRole('button', { name: 'Jump to latest' });
     await expect(jump).toBeVisible();
+    await expect
+      .poll(async () => {
+        const before = (await scrollState(page)).y;
+        await page.waitForTimeout(150);
+        return Math.abs((await scrollState(page)).y - before);
+      })
+      .toBeLessThanOrEqual(1);
     const held = (await scrollState(page)).y;
     await page.waitForTimeout(800);
     expect(Math.abs((await scrollState(page)).y - held)).toBeLessThanOrEqual(1);
