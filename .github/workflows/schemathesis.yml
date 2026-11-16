@@ -1,0 +1,69 @@
+name: Schemathesis nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: schemathesis-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  schemathesis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          extra_nix_config: |
+            extra-substituters = https://cache.jeiang.dev
+            extra-trusted-public-keys = cache.jeiang.dev-1:owXJK5/UX9NSf1lhmDDT3QTxMtbVk9YfHhjvOXyPhpA=
+
+      - name: Build atrium
+        run: nix build --no-link --print-out-paths -L .#atrium >"$RUNNER_TEMP/atrium-out"
+
+      - name: Run Schemathesis against /api/v1
+        run: |
+          nix shell --inputs-from . nixpkgs#uv nixpkgs#curl -c \
+            tools/schemathesis/nightly.sh "$(cat "$RUNNER_TEMP/atrium-out")/bin/atrium" "$RUNNER_TEMP/schemathesis"
+
+      - name: Open or update the issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Schemathesis nightly: /api/v1 does not match docs/api/openapi.json"
+          label=schemathesis
+          gh label create "$label" -R "$GITHUB_REPOSITORY" --color B60205 --description "Nightly Schemathesis findings" --force
+          body=$RUNNER_TEMP/issue.md
+          {
+            echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID failed on $GITHUB_SHA."
+            echo
+            echo '```text'
+            if [ -s "$RUNNER_TEMP/schemathesis/schemathesis.txt" ]; then
+              head -c 60000 "$RUNNER_TEMP/schemathesis/schemathesis.txt"
+            else
+              echo "Schemathesis produced no output; see the run log."
+            fi
+            echo
+            echo '```'
+          } >"$body"
+          number=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --label "$label" --search "in:title \"$title\"" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" -R "$GITHUB_REPOSITORY" --body-file "$body"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --label "$label" --body-file "$body"
+          fi
