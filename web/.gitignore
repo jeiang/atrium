@@ -1,0 +1,5 @@
+node_modules/
+dist/
+dist-mock/
+.npm-cache/
+src/contract/gen/

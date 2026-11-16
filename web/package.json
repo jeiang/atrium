@@ -1,0 +1,32 @@
+{
+  "name": "atrium-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.20.0"
+  },
+  "scripts": {
+    "gen": "orval --config orval.config.ts",
+    "dev": "npm run gen && vite --mode mock",
+    "build": "npm run gen && vite build",
+    "build:mock": "npm run gen && vite build --mode mock",
+    "check": "npm run gen && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "lint": "npm run gen && biome check --error-on-warnings . && node scripts/lint-commands.ts",
+    "format": "biome check --write ."
+  },
+  "dependencies": {
+    "@tanstack/svelte-query": "6.4.1",
+    "sv-router": "0.19.0",
+    "svelte": "5.57.3"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@types/node": "24.19.2",
+    "msw": "3.0.4",
+    "orval": "8.47.0",
+    "svelte-check": "4.7.8",
+    "typescript": "6.0.3",
+    "vite": "8.3.6"
+  }
+}

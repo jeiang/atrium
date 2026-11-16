@@ -38,6 +38,8 @@
           pkgs.pkg-config
           pkgs.tailwindcss_4
           pkgs.brotli
+          pkgs.nodejs_24
+          pkgs.biome
           pkgs.gopls
           pkgs.nixd
           pkgs.typescript-language-server
