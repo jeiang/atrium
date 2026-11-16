@@ -476,7 +476,7 @@ claims about the running application. Operator contracts are in
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
   `weather_longitude` and `weather_location_name`), validated in range,
-  offered in the Assistant settings' Weather group and on the `/next/`
+  offered in the Weather app's settings group and on the `/next/`
   weather connection, and read-only when the host file declares them. Without a location name or
   both coordinates, the weather connection checks as `unconfigured` and
   probes nothing. The Integrations page also has a Google OAuth wizard:
@@ -969,6 +969,22 @@ claims about the running application. Operator contracts are in
   recurrence, proposals and undo, invitations, its tools, CLI, HTTP
   operations, `day` provider and `event:` resolver); only the candidate
   queue stays in `internal/calendar/candidates` until the candidates move.
+  The Weather app (`weather`, flag `weather_enabled`) lives in
+  `internal/apps/weather`: the Open-Meteo client, the `service/weather`
+  connection kind and its soft `forecast` and `geocoding` needs, the three
+  location settings (keys and their `assistant` settings module unchanged;
+  the `weather` group now sits on the app's own settings page), the
+  `weather` tool (operation `weather.forecast`) and the Home weather card.
+  It is tool-only: no page, job or table. With Weather off the tool leaves
+  the catalog, `/home` answers the card as `off` without reading settings
+  or starting a refresh, and the built-in `service/weather` row is disabled
+  by the row lifecycle with the reason "its app is off" (never deleted);
+  turning Weather on returns the row enabled and untested. A declaration's
+  `Inherits` names the unit that carried its feature before it became an
+  app: at start, when the new flag has no audit rows, is not pinned, and
+  the named unit's flag is on, the seed writes `<name>_enabled=true` once
+  as a new row (actor `atrium`, source `migration`); a fresh database
+  stays opt-in. Weather inherits from `assistant`.
   `module.Compile` fails start on an empty title, a core declaration that is
   an app or declares dependencies, an unknown dependency, a core unit that
   depends on an app, a dependency cycle (named in order), a need for a
@@ -1564,16 +1580,19 @@ claims about the running application. Operator contracts are in
   `GET /connections/schema` (kinds and per-connection fields with secret
   and host-owned flags, no credential values) and `GET /files` (the
   thread and space file library, newest first, keyset cursor). `GET
-  /home` always carries a `weather` card with a `state`: `off` (no weather
-  connection, or its forecast capability disabled), `unconfigured` (no
+  /home` always carries a `weather` card with a `state`: `off` (the Weather
+  app off, no weather connection, or its forecast capability disabled), `unconfigured` (no
   location), `loading` (no reading yet), `failed` (no reading, last fetch
   failed; `failure` is `unreachable`, `timeout`, `no_match`, `bad_reply` or
   `unavailable`), `stale` (the last reading is shown but the refresh after
   it failed, or it is older than 60 minutes) or `ok`, plus `fetched_at` and
   the reading (location, current, today, hourly). `/home` never calls the
-  weather service: it serves the last reading held in memory per database
+  weather service: the Weather app's card (declared as `HomeWeather` and
+  read through `module.HomeWeather`, so the assistant does not import the
+  app) serves the last reading held in memory per database
   (`weather.LastFor`) and starts a background refresh when the reading is
-  15 minutes old (a failed fetch is retried after 60 seconds). A finished
+  15 minutes old (a failed fetch is retried after 60 seconds). With the
+  Weather app off the card is `off` and no refresh starts. A finished
   refresh bumps the `assistant` app-event topic so the client refetches. A
   location change discards the held reading, so the next `/home` answers
   `loading` and refreshes for the new place.

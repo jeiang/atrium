@@ -618,10 +618,10 @@
     },
     {
       "kind": "group",
-      "module": "assistant",
+      "module": "weather",
       "name": "weather",
       "title": "Weather",
-      "url": "/settings/assistant",
+      "url": "/settings/weather",
       "fields": [
         {
           "key": "weather_location_name",
@@ -942,6 +942,31 @@
         {
           "key": "notifications_enabled",
           "label": "Notifications app is on",
+          "module": "core",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "false",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps",
+          "restart": true
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "module": "weather",
+      "name": "weather",
+      "title": "weather",
+      "url": "/settings/weather",
+      "fields": [
+        {
+          "key": "weather_enabled",
+          "label": "Weather app is on",
           "module": "core",
           "type": "bool",
           "multi": false,

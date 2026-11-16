@@ -59,6 +59,7 @@ var moduleCases = []moduleCase{
 	{module: unit.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
 	{module: unit.Grafana, tool: "grafana_datasources"},
 	{module: unit.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
+	{module: unit.Weather, tool: "weather"},
 }
 
 type appRun struct {

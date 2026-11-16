@@ -389,10 +389,6 @@
       "reached_via": "review.approve"
     },
     {
-      "operation": "assistant.weather",
-      "reached_via": "review.approve"
-    },
-    {
       "operation": "assistant.web-fetch",
       "reached_via": "review.approve"
     },
@@ -402,6 +398,10 @@
     },
     {
       "operation": "mail.propose-tracking",
+      "reached_via": "review.approve"
+    },
+    {
+      "operation": "weather.forecast",
       "reached_via": "review.approve"
     }
   ],

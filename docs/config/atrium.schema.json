@@ -231,6 +231,17 @@
         "public_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "weather_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "weather_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"
@@ -481,6 +492,7 @@
     "core.otel_traces_endpoint": "host",
     "core.public_url": "host",
     "core.tz": "operator",
+    "core.weather_enabled": "operator",
     "db.key": "host",
     "export.export_obsidian_dir": "host",
     "export.export_obsidian_kinds": "operator",
@@ -932,14 +944,14 @@
     "assistant.ops_worker_max_run_usd": "atrium settings set ops_worker_max_run_usd",
     "assistant.ops_worker_monthly_usd": "atrium settings set ops_worker_monthly_usd",
     "assistant.thread_cost_cap_usd": "atrium settings set thread_cost_cap_usd",
-    "assistant.weather_forecast_days": "the compiled constant internal/weather/tuning.go:TuningWeatherForecastDays",
+    "assistant.weather_forecast_days": "the compiled constant internal/apps/weather/tuning.go:TuningWeatherForecastDays",
     "assistant.weather_geocoding_url": "connections.\"service/weather\".config.geocoding_url",
-    "assistant.weather_hourly_hours": "the compiled constant internal/weather/tuning.go:TuningWeatherHourlyHours",
+    "assistant.weather_hourly_hours": "the compiled constant internal/apps/weather/tuning.go:TuningWeatherHourlyHours",
     "assistant.weather_latitude": "atrium settings set weather_latitude",
     "assistant.weather_location_name": "atrium settings set weather_location_name",
     "assistant.weather_longitude": "atrium settings set weather_longitude",
     "assistant.weather_open_meteo_url": "connections.\"service/weather\".config.url",
-    "assistant.weather_timeout_seconds": "the compiled constant internal/weather/tuning.go:TuningWeatherTimeoutSeconds",
+    "assistant.weather_timeout_seconds": "the compiled constant internal/apps/weather/tuning.go:TuningWeatherTimeoutSeconds",
     "auth.oidc_access_domains": "connections.\"service/oidc\".config.access_domains",
     "auth.oidc_access_emails": "connections.\"service/oidc\".config.access_emails",
     "auth.oidc_access_groups": "connections.\"service/oidc\".config.access_groups",
@@ -980,6 +992,7 @@
     "core.notifications_enabled": "atrium settings set notifications_enabled",
     "core.otel_traces_endpoint": "services.atrium.observability.tracesEndpoint",
     "core.tz": "atrium settings set tz",
+    "core.weather_enabled": "atrium settings set weather_enabled",
     "db.key": "services.atrium.database.keyFile",
     "export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
     "export.export_obsidian_kinds": "atrium settings set export_obsidian_kinds",

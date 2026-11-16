@@ -399,6 +399,15 @@ flags. The settings API returns 409 for a flag because it is not an offered
 setting. Saving a working connection or completing OAuth consent does not turn
 its module flag on.
 
+Weather is its own app, switched by `weather_enabled`. The first start of a
+version with the Weather app turns it on once when the assistant is on and
+`weather_enabled` has never been set or pinned, so an upgraded system keeps
+its weather; a fresh database leaves it off. With Weather off, the `weather`
+tool is not offered, the Home weather card shows `off`, no forecast is
+fetched, and the built-in weather connection is disabled with the reason "its
+app is off" (the row, its settings and the three location keys stay).
+Turning Weather on again re-enables that connection as untested.
+
 A settings save in the running serve re-checks module requirements after
 commit. That can change route/service availability without a restart if
 requirements changed. Connection saves themselves do not publish a new module

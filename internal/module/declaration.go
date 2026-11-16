@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/homecard"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -51,6 +52,7 @@ type Declaration struct {
 	Core              bool
 	App               bool
 	Depends           []string
+	Inherits          string
 	Needs             []Need
 	Packages          []string
 	Tables            []string
@@ -72,6 +74,7 @@ type Declaration struct {
 	Channels          []string
 	Refs              []RefKind
 	Day               DayProvider
+	HomeWeather       homecard.WeatherCard
 	Attachments       []Attachment
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync
