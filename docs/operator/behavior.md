@@ -90,6 +90,11 @@ administrator role or remote emergency bypass.
   offline. Signing out or a lapsed session deletes the stored data. The
   account menu item "Don't keep data on this device" deletes it at once and
   stops keeping it on that browser.
+- The `/next/` Connections screen under Settings is never kept on the
+  device. A stored credential is never shown or sent back; a new value
+  replaces it. Disconnect asks first, then deletes the stored credentials and
+  turns the connection off, and only applies to connections the operator set
+  up. Fields and credentials the host owns are read-only there.
 
 Public requests are limited in process by token buckets owned by each listener:
 10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`

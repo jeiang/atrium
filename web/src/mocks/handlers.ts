@@ -2,6 +2,7 @@ import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
 import { type ChatScenario, chatHandlers } from './chats';
+import { type ConnectionsScenario, connectionHandlers } from './connections';
 import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
@@ -18,6 +19,7 @@ export interface MockScenario {
   mail?: { mode: string; paused: boolean };
   inbox?: InboxScenario;
   chat?: ChatScenario;
+  connections?: ConnectionsScenario;
   home?: HomeScenario;
   unreachable?: boolean;
   plan?: PlanScenario;
@@ -160,6 +162,7 @@ export const handlers = [
   ...homeHandlers(scenario),
   ...inboxAskHandlers,
   ...planHandlers,
+  ...connectionHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,
   ...knowledgeHandlers,
