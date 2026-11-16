@@ -324,9 +324,14 @@ func TestCommitmentToolsMergeTaskAndMailLists(t *testing.T) {
 	if got := results(); !strings.Contains(got, "is_error") {
 		t.Fatalf("task_update on a commitment was not refused: %s", got)
 	}
-	run("cron", "c2", "task_close", map[string]any{"ref": ref})
-	if err := d.Read.QueryRow("SELECT status FROM tasks WHERE id = ?", task).Scan(&st); err != nil || st != "open" {
-		t.Fatalf("cron closed a task: %s %v", st, err)
+	for _, kind := range []string{"cron", "nightly", "sub"} {
+		ran := run(kind, "c2"+kind, "task_close", map[string]any{"ref": ref})
+		if err := d.Read.QueryRow("SELECT status FROM tasks WHERE id = ?", task).Scan(&st); err != nil || st != "open" {
+			t.Fatalf("%s closed a task: %s %v", kind, st, err)
+		}
+		if names := offeredTools(t, api, ran); containsName(names, "task_close") {
+			t.Fatalf("%s run offered task_close: %v", kind, names)
+		}
 	}
 	run("chat", "c3", "task_close", map[string]any{"ref": ref, "outcome": "dismissed"})
 	if err := d.Read.QueryRow("SELECT status FROM tasks WHERE id = ?", task).Scan(&st); err != nil || st != "dismissed" {
