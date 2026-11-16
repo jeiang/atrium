@@ -92,6 +92,19 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'mock' ? 'dist-mock' : 'dist',
     target: 'baseline-widely-available',
+    rolldownOptions:
+      mode === 'mock'
+        ? {}
+        : {
+            output: {
+              codeSplitting: {
+                groups: [
+                  { name: 'boot', tags: ['$initial'], test: /[\\/](node_modules|src[\\/](?!main\.ts))/ },
+                  { name: 'shared', test: /[\\/]src[\\/]shared[\\/]/, minShareCount: 8 },
+                ],
+              },
+            },
+          },
     manifest: true,
   },
 }));
