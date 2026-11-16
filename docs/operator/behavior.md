@@ -272,8 +272,12 @@ triggers a check within a minute. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
-keeps its row and credentials, and is announced once. Connection notices open
-the Connections settings page, `/settings/connections`.
+keeps its row and credentials, and is announced once. Declaring it again
+enables it as `untested` with its earlier results cleared, so the next check
+tests it. A host connection the operator disconnected stays disconnected:
+removing it from the host file or declaring it again does not enable or
+announce it. Connection notices open the Connections settings page,
+`/settings/connections`.
 
 qBittorrent and the embedding endpoint ride out short outages: a failure that
 follows an `ok` or `expiring` state starts a 6-hour grace window. The stored
@@ -288,7 +292,9 @@ Other connection kinds have no window.
 
 `atrium connections check` runs the silent check of every configured
 connection and records the result; `--changed` checks only connections that
-were added or whose host declaration changed since their last check, and
+were added, declared again, or whose host declaration changed since their last
+check (a changed declaration includes adding, removing or moving a credential
+file slot; an unchanged restart changes nothing), and
 prints `no connection to check` when there are none. Each checked connection
 prints its id, state (or `away until <time UTC>`) and reason. The command
 exits 1 when a checked connection is failing, in its window or not, or needs
