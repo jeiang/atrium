@@ -621,8 +621,9 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	push.answer(http.StatusInternalServerError)
 	thread := latestThread(t, dir)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("waiting")))
-	if code, body := s.post(fmt.Sprintf("/chat/%d/messages", thread), url.Values{"text": {"read " + srv.URL + "/a"}}); code >= http.StatusBadRequest {
+	if code, body := s.post(fmt.Sprintf("/chat/%d/messages", thread), url.Values{"text": {"read " + srv.URL + "/a then " + srv.URL + "/b"}}); code >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", code, body)
 	}
 	proposal := waitParkedPermission(t, d, thread)
