@@ -978,7 +978,7 @@
           "editable": true,
           "secret": false,
           "group": "apps",
-          "restart": true
+          "restart": false
         }
       ]
     }

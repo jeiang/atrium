@@ -92,8 +92,8 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	before := audits()
 
 	listed := apiData(t, api.do(http.MethodGet, "/api/v1/apps", token, nil), http.StatusOK)
-	if ids := appIDs(listed); !slices.Equal(ids, []string{"calendar", "grafana", "mail", "media"}) {
-		t.Fatalf("manifest apps = %v, want only the four apps", ids)
+	if ids := appIDs(listed); !slices.Equal(ids, []string{"calendar", "grafana", "mail", "media", "weather"}) {
+		t.Fatalf("manifest apps = %v, want only the five apps", ids)
 	}
 	if web := apiData(t, browser.do(http.MethodGet, "/web/v1/apps", nil), http.StatusOK); !slices.Equal(appIDs(web), appIDs(listed)) {
 		t.Fatalf("the web manifest differs: %v", appIDs(web))
@@ -211,7 +211,7 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 		t.Fatalf("atrium settings set assistant_enabled false: %v %s", err, out)
 	}
 	waitFor(t, func() bool {
-		enabled, _, reason := lifecycleRow(t, dir, "service/weather")
+		enabled, _, reason := lifecycleRow(t, dir, "service/webfetch")
 		return !enabled && reason == "its app is off"
 	})
 	waitFor(t, func() bool {
