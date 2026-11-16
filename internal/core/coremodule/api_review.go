@@ -28,19 +28,21 @@ type PermissionPayload struct {
 }
 
 type ActionPayload struct {
-	Kind         string          `json:"kind"`
-	ProposalKind string          `json:"proposal_kind"`
-	Module       string          `json:"module"`
-	Label        string          `json:"label"`
-	Args         []reviewapp.Arg `json:"args"`
-	Preview      json.RawMessage `json:"preview"`
-	Result       json.RawMessage `json:"result"`
+	Kind         string                   `json:"kind"`
+	ProposalKind string                   `json:"proposal_kind"`
+	Module       string                   `json:"module"`
+	Label        string                   `json:"label"`
+	Args         []reviewapp.Arg          `json:"args"`
+	Preview      json.RawMessage          `json:"preview"`
+	Change       reviewapp.ProposalChange `json:"change" api:"nullable"`
+	Result       json.RawMessage          `json:"result"`
 }
 
 func (PermissionPayload) proposalPayload() {}
 func (ActionPayload) proposalPayload()     {}
 
 var registerPayload = sync.OnceFunc(func() {
+	reviewapp.RegisterChanges()
 	application.RegisterUnion[ProposalPayload](map[string]reflect.Type{
 		permission.Kind: reflect.TypeFor[PermissionPayload](),
 		"action":        reflect.TypeFor[ActionPayload](),
@@ -135,7 +137,7 @@ func detailOf(c reviewapp.Card) ProposalDetail {
 	if c.Kind == permission.Kind {
 		out.Payload = PermissionPayload{Kind: permission.Kind, Args: c.Args, ThreadID: c.ThreadID, RunID: c.RunID}
 	} else {
-		out.Payload = ActionPayload{Kind: "action", ProposalKind: c.Kind, Module: c.Module, Label: c.KindLabel, Args: c.Args, Preview: rawJSON(c.Preview), Result: rawJSON(c.Result)}
+		out.Payload = ActionPayload{Kind: "action", ProposalKind: c.Kind, Module: c.Module, Label: c.KindLabel, Args: c.Args, Preview: rawJSON(c.Preview), Change: reviewapp.ChangeOf(c), Result: rawJSON(c.Result)}
 	}
 	return out
 }

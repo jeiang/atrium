@@ -740,3 +740,18 @@ func ForwardOf(ctx context.Context, q db.Querier, undoID int64) (Effect, error) 
 	}
 	return GetEffect(ctx, q, forwardID, 0)
 }
+
+func EffectsUndoable(ctx context.Context, q db.Querier, ids []int64) (bool, error) {
+	if len(ids) == 0 {
+		return false, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	var undoable bool
+	err := q.QueryRowContext(ctx,
+		"SELECT EXISTS (SELECT 1 FROM effects e"+effectResolutionJoin+
+			" WHERE e.id IN (?"+strings.Repeat(",?", len(ids)-1)+") AND "+effectUndoableExpr+")", args...).Scan(&undoable)
+	return undoable, err
+}

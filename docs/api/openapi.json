@@ -86,6 +86,16 @@
             },
             "type": "array"
           },
+          "change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalChange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "kind": {
             "const": "action",
             "type": "string"
@@ -109,6 +119,7 @@
           "label",
           "args",
           "preview",
+          "change",
           "result"
         ],
         "type": "object"
@@ -1023,6 +1034,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1047,6 +1061,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1071,6 +1088,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1095,6 +1115,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1119,6 +1142,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1143,6 +1169,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1167,6 +1196,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1191,6 +1223,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1215,6 +1250,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1239,6 +1277,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1263,6 +1304,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1287,6 +1331,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1311,6 +1358,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1335,6 +1385,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1359,6 +1412,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1383,6 +1439,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1407,6 +1466,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1431,6 +1493,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1455,6 +1520,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1479,6 +1547,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1503,6 +1574,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1527,6 +1601,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1551,6 +1628,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1575,6 +1655,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1599,6 +1682,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1623,6 +1709,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1647,6 +1736,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1671,6 +1763,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1695,6 +1790,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1719,6 +1817,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1743,6 +1844,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1767,6 +1871,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1791,6 +1898,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1815,6 +1925,36 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ChangeSettingsPatched": {
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SettingsPatched"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1839,6 +1979,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1863,6 +2006,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1887,6 +2033,9 @@
               "type": "integer"
             },
             "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -3255,6 +3404,7 @@
                       "not_configured",
                       "not_found",
                       "nothing_to_edit",
+                      "precondition_failed",
                       "project_archived",
                       "rate_limited",
                       "read_only_thread",
@@ -8275,6 +8425,464 @@
         ],
         "type": "object"
       },
+      "PreviewCalendarEvent": {
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "calendar": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_event",
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "source": {},
+          "start": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "calendar",
+          "title",
+          "start",
+          "end",
+          "all_day",
+          "location",
+          "notes",
+          "source"
+        ],
+        "type": "object"
+      },
+      "PreviewCalendarReply": {
+        "properties": {
+          "calendar": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_rsvp",
+            "type": "string"
+          },
+          "response": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "calendar",
+          "uid",
+          "response"
+        ],
+        "type": "object"
+      },
+      "PreviewCalendarUpdate": {
+        "properties": {
+          "calendar": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_update",
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "calendar",
+          "uid",
+          "title",
+          "start",
+          "end",
+          "location"
+        ],
+        "type": "object"
+      },
+      "PreviewCondition": {
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string"
+          },
+          "value": {}
+        },
+        "required": [
+          "field",
+          "op",
+          "value"
+        ],
+        "type": "object"
+      },
+      "PreviewCount": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "count"
+        ],
+        "type": "object"
+      },
+      "PreviewDeletionRule": {
+        "properties": {
+          "backlog": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "deletion_rule",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMessage"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/PreviewRule"
+          },
+          "senders": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewCount"
+            },
+            "type": "array"
+          },
+          "subjects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "rule",
+          "backlog",
+          "subjects",
+          "senders",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewFolderMerge": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/components/schemas/PreviewGroup"
+          },
+          "into": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "rebalance_merge",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewSource"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "sources",
+          "into",
+          "group"
+        ],
+        "type": "object"
+      },
+      "PreviewFolderSplit": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewGroup"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "rebalance_split",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "groups"
+        ],
+        "type": "object"
+      },
+      "PreviewGroup": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMessage"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "senders": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewCount"
+            },
+            "type": "array"
+          },
+          "subjects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "count",
+          "senders",
+          "terms",
+          "subjects",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewInboxBacklog": {
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewGroup"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "inbox_backlog",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "folder",
+          "groups"
+        ],
+        "type": "object"
+      },
+      "PreviewLabelMerge": {
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "from_count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "into": {
+            "type": "string"
+          },
+          "into_count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "gmail_label_merge",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewMessage"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "from",
+          "into",
+          "from_count",
+          "into_count",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewMailTriage": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "mail_triage",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewTriageItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "count",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewMessage": {
+        "properties": {
+          "date_ts": {
+            "type": "number"
+          },
+          "from_addr": {
+            "type": "string"
+          },
+          "from_name": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "from_name",
+          "from_addr",
+          "date_ts"
+        ],
+        "type": "object"
+      },
+      "PreviewReminder": {
+        "properties": {
+          "commitment_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "due": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "reminder",
+            "type": "string"
+          },
+          "message_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "remind_at": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "commitment_id",
+          "text",
+          "due",
+          "owner",
+          "message_id",
+          "tz",
+          "remind_at",
+          "subject"
+        ],
+        "type": "object"
+      },
+      "PreviewRule": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "when": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewCondition"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "account",
+          "when"
+        ],
+        "type": "object"
+      },
       "PreviewSample": {
         "properties": {
           "account": {
@@ -8309,6 +8917,73 @@
           "from_name",
           "folder",
           "date_ts"
+        ],
+        "type": "object"
+      },
+      "PreviewSource": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "folder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "count"
+        ],
+        "type": "object"
+      },
+      "PreviewToolCall": {
+        "properties": {
+          "args": {},
+          "kind": {
+            "const": "tool_call",
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "tool",
+          "args"
+        ],
+        "type": "object"
+      },
+      "PreviewTriageItem": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "date_ts": {
+            "type": "number"
+          },
+          "from_addr": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "from_addr",
+          "date_ts",
+          "action",
+          "label"
         ],
         "type": "object"
       },
@@ -8605,6 +9280,59 @@
           "value"
         ],
         "type": "object"
+      },
+      "ProposalChange": {
+        "discriminator": {
+          "mapping": {
+            "calendar_event": "#/components/schemas/PreviewCalendarEvent",
+            "calendar_rsvp": "#/components/schemas/PreviewCalendarReply",
+            "calendar_update": "#/components/schemas/PreviewCalendarUpdate",
+            "deletion_rule": "#/components/schemas/PreviewDeletionRule",
+            "gmail_label_merge": "#/components/schemas/PreviewLabelMerge",
+            "inbox_backlog": "#/components/schemas/PreviewInboxBacklog",
+            "mail_triage": "#/components/schemas/PreviewMailTriage",
+            "rebalance_merge": "#/components/schemas/PreviewFolderMerge",
+            "rebalance_split": "#/components/schemas/PreviewFolderSplit",
+            "reminder": "#/components/schemas/PreviewReminder",
+            "tool_call": "#/components/schemas/PreviewToolCall"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PreviewCalendarEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewCalendarReply"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewCalendarUpdate"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewDeletionRule"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewLabelMerge"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewInboxBacklog"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewMailTriage"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewFolderMerge"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewFolderSplit"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewReminder"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewToolCall"
+          }
+        ]
       },
       "ProposalDetail": {
         "properties": {
@@ -9423,6 +10151,21 @@
         ],
         "type": "object"
       },
+      "ReadRuleVocabulary": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RuleVocabulary"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadSecrets": {
         "properties": {
           "data": {
@@ -9955,6 +10698,108 @@
         },
         "required": [
           "moved"
+        ],
+        "type": "object"
+      },
+      "RuleVocabulary": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVocabularyAction"
+            },
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVocabularyField"
+            },
+            "type": "array"
+          },
+          "ops": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVocabularyOp"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "fields",
+          "ops",
+          "actions"
+        ],
+        "type": "object"
+      },
+      "RuleVocabularyAction": {
+        "properties": {
+          "destination": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "destination"
+        ],
+        "type": "object"
+      },
+      "RuleVocabularyField": {
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "list": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "list",
+          "ops"
+        ],
+        "type": "object"
+      },
+      "RuleVocabularyOp": {
+        "properties": {
+          "hint": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "enum": [
+              "none",
+              "text",
+              "list",
+              "days"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "hint",
+          "value"
         ],
         "type": "object"
       },
@@ -10978,6 +11823,42 @@
         },
         "required": [
           "items"
+        ],
+        "type": "object"
+      },
+      "SettingsPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "set": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "unset": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SettingsPatched": {
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "keys",
+          "revision"
         ],
         "type": "object"
       },
@@ -12875,7 +13756,8 @@
           "proposals"
         ],
         "x-atrium-area": "proposals",
-        "x-atrium-module": "core"
+        "x-atrium-module": "core",
+        "x-atrium-undoable": true
       }
     },
     "/approvals/{proposal_id}/deny": {
@@ -17775,7 +18657,8 @@
           "drafts"
         ],
         "x-atrium-area": "drafts",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/drafts/{draft_id}/discard": {
@@ -20045,7 +20928,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/confirm": {
@@ -20209,7 +21093,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/confirm-matching": {
@@ -20373,7 +21258,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/import": {
@@ -20823,7 +21709,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}": {
@@ -21279,7 +22166,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}/confirm": {
@@ -21442,7 +22330,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}/restore": {
@@ -21605,7 +22494,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/knowledge/{record_id}/retract": {
@@ -21768,7 +22658,8 @@
           "knowledge"
         ],
         "x-atrium-area": "knowledge",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/mail/accounts": {
@@ -25557,7 +26448,8 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "mail",
+        "x-atrium-undoable": true
       }
     },
     "/mail/packages": {
@@ -27249,6 +28141,129 @@
         ],
         "x-atrium-area": "mail",
         "x-atrium-module": "mail"
+      }
+    },
+    "/mail/rules/vocabulary": {
+      "get": {
+        "operationId": "mail.rules-vocabulary",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadRuleVocabulary"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail",
+        "x-atrium-operation": "mail.rules"
       }
     },
     "/mail/rules/{rule_id}": {
@@ -29878,7 +30893,8 @@
           "media"
         ],
         "x-atrium-area": "media",
-        "x-atrium-module": "media"
+        "x-atrium-module": "media",
+        "x-atrium-undoable": true
       }
     },
     "/media/channels/poll": {
@@ -30357,7 +31373,8 @@
           "media"
         ],
         "x-atrium-area": "media",
-        "x-atrium-module": "media"
+        "x-atrium-module": "media",
+        "x-atrium-undoable": true
       }
     },
     "/media/files/{file_id}/content": {
@@ -37032,7 +38049,8 @@
           "schedules"
         ],
         "x-atrium-area": "schedules",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       },
       "patch": {
         "operationId": "assistant.schedule.update",
@@ -37204,7 +38222,8 @@
           "schedules"
         ],
         "x-atrium-area": "schedules",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/schedules/{job_id}/enabled": {
@@ -38061,6 +39080,186 @@
         ],
         "x-atrium-area": "settings",
         "x-atrium-module": "core"
+      },
+      "patch": {
+        "operationId": "settings.patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeSettingsPatched"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core",
+        "x-atrium-operation": "settings.set"
       }
     },
     "/settings/secrets": {
@@ -39806,7 +41005,8 @@
           "tasks"
         ],
         "x-atrium-area": "tasks",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/tasks/{task_id}": {
@@ -39979,7 +41179,8 @@
           "tasks"
         ],
         "x-atrium-area": "tasks",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/tasks/{task_id}/done": {
@@ -40142,7 +41343,8 @@
           "tasks"
         ],
         "x-atrium-area": "tasks",
-        "x-atrium-module": "assistant"
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
       }
     },
     "/threads": {
