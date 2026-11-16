@@ -1190,7 +1190,8 @@ claims about the running application. Operator contracts are in
   it; storage errors mean no cache. Offline means atrium itself did not
   answer: the last request or stream to it failed, and the next response
   clears it. `navigator.onLine` is never trusted; its `online` and `offline`
-  events only probe the session at once, because
+  events only probe the session at once, and while atrium is unreachable
+  the client probes on its own every 5 s doubling to 60 s, because
   a VPN or LAN can reach atrium while the browser reports offline. While
   offline, writes refuse at once and are never queued. A lazy page missing
   from the device shows "Not available" instead of failing.

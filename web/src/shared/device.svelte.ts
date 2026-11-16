@@ -31,14 +31,38 @@ export function setForget(on: boolean): void {
   applyForget(on);
 }
 
+const PROBE_MIN_MS = 5_000;
+const PROBE_MAX_MS = 60_000;
+
+let probeDelay = PROBE_MIN_MS;
+let probeTimer: ReturnType<typeof setTimeout> | undefined;
+const reconnected: (() => void)[] = [];
+
+export function onReconnect(handler: () => void): void {
+  reconnected.push(handler);
+}
+
 function probe(): void {
   webFetch('/session').catch(() => undefined);
 }
 
+function schedule(): void {
+  clearTimeout(probeTimer);
+  probeTimer = setTimeout(() => {
+    probeDelay = Math.min(probeDelay * 2, PROBE_MAX_MS);
+    probe();
+  }, probeDelay);
+}
+
 onReachability((ok) => {
+  if (!ok) schedule();
   if (ok === device.online) return;
   device.online = ok;
-  if (ok) void queryClient.refetchQueries({ type: 'active' });
+  if (!ok) return;
+  clearTimeout(probeTimer);
+  probeDelay = PROBE_MIN_MS;
+  void queryClient.refetchQueries({ type: 'active' });
+  for (const handler of reconnected) handler();
 });
 
 addEventListener('online', probe);

@@ -8,6 +8,7 @@ import {
   webSession,
   webSessionLogout,
 } from '../contract';
+import { onReconnect } from '../shared/device.svelte';
 import { queryClient } from '../shared/query';
 import { cachedSession, restore, wipe } from '../shared/readcache';
 import { toast } from '../shared/ui/toast.svelte';
@@ -119,6 +120,6 @@ channel?.addEventListener('message', (event: MessageEvent<unknown>) => {
   if (event.data === 'signed-out' && session.view.status === 'signed-in') void loadSession(false, 'logout');
 });
 
-addEventListener('online', () => {
+onReconnect(() => {
   if (session.view.status === 'signed-in' && session.view.cached) void loadSession(true, 'start', true);
 });

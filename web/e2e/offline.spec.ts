@@ -335,6 +335,7 @@ test.describe('the read cache', () => {
     site.api.needsYou = 5;
     site.down(false);
     await context.setOffline(false);
+    await page.evaluate(() => dispatchEvent(new Event('online')));
     await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toHaveCount(0);
     await expect(inboxCount(page)).toContainText('5');
     await expect.poll(() => site.api.calls.includes('GET /events')).toBe(true);
@@ -352,6 +353,21 @@ test.describe('the read cache', () => {
     await page.getByRole('button', { name: 'Try again' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toHaveCount(0);
     await expect(inboxCount(page)).toContainText('4');
+  });
+
+  test('the page finds atrium again by itself without a browser event', async ({ page, site }) => {
+    await page.clock.install();
+    await signedIn(page, `${site.url}/next/`);
+    await workerReady(page);
+    await expect.poll(() => storedShell(page)).toBe(3);
+    site.down(true);
+    await page.reload();
+    await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toBeVisible();
+    site.api.needsYou = 6;
+    site.down(false);
+    await page.clock.runFor(70_000);
+    await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toHaveCount(0);
+    await expect(inboxCount(page)).toContainText('6');
   });
 
   test('data older than seven days is dropped', async ({ page, site }) => {
