@@ -12,13 +12,17 @@ import (
 )
 
 const (
-	KeyTZ                = "tz"
-	KeyPublicURL         = "public_url"
-	KeySnoozeChoices     = "snooze_choices"
-	InitialTZEnv         = "ATRIUM_INITIAL_TZ"
-	coreModule           = "core"
-	webModule            = "web"
-	defaultSnoozeChoices = "1,3,7,14"
+	KeyTZ                     = "tz"
+	KeyPublicURL              = "public_url"
+	KeySnoozeChoices          = "snooze_choices"
+	KeyLoopsWaitingAfterDays  = "openloops_waiting_after_days"
+	KeyLoopsRemindAheadDays   = "openloops_remind_ahead_days"
+	KeyLoopsRemindHour        = "openloops_remind_hour"
+	KeyLoopsSnoozeDefaultDays = "openloops_snooze_default_days"
+	InitialTZEnv              = "ATRIUM_INITIAL_TZ"
+	coreModule                = "core"
+	webModule                 = "web"
+	defaultSnoozeChoices      = "1,3,7,14"
 )
 
 func HostSettings() []settings.HostDef {

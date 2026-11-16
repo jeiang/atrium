@@ -47,49 +47,50 @@ func (c Context) Tools() (*registry.Registry, error) {
 }
 
 type Declaration struct {
-	Name              string
-	Core              bool
-	Needs             []string
-	Requires          []Requirement
-	Settings          []settings.Def
-	Host              []settings.HostDef
-	Groups            []settings.Group
-	Sections          []settingspage.Section
-	Pages             []web.Page
-	Commands          []*cli.Command
-	Leaves            map[string]Leaf
-	Tools             []ToolDefinition
-	ProposeKinds      []proposals.Definition
-	Effects           func(EffectDeps) Effects
-	ReviewKinds       func(ReviewDeps) review.Kinds
-	ActivityCategory  string
-	EffectCategories  []review.Category
-	EffectOrigins     []EffectOrigin
-	Channels          []string
-	Refs              []RefKind
-	Day               DayProvider
-	Communications    communications.Provider
-	Attachments       []Attachment
-	Connections       []connections.Definition
-	AccountSync       *connections.AccountSync
-	AccountCredential config.AccountCredentialFunc
-	ProposalCreated   proposals.CreatedHook
-	ConnectionNotice  connections.Notifier
-	Attention         []attention.Source
-	Search            []search.Source
-	Jobs              []scheduler.Definition
-	Services          []runtime.ServiceDefinition
-	ServiceSets       func(context.Context) ([]SetService, error)
-	ServiceSetName    string
-	Recover           func(context.Context, *db.DB, config.Config) error
-	HasOperatorData   func(context.Context, db.Querier) (bool, error)
-	Metrics           []ops.Metric
-	Queues            []ops.Queue
-	Corpora           []embed.Corpus
-	ProposalScan      *proposalsapp.Scan
-	Checks            []ops.Check
-	Operations        []application.Definition
-	Bindings          []application.Binding
+	Name                  string
+	Core                  bool
+	Needs                 []string
+	Requires              []Requirement
+	Settings              []settings.Def
+	Host                  []settings.HostDef
+	Groups                []settings.Group
+	Sections              []settingspage.Section
+	Pages                 []web.Page
+	Commands              []*cli.Command
+	Leaves                map[string]Leaf
+	Tools                 []ToolDefinition
+	ProposeKinds          []proposals.Definition
+	Effects               func(EffectDeps) Effects
+	ReviewKinds           func(ReviewDeps) review.Kinds
+	ActivityCategory      string
+	EffectCategories      []review.Category
+	EffectOrigins         []EffectOrigin
+	Channels              []string
+	Refs                  []RefKind
+	Day                   DayProvider
+	Communications        communications.Provider
+	CommunicationsRefresh Refresher
+	Attachments           []Attachment
+	Connections           []connections.Definition
+	AccountSync           *connections.AccountSync
+	AccountCredential     config.AccountCredentialFunc
+	ProposalCreated       proposals.CreatedHook
+	ConnectionNotice      connections.Notifier
+	Attention             []attention.Source
+	Search                []search.Source
+	Jobs                  []scheduler.Definition
+	Services              []runtime.ServiceDefinition
+	ServiceSets           func(context.Context) ([]SetService, error)
+	ServiceSetName        string
+	Recover               func(context.Context, *db.DB, config.Config) error
+	HasOperatorData       func(context.Context, db.Querier) (bool, error)
+	Metrics               []ops.Metric
+	Queues                []ops.Queue
+	Corpora               []embed.Corpus
+	ProposalScan          *proposalsapp.Scan
+	Checks                []ops.Check
+	Operations            []application.Definition
+	Bindings              []application.Binding
 }
 
 type SetService struct {

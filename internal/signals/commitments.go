@@ -1,4 +1,4 @@
-package openloops
+package signals
 
 import (
 	"context"
@@ -12,14 +12,13 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/classifier"
+	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/jsonx"
-	"github.com/jeiang/atrium/internal/mail"
-	mailclassify "github.com/jeiang/atrium/internal/mail/classify"
-	"github.com/jeiang/atrium/internal/mail/mailscan"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/timex"
 )
@@ -71,7 +70,7 @@ func JudgeCommitments(ctx context.Context, env config.Env, c *classifier.Service
 	}
 	user := fmt.Sprintf("The mailbox owner is: %s\nThis message was %s on %s.\nFrom: %s <%s>\nRecipients: %s\nSubject: %s\nBody:\n%s",
 		owners, direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, textx.Clip(body, endpoint.TuningLlmBodyChars))
-	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Commitments, Item: mailclassify.MessageItem(m.Account, m.ID),
+	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Commitments, Item: classifier.MessageItem(m.Account, m.ID),
 		System: CommitmentSystem, User: user, Schema: commitmentSchema})
 	if err != nil {
 		return nil, err
@@ -90,12 +89,6 @@ func JudgeCommitments(ctx context.Context, env config.Env, c *classifier.Service
 	return httpx.Key(answer, "commitments")
 }
 
-func messageOf(m mailscan.Message) Message {
-	return Message{ID: m.ID, Account: m.Account, DateTS: m.DateTS, Sent: m.Sent, Subject: m.Subject, FromName: m.FromName,
-		FromAddr: m.FromAddr, FromDomain: m.FromDomain, ToAddrs: m.ToAddrs, ListID: m.ListID, Precedence: m.Precedence,
-		Category: m.Category, ESP: m.ESP, ReplyTo: m.ReplyTo, RawPath: m.RawPath, Labels: m.Labels, Flags: m.Flags}
-}
-
 func commitmentItems(found any, perMail int) ([]any, error) {
 	if !jsonx.Truthy(found) {
 		return nil, nil
@@ -111,11 +104,11 @@ func commitmentItems(found any, perMail int) ([]any, error) {
 	return nil, fmt.Errorf("%w: %s is not a list", httpx.ErrShape, fmt.Sprintf("%T", found))
 }
 
-func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.Env, now float64, c *classifier.Service, paid *mailclassify.Deferral) (int64, error) {
-	window := mail.TuningOpenloopsCommitmentWindowDays
-	perMail := mail.TuningOpenloopsCommitmentsPerMessage
-	limit := mail.TuningOpenloopsCommitmentScanLimit
-	selves, err := selfAddresses(ctx, d.Read)
+func ScanCommitments(ctx context.Context, d *db.DB, feed communications.Feed, env config.Env, now float64, c *classifier.Service, paid communications.Deferral) (int64, error) {
+	window := TuningOpenloopsCommitmentWindowDays
+	perMail := TuningOpenloopsCommitmentsPerMessage
+	limit := TuningOpenloopsCommitmentScanLimit
+	selves, err := selfAddresses(ctx, d.Read, feed)
 	if err != nil {
 		return 0, err
 	}
@@ -124,20 +117,21 @@ func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.
 		owners = append(owners, addr)
 	}
 	slices.Sort(owners)
-	g := newGate(cacheDir, selves)
-	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
-		Kind: "commitments", Hint: "1", WindowDays: window, FetchLimit: limit * 4, Limit: limit, Paid: paid,
-		Eligible: func(m mailscan.Message) (bool, error) {
-			draft, err := IsDraft(m.Labels, m.Flags)
-			if err != nil || draft {
-				return false, err
+	g := newGate(ctx, d.Read, feed, selves)
+	result, err := feed.Scan(ctx, d, now, communications.Scan{
+		Kind: "commitments", WindowDays: window, FetchLimit: limit * 4, Limit: limit, Paid: paid,
+		Eligible: func(m communications.Message) (bool, error) {
+			if m.Flags.Draft {
+				return false, nil
 			}
 			msg := messageOf(m)
 			return g.wanted(&msg)
 		},
-		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
-			if err := paid.Err(); err != nil {
-				return 0, err
+		Judge: func(ctx context.Context, row communications.Message, body string) (int, error) {
+			if paid != nil {
+				if err := paid.Err(); err != nil {
+					return 0, err
+				}
 			}
 			msg := messageOf(row)
 			msg.Owners = owners
@@ -212,17 +206,57 @@ func ListCommitments(ctx context.Context, q db.Querier, status string, limit int
 		where, params = "WHERE c.status = ?", []any{status}
 	}
 	rows, err := q.QueryContext(ctx,
-		"SELECT c.id, c.message_id, c.text, c.owner, c.due, c.status, c.proposal_id, m.subject, m.from_addr "+
-			"FROM commitments c LEFT JOIN messages m ON m.id = c.message_id "+where+
-			" ORDER BY c.due IS NULL, c.due, c.id LIMIT ?", append(params, limit)...)
+		"SELECT c.id, c.message_id, c.text, c.owner, c.due, c.status, c.proposal_id "+
+			"FROM commitments c "+where+" ORDER BY c.due IS NULL, c.due, c.id LIMIT ?", append(params, limit)...)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Commitment, error) {
+	found, err := db.Collect(rows, func(r *sql.Rows) (Commitment, error) {
 		var c Commitment
-		err := r.Scan(&c.ID, &c.MessageID, &c.Text, &c.Owner, &c.Due, &c.Status, &c.ProposalID, &c.Subject, &c.FromAddr)
+		err := r.Scan(&c.ID, &c.MessageID, &c.Text, &c.Owner, &c.Due, &c.Status, &c.ProposalID)
 		return c, err
 	})
+	if err != nil {
+		return nil, err
+	}
+	feed := module.Communications(ctx)
+	for i := range found {
+		m, err := feed.Message(ctx, q, found[i].MessageID)
+		if err != nil {
+			return nil, err
+		}
+		if m != nil {
+			found[i].Subject, found[i].FromAddr = &m.Subject, &m.From.Addr
+		}
+	}
+	return found, nil
+}
+
+func counterpart(m *communications.Message) *string {
+	switch {
+	case m == nil:
+		return nil
+	case m.Flags.Sent:
+		if len(m.To) == 0 {
+			return nil
+		}
+		return &m.To[0]
+	case m.From.Addr == "":
+		return nil
+	}
+	return &m.From.Addr
+}
+
+func withMessage(ctx context.Context, q db.Querier, c CommitmentRow) (CommitmentRow, error) {
+	m, err := module.Communications(ctx).Message(ctx, q, c.MessageID)
+	if err != nil {
+		return c, err
+	}
+	if m != nil {
+		c.Subject = &m.Subject
+	}
+	c.Counterpart = counterpart(m)
+	return c, nil
 }
 
 func SetCommitmentStatus(ctx context.Context, q db.Querier, id int64, status string) (bool, error) {
@@ -249,13 +283,11 @@ type CommitmentRow struct {
 	Counterpart *string
 }
 
-const commitmentRowSelect = "SELECT c.id, c.message_id, c.text, c.owner, c.due, c.status, c.proposal_id, c.created_ts, m.subject, " +
-	"CASE WHEN m.id IS NULL THEN NULL WHEN m.sent = 1 THEN json_extract(m.to_addrs, '$[0]') ELSE NULLIF(m.from_addr, '') END " +
-	"FROM commitments c LEFT JOIN messages m ON m.id = c.message_id"
+const commitmentRowSelect = "SELECT c.id, c.message_id, c.text, c.owner, c.due, c.status, c.proposal_id, c.created_ts FROM commitments c"
 
 func scanCommitmentRow(r interface{ Scan(...any) error }) (CommitmentRow, error) {
 	var c CommitmentRow
-	err := r.Scan(&c.ID, &c.MessageID, &c.Text, &c.Owner, &c.Due, &c.Status, &c.ProposalID, &c.CreatedTS, &c.Subject, &c.Counterpart)
+	err := r.Scan(&c.ID, &c.MessageID, &c.Text, &c.Owner, &c.Due, &c.Status, &c.ProposalID, &c.CreatedTS)
 	return c, err
 }
 
@@ -264,7 +296,16 @@ func CommitmentRows(ctx context.Context, q db.Querier) ([]CommitmentRow, error) 
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (CommitmentRow, error) { return scanCommitmentRow(r) })
+	found, err := db.Collect(rows, func(r *sql.Rows) (CommitmentRow, error) { return scanCommitmentRow(r) })
+	if err != nil {
+		return nil, err
+	}
+	for i := range found {
+		if found[i], err = withMessage(ctx, q, found[i]); err != nil {
+			return nil, err
+		}
+	}
+	return found, nil
 }
 
 func GetCommitment(ctx context.Context, q db.Querier, id int64) (*CommitmentRow, error) {
@@ -272,6 +313,10 @@ func GetCommitment(ctx context.Context, q db.Querier, id int64) (*CommitmentRow,
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	c, err = withMessage(ctx, q, c)
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -19,10 +18,6 @@ type Service struct {
 }
 
 func New(c *classifier.Service) *Service { return &Service{c: c} }
-
-func MessageItem(account string, messageID int64) classifier.Item {
-	return classifier.Item{Key: account + ":" + strconv.FormatInt(messageID, 10)}
-}
 
 type Flags struct {
 	PersonAsking         bool `json:"person_asking"`

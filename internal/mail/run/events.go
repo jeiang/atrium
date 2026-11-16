@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/mail/classify"
@@ -16,7 +17,7 @@ type eventJudge struct {
 func (j eventJudge) Stopped() bool { return j.paid.Stopped() }
 
 func (j eventJudge) JudgeEvent(ctx context.Context, m communications.Message, body string) (candidates.Verdict, error) {
-	hasEvent, err := j.classify.JudgeEvent(ctx, classify.MessageItem(m.Account, m.ID),
+	hasEvent, err := j.classify.JudgeEvent(ctx, classifier.MessageItem(m.Account, m.ID),
 		classify.Message{Subject: m.Subject, FromName: m.From.Name, FromAddr: m.From.Addr}, body)
 	if j.paid.Note(err) {
 		return candidates.Skip, nil

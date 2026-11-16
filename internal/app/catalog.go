@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"
+	"github.com/jeiang/atrium/internal/signals/signalsmodule"
 )
 
 type Dependencies struct {
@@ -35,6 +36,7 @@ func Builtins(d Dependencies) []module.Builder {
 	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Classifier: classifierFor, Now: d.Now, Start: asstapp.ScheduledStart}
 	return []module.Builder{
 		coremodule.Module{Version: d.Version, Guard: d.Guard, Now: d.Now, Resources: d.Bindings.Resources, Jobs: jobs},
+		signalsmodule.Module{},
 		contactsmodule.Module{Jobs: jobs},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
 		calendarmodule.Module{Jobs: jobs},

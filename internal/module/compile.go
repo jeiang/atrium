@@ -28,21 +28,17 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		}
 		byName[d.Name] = d
 	}
-	core := ""
+	core := false
 	for _, d := range decls {
-		if !d.Core {
-			continue
+		if d.Name == Core {
+			if !d.Core {
+				return nil, &InvalidCore{Module: d.Name, Reason: "must be core"}
+			}
+			core = true
 		}
-		if core != "" {
-			return nil, &InvalidCore{Reason: "exactly one module must be core, found " + core + " and " + d.Name}
-		}
-		core = d.Name
 	}
-	switch {
-	case core == "":
-		return nil, &InvalidCore{Reason: "exactly one module must be core"}
-	case core != Core:
-		return nil, &InvalidCore{Module: core, Reason: "must be named " + Core}
+	if !core {
+		return nil, &InvalidCore{Reason: "exactly one module must be named " + Core}
 	}
 	for _, d := range decls {
 		if d.Core && (len(d.Needs) > 0 || len(d.Requires) > 0) {

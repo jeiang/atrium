@@ -20,14 +20,10 @@ const module = unit.Mail
 const PassResource = "mail-pass"
 
 const (
-	KeyMode                   = "mail_mode"
-	KeyWriteCap               = "write_cap"
-	KeyUncertainDest          = "uncertain_dest"
-	KeyLoopsWaitingAfterDays  = "openloops_waiting_after_days"
-	KeyLoopsRemindAheadDays   = "openloops_remind_ahead_days"
-	KeyLoopsRemindHour        = "openloops_remind_hour"
-	KeyLoopsSnoozeDefaultDays = "openloops_snooze_default_days"
-	KeyWatchesCarrierDomains  = "watches_carrier_domains"
+	KeyMode                  = "mail_mode"
+	KeyWriteCap              = "write_cap"
+	KeyUncertainDest         = "uncertain_dest"
+	KeyWatchesCarrierDomains = "watches_carrier_domains"
 )
 
 const modeDefault = config.Shadow
@@ -45,10 +41,10 @@ func Settings() []settings.Def {
 			Key: KeyWriteCap, Label: "Automatic write cap", Module: module, Type: settings.Int, Default: "100",
 			Check: settings.Between(1, 1000)}),
 		ui(KeyUncertainDest, settings.String, "Misc", nonBlank),
-		settings.Shown("Waiting on them after (days)", adv(KeyLoopsWaitingAfterDays, settings.Int, "3", atLeast(1))),
-		settings.Shown("Remind ahead of a due date (days)", adv(KeyLoopsRemindAheadDays, settings.Int, "1", atLeast(1))),
-		ui(KeyLoopsRemindHour, settings.Int, "9", settings.Between(0, 23)),
-		settings.Shown("Default snooze (days)", adv(KeyLoopsSnoozeDefaultDays, settings.Int, "3", atLeast(1))),
+		settings.Shown("Waiting on them after (days)", adv(config.KeyLoopsWaitingAfterDays, settings.Int, "3", atLeast(1))),
+		settings.Shown("Remind ahead of a due date (days)", adv(config.KeyLoopsRemindAheadDays, settings.Int, "1", atLeast(1))),
+		ui(config.KeyLoopsRemindHour, settings.Int, "9", settings.Between(0, 23)),
+		settings.Shown("Default snooze (days)", adv(config.KeyLoopsSnoozeDefaultDays, settings.Int, "3", atLeast(1))),
 		ui(KeyWatchesCarrierDomains, settings.String, "ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de", domainsCheck),
 	}
 }

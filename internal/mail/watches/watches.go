@@ -131,7 +131,7 @@ func judgePackage(ctx context.Context, c *classifier.Service, row mailscan.Messa
 	if packageSchemaErr != nil {
 		return nil, packageSchemaErr
 	}
-	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Package, Item: classify.MessageItem(row.Account, row.ID),
+	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Package, Item: classifier.MessageItem(row.Account, row.ID),
 		System: PackageSystem, User: rowText(row, body, bodyChars), Schema: packageSchemaJSON})
 	if err != nil {
 		return nil, err

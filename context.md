@@ -53,12 +53,31 @@ claims about the running application. Operator contracts are in
   lookup report's `mail_message` id is unknown, and queued event candidates
   are not listed. Event candidates read invitations and message bodies from
   the feed; the mail pass still calls them, passing its paid event judge.
-  The drafts, loops, commitments and packages attention sources live in
-  `internal/mail/attentionsources`. `tools/adapterboundary` fails when a Go
+  The drafts and packages attention sources live in
+  `internal/mail/attentionsources`.
+- The core `signals` unit (`internal/signals` for the domain,
+  `internal/signals/signalsmodule` for its service, API routes, Loops page,
+  `open_loops` tool and declaration) owns open loops, commitments and
+  commitment reminders: the `open_loops`, `loop_overrides` and `commitments`
+  tables, their attention sources, the `open_loops` queue, the reminder
+  proposals and their undo. It reads messages only through the
+  communications feed (summaries, recipient envelopes, owner addresses, the
+  question test and paid scans), so stored loops and commitments stay
+  readable with Mail off, with no message subject or sender. Signals is
+  declared `Core`; `module.Compile` still requires the `core` declaration and
+  lets any core unit own delegated or shared operations. The mail pass, and
+  the mail-owned `mail.refresh-loops` operation under the mail pass lock,
+  call `module.RefreshCommunications` with the paid classifier and
+  deferral; the one unit that sets `CommunicationsRefresh` (signals) runs,
+  and with no feed provider it skips and keeps stored rows. Operation names,
+  `/api/v1/mail/loops*` and `/api/v1/mail/commitments*` routes, the tool
+  name and the `openloops_*` setting keys are unchanged. `tools/adapterboundary`
+  fails when a mail package imports `internal/signals`, and the general rule
+  below fails when signals imports mail. `tools/adapterboundary` fails when a Go
   file outside `internal/mail` (under `internal` or `cmd`) imports a mail
   package, except the listed exceptions with the slice that removes each
   (the composition roots `cmd/atrium` and `internal/app`; the agent mail
-  tools until P13.2b; commitments until P12.1b; account rows in
+  tools until P13.2b; account rows in
   `internal/config` until P13.3), and when an exception no longer imports
   mail; it also treats `internal/communications` as platform.
 - Internal undoable tools can act directly and record undo. External,

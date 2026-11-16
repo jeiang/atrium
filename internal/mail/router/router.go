@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
@@ -281,7 +282,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		for i := range near {
 			near[i] = classify.Neighbor{Folder: neighbors[i].Folder, FromDomain: neighbors[i].FromDomain, Subject: neighbors[i].Subject}
 		}
-		folder, confident, err := r.Classifier.JudgeFolder(ctx, classify.MessageItem(m.Account, m.ID), lc.Folders, lc.Catalog, near,
+		folder, confident, err := r.Classifier.JudgeFolder(ctx, classifier.MessageItem(m.Account, m.ID), lc.Folders, lc.Catalog, near,
 			classify.Message{Subject: m.Subject, FromName: m.FromName, FromAddr: m.FromAddr}, body)
 		if lc.Paid.Note(err) {
 			return nil, nil

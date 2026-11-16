@@ -20,6 +20,7 @@ type Flags struct {
 	InInbox bool
 	Sent    bool
 	Gone    bool
+	Draft   bool
 }
 
 type Thread struct {
@@ -27,6 +28,15 @@ type Thread struct {
 	InReplyTo   string
 	References  string
 	GmailThread string
+}
+
+type Mailing struct {
+	Domain     string
+	ListID     string
+	Precedence string
+	Category   string
+	ESP        string
+	ReplyTo    string
 }
 
 type Message struct {
@@ -38,6 +48,35 @@ type Message struct {
 	Date    float64
 	Flags   Flags
 	Thread  Thread
+	Mailing Mailing
+}
+
+type Envelope struct {
+	Found           bool
+	To              []string
+	Cc              []string
+	ListUnsubscribe string
+	AutoSubmitted   string
+}
+
+type Deferral interface {
+	Err() error
+	Note(err error) bool
+}
+
+type Scan struct {
+	Kind       string
+	WindowDays int
+	FetchLimit int
+	Limit      int
+	Paid       Deferral
+	Eligible   func(Message) (bool, error)
+	Judge      func(ctx context.Context, m Message, body string) (found int, err error)
+}
+
+type ScanResult struct {
+	Scanned int
+	Found   int
 }
 
 type Part struct {
@@ -56,6 +95,8 @@ type Query struct {
 	Received bool
 	Present  bool
 	AfterID  int64
+	Since    float64
+	ByDate   bool
 	Limit    int
 }
 
@@ -65,6 +106,10 @@ type Provider interface {
 	Body(ctx context.Context, q db.Querier, id int64) (string, error)
 	Parts(ctx context.Context, q db.Querier, id int64) ([]Part, error)
 	Part(ctx context.Context, q db.Querier, id int64, part string, limit int) ([]byte, error)
+	Envelope(ctx context.Context, q db.Querier, id int64) (Envelope, error)
+	Asking(ctx context.Context, q db.Querier, id int64) (*bool, error)
+	Selves(ctx context.Context, q db.Querier) ([]string, error)
+	Scan(ctx context.Context, d *db.DB, now float64, scan Scan) (ScanResult, error)
 }
 
 type Feed struct {
@@ -105,4 +150,32 @@ func (f Feed) Part(ctx context.Context, q db.Querier, id int64, part string, lim
 		return nil, nil
 	}
 	return f.Provider.Part(ctx, q, id, part, limit)
+}
+
+func (f Feed) Envelope(ctx context.Context, q db.Querier, id int64) (Envelope, error) {
+	if f.Provider == nil {
+		return Envelope{}, nil
+	}
+	return f.Provider.Envelope(ctx, q, id)
+}
+
+func (f Feed) Asking(ctx context.Context, q db.Querier, id int64) (*bool, error) {
+	if f.Provider == nil {
+		return nil, nil
+	}
+	return f.Provider.Asking(ctx, q, id)
+}
+
+func (f Feed) Selves(ctx context.Context, q db.Querier) ([]string, error) {
+	if f.Provider == nil {
+		return nil, nil
+	}
+	return f.Provider.Selves(ctx, q)
+}
+
+func (f Feed) Scan(ctx context.Context, d *db.DB, now float64, scan Scan) (ScanResult, error) {
+	if f.Provider == nil {
+		return ScanResult{}, nil
+	}
+	return f.Provider.Scan(ctx, d, now, scan)
 }

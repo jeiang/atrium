@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,10 @@ const finishTimeout = 5 * time.Second
 
 type Item struct {
 	Key string
+}
+
+func MessageItem(account string, messageID int64) Item {
+	return Item{Key: account + ":" + strconv.FormatInt(messageID, 10)}
 }
 
 type Request struct {

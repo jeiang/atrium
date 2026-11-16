@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
@@ -67,8 +66,6 @@ type (
 	DraftStale             = drafts.Stale
 	DraftSendOutcome       = drafts.Result
 	DraftOutcomeUnknown    = drafts.OutcomeUnknown
-	Loop                   = openloops.Loop
-	Commitment             = openloops.Commitment
 	Package                = watches.Package
 	UnknownAccount         = run.UnknownAccount
 	OpenFunc               = mail.OpenFunc
@@ -86,9 +83,6 @@ const (
 	TriageArchive          = executors.TriageArchive
 	TriageLabel            = executors.TriageLabel
 	UndoUntrack            = tracking.UndoUntrack
-	LoopOweReply           = openloops.OweReply
-	LoopWaiting            = openloops.Waiting
-	CommitmentOpen         = openloops.Open
 	ReplayStageNone        = replay.StageNone
 	RuleAgeField           = rules.AgeField
 	RuleAgeOp              = rules.AgeOp
@@ -102,14 +96,12 @@ const (
 )
 
 var (
-	LoopStates         = openloops.States
-	CommitmentStatuses = openloops.CommitmentStatuses
-	LiveKinds          = live.Kinds
-	RouterStages       = router.Stages
-	RuleFieldNames     = rules.FieldNames
-	RuleOps            = rules.Ops
-	RuleValuelessOps   = rules.ValuelessOps
-	ScanKinds          = scans.All
+	LiveKinds        = live.Kinds
+	RouterStages     = router.Stages
+	RuleFieldNames   = rules.FieldNames
+	RuleOps          = rules.Ops
+	RuleValuelessOps = rules.ValuelessOps
+	ScanKinds        = scans.All
 )
 
 func WallClock() float64 { return mail.WallClock() }

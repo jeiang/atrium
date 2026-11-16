@@ -107,14 +107,14 @@ const (
 	dayContract  = "internal/day"
 	calendarUnit = module + "/internal/calendar"
 	mailUnit     = "internal/mail"
+	signalsUnit  = "internal/signals"
 )
 
 var mailImporters = map[string]string{
-	"cmd/atrium":                       "composition root",
-	"internal/app":                     "composition root",
-	"internal/assistant/tools/mail":    "P13.2b moves the mail tools into the Mail app",
-	"internal/commitments/application": "P12.1b moves commitments into signals",
-	"internal/config":                  "P13.3 moves account rows into the Mail app",
+	"cmd/atrium":                    "composition root",
+	"internal/app":                  "composition root",
+	"internal/assistant/tools/mail": "P13.2b moves the mail tools into the Mail app",
+	"internal/config":               "P13.3 moves account rows into the Mail app",
 }
 
 var units = []string{
@@ -173,6 +173,9 @@ func scan() ([]string, error) {
 			}
 			if dayReader && (imp == calendarUnit || strings.HasPrefix(imp, calendarUnit+"/")) {
 				edges = append(edges, "core assistant package imports calendar instead of reading the day contract: "+file+"\t"+imp)
+			}
+			if !outsideMail && (imp == module+"/"+signalsUnit || strings.HasPrefix(imp, module+"/"+signalsUnit+"/")) {
+				edges = append(edges, "mail package imports signals instead of calling the platform hook: "+file+"\t"+imp)
 			}
 			if outsideMail && (imp == module+"/"+mailUnit || strings.HasPrefix(imp, module+"/"+mailUnit+"/")) {
 				if _, ok := mailImporters[path.Dir(file)]; ok {

@@ -8,4 +8,5 @@ const (
 	Notifications = "notifications"
 	Grafana       = "grafana"
 	Contacts      = "contacts"
+	Signals       = "signals"
 )

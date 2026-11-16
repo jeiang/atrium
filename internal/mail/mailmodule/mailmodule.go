@@ -29,7 +29,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailconn"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/run"
@@ -63,7 +62,7 @@ func (m Module) classifiers(ctx context.Context, env config.Env, d *db.DB, cfg c
 }
 
 func AttentionSources() []attention.Source {
-	return []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()}
+	return []attention.Source{attentionsources.Drafts(), attentionsources.Packages()}
 }
 
 func Requirements() []module.Requirement {
@@ -79,7 +78,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
 		{Name: "loops", Title: "Open loops", Keys: []string{
-			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+			config.KeyLoopsWaitingAfterDays, config.KeyLoopsRemindAheadDays, config.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
 		}},
 		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 	}
@@ -175,7 +174,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			}},
 			{Module: pages.PauseModule(mailPageService)},
 			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
-				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},
 			{Module: accountpages.Module(mailPageService, mailSettingsService), Templates: accountpages.Templates()},
@@ -193,10 +191,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Effects: func(d module.EffectDeps) module.Effects {
 			open := m.opener(d.Cfg)
 			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: open, Now: d.Now}
-			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			return module.Effects{
-				Proposals: slices.Concat(e.Proposals(unit.Mail), r.Proposals(unit.Mail)),
-				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo()),
+				Proposals: e.Proposals(unit.Mail),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB)),
 				Resolve:   live.Resolve(),
 				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),
 			}

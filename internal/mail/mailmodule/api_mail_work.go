@@ -8,13 +8,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
-	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/mail/watches"
@@ -24,25 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
-type MailLoopsRequest struct {
-	State  string     `query:"state" json:"-" api:"enum=owe_reply|waiting_on_them"`
-	Cursor api.Cursor `query:"cursor" json:"-"`
-	Limit  api.Limit  `query:"limit" json:"-"`
-}
-type MailLoopsPage struct {
-	Items         []openloops.Loop `json:"items"`
-	NextCursor    *string          `json:"next_cursor" api:"nullable"`
-	SnoozeDefault int              `json:"snooze_default"`
-}
-type MailCommitmentsRequest struct {
-	View   string     `query:"view" json:"-" api:"enum=open|done|dismissed"`
-	Cursor api.Cursor `query:"cursor" json:"-"`
-	Limit  api.Limit  `query:"limit" json:"-"`
-}
-type MailCommitmentsPage struct {
-	Items      []openloops.Commitment `json:"items"`
-	NextCursor *string                `json:"next_cursor" api:"nullable"`
-}
 type MailPackagesRequest struct {
 	Active bool       `query:"active" json:"-"`
 	Cursor api.Cursor `query:"cursor" json:"-"`
@@ -57,25 +36,6 @@ type MailBirthdaysRequest struct {
 }
 type MailBirthdays struct {
 	Upcoming []birthdays.Item `json:"upcoming"`
-}
-type MailLoopRef struct {
-	ID int64 `path:"loop_id" json:"-" api:"min=1"`
-}
-type MailLoopSnooze struct {
-	ID   int64  `path:"loop_id" json:"-" api:"min=1"`
-	Days *int64 `json:"days,omitempty"`
-}
-type MailLoopSnoozed struct {
-	Days int64 `json:"days"`
-}
-type MailLoopsDismiss struct {
-	State string `json:"state" api:"enum=owe_reply|waiting_on_them"`
-}
-type MailLoopsDismissed struct {
-	Count int64 `json:"count"`
-}
-type MailCommitmentRef struct {
-	ID int64 `path:"commitment_id" json:"-" api:"min=1"`
 }
 type MailPackageRef struct {
 	ID int64 `path:"package_id" json:"-" api:"min=1"`
@@ -229,41 +189,10 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 	svc := func() *mailapp.Service { return service }
 	passes := mailPasses{d: d, m: m}
 	if d != nil {
-		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, d.Cfg, mail.WallClock)
-		if err != nil {
-			panic(err)
-		}
-		d.DrainOnStop(effects.Drain)
-		service = mailPageService(d).WithCommitments(commitmentsapp.New(d.DB, effects, mail.WallClock))
-	}
-	modules := func(ctx context.Context) context.Context {
-		if module.SetFrom(ctx) == nil {
-			return module.WithSet(ctx, module.SetFrom(d.Ctx))
-		}
-		return ctx
+		service = mailPageService(d)
 	}
 	const area = "mail"
 	return []application.Binding{
-		api.Query(d, mailapp.DescribeOpenLoops(), application.APIShape{Area: area}, "GET /mail/loops", func(ctx context.Context, in MailLoopsRequest) (application.Read[MailLoopsPage], error) {
-			var r application.Read[mailapp.OpenLoopsResult]
-			items, next, err := mailPage(nil, in.Cursor, in.Limit, func(n int) ([]openloops.Loop, error) {
-				var err error
-				r, err = svc().OpenLoops(ctx, mailapp.OpenLoopsInput{State: in.State, Limit: n, Snooze: true})
-				return r.Data.Loops, err
-			})
-			page := MailLoopsPage{Items: items, NextCursor: next, SnoozeDefault: r.Data.SnoozeDefault}
-			return application.Read[MailLoopsPage]{Revision: servedRevision(mailapp.DescribeOpenLoops().Name, page), Data: page}, err
-		}),
-		api.Query(d, mailapp.DescribeCommitments(), application.APIShape{Area: area}, "GET /mail/commitments", func(ctx context.Context, in MailCommitmentsRequest) (application.Read[MailCommitmentsPage], error) {
-			var r application.Read[mailapp.CommitmentsResult]
-			items, next, err := mailPage(nil, in.Cursor, in.Limit, func(n int) ([]openloops.Commitment, error) {
-				var err error
-				r, err = svc().Commitments(ctx, mailapp.CommitmentsInput{Status: in.View, Limit: n})
-				return r.Data.Commitments, err
-			})
-			page := MailCommitmentsPage{Items: items, NextCursor: next}
-			return application.Read[MailCommitmentsPage]{Revision: servedRevision(mailapp.DescribeCommitments().Name, page), Data: page}, err
-		}),
 		api.Query(d, mailapp.DescribePackages(), application.APIShape{Area: area}, "GET /mail/packages", func(ctx context.Context, in MailPackagesRequest) (application.Read[MailPackagesPage], error) {
 			r, err := svc().Packages(ctx, mailapp.PackagesInput{ActiveOnly: in.Active})
 			if err != nil {
@@ -282,23 +211,6 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			r, err := svc().UpcomingBirthdays(ctx, mailapp.UpcomingBirthdaysInput{Today: birthdays.Date(now.Year(), now.Month(), now.Day()), Days: in.Days})
 			out := MailBirthdays{Upcoming: r.Data.Upcoming}
 			return application.Read[MailBirthdays]{Revision: servedRevision(mailapp.DescribeUpcomingBirthdays().Name, out), Data: out}, err
-		}),
-		api.Command(d, mailapp.DescribeLoopSnooze(), application.APIShape{Area: area, Errors: []application.Code{application.NotFound}}, "POST /mail/loops/{loop_id}/snooze", func(ctx context.Context, in MailLoopSnooze) (application.Change[MailLoopSnoozed], error) {
-			r, err := svc().LoopSnooze(ctx, mailapp.LoopSnoozeInput{ID: in.ID, Days: in.Days})
-			return application.Change[MailLoopSnoozed]{Data: MailLoopSnoozed{Days: r.Data.Days}, AuditID: r.AuditID}, err
-		}),
-		api.Command(d, mailapp.DescribeLoopDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/loops/{loop_id}/dismiss", func(ctx context.Context, in MailLoopRef) (application.Change[struct{}], error) {
-			return svc().LoopDismiss(ctx, mailapp.LoopInput{ID: in.ID})
-		}),
-		api.Command(d, mailapp.DescribeLoopsDismissMatching(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}}, "POST /mail/loops/dismiss", func(ctx context.Context, in MailLoopsDismiss) (application.Change[MailLoopsDismissed], error) {
-			r, err := svc().LoopsDismissMatching(ctx, mailapp.LoopsDismissMatchingInput{State: in.State})
-			return application.Change[MailLoopsDismissed]{Data: MailLoopsDismissed{Count: r.Data.Count}, AuditID: r.AuditID}, err
-		}),
-		api.Command(d, mailapp.DescribeCommitmentDone(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound, application.Conflict}}, "POST /mail/commitments/{commitment_id}/done", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
-			return svc().CommitmentDone(modules(ctx), mailapp.CommitmentInput{ID: in.ID})
-		}),
-		api.Command(d, mailapp.DescribeCommitmentDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound, application.Conflict}}, "POST /mail/commitments/{commitment_id}/dismiss", func(ctx context.Context, in MailCommitmentRef) (application.Change[struct{}], error) {
-			return svc().CommitmentDismiss(modules(ctx), mailapp.CommitmentInput{ID: in.ID})
 		}),
 		api.Command(d, mailapp.DescribePackageDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/packages/{package_id}/dismiss", func(ctx context.Context, in MailPackageRef) (application.Change[struct{}], error) {
 			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})
