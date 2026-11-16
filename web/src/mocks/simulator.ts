@@ -1,5 +1,6 @@
 import { HttpResponse, http } from 'msw';
-import { API_BASE, type RunStreamEvent } from '../contract';
+import { API_BASE } from '../contract';
+import { sseFrame } from './g3';
 import { extraRunScripts, type RunScript, runScripts } from './runs';
 
 const encoder = new TextEncoder();
@@ -7,11 +8,6 @@ const STEP_MS = 400;
 
 function problem(status: number, code: string, message: string, extra: Record<string, unknown> = {}): Response {
   return HttpResponse.json({ error: { code, message }, ...extra }, { status });
-}
-
-function frame(event: RunStreamEvent): string {
-  const id = 'id' in event && event.id !== undefined ? `id: ${event.id}\n` : '';
-  return `${id}event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`;
 }
 
 function terminalState(script: RunScript): string {
@@ -83,7 +79,7 @@ export function simulateRun(request: Request, thread: number, run: number): Resp
         }
         const event = pending[sent];
         if (!event) {
-          controller.enqueue(encoder.encode(frame({ event: 'done', data: { state: terminalState(script) } })));
+          controller.enqueue(encoder.encode(sseFrame({ event: 'done', data: { state: terminalState(script) } })));
           controller.close();
           return;
         }
@@ -93,7 +89,7 @@ export function simulateRun(request: Request, thread: number, run: number): Resp
           controller.close();
           return;
         }
-        controller.enqueue(encoder.encode(frame(event)));
+        controller.enqueue(encoder.encode(sseFrame(event)));
         sent++;
       },
     },

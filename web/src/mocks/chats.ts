@@ -1,4 +1,4 @@
-import { delay, HttpResponse, http } from 'msw';
+import { delay, HttpResponse, http, passthrough } from 'msw';
 import type {
   ListedThread,
   Model,
@@ -12,6 +12,7 @@ import type {
   TranscriptItem,
 } from '../contract';
 import { API_BASE } from '../contract';
+import { G3_RUN, G3_THREAD, g3Events } from './g3';
 import { extraRunScripts, type RunScript } from './runs';
 import { findRunScript, simulateRun } from './simulator';
 
@@ -22,6 +23,7 @@ export interface ChatScenario {
   failSends?: number;
   empty?: boolean;
   listError?: boolean;
+  liveStream?: boolean;
 }
 
 interface MockThread {
@@ -36,10 +38,6 @@ interface MockThread {
 const BASE = Date.UTC(2026, 10, 16, 9, 0) / 1000;
 const SCENARIO_KEY = 'atrium.mock';
 const decoder = new TextDecoder();
-
-export const G3_THREAD = 50;
-export const G3_RUN = 900;
-export const G3_EVENTS = 2000;
 
 const models: Model[] = [
   model('sonnet-5.5', 'Sonnet 5.5', ['low', 'medium', 'high'], 15),
@@ -120,36 +118,7 @@ function replyScript(thread: number, run: number, text: string): RunScript {
   };
 }
 
-function g3Script(): RunScript {
-  const events: Omit<RunStreamEvent, 'id'>[] = [start(G3_THREAD, G3_RUN, 'Compare the winter tyre quotes')];
-  let call = 0;
-  while (events.length < G3_EVENTS - 2) {
-    const index = events.length;
-    if (index % 50 === 1) {
-      call++;
-      events.push({
-        event: 'tool_start',
-        data: { run_id: G3_RUN, id: `call-${call}`, name: 'search_web', args: `{"query":"winter tyre quote ${call}"}` },
-      });
-    } else if (index % 50 === 6) {
-      events.push({
-        event: 'tool_done',
-        data: { run_id: G3_RUN, id: `call-${call}`, ok: true, preview: `Read quote ${call}` },
-      });
-    } else if (index % 25 === 0) {
-      events.push({ event: 'text', data: { run_id: G3_RUN, text: `\n\n## Garage ${index / 25}\n\n` } });
-    } else if (index % 7 === 0) {
-      events.push({ event: 'text', data: { run_id: G3_RUN, text: `\n- set ${index} costs **${index % 97} units** ` } });
-    } else {
-      events.push({ event: 'text', data: { run_id: G3_RUN, text: `word${index} ` } });
-    }
-  }
-  events.push({ event: 'run_done', data: { run_id: G3_RUN, state: 'done', error: null } });
-  events.push({ event: 'complete', data: { run_id: G3_RUN, state: 'done', thread_id: G3_THREAD } });
-  return { thread: G3_THREAD, run: G3_RUN, label: 'Long run', parked: false, events: numbered(events) };
-}
-
-extraRunScripts.push(g3Script());
+extraRunScripts.push({ thread: G3_THREAD, run: G3_RUN, label: 'Long run', parked: false, events: g3Events() });
 extraRunScripts.push({
   thread: 10,
   run: 104,
@@ -556,6 +525,10 @@ export const chatHandlers = [
     const threadId = Number(params.thread);
     const run = Number(params.run);
     const state = scenario();
+    if (state.liveStream && threadId === G3_THREAD && run === G3_RUN) {
+      finish(threadId, run, 'done');
+      return passthrough();
+    }
     const fault = state.faults?.[connections++];
     url.searchParams.set('speed', String(state.speed ?? 4));
     if (fault) url.searchParams.set('fault', fault);
