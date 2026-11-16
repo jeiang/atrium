@@ -468,7 +468,7 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		api.Push(
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "research", map[string]any{"role": "mail", "task": "read " + srv.URL + "/a"})),
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": seedMail(t, dir)})),
-			anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "task_list", map[string]any{})),
+			anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "commitment_list", map[string]any{})),
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 			anthropictest.Reply("end_turn", anthropictest.Text("digest")),
 			anthropictest.Reply("end_turn", anthropictest.Text("done")),
@@ -481,7 +481,7 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 			t.Fatalf("%d model requests, want 6", len(requests))
 		}
 		escaped := findToolResult(t, requests, "l1")
-		if escaped == nil || escaped["is_error"] != true || !strings.Contains(fmt.Sprint(escaped["content"]), "unknown tool task_list") {
+		if escaped == nil || escaped["is_error"] != true || !strings.Contains(fmt.Sprint(escaped["content"]), "unknown tool commitment_list") {
 			t.Errorf("the child's out-of-allow-list call returned %v, want an unknown-tool refusal", escaped)
 		}
 		refusal := findToolResult(t, requests, "f1")

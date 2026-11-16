@@ -281,9 +281,7 @@ func (p *pages) chatRun(w http.ResponseWriter, r *http.Request) {
 	}
 	work, err := p.assistant().Work(r.Context(), asstapp.ThreadInput{ID: threadID})
 	check(err)
-	pending, err := p.assistant().NeedsCount(r.Context())
-	check(err)
-	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", tpl.Fragment{PendingCount: pending, Data: RunDone{View: view, ThreadID: threadID, Run: found, Items: items, Work: work.Data}})
+	p.fragment(w, r, http.StatusOK, "_run_done.gohtml", tpl.Fragment{PendingCount: p.deps.Render.PendingCount(r.Context()), Data: RunDone{View: view, ThreadID: threadID, Run: found, Items: items, Work: work.Data}})
 }
 
 func (p *pages) chatResume(w http.ResponseWriter, r *http.Request) {
