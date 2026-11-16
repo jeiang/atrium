@@ -63,6 +63,9 @@
           ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";
           npmDeps = "${webNodeModules}";
           ATRIUM_WEB_STUB = "${self'.packages.atrium-web.stub}";
+          PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
         }
         // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           ATRIUM_MUSL_CC = "${pkgs.pkgsStatic.stdenv.cc}/bin/${pkgs.pkgsStatic.stdenv.cc.targetPrefix}cc";

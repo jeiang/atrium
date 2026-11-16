@@ -14,6 +14,7 @@
     "check": "npm run gen && npm run tokens && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "lint": "npm run gen && npm run tokens && biome check --error-on-warnings . && node scripts/lint-commands.ts",
     "format": "biome check --write .",
+    "e2e": "playwright test",
     "tokens": "node scripts/tokens.ts"
   },
   "dependencies": {
@@ -24,10 +25,13 @@
     "svelte": "5.57.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.63.0",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@types/node": "24.19.2",
     "msw": "3.0.4",
     "orval": "8.47.0",
+    "playwright-core": "1.63.0",
     "style-dictionary": "5.8.0",
     "svelte-check": "4.7.8",
     "typescript": "6.0.3",
