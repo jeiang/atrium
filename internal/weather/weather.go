@@ -16,6 +16,8 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
+const ErrUnreachable Error = "Open-Meteo is unreachable"
+
 type Location struct {
 	Name      string  `json:"name"`
 	Country   string  `json:"country,omitempty"`
@@ -188,7 +190,7 @@ func (o *OpenMeteo) get(ctx context.Context, target string, into any) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return Error("Open-Meteo is unreachable")
+		return ErrUnreachable
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
