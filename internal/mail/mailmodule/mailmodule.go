@@ -17,9 +17,12 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
+	"github.com/jeiang/atrium/internal/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -27,13 +30,17 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	"github.com/jeiang/atrium/internal/mail/run"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -98,7 +105,7 @@ func (m Module) ProposeKinds() []proposals.Definition {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := m.mailCommands(mc.Env)
 	cmds := []*cli.Command{
-		mailCmds.SyncCommand(),
+		jobcmd.Delegating(mailCmds.SyncCommand(), run.SyncJobKey, "account"),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
@@ -130,37 +137,39 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	passOps, passBindings := mailPassOperations()
 	operations = append(operations, passOps...)
 	bindings = append(bindings, passBindings...)
-	bindings = append(bindings, mailAPIRoutes(nil)...)
+	bindings = append(bindings, m.mailAPIRoutes(nil)...)
 	bindings = append(bindings, mailWorkRoutes(nil, m)...)
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
-		Name:           module.Mail,
-		Operations:     operations,
-		Bindings:       append(bindings, finalBindings()...),
-		Recover:        recoverDrafts,
-		Settings:       slices.Concat(mail.Settings(), tracking.SettingsDefs()),
-		Host:           mail.HostSettings(),
-		Attention:      AttentionSources(),
-		Search:         SearchSources(),
-		Jobs:           []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
-		ServiceSets:    m.watchServices(mc.Env),
-		ServiceSetName: "mail/watch",
-		Requires:       Requirements(),
+		Name:            unit.Mail,
+		Operations:      operations,
+		Bindings:        append(bindings, finalBindings()...),
+		Recover:         recoverDrafts,
+		HasOperatorData: accounts.ExistsAny,
+		EffectOrigins:   []string{ledger.AutoOrigin, "operator_send"},
+		Settings:        slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Host:            mail.HostSettings(),
+		Attention:       AttentionSources(),
+		Search:          SearchSources(),
+		Jobs:            []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		ServiceSets:     m.watchServices(mc.Env),
+		ServiceSetName:  "mail/watch",
+		Requires:        Requirements(),
 		Pages: []web.Page{
 			{Module: func(_ chi.Router, d *web.Deps) {
-				mailAPIRoutes(d)
+				m.mailAPIRoutes(d)
 				mailWorkRoutes(d, m)
 				mailPassRoutes(d, m)
 				mailDraftRoutes(d, m)
 			}},
-			{Module: pages.Module(mailPageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+			{Module: pages.Module(m.pageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule(mailPageService)},
-			{Module: reviewpages.MailModule(reviewpages.Options{Compose: ReviewServices(ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Application: mailPageService})}), Nav: []web.NavItem{
+			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},
@@ -181,13 +190,20 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: open, Now: d.Now}
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			return module.Effects{
-				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
+				Proposals: slices.Concat(e.Proposals(unit.Mail), r.Proposals(unit.Mail)),
 				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo()),
 				Resolve:   live.Resolve(),
 				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),
 			}
 		},
-		Connections: slices.Concat(Connections(), tracking.Connections()),
-		AccountSync: mailconn.AccountSync(),
+		ReviewKinds: func(d module.ReviewDeps) review.Kinds {
+			open := m.opener(d.Cfg)
+			l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: d.Ledger, Open: open, Registry: d.Registry, Now: d.Now}
+			store := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: d.Ledger, Open: open, Now: d.Now}
+			return review.Kinds{Mode: mail.Mode, Needs: drafts.ReviewNeeds, Drafts: store.ReviewDrafts, Actions: l.ReviewActions()}
+		},
+		ActivityCategory: unit.Mail,
+		Connections:      slices.Concat(Connections(), tracking.Connections()),
+		AccountSync:      mailconn.AccountSync(),
 	}
 }

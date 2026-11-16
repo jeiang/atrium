@@ -1,7 +1,6 @@
 package application
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,9 +18,8 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/serverops"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/textx"
 )
 
@@ -66,21 +64,6 @@ type Card struct {
 	Result        any
 }
 
-type DraftCard struct {
-	Row        drafts.Row
-	Unexpected []string
-}
-
-type Finding struct {
-	ID       int64
-	Severity string
-	Host     string
-	Metric   string
-	Title    string
-	Body     string
-	Created  float64
-}
-
 type PendingInput struct {
 	Findings bool
 	Refs     bool
@@ -90,9 +73,9 @@ type PendingInput struct {
 type Pending struct {
 	Approvals  []Card
 	Blocked    []Card
-	Drafts     []DraftCard
+	Drafts     []review.Draft
 	Count      int
-	Findings   []Finding
+	Findings   []review.Finding
 	Configured map[string]bool
 }
 
@@ -130,53 +113,47 @@ func (s *Service) pending(ctx context.Context, in PendingInput) (Pending, error)
 	if out.Blocked, err = s.cards(ctx, blocked[:take(len(blocked))], in.Refs); err != nil {
 		return out, err
 	}
-	open, err := s.drafts.List(ctx, drafts.Draft, DraftLimit)
-	if err != nil {
-		return out, err
-	}
-	unknown, err := s.drafts.List(ctx, drafts.Unknown, DraftLimit)
-	if err != nil {
-		return out, err
-	}
-	rows := append(unknown, open...)
-	slices.SortStableFunc(rows, func(a, b drafts.Row) int { return cmp.Compare(b.UpdatedAt, a.UpdatedAt) })
-	if out.Drafts, err = s.DraftCards(ctx, rows[:take(len(rows))]); err != nil {
-		return out, err
+	kinds := s.contributions(ctx)
+	out.Drafts = []review.Draft{}
+	for _, c := range kinds {
+		if c.Kinds.Drafts == nil {
+			continue
+		}
+		found, err := c.Kinds.Drafts(ctx, take)
+		if err != nil {
+			return out, err
+		}
+		out.Drafts = append(out.Drafts, found...)
 	}
 	n, err := proposals.NeedsCount(ctx, q)
 	if err != nil {
 		return out, err
 	}
-	d, err := drafts.CountNeeds(ctx, q)
-	if err != nil {
-		return out, err
-	}
-	out.Count = n + d
-	if in.Findings {
-		found, err := serverops.ReviewFindings(ctx, q, findingsLimit)
+	out.Count = n
+	for _, c := range kinds {
+		if c.Kinds.Needs == nil {
+			continue
+		}
+		needs, err := c.Kinds.Needs(ctx, q)
 		if err != nil {
 			return out, err
 		}
-		out.Findings = make([]Finding, 0, len(found))
-		for _, f := range found {
-			finding := Finding{ID: f.ID, Severity: f.Severity, Title: f.Title, Body: f.Body, Created: f.CreatedAt}
-			finding.Host, finding.Metric, _ = strings.Cut(f.Fact, ":")
-			out.Findings = append(out.Findings, finding)
+		out.Count += len(needs)
+	}
+	if in.Findings {
+		out.Findings = []review.Finding{}
+		for _, c := range kinds {
+			if c.Kinds.Findings == nil {
+				continue
+			}
+			found, err := c.Kinds.Findings(ctx, q, findingsLimit)
+			if err != nil {
+				return out, err
+			}
+			out.Findings = append(out.Findings, found...)
 		}
 	}
 	out.Configured = AccountConfigured(ctx)
-	return out, nil
-}
-
-func (s *Service) DraftCards(ctx context.Context, rows []drafts.Row) ([]DraftCard, error) {
-	unexpected, err := s.drafts.UnexpectedRecipientsBatch(ctx, rows)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]DraftCard, len(rows))
-	for i, row := range rows {
-		out[i] = DraftCard{Row: row, Unexpected: unexpected[i]}
-	}
 	return out, nil
 }
 

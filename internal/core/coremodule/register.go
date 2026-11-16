@@ -8,6 +8,7 @@ import (
 	"time"
 
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 
 	"github.com/go-chi/chi/v5"
 
@@ -41,8 +42,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/obs/opsmetrics"
@@ -52,6 +51,7 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -67,7 +67,6 @@ import (
 type Module struct {
 	Version   string
 	Guard     settingsapp.Guard
-	Clients   func(config.Config) mail.OpenFunc
 	Now       func() float64
 	Resources module.Resources
 	Jobs      jobworker.Dependencies
@@ -99,6 +98,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, eventOps...), append(bindings, eventBindings...)
 	searchOps, searchBindings := searchOperations(m.Now)
 	operations, bindings = append(operations, searchOps...), append(bindings, searchBindings...)
+	pauseOps, pauseBindings := pauseOperations()
+	operations, bindings = append(operations, pauseOps...), append(bindings, pauseBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -146,9 +147,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
 			}},
-			{Module: reviewpages.Module(reviewpages.Options{Compose: mailmodule.ReviewServices(mailmodule.ReviewOptions{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Routes: func(d *web.Deps, svc *reviewapp.Service) {
+			{Module: hub.Module(hub.Options{Compose: func(d *web.Deps) *reviewapp.Service {
+				return hub.Compose(hub.ComposeOptions{Tools: mc.Tools, Enabled: enabled})(d).Review
+			}, Routes: func(d *web.Deps, svc *reviewapp.Service) {
 				reviewRoutes(d, func() *reviewapp.Service { return svc })
-			}}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
+			}}), Templates: hub.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
@@ -160,6 +163,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				authRoutes(d)
 				commandRoutes(d)
 				eventRoutes(d)
+				pauseRoutes(d)
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
@@ -185,6 +189,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			dbcmd.BackupCommand(maintenance),
 			dbcmd.RestoreCommand(maintenance),
 			catalogCommand(mc),
+			jobcmd.Command(),
 		},
 	}
 }

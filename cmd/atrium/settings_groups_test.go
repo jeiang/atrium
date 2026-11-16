@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
@@ -115,7 +116,7 @@ func TestSettingsSaveSameRefusalInCLIAndUI(t *testing.T) {
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	pinned := module.FlagKey(module.Mail)
+	pinned := module.FlagKey(unit.Mail)
 	seedFlagsAt(t, newTestApp(t), path, allFlagsTrue())
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host.toml", "[core]\n"+pinned+" = true\n"))
 	base := startServeIn(t, dir)

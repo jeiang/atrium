@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func permissionProposals(resume func(context.Context, int64) error) []proposals.Definition {
@@ -15,7 +16,7 @@ func permissionProposals(resume func(context.Context, int64) error) []proposals.
 		return nil
 	}
 	return []proposals.Definition{{
-		Kind: proposals.Kind{Name: permission.Kind, Module: module.Assistant, Label: "Permission request", Icon: "lock", Approval: true},
+		Kind: proposals.Kind{Name: permission.Kind, Module: unit.Assistant, Label: "Permission request", Icon: "lock", Approval: true},
 		Execute: func(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 			var payload permission.Payload
 			if err := json.Unmarshal(p.Payload, &payload); err != nil {
@@ -33,7 +34,7 @@ func permissionProposals(resume func(context.Context, int64) error) []proposals.
 			}
 			err := resume(ctx, payload.RunID)
 			var disabled *module.OwnerDisabled
-			if errors.As(err, &disabled) && disabled.Module == module.Assistant {
+			if errors.As(err, &disabled) && disabled.Module == unit.Assistant {
 				return nil
 			}
 			return err

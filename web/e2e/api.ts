@@ -29,6 +29,7 @@ function shell(needsYou: number): unknown {
     needs_you: needsYou,
     notify_failing: [],
     mail: { mode: 'live', paused: false },
+    pause: { paused: false },
     modules: ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'].map((name) => ({
       name,
       state: 'enabled',

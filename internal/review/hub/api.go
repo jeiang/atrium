@@ -1,11 +1,11 @@
-package reviewpages
+package hub
 
 import (
 	"encoding/json"
 	"net/http"
 	"strconv"
 
-	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -82,19 +82,18 @@ func approvalsOf(cards []reviewapp.Card) []apiApproval {
 
 func ApprovalOf(c reviewapp.Card) Approval { return approvalOf(c) }
 
-func DraftsOf(cards []reviewapp.DraftCard, configured map[string]bool) []Draft {
-	out := make([]Draft, len(cards))
-	for i, c := range cards {
-		row := c.Row
-		recipients := c.Unexpected
+func DraftsOf(drafts []review.Draft, configured map[string]bool) []Draft {
+	out := make([]Draft, len(drafts))
+	for i, d := range drafts {
+		recipients := d.Unexpected
 		if recipients == nil {
 			recipients = []string{}
 		}
 		out[i] = Draft{
-			ID: row.ID, ThreadID: row.ThreadID, Account: row.Account, To: row.ToAddrs, Cc: row.CcAddrs, Subject: row.Subject,
-			Body: row.Body, InReplyToMessageID: row.InReplyToMessageID, Status: string(row.Status), Revision: row.Revision,
-			CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, SentAt: row.SentAt, SMTPResult: row.SMTPResult,
-			UnexpectedRecipients: recipients, AccountConfigured: configured[row.Account],
+			ID: d.ID, ThreadID: d.ThreadID, Account: d.Account, To: d.ToAddrs, Cc: d.CcAddrs, Subject: d.Subject,
+			Body: d.Body, InReplyToMessageID: d.InReplyToMessageID, Status: d.Status, Revision: d.Revision,
+			CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt, SentAt: d.SentAt, SMTPResult: d.SMTPResult,
+			UnexpectedRecipients: recipients, AccountConfigured: configured[d.Account],
 		}
 	}
 	return out
@@ -122,8 +121,8 @@ func PendingRead(w http.ResponseWriter, r *http.Request, s *reviewapp.Service) {
 	}
 	data := found.Data
 	unknown := 0
-	for _, c := range data.Drafts {
-		if c.Row.Status == mailapp.DraftUnknown {
+	for _, d := range data.Drafts {
+		if d.Unknown {
 			unknown++
 		}
 	}
@@ -230,7 +229,7 @@ func EffectRead(w http.ResponseWriter, r *http.Request, s *reviewapp.Service) {
 
 func apiRaw(v any) json.RawMessage {
 	raw, err := json.Marshal(v)
-	check(err)
+	Check(err)
 	return raw
 }
 

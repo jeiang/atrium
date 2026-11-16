@@ -3,12 +3,11 @@ package module
 import (
 	"context"
 	"database/sql"
+	"slices"
 
-	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -24,11 +23,9 @@ func FlagHostDef(name string) settings.HostDef {
 	return settings.HostDef{Key: FlagKey(name), Module: Core, Type: settings.Bool, Default: "false"}
 }
 
-var operatorData = []func(context.Context, db.Querier) (bool, error){
+var platformData = []func(context.Context, db.Querier) (bool, error){
 	settings.HasRows,
 	settings.SecretsHasRows,
-	accounts.ExistsAny,
-	threads.HasRows,
 	inference.HasRows,
 }
 
@@ -89,7 +86,7 @@ func (s *Set) Seed(ctx context.Context, d *db.DB) error {
 		if done, err := seeded(ctx, tx); err != nil || done {
 			return err
 		}
-		phaseA, err := hasOperatorData(ctx, tx)
+		phaseA, err := s.hasOperatorData(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -104,8 +101,14 @@ func (s *Set) Seed(ctx context.Context, d *db.DB) error {
 	})
 }
 
-func hasOperatorData(ctx context.Context, q db.Querier) (bool, error) {
-	for _, has := range operatorData {
+func (s *Set) hasOperatorData(ctx context.Context, q db.Querier) (bool, error) {
+	checks := slices.Clone(platformData)
+	for _, r := range s.decls {
+		if r.HasOperatorData != nil {
+			checks = append(checks, r.HasOperatorData)
+		}
+	}
+	for _, has := range checks {
 		found, err := has(ctx, q)
 		if err != nil {
 			return false, err

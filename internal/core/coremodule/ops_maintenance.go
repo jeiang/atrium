@@ -29,6 +29,10 @@ type BackupRef struct {
 	Name string `json:"name"`
 }
 
+type BackupsQuery struct {
+	Limit api.Limit `query:"limit" json:"-"`
+}
+
 type BackupVerified struct {
 	Name       string                    `json:"name"`
 	CreatedAt  string                    `json:"created_at"`
@@ -50,7 +54,7 @@ type DatabaseCheck struct {
 
 func (m Module) maintenanceOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
-			maintenanceapp.DescribeCheck(), maintenanceapp.DescribeVerifyArchive(),
+			maintenanceapp.DescribeCheck(), maintenanceapp.DescribeVerifyArchive(), maintenanceapp.DescribeListBackups(),
 			maintenanceapp.DescribeBackup(), maintenanceapp.DescribeRestore(),
 			maintenanceapp.DescribeEncrypt(), maintenanceapp.DescribeRekey(), maintenanceapp.DescribeSQL(),
 		}, append(m.maintenanceRoutes(nil), []application.Binding{
@@ -59,7 +63,7 @@ func (m Module) maintenanceOperations() ([]application.Definition, []application
 			{Kind: application.CLI, Target: "db rekey", Uses: []application.Name{maintenanceapp.RekeyName}},
 			{Kind: application.CLI, Target: "db shell", Uses: []application.Name{maintenanceapp.SQLName}},
 			{Kind: application.Job, Target: "core/backup", Uses: []application.Name{maintenanceapp.BackupName}},
-			{Kind: application.CLI, Target: "backup", Uses: []application.Name{maintenanceapp.BackupName}},
+			{Kind: application.CLI, Target: "backup", Uses: []application.Name{maintenanceapp.BackupName, maintenanceapp.ListBackupsName}},
 			{Kind: application.CLI, Target: "restore", Uses: []application.Name{maintenanceapp.VerifyArchiveName, maintenanceapp.RestoreName}},
 		}...)
 }
@@ -136,6 +140,10 @@ func (m Module) maintenanceRoutes(d *web.Deps) []application.Binding {
 					c := read.Data
 					return application.Change[DatabaseCheck]{Data: DatabaseCheck{Encryption: c.Encryption, Opened: c.Opened, Intact: c.Intact, Tables: c.Tables}}, err
 				}))
+			}),
+		api.Query(d, maintenanceapp.DescribeListBackups(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}},
+			"GET /maintenance/backups", func(ctx context.Context, in BackupsQuery) (application.Read[maintenanceapp.BackupList], error) {
+				return svc().ListBackups(ctx, maintenanceapp.ListBackupsInput{Limit: int(in.Limit)})
 			}),
 		api.Command(d, maintenanceapp.DescribeVerifyArchive(), application.APIShape{Area: area, Errors: refusable},
 			"POST /maintenance/backups/verify", func(ctx context.Context, in BackupRef) (application.Change[BackupVerified], error) {

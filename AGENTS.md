@@ -39,6 +39,12 @@ settings the operator edits in the UI or pins from the host.
   with `nix develop -c` (no `--impure`).
 - Keep the required CI check passing. For an authorized merge, use
   `gh pr merge --auto --merge`.
+- CI on a pull request runs x86_64 only: the Go tests run on the runner in
+  shards (`tools/go-test-shard`, the `ci` dev shell, a Go cache saved from
+  `main`), and the Nix checks build in the groups of `.ci/targets.nix`.
+  aarch64 and the hermetic Go checks run on `main`. A new flake check joins
+  the `rest` group unless `.ci/targets.nix` names it; a check that compiles
+  the Go tree belongs in a named group or on the runner.
 - Deployment consumes this repository from a separate host configuration.
   A merge here does not deploy it.
 

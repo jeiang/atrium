@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
@@ -112,13 +113,13 @@ func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
 	for _, item := range all.Items {
 		byID[item.ID] = item
 	}
-	if p := byID[permission]; p.Kind != reviewapp.QueueAsk || p.WaitingFor != reviewapp.WaitingPermission || p.Module != module.Assistant {
+	if p := byID[permission]; p.Kind != reviewapp.QueueAsk || p.WaitingFor != reviewapp.WaitingPermission || p.Module != unit.Assistant {
 		t.Fatalf("permission item: %+v", p)
 	}
 	if q := byID[question]; q.Kind != reviewapp.QueueAsk || q.WaitingFor != reviewapp.WaitingAnswer || q.Title != "Which calendar should I use?" {
 		t.Fatalf("question item: %+v", q)
 	}
-	if c := byID["commitment:2"]; c.Kind != reviewapp.QueueAttention || c.WaitingFor != reviewapp.WaitingDue || c.Due == nil || c.Module != module.Mail {
+	if c := byID["commitment:2"]; c.Kind != reviewapp.QueueAttention || c.WaitingFor != reviewapp.WaitingDue || c.Due == nil || c.Module != unit.Mail {
 		t.Fatalf("commitment item: %+v", c)
 	}
 	if d := byID["draft:1"]; d.Kind != reviewapp.QueueDraft || d.WaitingFor != reviewapp.WaitingSend || d.Source != (reviewapp.QueueSource{Type: "draft", ID: "1"}) {
@@ -170,13 +171,13 @@ func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/queue/"+proposal, s.token, nil), http.StatusNotFound, "not_found")
 
-	seedSettings(t, map[string]string{module.FlagKey(module.Mail): "false"})
+	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "false"})
 	s.restart()
 	browser = newWebClient(t, s.base, nil)
 	browser.session("local")
 	off := queue("")
 	for _, item := range off.Items {
-		if item.Module == module.Mail {
+		if item.Module == unit.Mail {
 			t.Fatalf("mail is off but the queue lists %+v", item)
 		}
 	}

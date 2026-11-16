@@ -1,6 +1,7 @@
 package dbcmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,10 +15,17 @@ import (
 func BackupCommand(svc *maintenanceapp.Service) *cli.Command {
 	return &cli.Command{
 		Name: "backup",
-		Help: "write one archive holding a consistent copy of the database and the uploaded files; safe while atrium runs",
+		Help: "write one archive holding a consistent copy of the database and the uploaded files; safe while atrium runs. atrium backup list lists the archives in the backup directory",
 		Setup: func(a *cli.Args) cli.Handler {
-			dest := a.Arg("dest", cli.Opt{Help: "path of the new archive; must not exist"})
+			asJSON := a.Bool("json", cli.Opt{Help: "with list: print the list as JSON"})
+			dest := a.Arg("dest", cli.Opt{Help: "path of the new archive; must not exist. The word list lists the archives instead; write ./list for an archive named list"})
 			return func(e *cli.Env) int {
+				if *dest == "list" {
+					return listBackups(e, svc, *asJSON)
+				}
+				if *asJSON {
+					return e.UsageError("--json applies only to atrium backup list")
+				}
 				res, err := svc.Backup(e.Ctx, maintenanceapp.BackupInput{Dest: *dest})
 				if err != nil {
 					return cli.Fail(e, err)
@@ -116,4 +124,38 @@ func encryption(e maintenanceapp.Encryption) string {
 		return "plaintext"
 	}
 	return "encrypted, key id " + e.KeyID
+}
+
+func listBackups(e *cli.Env, svc *maintenanceapp.Service, asJSON bool) int {
+	res, err := svc.ListBackups(e.Ctx, maintenanceapp.ListBackupsInput{Limit: maintenanceapp.ListBackupsMax})
+	if err != nil {
+		return cli.Fail(e, err)
+	}
+	list := res.Data
+	if asJSON {
+		raw, err := json.MarshalIndent(list, "", "  ")
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		_, _ = fmt.Fprintln(e.Stdout, string(raw))
+		return cli.ExitOK
+	}
+	w := e.Stdout
+	switch list.Location.State {
+	case maintenanceapp.LocationUnconfigured:
+		_, _ = fmt.Fprintf(w, "no backup directory: set host key %s (NixOS: %s)\n", list.Location.HostKey, list.Location.NixOption)
+		return cli.ExitOK
+	case maintenanceapp.LocationMissing:
+		_, _ = fmt.Fprintf(w, "the backup directory in host key %s does not exist yet\n", list.Location.HostKey)
+		return cli.ExitOK
+	}
+	for _, b := range list.Items {
+		detail := b.Problem
+		if h := b.Header; h != nil {
+			detail = fmt.Sprintf("schema %04d, %s, %d files", h.Schema, encryption(h.Encryption), h.Files)
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", b.Name, b.SizeBytes, b.ModifiedAt, detail)
+	}
+	_, _ = fmt.Fprintf(w, "%d of %d archives\n", len(list.Items), list.Total)
+	return cli.ExitOK
 }

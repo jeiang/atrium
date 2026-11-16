@@ -1,4 +1,4 @@
-package reviewpages
+package hub
 
 import (
 	"net/http"
@@ -32,7 +32,7 @@ func (s *service) needsStrip(w http.ResponseWriter, r *http.Request) {
 		s.failRead(w, r, err, "")
 		return
 	}
-	check(s.deps.Render.Fragment(w, r, http.StatusOK, "_review_strip.gohtml", tpl.Fragment{Mode: s.mode(r.Context()), Data: StripView(found.Data)}))
+	Check(s.deps.Render.Fragment(w, r, http.StatusOK, "_review_strip.gohtml", tpl.Fragment{Mode: s.mode(r.Context()), Data: StripView(found.Data)}))
 }
 
 func StripView(found reviewapp.Pending) stripData {

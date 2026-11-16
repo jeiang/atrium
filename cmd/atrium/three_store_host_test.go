@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/serverops"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func seedSetting(t *testing.T, d *db.DB, key, value string) {
@@ -74,7 +75,7 @@ func TestConnectionOwnedURLRowCannotRedirectTheSampler(t *testing.T) {
 }
 
 func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "true"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, "true"))
 	raw, err := os.ReadFile(defaultHostConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -88,16 +89,16 @@ func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
 		t.Fatalf("settings list: exit %d stderr %q", ran.code, ran.stderr)
 	}
 	path := filepath.Join(dir, "atrium.db")
-	seedSetting(t, mustConnect(t, path, db.Key{}), module.FlagKey(module.Mail), "false")
+	seedSetting(t, mustConnect(t, path, db.Key{}), module.FlagKey(unit.Mail), "false")
 
-	if got := pinRowOf(t, runSettings(t, "get", module.FlagKey(module.Mail))); got.Value != "true" || !strings.Contains(got.PinSource, "host") {
+	if got := pinRowOf(t, runSettings(t, "get", module.FlagKey(unit.Mail))); got.Value != "true" || !strings.Contains(got.PinSource, "host") {
 		t.Errorf("a database row overrode the host module flag: %+v", got)
 	}
-	got := runSettings(t, "set", module.FlagKey(module.Mail), "false")
+	got := runSettings(t, "set", module.FlagKey(unit.Mail), "false")
 	if got.code != cli.ExitError || !strings.Contains(got.stderr, "pinned by host") {
 		t.Errorf("setting a host-declared flag: exit %d stderr %q", got.code, got.stderr)
 	}
-	if value, ok := storedSetting(t, path, module.FlagKey(module.Mail)); !ok || value != "false" {
+	if value, ok := storedSetting(t, path, module.FlagKey(unit.Mail)); !ok || value != "false" {
 		t.Errorf("a refused flag write changed the row: %q %v", value, ok)
 	}
 	if status, _, _ := fetch(t, http.DefaultClient, http.MethodGet, startServeIn(t, dir)+"/triage", nil); status != http.StatusOK {

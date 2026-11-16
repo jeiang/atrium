@@ -81,6 +81,12 @@ func SubscribeLive(streamID int64) (<-chan string, func()) {
 	}
 }
 
+func Watched(streamID int64) bool {
+	liveListeners.Lock()
+	defer liveListeners.Unlock()
+	return len(liveListeners.streams[streamID]) > 0
+}
+
 func Publish(ctx context.Context, q db.Querier, runID int64, kind string, data map[string]any) error {
 	liveListeners.Lock()
 	idle := len(liveListeners.streams) == 0

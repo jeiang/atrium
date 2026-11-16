@@ -154,9 +154,16 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	tools := map[string]bool{}
 	scratch := registry.New(settings.NewFrom(nil))
 	var optional []string
+	origins := map[string]string{}
 	for _, d := range decls {
 		if !d.Core {
 			optional = append(optional, d.Name)
+		}
+		for _, origin := range d.EffectOrigins {
+			if owner, ok := origins[origin]; ok {
+				return nil, &DuplicateHook{Hook: "effect origin " + origin, Modules: []string{owner, d.Name}}
+			}
+			origins[origin] = d.Name
 		}
 		for _, m := range d.Metrics {
 			if metrics[m.Name] {
@@ -200,7 +207,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		return nil, err
 	}
 	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
-		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
+		conns: conns, hooks: hooks, credential: credential, origins: origins, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
 		operations: operations, bindings: bindings}, nil
 }
 
@@ -308,7 +315,7 @@ func compileSettings(decls []Declaration, jobs []scheduler.Definition) (*setting
 		hosts = append(hosts, FlagHostDef(d.Name))
 	}
 	if len(jobs) > 0 {
-		for _, def := range scheduler.Settings(jobs) {
+		for _, def := range scheduler.Settings() {
 			owner[def.Key] = def.Module
 			defs = append(defs, def)
 		}

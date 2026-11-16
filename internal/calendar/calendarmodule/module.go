@@ -18,8 +18,11 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -40,26 +43,27 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	command := calendarcmd.Command(m.calendarCLI(mc.Env, mc.Tools), connectionsapp.CLI(mc.Env))
+	command := jobcmd.DelegatingSubs(calendarcmd.Command(m.calendarCLI(mc.Env, mc.Tools), connectionsapp.CLI(mc.Env)), map[string]string{"sync": unit.Calendar + "/" + passrun.CalDAV, "candidates": unit.Calendar + "/" + calendar.JobCandidates})
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
-		Name:      module.Calendar,
-		Settings:  slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
-		Host:      calendar.HostSettings(),
-		Sections:  calendar.Sections(),
-		Attention: AttentionSources(),
-		Jobs:      []scheduler.Definition{CandidatesJob(m.Jobs), CalDAVJob(m.Jobs)},
-		Requires:  Requirements(),
-		Commands:  []*cli.Command{command},
+		Name:          unit.Calendar,
+		EffectOrigins: []string{"calendar"},
+		Settings:      slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
+		Host:          calendar.HostSettings(),
+		Sections:      calendar.Sections(),
+		Attention:     AttentionSources(),
+		Jobs:          []scheduler.Definition{CandidatesJob(m.Jobs), CalDAVJob(m.Jobs)},
+		Requires:      Requirements(),
+		Commands:      []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
-			"calendar candidates":  {Needs: []string{module.Mail}},
+			"calendar candidates":  {Needs: []string{unit.Mail}},
 			"calendar google-auth": {Always: true},
 		},
 		Tools: ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			p := &calendar.Proposals{DB: d.DB, Ledger: d.Ledger, Now: d.Now, Env: d.Env}
 			return module.Effects{
-				Proposals: p.Proposals(module.Calendar),
+				Proposals: p.Proposals(unit.Calendar),
 				Undo:      slices.Concat(p.Undo(), calapp.Undo(d.Ledger, d.Env)),
 			}
 		},

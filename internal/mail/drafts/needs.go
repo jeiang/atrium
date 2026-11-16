@@ -15,12 +15,6 @@ type Need struct {
 	CreatedAt float64
 }
 
-func CountNeeds(ctx context.Context, q db.Querier) (int, error) {
-	var n int
-	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM drafts WHERE status IN ('draft', 'unknown')").Scan(&n)
-	return n, err
-}
-
 func Needs(ctx context.Context, q db.Querier) ([]Need, error) {
 	rows, err := q.QueryContext(ctx, "SELECT id, subject, to_addrs, status, created_at FROM drafts WHERE status IN ('draft', 'unknown')")
 	if err != nil {

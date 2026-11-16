@@ -307,7 +307,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Errorf("push headers %v", sent.header)
 	}
 	checkVAPID(t, sent.header, publicKey, push.URL)
-	if payload["title"] != "atrium: mail writes paused" || payload["body"] != "Changed by the operator." || payload["url"] != "/settings/notifications" || len(payload) != 3 {
+	if payload["title"] != "atrium: automation paused" || payload["body"] != "Changed by the operator." || payload["url"] != "/settings/notifications" || len(payload) != 3 {
 		t.Errorf("payload %v", payload)
 	}
 	var delivered bool

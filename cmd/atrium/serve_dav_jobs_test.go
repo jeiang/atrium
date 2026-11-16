@@ -18,11 +18,11 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
-var davJobKeys = []string{module.Calendar + "/" + passrun.CalDAV, module.Contacts + "/" + passrun.CardDAV}
+var davJobKeys = []string{unit.Calendar + "/" + passrun.CalDAV, unit.Contacts + "/" + passrun.CardDAV}
 
 type heldDAV struct {
 	*httptest.Server

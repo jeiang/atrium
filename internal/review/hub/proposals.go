@@ -1,4 +1,4 @@
-package reviewpages
+package hub
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ import (
 )
 
 func (s *service) proposalLink(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "proposal_id")
+	id, ok := PathID(w, r, "proposal_id")
 	if !ok {
 		return
 	}
@@ -59,13 +59,13 @@ func (s *service) renderCard(w http.ResponseWriter, r *http.Request, card review
 	f := tpl.Fragment{Data: proposalCardData{Proposal: proposalView(card), PendingOOB: true}, Toast: notice}
 	var err error
 	f.PendingCount, err = s.needs(r.Context())
-	check(err)
+	Check(err)
 	name := "_proposal_row.gohtml"
 	if !rowView(r) {
 		name = "_proposal.gohtml"
 		f.Mode = s.mode(r.Context())
 	}
-	check(s.deps.Render.Fragment(w, r, http.StatusOK, name, f))
+	Check(s.deps.Render.Fragment(w, r, http.StatusOK, name, f))
 }
 
 func (s *service) decidedCard(w http.ResponseWriter, r *http.Request, id int64, proposal *proposalsapp.Proposal, notice *tpl.Toast) {
@@ -133,7 +133,7 @@ func selectionOf(p *proposalsapp.Proposal, kind proposalsapp.Kind, form url.Valu
 }
 
 func (s *service) proposalCard(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "proposal_id")
+	id, ok := PathID(w, r, "proposal_id")
 	if !ok {
 		return
 	}
@@ -141,13 +141,13 @@ func (s *service) proposalCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "proposal_id")
+	id, ok := PathID(w, r, "proposal_id")
 	if !ok {
 		return
 	}
-	ctx := detached(r)
+	ctx := Detached(r)
 	found, err := s.review.StoredProposal(ctx, id)
-	check(err)
+	Check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
 		return
@@ -158,7 +158,7 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		kind, _ := s.review.ProposalKind(found.Kind)
 		picked, err := selectionOf(found, kind, form)
 		if err != nil {
-			s.card(w, r, id, toast("error", "Not approved", err.Error()))
+			s.card(w, r, id, Toast("error", "Not approved", err.Error()))
 			return
 		}
 		in.Selection = picked
@@ -170,17 +170,17 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	}
 	if refused != nil {
 		if done.Data.Proposal != nil {
-			s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "It did not finish", stoppedPartway(refused, done.Data.Proposal)))
+			s.decidedCard(w, r, id, done.Data.Proposal, Toast("error", "It did not finish", stoppedPartway(refused, done.Data.Proposal)))
 			return
 		}
-		s.card(w, r, id, toast("error", "Not approved", refused.Error()))
+		s.card(w, r, id, Toast("error", "Not approved", refused.Error()))
 		return
 	}
 	if done.Data.Applied {
-		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Applied", ResultString(done.Data.Proposal.Result, "summary")))
+		s.decidedCard(w, r, id, done.Data.Proposal, Toast("success", "Applied", ResultString(done.Data.Proposal.Result, "summary")))
 		return
 	}
-	s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "It did not finish", ResultString(done.Data.Proposal.Result, "error")))
+	s.decidedCard(w, r, id, done.Data.Proposal, Toast("error", "It did not finish", ResultString(done.Data.Proposal.Result, "error")))
 }
 
 func (s *service) decided(w http.ResponseWriter, r *http.Request, err error, missing string) (error, bool) {
@@ -200,32 +200,32 @@ func (s *service) decided(w http.ResponseWriter, r *http.Request, err error, mis
 }
 
 func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "proposal_id")
+	id, ok := PathID(w, r, "proposal_id")
 	if !ok {
 		return
 	}
 	forever, _ := web.Value(web.FormValues(r), "forever")
-	done, err := s.review.Dismiss(detached(r), reviewapp.DismissInput{ProposalID: id, Suppress: forever != ""})
+	done, err := s.review.Dismiss(Detached(r), reviewapp.DismissInput{ProposalID: id, Suppress: forever != ""})
 	refused, answered := s.decided(w, r, err, "unknown proposal")
 	if answered {
 		return
 	}
 	if refused != nil {
-		s.card(w, r, id, toast("error", "Not dismissed", refused.Error()))
+		s.card(w, r, id, Toast("error", "Not dismissed", refused.Error()))
 		return
 	}
 	if forever != "" {
-		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Dismissed forever"))
+		s.decidedCard(w, r, id, done.Data.Proposal, Toast("success", "Dismissed forever"))
 		return
 	}
-	s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Dismissed"))
+	s.decidedCard(w, r, id, done.Data.Proposal, Toast("success", "Dismissed"))
 }
 func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "proposal_id")
+	id, ok := PathID(w, r, "proposal_id")
 	if !ok {
 		return
 	}
-	done, err := s.review.Undo(detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}})
+	done, err := s.review.Undo(Detached(r), reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}})
 	outcome := done.Data.Outcome
 	refused, answered := s.decided(w, r, err, "unknown proposal")
 	if answered {
@@ -233,14 +233,14 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	if refused != nil {
 		if len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
-			s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "Undo stopped partway", undoStoppedPartway(refused, outcome)))
+			s.decidedCard(w, r, id, done.Data.Proposal, Toast("error", "Undo stopped partway", undoStoppedPartway(refused, outcome)))
 			return
 		}
-		s.card(w, r, id, toast("error", "Not undone", refused.Error()))
+		s.card(w, r, id, Toast("error", "Not undone", refused.Error()))
 		return
 	}
 	if outcome.Undone {
-		s.decidedCard(w, r, id, done.Data.Proposal, toast("success", "Undone"))
+		s.decidedCard(w, r, id, done.Data.Proposal, Toast("success", "Undone"))
 		return
 	}
 	failed := ""
@@ -251,7 +251,7 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	s.decidedCard(w, r, id, done.Data.Proposal, toast("error", "Undo did not finish", failed))
+	s.decidedCard(w, r, id, done.Data.Proposal, Toast("error", "Undo did not finish", failed))
 }
 func stoppedPartway(err error, done *proposalsapp.Proposal) string {
 	if done.Undoable {
@@ -278,30 +278,30 @@ func resolvedToast(outcome string) *tpl.Toast {
 	const untouched = " atrium did not touch the mailbox."
 	switch outcome {
 	case proposalsapp.OutcomeUndone:
-		return toast("success", "Undo recorded as done", "You checked that the messages are back."+untouched)
+		return Toast("success", "Undo recorded as done", "You checked that the messages are back."+untouched)
 	case proposalsapp.OutcomeNotUndone:
-		return toast("success", "Undo recorded as not done", "You checked that the messages were not moved back, so the undo can be tried again."+untouched)
+		return Toast("success", "Undo recorded as not done", "You checked that the messages were not moved back, so the undo can be tried again."+untouched)
 	case proposalsapp.OutcomeApplied:
-		return toast("success", "Write recorded as done", "You checked that the write happened."+untouched)
+		return Toast("success", "Write recorded as done", "You checked that the write happened."+untouched)
 	case proposalsapp.OutcomeNotApplied:
-		return toast("success", "Write recorded as not done", "You checked that the write did not happen, so the action can be tried again."+untouched)
+		return Toast("success", "Write recorded as not done", "You checked that the write did not happen, so the action can be tried again."+untouched)
 	}
-	return toast("success", "Marked as checked", "The blocked write is recorded as checked by you."+untouched)
+	return Toast("success", "Marked as checked", "The blocked write is recorded as checked by you."+untouched)
 }
 
 func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "proposal_id")
+	id, ok := PathID(w, r, "proposal_id")
 	if !ok {
 		return
 	}
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
-	_, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}, Outcome: outcome})
+	_, err := s.review.Resolve(Detached(r), reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}, Outcome: outcome})
 	refused, answered := s.decided(w, r, err, "unknown proposal")
 	if answered {
 		return
 	}
 	if refused != nil {
-		s.card(w, r, id, toast("error", "Not settled", refused.Error()))
+		s.card(w, r, id, Toast("error", "Not settled", refused.Error()))
 		return
 	}
 	s.card(w, r, id, resolvedToast(outcome))

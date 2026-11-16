@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
@@ -30,6 +31,7 @@ type Catalog struct {
 	conns      *connections.Registry
 	hooks      proposals.Hooks
 	credential config.AccountCredentialFunc
+	origins    map[string]string
 	metrics    []ops.Metric
 	checks     []ops.Check
 	jobs       []scheduler.Definition
@@ -165,6 +167,16 @@ func (c *Catalog) ProposeKinds() []proposals.Definition {
 	return out
 }
 
+func (c *Catalog) ReviewKinds(deps ReviewDeps) []review.Contribution {
+	var out []review.Contribution
+	for _, decl := range c.decls {
+		if decl.ReviewKinds != nil {
+			out = append(out, review.Contribution{Module: decl.Name, Category: decl.ActivityCategory, Kinds: decl.ReviewKinds(deps)})
+		}
+	}
+	return out
+}
+
 func (c *Catalog) UndoModules() map[string]bool {
 	out := map[string]bool{}
 	for _, decl := range c.decls {
@@ -198,18 +210,7 @@ func (c *Catalog) Ledger(d *db.DB, env config.Env, cfg config.Config, now func()
 				owner = operations[undo.Op]
 			}
 			if owner == "" {
-				switch effect.Origin {
-				case "mail_auto", "operator_send":
-					owner = Mail
-				case "calendar":
-					owner = Calendar
-				case "media":
-					owner = Media
-				case "notify":
-					owner = Notifications
-				case "export", "agent", "local":
-					owner = Assistant
-				}
+				owner = c.origins[effect.Origin]
 			}
 			if owner == "" {
 				return ctx, ledger.Refused("the effect has no registered owner")

@@ -16,8 +16,8 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/numx"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/safety"
 )
 
 var log = logx.Logger("atrium.live")
@@ -460,9 +460,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	return out, nil
 }
 
-func (l *Live) Paused() bool { return safety.IsPaused(l.Cfg.PausePath()) }
-
-func (l *Live) SetPaused(paused bool) error { return safety.SetPaused(l.Cfg.PausePath(), paused) }
+func (l *Live) Paused() bool { return pause.Paused(l.Cfg.PausePath()) }
 
 type Status struct {
 	Mode     string                      `json:"mode"`
