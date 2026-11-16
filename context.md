@@ -1218,7 +1218,12 @@ claims about the running application. Operator contracts are in
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
   catalog (`atrium catalog openapi --output docs/api`, drift-checked by
   `--check`). Approval-only operations count as reached through
-  `review.approve` and are listed separately in `reach.json`. The run event
+  `review.approve` and are listed separately in `reach.json`. The
+  `openapi-diff` check (oasdiff, a Go tool dependency) fails on a breaking
+  change against the deployed baseline in `docs/api/baseline/` unless
+  `approved-breaking.txt` lists it; the baseline is `v3.3.0`. A nightly
+  Schemathesis workflow runs the `GET` operations of `/api/v1` against a
+  throwaway server and opens or updates one issue on failure. The run event
   stream is documented in `docs/api/run-stream.md` (heartbeats,
   `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
   retention, `tool_done.results` with web search sources, live-only
@@ -1241,9 +1246,19 @@ claims about the running application. Operator contracts are in
   `GET /connections/schema` (kinds and per-connection fields with secret
   and host-owned flags, no credential values) and `GET /files` (the
   thread and project file library, newest first, keyset cursor). `GET
-  /home` carries a `weather` card (current, today, hourly) or null when no
-  location is set or the weather connection is off; the forecast call is
-  capped at 3 seconds and a failure only drops the card.
+  /home` always carries a `weather` card with a `state`: `off` (no weather
+  connection, or its forecast capability disabled), `unconfigured` (no
+  location), `loading` (no reading yet), `failed` (no reading, last fetch
+  failed; `failure` is `unreachable`, `timeout`, `no_match`, `bad_reply` or
+  `unavailable`), `stale` (the last reading is shown but the refresh after
+  it failed, or it is older than 60 minutes) or `ok`, plus `fetched_at` and
+  the reading (location, current, today, hourly). `/home` never calls the
+  weather service: it serves the last reading held in memory per database
+  (`weather.LastFor`) and starts a background refresh when the reading is
+  15 minutes old (a failed fetch is retried after 60 seconds). A finished
+  refresh bumps the `assistant` app-event topic so the client refetches. A
+  location change discards the held reading, so the next `/home` answers
+  `loading` and refreshes for the new place.
 - The embedded web client is served at `/next/` on every listener, the
   emergency listener included, beside the server-rendered UI; nothing links
   to it yet, and `/next` redirects there. A `/next/...` GET that accepts HTML
