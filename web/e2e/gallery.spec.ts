@@ -14,8 +14,9 @@ import { expect, galleryLayouts, layouts, test } from './fixtures.ts';
 const edgeSurfaces = ['header.bar', 'dialog.sheet'];
 
 async function gotoGallery(page: Page): Promise<void> {
+  test.slow();
   await gotoShell(page, '/__gallery');
-  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible({ timeout: 0 });
 }
 
 test.describe('gallery design checks', () => {

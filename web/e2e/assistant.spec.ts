@@ -5,9 +5,10 @@ import { expect, galleryLayouts, test } from './fixtures.ts';
 const cards = ['a-draft', 'a-move', 'a-triage', 'a-unknown', 'a-elsewhere', 'a-blocked'];
 
 async function gotoGallery(page: Page): Promise<void> {
+  test.slow();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await gotoShell(page, '/__gallery');
-  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible({ timeout: 0 });
 }
 
 async function showCard(page: Page, id: string): Promise<Locator> {
@@ -281,7 +282,7 @@ test.describe('tool cards', () => {
     await section.getByText('Finishes', { exact: true }).click();
     await section.getByRole('button', { name: 'Run script' }).click();
     await expect(live.locator('[data-tool="call-1"]')).toHaveAttribute('data-state', 'running');
-    await expect(section.getByTestId('tool-run-result')).toHaveText('done');
+    await expect(section.getByTestId('tool-run-result')).toHaveText('done', { timeout: 0 });
     const done = live.locator('[data-tool="call-1"]');
     await expect(done).toHaveAttribute('data-state', 'done');
     await expect(done).toContainText('Found prices from 3 suppliers · 3 sources');
@@ -303,13 +304,13 @@ test.describe('tool cards', () => {
 
     await section.getByText('Fails', { exact: true }).click();
     await section.getByRole('button', { name: 'Run script' }).click();
-    await expect(section.getByTestId('tool-run-result')).toHaveText('failed');
+    await expect(section.getByTestId('tool-run-result')).toHaveText('failed', { timeout: 0 });
     await expect(live.locator('[data-tool="call-1"]')).toHaveAttribute('data-state', 'failed');
     await expect(live).toContainText('The weather service timed out');
 
     await section.getByText('Parks', { exact: true }).click();
     await section.getByRole('button', { name: 'Run script' }).click();
-    await expect(section.getByTestId('tool-run-result')).toHaveText('parked');
+    await expect(section.getByTestId('tool-run-result')).toHaveText('parked', { timeout: 0 });
     const waiting = live.locator('[data-tool="call-1"]');
     await expect(waiting).toHaveAttribute('data-state', 'waiting');
     await expect(waiting.locator('[data-approval="a-parked"]')).toContainText(

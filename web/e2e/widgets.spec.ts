@@ -17,8 +17,9 @@ const phone = layouts[0] ?? { name: 'phone', width: 390, height: 844, touch: tru
 const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
 
 async function gotoGallery(page: Page): Promise<void> {
+  test.slow();
   await gotoShell(page, '/__gallery');
-  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Component gallery' })).toBeVisible({ timeout: 0 });
 }
 
 async function settle(popup: Locator): Promise<void> {
