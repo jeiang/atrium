@@ -57,12 +57,12 @@ func (s *Service) sweep(ctx context.Context) (Swept, error) {
 	if err != nil {
 		return Swept{}, err
 	}
-	selected, err := set.SelectFiles(ctx, s.d.Ledger, set, media.Scope{}, nil)
+	selected, err := set.SelectFiles(ctx, set, contract.Scope{Actor: contract.Job}, nil)
 	out := Swept{Selected: selected}
 	if err != nil {
 		return out, classify(err)
 	}
-	swept, err := media.Sweep(ctx, s.d.Ledger, set)
+	swept, err := media.Sweep(ctx, set)
 	out.Removed, out.Errors = swept.Removed, swept.Errors
 	return out, classify(err)
 }

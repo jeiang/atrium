@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"math/big"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	UndoTorrent        = mediaapp.UndoTorrent
 	UndoChannelDelete  = mediaapp.UndoChannelDelete
 	UndoChannelRestore = mediaapp.UndoChannelRestore
 	searchLimitCeiling = mediaapp.TuningMediaSearchLimit
@@ -28,8 +27,12 @@ var (
 	searchBound = tool.NewCeiling(20, 1, searchLimitCeiling)
 )
 
-func Definitions() []module.ToolDefinition {
-	tools := Tools()
+type handlers struct {
+	torrents contract.Provider
+}
+
+func Definitions(torrents contract.Provider) []module.ToolDefinition {
+	tools := Tools(torrents)
 	defs := make([]module.ToolDefinition, len(tools))
 	for i, t := range tools {
 		defs[i] = module.ToolDefinition{Tool: t}
@@ -37,22 +40,14 @@ func Definitions() []module.ToolDefinition {
 	return defs
 }
 
-func Tools() []tool.Tool {
+func Tools(torrents contract.Provider) []tool.Tool {
+	h := handlers{torrents: torrents}
 	return []tool.Tool{
-		{
-			Name:        "media_downloads",
-			Description: "List torrents in qBittorrent (name, state, progress, size, speed, ETA, media or plain) and the completed media torrents and import entries waiting to be filed.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
-			Handler:     mediaDownloads,
-			Effect:      tool.Read,
-			Annotated:   true,
-			Contexts:    readKinds,
-		},
 		{
 			Name:        "media_library_search",
 			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs. The limit is capped at 50.",
 			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": %s}, "required": ["query"], "additionalProperties": false}`, searchBound.Schema())),
-			Handler:     mediaLibrarySearch,
+			Handler:     h.mediaLibrarySearch,
 			Effect:      tool.Read,
 			Annotated:   true,
 			Contexts:    readKinds,
@@ -61,21 +56,11 @@ func Tools() []tool.Tool {
 			Name:        "media_channels",
 			Description: "List the EZTV channels (show, IMDb id, title regex, case sensitivity) with the last poll time and errors.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "additionalProperties": false}`),
-			Handler:     mediaChannels,
+			Handler:     h.mediaChannels,
 			Effect:      tool.Read,
 			Annotated:   true,
 			Contexts:    readKinds,
 		},
-		asstapp.ApprovalGate(tool.Tool{
-			Name:        "media_add_magnet",
-			Description: "Ask the operator to approve adding a magnet link to qBittorrent; nothing is added until they approve the card. media=true (default) tags it for filing into the library with automatic video/subtitle selection; false adds a plain torrent. Undo deletes the torrent and its data unless it was already filed.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"magnet": {"type": "string"}, "media": {"type": "boolean"}}, "required": ["magnet"], "additionalProperties": false}`),
-			Effect:      tool.Propose, Undo: UndoTorrent,
-			Annotated: true,
-			Channel:   tool.ChannelOwn,
-			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaAddMagnet, Check: checkAddMagnet, Label: "Add torrent", Icon: "download", Module: unit.Media},
-		}),
 		asstapp.ApprovalGate(tool.Tool{
 			Name:        "media_channel_add",
 			Description: "Ask the operator to approve watching a show on EZTV; nothing changes until they approve the card. Give imdb_id (tt1234567) or tmdb_id (needs TMDB) plus a regex over release titles; case_sensitive defaults to false. New matches are downloaded automatically after the first poll. Undo removes the channel.",
@@ -84,7 +69,7 @@ func Tools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaChannelAdd, Label: "Watch show", Icon: "tv", Module: unit.Media, Detail: "name"},
+			Approval:  &tool.Approval{Apply: h.mediaChannelAdd, Label: "Watch show", Icon: "tv", Module: unit.Media, Detail: "name"},
 		}),
 		asstapp.ApprovalGate(tool.Tool{
 			Name:        "media_channel_remove",
@@ -94,7 +79,7 @@ func Tools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  writeKinds,
-			Approval:  &tool.Approval{Apply: mediaChannelRemove, Label: "Stop watching show", Icon: "tv", Module: unit.Media},
+			Approval:  &tool.Approval{Apply: h.mediaChannelRemove, Label: "Stop watching show", Icon: "tv", Module: unit.Media},
 		}),
 	}
 }
@@ -138,43 +123,7 @@ func channelDict(c mediaapp.Channel) map[string]any {
 	return map[string]any{"id": c.ID, "name": c.Name, "imdb": c.IMDB, "tmdb_id": optionalInt(c.TMDBID), "pattern": c.Pattern, "case_sensitive": c.CaseSensitive, "primed": c.Primed, "created": c.Created}
 }
 
-func kindOf(isMedia bool) string {
-	if isMedia {
-		return "media"
-	}
-	return "plain"
-}
-
-func torrentDict(t mediaapp.QBitTorrent) map[string]any {
-	state := t.State
-	if label, ok := mediaapp.StateLabels[t.State]; ok {
-		state = label
-	}
-	return map[string]any{"hash": t.Hash, "name": t.Name, "state": state, "progress_percent": int64(math.RoundToEven(t.Progress * 100)), "size_bytes": optionalInt(t.Size), "download_bytes_per_second": optionalInt(t.DLSpeed), "eta_seconds": optionalInt(t.ETA), "kind": kindOf(t.HasTag(mediaapp.TagMedia)), "filed": t.HasTag(mediaapp.TagFiled)}
-}
-
-func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	read, err := mediaapp.ForTool(tc).Downloads(ctx, mediaapp.DownloadsInput{})
-	if err != nil {
-		return nil, tool.Fail(err)
-	}
-	if read.Data.TorrentsError != nil {
-		return nil, tool.Fail(read.Data.TorrentsError)
-	}
-	torrents := read.Data.Torrents
-	torrentLimit := asstapp.TuningAgentMediaTorrentLimit
-	shown := []any{}
-	for _, t := range torrents[:min(torrentLimit, len(torrents))] {
-		shown = append(shown, torrentDict(t))
-	}
-	queue := []any{}
-	for _, it := range read.Data.Queue {
-		queue = append(queue, map[string]any{"id": it.Item.ID, "name": it.Item.Name, "torrent": it.Item.Torrent})
-	}
-	return map[string]any{"torrents": shown, "waiting_to_file": queue, "note": "Only torrents of kind media are filed into the library, from the Media downloads page."}, nil
-}
-
-func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func (h handlers) mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err
@@ -183,7 +132,7 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
-	read, err := mediaapp.ForTool(tc).Library(ctx, mediaapp.LibraryInput{Query: query, Limit: int(limit)})
+	read, err := mediaapp.ForTool(tc, h.torrents).Library(ctx, mediaapp.LibraryInput{Query: query, Limit: int(limit)})
 	if err != nil {
 		return nil, tool.Fail(err)
 	}
@@ -202,8 +151,8 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 		"note": "Paths are relative to the media library; VPN URLs work on the mesh. Public links are made on the Library page. A stale catalogue means the media agent is unavailable and results are from the last complete scan."}, nil
 }
 
-func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	read, err := mediaapp.ForTool(tc).Channels(ctx, mediaapp.ChannelsInput{})
+func (h handlers) mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
+	read, err := mediaapp.ForTool(tc, h.torrents).Channels(ctx, mediaapp.ChannelsInput{})
 	if err != nil {
 		return nil, tool.Fail(err)
 	}
@@ -218,42 +167,7 @@ func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, err
 	return map[string]any{"channels": listed, "last_check": read.Data.Status.LastCheck, "errors": errs}, nil
 }
 
-func addMagnetArgs(args tool.Args) (string, bool, error) {
-	magnet, _, err := tool.TextArg(args, "magnet", true)
-	if err != nil {
-		return "", false, err
-	}
-	asMedia, err := boolArg(args, "media", true)
-	if err != nil {
-		return "", false, err
-	}
-	return magnet, asMedia, nil
-}
-
-func checkAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) error {
-	magnet, _, err := addMagnetArgs(args)
-	if err != nil {
-		return err
-	}
-	if err := mediaapp.ForTool(tc).CheckMagnet(ctx, magnet); err != nil {
-		return tool.Fail(err)
-	}
-	return nil
-}
-
-func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	magnet, asMedia, err := addMagnetArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	added, err := mediaapp.ForTool(tc).Add(ctx, mediaapp.AddInput{Magnet: &mediaapp.Magnet{URI: magnet}, Media: asMedia, ProposalID: tc.ProposalID})
-	if err != nil {
-		return nil, tool.Fail(err)
-	}
-	return map[string]any{"hash": added.Data.Hash, "kind": added.Data.Kind}, nil
-}
-
-func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func (h handlers) mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	pattern, _, err := tool.TextArg(args, "regex", true)
 	if err != nil {
 		return nil, err
@@ -278,7 +192,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 	if hasTMDB {
 		in.TMDBID = &tmdbID
 	}
-	added, err := mediaapp.ForTool(tc).ChannelAdd(ctx, in)
+	added, err := mediaapp.ForTool(tc, h.torrents).ChannelAdd(ctx, in)
 	if err != nil {
 		return nil, tool.Fail(err)
 	}
@@ -290,13 +204,13 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 	return out, nil
 }
 
-func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func (h handlers) mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, _ := args.Get("id")
 	id, err := intArg(raw, "id must be an integer")
 	if err != nil {
 		return nil, err
 	}
-	removed, err := mediaapp.ForTool(tc).ChannelRemove(ctx, mediaapp.ChannelRemoveInput{ID: id, ProposalID: tc.ProposalID})
+	removed, err := mediaapp.ForTool(tc, h.torrents).ChannelRemove(ctx, mediaapp.ChannelRemoveInput{ID: id, ProposalID: tc.ProposalID})
 	if err != nil {
 		return nil, tool.Fail(err)
 	}

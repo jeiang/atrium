@@ -16,11 +16,6 @@ import (
 func (s *service) registerDownloads(r chi.Router) {
 	r.Get("/apps/media", s.dlHome)
 	r.Get(dlDownloadsPage, s.dlDownloadsGet)
-	r.Get("/apps/media/torrents", s.dlTorrentsGet)
-	r.Get("/apps/media/torrents/{hash}/files", s.dlFilesGet)
-	r.Post("/apps/media/torrents/{hash}/files", s.dlFilesToggle)
-	r.Get("/apps/media/add", s.dlAddGet)
-	r.Post("/apps/media/add", s.dlAddPost)
 	r.Post("/apps/media/file", s.dlFilePost)
 	r.Post("/apps/media/ignore", s.dlIgnorePost)
 }
@@ -46,51 +41,14 @@ func (s *service) dlPageOut(w http.ResponseWriter, r *http.Request, status int, 
 	dlCheck(s.deps.Render.Page(w, r, status, name, f))
 }
 
-func (s *service) dlFragmentOut(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
-	dlCheck(s.deps.Render.Fragment(w, r, status, name, tpl.Fragment{Data: data, Toast: toast}))
-}
-
-func (s *service) dlRead(w http.ResponseWriter, r *http.Request, torrentsOnly bool) (mediaapp.Downloads, bool) {
-	read, err := s.app.Downloads(r.Context(), mediaapp.DownloadsInput{TorrentsOnly: torrentsOnly})
-	if err != nil {
-		web.Fail(w, r, err, func(status int) {
-			if torrentsOnly {
-				s.dlFragmentOut(w, r, status, "_media_torrents.gohtml", torrentsView{Torrents: []TorrentView{}, Error: application.Classify(err).Error(), Poll: dlPollSeconds}, nil)
-				return
-			}
-			s.deps.Error(w, r, status, application.Classify(err).Error())
-		})
-		return mediaapp.Downloads{}, false
-	}
-	return read.Data, true
-}
-
-func torrentRows(found mediaapp.Downloads) ([]TorrentView, string) {
-	rows := []TorrentView{}
-	for _, t := range found.Torrents {
-		rows = append(rows, torrentView(t))
-	}
-	if found.TorrentsError != nil {
-		return rows, found.TorrentsError.Error()
-	}
-	return rows, ""
-}
-
-func dlAnyActive(rows []TorrentView) bool {
-	for _, t := range rows {
-		if t.Active {
-			return true
-		}
-	}
-	return false
-}
 
 func (s *service) dlDownloads(w http.ResponseWriter, r *http.Request, toast *tpl.Toast, status int, edited *mediaapp.View) {
-	found, ok := s.dlRead(w, r, false)
-	if !ok {
+	read, err := s.app.Queue(r.Context(), mediaapp.QueueInput{})
+	if err != nil {
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
 		return
 	}
-	rows, errText := torrentRows(found)
+	found := read.Data
 	waiting := []QueueView{}
 	for _, it := range found.Queue {
 		if edited != nil && edited.ID() == it.Item.ID {
@@ -99,10 +57,7 @@ func (s *service) dlDownloads(w http.ResponseWriter, r *http.Request, toast *tpl
 			waiting = append(waiting, queueView(it.View))
 		}
 	}
-	view := downloadsView{
-		Torrents: rows, Error: errText, Active: dlAnyActive(rows), Poll: dlPollSeconds,
-		Queue: waiting, QueueError: found.QueueError, Kinds: found.Kinds,
-	}
+	view := downloadsView{Queue: waiting, QueueError: found.QueueError, Kinds: found.Kinds}
 	s.dlPageOut(w, r, status, "media_downloads", "media_downloads.gohtml", view, toast)
 }
 
@@ -113,76 +68,6 @@ func (s *service) dlHome(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) dlDownloadsGet(w http.ResponseWriter, r *http.Request) {
 	s.dlDownloads(w, r, nil, http.StatusOK, nil)
-}
-
-func (s *service) dlTorrentsGet(w http.ResponseWriter, r *http.Request) {
-	found, ok := s.dlRead(w, r, true)
-	if !ok {
-		return
-	}
-	rows, errText := torrentRows(found)
-	view := torrentsView{Torrents: rows, Error: errText, Active: dlAnyActive(rows), Poll: dlPollSeconds}
-	s.dlFragmentOut(w, r, http.StatusOK, "_media_torrents.gohtml", view, nil)
-}
-
-func (s *service) dlFilesError(w http.ResponseWriter, r *http.Request, hash string, err error) {
-	failure := application.Classify(err)
-	web.Fail(w, r, failure, func(status int) {
-		if status == http.StatusNotFound {
-			s.deps.Error(w, r, status, failure.Error())
-			return
-		}
-		view := filesView{Hash: hash, Files: []FileView{}, Error: failure.Error()}
-		s.dlFragmentOut(w, r, backendStatus(status), "_media_files.gohtml", view, nil)
-	})
-}
-
-func (s *service) dlFiles(w http.ResponseWriter, r *http.Request, hash string, toast *tpl.Toast) {
-	read, err := s.app.TorrentFiles(r.Context(), mediaapp.TorrentFilesInput{Hash: hash})
-	if err != nil {
-		s.dlFilesError(w, r, hash, err)
-		return
-	}
-	views := make([]FileView, len(read.Data.Files))
-	for i, f := range read.Data.Files {
-		views[i] = fileView(f)
-	}
-	s.dlFragmentOut(w, r, http.StatusOK, "_media_files.gohtml", filesView{Hash: hash, TorrentName: read.Data.Torrent.Name, Files: views}, toast)
-}
-
-func (s *service) dlFilesGet(w http.ResponseWriter, r *http.Request) {
-	s.dlFiles(w, r, web.PathParam(r, "hash"), nil)
-}
-
-func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
-	hash := web.PathParam(r, "hash")
-	form := web.FormValues(r)
-	var errs []web.FieldError
-	var index int64
-	if raw, found := web.Value(form, "index"); !found || raw == "" {
-		errs = append(errs, web.Missing("body", "index"))
-	} else if n, ok := laxInt64(raw); ok {
-		index = n
-	} else {
-		errs = append(errs, web.BadInt("body", "index", raw))
-	}
-	var wanted int64
-	if raw, found := web.Value(form, "wanted"); !found || raw == "" {
-		errs = append(errs, web.Missing("body", "wanted"))
-	} else if n, ok := laxInt64(raw); ok {
-		wanted = n
-	} else {
-		errs = append(errs, web.BadInt("body", "wanted", raw))
-	}
-	if len(errs) > 0 {
-		web.Unprocessable(w, errs...)
-		return
-	}
-	if _, err := s.app.SelectFiles(r.Context(), mediaapp.SelectFilesInput{Hash: hash, Index: index, Wanted: wanted != 0}); err != nil {
-		s.dlFilesError(w, r, hash, err)
-		return
-	}
-	s.dlFiles(w, r, hash, &tpl.Toast{Category: "success", Title: "Selection changed"})
 }
 
 func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {

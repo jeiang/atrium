@@ -34,13 +34,13 @@ func sweepJob(ctx context.Context, svc *mediaapp.Service) (any, error) {
 	return nil, nil
 }
 
-func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, shutdown scheduler.ShutdownPolicy, run mediacmd.Job) scheduler.Definition {
+func mediaJob(deps jobworker.Dependencies, torrents contract.Provider, name, prompt, schedule, setting string, timeout time.Duration, resource string, shutdown scheduler.ShutdownPolicy, run mediacmd.Job) scheduler.Definition {
 	return scheduler.Definition{
 		Module: unit.Media, Key: unit.Media + "/" + name, Name: name, Kind: scheduler.JobBuiltin, Prompt: prompt,
 		Schedule: schedule, CarriedSetting: setting, Persistent: true, Timeout: timeout, Spend: scheduler.ModelFree,
 		Shutdown: shutdown, Resources: []string{resource}, Needs: []string{unit.Media},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-			svc, err := openService(ctx, e.Service.DB, e.Service.Env, e.Service.Cfg, e.Now)
+			svc, err := openService(ctx, e.Service.DB, e.Service.Env, e.Service.Cfg, e.Now, torrents)
 			if err == nil {
 				_, err = run(ctx, svc)
 			}
@@ -52,11 +52,11 @@ func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting strin
 	}
 }
 
-func mediaJobs(deps jobworker.Dependencies) []scheduler.Definition {
+func mediaJobs(deps jobworker.Dependencies, torrents contract.Provider) []scheduler.Definition {
 	return []scheduler.Definition{
-		mediaJob(deps, media.JobChannels, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).",
+		mediaJob(deps, torrents, media.JobChannels, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).",
 			"*/30 * * * *", media.KeyScheduleChannels, 15*time.Minute, "media-control", scheduler.ShutdownDrain, mediacmd.Poll),
-		mediaJob(deps, media.JobSweep, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).",
+		mediaJob(deps, torrents, media.JobSweep, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).",
 			"*/10 * * * *", media.KeyScheduleSweep, 15*time.Minute, "media-control", scheduler.ShutdownDrain, sweepJob),
 	}
 }

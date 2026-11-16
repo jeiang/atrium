@@ -1,4 +1,4 @@
-package mediamodule
+package torrentsmodule
 
 import (
 	"encoding/base64"
@@ -6,12 +6,12 @@ import (
 	"mime/multipart"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/media"
-	mediaapp "github.com/jeiang/atrium/internal/media/application"
+	"github.com/jeiang/atrium/internal/apps/torrents"
+	torrentsapp "github.com/jeiang/atrium/internal/apps/torrents/application"
 )
 
-func mediaAddShape() application.APIShape {
-	shape := mediaShape[MediaAdded]()
+func addShape() application.APIShape {
+	shape := shape[MediaAdded]("media")
 	shape.Body = application.BodyMultipart
 	shape.AllowJSON = true
 	shape.BodyLimit = 2 << 20
@@ -35,7 +35,7 @@ func (in *MediaAddInput) DecodeMultipart(reader *multipart.Reader) error {
 			return &application.Error{Code: application.Invalid, Message: "Give one magnet or torrent file."}
 		}
 		seen[name] = true
-		limit := media.TuningMediaTorrentUploadBytes / 4 * 3
+		limit := torrents.TuningMediaTorrentUploadBytes / 4 * 3
 		if name == "magnet" {
 			limit = 1 << 20
 		}
@@ -55,7 +55,7 @@ func (in *MediaAddInput) DecodeMultipart(reader *multipart.Reader) error {
 			if part.FileName() == "" {
 				return &application.Error{Code: application.Invalid, Message: "torrent must be a file."}
 			}
-			in.Torrent = &mediaapp.Torrent{Name: part.FileName(), Encoded: base64.StdEncoding.EncodeToString(data)}
+			in.Torrent = &torrentsapp.Torrent{Name: part.FileName(), Encoded: base64.StdEncoding.EncodeToString(data)}
 		}
 	}
 }

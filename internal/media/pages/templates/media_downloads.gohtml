@@ -5,7 +5,7 @@
   <a class="btn" data-size="sm" data-variant="outline" href="/apps/media/add">{{icon "plus"}}Add torrent</a>
 </div>
 
-{{template "media_torrents" .Data}}
+<div id="torrents" hx-get="/apps/media/torrents" hx-trigger="load" hx-swap="outerHTML"></div>
 <dialog class="dialog" aria-label="Torrent files">
   <div id="torrent-files" class="w-full sm:max-w-2xl"></div>
 </dialog>

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media/agentclient"
 	"github.com/jeiang/atrium/internal/mediaagent/protocol"
@@ -18,6 +19,11 @@ import (
 const (
 	Skipped    = "(skipped)"
 	importPref = Import + "/"
+
+	TagMedia    = contract.TagLegacy
+	TagFiled    = "filed"
+	TagIgnored  = "ignored"
+	TagSelected = "selected"
 )
 
 type PlanError string
@@ -103,12 +109,12 @@ func agentText(err error) string {
 	return "the media agent is unavailable"
 }
 
-func (t Tuning) Items(ctx context.Context, qb *Qbit, agent *agentclient.Client, prefix string) ([]Item, string, error) {
+func (t Tuning) Items(ctx context.Context, in contract.Intake, agent *agentclient.Client, prefix string) ([]Item, string, error) {
 	found := []Item{}
 	var problems []string
-	torrents, err := qb.Completed(ctx)
+	torrents, err := in.List(ctx, contract.Filter{Completed: true})
 	if err != nil {
-		if !IsQbit(err) {
+		if !contract.IsQbit(err) {
 			return nil, "", err
 		}
 		torrents, problems = nil, append(problems, err.Error())
@@ -145,8 +151,8 @@ func (t Tuning) Items(ctx context.Context, qb *Qbit, agent *agentclient.Client, 
 	return found, strings.Join(problems, "; "), nil
 }
 
-func (t Tuning) Find(ctx context.Context, qb *Qbit, agent *agentclient.Client, prefix, itemID string) (Item, error) {
-	found, errText, err := t.Items(ctx, qb, agent, prefix)
+func (t Tuning) Find(ctx context.Context, in contract.Intake, agent *agentclient.Client, prefix, itemID string) (Item, error) {
+	found, errText, err := t.Items(ctx, in, agent, prefix)
 	if err != nil {
 		return Item{}, err
 	}
@@ -342,14 +348,15 @@ func (t Tuning) Edited(item Item, shows []string, form map[string]string) View {
 	return view
 }
 
-func Ignore(ctx context.Context, store *ledger.Store, set Settings, item Item) error {
+func Ignore(ctx context.Context, set Settings, item Item) error {
 	if !item.Torrent {
 		return PlanError("Only torrents can be ignored; delete the import entry instead.")
 	}
-	if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagFiled, false); err != nil {
+	scope := contract.Scope{Actor: contract.Operator}
+	if err := set.Intake.Mark(ctx, scope, item.ID, TagMedia, TagFiled, false); err != nil {
 		return err
 	}
-	if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagIgnored, true); err != nil {
+	if err := set.Intake.Mark(ctx, scope, item.ID, TagMedia, TagIgnored, true); err != nil {
 		return &PartialError{Cause: err}
 	}
 	return nil
@@ -360,27 +367,31 @@ type SweepResult struct {
 	Errors  []string
 }
 
-func Sweep(ctx context.Context, store *ledger.Store, set Settings) (SweepResult, error) {
+func soft(err error) bool {
+	var conflict *ledger.Conflict
+	var refused *contract.Refused
+	return contract.IsQbit(err) || errors.As(err, &conflict) || errors.As(err, &refused)
+}
+
+func Sweep(ctx context.Context, set Settings) (SweepResult, error) {
 	out := SweepResult{Removed: []string{}, Errors: []string{}}
-	qb, err := set.Qbit()
-	if err != nil {
+	if err := set.Intake.Ready(ctx); err != nil {
 		return out, err
 	}
-	torrents, err := qb.Completed(ctx)
+	torrents, err := set.Intake.List(ctx, contract.Filter{Completed: true, Label: TagMedia})
 	if err != nil {
-		if !IsQbit(err) {
+		if !contract.IsQbit(err) {
 			return out, err
 		}
 		out.Errors = append(out.Errors, err.Error())
 		return out, nil
 	}
 	for _, t := range torrents {
-		if !t.HasTag(TagMedia) || !t.HasTag(TagFiled) || t.State != StoppedUP {
+		if !t.HasTag(TagMedia) || !t.HasTag(TagFiled) || t.State != contract.StoppedUP {
 			continue
 		}
-		if err := set.Delete(ctx, store, set, Scope{}, t.Hash, true); err != nil {
-			var conflict *ledger.Conflict
-			if !IsQbit(err) && !errors.As(err, &conflict) {
+		if err := set.Intake.Control(ctx, contract.Control{Scope: contract.Scope{Actor: contract.Job}, Hash: t.Hash, Label: TagMedia, Action: contract.Remove, DeleteFiles: true}); err != nil {
+			if !soft(err) {
 				return out, err
 			}
 			out.Errors = append(out.Errors, t.Name+": "+err.Error())
@@ -394,7 +405,7 @@ func Sweep(ctx context.Context, store *ledger.Store, set Settings) (SweepResult,
 	return out, nil
 }
 
-func (t Tuning) wanted(f TorrentFile) bool {
+func (t Tuning) wanted(f contract.TorrentFile) bool {
 	size := int64(-1)
 	if f.Size != nil {
 		size = *f.Size
@@ -402,16 +413,13 @@ func (t Tuning) wanted(f TorrentFile) bool {
 	return t.IsVideo(f.Name, size) || t.IsSubtitle(path.Base(f.Name))
 }
 
-func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settings, scope Scope, torrents []Torrent) ([]string, error) {
+func (t Tuning) SelectFiles(ctx context.Context, set Settings, scope contract.Scope, torrents []contract.Torrent) ([]string, error) {
 	done := []string{}
-	qb, err := set.Qbit()
-	if err != nil {
-		return done, err
-	}
 	if torrents == nil {
-		torrents, err = qb.Torrents(ctx, "", TagMedia, "")
+		var err error
+		torrents, err = set.Intake.List(ctx, contract.Filter{Label: TagMedia})
 		if err != nil {
-			if IsQbit(err) {
+			if contract.IsQbit(err) {
 				return done, nil
 			}
 			return done, err
@@ -421,10 +429,9 @@ func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settin
 		if !torrent.HasTag(TagMedia) || torrent.HasTag(TagSelected) {
 			continue
 		}
-		selected, err := t.selectOne(ctx, store, set, scope, qb, torrent)
+		selected, err := t.selectOne(ctx, set, scope, torrent)
 		if err != nil {
-			var conflict *ledger.Conflict
-			if !IsQbit(err) && !errors.As(err, &conflict) {
+			if !soft(err) {
 				return done, err
 			}
 			log.Warn(fmt.Sprintf("select %s: %v", torrent.Name, err))
@@ -437,37 +444,37 @@ func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settin
 	return done, nil
 }
 
-func (t Tuning) selectOne(ctx context.Context, store *ledger.Store, set Settings, scope Scope, qb *Qbit, torrent Torrent) (bool, error) {
-	files, err := qb.Files(ctx, torrent.Hash)
+func (t Tuning) selectOne(ctx context.Context, set Settings, scope contract.Scope, torrent contract.Torrent) (bool, error) {
+	files, err := set.Intake.Files(ctx, torrent.Hash)
 	if err != nil || len(files) == 0 {
 		return false, err
 	}
-	if slices.ContainsFunc(files, func(f TorrentFile) bool { return t.wanted(f) }) {
+	if slices.ContainsFunc(files, func(f contract.TorrentFile) bool { return t.wanted(f) }) {
 		var keep, skip []int
 		for _, f := range files {
 			switch {
-			case t.wanted(f) && f.Priority == PrioritySkip:
+			case t.wanted(f) && f.Priority == contract.PrioritySkip:
 				keep = append(keep, f.Index)
-			case !t.wanted(f) && f.Priority != PrioritySkip:
+			case !t.wanted(f) && f.Priority != contract.PrioritySkip:
 				skip = append(skip, f.Index)
 			}
 		}
 		if len(keep) > 0 {
-			if err := t.SetPriority(ctx, store, set, scope, torrent.Hash, keep, PriorityNormal); err != nil {
+			if err := set.Intake.SetWanted(ctx, scope, torrent.Hash, TagMedia, keep, true); err != nil {
 				return false, err
 			}
 		}
 		if len(skip) > 0 {
-			if err := t.SetPriority(ctx, store, set, scope, torrent.Hash, skip, PrioritySkip); err != nil {
+			if err := set.Intake.SetWanted(ctx, scope, torrent.Hash, TagMedia, skip, false); err != nil {
 				return false, err
 			}
 		}
 	}
-	if err := t.Tag(ctx, store, set, scope, torrent.Hash, TagSelected, true); err != nil {
+	if err := set.Intake.Mark(ctx, scope, torrent.Hash, TagMedia, TagSelected, true); err != nil {
 		return false, err
 	}
-	if torrent.State == StoppedDL || torrent.State == "pausedDL" {
-		if err := t.Start(ctx, store, set, scope, torrent.Hash); err != nil {
+	if torrent.State == contract.StoppedDL || torrent.State == "pausedDL" {
+		if err := set.Intake.Control(ctx, contract.Control{Scope: scope, Hash: torrent.Hash, Label: TagMedia, Action: contract.Resume}); err != nil {
 			return false, err
 		}
 	}

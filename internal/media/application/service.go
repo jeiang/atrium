@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -24,6 +25,7 @@ type Deps struct {
 	CacheDir  string
 	Links     *media.Links
 	Catalogue *media.Catalogue
+	Torrents  contract.Provider
 }
 
 type Service struct {
@@ -41,12 +43,17 @@ func New(d Deps) *Service {
 	return &Service{d: d, state: state.New(d.DB)}
 }
 
-func ForTool(tc *tool.Context) *Service {
-	return New(Deps{DB: tc.DB, Env: tc.Env, Ledger: tc.Ledger, Now: tc.Now})
+func ForTool(tc *tool.Context, torrents contract.Provider) *Service {
+	return New(Deps{DB: tc.DB, Env: tc.Env, Ledger: tc.Ledger, Now: tc.Now, Torrents: torrents})
 }
 
 func (s *Service) settings(ctx context.Context) (media.Settings, error) {
-	return media.Load(ctx, s.d.DB.Read, s.d.Env)
+	set, err := media.Load(ctx, s.d.DB.Read, s.d.Env)
+	if err != nil {
+		return set, err
+	}
+	set.Intake = s.d.Torrents.Intake(contract.Deps{DB: s.d.DB, Env: s.d.Env, Ledger: s.d.Ledger})
+	return set, nil
 }
 
 func (s *Service) revision(ctx context.Context, projection string, input, data any) (application.Revision, error) {
@@ -118,6 +125,7 @@ func classify(err error) error {
 	var conflict *ledger.Conflict
 	var gone media.NotFound
 	var partial *media.PartialError
+	var refused *contract.Refused
 	var down *media.LibraryUnavailable
 	switch {
 	case errors.As(err, &done):
@@ -130,7 +138,12 @@ func classify(err error) error {
 		return &application.Error{Code: application.Conflict, Message: "an earlier change to this torrent is unresolved", Cause: err}
 	case errors.As(err, &missing):
 		return &application.Error{Code: application.NotConfigured, Message: err.Error(), Cause: err}
-	case media.IsQbit(err):
+	case errors.As(err, &refused):
+		if refused.Reason == contract.Missing {
+			return &application.Error{Code: application.NotFound, Message: "unknown torrent", Cause: err}
+		}
+		return &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}
+	case contract.IsQbit(err):
 		return &application.Error{Code: application.Unavailable, Message: err.Error(), Cause: err}
 	case errors.As(err, &gone):
 		return &application.Error{Code: application.NotFound, Message: err.Error(), Cause: err}
@@ -143,7 +156,7 @@ func classifyWrite(err error) error {
 	if errors.As(err, &partial) {
 		return classify(err)
 	}
-	if err != nil && media.IsQbit(err) && !media.QbitDefinite(err) {
+	if err != nil && contract.IsQbit(err) && !contract.QbitDefinite(err) {
 		return &application.Error{Code: application.Unknown, Message: err.Error(), Cause: err}
 	}
 	return classify(err)

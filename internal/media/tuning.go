@@ -9,12 +9,10 @@ const (
 	TuningMediaChildLimit                = 500
 	TuningMediaEztvLimit                 = 100
 	TuningMediaEztvTimeoutSeconds        = 30
-	TuningMediaQbittorrentTimeoutSeconds = 15
 	TuningMediaSearchLimit               = 50
 	TuningMediaSubtitleExtensions        = ".srt,.sub,.idx,.ass,.ssa,.vtt"
 	TuningMediaTmdbSearchLimit           = 8
 	TuningMediaTmdbTimeoutSeconds        = 15
-	TuningMediaTorrentUploadBytes        = 1048576
 	TuningMediaVideoExtensions           = ".mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv"
 )
 
@@ -33,6 +31,5 @@ func DefaultTuning() Tuning {
 		ChildLimit:      TuningMediaChildLimit,
 		VideoExts:       video,
 		SubtitleExts:    subtitle,
-		TorrentUpload:   TuningMediaTorrentUploadBytes,
 	}
 }
