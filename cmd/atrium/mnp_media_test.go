@@ -263,6 +263,12 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 				t.state = "downloading"
 			}
 		}
+	case "torrents/stop":
+		for _, h := range strings.Split(form.Get("hashes"), "|") {
+			if t, ok := f.items[h]; ok {
+				t.state = "stoppedDL"
+			}
+		}
 	case "torrents/delete":
 		for _, h := range strings.Split(form.Get("hashes"), "|") {
 			if _, ok := f.items[h]; ok {
@@ -403,12 +409,12 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 
 	magnet := "magnet:?xt=urn:btih:" + fresh + "&dn=Lanterns.S01E09"
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK)
-	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != media.TagMedia {
+	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != "atrium,"+media.TagMedia {
 		t.Fatalf("media add sent %v", got)
 	}
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {"magnet:?xt=urn:btih:" + strings.Repeat("e", 40)}, "mode": {"plain"}}, http.StatusOK)
-	if got := qb.lastAdd(); got.Get("tags") != "" {
-		t.Fatalf("plain add carried tags %q", got.Get("tags"))
+	if got := qb.lastAdd(); got.Get("tags") != "atrium" {
+		t.Fatalf("plain add carried tags %q, want only atrium", got.Get("tags"))
 	}
 
 	form := func(action string) url.Values {

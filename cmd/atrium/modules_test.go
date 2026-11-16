@@ -52,6 +52,7 @@ var moduleCases = []moduleCase{
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
 	{module: unit.Media, tool: "media_channels", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
+	{module: unit.Torrents, tool: "downloads", method: "GET", path: "/apps/media/add", status: http.StatusOK},
 	{module: unit.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
 		command: []string{"agent", "run", "--text", "hello", "--kind", "chat"}, output: func(stdout, _ string, code int) bool {
 			return code == cli.ExitOK && strings.HasPrefix(stdout, "{")

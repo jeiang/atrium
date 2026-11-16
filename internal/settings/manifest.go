@@ -167,6 +167,7 @@ var manifest = []Entry{
 	{Module: "core", Key: "ops_pprof", Class: ClassHost, Action: ActionDropHost, Target: "host.core.ops_pprof", Default: "false", Type: Bool, Choices: nil, Cutover: false},
 	{Module: "core", Key: "otel_traces_endpoint", Class: ClassHost, Action: ActionDropHost, Target: "host.core.otel_traces_endpoint", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "core", Key: "public_url", Class: ClassHost, Action: ActionDropHost, Target: "host.core.public_url", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "core", Key: "torrents_enabled", Class: ClassOperator, Action: ActionCarry, Target: "settings.torrents_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
 	{Module: "core", Key: "tz", Class: ClassOperator, Action: ActionCarry, Target: "settings.tz", Default: "America/Port_of_Spain", Type: String, Choices: nil, Cutover: false},
 	{Module: "db", Key: "key", Class: ClassHost, Action: ActionDropHost, Target: "host.db.key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true},
 	{Module: "export", Key: "export_obsidian_dir", Class: ClassHost, Action: ActionDropHost, Target: "host.export.export_obsidian_dir", Default: "", Type: String, Choices: nil, Cutover: false},
