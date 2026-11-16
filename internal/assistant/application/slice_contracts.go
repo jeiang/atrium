@@ -6,7 +6,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/loop"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
@@ -33,10 +32,6 @@ func (s *Service) RunDict(ctx context.Context, runID int64) (map[string]any, err
 	return service.RunDict(ctx, s.db.Read, runID)
 }
 
-const EffortMedium = pricing.Medium
-
-var EffortChoices = pricing.Efforts
-
 const (
 	WeatherForecastDays = weather.TuningWeatherForecastDays
 	WeatherHourlyHours  = weather.TuningWeatherHourlyHours
@@ -46,11 +41,7 @@ const LoopResearch = loop.Research
 
 const SubagentContextIDsLimit = assistant.TuningAgentSubagentContextIDs
 
-type EnabledSubagent = subagents.Agent
-
-func EnabledSubagents(ctx context.Context, q db.Querier) ([]EnabledSubagent, error) {
-	return subagents.Enabled(ctx, q)
-}
+var SubagentRoles = subagents.Roles
 
 type ProposalDefinition = proposals.Definition
 

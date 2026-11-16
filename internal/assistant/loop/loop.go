@@ -54,10 +54,11 @@ type LeaseLost string
 func (e LeaseLost) Error() string { return string(e) }
 
 type Runner struct {
-	Registry *registry.Registry
-	Source   registry.Source
-	Ledger   *ledger.Store
-	Profile  func(ctx context.Context, q db.Querier, projectID int64) (string, error)
+	Registry     *registry.Registry
+	Source       registry.Source
+	Ledger       *ledger.Store
+	Profile      func(ctx context.Context, q db.Querier, projectID int64) (string, error)
+	Instructions func(ctx context.Context, q db.Querier, projectID int64) (string, error)
 }
 
 func (r *Runner) currentRegistry() (*registry.Registry, error) {

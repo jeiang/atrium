@@ -77,13 +77,13 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 	if got := apiData(t, s.do(http.MethodPut, "/api/v1/settings/secrets/"+secrets.ActionLinkKey, token, map[string]any{"value": secret}), http.StatusOK); got["status"] != "set" {
 		t.Fatalf("secret set: %v", got)
 	}
-	project := s.do(http.MethodPost, "/api/v1/projects", token, map[string]any{"name": "Library", "instructions": "", "effort": "high", "context_limit": 200000})
+	project := s.do(http.MethodPost, "/api/v1/knowledge/spaces", token, map[string]any{"name": "Library", "instructions": "", "effort": "high", "context_limit": 200000})
 	if project.status != http.StatusCreated {
 		t.Fatalf("create project: %d %s", project.status, project.body)
 	}
 	for _, name := range []string{"one.txt", "two.txt", "three.txt"} {
 		body, media := uploadBody(t, nil, name, "notes for "+name)
-		if up := s.do(http.MethodPost, projectPath(number(t, project.json["id"]), "/files"), token, body, "Content-Type", media); up.status != http.StatusCreated {
+		if up := s.do(http.MethodPost, spacePath(number(t, project.json["id"]), "/files"), token, body, "Content-Type", media); up.status != http.StatusCreated {
 			t.Fatalf("upload %s: %d %s", name, up.status, up.body)
 		}
 	}

@@ -132,13 +132,18 @@ func privateClause(alias string, project int64) (string, []any) {
 	return "NOT ((" + alias + ".private = 1 OR COALESCE(p.private, 0) = 1) AND (" + alias + ".project_id IS NULL OR " + alias + ".project_id != ?))", []any{project}
 }
 
-func liveWhere(alias string, project int64, now float64, scope string) (string, []any) {
+func liveBase(alias string, now float64, scope string) (string, []any) {
 	where := alias + ".retracted_at IS NULL AND (" + alias + ".expires_at IS NULL OR " + alias + ".expires_at > ?)"
 	args := []any{now}
 	if scope != "" {
 		where += " AND " + alias + ".scope = ?"
 		args = append(args, scope)
 	}
+	return where, args
+}
+
+func liveWhere(alias string, project int64, now float64, scope string) (string, []any) {
+	where, args := liveBase(alias, now, scope)
 	clause, pargs := privateClause(alias, project)
 	return where + " AND " + clause, append(args, pargs...)
 }
@@ -195,11 +200,13 @@ func MarksOf(records []Record) tool.Marks {
 }
 
 type ListFilter struct {
-	Query string
-	Scope string
-	State string
-	Limit int
-	After *ListKey
+	Query  string
+	Titles bool
+	Scope  string
+	Kind   string
+	State  string
+	Limit  int
+	After  *ListKey
 }
 
 type ListKey struct {
@@ -210,16 +217,26 @@ type ListKey struct {
 func List(ctx context.Context, q db.Querier, f ListFilter) ([]Record, error) {
 	where := "1 = 1"
 	var args []any
-	if f.Query != "" {
+	switch {
+	case f.Query != "" && f.Titles:
+		where += " AND (r.title LIKE ? OR r.aliases LIKE ?)"
+		like := "%" + f.Query + "%"
+		args = append(args, like, like)
+	case f.Query != "":
 		where += " AND (r.title LIKE ? OR r.body LIKE ? OR r.aliases LIKE ?)"
 		like := "%" + f.Query + "%"
 		args = append(args, like, like, like)
+	}
+	if f.Kind != "" {
+		where += " AND " + kindWhere(f.Kind)
 	}
 	if f.Scope != "" {
 		where += " AND r.scope = ?"
 		args = append(args, f.Scope)
 	}
 	switch f.State {
+	case "live":
+		where += " AND r.retracted_at IS NULL"
 	case "unconfirmed":
 		where += " AND r.confirmed_at IS NULL AND r.retracted_at IS NULL"
 	case "pinned":
@@ -255,10 +272,12 @@ func SameRun(ctx context.Context, q db.Querier, runID, exclude int64) ([]Record,
 }
 
 type WriteRow struct {
-	ID       int64
-	TS       float64
-	Tool     string
-	UndoneAt *float64
+	ID           int64
+	TS           float64
+	Tool         string
+	By           string
+	PreviousBody *string
+	UndoneAt     *float64
 }
 
 func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
@@ -268,9 +287,25 @@ func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
 	}
 	out := make([]WriteRow, len(found))
 	for i, w := range found {
-		out[i] = WriteRow{ID: w.ID, TS: w.TS, Tool: w.Tool, UndoneAt: w.UndoneAt}
+		out[i] = WriteRow{ID: w.ID, TS: w.TS, Tool: w.Tool, By: author(w.Origin), UndoneAt: w.UndoneAt}
+		var before struct {
+			Body *string `json:"body"`
+		}
+		if len(w.Before) > 0 && json.Unmarshal(w.Before, &before) == nil {
+			out[i].PreviousBody = before.Body
+		}
 	}
 	return out, nil
+}
+
+func author(origin string) string {
+	switch origin {
+	case "local":
+		return WriterOperator
+	case "agent":
+		return "assistant"
+	}
+	return origin
 }
 
 type ExportFilter struct {

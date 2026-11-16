@@ -57,6 +57,7 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 				Name string `json:"name"`
 				In   string `json:"in"`
 			} `json:"parameters"`
+			Responses map[string]json.RawMessage `json:"responses"`
 		} `json:"paths"`
 		Security   []map[string][]string `json:"security"`
 		Components struct {
@@ -99,12 +100,14 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 				}
 				seen[key] = true
 			}
+			if seen["query limit"] && op.Responses["422"] == nil {
+				t.Errorf("%s %s takes a limit but does not document 422", method, path)
+			}
 		}
 	}
 	for schema, field := range map[string]string{
 		"SchedulePatch":   "schedule",
 		"ScheduleEnabled": "enabled",
-		"SubagentEnabled": "enabled",
 	} {
 		s := doc.Components.Schemas[schema]
 		if !slices.Contains(s.Required, field) {
@@ -166,7 +169,7 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 			settings = true
 		}
 	}
-	if len(reach.Areas) != 21 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
+	if len(reach.Areas) != 20 || !settings || reach.TotalBound < 1 || reach.TotalBound > reach.TotalRequired {
 		t.Fatalf("reach.json: %s", raw)
 	}
 

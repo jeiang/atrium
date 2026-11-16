@@ -98,7 +98,7 @@ func TestMigrationTwoDropsUnreadTablesAndKeepsCarriedRows(t *testing.T) {
 	if n := count(d, "SELECT COUNT(*) FROM attention_snoozes WHERE kind = 'task' AND source_id = '42'"); n != 1 {
 		t.Errorf("the carried attention snooze is gone")
 	}
-	if n := count(d, "SELECT COUNT(*) FROM kb_records"); n != records {
+	if n := count(d, "SELECT COUNT(*) FROM kb_records WHERE origin IS NOT 'atrium:instructions'"); n != records {
 		t.Errorf("%d knowledge records, want %d", n, records)
 	}
 	if n := count(d, "SELECT COUNT(*) FROM pragma_foreign_key_check"); n != 0 {

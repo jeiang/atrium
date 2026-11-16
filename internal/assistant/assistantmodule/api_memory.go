@@ -3,11 +3,9 @@ package assistantmodule
 import (
 	"context"
 
-	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/memory"
-	"github.com/jeiang/atrium/internal/web"
 )
 
 type apiMemoryThread struct {
@@ -53,28 +51,6 @@ type apiMemoryWork struct {
 
 type apiMemoryBackfill struct {
 	ThreadID *int64 `json:"thread_id"`
-}
-
-type apiSubagentList struct {
-	Limit  api.Limit  `query:"limit" json:"-"`
-	Cursor api.Cursor `query:"cursor" json:"-"`
-}
-
-type apiSubagentName struct {
-	Name string `path:"name" json:"-"`
-}
-
-type apiSubagentSet struct {
-	Name        string   `path:"name" json:"-"`
-	Description *string  `json:"description"`
-	Prompt      *string  `json:"prompt"`
-	Effort      *string  `json:"effort"`
-	Tools       []string `json:"tools,omitempty"`
-}
-
-type apiSubagentEnabled struct {
-	Name    string `path:"name" json:"-"`
-	Enabled *bool  `json:"enabled" api:"required"`
 }
 
 func memoryTreeOut(tree asstapp.MemoryTree) apiMemoryTree {
@@ -141,42 +117,6 @@ func memoryAPIBindings(p *apiPages) []application.Binding {
 		apiQuery(p, asstapp.DescribeUsage(), application.APIShape{Area: "usage"}, "GET /usage",
 			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.Usage], error) {
 				return svc.Usage(ctx, asstapp.UsageInput{})
-			}),
-	}
-}
-
-func subagentAPIBindings(p *apiPages) []application.Binding {
-	settings := func(codes ...application.Code) application.APIShape {
-		return application.APIShape{Area: "settings", Errors: codes}
-	}
-	remove := settings(application.NotFound, application.Refused)
-	remove.Success = 204
-	remove.Body = application.BodyNone
-	tooled := func(svc *asstapp.Service) *asstapp.Service { return svc.WithTools(p.tools) }
-	return []application.Binding{
-		apiQuery(p, asstapp.DescribeSubagentList(), settings(application.Invalid), "GET /subagents",
-			func(ctx context.Context, svc *asstapp.Service, in apiSubagentList) (application.Read[web.List[asstapp.Subagent]], error) {
-				read, err := svc.SubagentList(ctx, asstapp.SubagentListInput{})
-				if err != nil {
-					return application.Read[web.List[asstapp.Subagent]]{}, err
-				}
-				page, err := pageAfter(read.Data, func(a asstapp.Subagent) string { return a.Name }, in.Cursor, in.Limit)
-				return application.Read[web.List[asstapp.Subagent]]{Revision: read.Revision, Data: page}, err
-			}),
-		apiCommand(p, asstapp.DescribeSubagentSet(), settings(application.Invalid, application.Refused), "PUT /subagents/{name}",
-			func(ctx context.Context, svc *asstapp.Service, in apiSubagentSet) (application.Change[asstapp.Subagent], error) {
-				return tooled(svc).SubagentSet(ctx, asstapp.SubagentSetInput{Name: in.Name, Description: in.Description, Prompt: in.Prompt, Effort: in.Effort, Tools: in.Tools, CustomOnly: true})
-			}),
-		apiCommand(p, asstapp.DescribeSubagentEnabled(), settings(application.Invalid, application.NotFound, application.Refused), "PUT /subagents/{name}/enabled",
-			func(ctx context.Context, svc *asstapp.Service, in apiSubagentEnabled) (application.Change[asstapp.Subagent], error) {
-				if in.Enabled == nil {
-					return application.Change[asstapp.Subagent]{}, invalidField("enabled", "Say whether the subagent is enabled.")
-				}
-				return svc.SubagentEnabled(ctx, asstapp.SubagentEnabledInput{Name: in.Name, Enabled: *in.Enabled})
-			}),
-		apiCommand(p, asstapp.DescribeSubagentDelete(), remove, "DELETE /subagents/{name}",
-			func(ctx context.Context, svc *asstapp.Service, in apiSubagentName) (application.Change[asstapp.Subagent], error) {
-				return svc.SubagentDelete(ctx, asstapp.SubagentDeleteInput{Name: in.Name})
 			}),
 	}
 }
