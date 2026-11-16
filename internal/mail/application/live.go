@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/live"
 	pauseapp "github.com/jeiang/atrium/internal/pause/application"
@@ -54,14 +53,8 @@ func (s *Service) Resume(ctx context.Context, in PauseInput) (application.Change
 	return s.setPaused(ctx, false)
 }
 func (s *Service) setPaused(ctx context.Context, paused bool) (application.Change[PauseResult], error) {
-	name := ResumeName
-	if paused {
-		name = PauseName
-	}
 	changed, err := pauseapp.New(s.db, s.cfg, s.env).Set(ctx, paused, "")
-	out := PauseResult{Paused: changed.State.Paused, NoticeError: changed.NoticeError}
-	id, err := s.settle(ctx, name, "", err, state.OK)
-	return application.Change[PauseResult]{Data: out, AuditID: id}, err
+	return application.Change[PauseResult]{Data: PauseResult{Paused: changed.State.Paused, NoticeError: changed.NoticeError}, AuditID: changed.AuditID}, err
 }
 func (s *Service) LiveStatus(ctx context.Context, in struct{}) (application.Read[live.Status], error) {
 	out, err := s.liveService().Status(ctx)

@@ -905,7 +905,9 @@ claims about the running application. Operator contracts are in
   `automation.pause` and `automation.resume`, bump the `automation` event
   topic and send the pause notice, and `GET /shell` carries the same state
   as `pause`. `POST /api/v1/mail/live/pause` and `/resume` and `atrium live
-  pause|resume` are aliases of the same pause with unchanged shapes.
+  pause|resume` are aliases of the same pause with unchanged shapes: each
+  gesture records one `automation.*` audit row and, with notifications on,
+  one notice.
 - Module ownership is checked at build time. `tools/tableownership` keeps
   each table's SQL inside its owning module, and `tools/registrationownership`
   keeps every registration in the module catalog: it type-checks the
