@@ -8,20 +8,25 @@ import { startWorker } from './shared/worker';
 import App from './shell/App.svelte';
 import { firstView } from './shell/firstView';
 import { shellQuery } from './shell/frame';
-import { loadSession } from './shell/session.svelte';
+import { loadSession, session } from './shell/session.svelte';
+import faces from './tokens/faces.css?url';
 
 if (import.meta.env.MODE === 'mock') {
   const { startMocks } = await import('./mocks/browser');
   await startMocks();
 }
-void loadSession();
+const started = loadSession();
 void queryClient.prefetchQuery(shellQuery);
 if (location.pathname === import.meta.env.BASE_URL) {
   void queryClient.prefetchQuery(homeQuery);
   void queryClient.prefetchQuery(pendingQuery);
 }
-if (navigator.serviceWorker?.controller) void import('./tokens/faces.css');
-else void firstView.then(() => import('./tokens/faces.css'));
+const addFaces = (): void => {
+  if (session.view.status === 'redirecting') return;
+  document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: faces }));
+};
+if (navigator.serviceWorker?.controller) addFaces();
+else void Promise.all([started, firstView]).then(addFaces);
 const painted = Promise.withResolvers<void>();
 requestAnimationFrame(() => setTimeout(painted.resolve));
 await painted.promise;
