@@ -23,9 +23,19 @@ claims about the running application. Operator contracts are in
   schedules. Spaces in Knowledge hold a former project's instructions,
   files, threads and tasks, and can restrict their content to a private
   space. Draft and proposal cards in chat use the same send and
-  approval services as their dedicated views. The `/chat/agenda` fragment
-  answers 404 when the calendar module is off and 503 `unavailable` when the
-  calendar cannot be listed, for example when no calendar is configured.
+  approval services as their dedicated views. The agenda (`/chat/agenda`,
+  `GET /agenda`, and the `agenda` flag of `GET /home`) reads the core `day`
+  contract (`internal/day`): a unit sets `Day` on its declaration to a
+  provider of dated entries (start, end or all-day, title, location, kind,
+  an `event:`-style reference that `Refs` resolves) for a time range, and
+  `module.Compile` fails start when two units claim one entry kind. Home
+  merges the providers of enabled units by start time, then title. Calendar
+  is the only provider (kind `event`); tasks due stay attention items and
+  birthdays stay under mail. The agenda answers 404 when no provider's unit
+  is on and 503 `unavailable` when the calendar cannot be listed, for example
+  when no calendar is configured. `tools/adapterboundary` fails when a
+  package under `internal/assistant` other than the agent tools imports
+  `internal/calendar`, or when `internal/day` imports any unit.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.

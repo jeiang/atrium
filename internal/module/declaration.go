@@ -66,6 +66,7 @@ type Declaration struct {
 	EffectOrigins     []EffectOrigin
 	Channels          []string
 	Refs              []RefKind
+	Day               DayProvider
 	Attachments       []Attachment
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync
