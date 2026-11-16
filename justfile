@@ -147,6 +147,15 @@ css mode="watch":
     fi
   done
 
+web-dev:
+  {{dev}} bash -c 'cd web && { [ -d node_modules ] || npm ci; } && npm run dev'
+
+web-build:
+  {{dev}} bash -c 'cd web && { [ -d node_modules ] || npm ci; } && npm run build && npm run build:mock'
+
+web-lint:
+  {{dev}} bash -c 'cd web && { [ -d node_modules ] || npm ci; } && npm run lint && npm run check'
+
 settingsgen:
   go run -tags modernc ./tools/settingsgen docs/config
 
