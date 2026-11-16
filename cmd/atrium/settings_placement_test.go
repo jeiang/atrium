@@ -51,7 +51,7 @@ func TestRetiredSettingsAreIgnoredAndTheirConstantsHold(t *testing.T) {
 		if strings.Contains(listed.stdout, `"`+r.Key+`"`) {
 			t.Errorf("retired %s is still listed", r.Key)
 		}
-		if !strings.Contains(listed.stderr, r.Module+"."+r.Key) || !strings.Contains(listed.stderr, "ignoring a removed setting") {
+		if !strings.Contains(listed.stderr, "env "+r.EnvName()) || !strings.Contains(listed.stderr, "ignoring a removed setting") {
 			t.Errorf("the %s pin was not reported as ignored: %s", r.EnvName(), listed.stderr)
 		}
 		for _, args := range [][]string{{"get", r.Key}, {"set", r.Key, "2"}, {"unset", r.Key}} {
@@ -139,14 +139,14 @@ func TestOfferedSettingsPatchOnBothSurfacesWithIfMatch(t *testing.T) {
 		if field.Group != tc.place || !field.Editable {
 			t.Errorf("%s schema field: %+v", tc.key, field)
 		}
-		listed := apiData(t, s.do(http.MethodGet, "/api/v1/settings?group="+tc.group+"&limit=200", token, nil), http.StatusOK)
+		listed := apiData(t, s.do(http.MethodGet, "/api/v1/settings?group="+tc.group+"&limit=100", token, nil), http.StatusOK)
 		items, _ := listed["items"].([]any)
 		if !slices.ContainsFunc(items, func(item any) bool { return item.(map[string]any)["key"] == tc.key }) {
 			t.Errorf("GET /settings?group=%s does not list %s: %v", tc.group, tc.key, listed["items"])
 		}
 
 		for _, surface := range surfaces {
-			read := surface.do(http.MethodGet, surface.prefix+"/settings?group="+tc.group+"&limit=200", nil)
+			read := surface.do(http.MethodGet, surface.prefix+"/settings?group="+tc.group+"&limit=100", nil)
 			apiData(t, read, http.StatusOK)
 			rev, _ := read.json["revision"].(string)
 			before := stored(tc.key)
@@ -167,7 +167,7 @@ func TestOfferedSettingsPatchOnBothSurfacesWithIfMatch(t *testing.T) {
 			if stored(tc.key) != tc.value {
 				t.Fatalf("%s stale patch changed %s", surface.prefix, tc.key)
 			}
-			fresh := surface.do(http.MethodGet, surface.prefix+"/settings?group="+tc.group+"&limit=200", nil)
+			fresh := surface.do(http.MethodGet, surface.prefix+"/settings?group="+tc.group+"&limit=100", nil)
 			apiData(t, fresh, http.StatusOK)
 			next, _ := fresh.json["revision"].(string)
 			apiData(t, surface.do(http.MethodPatch, surface.prefix+"/settings", map[string]any{"unset": []string{tc.key}}, "If-Match", `W/"`+next+`"`), http.StatusOK)
@@ -175,19 +175,21 @@ func TestOfferedSettingsPatchOnBothSurfacesWithIfMatch(t *testing.T) {
 	}
 }
 
-func TestOfferedSettingsPinnedByTheHostFileAreReadOnly(t *testing.T) {
-	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+func TestOfferedSettingsRefuseHostAndEnvPins(t *testing.T) {
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	host, _ := f.lookup("ATRIUM_HOST_CONFIG")
-	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, host, dir, "host-pinned.toml", nil,
-		"\n[core]\ntz = \"Europe/Lisbon\"\n\n[assistant]\ndigest_notify = false\nagent_schedule_min_interval_seconds = 7200\n"))
-	s := startAPISite(t, dir, api)
-	token := s.token("owner")
-	schema := strictJSON[coremodule.SettingsSchema](t, "/settings/schema", s.do(http.MethodGet, "/api/v1/settings/schema", token, nil))
 	for _, tc := range offeredHere {
-		field := schemaField(t, schema, tc.key)
-		if field.Editable || field.Source == nil || *field.Source != "pin" || field.PinSource == "" || field.Value == nil || *field.Value != tc.value {
-			t.Errorf("pinned %s: %+v", tc.key, field)
+		def, _ := testSettings().Lookup(tc.key)
+		pinned := hostConfigFrom(t, host, dir, "host-"+tc.key+".toml", nil, "\n["+def.Module+"]\n"+tc.key+" = \""+tc.value+"\"\n")
+		setEnv(t, "ATRIUM_HOST_CONFIG", pinned)
+		if got := runApp(t, "settings", "list"); got.code == cli.ExitOK || !strings.Contains(got.stderr, def.Module+"."+tc.key+" is not host configuration") {
+			t.Errorf("host pin of %s: exit %d stderr %q", tc.key, got.code, got.stderr)
 		}
-		expectAPI(t, s.do(http.MethodPatch, "/api/v1/settings", token, map[string]any{"set": map[string]any{tc.key: tc.invalid}}), http.StatusConflict, "refused")
+		setEnv(t, "ATRIUM_HOST_CONFIG", host)
+		setEnv(t, settingEnv(tc.key), tc.value)
+		if got := runApp(t, "settings", "list"); got.code == cli.ExitOK || !strings.Contains(got.stderr, settingEnv(tc.key)) {
+			t.Errorf("env pin of %s: exit %d stderr %q", tc.key, got.code, got.stderr)
+		}
+		f.unset(settingEnv(tc.key))
 	}
 }
