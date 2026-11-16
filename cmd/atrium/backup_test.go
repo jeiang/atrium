@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -382,8 +383,8 @@ func TestBackupRestorePlaintextAndRefusesNewer(t *testing.T) {
 	if got := runProcess(t, "backup "+archive, env...); got.code != cli.ExitOK || !strings.Contains(got.stdout, "plaintext") {
 		t.Fatalf("backup exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if !bytes.Contains(archiveEntries(t, archive)["header.json"], []byte(`"schema":1`)) {
-		t.Fatalf("the v3 database should archive at schema 1: %s", archiveEntries(t, archive)["header.json"])
+	if want := `"schema":` + strconv.Itoa(db.LatestSchemaVersion()); !bytes.Contains(archiveEntries(t, archive)["header.json"], []byte(want)) {
+		t.Fatalf("the database should archive at the newest schema: %s", archiveEntries(t, archive)["header.json"])
 	}
 	if keyed := runProcess(t, "restore --verify "+archive, "ATRIUM_DB="+live, "ATRIUM_DB_KEY="+rightKeyHex); keyed.code != cli.ExitError || !strings.Contains(keyed.stderr, string(backup.ErrPlaintextKeyed)) {
 		t.Errorf("verify of a plaintext archive with a key configured exited %d, stderr %q", keyed.code, keyed.stderr)

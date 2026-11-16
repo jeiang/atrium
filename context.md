@@ -419,12 +419,28 @@ claims about the running application. Operator contracts are in
   `db rekey` on a missing database path fail without creating a file.
 - The `*.sql` files in `internal/db/schema/` are the frozen v3 baseline,
   migration 1; every later schema change is a new additive migration in
-  `internal/db/migrate.go`. A CLI e2e checks the canonical schema dump in
-  `testdata/schema/baseline.v3.txt` and the migration-1 golden database,
-  then compares the migrated fixture with a fresh keyed database. A database
-  at an unknown future schema version is refused
+  `internal/db/migrate.go`, except that a migration may drop a table no code
+  reads. A fresh database is the baseline followed by every migration.
+  Migration 2 drops the unread tables `nightly_observations`,
+  `agent_profile`, `notion_pages`, `notion_sources`, `notion_state`,
+  `notion_fts`, `wiki_pages`, every Notion vector generation
+  `embed_notion_<N>`, `action_links`, `rebalance_candidates`, `pass_runs`,
+  `pass_run_alerts` and `snoozes`, with their indexes, revision triggers
+  and FTS5 and vec0 shadow tables; their rows are discarded. `skills`,
+  `export_pages` and `attention_snoozes` stay; `skills` and
+  `effect_import_refs` are read by nothing and are candidates for a later
+  drop.
+  A CLI e2e checks the canonical schema dump in
+  `testdata/schema/baseline.v3.txt` and the migration-1 golden database
+  (`world.db`), migrates each previous version's golden database
+  (`world.db` for migration 2, `schema-v3-N.db` for migration N+1) and
+  compares it with a fresh keyed database, and requires
+  `schema-v3-N.db` for the newest version N to match a fresh database. A
+  database at an unknown future schema version is refused
   before any write. A binary downgrade does not reverse a migration and can
-  require restoring an earlier database, losing later writes.
+  require restoring an earlier database, losing later writes: a release
+  older than migration 2 refuses a database at version 2, so after that
+  upgrade recovery is rolling forward or restoring the pre-upgrade backup.
   A database with tables but no v3 marker is refused before any write. v2
   data reaches v3 only through release `v3.0.0`, the last release that
   carries the v2 importer: import there, then upgrade.
@@ -668,8 +684,8 @@ claims about the running application. Operator contracts are in
   `atrium_job_last_success_timestamp_seconds` and the one stale notice per
   episode) reads the scheduler's `job_runs`: a pass is stale when its last
   finished run failed or its last success is older than its limit, and a
-  pass with no finished run is never stale. The `pass_runs` and
-  `pass_run_alerts` tables are no longer read or written.
+  pass with no finished run is never stale. Migration 2 dropped the old
+  `pass_runs` and `pass_run_alerts` tables.
   The host owns the scrape job and the traces endpoint.
 
 ### Media agent
