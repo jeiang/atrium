@@ -103,15 +103,17 @@ func TestTaskVerbsLinksFiltersAndUndo(t *testing.T) {
 		if changed["status"] != step.to || changed["task"].(map[string]any)["status"] != step.to {
 			t.Fatalf("%s: %v", step.verb, changed)
 		}
-		if step.verb != "done" {
-			expectAPI(t, s.do(http.MethodPost, path+"/"+step.verb, s.token, nil), http.StatusConflict, "conflict")
-		}
+		expectAPI(t, s.do(http.MethodPost, path+"/"+step.verb, s.token, nil), http.StatusConflict, "conflict")
 		undo(effect)
 		if got := get(id); got["status"] != step.from {
 			t.Fatalf("undo %s left %v", step.verb, got["status"])
 		}
 	}
 	call(http.MethodPost, path+"/dismiss", nil, http.StatusOK)
+	expectAPI(t, s.do(http.MethodPost, path+"/done", s.token, nil), http.StatusConflict, "conflict")
+	if got := get(id); got["status"] != "dismissed" {
+		t.Fatalf("done on a dismissed task left %v", got["status"])
+	}
 	expectAPI(t, s.do(http.MethodPost, path+"/reopen", s.token, nil), http.StatusOK, "")
 
 	deleted, effect := call(http.MethodDelete, path, nil, http.StatusOK)

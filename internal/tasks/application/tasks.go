@@ -415,12 +415,13 @@ func (s *Service) transition(ctx context.Context, name application.Name, operati
 
 func (s *Service) Done(ctx context.Context, in IDInput) (application.Change[Changed], error) {
 	now := s.now()
-	changed, err := s.transition(ctx, DoneName, "task_done", in, func(ctx context.Context, tx *sql.Tx, _ tasks.Task) error {
+	return s.transition(ctx, DoneName, "task_done", in, func(ctx context.Context, tx *sql.Tx, previous tasks.Task) error {
+		if previous.Status != tasks.StatusOpen {
+			return wrongStatus(previous.Status, "done")
+		}
 		_, err := tasks.Done(ctx, tx, now, in.ID)
 		return err
 	})
-	changed.Data.Status = tasks.StatusDone
-	return changed, err
 }
 
 func (s *Service) Reopen(ctx context.Context, in IDInput) (application.Change[Changed], error) {

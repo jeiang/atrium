@@ -202,7 +202,7 @@ func (m Module) taskRoutes(d *web.Deps) []application.Binding {
 				return change(svc().Update(ctx, tasksapp.UpdateInput{ID: in.ID, Title: in.Title, Notes: in.Notes, Due: in.Due, RemindAt: in.RemindAt, Priority: in.Priority,
 					Link: linkInput(in.Link), Clear: in.Clear, UpdatedTS: in.UpdatedTS}))
 			}),
-		api.Command(d, tasksapp.DescribeDone(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}},
+		api.Command(d, tasksapp.DescribeDone(), transition,
 			"POST /tasks/{task_id}/done", func(ctx context.Context, in TaskIDRequest) (application.Change[TaskChanged], error) {
 				return change(svc().Done(ctx, tasksapp.IDInput{ID: in.ID}))
 			}),
