@@ -88,7 +88,7 @@ func operatorKey(ctx context.Context, key string, writing bool) (settings.Def, e
 			}
 			return def, nil
 		}
-		if entry, known := settings.ImportEntryFor(key); known {
+		if entry, known := settings.EntryFor(key); known {
 			return def, refused("%s is not an operator setting; use %s", key, settings.CutoverDestination(entry))
 		}
 		return def, classify(settings.UnknownKey(key))

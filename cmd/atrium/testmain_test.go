@@ -48,7 +48,7 @@ func settingEnv(key string) string {
 	if d, ok := testSettings().Lookup(key); ok {
 		return config.EnvName(d)
 	}
-	if entry, ok := settings.ImportEntryFor(key); ok {
+	if entry, ok := settings.EntryFor(key); ok {
 		return "ATRIUM_" + strings.ToUpper(entry.Module) + "_" + strings.ToUpper(entry.Key)
 	}
 	if d, ok := testSettings().HostDefOf(key); ok {

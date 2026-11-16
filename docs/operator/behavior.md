@@ -120,7 +120,7 @@ regular files with that pattern directly in the backup directory after success.
 The default keeps the newest five regardless of age, plus any modified within
 14 days. It is not a maximum of five archives. Other names are left alone;
 failed backup creation does not prune archives. v2 archives named
-`atrium-*.backup` are subject to the same pruning, so a retained pre-import
+`atrium-*.backup` are subject to the same pruning, so a retained v2
 archive needs another name or location. Off-host copying belongs to the host.
 
 Restore replaces database and uploaded state and requires resident users of the
@@ -158,7 +158,7 @@ operator connection with a changed endpoint and unreplaced database credential.
 An `issuer` or provider `preset` change is an endpoint identity change too.
 
 Endpoint URLs cannot carry userinfo (`user:password@`). Such a URL is refused
-at save, at Test, at v2 import, and at boot host reconciliation; the refusal
+at save, at Test, and at boot host reconciliation; the refusal
 names the connection and field, never the URL. Host fields (`host`, `*_host`
 such as `imap_host`) take a host name, IPv4 address, or IPv6 literal (bare or
 bracketed) with an optional port; `@`, `/`, `\`, whitespace, and control
@@ -188,7 +188,7 @@ approval, undo, and other mutations.
 Mail sync and routing are application workflows, not decisions to run made by
 the assistant. `mail_mode` is `shadow` by default or `live`. The operator changes
 it through `atrium settings set mail_mode shadow|live`; the change is audited.
-An import resets it to shadow. Pause/resume does not change the mode or grant
+Pause/resume does not change the mode or grant
 go-live eligibility.
 
 - Shadow records what automatic actions would do and makes no automatic
@@ -435,20 +435,9 @@ The agent exits 78 for permanent configuration errors and 1 for transient start
 failures. SIGTERM/SIGINT drain it. SIGHUP drains and exits nonzero; it is not a
 reload. The NixOS agent unit restarts failures after 5 seconds except exit 78.
 
-## Importing an existing database
+## v2 databases
 
-v2 to v3 is an explicit `atrium db import-v2 SOURCE` into a fresh destination,
-not an in-place schema upgrade. It accepts v2 schema 11 and refuses a non-empty
-destination, the same source/destination, an embedding rebuild, and in-flight
-writes. `--source-config` and `--source-env` account for source pins. The source
-is not modified.
-
-Mail and learned state, durable operator records, threads/messages/files,
-proposals and converted write evidence, active message vectors, jobs without
-leases, media state, and eligible settings/secrets carry. Usage carries only
-from the calendar month of the import; keep the v2 database for older usage
-history. Run/tool/job history, sessions, phone links, notification delivery
-history, mirrors, old memory projections, and transient health/ops data do not.
-Full-text and memory indexes rebuild, Notion re-syncs, built-in subagents are
-reseeded, and mail starts in shadow. The importer reports host requirements
-separately and records one import operation audit row.
+A database with tables but no v3 marker was created by v2 or older and is
+refused before any write. This release has no v2 importer: v2 data reaches v3
+only through release `v3.0.0`, the last release that carries it. Import the v2
+database with that release into a fresh destination, then upgrade the binary.

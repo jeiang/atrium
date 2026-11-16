@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
@@ -42,14 +41,6 @@ func test(ctx context.Context, lease *connections.Lease, caps []connections.Capa
 		})
 	}
 	return out, nil
-}
-
-func ImportV2(secret connections.ImportCredential) []string {
-	destination := `connections."service/oidc".credential_files.client_secret`
-	if strings.TrimSpace(secret.Value) == "" {
-		return []string{"oidc client secret: no source secret; set " + destination + " in the host configuration"}
-	}
-	return []string{"oidc client secret: unresolved host credential; export the source secrets row to a secure file and set " + destination}
 }
 
 type source struct{}

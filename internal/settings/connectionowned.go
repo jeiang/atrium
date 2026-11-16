@@ -56,17 +56,17 @@ var appKeyFiles = map[string]string{
 	"link_key":        "app_keys.link_key_file",
 }
 
-func Destination(entry ImportEntry) string {
-	if entry.Class == ImportTuning {
+func Destination(entry Entry) string {
+	if entry.Class == ClassTuning {
 		return "the compiled constant " + entry.Target
 	}
-	if entry.Action == ImportDrop && entry.Class == ImportOperator && entry.Module != "" {
+	if entry.Action == ActionDrop && entry.Class == ClassOperator && entry.Module != "" {
 		return entry.Target
 	}
 	if file, ok := appKeyFiles[entry.Key]; ok {
 		return "the app key file " + file
 	}
-	if entry.Action == ImportRename {
+	if entry.Action == ActionRename {
 		if destination, ok := connectionDestination(entry.Target); ok {
 			return destination
 		}
@@ -75,7 +75,7 @@ func Destination(entry ImportEntry) string {
 	if entry.Retired {
 		return entry.Target
 	}
-	if entry.Class == ImportHost {
+	if entry.Class == ClassHost {
 		if destination, ok := connectionOwnedHost[entry.Key]; ok {
 			return destination
 		}
