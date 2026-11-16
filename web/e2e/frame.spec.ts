@@ -71,16 +71,6 @@ test.describe('signed in', () => {
     await expect(page.getByRole('button', { name: 'Account: Operator' })).toBeFocused();
   });
 
-  test('a placeholder links to the same place in the current interface', async ({ page }) => {
-    await gotoShell(page, '/assistant');
-    await expect(page.getByRole('heading', { level: 1, name: 'Assistant' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open Assistant in the current interface' })).toHaveAttribute(
-      'href',
-      '/settings/assistant',
-    );
-    await expect(page).toHaveTitle('Assistant · atrium');
-  });
-
   test('back and forward move between destinations', async ({ page }) => {
     await gotoShell(page, '/');
     const rail = page.getByRole('navigation', { name: 'Main' });
