@@ -126,6 +126,7 @@ type NewJob struct {
 	PromptBy  string
 	Module    string
 	Key       string
+	Floor     bool
 }
 
 func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
@@ -150,7 +151,7 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 		return 0, Error(errUnrecognised)
 	}
 	bypass := n.CreatedBy == Operator
-	_, due, err := Validate(ctx, q, n.Schedule, n.TZ, n.Now, !bypass)
+	_, due, err := Validate(ctx, q, n.Schedule, n.TZ, n.Now, !bypass || n.Floor)
 	if err != nil {
 		return 0, err
 	}
@@ -177,6 +178,7 @@ type JobUpdate struct {
 	Enabled  *bool
 	Actor    string
 	PromptBy string
+	Floor    bool
 }
 
 func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUpdate) (*Job, error) {
@@ -229,7 +231,7 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 	needsDue := u.Schedule != nil || enabling || disabling
 	var due float64
 	if needsDue && state == StateActive {
-		_, due, err = Validate(ctx, q, schedule, job.TZ, now, !bypass)
+		_, due, err = Validate(ctx, q, schedule, job.TZ, now, !bypass || u.Floor)
 		if err != nil {
 			return nil, err
 		}

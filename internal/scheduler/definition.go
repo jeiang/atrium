@@ -44,7 +44,7 @@ type Definition struct {
 	PromptRun       bool
 	Schedule        string
 	Every           time.Duration
-	ScheduleSetting string
+	CarriedSetting  string
 	ScheduleHost    string
 	InitialDelay    time.Duration
 	Persistent      bool

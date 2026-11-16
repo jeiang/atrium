@@ -88,6 +88,17 @@ var Retired = []RetiredKey{
 	{Module: "notion", Key: "wiki_log_title"},
 	{Module: "notion", Key: "wiki_root"},
 	{Module: "core", Key: "pass_run_retention_days"},
+	{Module: "assistant", Key: "agent_schedule_nightly"},
+	{Module: "assistant", Key: "agent_schedule_weekly_review"},
+	{Module: "assistant", Key: "agent_schedule_daily_nudges"},
+	{Module: "assistant", Key: "agent_schedule_task_reminders"},
+	{Module: "assistant", Key: "agent_schedule_memory_work"},
+	{Module: "assistant", Key: "agent_schedule_knowledge_export"},
+	{Module: "assistant", Key: "agent_schedule_calendar_candidates"},
+	{Module: "assistant", Key: "agent_schedule_ops_sampler"},
+	{Module: "assistant", Key: "agent_schedule_package_tracking"},
+	{Module: "assistant", Key: "agent_schedule_media_channels"},
+	{Module: "assistant", Key: "agent_schedule_media_sweep"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

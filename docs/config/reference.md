@@ -95,18 +95,7 @@ Operator settings are stored in the database and edited in the application. They
 | `agent_effort_cron` | enum (low, medium, high, xhigh, max) | `high` | ui |
 | `agent_effort_nightly` | enum (low, medium, high, xhigh, max) | `high` | ui |
 | `agent_effort_subagent` | enum (low, medium, high, xhigh, max) | `medium` | ui |
-| `agent_schedule_calendar_candidates` | string | `0 * * * *` | advanced |
-| `agent_schedule_daily_nudges` | string | `daily 08:00` | advanced |
-| `agent_schedule_knowledge_export` | string | `daily 03:30` | advanced |
-| `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced |
-| `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced |
-| `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced |
-| `agent_schedule_nightly` | string | `daily 02:30` | advanced |
-| `agent_schedule_ops_sampler` | string | `*/15 * * * *` | advanced |
-| `agent_schedule_package_tracking` | string | `0 * * * *` | advanced |
-| `agent_schedule_task_reminders` | string | `*/5 * * * *` | advanced |
-| `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced |
 | `agent_subagent_max_cost_usd` | float | `0.25` | ui |
 | `budget_chat_share` | float | `1` | ui |
 | `budget_unattended_share` | float | `0.8` | ui |

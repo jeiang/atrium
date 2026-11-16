@@ -244,7 +244,7 @@ func (s *Service) ScheduleList(ctx context.Context, in ScheduleListInput) (appli
 				return err
 			}
 			def, declared := scheduler.Declared(s.jobs, j.Job)
-			view.Fixed = declared && def.ScheduleSetting == ""
+			view.Fixed = declared && def.CarriedSetting == ""
 			out.Jobs = append(out.Jobs, view)
 			targets = append(targets, target("schedule", j.ID))
 		}
@@ -421,15 +421,14 @@ func (s *Service) ScheduleUpdate(ctx context.Context, in ScheduleUpdateInput) (a
 				return ScheduleChanged{}, ledger.Result{}, invalid("schedule", "schedule is empty", nil)
 			}
 			schedule := strings.TrimSpace(*in.Schedule)
-			if def, known := scheduler.Declared(s.jobs, *job); known {
-				if def.ScheduleSetting == "" {
-					return ScheduleChanged{}, ledger.Result{}, refusal("the schedule of " + job.Name + " is fixed by its module")
-				}
-				if err := settings.From(ctx).Set(ctx, tx, def.ScheduleSetting, schedule); err != nil {
-					return ScheduleChanged{}, ledger.Result{}, err
-				}
+			if _, err := scheduler.Parse(schedule, job.TZ); err != nil {
+				return ScheduleChanged{}, ledger.Result{}, invalid("schedule", err.Error(), nil)
 			}
-			updated, err := scheduler.UpdateJob(ctx, tx, job.ID, now, scheduler.JobUpdate{Schedule: &schedule, Actor: scheduler.Operator})
+			def, known := scheduler.Declared(s.jobs, *job)
+			if known && def.CarriedSetting == "" {
+				return ScheduleChanged{}, ledger.Result{}, refusal("the schedule of " + job.Name + " is fixed by its module")
+			}
+			updated, err := scheduler.UpdateJob(ctx, tx, job.ID, now, scheduler.JobUpdate{Schedule: &schedule, Actor: scheduler.Operator, Floor: def.PromptRun})
 			if err != nil {
 				return ScheduleChanged{}, ledger.Result{}, err
 			}
