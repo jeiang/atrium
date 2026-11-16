@@ -197,6 +197,15 @@ func Neighborhood(ctx context.Context, q db.Querier, id int64, depth int) (*Map,
 	if i < 0 {
 		return nil, nil
 	}
+	typed, err := RecordLinks(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	pairs := map[[2]int64]bool{}
+	for _, l := range typed {
+		to, _ := RecordTarget(l.TargetID)
+		pairs[[2]int64{l.RecordID, to}], pairs[[2]int64{to, l.RecordID}] = true, true
+	}
 	depth = max(1, min(depth, MapDepthMax))
 	nodes := []named{all[i]}
 	depths := map[int64]int{id: 0}
@@ -210,7 +219,7 @@ func Neighborhood(ctx context.Context, q db.Querier, id int64, depth int) (*Map,
 			if r.rec.Retracted() || depths[r.rec.ID] > 0 || r.rec.ID == id {
 				continue
 			}
-			if !r.mentions(n) && !n.mentions(r) && !n.sameRun(r) {
+			if !r.mentions(n) && !n.mentions(r) && !n.sameRun(r) && !pairs[[2]int64{n.rec.ID, r.rec.ID}] {
 				continue
 			}
 			if len(nodes) >= MapNodeCap {
@@ -229,6 +238,14 @@ func Neighborhood(ctx context.Context, q db.Querier, id int64, depth int) (*Map,
 			}
 			if a < b && from.sameRun(to) {
 				out.Edges = append(out.Edges, MapEdge{From: from.rec.ID, To: to.rec.ID, Kind: EdgeSameRun})
+			}
+		}
+	}
+	for _, l := range typed {
+		to, _ := RecordTarget(l.TargetID)
+		if _, ok := depths[l.RecordID]; ok {
+			if _, ok := depths[to]; ok {
+				out.Edges = append(out.Edges, MapEdge{From: l.RecordID, To: to, Kind: l.Relation})
 			}
 		}
 	}

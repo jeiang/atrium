@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
@@ -234,6 +235,9 @@ func PurgeTx(ctx context.Context, tx *sql.Tx, id int64) (ledger.Result, error) {
 		return ledger.Result{}, Refused(fmt.Sprintf("%s is unknown", Cite(id)))
 	}
 	if err := embed.DeleteKB(ctx, tx, id); err != nil {
+		return ledger.Result{}, err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM record_links WHERE record_id = ? OR (target_kind = ? AND target_id = ?)", id, TargetRecord, strconv.FormatInt(id, 10)); err != nil {
 		return ledger.Result{}, err
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM kb_records WHERE id = ?", id); err != nil {

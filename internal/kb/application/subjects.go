@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -53,10 +54,16 @@ type Fact struct {
 }
 
 type Related struct {
-	ID       int64
-	Title    string
-	Kind     string
-	Relation string
+	ID         int64
+	Title      string
+	Kind       string
+	Relation   string
+	TargetKind string
+	TargetID   string
+	Direction  string
+	LinkID     int64
+	State      string
+	Address    string
 }
 
 type SubjectPage struct {
@@ -162,14 +169,32 @@ func (s *Service) Subjects(ctx context.Context, in SubjectsInput) (application.R
 func related(records []kb.Record, relation string) []Related {
 	out := make([]Related, len(records))
 	for i, r := range records {
-		out[i] = Related{ID: r.ID, Title: r.Title, Kind: kb.KindOf(r), Relation: relation}
+		id := strconv.FormatInt(r.ID, 10)
+		out[i] = Related{ID: r.ID, Title: r.Title, Kind: kb.KindOf(r), Relation: relation, TargetKind: kb.TargetRecord, TargetID: id, State: EndLive, Address: "/knowledge/" + id}
+	}
+	return out
+}
+
+func typedRelated(links []Link, direction string) []Related {
+	out := make([]Related, len(links))
+	for i, l := range links {
+		other := l.Target
+		if direction == DirectionIncoming {
+			other = l.Source
+		}
+		id, _ := strconv.ParseInt(other.ID, 10, 64)
+		if other.Kind == kb.TargetContact {
+			id = 0
+		}
+		out[i] = Related{ID: id, Title: other.Title, Kind: other.RecordKind, Relation: l.Relation, TargetKind: other.Kind, TargetID: other.ID,
+			Direction: direction, LinkID: l.ID, State: other.State, Address: other.Address}
 	}
 	return out
 }
 
 func (s *Service) Subject(ctx context.Context, in SubjectInput) (application.Read[SubjectPage], error) {
 	var out SubjectPage
-	rev, err := s.snapshot(ctx, string(SubjectName), pageScopes, in, func(q db.Querier) error {
+	rev, err := s.snapshot(ctx, string(SubjectName), linkScopes, in, func(q db.Querier) error {
 		page, err := kb.Subject(ctx, q, in.ID)
 		if err != nil {
 			return err
@@ -184,6 +209,11 @@ func (s *Service) Subject(ctx context.Context, in SubjectInput) (application.Rea
 		for i, f := range page.Facts {
 			out.Facts[i] = Fact{Record: recordOf(f), Kind: kb.KindOf(f), CreatedAt: f.CreatedAt, Retracted: f.RetractedAt}
 		}
+		typed, err := linksOf(ctx, q, in.ID)
+		if err != nil {
+			return err
+		}
+		out.Related = slices.Concat(out.Related, typedRelated(typed.Outgoing, DirectionOutgoing), typedRelated(typed.Incoming, DirectionIncoming))
 		return nil
 	})
 	if err != nil {

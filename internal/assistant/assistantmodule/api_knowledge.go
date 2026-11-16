@@ -208,10 +208,53 @@ type KnowledgeFact struct {
 }
 
 type KnowledgeRelated struct {
-	ID       int64  `json:"id"`
-	Title    string `json:"title"`
-	Kind     string `json:"kind"`
-	Relation string `json:"relation"`
+	ID         int64  `json:"id"`
+	Title      string `json:"title"`
+	Kind       string `json:"kind"`
+	Relation   string `json:"relation"`
+	TargetKind string `json:"target_kind" api:"enum=record|task|contact"`
+	TargetID   string `json:"target_id"`
+	Direction  string `json:"direction,omitempty" api:"enum=outgoing|incoming"`
+	LinkID     int64  `json:"link_id,omitempty"`
+	State      string `json:"state" api:"enum=live|retracted|done|dismissed|missing|unavailable"`
+	Address    string `json:"address"`
+}
+
+type KnowledgeLinkRequest struct {
+	ID         int64  `path:"record_id" json:"-"`
+	TargetKind string `json:"target_kind" api:"enum=record|task|contact"`
+	TargetID   string `json:"target_id"`
+	Relation   string `json:"relation" api:"enum=about|part_of|works_with|depends_on|see_also"`
+}
+
+type KnowledgeLinkIDRequest struct {
+	ID int64 `path:"link_id" json:"-"`
+}
+
+type KnowledgeLinkEnd struct {
+	Kind       string `json:"kind" api:"enum=record|task|contact"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	RecordKind string `json:"record_kind,omitempty"`
+	State      string `json:"state" api:"enum=live|retracted|done|dismissed|missing|unavailable"`
+	Address    string `json:"address"`
+}
+
+type KnowledgeLink struct {
+	ID        int64            `json:"id"`
+	Relation  string           `json:"relation"`
+	Writer    string           `json:"writer" api:"enum=operator|assistant"`
+	RunID     *int64           `json:"run_id" api:"nullable"`
+	CreatedAt time.Time        `json:"created_at"`
+	Removed   bool             `json:"removed"`
+	Source    KnowledgeLinkEnd `json:"source"`
+	Target    KnowledgeLinkEnd `json:"target"`
+}
+
+type KnowledgeLinks struct {
+	RecordID int64           `json:"record_id"`
+	Outgoing []KnowledgeLink `json:"outgoing"`
+	Incoming []KnowledgeLink `json:"incoming"`
 }
 
 type KnowledgeSubjectPage struct {
@@ -372,6 +415,23 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 				}
 				return application.Read[KnowledgeMap]{Revision: read.Revision, Data: out}, nil
 			}),
+		api.Query(d, kbapp.DescribeLinks(), application.APIShape{Area: area, Errors: missing},
+			"GET /knowledge/{record_id}/links", func(ctx context.Context, in KnowledgeIDRequest) (application.Read[KnowledgeLinks], error) {
+				read, err := svc().Links(ctx, kbapp.LinksInput{ID: in.ID})
+				if err != nil {
+					return application.Read[KnowledgeLinks]{}, err
+				}
+				out := KnowledgeLinks{RecordID: read.Data.Record, Outgoing: knowledgeLinks(read.Data.Outgoing), Incoming: knowledgeLinks(read.Data.Incoming)}
+				return application.Read[KnowledgeLinks]{Revision: read.Revision, Data: out}, nil
+			}),
+		api.Command(d, kbapp.DescribeLink(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: []application.Code{application.Invalid, application.NotFound, application.Refused}},
+			"POST /knowledge/{record_id}/links", func(ctx context.Context, in KnowledgeLinkRequest) (application.Change[KnowledgeLink], error) {
+				return knowledgeLinkChange(svc().Link(ctx, kbapp.LinkInput{RecordID: in.ID, TargetKind: in.TargetKind, TargetID: in.TargetID, Relation: in.Relation}))
+			}),
+		api.Command(d, kbapp.DescribeUnlink(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable},
+			"POST /knowledge/links/{link_id}/retract", func(ctx context.Context, in KnowledgeLinkIDRequest) (application.Change[KnowledgeLink], error) {
+				return knowledgeLinkChange(svc().Unlink(ctx, kbapp.LinkIDInput{ID: in.ID}))
+			}),
 		api.Command(d, kbapp.DescribeCreate(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: []application.Code{application.Invalid}},
 			"POST /knowledge", func(ctx context.Context, in KnowledgeFields) (application.Change[KnowledgeChanged], error) {
 				record, err := in.input()
@@ -472,9 +532,34 @@ func knowledgeSubjectPage(p kbapp.SubjectPage) KnowledgeSubjectPage {
 		}
 	}
 	for i, r := range p.Related {
-		out.Related[i] = KnowledgeRelated{ID: r.ID, Title: r.Title, Kind: r.Kind, Relation: r.Relation}
+		out.Related[i] = KnowledgeRelated{ID: r.ID, Title: r.Title, Kind: r.Kind, Relation: r.Relation, TargetKind: r.TargetKind, TargetID: r.TargetID,
+			Direction: r.Direction, LinkID: r.LinkID, State: r.State, Address: r.Address}
 	}
 	return out
+}
+
+func knowledgeLinkEnd(e kbapp.Endpoint) KnowledgeLinkEnd {
+	return KnowledgeLinkEnd{Kind: e.Kind, ID: e.ID, Title: e.Title, RecordKind: e.RecordKind, State: e.State, Address: e.Address}
+}
+
+func knowledgeLink(l kbapp.Link) KnowledgeLink {
+	return KnowledgeLink{ID: l.ID, Relation: l.Relation, Writer: l.Writer, RunID: l.RunID, CreatedAt: seconds(l.CreatedAt), Removed: l.Retracted != nil,
+		Source: knowledgeLinkEnd(l.Source), Target: knowledgeLinkEnd(l.Target)}
+}
+
+func knowledgeLinks(links []kbapp.Link) []KnowledgeLink {
+	out := make([]KnowledgeLink, len(links))
+	for i, l := range links {
+		out[i] = knowledgeLink(l)
+	}
+	return out
+}
+
+func knowledgeLinkChange(change application.Change[kbapp.Link], err error) (application.Change[KnowledgeLink], error) {
+	if err != nil {
+		return application.Change[KnowledgeLink]{}, err
+	}
+	return application.Change[KnowledgeLink]{Data: knowledgeLink(change.Data), AuditID: change.AuditID, EffectIDs: change.EffectIDs}, nil
 }
 
 func (f KnowledgeFields) input() (kbapp.RecordInput, error) {
