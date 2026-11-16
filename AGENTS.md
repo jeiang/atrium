@@ -152,6 +152,13 @@ settings the operator edits in the UI or pins from the host.
   only exception. Within v1, responses on both prefixes change only
   additively, and clients ignore unknown fields, error codes, event names and
   preview kinds.
+- The `openapi-diff` check (`just openapi-diff`) compares `docs/api/openapi.json`
+  with `docs/api/baseline/openapi.json`, the document of the last deployed tag.
+  A breaking change passes only with a line in
+  `docs/api/baseline/approved-breaking.txt`, added in the same pull request
+  and citing the operator decision or ruling that allows it. Move the baseline
+  only to a tag that is deployed, after the deploy: `just openapi-baseline <tag>`
+  (it resets the approvals).
 - Public request limits are in-process code constants owned by each server
   instance. Do not move them into settings, a shared process, or a dependency,
   and never trust a forwarded client address from an untrusted peer.
