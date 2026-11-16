@@ -547,6 +547,20 @@
       {
         inherit (self'.packages) atrium-static atrium-docs atrium-web atrium-web-mock;
 
+        inherit (pkgs.callPackage ../nix/web.nix {}) web-lint;
+
+        web-playwright-pin = pkgs.runCommand "atrium-web-playwright-pin" {nativeBuildInputs = [pkgs.jq];} ''
+          driver=${pkgs.playwright-driver.version}
+          for name in @playwright/test playwright playwright-core; do
+            pinned=$(jq -r --arg p "node_modules/$name" '.packages[$p].version // "missing"' ${../web/package-lock.json})
+            if [ "$pinned" != "$driver" ]; then
+              echo "web/package-lock.json pins $name $pinned; nixpkgs playwright-driver is $driver: pin $name to $driver" >&2
+              exit 1
+            fi
+          done
+          touch $out
+        '';
+
         statix = pkgs.runCommand "statix-check" {nativeBuildInputs = [pkgs.statix];} ''
           statix check ${self}
           touch $out
@@ -589,6 +603,9 @@
             grep -q '#define SQLITE_VERSION        "3.53.4"' ${../third_party/sqlite-vec/sqlite3.h}
             touch $out
           '';
+      }
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+        inherit (pkgs.callPackage ../nix/web.nix {}) web-e2e;
       }
       // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
         module-keyed = pkgs.callPackage ../nix/module-keyed-test.nix {inherit self;};

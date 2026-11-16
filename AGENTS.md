@@ -58,6 +58,18 @@ settings the operator edits in the UI or pins from the host.
   containment tests.
 - Direct helper, parser, query, repository, or component tests do not qualify.
   Checking source text or internal call wiring does not qualify.
+- The client in `web/` is tested only by real-browser e2e: Playwright in
+  Chromium, Firefox and WebKit against the mock build (`atrium-web-mock`,
+  MSW for the API), in `web/e2e`. No Vitest, Jest, component or story tests.
+  `just web-test` runs it; the `web-e2e` check runs it in the Nix sandbox.
+  The `@playwright/test`, `playwright` and `playwright-core` pins in
+  `web/package-lock.json` must equal nixpkgs `playwright-driver.version`
+  (the `web-playwright-pin` check), because the browsers come from Nix.
+- Every screen's browser test calls the layout checks in `web/e2e/checks.ts`
+  at the phone, tablet and desktop widths of `layouts`: `expectTouchTargets`
+  on touch layouts, `expectRoundedSurfaces`, `expectNoHorizontalScroll` and
+  `expectNoSeriousAxeFindings`. The fixture in `web/e2e/fixtures.ts` fails a
+  test on any console error or policy violation.
 - Test observable results, state transitions, refusals, and failure outcomes.
   An e2e filename or a golden fixture does not make a test e2e.
 - Add an e2e test only when its regression value justifies its maintenance.
@@ -115,14 +127,31 @@ settings the operator edits in the UI or pins from the host.
   grant URL access or widen tool permissions. Arbitrary web fetches use the
   shared allowlist and SSRF protections on every redirect.
 - Preserve proxy authentication, Host validation, CSRF, same-origin checks,
-  CSP, and loopback listener defaults. Accept forwarded identity headers only
-  from peers in the trusted proxy list.
+  CSP, and loopback listener defaults on every browser-reachable route,
+  `/web/v1` included. Accept forwarded identity headers only from peers in
+  the trusted proxy list. The CSP carries no `'unsafe-inline'` script,
+  `'unsafe-eval'`, nonce or remote source.
 - Every admitted proxy, OIDC or local identity is the one principal with full
   authority; do not add an administrator role, login links, or a remote
   emergency bypass.
 - `/api/v1` is bearer-only: never read session cookies or proxy headers
   there. Bearer tokens are persisted by hash and pass one revocation and usage
-  gate. Within v1, responses change only additively.
+  gate.
+- `/web/v1` is the browser surface: it authenticates only by the web identity
+  (proxy, OIDC session or local), never reads `Authorization` and refuses a
+  request that carries it, and sends no CORS headers. An unsafe request there
+  needs the `Atrium-Client: web` header, an `Origin` equal to Host,
+  `Sec-Fetch-Site: same-origin` when the browser sends it, and the CSRF
+  token. A JSON read needs the `Atrium-Client` header.
+- The guard picks the authenticator from the path prefix before it reads any
+  credential. Never choose it from request headers, and never add a route
+  that accepts both.
+- Both prefixes are mounted by one loop over the same typed bindings and
+  described by one generated `docs/api/openapi.json`. Do not register a route
+  under one prefix only; the session routes listed in `internal/web` are the
+  only exception. Within v1, responses on both prefixes change only
+  additively, and clients ignore unknown fields, error codes, event names and
+  preview kinds.
 - Public request limits are in-process code constants owned by each server
   instance. Do not move them into settings, a shared process, or a dependency,
   and never trust a forwarded client address from an untrusted peer.

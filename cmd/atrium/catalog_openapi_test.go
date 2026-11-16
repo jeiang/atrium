@@ -50,7 +50,10 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 		Paths map[string]map[string]struct {
 			OperationID string `json:"operationId"`
 			Area        string `json:"x-atrium-area"`
-			Parameters  []struct {
+			Servers     []struct {
+				URL string `json:"url"`
+			} `json:"servers"`
+			Parameters []struct {
 				Name string `json:"name"`
 				In   string `json:"in"`
 			} `json:"parameters"`
@@ -73,8 +76,12 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	me := doc.Paths["/me"]["get"]
-	if doc.OpenAPI != "3.1.0" || len(doc.Servers) != 1 || doc.Servers[0].URL != "/api/v1" || me.OperationID != "auth.identity" || me.Area != "settings" {
+	session := doc.Paths["/session"]["get"]
+	if doc.OpenAPI != "3.1.0" || len(doc.Servers) != 2 || doc.Servers[0].URL != "/api/v1" || doc.Servers[1].URL != "/web/v1" || me.OperationID != "auth.identity" || me.Area != "settings" || len(me.Servers) != 0 {
 		t.Fatalf("openapi.json: version %q servers %+v /me %+v", doc.OpenAPI, doc.Servers, me)
+	}
+	if logout := doc.Paths["/session/logout"]["post"]; session.OperationID != "web.session" || len(session.Servers) != 1 || session.Servers[0].URL != "/web/v1" || logout.OperationID != "web.session.logout" || len(logout.Servers) != 1 {
+		t.Fatalf("web session routes: %+v %+v", session, logout)
 	}
 	if search, threads := doc.Paths["/search"]["get"].OperationID, doc.Paths["/threads"]["get"].OperationID; search != "assistant.search" || threads != "assistant.thread.list" || search == threads {
 		t.Fatalf("search/thread operation ids collide or changed: %q / %q", search, threads)
@@ -113,7 +120,7 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 	if step := doc.Components.Schemas["Step"]; step.AdditionalProperties != nil || !strings.Contains(string(step.Properties["error"]), `"string"`) {
 		t.Errorf("response schema Step is closed or leaves error untyped: %+v", step)
 	}
-	if bearer := doc.Components.SecuritySchemes["bearer"]; bearer.Type != "http" || bearer.Scheme != "bearer" || len(doc.Security) != 1 || doc.Security[0]["bearer"] == nil {
+	if bearer, cookie := doc.Components.SecuritySchemes["bearer"], doc.Components.SecuritySchemes["webSession"]; bearer.Type != "http" || bearer.Scheme != "bearer" || cookie.Type != "apiKey" || len(doc.Security) != 2 || doc.Security[0]["bearer"] == nil || doc.Security[1]["webSession"] == nil {
 		t.Fatalf("security: %+v %+v", doc.Security, doc.Components.SecuritySchemes)
 	}
 	var envelope struct {
@@ -134,6 +141,9 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 	}
 	if events := doc.Components.Schemas["RunStreamEvent"]; len(events.AnyOf) != 2 || !strings.Contains(string(events.AnyOf[0]), "RunStreamEventToolDone") {
 		t.Errorf("RunStreamEvent is not an open union of typed events: %+v", events)
+	}
+	if events := doc.Components.Schemas["AppEvent"]; len(events.AnyOf) != 2 || !strings.Contains(string(events.AnyOf[0]), "AppEventSync") || !strings.Contains(string(events.AnyOf[0]), "AppEventChange") {
+		t.Errorf("AppEvent is not an open union of typed events: %+v", events)
 	}
 	var reach struct {
 		Areas []struct {

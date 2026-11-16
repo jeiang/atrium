@@ -23,6 +23,8 @@ func Status(code application.Code) int {
 		return http.StatusUnauthorized
 	case application.Forbidden:
 		return http.StatusForbidden
+	case application.Precondition:
+		return http.StatusPreconditionFailed
 	case application.Refused, application.Conflict, application.Budget, application.Unknown, application.Partial:
 		return http.StatusConflict
 	case application.NotConfigured, application.Unavailable:

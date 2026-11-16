@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -14,17 +13,14 @@ import (
 )
 
 const (
-	Heartbeat         = 15 * time.Second
-	Idle              = time.Second
-	WriteDeadline     = 10 * time.Second
-	StreamsPerSubject = 4
-	StreamsPerServer  = 16
+	Heartbeat     = 15 * time.Second
+	Idle          = time.Second
+	WriteDeadline = 10 * time.Second
 )
 
 var (
 	ErrExpired = errors.New("progress: stream expired")
 	ErrFuture  = errors.New("progress: cursor is beyond the stream")
-	ErrBusy    = errors.New("progress: too many streams")
 )
 
 type Stream struct {
@@ -45,35 +41,6 @@ func Open(ctx context.Context, q db.Querier, runID, after int64) (Stream, error)
 		return Stream{}, ErrExpired
 	}
 	return Stream{RunID: runID, After: after, Finished: b.TerminalSeq != nil && after >= *b.TerminalSeq}, nil
-}
-
-type limits struct {
-	sync.Mutex
-	total int
-	keys  map[string]int
-}
-
-var streamLimits = limits{keys: map[string]int{}}
-
-func Acquire(key string) (func(), error) {
-	streamLimits.Lock()
-	defer streamLimits.Unlock()
-	if streamLimits.total >= StreamsPerServer || streamLimits.keys[key] >= StreamsPerSubject {
-		return nil, ErrBusy
-	}
-	streamLimits.total++
-	streamLimits.keys[key]++
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			streamLimits.Lock()
-			defer streamLimits.Unlock()
-			streamLimits.total--
-			if streamLimits.keys[key]--; streamLimits.keys[key] == 0 {
-				delete(streamLimits.keys, key)
-			}
-		})
-	}, nil
 }
 
 func Frame(e Event) (string, error) {

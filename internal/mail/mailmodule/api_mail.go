@@ -334,6 +334,10 @@ func mailAPIRoutes(d *web.Deps) []application.Binding {
 			}
 			return svc().RulePreview(ctx, mailapp.RulePreviewInput{Rule: raw})
 		}),
+		api.Query(d, mailapp.DescribeRules(), application.APIShape{Area: area, ID: "mail.rules-vocabulary"}, "GET /mail/rules/vocabulary", func(ctx context.Context, in struct{}) (application.Read[RuleVocabulary], error) {
+			out := ruleVocabulary()
+			return application.Read[RuleVocabulary]{Revision: servedRevision("mail.rules-vocabulary", out), Data: out}, nil
+		}),
 		api.Query(d, mailapp.DescribeRulesExport(), application.APIShape{Area: area}, "GET /mail/rules/export", func(ctx context.Context, in struct{}) (application.Read[MailRulesDocument], error) {
 			r, err := svc().RulesExport(ctx, in)
 			if err != nil {

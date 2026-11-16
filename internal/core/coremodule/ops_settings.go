@@ -4,10 +4,12 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"maps"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
@@ -37,6 +39,17 @@ type SettingSet struct {
 
 type SettingChange struct {
 	Keys []string `json:"keys"`
+}
+
+type SettingsPatch struct {
+	Set     map[string]string `json:"set,omitempty"`
+	Unset   []string          `json:"unset,omitempty"`
+	IfMatch string            `header:"If-Match" json:"-"`
+}
+
+type SettingsPatched struct {
+	Keys     []string             `json:"keys"`
+	Revision application.Revision `json:"revision"`
 }
 
 type Secrets struct {
@@ -89,6 +102,67 @@ func notOffered(key string) error {
 	return &application.Error{Code: application.Refused, Message: key + " is not offered on the settings pages and is not writable here"}
 }
 
+func settingsPatch(ctx context.Context, svc *settingsapp.Service, in SettingsPatch) (application.Change[SettingsPatched], error) {
+	if len(in.Set)+len(in.Unset) == 0 {
+		return application.Change[SettingsPatched]{}, &application.Error{Code: application.Invalid, Message: "Name at least one setting to set or unset.", Fields: []application.Field{{Name: "set", Code: string(application.Invalid), Message: "Name at least one setting to set or unset."}}}
+	}
+	values := make([]settingsapp.Value, 0, len(in.Set)+len(in.Unset))
+	for _, key := range slices.Sorted(maps.Keys(in.Set)) {
+		values = append(values, settingsapp.Value{Key: key, Value: in.Set[key]})
+	}
+	for _, key := range in.Unset {
+		if _, both := in.Set[key]; both || slices.ContainsFunc(values[len(in.Set):], func(v settingsapp.Value) bool { return v.Key == key }) {
+			return application.Change[SettingsPatched]{}, &application.Error{Code: application.Invalid, Message: key + " is named more than once.", Fields: []application.Field{{Name: key, Code: string(application.Invalid), Message: key + " is named more than once."}}}
+		}
+		values = append(values, settingsapp.Value{Key: key, Unset: true})
+	}
+	sections := map[string]settingspage.Section{}
+	members := map[string][]string{}
+	var order []string
+	for _, v := range values {
+		section, ok := offered(ctx, v.Key)
+		if !ok {
+			if err := settingsapp.CheckRead(ctx, v.Key); err != nil {
+				return application.Change[SettingsPatched]{}, err
+			}
+			return application.Change[SettingsPatched]{}, notOffered(v.Key)
+		}
+		if section.Validate == nil {
+			continue
+		}
+		if _, seen := sections[section.Name]; !seen {
+			order = append(order, section.Name)
+		}
+		sections[section.Name] = section
+		members[section.Name] = append(members[section.Name], v.Key)
+	}
+	input := settingsapp.PatchInput{Values: values, IfMatch: in.IfMatch}
+	if len(order) > 0 {
+		input.Validate = func(ctx context.Context, q db.Querier, all map[string]string) error {
+			for _, name := range order {
+				part := make(map[string]string, len(members[name]))
+				for _, key := range members[name] {
+					part[key] = all[key]
+				}
+				if err := sections[name].Validate(ctx, q, part); err != nil {
+					return err
+				}
+				maps.Copy(all, part)
+			}
+			return nil
+		}
+	}
+	change, err := svc.Patch(ctx, input)
+	if e, ok := errors.AsType[*application.Error](err); ok && e.Code == application.Precondition {
+		revision, revErr := svc.Revision(ctx, nil)
+		if revErr != nil {
+			return application.Change[SettingsPatched]{}, errors.Join(err, revErr)
+		}
+		return application.Change[SettingsPatched]{}, web.WithBody(err, map[string]any{"revision": revision})
+	}
+	return application.Change[SettingsPatched]{Data: SettingsPatched{Keys: change.Data.Keys, Revision: change.Data.Revision}, AuditID: change.AuditID}, err
+}
+
 func (m Module) settingsRoutes(d *web.Deps) []application.Binding {
 	svc := func() *settingsapp.Service { return settingsapp.Server(d.DB, d.Settings, m.Guard) }
 	const area = "settings"
@@ -134,6 +208,10 @@ func (m Module) settingsRoutes(d *web.Deps) []application.Binding {
 					return application.Change[SettingChange]{}, notOffered(in.Key)
 				}
 				return valueField(changed(svc().Set(ctx, settingsapp.SetInput{Values: []settingsapp.Value{{Key: in.Key, Value: in.Value}}, Validate: section.Validate})))
+			}),
+		api.Command(d, settingsapp.DescribeSet(), application.APIShape{Area: area, ID: "settings.patch", Errors: []application.Code{application.Invalid, application.Refused, application.Precondition}},
+			"PATCH /settings", func(ctx context.Context, in SettingsPatch) (application.Change[SettingsPatched], error) {
+				return settingsPatch(ctx, svc(), in)
 			}),
 		api.Command(d, settingsapp.DescribeUnset(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable},
 			"DELETE /settings/{key}", func(ctx context.Context, in SettingKey) (application.Change[SettingChange], error) {

@@ -1073,13 +1073,13 @@ claims about the running application. Operator contracts are in
   file is moved into the database on first use. In-process token buckets, owned by each server
   instance, bound public requests: 10 sign-in requests a minute per client
   address, 120 API requests a minute per address and 60 a minute per bearer
-  token. A refusal is `429` with `Retry-After` and `no-store` and changes
+  token or web session. A refusal is `429` with `Retry-After` and `no-store` and changes
   nothing. The client address is the socket peer, unless the peer is in the
   host's `web.trusted_proxy_cidrs` list, in which case exactly one valid
   `CF-Connecting-IP` names it; other forwarded headers are ignored.
 - The Sign-in settings tab shows the OIDC connection and session settings, and issues, lists and revokes API bearer tokens.
   Issue and revoke write one `operation_audit` row each (`auth.bearer-issue`, `auth.bearer-revoke`; token id and kind only, never the secret) and, in the same transaction, the `settings_audit` row (`auth_token.issue`, `auth_token.revoke`; id, name and kind) that the Activity page lists; an invalid name or expiry answers 422.
-- `/api/v1` is a JSON API for a native client, available in every listener.
+- `/api/v1` is the JSON API for native clients, available in every listener.
   It accepts nothing but a bearer token: a locally issued `atr_` token, or,
   when `oidc_api_client_id` names the client, an RFC 9068 access token from
   the configured issuer (audience and `client_id` equal to that client, expiry
@@ -1114,7 +1114,29 @@ claims about the running application. Operator contracts are in
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
   go through the `review.*` operations in
   `internal/review/application`.
-- Every `/api/v1` route is a typed binding mounted through `internal/api`.
+- `/web/v1` is the same JSON API for the embedded web client, available in
+  every listener. It is mounted from the same typed bindings and described by
+  the same OpenAPI document. It accepts only the web identity (proxy
+  `Remote-Groups` from a trusted peer, an OIDC session, or local); a bearer
+  token grants nothing there and a request carrying `Authorization` is
+  refused with 400 `bearer_refused`. Every request except a binary content
+  read sends `Atrium-Client: web`, and `Sec-Fetch-Site`, when sent, must be
+  `same-origin`. Unsafe requests also need an `Origin` equal to Host (or,
+  without `Origin`, `Sec-Fetch-Site: same-origin`) and `X-CSRF-Token` equal to
+  the HttpOnly `atrium_csrf` cookie, whose value `GET /web/v1/session`
+  returns. Refusals are 403 `cross_origin` or `csrf_failed`; there are no CORS
+  headers. Commands, idempotency keys, ETags, cursors, body caps, content
+  types, the error envelope and limits are those of `/api/v1`, with the
+  per-token rate limit and stream limit keyed by the OIDC session (or the
+  CSRF cookie under proxy and local sign-in); requests are audited with the UI
+  source. Two routes exist only there: `GET /web/v1/session` returns
+  `auth_mode`, `identity`, `csrf_token` and `sign_out` (the logout method and
+  URL for OIDC sessions, otherwise null), and `POST /web/v1/session/logout`
+  (OIDC only) ends the session for the web client and the pages alike. Any
+  401 there carries `sign_in` (`modes`, `login_url` under OIDC, `csrf_token`);
+  sign-in itself stays `/login` and the OIDC callback.
+- Every typed binding is mounted through `internal/api` under both `/api/v1`
+  and `/web/v1` by one loop in `internal/web`.
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
   catalog (`atrium catalog openapi --output docs/api`, drift-checked by
   `--check`). Approval-only operations count as reached through
@@ -1123,16 +1145,51 @@ claims about the running application. Operator contracts are in
   `Last-Event-ID` resume, terminal `complete`/`run_error`, 30-day
   retention, `tool_done.results` with web search sources, live-only
   `tool_progress` from sub-agent tools); it sends a heartbeat every 15
-  seconds and allows 4 streams per subject and 16 per server. Static assets
-  are served from content-hashed immutable URLs.
-- The generated spec declares bearer security, leaves response schemas open
+  seconds and allows 4 streams per subject and 16 per server. The app event
+  stream `GET /events`
+  (`docs/api/app-events.md`) sends a `sync` of every visible
+  `read_revisions` topic on connect and a `change` `{topic, revision}` when
+  one moves, with no content and no replay; topics of disabled modules are
+  not sent. A committed `DB.WithTx` wakes it, and a 2-second check catches
+  other writers. It allows 2 streams per subject and 8 per server, counted
+  apart from run streams; the subject is the bearer token on `/api/v1` and
+  the web session key on `/web/v1`, and each server instance owns its
+  counts. Static assets are served from content-hashed immutable URLs.
+- Client read models (both prefixes): `GET /shell` (navigation, sections
+  and tabs, Needs you count, mail mode and pause, module states, version),
+  `GET /about` (version, VCS build when stamped, schema version, modules),
+  `GET /settings/schema` (offered settings per page with type, choices,
+  bounds, default, source, editable, secret; secret values are never sent),
+  `GET /connections/schema` (kinds and per-connection fields with secret
+  and host-owned flags, no credential values) and `GET /files` (the
+  thread and project file library, newest first, keyset cursor). `GET
+  /home` carries a `weather` card (current, today, hourly) or null when no
+  location is set or the weather connection is off; the forecast call is
+  capped at 3 seconds and a failure only drops the card.
+- The generated spec lists both prefixes as servers and declares `bearer`
+  and the `webSession` cookie scheme; the two session operations carry a
+  `/web/v1` server of their own. It leaves response schemas open
   and closes request schemas (`<Name>Input` when a type is used both ways),
   bounds response integers at 2^53-1, marks null-sent pointers nullable, keeps
   the error `code` enum open, and types run stream frames as the open union
   `RunStreamEvent`. Component names are bare Go type names; collisions fail
   generation until a name is pinned in `internal/apischema/walk.go`.
 - Draft PATCH and send accept the resource ETag through `If-Match` and still
-  compare revisions; knowledge PATCH has no `If-Match`. Opaque cursors bind
+  compare revisions; knowledge PATCH has no `If-Match`. `PATCH /settings`
+  writes `{"set": {key: value}, "unset": [key]}` in one transaction. Its
+  optional `If-Match` is the settings revision, one token per settings state
+  shared by every `GET /settings` page (the ETag). A stale tag returns 412
+  `precondition_failed` with the current `revision`; per-key and cross-field
+  (`Def.Peers`) failures, checked against the final state, return 422 with one
+  field per key; a pinned or unoffered key refuses the whole request. Success
+  returns the keys and the new revision. Operations marked
+  `x-atrium-undoable` are `review.approve` and the local-undoable or audited
+  conditional operations of modules that register ledger undoers; a command
+  response with `effect_ids` also carries `undoable`. Proposal payloads carry
+  `change`, the stored preview typed by proposal kind (`tool_call` for gated
+  tools, with the full arguments), or null for kinds outside the union.
+  `GET /mail/rules/vocabulary` serves the rule editor's fields, operators
+  and actions. Opaque cursors bind
   the operation, filters and path parameters and are at most 2,048
   characters; pages usually default to 50 items and allow at most 100.
 - Multipart bodies containing file parts share four in-process upload slots; excess uploads return 429 with `Retry-After: 1`. A multipart body counts as carrying files unless its first 1 MiB holds every part and the closing boundary with no file part; a malformed or truncated body counts as carrying files. Multipart bodies have a 30-second idle read deadline from their first byte and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.

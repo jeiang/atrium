@@ -116,6 +116,10 @@ func (r *Registry) record(ctx context.Context, q db.Querier, key string, old, ne
 }
 
 func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string) error {
+	return r.set(ctx, q, key, value, true)
+}
+
+func (r *Registry) set(ctx context.Context, q db.Querier, key, value string, peers bool) error {
 	if !audit.HasActor(ctx) {
 		return audit.ErrNoActor
 	}
@@ -126,8 +130,10 @@ func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string) err
 	if err := r.Validate(key, value); err != nil {
 		return err
 	}
-	if err := r.checkPeers(ctx, q, d, value); err != nil {
-		return err
+	if peers {
+		if err := r.checkPeers(ctx, q, d, value); err != nil {
+			return err
+		}
 	}
 	old, err := r.stored(ctx, q, d)
 	if err != nil {
@@ -140,6 +146,10 @@ func (r *Registry) Set(ctx context.Context, q db.Querier, key, value string) err
 }
 
 func (r *Registry) Unset(ctx context.Context, q db.Querier, key string) error {
+	return r.unset(ctx, q, key, true)
+}
+
+func (r *Registry) unset(ctx context.Context, q db.Querier, key string, peers bool) error {
 	if !audit.HasActor(ctx) {
 		return audit.ErrNoActor
 	}
@@ -147,7 +157,7 @@ func (r *Registry) Unset(ctx context.Context, q db.Querier, key string) error {
 	if err != nil {
 		return err
 	}
-	if d.Default != "" {
+	if peers && d.Default != "" {
 		if err := r.checkPeers(ctx, q, d, d.Default); err != nil {
 			return err
 		}
@@ -160,6 +170,72 @@ func (r *Registry) Unset(ctx context.Context, q db.Querier, key string) error {
 		return err
 	}
 	return r.record(ctx, q, key, old, nil)
+}
+
+type Change struct {
+	Key   string
+	Value string
+	Unset bool
+}
+
+type Conflicts []FieldInvalid
+
+func (e Conflicts) Error() string {
+	messages := make([]string, len(e))
+	for i, f := range e {
+		messages[i] = f.Error()
+	}
+	return strings.Join(messages, "; ")
+}
+
+func (r *Registry) SetAll(ctx context.Context, q db.Querier, changes []Change) error {
+	var conflicts Conflicts
+	field := func(key string, err error) error {
+		var invalid Invalid
+		if errors.As(err, &invalid) {
+			conflicts = append(conflicts, FieldInvalid{Key: key, Err: invalid})
+			return nil
+		}
+		return err
+	}
+	for _, c := range changes {
+		var err error
+		if c.Unset {
+			err = r.unset(ctx, q, c.Key, false)
+		} else {
+			err = r.set(ctx, q, c.Key, c.Value, false)
+		}
+		if err != nil {
+			if err := field(c.Key, err); err != nil {
+				return err
+			}
+		}
+	}
+	if len(conflicts) > 0 {
+		return conflicts
+	}
+	for _, c := range changes {
+		d, _, err := r.lookup(c.Key)
+		if err != nil {
+			return err
+		}
+		if c.Unset && d.Default == "" {
+			continue
+		}
+		found, err := r.Resolve(ctx, q, c.Key)
+		if err != nil {
+			return err
+		}
+		if err := r.checkPeers(ctx, q, d, found.Value); err != nil {
+			if err := field(c.Key, err); err != nil {
+				return err
+			}
+		}
+	}
+	if len(conflicts) > 0 {
+		return conflicts
+	}
+	return nil
 }
 
 func (r *Registry) checkPeers(ctx context.Context, q db.Querier, d Def, value string) error {

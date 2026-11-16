@@ -10,6 +10,7 @@ type Read[T any] struct {
 type Change[T any] struct {
 	Data      T       `json:"data"`
 	EffectIDs []int64 `json:"effect_ids,omitempty"`
+	Undoable  *bool   `json:"undoable,omitempty"`
 	AuditID   int64   `json:"audit_id,omitempty"`
 }
 

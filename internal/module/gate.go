@@ -89,6 +89,11 @@ func (s *Set) OfferedSetting(key string) (settingspage.Section, bool) {
 	return settingspage.Offered(groups, s.cat.Sections(), key)
 }
 
+func (s *Set) SettingsLayout() ([]settingspage.Group, settingspage.Sections, []settingspage.Module) {
+	groups, _, control := s.settingPages()
+	return groups, s.cat.Sections(), control.Modules
+}
+
 func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
 	var groups []settingspage.Group
 	var generic []settingspage.Generic

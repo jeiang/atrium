@@ -116,7 +116,7 @@ func bindMail(next http.Handler) http.Handler {
 		}
 		ctx, err := module.BindOwner(r.Context(), module.Mail)
 		if err != nil {
-			if strings.HasPrefix(r.URL.Path, web.APIPrefix+"/") {
+			if web.IsAPI(r) {
 				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
 			} else {
 				http.Error(w, err.Error(), http.StatusConflict)
