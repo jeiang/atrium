@@ -124,12 +124,19 @@
         "knowledge.restore",
         "knowledge.retract",
         "knowledge.retract-run",
+        "knowledge.space.archive",
+        "knowledge.space.create",
+        "knowledge.space.detail",
+        "knowledge.space.edit",
+        "knowledge.space.file.delete",
+        "knowledge.space.file.upload",
+        "knowledge.space.list",
         "knowledge.subject",
         "knowledge.subjects",
         "knowledge.unlink"
       ],
-      "required": 23,
-      "bound": 23
+      "required": 30,
+      "bound": 30
     },
     {
       "area": "mail",
@@ -215,20 +222,6 @@
       ],
       "required": 2,
       "bound": 2
-    },
-    {
-      "area": "projects",
-      "operations": [
-        "assistant.project-file.delete",
-        "assistant.project-file.upload",
-        "assistant.project.archive",
-        "assistant.project.create",
-        "assistant.project.detail",
-        "assistant.project.edit",
-        "assistant.project.list"
-      ],
-      "required": 7,
-      "bound": 7
     },
     {
       "area": "proposals",

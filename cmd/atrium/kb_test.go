@@ -222,7 +222,7 @@ func TestKnowledgeSearchSkipsExpiredRecords(t *testing.T) {
 	}
 }
 
-func TestPrivateProjectKnowledgeStaysInItsProject(t *testing.T) {
+func TestPrivateSpaceKnowledgeStaysInItsSpace(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

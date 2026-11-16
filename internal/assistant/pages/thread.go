@@ -84,14 +84,14 @@ func (p *pages) chatThread(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	work, err := p.assistant().Work(ctx, asstapp.ThreadInput{ID: threadID})
 	check(err)
-	list, err := p.assistant().ProjectList(ctx, asstapp.ProjectListInput{})
+	list, err := p.assistant().SpaceList(ctx, asstapp.SpaceListInput{})
 	check(err)
 	data.Work, data.Projects, data.Project = work.Data, list.Data, nil
 	if t := threadOf(data.View); t.ProjectID != nil && *t.ProjectID != 0 {
-		found, err := p.assistant().ProjectDetail(ctx, asstapp.ProjectInput{ID: *t.ProjectID})
+		found, err := p.assistant().SpaceDetail(ctx, asstapp.SpaceInput{ID: *t.ProjectID})
 		if application.Classify(err).Code != application.NotFound {
 			check(err)
-			data.Project = &found.Data.Project
+			data.Project = &found.Data.Space
 		}
 	}
 	if web.IsPartial(r) {

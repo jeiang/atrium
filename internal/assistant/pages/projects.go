@@ -23,7 +23,7 @@ type ProjectFormValues struct {
 }
 
 type ProjectFormData struct {
-	Project       *asstapp.Project  `json:"project"`
+	Project       *asstapp.Space  `json:"project"`
 	Values        ProjectFormValues `json:"values"`
 	Efforts       []string          `json:"efforts"`
 	ContextLimits []int64           `json:"context_limits"`
@@ -32,16 +32,16 @@ type ProjectFormData struct {
 
 type ProjectEditData struct {
 	Form  ProjectFormData       `json:"form"`
-	Files []asstapp.ProjectFile `json:"files"`
+	Files []asstapp.SpaceFile `json:"files"`
 }
 
-func projectValues(found asstapp.Project) ProjectFormValues {
+func projectValues(found asstapp.Space) ProjectFormValues {
 	limit := found.ContextLimit
 	return ProjectFormValues{Name: found.Name, Instructions: found.Instructions, Effort: found.Effort, ContextLimit: &limit, Private: found.Private}
 }
 
-func submittedProject(form url.Values) asstapp.ProjectFields {
-	return asstapp.ProjectFields{
+func submittedProject(form url.Values) asstapp.SpaceFields {
+	return asstapp.SpaceFields{
 		Name:         web.FormString(form, "name", ""),
 		Instructions: web.FormString(form, "instructions", ""),
 		Effort:       web.FormString(form, "effort", ""),
@@ -50,7 +50,7 @@ func submittedProject(form url.Values) asstapp.ProjectFields {
 	}
 }
 
-func submittedValues(cfg asstapp.ModelConfiguration, f asstapp.ProjectFields, fallback ProjectFormValues) ProjectFormValues {
+func submittedValues(cfg asstapp.ModelConfiguration, f asstapp.SpaceFields, fallback ProjectFormValues) ProjectFormValues {
 	effort := fallback.Effort
 	if slices.Contains(cfg.Efforts, f.Effort) {
 		effort = f.Effort
@@ -78,7 +78,7 @@ func (p *pages) configuration(r *http.Request) asstapp.ModelConfiguration {
 	return read.Data
 }
 
-func formData(cfg asstapp.ModelConfiguration, project *asstapp.Project, values ProjectFormValues, problem *string) ProjectFormData {
+func formData(cfg asstapp.ModelConfiguration, project *asstapp.Space, values ProjectFormValues, problem *string) ProjectFormData {
 	return ProjectFormData{Project: project, Values: values, Efforts: cfg.Efforts, ContextLimits: cfg.ContextLimits, Error: problem}
 }
 
@@ -87,7 +87,7 @@ func defaultValues(cfg asstapp.ModelConfiguration) ProjectFormValues {
 	return ProjectFormValues{Effort: cfg.Defaults.Effort, ContextLimit: &limit}
 }
 
-func (p *pages) projectPage(w http.ResponseWriter, r *http.Request, status int, data ProjectFormData, attached []asstapp.ProjectFile) {
+func (p *pages) projectPage(w http.ResponseWriter, r *http.Request, status int, data ProjectFormData, attached []asstapp.SpaceFile) {
 	if data.Project == nil {
 		p.render(w, r, status, "projects", "project_new.gohtml", data, nil)
 		return
@@ -100,15 +100,15 @@ func (p *pages) projectNew(w http.ResponseWriter, r *http.Request) {
 	p.projectPage(w, r, http.StatusOK, formData(cfg, nil, defaultValues(cfg), nil), nil)
 }
 
-func (p *pages) projectDetail(w http.ResponseWriter, r *http.Request) (asstapp.ProjectDetail, bool) {
+func (p *pages) projectDetail(w http.ResponseWriter, r *http.Request) (asstapp.SpaceDetail, bool) {
 	id, ok := pathID(w, r, "project_id")
 	if !ok {
-		return asstapp.ProjectDetail{}, false
+		return asstapp.SpaceDetail{}, false
 	}
-	read, err := p.assistant().ProjectDetail(r.Context(), asstapp.ProjectInput{ID: id})
+	read, err := p.assistant().SpaceDetail(r.Context(), asstapp.SpaceInput{ID: id})
 	if err != nil {
 		web.Fail(w, r, err, func(status int) { p.fail(w, r, status, application.Classify(err).Error()) })
-		return asstapp.ProjectDetail{}, false
+		return asstapp.SpaceDetail{}, false
 	}
 	return read.Data, true
 }
@@ -118,10 +118,10 @@ func (p *pages) projectEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p.projectPage(w, r, http.StatusOK, formData(p.configuration(r), &found.Project, projectValues(found.Project), nil), found.Files)
+	p.projectPage(w, r, http.StatusOK, formData(p.configuration(r), &found.Space, projectValues(found.Space), nil), found.Files)
 }
 
-func (p *pages) projectFailed(w http.ResponseWriter, r *http.Request, found *asstapp.ProjectDetail, fields asstapp.ProjectFields, err error) {
+func (p *pages) projectFailed(w http.ResponseWriter, r *http.Request, found *asstapp.SpaceDetail, fields asstapp.SpaceFields, err error) {
 	web.Fail(w, r, err, func(status int) {
 		problem := application.Classify(err).Error()
 		if status != http.StatusUnprocessableEntity {
@@ -129,9 +129,9 @@ func (p *pages) projectFailed(w http.ResponseWriter, r *http.Request, found *ass
 			return
 		}
 		cfg := p.configuration(r)
-		fallback, project, attached := defaultValues(cfg), (*asstapp.Project)(nil), []asstapp.ProjectFile(nil)
+		fallback, project, attached := defaultValues(cfg), (*asstapp.Space)(nil), []asstapp.SpaceFile(nil)
 		if found != nil {
-			fallback, project, attached = projectValues(found.Project), &found.Project, found.Files
+			fallback, project, attached = projectValues(found.Space), &found.Space, found.Files
 		}
 		data := formData(cfg, project, submittedValues(cfg, fields, fallback), &problem)
 		if web.IsPartial(r) {
@@ -144,7 +144,7 @@ func (p *pages) projectFailed(w http.ResponseWriter, r *http.Request, found *ass
 
 func (p *pages) projectCreate(w http.ResponseWriter, r *http.Request) {
 	fields := submittedProject(web.FormValues(r))
-	changed, err := p.assistant().ProjectCreate(detached(r), fields)
+	changed, err := p.assistant().SpaceCreate(detached(r), fields)
 	if err != nil {
 		p.projectFailed(w, r, nil, fields, err)
 		return
@@ -158,11 +158,11 @@ func (p *pages) projectUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fields := submittedProject(web.FormValues(r))
-	if _, err := p.assistant().ProjectEdit(detached(r), asstapp.ProjectEditInput{ID: found.Project.ID, ProjectFields: fields}); err != nil {
+	if _, err := p.assistant().SpaceEdit(detached(r), asstapp.SpaceEditInput{ID: found.Space.ID, SpaceFields: fields}); err != nil {
 		p.projectFailed(w, r, &found, fields, err)
 		return
 	}
-	navigate(w, r, editPath(found.Project.ID))
+	navigate(w, r, editPath(found.Space.ID))
 }
 
 func (p *pages) projectArchive(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +172,7 @@ func (p *pages) projectArchive(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	if _, err := p.assistant().ProjectArchive(detached(r), asstapp.ProjectArchiveInput{ID: id, Archived: flag != 0}); err != nil {
+	if _, err := p.assistant().SpaceArchive(detached(r), asstapp.SpaceArchiveInput{ID: id, Archived: flag != 0}); err != nil {
 		web.Fail(w, r, err, func(status int) { p.fail(w, r, status, application.Classify(err).Error()) })
 		return
 	}

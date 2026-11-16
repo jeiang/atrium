@@ -77,7 +77,7 @@ type Module struct {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	knowledgeOps, knowledgeBindings := m.knowledgeOperations()
 	taskOps, taskBindings := m.taskOperations()
-	projectOps, projectBindings := projectOperations()
+	projectOps, projectBindings := spaceOperations()
 	threadOps, threadBindings := threadOperations()
 	fileOps, fileBindings := fileOperations()
 	scheduleOps, scheduleBindings := scheduleOperations()

@@ -18,6 +18,7 @@ const (
 	TargetRecord  = "record"
 	TargetTask    = "task"
 	TargetContact = "contact"
+	TargetSpace   = "space"
 
 	RelationAbout     = "about"
 	RelationPartOf    = "part_of"
@@ -34,7 +35,7 @@ const (
 )
 
 var (
-	LinkTargets = []string{TargetRecord, TargetTask, TargetContact}
+	LinkTargets = []string{TargetRecord, TargetTask, TargetContact, TargetSpace}
 	Relations   = []string{RelationAbout, RelationPartOf, RelationWorksWith, RelationDependsOn, RelationSeeAlso}
 )
 

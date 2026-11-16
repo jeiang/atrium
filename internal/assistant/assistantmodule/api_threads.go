@@ -48,7 +48,7 @@ func threadAPI(tools registry.Source) func(*web.Deps, func() *asstapp.Service, h
 		p := &apiPages{deps: d, assistant: assistant, tools: tools, events: events}
 		apiBindings(p)
 		fileAPIBindings(p)
-		projectAPIBindings(p)
+		spaceAPIBindings(p)
 		scheduleAPIBindings(p)
 		memoryAPIBindings(p)
 		subagentAPIBindings(p)

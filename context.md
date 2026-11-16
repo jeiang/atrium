@@ -14,14 +14,15 @@ claims about the running application. Operator contracts are in
   external services, reverse proxy configuration, credentials, persistence,
   and off-host backups. Updating this repository does not update a host's pin.
 - The application joins mail, calendar, contacts, media, notifications,
-  and read-only Grafana access with assistant chat, files, projects,
+  and read-only Grafana access with assistant chat, files, spaces,
   knowledge, tasks, scheduled work, and research children. Skills and code
   execution are not active assistant capabilities.
 - Today is home at `/chat`. Its initial response includes Needs you, the agenda,
   and recent activity. A new home message starts a thread. Review holds
   decisions and history; Library holds knowledge, files, rules, and
-  schedules. Projects group threads and can restrict their content to a
-  private project. Draft and proposal cards in chat use the same send and
+  schedules. Spaces in Knowledge hold a former project's instructions,
+  files, threads and tasks, and can restrict their content to a private
+  space. Draft and proposal cards in chat use the same send and
   approval services as their dedicated views. The `/chat/agenda` fragment
   answers 404 when the calendar module is off and 503 `unavailable` when the
   calendar cannot be listed, for example when no calendar is configured.
@@ -112,21 +113,36 @@ claims about the running application. Operator contracts are in
   and same-run edges, capped at 50 nodes with a `truncated` flag. These
   operator reads show private records with their flag, like the record
   list, and change nothing the assistant retrieves.
-- The operator links a record to another record, a task or a contact
-  (by vCard `UID`) with one relation: `about`, `part_of`, `works_with`,
+- The operator links a record to another record, a task, a contact
+  (by vCard `UID`) or a space with one relation: `about`, `part_of`, `works_with`,
   `depends_on` or `see_also`. Kinds and relations are checked in code, so
   new ones need no migration. Linking needs a live source and an existing
   target; an identical live link is a no-op, removing a link keeps the row,
   and both are undoable. The subject page lists links after mentions and
   same-run records with a direction, a target state (`live`, `retracted`,
-  `done`, `dismissed`, `missing` or `unavailable` when contacts are off)
-  and a client address (`/knowledge/{id}`, `/tasks/{id}`,
-  `/contacts/{uid}`); the map adds record-to-record links as edges named by
+  `done`, `dismissed`, `archived` for an archived space, `missing` or
+  `unavailable` when contacts are off) and a client address
+  (`/knowledge/{id}`, `/tasks/{id}`, `/contacts/{uid}`,
+  `/knowledge/spaces/{id}`); the map adds record-to-record links as edges named by
   the relation. Purging a record deletes the links from and to it; a
   deleted task or contact leaves its links showing as missing. Links are
   never read by retrieval and the assistant has no link tool.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
+- A space is a `projects` row presented in Knowledge; the table, its
+  columns and the thread, file, record and task `project_id` links are
+  unchanged, so nothing moves. `/api/v1/knowledge/spaces` lists them and
+  creates one, `/knowledge/spaces/{id}` reads the space page (fields, the
+  instructions split into sections like a subject page, files, chat
+  threads, tasks whose source is `project`/id, records linked to it, and
+  counts), edits name, instructions, effort, context limit and the private
+  flag, and `/archive` archives or restores it; files live under
+  `/knowledge/spaces/{id}/files`. The `/projects*` API is removed. A
+  record links to a space with target kind `space` (state `live` or
+  `archived`, address `/knowledge/spaces/{id}`). The instructions still
+  reach a space thread's prompt in the `<project_instructions>` block,
+  and audit targets stay `project:{id}`. The older `/projects/...` HTML
+  pages edit the same rows.
 
 ### Notifications, attention, and mail
 - Notifications are recorded in an in-app inbox first and pushed best
@@ -262,10 +278,10 @@ claims about the running application. Operator contracts are in
   (unknown 404, subagent thread `read_only_thread`) and then the connection.
   Stopping in an unknown thread answers 404 on the chat page as in the API.
   An action that changed state and then failed is audited `failed`.
-  Project file uploads and deletes, and agent `file_write`, each write one
-  `operation_audit` row (`assistant.project-file.upload|delete`,
-  `assistant.file.write` naming its effect); a project upload over the body
-  cap is refused with 422 before the project is looked up.
+  Space file uploads and deletes, and agent `file_write`, each write one
+  `operation_audit` row (`knowledge.space.file.upload|delete`,
+  `assistant.file.write` naming its effect); a space upload over the body
+  cap is refused with 422 before the space is looked up.
   Saving the chat defaults on `/settings/assistant` runs
   `assistant.defaults-set`: the stored settings are unchanged, and it writes
   one `operation_audit` row (`invalid` when the model, effort or context limit
@@ -1208,7 +1224,7 @@ claims about the running application. Operator contracts are in
   bounds, default, source, editable, secret; secret values are never sent),
   `GET /connections/schema` (kinds and per-connection fields with secret
   and host-owned flags, no credential values) and `GET /files` (the
-  thread and project file library, newest first, keyset cursor). `GET
+  thread and space file library, newest first, keyset cursor). `GET
   /home` carries a `weather` card (current, today, hourly) or null when no
   location is set or the weather connection is off; the forecast call is
   capped at 3 seconds and a failure only drops the card.
@@ -1260,7 +1276,7 @@ claims about the running application. Operator contracts are in
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
 - **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
-- **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
+- **Scheduled runs** are managed from chat, with a list in Library. **Projects** became **spaces** in Knowledge. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build, but nothing serves it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
@@ -28,6 +29,7 @@ const (
 	EndDismissed   = "dismissed"
 	EndMissing     = "missing"
 	EndUnavailable = "unavailable"
+	EndArchived    = "archived"
 
 	DirectionOutgoing = "outgoing"
 	DirectionIncoming = "incoming"
@@ -161,6 +163,20 @@ func (r *resolver) endpoint(kind, id string) (Endpoint, error) {
 		if c, ok := r.cards[id]; ok {
 			out.Title, out.State = c.Name, EndLive
 		}
+	case kb.TargetSpace:
+		out.Address = "/knowledge/spaces/" + id
+		n, ok := kb.RecordTarget(id)
+		if !ok {
+			return out, nil
+		}
+		p, err := projects.Get(r.ctx, r.q, n)
+		if err != nil || p == nil {
+			return out, err
+		}
+		out.Title, out.State = p.Name, EndLive
+		if p.Archived {
+			out.State = EndArchived
+		}
 	}
 	return out, nil
 }
@@ -231,7 +247,7 @@ func (s *Service) Links(ctx context.Context, in LinksInput) (application.Read[Li
 func (in LinkInput) normalize() (LinkInput, error) {
 	in.TargetKind, in.TargetID, in.Relation = strings.TrimSpace(in.TargetKind), strings.TrimSpace(in.TargetID), strings.TrimSpace(in.Relation)
 	if !slices.Contains(kb.LinkTargets, in.TargetKind) {
-		return in, invalid("target_kind", "target_kind must be record, task or contact")
+		return in, invalid("target_kind", "target_kind must be record, task, contact or space")
 	}
 	if !slices.Contains(kb.Relations, in.Relation) {
 		return in, invalid("relation", "relation must be one of "+strings.Join(kb.Relations, ", "))
