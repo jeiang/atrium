@@ -126,6 +126,36 @@ func lexical(ctx context.Context, q Querier, match string, f Filters, limit, sni
 	})
 }
 
+type Found struct {
+	Info
+	Snippet string
+}
+
+func Find(ctx context.Context, q Querier, text string, accounts []string, limit, offset int) ([]Found, error) {
+	match, err := textsearch.FTSQueryTerms(text, mail.TuningMailSearchMaxTerms)
+	if err != nil || match == "" || len(accounts) == 0 {
+		return nil, err
+	}
+	names, err := json.Marshal(accounts)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.QueryContext(ctx,
+		fmt.Sprintf("SELECT m.id, m.account, m.from_addr, m.from_name, m.subject, m.date_ts, snippet(message_fts, -1, '%s', '%s', '…', %d) ",
+			textsearch.MarkStart, textsearch.MarkEnd, mail.TuningMailSearchSnippetTokens)+
+			"FROM message_fts JOIN messages m ON m.id = message_fts.rowid "+
+			"WHERE message_fts MATCH ? AND m.gone_at IS NULL AND m.account IN (SELECT value FROM json_each(?)) "+
+			"ORDER BY bm25(message_fts, 5.0, 2.0, 1.0), m.id DESC LIMIT ? OFFSET ?",
+		match, string(names), limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Found, error) {
+		var f Found
+		return f, r.Scan(&f.ID, &f.Account, &f.FromAddr, &f.FromName, &f.Subject, &f.DateTS, &f.Snippet)
+	})
+}
+
 func ids(rows *sql.Rows, err error) ([]int64, error) {
 	if err != nil {
 		return nil, err

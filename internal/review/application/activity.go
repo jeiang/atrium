@@ -115,6 +115,7 @@ var receiptVerbs = map[string]string{
 	"commitment_status": "Changed a commitment",
 	"kb_write":          "Wrote a knowledge record", "kb_retract": "Retracted a knowledge record", "kb_confirm": "Confirmed a knowledge record",
 	"kb_purge": "Purged a knowledge record", "kb_export": "Exported knowledge",
+	"kb_link": "Linked a knowledge record", "kb_unlink": "Removed a knowledge link",
 	"mail_move": "Moved mail", "mail_folder_create": "Created a mail folder",
 	"draft_email_create": "Drafted an email", "draft_email_update": "Changed a draft",
 	"calendar_delete":  "Deleted a calendar event",

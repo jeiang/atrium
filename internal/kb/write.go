@@ -165,6 +165,8 @@ func duplicate(ctx context.Context, q db.Querier, scope string, project int64, n
 
 func refused(r Record, verb string) error {
 	switch {
+	case r.StandingInstructions():
+		return tool.Error(fmt.Sprintf("%s holds the operator's standing instructions and cannot be %s", Cite(r.ID), verb))
 	case r.Confirmed():
 		return tool.Error(fmt.Sprintf("%s is confirmed by the operator and cannot be %s", Cite(r.ID), verb))
 	case r.Retracted():
@@ -362,7 +364,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 }
 
 func Undo() []ledger.UndoDefinition {
-	return []ledger.UndoDefinition{{Operation: UndoOp, Undoer: ledger.Undoer{
+	return []ledger.UndoDefinition{linkUndoDefinition(), {Operation: UndoOp, Undoer: ledger.Undoer{
 		Validate: func(payload json.RawMessage) error {
 			var u undoPayload
 			if err := json.Unmarshal(payload, &u); err != nil {
