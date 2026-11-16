@@ -174,3 +174,58 @@ func TestAppEventStreamSignalsChangesWithinItsOwnLimit(t *testing.T) {
 	}
 	waitAppChange(t, browser, "tasks", tasks)
 }
+
+func TestFreshDatabaseSendsEmptyCollectionsAsArrays(t *testing.T) {
+	s := newStreamSite(t)
+	array := func(what string, v any) []any {
+		t.Helper()
+		list, ok := v.([]any)
+		if !ok {
+			t.Fatalf("%s = %#v, want an array", what, v)
+		}
+		return list
+	}
+	if origins := array("auth origins", apiData(t, s.do(http.MethodGet, "/api/v1/auth", s.token, nil), http.StatusOK)["origins"]); len(origins) != 0 {
+		t.Fatalf("auth origins without OIDC = %v", origins)
+	}
+	review := apiData(t, s.do(http.MethodGet, "/api/v1/review/items", s.token, nil), http.StatusOK)
+	for _, field := range []string{"items", "groups"} {
+		if list := array("review "+field, review[field]); len(list) != 0 {
+			t.Fatalf("review %s on a fresh database = %v", field, list)
+		}
+	}
+	for _, raw := range array("connections", apiData(t, s.do(http.MethodGet, "/api/v1/connections", s.token, nil), http.StatusOK)["connections"]) {
+		c, _ := raw.(map[string]any)
+		array(fmt.Sprintf("%v credentials", c["id"]), c["credentials"])
+		array(fmt.Sprintf("%v capabilities", c["id"]), c["capabilities"])
+	}
+
+	scan := bufio.NewScanner(s.openApp().Body)
+	event := ""
+	for scan.Scan() {
+		line := scan.Text()
+		if name, ok := strings.CutPrefix(line, "event: "); ok {
+			event = name
+		}
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok || event != "sync" {
+			continue
+		}
+		var frame struct {
+			Topics []struct {
+				Topic    string `json:"topic"`
+				Revision *int64 `json:"revision"`
+			} `json:"topics"`
+		}
+		if !strings.HasPrefix(data, `{"topics":[`) || json.Unmarshal([]byte(data), &frame) != nil || len(frame.Topics) == 0 {
+			t.Fatalf("sync data is not a JSON object with a topics array: %s", data)
+		}
+		for _, topic := range frame.Topics {
+			if topic.Topic == "" || topic.Revision == nil {
+				t.Fatalf("sync topic: %s", data)
+			}
+		}
+		return
+	}
+	t.Fatalf("the app event stream ended without a sync frame: %v", scan.Err())
+}
