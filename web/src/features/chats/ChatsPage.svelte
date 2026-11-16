@@ -2,6 +2,7 @@
   import { createInfiniteQuery } from '@tanstack/svelte-query';
   import { assistantThreadList, type ListedThread, ok } from '../../contract';
   import { formatDayTime } from '../../shared/assistant/format';
+  import { device } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
   import List from '../../shared/ui/List.svelte';
@@ -45,8 +46,8 @@
   {#snippet actions()}
     <a class="btn btn--primary" href={p('/chat/new')}><Icon name="plus" />New chat</a>
   {/snippet}
-  {#if threads.fetchStatus === 'paused' && rows.length === 0}
-    <ViewState kind="offline" title="You are offline" level={2}>
+  {#if !device.online && rows.length === 0}
+    <ViewState kind="offline" title="Cannot reach atrium" level={2}>
       Chats load again when the connection returns.
       {#snippet action()}
         <Button onclick={onRetry}>Try again</Button>

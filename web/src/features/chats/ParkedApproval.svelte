@@ -1,6 +1,16 @@
 <script lang="ts" module>
   import { SvelteMap } from 'svelte/reactivity';
-  import { ok, reviewApprove, reviewDismiss, reviewProposal, reviewUndo, reviewUndoable } from '../../contract';
+  import {
+    ApiError,
+    OFFLINE_MESSAGE,
+    ok,
+    reviewApprove,
+    reviewDismiss,
+    reviewProposal,
+    reviewUndo,
+    reviewUndoable,
+  } from '../../contract';
+  import { device, unreachable } from '../../shared/device.svelte';
   import { queryClient } from '../../shared/query';
   import { toast } from '../../shared/ui/toast.svelte';
 
@@ -52,12 +62,22 @@
       : undefined,
   );
 
+  function refuse(error: unknown, fallback: string): never {
+    toast(error instanceof Error && error.message ? error.message : fallback, { tone: 'error' });
+    throw error;
+  }
+
   async function onApprove(): Promise<void> {
-    ok(await reviewApprove(id, {}));
+    try {
+      ok(await reviewApprove(id, {}));
+    } catch (error) {
+      refuse(error, 'The ask could not be approved.');
+    }
     ondecided();
   }
 
   function onDecline(): void {
+    if (!device.online) refuse(new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } }), '');
     deferred.set(
       id,
       window.setTimeout(() => void handleDismissDue(id), UNDO_MS),
@@ -76,7 +96,9 @@
   }
 </script>
 
-{#if proposal.isPending}
+{#if unreachable(proposal)}
+  <ViewState kind="offline" title="Cannot reach atrium" level={4}>Decide it when atrium answers.</ViewState>
+{:else if proposal.isPending}
   <ViewState kind="loading" title="Loading the ask" />
 {:else if proposal.isError || !approval || !proposal.data}
   <ViewState kind="error" title="The ask could not be loaded" level={4}>

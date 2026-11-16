@@ -15,7 +15,7 @@ function reach(ok: boolean): void {
   reached?.(ok);
 }
 
-export const OFFLINE_MESSAGE = 'You are offline. Nothing was sent.';
+export const OFFLINE_MESSAGE = 'Cannot reach atrium. Nothing was sent.';
 
 export function setCsrfToken(token: string | undefined): void {
   csrfToken = token;

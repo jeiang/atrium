@@ -26,6 +26,7 @@
   import StatusSlot from '../../shared/assistant/StatusSlot.svelte';
   import ToolCard from '../../shared/assistant/ToolCard.svelte';
   import type { ToolCall } from '../../shared/assistant/types';
+  import { refusedOffline, unreachable } from '../../shared/device.svelte';
   import { queryClient } from '../../shared/query';
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
@@ -121,13 +122,25 @@
     return element.scrollHeight - (window.scrollY + window.innerHeight) <= FOLLOW_SLACK;
   }
 
+  let lastY = 0;
+
   function toBottom(): void {
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
+    lastY = window.scrollY;
+  }
+
+  function keepFollowing(): void {
+    if (!following) return;
+    if (window.scrollY < lastY && !atBottom()) {
+      following = false;
+      return;
+    }
+    toBottom();
   }
 
   function onApplied(): void {
-    if (following) toBottom();
-    else unseen = true;
+    keepFollowing();
+    if (!following) unseen = true;
   }
 
   function onStreamEnd(status: StreamStatus, run: number): void {
@@ -159,11 +172,11 @@
   });
 
   $effect(() => () => {
-    for (const stream of streams.values()) stream.close();
+    for (const stream of streams.values()) stream.dispose();
   });
 
   $effect(() => {
-    let lastY = window.scrollY;
+    lastY = window.scrollY;
     const onScroll = (): void => {
       const y = window.scrollY;
       if (atBottom()) following = true;
@@ -205,8 +218,17 @@
     void queued.length;
     if (!restored) return;
     untrack(() => {
-      if (following) void tick().then(toBottom);
+      if (following) void tick().then(keepFollowing);
     });
+  });
+
+  $effect(() => {
+    if (!root) return;
+    const observer = new ResizeObserver(() => {
+      if (restored) keepFollowing();
+    });
+    observer.observe(root);
+    return () => observer.disconnect();
   });
 
   $effect(() => {
@@ -253,7 +275,8 @@
   }
 
   function message(error: unknown): string {
-    if (error instanceof TypeError) return 'You are offline. The message was kept.';
+    if (error instanceof TypeError || refusedOffline(error))
+      return 'Cannot reach atrium. Nothing was sent. The message was kept.';
     return error instanceof Error && error.message ? error.message : 'The message was not sent.';
   }
 
@@ -387,8 +410,8 @@
     <ViewState kind="error" title="This chat does not exist" level={2}>
       Check the link, or open a chat from the list.
     </ViewState>
-  {:else if id !== undefined && transcript.fetchStatus === 'paused' && !first}
-    <ViewState kind="offline" title="You are offline" level={2}>
+  {:else if id !== undefined && unreachable(transcript) && !first}
+    <ViewState kind="offline" title="Cannot reach atrium" level={2}>
       The chat loads again when the connection returns.
       {#snippet action()}
         <Button onclick={onRetry}>Try again</Button>

@@ -9,7 +9,17 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks.ts';
-import { expect, layouts, test, useScenario } from './fixtures.ts';
+import {
+  expect,
+  goReachable,
+  goUnreachable,
+  layouts,
+  setUnreachable,
+  storedKeys,
+  test,
+  unreachableConsole,
+  useScenario,
+} from './fixtures.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -144,12 +154,7 @@ test.describe('inbox on a desktop', () => {
   });
 
   test.describe('with a refusal or a lost connection', () => {
-    test.use({
-      allowStatus: [404, 409, 500],
-      allowConsole: [
-        /net::ERR_FAILED|ERR_INTERNET_DISCONNECTED|served by service worker is an error|passed an Error Response to FetchEvent/,
-      ],
-    });
+    test.use({ allowStatus: [404, 409, 500], allowConsole: unreachableConsole });
 
     test('a conflict reloads the item and says so', async ({ page }) => {
       await useScenario(page, { inbox: { decide: 'conflict' } });
@@ -169,18 +174,35 @@ test.describe('inbox on a desktop', () => {
       await expect(page.getByRole('heading', { name: 'The Inbox did not load' })).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
     });
-    test('offline says so and decides nothing', async ({ page, context }) => {
+    test('an unreachable atrium says so and decides nothing', async ({ page }) => {
       await gotoShell(page, '/inbox');
       await expect(card(page, 'draft:7')).toBeVisible();
-      await context.setOffline(true);
+      await setUnreachable(page, true);
       await page
         .getByRole('table', { name: 'Needs you' })
         .getByRole('row', { name: /Move the dentist/ })
         .click();
-      await expect(page.getByRole('heading', { name: 'You are offline' })).toBeVisible();
-      await context.setOffline(false);
-      await page.evaluate(() => dispatchEvent(new Event('online')));
-      await expect(card(page, 'proposal:12')).toContainText('Move the dentist visit to Friday');
+      await expect(page.getByRole('heading', { name: 'Cannot reach atrium' })).toBeVisible();
+      await setUnreachable(page, false);
+      await expect(card(page, 'proposal:12')).toContainText('Move the dentist visit to Friday', { timeout: 15_000 });
+      expect(await requests(page)).toEqual([]);
+    });
+
+    test('a decision while atrium is unreachable is refused at once and never sent later', async ({ page }) => {
+      const posts: string[] = [];
+      page.on('request', (request) => {
+        if (request.method() === 'POST') posts.push(request.url());
+      });
+      await gotoShell(page, '/inbox/proposal:14');
+      const item = card(page, 'proposal:14');
+      await expect(item.getByRole('button', { name: 'Approve' })).toBeVisible();
+      await goUnreachable(page);
+      await item.getByRole('button', { name: 'Approve' }).click();
+      await expect(page.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
+      await expect(item.getByRole('button', { name: 'Approve' })).toBeVisible();
+      await goReachable(page);
+      await page.waitForTimeout(1_000);
+      expect(posts).toEqual([]);
       expect(await requests(page)).toEqual([]);
     });
 
@@ -202,6 +224,15 @@ test.describe('inbox on a desktop', () => {
       await page.waitForTimeout(1500);
       expect(await requests(page)).toHaveLength(1);
     });
+  });
+
+  test('the Inbox list and its items are kept on the device', async ({ page }) => {
+    await gotoShell(page, '/inbox/proposal:14');
+    await expect(card(page, 'proposal:14').getByRole('button', { name: 'Approve' })).toBeVisible();
+    await expect
+      .poll(() => storedKeys(page))
+      .toEqual(expect.arrayContaining(['["inbox","pending"]', '["inbox","item","proposal:14"]']));
+    expect((await storedKeys(page)).filter((key) => key.startsWith('["session'))).toEqual([]);
   });
 
   test('a decision made elsewhere shows on the open card', async ({ page }) => {

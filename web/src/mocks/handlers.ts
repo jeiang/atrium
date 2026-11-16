@@ -16,6 +16,7 @@ export interface MockScenario {
   inbox?: InboxScenario;
   chat?: ChatScenario;
   home?: HomeScenario;
+  unreachable?: boolean;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
@@ -79,6 +80,7 @@ const revisions = new Map(TOPICS.map((topic) => [topic, 1]));
 const counter = globalThis as typeof globalThis & { atriumMockStreams?: number };
 
 export const handlers = [
+  http.all(`*${API_BASE}/*`, () => (scenario().unreachable ? HttpResponse.error() : undefined)),
   http.get(`*${API_BASE}/session`, () => {
     const state = scenario();
     if (state.session === 'unavailable') {

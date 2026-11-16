@@ -3,6 +3,7 @@
   import { ApiError } from '../../contract';
   import ApprovalCard from '../../shared/assistant/ApprovalCard.svelte';
   import type { InboxId } from '../../shared/assistant/inboxId';
+  import { refusedOffline, unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
@@ -50,6 +51,9 @@
   );
 
   function describe(error: unknown): { tone: 'warn' | 'error'; title: string; text: string } {
+    if (refusedOffline(error) && error instanceof Error) {
+      return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+    }
     if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
       return {
         tone: 'warn',
@@ -133,8 +137,8 @@
         onundo={onUndo}
       />
     {/key}
-  {:else if query.isPending && query.fetchStatus === 'paused'}
-    <ViewState kind="offline" title="You are offline" {level}>
+  {:else if unreachable(query)}
+    <ViewState kind="offline" title="Cannot reach atrium" {level}>
       This item loads when the connection is back. Nothing was decided.
     </ViewState>
   {:else if query.isPending}

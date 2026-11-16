@@ -72,11 +72,15 @@ export class RunStream {
     void this.#connect();
   }
 
-  close(status?: StreamStatus): void {
+  dispose(): void {
     this.#abort?.abort();
     clearTimeout(this.#timer);
     cancelAnimationFrame(this.#frame);
     this.#frame = 0;
+  }
+
+  close(status?: StreamStatus): void {
+    this.dispose();
     if (this.#queue.length > 0) this.#flush();
     if (status) this.status = status;
     this.#ended = true;

@@ -9,7 +9,17 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks.ts';
-import { expect, galleryLayouts, type Layout, test, useScenario } from './fixtures.ts';
+import {
+  expect,
+  galleryLayouts,
+  goReachable,
+  goUnreachable,
+  type Layout,
+  storedKeys,
+  test,
+  unreachableConsole,
+  useScenario,
+} from './fixtures.ts';
 
 const desktop = { width: 1440, height: 900 };
 const phone = { viewport: { width: 390, height: 844 }, hasTouch: true };
@@ -231,6 +241,38 @@ test.describe('home failures', () => {
     await page.evaluate(() => localStorage.setItem('atrium.mock', '{}'));
     await page.getByRole('button', { name: 'Try again' }).click();
     await expect(page.getByRole('heading', { level: 2, name: 'Weather in Hillfield' })).toBeVisible();
+  });
+});
+
+test.describe('home while atrium is unreachable', () => {
+  test.use({ viewport: desktop, allowConsole: unreachableConsole });
+
+  test('the composer refuses at once, keeps the text and sends nothing later', async ({ page }) => {
+    const sent: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'GET') sent.push(request.url());
+    });
+    await gotoHome(page);
+    await expect(page.getByRole('heading', { level: 2, name: 'Weather in Hillfield' })).toBeVisible();
+    await goUnreachable(page);
+    const box = page.getByRole('textbox', { name: 'Message' });
+    await box.fill('Remind me about the bins');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page.locator('.home__composer').getByRole('alert')).toContainText(
+      'Cannot reach atrium. Nothing was sent.',
+    );
+    await expect(box).toHaveValue('Remind me about the bins');
+    await goReachable(page);
+    await page.waitForTimeout(1_000);
+    expect(sent).toEqual([]);
+    await expect(page).toHaveURL(/\/$/);
+  });
+
+  test('Home and Needs you are kept on the device', async ({ page }) => {
+    await gotoHome(page);
+    await expect(page.getByRole('heading', { level: 2, name: 'Weather in Hillfield' })).toBeVisible();
+    await expect.poll(() => storedKeys(page)).toEqual(expect.arrayContaining(['["home"]', '["pending"]']));
+    expect((await storedKeys(page)).filter((key) => key.startsWith('["session'))).toEqual([]);
   });
 });
 

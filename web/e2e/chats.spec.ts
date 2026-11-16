@@ -7,7 +7,18 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks.ts';
-import { expect, galleryLayouts, layouts, test, useScenario } from './fixtures.ts';
+import {
+  expect,
+  galleryLayouts,
+  goReachable,
+  goUnreachable,
+  layouts,
+  setUnreachable,
+  storedKeys,
+  test,
+  unreachableConsole,
+  useScenario,
+} from './fixtures.ts';
 
 const edgeSurfaces = ['.rail', '.tabbar'];
 const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
@@ -73,7 +84,7 @@ test.describe('chat list', () => {
   });
 
   test.describe('failures', () => {
-    test.use({ allowStatus: [503] });
+    test.use({ allowStatus: [503], allowConsole: unreachableConsole });
 
     test('shows the error state with a retry', async ({ page }) => {
       await openChat(page, '/chat', { listError: true });
@@ -81,7 +92,7 @@ test.describe('chat list', () => {
       await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
     });
 
-    test('shows the offline state when the connection is gone', async ({ page, context }) => {
+    test('shows the unreachable state when atrium does not answer', async ({ page }) => {
       await openChat(page, '/chat', { listError: true });
       await expect(page.getByRole('heading', { name: 'Chats could not be loaded' })).toBeVisible();
       await page.evaluate(() => {
@@ -89,14 +100,88 @@ test.describe('chat list', () => {
         dispatchEvent(new PopStateEvent('popstate'));
       });
       await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
-      await context.setOffline(true);
+      await setUnreachable(page, true);
       await page.evaluate(() => {
         history.pushState({}, '', '/chat');
         dispatchEvent(new PopStateEvent('popstate'));
       });
-      await expect(page.getByRole('heading', { name: 'You are offline' })).toBeVisible();
-      await context.setOffline(false);
+      await expect(page.getByRole('heading', { name: 'Cannot reach atrium' })).toBeVisible();
+      await setUnreachable(page, false);
     });
+  });
+});
+
+test.describe('while atrium is unreachable', () => {
+  test.use({ allowConsole: unreachableConsole });
+
+  function writes(page: Page): string[] {
+    const seen: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'GET') seen.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    });
+    return seen;
+  }
+
+  test('a message is refused at once, kept in the composer and never sent later', async ({ page }) => {
+    const sent = writes(page);
+    await openChat(page, '/chat/9');
+    await expect(transcript(page).getByText('Answer 40:', { exact: false })).toBeVisible();
+    await goUnreachable(page);
+    await composer(page).fill('Book the fitting for Saturday');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page.locator('.composer').getByRole('alert')).toContainText(
+      'Cannot reach atrium. Nothing was sent. The message was kept.',
+    );
+    await expect(composer(page)).toHaveValue('Book the fitting for Saturday');
+    await goReachable(page);
+    await page.waitForTimeout(1_000);
+    expect(sent).toEqual([]);
+  });
+
+  test('an answer is refused at once and never sent later', async ({ page }) => {
+    const sent = writes(page);
+    await openChat(page, '/chat/10');
+    await expect(transcript(page).getByText('Question for you')).toBeVisible();
+    await goUnreachable(page);
+    const box = page.getByRole('textbox', { name: 'Answer' });
+    await box.fill('Sage green, please');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Cannot reach atrium. Nothing was sent.' })).toBeVisible();
+    await expect(box).toHaveValue('Sage green, please');
+    await goReachable(page);
+    await page.waitForTimeout(1_000);
+    expect(sent).toEqual([]);
+  });
+
+  test('approving or declining an ask is refused at once and never sent later', async ({ page }) => {
+    test.setTimeout(45_000);
+    const sent = writes(page);
+    await page.setViewportSize({ width: desktop.width, height: desktop.height });
+    await openChat(page, '/chat/8');
+    const card = transcript(page).locator('[data-approval="501"]');
+    await showRow(card);
+    await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
+    await goUnreachable(page);
+    await card.getByRole('button', { name: 'Decline' }).click();
+    await expect(page.getByText('Cannot reach atrium. Nothing was sent.').first()).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Decline' })).toBeVisible();
+    await card.getByRole('button', { name: /send email/i }).click();
+    const confirm = page.getByRole('dialog', { name: 'Send this now?' });
+    if (await confirm.isVisible()) await confirm.getByRole('button', { name: 'Send now' }).click();
+    await expect(card.getByRole('button', { name: /send email/i })).toBeEnabled({ timeout: 15_000 });
+    await goReachable(page);
+    await page.waitForTimeout(1_000);
+    expect(sent).toEqual([]);
+    await expect(card.getByRole('button', { name: 'Decline' })).toBeVisible();
+  });
+
+  test('the chat list and the transcript are kept on the device', async ({ page }) => {
+    await openChat(page, '/chat/7');
+    await expect(transcript(page).getByText('What do twelve cedar boards cost around Hillfield?')).toBeVisible();
+    await page.getByRole('link', { name: 'All chats' }).click();
+    await expect(page.getByRole('list', { name: 'Chats' })).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => storedKeys(page)).toEqual(expect.arrayContaining(['["threads"]', '["thread",7]']));
+    expect((await storedKeys(page)).filter((key) => key.startsWith('["session'))).toEqual([]);
   });
 });
 

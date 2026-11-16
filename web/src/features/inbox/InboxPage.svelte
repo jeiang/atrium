@@ -3,6 +3,7 @@
   import { on } from 'svelte/events';
   import { formatDayTime, plural } from '../../shared/assistant/format';
   import { parseInboxId } from '../../shared/assistant/inboxId';
+  import { unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import DataTable, { type Column } from '../../shared/ui/DataTable.svelte';
   import Page from '../../shared/ui/Page.svelte';
@@ -40,7 +41,7 @@
       return target ? [{ key, target }] : [];
     });
   });
-  const offline = $derived(pending.isPending && pending.fetchStatus === 'paused');
+  const offline = $derived(unreachable(pending));
   const lede = $derived(
     pending.data ? (waiting === 0 ? 'Nothing waits on you.' : `${plural(waiting, 'item')} waiting on you`) : undefined,
   );
@@ -81,7 +82,7 @@
 
 {#snippet listState()}
   {#if offline}
-    <ViewState kind="offline" title="You are offline">
+    <ViewState kind="offline" title="Cannot reach atrium">
       The Inbox loads when the connection is back. Nothing was decided.
     </ViewState>
   {:else if pending.isError && !pending.data}

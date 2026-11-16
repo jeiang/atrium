@@ -1,4 +1,4 @@
-import { onReachability, webFetch } from '../contract';
+import { ApiError, onReachability, webFetch } from '../contract';
 import { queryClient } from './query';
 import { setPersistence, wipe } from './readcache';
 
@@ -31,7 +31,7 @@ export function setForget(on: boolean): void {
   applyForget(on);
 }
 
-const PROBE_MIN_MS = 5_000;
+const PROBE_MIN_MS = 2_000;
 const PROBE_MAX_MS = 60_000;
 
 let probeDelay = PROBE_MIN_MS;
@@ -40,6 +40,14 @@ const reconnected: (() => void)[] = [];
 
 export function onReconnect(handler: () => void): void {
   reconnected.push(handler);
+}
+
+export function unreachable(query: { data?: unknown }): boolean {
+  return !device.online && query.data === undefined;
+}
+
+export function refusedOffline(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 'offline';
 }
 
 function probe(): void {

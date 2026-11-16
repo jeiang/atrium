@@ -5,6 +5,7 @@
   import Digest from '../../shared/assistant/Digest.svelte';
   import { inboxPath } from '../../shared/assistant/inboxId';
   import WeatherCard from '../../shared/assistant/WeatherCard.svelte';
+  import { unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import List from '../../shared/ui/List.svelte';
   import ListRow from '../../shared/ui/ListRow.svelte';
@@ -92,8 +93,7 @@
       : undefined,
   );
 
-  const offline = (query: { isPending: boolean; fetchStatus: string }): boolean =>
-    query.isPending && query.fetchStatus === 'paused';
+  const offline = unreachable;
 
   let draft = $state('');
   async function onSubmit(text: string): Promise<void> {
@@ -135,7 +135,7 @@
             {/each}
           </List>
         {/if}
-      {:else if pending.isError}
+      {:else if pending.isError && !offline(pending)}
         <ViewState kind="error" title="The list did not load">
           {pending.error?.message}
           {#snippet action()}
@@ -143,7 +143,7 @@
           {/snippet}
         </ViewState>
       {:else if offline(pending)}
-        <ViewState kind="offline" title="You are offline">The list appears when the connection is back.</ViewState>
+        <ViewState kind="offline" title="Cannot reach atrium">The list appears when atrium answers.</ViewState>
       {:else if reservedRows.length > 0}
         <ul class="list home__skeleton" aria-busy="true">
           <li class="visually-hidden">Loading what needs you</li>
@@ -196,7 +196,7 @@
             {/if}
           {/snippet}
         </WeatherCard>
-      {:else if home.isError}
+      {:else if home.isError && !offline(home)}
         <ViewState kind="error" title="Home did not load" level={2}>
           {home.error?.message}
           {#snippet action()}
@@ -204,8 +204,8 @@
           {/snippet}
         </ViewState>
       {:else if offline(home)}
-        <ViewState kind="offline" title="You are offline" level={2}>
-          The weather and the digest appear when the connection is back.
+        <ViewState kind="offline" title="Cannot reach atrium" level={2}>
+          The weather and the digest appear when atrium answers.
         </ViewState>
       {:else}
         {@render weatherSkeleton()}
