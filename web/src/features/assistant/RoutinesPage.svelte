@@ -13,14 +13,14 @@
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import TextArea from '../../shared/ui/TextArea.svelte';
   import TextField from '../../shared/ui/TextField.svelte';
-  import ViewState from '../../shared/ui/ViewState.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
+  import ViewState from '../../shared/ui/ViewState.svelte';
   import { p, route } from '../../shell/router';
   import AssistantNav from './AssistantNav.svelte';
   import { failure, fieldErrors, gesture, type Outcome, refresh, runStatus, useSchedules } from './assistant';
   import ScheduleDetail from './ScheduleDetail.svelte';
-  import { GRAMMAR } from './schedules';
   import SettingsGroupForm from './SettingsGroupForm.svelte';
+  import { GRAMMAR } from './schedules';
   import './assistant.css';
 
   const client = useQueryClient();
@@ -105,7 +105,9 @@
           <Button variant="primary" onclick={onOpen}>New schedule</Button>
         {/snippet}
         {#if offline}
-          <ViewState kind="offline" title="Cannot reach atrium" level={3}>Schedules load when atrium answers again.</ViewState>
+          <ViewState kind="offline" title="Cannot reach atrium" level={3}
+            >Schedules load when atrium answers again.</ViewState
+          >
         {:else if schedules.isError && !schedules.data}
           <ViewState kind="error" title="Schedules did not load" level={3}>
             {schedules.error.message}
@@ -116,14 +118,15 @@
         {:else if !schedules.data}
           <Skeleton lines={4} label="Loading schedules" />
         {:else if schedules.data.items.length === 0}
-          <ViewState kind="empty" title="No schedules" level={3}>Set one up to have the assistant check something regularly.</ViewState>
+          <ViewState kind="empty" title="No schedules" level={3}
+            >Set one up to have the assistant check something regularly.</ViewState
+          >
         {:else}
           <List label="Schedules">
             {#each schedules.data.items as item (item.id)}
-              {@const last = runStatus(item.last_status)}
               <ListRow
                 title={item.name}
-                meta="{item.cadence || item.schedule}. Next: {item.enabled ? (item.next_due_text ?? 'not planned') : 'off'}{last ? `. Last: ${last.label}` : ''}"
+                meta="{item.cadence || item.schedule}. Next: {item.enabled ? (item.next_due_text ?? 'not planned') : 'off'}{item.last_status ? `. Last: ${runStatus(item.last_status)?.label ?? item.last_status}` : ''}"
                 href={p('/assistant/routines/:id', { params: { id: String(item.id) } })}
               >
                 {#snippet end()}

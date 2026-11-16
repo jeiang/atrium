@@ -159,8 +159,12 @@
 <Section id="schedule" title={job.name}>
   <div class="asst-badges">
     <Badge tone={job.enabled ? 'ok' : 'neutral'}>{job.enabled ? 'On' : 'Off'}</Badge>
-    {#if builtin}<Badge tone="info">Built in</Badge>{/if}
-    {#if job.protected}<Badge tone="accent">Protected</Badge>{/if}
+    {#if builtin}
+      <Badge tone="info">Built in</Badge>
+    {/if}
+    {#if job.protected}
+      <Badge tone="accent">Protected</Badge>
+    {/if}
   </div>
   <dl class="asst-dl">
     <dt>When</dt>
@@ -171,7 +175,9 @@
     <dd data-field="last">
       {#if last}
         {last.label}{job.last_started_text ? `, ${job.last_started_text}` : ''}
-        {#if job.last_error}<span class="asst-error">{job.last_error}</span>{/if}
+        {#if job.last_error}
+          <span class="asst-error">{job.last_error}</span>
+        {/if}
       {:else}
         Never
       {/if}
@@ -209,7 +215,13 @@
     <TextField label="Name" bind:value={draft.name} autocomplete="off" error={errors.name} />
     <TextField label="When" bind:value={draft.schedule} autocomplete="off" help={GRAMMAR} error={errors.schedule} />
     {#if builtin}
-      <TextArea label="What it does" value={draft.prompt} readonly rows={4} help="Built-in schedules keep their instructions." />
+      <TextArea
+        label="What it does"
+        value={draft.prompt}
+        readonly
+        rows={4}
+        help="Built-in schedules keep their instructions."
+      />
     {:else}
       <TextArea label="What it does" bind:value={draft.prompt} rows={4} error={errors.prompt} />
     {/if}
@@ -218,7 +230,9 @@
         Save schedule
       </Button>
       {#if !builtin && !job.protected}
-        <Button variant="danger" disabled={busy !== undefined} onclick={() => (confirming = true)}>Delete schedule</Button>
+        <Button variant="danger" disabled={busy !== undefined} onclick={() => (confirming = true)}
+          >Delete schedule</Button
+        >
       {/if}
     </div>
     {#if saved}
@@ -229,7 +243,9 @@
 
 <Section id="schedule-history" title="History">
   {#if runsOffline}
-    <ViewState kind="offline" title="Cannot reach atrium" level={3}>The history loads when atrium answers again.</ViewState>
+    <ViewState kind="offline" title="Cannot reach atrium" level={3}
+      >The history loads when atrium answers again.</ViewState
+    >
   {:else if runs.isError && !runs.data}
     <ViewState kind="error" title="The history did not load" level={3}>
       {runs.error.message}
@@ -250,8 +266,7 @@
           href={run.thread_id ? p('/chat/:id', { params: { id: String(run.thread_id) } }) : undefined}
         >
           {#snippet end()}
-            {@const status = runStatus(run.status)}
-            <Badge tone={status?.tone ?? 'neutral'}>{status?.label ?? run.status}</Badge>
+            <Badge tone={runStatus(run.status)?.tone ?? 'neutral'}>{runStatus(run.status)?.label ?? run.status}</Badge>
           {/snippet}
         </ListRow>
       {/each}

@@ -41,10 +41,11 @@ export function revisionOf(etag: string | null): string {
   return etag?.replace(/^W\//, '').replaceAll('"', '') ?? '';
 }
 
-export function useSettingsGroup(groups: readonly string[]) {
+export function useSettingsGroup(groupsOf: () => readonly string[]) {
   return createQuery(() => ({
-    queryKey: ['assistant', 'settings', ...groups],
+    queryKey: ['assistant', 'settings', ...groupsOf()],
     queryFn: async ({ signal }): Promise<GroupedSettings> => {
+      const groups = groupsOf();
       const response = await settingsSchema({ signal });
       const schema = ok(response);
       const fields = schema.pages
@@ -173,6 +174,8 @@ export function refresh(client: QueryClient, topic: string): void {
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 const smallUsd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
+const stamp = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const day = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' });
 
 export function money(value: number): string {
   return Math.abs(value) > 0 && Math.abs(value) < 0.01 ? smallUsd.format(value) : usd.format(value);
@@ -185,12 +188,11 @@ export function percent(share: number): string {
 export function dateTime(value: number | string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '';
   const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return Number.isNaN(date.getTime()) ? '' : stamp.format(date);
 }
 
 export function dayOf(value: number): string {
-  return new Date(value * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  return day.format(new Date(value * 1000));
 }
 
 export const kindWords: Record<string, string> = {

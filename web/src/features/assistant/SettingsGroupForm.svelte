@@ -32,7 +32,7 @@
   } = $props();
 
   const client = useQueryClient();
-  const settings = useSettingsGroup(groups);
+  const settings = useSettingsGroup(() => groups);
   const offline = $derived(unreachable(settings));
 
   let draft = $state<Record<string, string>>({});
@@ -139,7 +139,9 @@
 <Section {id} {title}>
   {@render intro?.()}
   {#if offline}
-    <ViewState kind="offline" title="Cannot reach atrium" level={3}>These settings load when atrium answers again.</ViewState>
+    <ViewState kind="offline" title="Cannot reach atrium" level={3}
+      >These settings load when atrium answers again.</ViewState
+    >
   {:else if settings.isError && !settings.data}
     <ViewState kind="error" title="These settings did not load" level={3}>
       {settings.error.message}
@@ -191,7 +193,9 @@
         </div>
       {/each}
       <div class="cluster">
-        <Button type="submit" variant="primary" {pending} disabled={!dirty} reason="Nothing changed">{saveLabel}</Button>
+        <Button type="submit" variant="primary" {pending} disabled={!dirty} reason="Nothing changed"
+          >{saveLabel}</Button
+        >
       </div>
       {#if result}
         <Notice tone={result.tone} variant="inline" title={result.title}>{result.text}</Notice>

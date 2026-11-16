@@ -87,12 +87,18 @@
   }
 </script>
 
-<Page title="Behavior" eyebrow="Assistant" lede="How the assistant works when you start a chat, and which helpers it uses.">
+<Page
+  title="Behavior"
+  eyebrow="Assistant"
+  lede="How the assistant works when you start a chat, and which helpers it uses."
+>
   <AssistantNav current="behavior" />
   <div class="asst">
     <Section id="defaults" title="Defaults for new chats">
       {#if offline}
-        <ViewState kind="offline" title="Cannot reach atrium" level={3}>The defaults load when atrium answers again.</ViewState>
+        <ViewState kind="offline" title="Cannot reach atrium" level={3}
+          >The defaults load when atrium answers again.</ViewState
+        >
       {:else if configuration.isError && !config}
         <ViewState kind="error" title="The defaults did not load" level={3}>
           {configuration.error.message}
@@ -108,7 +114,13 @@
         </ViewState>
       {:else}
         <form class="stack asst-form" novalidate onsubmit={onSave} data-settings="defaults">
-          <SelectField label="Model" bind:value={draft.model} options={modelOptions} help={price} error={errors.model} />
+          <SelectField
+            label="Model"
+            bind:value={draft.model}
+            options={modelOptions}
+            help={price}
+            error={errors.model}
+          />
           <SelectField label="Effort" bind:value={draft.effort} options={effortOptions} error={errors.effort} />
           <SelectField
             label="Context limit"
@@ -118,7 +130,9 @@
             error={errors.context_limit}
           />
           <div class="cluster">
-            <Button type="submit" variant="primary" {pending} disabled={!dirty} reason="Nothing changed">Save defaults</Button>
+            <Button type="submit" variant="primary" {pending} disabled={!dirty} reason="Nothing changed"
+              >Save defaults</Button
+            >
           </div>
           {#if result}
             <Notice tone={result.tone} variant="inline" title={result.title}>{result.text}</Notice>
@@ -148,7 +162,9 @@
     <Section id="roles" title="Research roles">
       <p class="asst-text">The helpers the assistant can start, as declared in atrium. You cannot change them here.</p>
       {#if rolesOffline}
-        <ViewState kind="offline" title="Cannot reach atrium" level={3}>The roles load when atrium answers again.</ViewState>
+        <ViewState kind="offline" title="Cannot reach atrium" level={3}
+          >The roles load when atrium answers again.</ViewState
+        >
       {:else if roles.isError && !roles.data}
         <ViewState kind="error" title="The roles did not load" level={3}>
           {roles.error.message}
@@ -166,7 +182,9 @@
             <li class="asst-role" data-role={role.name}>
               <h3 class="asst-role__name">{role.name}</h3>
               <p class="asst-text">{role.description}</p>
-              <p class="asst-meta">Effort {role.effort}. Tools: {role.tools.length > 0 ? role.tools.join(', ') : 'none'}.</p>
+              <p class="asst-meta">
+                Effort {role.effort}. Tools: {role.tools.length > 0 ? role.tools.join(', ') : 'none'}.
+              </p>
               <details class="asst-details">
                 <summary>Instructions</summary>
                 <p class="asst-pre">{role.prompt}</p>

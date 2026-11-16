@@ -5,10 +5,10 @@
   let { current }: { current: AssistantView } = $props();
 
   const links = [
-    { key: 'behavior', href: p('/assistant'), label: 'Behavior' },
+    { key: 'routines', href: p('/assistant/routines'), label: 'Routines' },
     { key: 'authority', href: p('/assistant/authority'), label: 'Authority' },
     { key: 'spend', href: p('/assistant/spend'), label: 'Spend' },
-    { key: 'routines', href: p('/assistant/routines'), label: 'Routines' },
+    { key: 'behavior', href: p('/assistant/behavior'), label: 'Behavior' },
   ] as const;
 </script>
 

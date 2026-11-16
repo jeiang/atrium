@@ -15,7 +15,15 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { p } from '../../shell/router';
   import AssistantNav from './AssistantNav.svelte';
-  import { failure, fieldErrors, gesture, type Outcome, refresh, usePermissionRequests, usePermissions } from './assistant';
+  import {
+    failure,
+    fieldErrors,
+    gesture,
+    type Outcome,
+    refresh,
+    usePermissionRequests,
+    usePermissions,
+  } from './assistant';
   import './assistant.css';
 
   const EDITABLE = ['people', 'internet'] as const;
@@ -80,7 +88,8 @@
 
   function help(rule: PermissionRule): string {
     const parts: string[] = [];
-    if (rule.floor !== 'allow') parts.push(`Never looser than ${(decisionWords[rule.floor] ?? rule.floor).toLowerCase()} here.`);
+    if (rule.floor !== 'allow')
+      parts.push(`Never looser than ${(decisionWords[rule.floor] ?? rule.floor).toLowerCase()} here.`);
     if (rule.source === 'pin') parts.push('Set by the host.');
     else if (rule.source === 'default') parts.push('atrium default.');
     return parts.join(' ');
@@ -116,21 +125,29 @@
   }
 </script>
 
-<Page title="Authority" eyebrow="Assistant" lede="What the assistant may do on its own, what it asks you about, and what it never does.">
+<Page
+  title="Authority"
+  eyebrow="Assistant"
+  lede="What the assistant may do on its own, what it asks you about, and what it never does."
+>
   <AssistantNav current="authority" />
   <div class="asst">
     <Section id="always" title="Always true">
       <ul class="asst-facts" aria-label="Fixed rules">
-        <li>Only you send email. The assistant writes drafts; you send them from the Inbox.</li>
-        <li>Scheduled, nightly and helper runs never wait for you, so an "Ask me first" there refuses the action.</li>
+        <li>Only you send email. The assistant can write drafts; sending one needs you.</li>
+        <li>
+          Outside a chat you started, "Ask me first" refuses the action, unless the action already waits for your
+          approval in the Inbox.
+        </li>
         <li>Once outside text is in a thread, actions toward other people or the internet can only ask or refuse.</li>
-        <li>Some tools work only in a chat you started, such as creating calendar events and adding downloads.</li>
       </ul>
     </Section>
 
     {#if offline}
       <Section id="table" title="Permissions">
-        <ViewState kind="offline" title="Cannot reach atrium" level={3}>The permissions load when atrium answers again.</ViewState>
+        <ViewState kind="offline" title="Cannot reach atrium" level={3}
+          >The permissions load when atrium answers again.</ViewState
+        >
       </Section>
     {:else if permissions.isError && !permissions.data}
       <Section id="table" title="Permissions">
@@ -191,7 +208,9 @@
           </Section>
         {/each}
         <div class="cluster asst-authority__save">
-          <Button type="submit" variant="primary" {pending} disabled={!dirty} reason="Nothing changed">Save authority</Button>
+          <Button type="submit" variant="primary" {pending} disabled={!dirty} reason="Nothing changed"
+            >Save authority</Button
+          >
         </div>
         {#if result}
           <Notice tone={result.tone} variant="inline" title={result.title}>{result.text}</Notice>
@@ -205,7 +224,9 @@
       meta={permissions.data ? `${permissions.data.data.pending_requests} waiting` : undefined}
     >
       {#if requestsOffline}
-        <ViewState kind="offline" title="Cannot reach atrium" level={3}>The requests load when atrium answers again.</ViewState>
+        <ViewState kind="offline" title="Cannot reach atrium" level={3}
+          >The requests load when atrium answers again.</ViewState
+        >
       {:else if requests.isError && !requests.data}
         <ViewState kind="error" title="The requests did not load" level={3}>
           {requests.error.message}

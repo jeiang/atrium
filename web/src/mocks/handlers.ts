@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
+import { type AssistantScenario, assistantHandlers } from './assistant';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type ConnectionsScenario, connectionHandlers } from './connections';
 import { type HomeScenario, homeHandlers } from './home';
@@ -27,6 +28,7 @@ export interface MockScenario {
   plan?: PlanScenario;
   knowledge?: KnowledgeScenario;
   search?: SearchScenario;
+  assistant?: AssistantScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
@@ -42,6 +44,7 @@ const TOPICS = [
   'notify',
   'connections',
   'assistant',
+  'jobs',
   'knowledge',
   'tasks',
 ];
@@ -164,6 +167,7 @@ export const handlers = [
   ...homeHandlers(scenario),
   ...inboxAskHandlers,
   ...planHandlers,
+  ...assistantHandlers(scenario),
   ...settingsHandlers(scenario),
   ...connectionHandlers(scenario),
   ...chatHandlers,

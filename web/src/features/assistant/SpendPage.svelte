@@ -2,6 +2,7 @@
   import type { SpendCap, SpendSlice } from '../../contract';
   import { unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
+  import DataTable, { type Column } from '../../shared/ui/DataTable.svelte';
   import List from '../../shared/ui/List.svelte';
   import ListRow from '../../shared/ui/ListRow.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
@@ -28,6 +29,12 @@
     { value: 'class', label: 'By budget' },
     { value: 'model', label: 'By model' },
   ];
+  const columns: readonly Column[] = [
+    { key: 'name', label: 'Where' },
+    { key: 'cost', label: 'Cost', numeric: true },
+    { key: 'calls', label: 'Calls', numeric: true },
+    { key: 'share', label: 'Share', numeric: true },
+  ];
 
   const spend = useSpend();
   const offline = $derived(unreachable(spend));
@@ -41,9 +48,13 @@
   const threadCap = $derived(capOf('thread'));
   const routineCaps = $derived(data?.caps.filter((cap) => ROUTINE_SCOPES.includes(cap.scope)) ?? []);
   const slices = $derived<SpendSlice[]>(
-    breakdown === 'kind' ? (data?.by_kind ?? []) : breakdown === 'class' ? (data?.by_class ?? []) : (data?.by_model ?? []),
+    breakdown === 'kind'
+      ? (data?.by_kind ?? [])
+      : breakdown === 'class'
+        ? (data?.by_class ?? [])
+        : (data?.by_model ?? []),
   );
-  const largest = $derived(Math.max(0.0001, ...slices.map((slice) => slice.cost_usd + slice.committed_usd)));
+  const total = $derived(slices.reduce((sum, slice) => sum + slice.cost_usd + slice.committed_usd, 0));
   const resets = $derived(data ? dayOf(data.next_month) : '');
 
   function label(slice: SpendSlice): string {
@@ -53,12 +64,29 @@
   }
 </script>
 
+{#snippet sliceCell(
+    slice: SpendSlice,
+    column: Column,
+  )}
+  {#if column.key === 'name'}
+    {label(slice)}
+  {:else if column.key === 'cost'}
+    {money(slice.cost_usd + slice.committed_usd)}
+  {:else if column.key === 'calls'}
+    {slice.calls}
+  {:else}
+    {total > 0 ? percent((slice.cost_usd + slice.committed_usd) / total) : '0%'}
+  {/if}
+{/snippet}
+
 <Page title="Spend" eyebrow="Assistant" lede="What the assistant cost this month, where it went, and where it stops.">
   <AssistantNav current="spend" />
   <div class="asst">
     {#if offline}
       <Section id="month" title="This month">
-        <ViewState kind="offline" title="Cannot reach atrium" level={3}>Spending loads when atrium answers again.</ViewState>
+        <ViewState kind="offline" title="Cannot reach atrium" level={3}
+          >Spending loads when atrium answers again.</ViewState
+        >
       </Section>
     {:else if spend.isError && !data}
       <Section id="month" title="This month">
@@ -87,16 +115,25 @@
             aria-label="Budget used"
           ></meter>
           <p class="asst-meter__text">
-            <strong>{money(budget.spent_usd)}</strong> spent of {money(budget.budget_usd)}.
+            <strong>{money(budget.spent_usd)}</strong>
+            spent of {money(budget.budget_usd)}.
             {#if budget.committed_usd + budget.reserved_usd > 0}
-              {money(budget.committed_usd + budget.reserved_usd)} is held for runs in progress.
+              {money(budget.committed_usd + budget.reserved_usd)}
+              is held for runs in progress.
             {/if}
-            {money(budget.remaining_usd)} left. The budget starts again on {resets}.
+            {money(budget.remaining_usd)}
+            left. The budget starts again on {resets}.
           </p>
           {#if budget.carry_in_usd > 0 || budget.unknown_usd > 0}
             <p class="asst-meta">
-              {#if budget.carry_in_usd > 0}{money(budget.carry_in_usd)} carried in from last month.{/if}
-              {#if budget.unknown_usd > 0}{money(budget.unknown_usd)} has no confirmed price yet.{/if}
+              {#if budget.carry_in_usd > 0}
+                {money(budget.carry_in_usd)}
+                carried in from last month.
+              {/if}
+              {#if budget.unknown_usd > 0}
+                {money(budget.unknown_usd)}
+                has no confirmed price yet.
+              {/if}
             </p>
           {/if}
         </div>
@@ -117,14 +154,15 @@
               {#if room.refused}
                 refused, the {money(room.ceiling_usd)} ceiling is reached.
               {:else}
-                {money(room.headroom_usd)} left before the {money(room.ceiling_usd)} ceiling.
+                {money(room.headroom_usd)}
+                left before the {money(room.ceiling_usd)} ceiling.
               {/if}
             </li>
           {/each}
           {#if runCap}
             <li data-cap="run">
-              A run that would pass {money(runCap.value)} is stopped before the request that would cross it, and says so in
-              the thread.
+              A run that would pass {money(runCap.value)} is stopped before the request that would cross it, and says so
+              in the thread.
             </li>
           {/if}
           {#if threadCap}
@@ -137,26 +175,21 @@
 
       <Section id="breakdown" title="Where it went">
         <Segmented label="Breakdown" options={breakdownOptions} bind:value={breakdown} />
-        {#if slices.length === 0}
-          <ViewState kind="empty" title="Nothing spent yet" level={3}>No paid run has happened this month.</ViewState>
-        {:else}
-          <ul class="asst-bars" aria-label="Spending {breakdownOptions.find((option) => option.value === breakdown)?.label.toLowerCase()}">
-            {#each slices as slice (slice.key)}
-              <li class="asst-bars__row" data-key={slice.key}>
-                <span class="asst-bars__label">{label(slice)}</span>
-                <span class="asst-bars__value">{money(slice.cost_usd + slice.committed_usd)}</span>
-                <meter class="asst-bars__bar" min="0" max={largest} value={slice.cost_usd + slice.committed_usd} aria-hidden="true"
-                ></meter>
-                <span class="asst-meta">{slice.calls} {slice.calls === 1 ? 'call' : 'calls'}</span>
-              </li>
-            {/each}
-          </ul>
-        {/if}
+        <DataTable
+          caption="Spending {breakdownOptions.find((option) => option.value === breakdown)?.label.toLowerCase()}"
+          {columns}
+          rows={slices}
+          key={(slice) => slice.key}
+          cell={sliceCell}
+          empty="No paid run has happened this month."
+        />
       </Section>
 
       <Section id="runs" title="Largest runs">
         {#if data.top_runs.length === 0}
-          <ViewState kind="empty" title="No runs yet" level={3}>The most expensive runs of the month show here.</ViewState>
+          <ViewState kind="empty" title="No runs yet" level={3}
+            >The most expensive runs of the month show here.</ViewState
+          >
         {:else}
           <List label="Largest runs">
             {#each data.top_runs as run (run.run_id)}
