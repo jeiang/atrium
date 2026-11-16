@@ -181,7 +181,11 @@
     let touchY = 0;
     // True when an element under the input can still move that way itself, so the page will not scroll.
     const inner = (target: EventTarget | null, up: boolean): boolean => {
-      for (let node = target instanceof Element ? target : null; node && node !== document.body; node = node.parentElement) {
+      for (
+        let node = target instanceof Element ? target : null;
+        node && node !== document.body;
+        node = node.parentElement
+      ) {
         const overflow = getComputedStyle(node).overflowY;
         if (overflow !== 'auto' && overflow !== 'scroll') continue;
         if (up ? node.scrollTop > 0 : node.scrollTop + node.clientHeight < node.scrollHeight) return true;
@@ -206,8 +210,10 @@
     };
     const onKey = (event: KeyboardEvent): void => {
       const target = event.target;
-      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select'))) return;
-      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey)) scrolledUp(target);
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select')))
+        return;
+      if (['ArrowUp', 'PageUp', 'Home'].includes(event.key) || (event.key === ' ' && event.shiftKey))
+        scrolledUp(target);
     };
     const onScroll = (): void => {
       const y = window.scrollY;
