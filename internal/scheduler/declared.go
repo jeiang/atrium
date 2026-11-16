@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -79,12 +80,8 @@ func syncSchedule(ctx context.Context, tx *sql.Tx, def Definition, job Job, now 
 }
 
 func carry(ctx context.Context, tx *sql.Tx, def Definition, job Job, now float64) error {
-	var value string
-	err := tx.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", def.CarriedSetting).Scan(&value)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
+	value, found, err := settings.StoredValue(ctx, tx, def.CarriedSetting)
+	if err != nil || !found {
 		return err
 	}
 	value = strings.TrimSpace(value)
@@ -92,8 +89,7 @@ func carry(ctx context.Context, tx *sql.Tx, def Definition, job Job, now float64
 		return nil
 	}
 	target := "job:" + def.Key
-	var done bool
-	if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM operation_audit WHERE operation = ? AND target = ?)", CarryOperation, target).Scan(&done); err != nil || done {
+	if done, err := state.Audited(ctx, tx, CarryOperation, target); err != nil || done {
 		return err
 	}
 	applied, reason := job.Schedule == value, ""
