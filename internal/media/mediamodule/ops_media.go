@@ -5,21 +5,11 @@ import (
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 )
 
-func downloadOperations() ([]application.Definition, []application.Binding) {
-	return []application.Definition{
-			mediaapp.DescribeDownloads(),
-			mediaapp.DescribeTorrentFiles(),
-			mediaapp.DescribeAdd(),
-			mediaapp.DescribeSelectFiles(),
-		}, []application.Binding{
-			{Kind: application.HTML, Target: "GET /apps/media/downloads", Uses: []application.Name{mediaapp.DownloadsName}},
-			{Kind: application.HTML, Target: "GET /apps/media/torrents", Uses: []application.Name{mediaapp.DownloadsName}},
-			{Kind: application.Tool, Target: "media_downloads", Uses: []application.Name{mediaapp.DownloadsName}},
-			{Kind: application.HTML, Target: "GET /apps/media/torrents/{hash}/files", Uses: []application.Name{mediaapp.TorrentFilesName}},
-			{Kind: application.HTML, Target: "POST /apps/media/torrents/{hash}/files", Uses: []application.Name{mediaapp.SelectFilesName, mediaapp.TorrentFilesName}},
-			{Kind: application.HTML, Target: "POST /apps/media/add", Uses: []application.Name{mediaapp.AddName, mediaapp.DownloadsName}},
-			{Kind: application.Tool, Target: "media_add_magnet", Uses: []application.Name{mediaapp.AddName}},
-		}
+func queueOperations() ([]application.Definition, []application.Binding) {
+	return []application.Definition{mediaapp.DescribeQueue()}, []application.Binding{
+		{Kind: application.HTML, Target: "GET /apps/media/downloads", Uses: []application.Name{mediaapp.QueueName}},
+		{Kind: application.HTML, Target: "GET /apps/media/torrents", Uses: []application.Name{mediaapp.QueueName}},
+	}
 }
 
 func channelOperations() ([]application.Definition, []application.Binding) {
@@ -71,8 +61,8 @@ func filingOperations() ([]application.Definition, []application.Binding) {
 			mediaapp.DescribeSweep(),
 			mediaapp.DescribeFilingInspect(),
 		}, []application.Binding{
-			{Kind: application.HTML, Target: "POST /apps/media/file", Uses: []application.Name{mediaapp.FilingPreviewName, mediaapp.FileItemName, mediaapp.DownloadsName}},
-			{Kind: application.HTML, Target: "POST /apps/media/ignore", Uses: []application.Name{mediaapp.IgnoreName, mediaapp.DownloadsName}},
+			{Kind: application.HTML, Target: "POST /apps/media/file", Uses: []application.Name{mediaapp.FilingPreviewName, mediaapp.FileItemName, mediaapp.QueueName}},
+			{Kind: application.HTML, Target: "POST /apps/media/ignore", Uses: []application.Name{mediaapp.IgnoreName, mediaapp.QueueName}},
 			{Kind: application.CLI, Target: "media sweep", Uses: []application.Name{mediaapp.SweepName}},
 			{Kind: application.CLI, Target: "media inspect-filing", Uses: []application.Name{mediaapp.FilingInspectName}},
 			{Kind: application.Job, Target: "media/media-sweep", Uses: []application.Name{mediaapp.SweepName}},

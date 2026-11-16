@@ -755,9 +755,30 @@ and exact Host, has no bearer, and serves only GET/HEAD under
 `media.media_vpn_base_url`; `media_root`, `media_movies_url`, and `media_tv_url`
 are refused inputs.
 
-- Only media-tagged torrents are changed. Adds take one magnet or one torrent
+- Adds take one magnet or one torrent
   file, not both. A v1 info hash is required; v2-only torrents are refused, and
   hybrid torrents with v1 pieces are accepted.
+- Torrents (`/apps/media/torrents`, the qBittorrent connection, the tools
+  `downloads`, `download_add` and `download_control`) is its own app; Library
+  depends on it. Every write goes through one gate. The operator may change any
+  torrent. Agents and jobs change only torrents tagged `atrium` (stamped on
+  every new add) or `media`, and never remove a tag. A job removes only a
+  torrent Library has tagged `filed` and qBittorrent has stopped. Undo of an
+  add is refused once the torrent is filed. The first start of this release
+  turns Torrents on when Library is on and Torrents has no stored choice and
+  no pin; otherwise Torrents stays off until enabled.
+  Library depends on Torrents: the app switch refuses to turn Torrents off
+  while Library is on (`dependent_on`) and to turn Library on while Torrents
+  is off (`dependency_off`). When Torrents is unavailable, `/settings/media`
+  shows Library as unavailable with "Torrents is unavailable:" and its reason.
+- Tool renames: `media_downloads` is now `downloads` and `media_add_magnet` is
+  now `download_add`; `download_control` (pause, resume, remove) is new. The
+  old `tools.tool_media_downloads_enabled` and
+  `tools.tool_media_add_magnet_enabled` keys are retired: an environment pin is
+  ignored with a warning, as for any retired key.
+- A successful add on `/apps/media/add` shows the Downloads page with an
+  "Added" notice when Library is on, and the add page with the notice when it
+  is off.
 - Filing prepares without writing. Durable receipt-keyed steps then hardlink
   downloads or rename imports without overwriting destinations or copying
   across devices. A repeated receipt returns its prior result, including

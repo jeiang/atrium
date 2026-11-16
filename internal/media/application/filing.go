@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/media/agentclient"
@@ -46,7 +47,6 @@ type FilingPreview struct {
 type located struct {
 	set   media.Settings
 	agent *agentclient.Client
-	qb    *media.Qbit
 	item  media.Item
 	shows []string
 }
@@ -151,7 +151,7 @@ func (s *Service) fileItem(ctx context.Context, in FilingInput) (Filed, error) {
 		return Filed{}, invalid("plan", plan.Error)
 	}
 	if at.item.Torrent {
-		current, err := at.qb.Torrent(ctx, at.item.ID)
+		current, err := at.set.Intake.Get(ctx, at.item.ID)
 		if err != nil {
 			return Filed{}, classify(err)
 		}
@@ -181,10 +181,11 @@ func (s *Service) fileItem(ctx context.Context, in FilingInput) (Filed, error) {
 		return Filed{}, &application.Error{Code: application.Unknown, Message: "the media agent did not confirm the filing; inspect it and resolve the effect"}
 	}
 	if at.item.Torrent {
-		if err := at.set.Tag(ctx, s.d.Ledger, at.set, media.Scope{}, at.item.ID, media.TagIgnored, false); err != nil {
+		scope := contract.Scope{Actor: contract.Operator}
+		if err := at.set.Intake.Mark(ctx, scope, at.item.ID, media.TagMedia, media.TagIgnored, false); err != nil {
 			return Filed{Item: at.item, Dests: dests}, classifyFiling(&media.PartialError{Cause: err, Placed: dests})
 		}
-		if err := at.set.Tag(ctx, s.d.Ledger, at.set, media.Scope{}, at.item.ID, media.TagFiled, true); err != nil {
+		if err := at.set.Intake.Mark(ctx, scope, at.item.ID, media.TagMedia, media.TagFiled, true); err != nil {
 			return Filed{Item: at.item, Dests: dests}, classifyFiling(&media.PartialError{Cause: err, Placed: dests})
 		}
 	} else {
@@ -345,7 +346,7 @@ func (s *Service) ignore(ctx context.Context, in IgnoreInput) error {
 	if err != nil {
 		return err
 	}
-	return classifyFiling(media.Ignore(ctx, s.d.Ledger, at.set, at.item))
+	return classifyFiling(media.Ignore(ctx, at.set, at.item))
 }
 
 func (s *Service) find(ctx context.Context, id string) (located, error) {
@@ -355,13 +356,13 @@ func (s *Service) find(ctx context.Context, id string) (located, error) {
 		return at, err
 	}
 	at.set = set
-	if at.qb, err = set.Qbit(); err != nil {
+	if err = set.Intake.Ready(ctx); err != nil {
 		return at, classify(err)
 	}
 	if at.agent, err = set.Agent(protocol.CapabilityFile); err != nil {
 		return at, classify(err)
 	}
-	if at.item, err = set.Find(ctx, at.qb, at.agent, set.DownloadPrefix, id); err != nil {
+	if at.item, err = set.Find(ctx, set.Intake, at.agent, set.DownloadPrefix, id); err != nil {
 		if _, ok := errors.AsType[media.PlanError](err); ok {
 			return at, &application.Error{Code: application.Unavailable, Message: "qBittorrent or the media agent could not list the waiting items.", Cause: err}
 		}

@@ -13,6 +13,7 @@ var exceptions = []exception{
 	{"internal/apps/calendar/calendarmodule", "internal/assistant/threads", "P12.2"},
 	{"internal/apps/calendar/calendarmodule", "internal/attention/sources", "P12.2"},
 	{"internal/apps/calendar/calendartools", "internal/assistant/application", unplanned},
+	{"internal/apps/torrents/torrenttools", "internal/assistant/application", unplanned},
 	{"internal/assistant/assistantmodule", "internal/assistant/tools/ops", "P14.1"},
 	{"internal/assistant/assistantmodule", "internal/serverops", "P14.1"},
 	{"internal/assistant/assistantmodule", "internal/serverops/application", "P14.1"},

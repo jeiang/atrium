@@ -45,6 +45,7 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ops_pprof` | bool | `false` | `ATRIUM_CORE_OPS_PPROF` |
 | `otel_traces_endpoint` | string | none | `ATRIUM_CORE_OTEL_TRACES_ENDPOINT` |
 | `public_url` | string | none | `ATRIUM_CORE_PUBLIC_URL` |
+| `torrents_enabled` | bool | `false` | `ATRIUM_CORE_TORRENTS_ENABLED` |
 
 ### export
 
@@ -143,6 +144,7 @@ Operator settings are stored in the database and edited in the application. They
 | `mail_enabled` | bool | `false` | ui |
 | `media_enabled` | bool | `false` | ui |
 | `notifications_enabled` | bool | `false` | ui |
+| `torrents_enabled` | bool | `false` | ui |
 | `tz` | string | `America/Port_of_Spain` | ui |
 
 ### export

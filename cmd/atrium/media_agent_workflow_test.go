@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -50,7 +51,7 @@ func TestFilingThroughTheAgentTwiceHasOneResult(t *testing.T) {
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E01.mkv"), []byte("one"))
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E02.mkv"), []byte("two"))
-	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
@@ -153,7 +154,7 @@ func TestFilingUnknownBlocksAndIsInspectable(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	root := filepath.Join(dir, "library")
 	useMediaAgent(t, dir, qbURL, srv.URL, token, root)
-	qb.put(mnpTorrent{hash: hash, name: "Movie.2020", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: filepath.Join(root, "downloads", "Movie.2020")})
+	qb.put(mnpTorrent{hash: hash, name: "Movie.2020", tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: filepath.Join(root, "downloads", "Movie.2020")})
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
@@ -205,8 +206,8 @@ func TestFilingRefusesUntaggedAndOutsidePrefix(t *testing.T) {
 	mnpWrite(t, filepath.Join(elsewhere, "Movie.2020.mkv"), []byte("outside"))
 	inside := filepath.Join(root, "downloads", "Plain.2021")
 	mnpWrite(t, filepath.Join(inside, "Plain.2021.mkv"), []byte("plain"))
-	qb.put(mnpTorrent{hash: outside, name: "Movie.2020", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: elsewhere})
-	qb.put(mnpTorrent{hash: plain, name: "Plain.2021", state: media.StoppedUP, progress: 1, content: inside})
+	qb.put(mnpTorrent{hash: outside, name: "Movie.2020", tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: elsewhere})
+	qb.put(mnpTorrent{hash: plain, name: "Plain.2021", state: contract.StoppedUP, progress: 1, content: inside})
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
@@ -313,7 +314,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E01.mkv"), []byte("one"))
 	mnpWrite(t, filepath.Join(content, "Lanterns.S02E01.mkv"), []byte("two"))
-	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 	show := filepath.Join(root, "tv", "Lanterns (2026)")
 	if err := os.Mkdir(show, 0o775); err != nil {
 		t.Fatal(err)
