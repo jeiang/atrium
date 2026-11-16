@@ -23,6 +23,9 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		if strings.TrimSpace(d.Name) == "" {
 			return nil, &InvalidDeclaration{Module: d.Name, Field: "name"}
 		}
+		if strings.TrimSpace(d.Title) == "" {
+			return nil, &InvalidDeclaration{Module: d.Name, Field: "title"}
+		}
 		if _, ok := byName[d.Name]; ok {
 			return nil, DuplicateModule(d.Name)
 		}
@@ -45,16 +48,23 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		return nil, &InvalidCore{Module: core, Reason: "must be named " + Core}
 	}
 	for _, d := range decls {
-		if d.Core && (len(d.Needs) > 0 || len(d.Requires) > 0) {
+		if d.Core && (d.App || len(d.Depends) > 0 || len(d.Needs) > 0 || len(d.Requires) > 0) {
 			return nil, &InvalidCore{Module: d.Name}
 		}
-		for _, dep := range d.Needs {
-			if _, ok := byName[dep]; !ok {
+		for _, dep := range d.Depends {
+			target, ok := byName[dep]
+			if !ok {
 				return nil, &UnknownDependency{Module: d.Name, Dependency: dep}
+			}
+			if !d.App && target.App {
+				return nil, &InvalidDependency{Module: d.Name, Dependency: dep}
 			}
 		}
 	}
-	if _, err := byNeeds(decls); err != nil {
+	if _, err := byDepends(decls); err != nil {
+		return nil, err
+	}
+	if err := checkContract(decls); err != nil {
 		return nil, err
 	}
 	jobs, err := compileJobs(decls, byName)

@@ -83,46 +83,18 @@ var allowed = map[string]bool{
 	"internal/review/hub":         true,
 }
 
-var platform = map[string]bool{
-	"internal/module":                 true,
-	"internal/unit":                   true,
-	"internal/tool":                   true,
-	"internal/ledger":                 true,
-	"internal/proposals":              true,
-	"internal/proposals/proposalscmd": true,
-	"internal/embed":                  true,
-	"internal/ops":                    true,
-	"internal/ops/collectors":         true,
-	"internal/scheduler":              true,
-	"internal/review":                 true,
-	"internal/review/application":     true,
-	"internal/review/hub":             true,
-	"internal/notify":                 true,
-	"internal/web":                    true,
-	"internal/web/tpl":                true,
-	"internal/davmirror":              true,
-}
-
-const (
-	dayContract  = "internal/day"
-	calendarUnit = module + "/internal/calendar"
-)
-
-var units = []string{
-	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
-	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
-}
-
-var isolated = map[string]bool{
-	"internal/contacts": true,
-}
-
 func main() {
 	edges, err := scan()
+	if err == nil {
+		var more []string
+		more, err = unitEdges()
+		edges = append(edges, more...)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "adapterboundary:", err)
 		os.Exit(1)
 	}
+	slices.Sort(edges)
 	for _, e := range edges {
 		fmt.Fprintln(os.Stderr, e)
 	}
@@ -146,11 +118,7 @@ func scan() ([]string, error) {
 		if err != nil {
 			return err
 		}
-		platformFile := platform[path.Dir(file)] || strings.HasPrefix(file, dayContract+"/")
-		adapterFile := isAdapter(file, src)
-		dayReader := strings.HasPrefix(file, "internal/assistant/") && !strings.HasPrefix(file, "internal/assistant/tools/")
-		own := unitOf(file)
-		if !platformFile && !adapterFile && !dayReader && !isolated[own] {
+		if !isAdapter(file, src) {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
@@ -162,17 +130,8 @@ func scan() ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if adapterFile && forbidden(imp) {
+			if forbidden(imp) {
 				edges = append(edges, "adapter imports a forbidden package: "+file+"\t"+imp)
-			}
-			if platformFile && unitOf(imp) != "" {
-				edges = append(edges, "platform package imports a unit: "+file+"\t"+imp)
-			}
-			if dayReader && (imp == calendarUnit || strings.HasPrefix(imp, calendarUnit+"/")) {
-				edges = append(edges, "core assistant package imports calendar instead of reading the day contract: "+file+"\t"+imp)
-			}
-			if other := unitOf(imp); isolated[own] && other != "" && other != own {
-				edges = append(edges, "unit imports another unit: "+file+"\t"+imp)
 			}
 		}
 		return nil
@@ -193,16 +152,6 @@ func isAdapter(file string, src []byte) bool {
 		}
 	}
 	return false
-}
-
-func unitOf(name string) string {
-	rel := strings.TrimPrefix(name, module+"/")
-	for _, unit := range units {
-		if rel == unit || strings.HasPrefix(rel, unit+"/") {
-			return unit
-		}
-	}
-	return ""
 }
 
 func matches(pattern, file string) bool {

@@ -15,6 +15,7 @@ import (
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -144,7 +145,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
-		Name:            unit.Mail,
+		Name:     unit.Mail,
+		Title:    "Mail",
+		App:      true,
+		Needs:    []module.Need{{Kind: connections.Kind(endpoint.KindEmbedding)}, {Kind: mailconn.Kind, Soft: true}, {Kind: tracking.KindShip24, Soft: true}},
+		Packages: []string{"internal/assistant/tools/mail", "internal/mail"},
+		Tables: []string{"accounts", "commitments", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state", "loop_overrides",
+			"mail_scans", "mailboxes", "message_fts", "messages", "open_loops", "package_events", "packages", "rules", "watch_dismissed"},
 		Operations:      operations,
 		Bindings:        append(bindings, finalBindings()...),
 		Recover:         recoverDrafts,

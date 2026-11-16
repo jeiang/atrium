@@ -126,6 +126,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	}
 	return module.Declaration{
 		Name:     module.Core,
+		Title:    "Core",
 		Core:     true,
 		Settings: slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
 		Host:     slices.Concat(config.HostSettings(), backup.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),

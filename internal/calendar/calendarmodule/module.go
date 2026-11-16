@@ -16,6 +16,7 @@ import (
 	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/module"
@@ -48,6 +49,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
 		Name:          unit.Calendar,
+		Title:         "Calendar",
+		App:           true,
+		Needs:         []module.Need{{Kind: davmirror.KindICloud, Soft: true}, {Kind: connections.KindGoogle, Soft: true}},
+		Packages:      []string{"internal/assistant/tools/calendar", "internal/calendar"},
+		Tables:        []string{"agent_events", "event_candidates"},
 		EffectOrigins: []module.EffectOrigin{{Name: "calendar", Direct: true}},
 		Refs:          []module.RefKind{eventRef(mc.Env)},
 		Day:           dayProvider{env: mc.Env},

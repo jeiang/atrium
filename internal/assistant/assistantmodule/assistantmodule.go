@@ -96,7 +96,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	opsOps, opsBindings := opsOperations()
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
-		Name:             unit.Assistant,
+		Name:     unit.Assistant,
+		Title:    "Assistant",
+		Needs:    []module.Need{{Kind: anthropicconn.Kind, Soft: true}, {Kind: webfetch.KindWebfetch, Soft: true}, {Kind: weather.KindWeather, Soft: true}},
+		Packages: []string{"internal/assistant", "internal/attention/application", "internal/attention/sources", "internal/commitments", "internal/kb", "internal/tasks", "internal/weather"},
+		Tables: []string{"context_ledger", "context_projections", "export_pages", "kb_fts", "kb_records", "memory_fts", "memory_jobs", "memory_nodes", "memory_state", "memory_views",
+			"projects", "record_links", "run_events", "run_streams", "runs", "skills", "subagents", "tasks", "thread_files", "thread_fts", "thread_messages", "thread_plans",
+			"thread_queue", "threads", "tool_calls", "tool_results"},
 		EffectOrigins:    []module.EffectOrigin{{Name: "export", Direct: true}, {Name: "agent", Direct: true}, {Name: "local", Direct: true}},
 		Channels:         []string{notify.Default},
 		EffectCategories: []review.Category{{Name: unit.Assistant}, {Name: "knowledge", Operations: []string{"kb"}}},

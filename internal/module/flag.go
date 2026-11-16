@@ -34,7 +34,7 @@ func (s *Set) unmet(ctx context.Context, p Probe, r Declaration, states map[stri
 	if err != nil {
 		return nil, err
 	}
-	for _, dep := range r.Needs {
+	for _, dep := range r.Depends {
 		if states[dep] != Enabled {
 			out = append(out, Unmet{Name: dep, Reason: "needs " + dep + " (" + string(states[dep]) + ")"})
 		}

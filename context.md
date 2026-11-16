@@ -33,9 +33,9 @@ claims about the running application. Operator contracts are in
   is the only provider (kind `event`); tasks due stay attention items and
   birthdays stay under mail. The agenda answers 404 when no provider's unit
   is on and 503 `unavailable` when the calendar cannot be listed, for example
-  when no calendar is configured. `tools/adapterboundary` fails when a
-  package under `internal/assistant` other than the agent tools imports
-  `internal/calendar`, or when `internal/day` imports any unit.
+  when no calendar is configured. `tools/adapterboundary` fails when an
+  assistant package imports `internal/calendar` outside its listed
+  exceptions, or when `internal/day` imports any unit.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.
@@ -884,9 +884,26 @@ claims about the running application. Operator contracts are in
   after the publish lock and write connection are released; a failed
   starter marks its module unavailable with the error, is logged once per
   failure and is retried at the next publication.
-- Module ownership is checked at build time. `tools/tableownership` keeps
-  each table's SQL inside its owning module, and `tools/registrationownership`
-  keeps every registration in the module catalog: it type-checks the
+- Each `module.Declaration` states its contract: `Name` (the stable id),
+  `Title`, `Core` (the platform core), `App` (a switchable app; units with
+  `App` false are core units), `Depends` (other units it needs on),
+  `Needs` (connection kinds, hard or `Soft`), `Packages` (the `internal/`
+  package roots it owns; the longest matching root wins) and `Tables`.
+  `module.Compile` fails start on an empty title, a core declaration that is
+  an app or declares dependencies, an unknown dependency, a core unit that
+  depends on an app, a dependency cycle (named in order), a need for a
+  connection kind that no module declares, or a table or package root that
+  two units claim. Notifications and core claim no packages, so every
+  unclaimed package is platform.
+- Module ownership is checked at build time from those declarations, by
+  `just verify` and `just check-quick`. `tools/tableownership` takes each
+  unit's tables from its declaration and the platform tables from a fixed
+  list, fails on a schema table with no owner, an owned table the schema
+  does not create, or a table with two owners, and keeps each table's SQL
+  inside its owner's packages. `tools/registrationownership` fails when a
+  `module.Declaration` sits outside the packages of the unit it names (a
+  platform declaration must sit in a platform package), and keeps every
+  registration in the module catalog: it type-checks the
   production packages and fails, naming file and line, when an `init`
   function calls into another package (only the SQLite driver setup in
   `internal/db/open_cgo.go` may), when code outside
@@ -1077,13 +1094,12 @@ claims about the running application. Operator contracts are in
   opener or syncer passes through the module framework or the tool context.
   Mail binds its IMAP opener and post-proposal sync hook in its own module
   declaration, and its assistant tools take the opener from the same place.
-  `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
-  `internal/tool`, `internal/ledger`, `internal/proposals`,
-  `internal/proposals/proposalscmd`, `internal/embed`, `internal/ops`,
-  `internal/ops/collectors`, `internal/scheduler`, `internal/review` and its
-  subpackages, `internal/notify`, `internal/web` or `internal/web/tpl`
-  imports a unit package (mail, media, calendar, contacts, kb, tasks, weather,
-  grafana, serverops, or the agent tools under `internal/assistant/tools`).
+  `tools/adapterboundary` fails when a platform package (any package no
+  unit claims, apart from the composition roots `internal/app` and `cmd`)
+  imports a unit, or when a unit imports another unit other than through
+  that unit's `<root>/contract` package and a declared `Depends`. Each
+  remaining edge is a listed exception, package to package, that names the
+  slice that removes it; an exception that matches no import fails.
   `internal/module` names only `core`; every other module name is a constant
   in the leaf package `internal/unit`, and the list of modules is
   `internal/app/catalog.go`. Platform lookups read registries that units fill
