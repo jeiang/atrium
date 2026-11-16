@@ -6,13 +6,14 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
-	"strings"
+
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/apps/weather"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/homecard"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/unit"
@@ -33,8 +34,12 @@ func weatherCard(t *testing.T, s *apiSite, token string) homecard.Weather {
 	return home.Weather
 }
 
-func weatherToolRun(t *testing.T, api *modelLog) []string {
+func weatherToolRun(t *testing.T, site *connectionSite, api *modelLog) []string {
 	t.Helper()
+	if site.stop != nil {
+		site.stop()
+		site.stop = nil
+	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
 	return offeredTools(t, api, runApp(t, "agent", "run", "--text", "weather", "--kind", "chat"))
 }
@@ -55,23 +60,31 @@ func TestWeatherAppSwitchesItsToolHomeCardAndConnectionRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedSettings(t, map[string]string{weather.KeyLatitude: "10.65", weather.KeyLongitude: "-61.5", weather.KeyLocationName: "Port of Spain"})
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "weather", map[string]any{})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
+		t.Fatalf("warm run: exit %d stderr %s", warm.code, warm.stderr)
+	}
+	if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "weather", "--kind", "chat")); !slices.Contains(names, "weather") {
+		t.Fatalf("weather tool missing while Weather is on: %v", names)
+	}
+	var results int
+	if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
+		"SELECT COUNT(*) FROM thread_messages WHERE role = 'user' AND content_json LIKE '%Partly cloudy%'").Scan(&results); err != nil || results == 0 {
+		t.Fatalf("no weather tool result while Weather is on: %v", err)
+	}
 
 	site := &connectionSite{t: t, dir: dir}
 	site.start()
-	defer func() { site.stop() }()
+	defer func() {
+		if site.stop != nil {
+			site.stop()
+		}
+	}()
 	token := localAPIToken(t, "weather")
 	s := &apiSite{t: t, base: site.base}
 	rows, creds := lifecycleCounts(t, dir)
-
 	waitFor(t, func() bool { return weatherCard(t, s, token).State == homecard.StateOK })
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "weather", map[string]any{})))
-	if names := weatherToolRun(t, api); !slices.Contains(names, "weather") {
-		t.Fatalf("weather tool missing while Weather is on: %v", names)
-	}
-	last := api.Requests()[len(api.Requests())-1]
-	if body, _ := json.Marshal(last.JSON(t)["messages"]); !strings.Contains(string(body), "Partly cloudy") {
-		t.Fatalf("the weather tool result did not reach the model: %s", body)
-	}
 
 	setFlag(t, site, s, unit.Weather, "false")
 	waitFor(t, func() bool {
@@ -84,7 +97,7 @@ func TestWeatherAppSwitchesItsToolHomeCardAndConnectionRow(t *testing.T) {
 			t.Fatalf("home weather with Weather off: %+v", w)
 		}
 	}
-	if names := weatherToolRun(t, api); slices.Contains(names, "weather") {
+	if names := weatherToolRun(t, site, api); slices.Contains(names, "weather") {
 		t.Fatalf("weather tool offered while Weather is off: %v", names)
 	}
 	time.Sleep(500 * time.Millisecond)
@@ -100,10 +113,10 @@ func TestWeatherAppSwitchesItsToolHomeCardAndConnectionRow(t *testing.T) {
 		enabled, state, reason := lifecycleRow(t, dir, "service/weather")
 		return enabled && reason == "" && (state == "untested" || state == "ok")
 	})
-	if names := weatherToolRun(t, api); !slices.Contains(names, "weather") {
+	waitFor(t, func() bool { return weatherCard(t, s, token).State == homecard.StateOK })
+	if names := weatherToolRun(t, site, api); !slices.Contains(names, "weather") {
 		t.Fatalf("weather tool missing after Weather came back: %v", names)
 	}
-	waitFor(t, func() bool { return weatherCard(t, s, token).State == homecard.StateOK })
 	if r, c := lifecycleCounts(t, dir); r != rows || c != creds {
 		t.Fatalf("rows %d credentials %d after the switch, want %d %d", r, c, rows, creds)
 	}
