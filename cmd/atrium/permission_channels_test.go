@@ -20,15 +20,14 @@ import (
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func permissionProposal(t *testing.T, d *db.DB) (int64, string) {
+func permissionProposal(t *testing.T, d *db.DB) int64 {
 	t.Helper()
 	var id int64
-	var fingerprint string
 	if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = 'permission' ORDER BY id DESC LIMIT 1").
-		Scan(&id, &fingerprint); err != nil {
+		Scan(&id); err != nil {
 		t.Fatalf("permission proposal: %v", err)
 	}
-	return id, fingerprint
+	return id
 }
 
 func waitRunState(t *testing.T, d *db.DB, thread int64, want string) {
@@ -269,7 +268,7 @@ func TestTaskWrittenFromAMarkedThreadMarksItsReader(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	waitRunState(t, d, reader, "parked")
-	if id, _ := permissionProposal(t, d); id == 0 {
+	if id := permissionProposal(t, d); id == 0 {
 		t.Error("no permission request after the gated fetch")
 	}
 }
