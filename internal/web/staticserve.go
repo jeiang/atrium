@@ -26,34 +26,64 @@ type preparedAsset struct {
 
 type staticHandler struct {
 	assets map[string]preparedAsset
+	shell  string
+}
+
+func (s *staticHandler) load(fsys fs.FS, url, name string, immutable bool) {
+	asset := preparedAsset{variants: make(map[string]assetBytes, 3), contentType: mime.TypeByExtension(path.Ext(name)), immutable: immutable}
+	for _, encoding := range []string{"", "gzip", "br"} {
+		suffix := map[string]string{"gzip": ".gz", "br": ".br"}[encoding]
+		content, err := fs.ReadFile(fsys, name+suffix)
+		if err != nil {
+			if encoding != "" && errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			panic(err)
+		}
+		sum := sha256.Sum256(content)
+		asset.variants[encoding] = assetBytes{content: content, etag: `"` + hex.EncodeToString(sum[:]) + `"`}
+	}
+	s.assets[url] = asset
 }
 
 func newStaticHandler(fsys fs.FS, manifest map[string]string) *staticHandler {
 	s := &staticHandler{assets: make(map[string]preparedAsset, len(manifest)+1)}
-	load := func(url, name string, immutable bool) {
-		asset := preparedAsset{variants: make(map[string]assetBytes, 3), contentType: mime.TypeByExtension(path.Ext(name)), immutable: immutable}
-		for _, encoding := range []string{"", "gzip", "br"} {
-			suffix := map[string]string{"gzip": ".gz", "br": ".br"}[encoding]
-			content, err := fs.ReadFile(fsys, name+suffix)
-			if err != nil {
-				if encoding != "" && errors.Is(err, fs.ErrNotExist) {
-					continue
-				}
-				panic(err)
-			}
-			sum := sha256.Sum256(content)
-			asset.variants[encoding] = assetBytes{content: content, etag: `"` + hex.EncodeToString(sum[:]) + `"`}
-		}
-		s.assets[url] = asset
-	}
 	for _, url := range manifest {
 		if !strings.HasPrefix(url, staticPrefix) || !fs.ValidPath(strings.TrimPrefix(url, staticPrefix)) {
 			panic(fmt.Errorf("invalid asset path %q", url))
 		}
-		load(url, strings.TrimPrefix(url, staticPrefix), true)
+		s.load(fsys, url, strings.TrimPrefix(url, staticPrefix), true)
 	}
-	load(staticPrefix+"sw.js", "sw.js", false)
+	s.load(fsys, staticPrefix+"sw.js", "sw.js", false)
 	return s
+}
+
+func newAppHandler(fsys fs.FS) *staticHandler {
+	s := &staticHandler{assets: map[string]preparedAsset{}, shell: nextPrefix + "index.html"}
+	err := fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || path.Ext(name) == ".gz" || path.Ext(name) == ".br" {
+			return err
+		}
+		s.load(fsys, nextPrefix+name, name, strings.HasPrefix(name, nextAssets))
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	if _, ok := s.assets[s.shell]; !ok {
+		panic("web: internal/web/app/dist/index.html is missing; run `just web-stub` or `just web-assets`")
+	}
+	return s
+}
+
+func acceptsHTML(r *http.Request) bool {
+	for _, part := range strings.Split(r.Header.Get("Accept"), ",") {
+		mediaType, _, _ := strings.Cut(part, ";")
+		if strings.EqualFold(strings.TrimSpace(mediaType), "text/html") {
+			return true
+		}
+	}
+	return false
 }
 
 func acceptedEncodings(header string) map[string]float64 {
@@ -87,6 +117,9 @@ func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, fail func(
 		return
 	}
 	asset, ok := s.assets[r.URL.Path]
+	if !ok && s.shell != "" && (r.URL.Path == nextPrefix || !strings.HasPrefix(r.URL.Path, nextPrefix+nextAssets) && acceptsHTML(r)) {
+		asset, ok = s.assets[s.shell]
+	}
 	if !ok {
 		fail(http.StatusNotFound, "Not Found")
 		return

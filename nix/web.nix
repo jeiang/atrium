@@ -4,7 +4,6 @@
   importNpmLock,
   nodejs_24,
   brotli,
-  writeTextDir,
   biome,
   playwright-driver,
   makeFontsConf,
@@ -31,9 +30,11 @@
     ];
   };
   npmDeps = importNpmLock {npmRoot = root + "/web";};
-  stub = writeTextDir "index.html" ''
-    <!doctype html>
-    <title>atrium</title>
+  stub = runCommand "atrium-web-stub" {} ''
+    mkdir -p $out/assets
+    printf '<!doctype html>\n<title>atrium</title>\n' > $out/index.html
+    printf 'export const stub = "atrium stub asset, staged so the server tests see one hashed asset and its gzip variant";\n' > $out/assets/stub.js
+    gzip -9n -c $out/assets/stub.js > $out/assets/stub.js.gz
   '';
   build = {
     pname,
