@@ -23,7 +23,6 @@ func reviewOperations() ([]application.Definition, []application.Binding) {
 		{Kind: application.CLI, Target: "effects show", Uses: uses(reviewapp.EffectName)},
 		{Kind: application.HTML, Target: "POST /proposals/{proposal_id}/approve", Uses: uses(reviewapp.ApproveName)},
 		{Kind: application.CLI, Target: "proposals approve", Uses: uses(reviewapp.ApproveName)},
-		{Kind: application.HTML, Target: "POST /actions/{token}", Uses: []application.Name{reviewapp.ApproveName, reviewapp.DismissName}},
 		{Kind: application.HTML, Target: "POST /proposals/{proposal_id}/dismiss", Uses: uses(reviewapp.DismissName)},
 		{Kind: application.CLI, Target: "proposals dismiss", Uses: uses(reviewapp.DismissName)},
 		{Kind: application.HTML, Target: "POST /proposals/{proposal_id}/undo", Uses: uses(reviewapp.UndoName)},

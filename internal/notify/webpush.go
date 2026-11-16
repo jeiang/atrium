@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -52,17 +51,10 @@ type pushBlocked string
 
 func (e pushBlocked) Error() string { return string(e) }
 
-type pushAction struct {
-	Action string `json:"action"`
-	Title  string `json:"title"`
-	URL    string `json:"url"`
-}
-
 type pushPayload struct {
-	Title   string       `json:"title"`
-	Body    string       `json:"body"`
-	URL     string       `json:"url"`
-	Actions []pushAction `json:"actions,omitempty"`
+	Title string `json:"title"`
+	Body  string `json:"body"`
+	URL   string `json:"url"`
 }
 
 type pushKeys struct{ private, public string }
@@ -245,16 +237,6 @@ func pushURL(link, click string) string {
 		}
 	}
 	return pushInbox
-}
-
-func pushActions(actions []Action) []pushAction {
-	var out []pushAction
-	for i, a := range actions {
-		if strings.HasPrefix(a.URL, "/actions/") && strings.EqualFold(a.Method, http.MethodPost) {
-			out = append(out, pushAction{Action: "post-" + strconv.Itoa(i), Title: a.Label, URL: a.URL})
-		}
-	}
-	return out
 }
 
 func pushErrorClass(err error) string {

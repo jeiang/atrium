@@ -208,7 +208,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			r = r.WithContext(withIdentity(r.Context(), who, audit.UI))
 			r = r.WithContext(g.sessionAccess(r, who, token))
 		}
-		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {
+		if isUnsafe(r.Method) {
 			limit := defaultBodyCap
 			if g.bodyCap != nil {
 				var err error

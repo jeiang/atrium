@@ -22,7 +22,6 @@ type Wakeup struct {
 	Body           string
 	URL            string
 	Priority       int
-	Actions        []Action
 }
 
 type Delivery struct {

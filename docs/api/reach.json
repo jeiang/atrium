@@ -206,13 +206,11 @@
     {
       "area": "permissions",
       "operations": [
-        "notifications.phone-policy",
-        "notifications.revoke-links",
         "review.permissions",
         "review.permissions-update"
       ],
-      "required": 4,
-      "bound": 4
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "projects",
@@ -398,7 +396,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 208,
-  "total_bound": 208,
+  "total_required": 206,
+  "total_bound": 206,
   "total_approval_reached": 11
 }

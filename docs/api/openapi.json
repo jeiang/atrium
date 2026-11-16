@@ -1305,26 +1305,6 @@
         ],
         "type": "object"
       },
-      "ApplicationKindRow": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "on": {
-            "type": "boolean"
-          },
-          "web_only": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "on",
-          "web_only"
-        ],
-        "type": "object"
-      },
       "ApplicationMemoryWorked": {
         "additionalProperties": false,
         "properties": {
@@ -8326,38 +8306,6 @@
         ],
         "type": "object"
       },
-      "NotifyActionRef": {
-        "additionalProperties": false,
-        "properties": {
-          "decision": {
-            "type": "string"
-          },
-          "expires_at": {
-            "type": "number"
-          },
-          "id": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "target_id": {
-            "format": "int64",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "target_id",
-          "decision",
-          "label"
-        ],
-        "type": "object"
-      },
       "NotifyChannel": {
         "additionalProperties": false,
         "properties": {
@@ -8381,12 +8329,6 @@
       "NotifyNotification": {
         "additionalProperties": false,
         "properties": {
-          "actions": {
-            "items": {
-              "$ref": "#/components/schemas/NotifyActionRef"
-            },
-            "type": "array"
-          },
           "body": {
             "type": "string"
           },
@@ -8434,8 +8376,7 @@
           "title",
           "body",
           "channel",
-          "delivered",
-          "actions"
+          "delivered"
         ],
         "type": "object"
       },
@@ -8575,9 +8516,6 @@
           "error": {
             "type": "string"
           },
-          "phone": {
-            "$ref": "#/components/schemas/NotifymodulePhoneSettings"
-          },
           "push": {
             "$ref": "#/components/schemas/ApplicationPushConfiguration"
           }
@@ -8585,46 +8523,7 @@
         "required": [
           "channels",
           "error",
-          "push",
-          "phone"
-        ],
-        "type": "object"
-      },
-      "NotifymodulePhonePolicy": {
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "kinds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "NotifymodulePhoneSettings": {
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "kinds": {
-            "items": {
-              "$ref": "#/components/schemas/ApplicationKindRow"
-            },
-            "type": "array"
-          },
-          "outstanding": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "enabled",
-          "kinds",
-          "outstanding"
+          "push"
         ],
         "type": "object"
       },
@@ -32611,310 +32510,6 @@
         ],
         "x-atrium-area": "permissions",
         "x-atrium-module": "core"
-      }
-    },
-    "/permissions/phone": {
-      "put": {
-        "operationId": "notifications.phone-policy",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NotifymodulePhonePolicy"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "No Content",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "permissions"
-        ],
-        "x-atrium-area": "permissions",
-        "x-atrium-module": "notifications"
-      }
-    },
-    "/permissions/phone/revoke-links": {
-      "post": {
-        "operationId": "notifications.revoke-links",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "permissions"
-        ],
-        "x-atrium-area": "permissions",
-        "x-atrium-module": "notifications"
       }
     },
     "/projects": {

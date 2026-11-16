@@ -58,8 +58,8 @@ administrator role or remote emergency bypass.
 - Requests still enforce accepted Host, CSRF, same-origin, and CSP rules. A
   Host outside the accepted list gets 400 `Bad Host header`; `GET /healthz` is
   the only exception (HEAD is not exempt). CSRF and same-origin failures get
-  403. Signed media and phone action links have narrowly scoped credentials,
-  not general operator sessions.
+  403. Signed media links have narrowly scoped credentials, not general
+  operator sessions.
 - Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
   Such a peer must send exactly one valid value; otherwise the request is 400.
   Other forwarded-address headers do not choose a rate-limit identity.
@@ -216,8 +216,7 @@ go-live eligibility.
 The mail scan job holds the shared `mail-pass` resource for up to two hours;
 mail sync has a 20-minute bound. Approvals, assistant moves, and undo wait five
 seconds before returning busy. They have not thereby approved, moved, or undone
-the item and can be retried after the pass. A busy phone Approve returns 503,
-leaves the proposal pending, and leaves the link usable.
+the item and can be retried after the pass.
 
 API sync and scans use their declared job claims. API apply-deletions,
 rebaseline, and loops/watches refresh instead take the resource lock alone,
@@ -255,16 +254,9 @@ releases the block and governs later undo. Resolving a draft as sent updates
 the draft but leaves its original SMTP attempt unknown; it does not resend.
 A partial undo must be checked and resolved rather than repeatedly invoked.
 
-Phone action links are off by default. `phone_actions_enabled` turns them on
-and `phone_actions_kinds` lists the proposal kinds that may be approved or
-dismissed from a notification; web-only kinds cannot be enabled, and phone
-links never decide a permission request. One stored nonce mints an Approve and
-a Dismiss link. A link is valid for 12 hours and one use, and at most 20 links
-are minted per hour. `POST /actions/<token>` needs no session but still checks
-Host. A phone approval that meets a busy lock answers 503, leaves the proposal
-pending and keeps the link usable. Revoke removes unused links and stamps used
-rows, including expired ones. Link minting limits do not drop the proposal's
-inbox notification or prevent a push without action links.
+A push notification carries only a title, a body and the path of the
+signed-in page for its subject, such as `/proposals/<id>`. It has no action
+buttons, carries no token, and opening it writes nothing.
 
 ## Assistant and daily work
 
