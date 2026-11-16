@@ -214,6 +214,15 @@ export async function expectRoundedSurfaces(page: Page, windowEdge: readonly str
 }
 
 export async function expectNoSeriousAxeFindings(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      !document.querySelector('[data-arming]') &&
+      document
+        .getAnimations()
+        .every(
+          (animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity,
+        ),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
     .analyze();
