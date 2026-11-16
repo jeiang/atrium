@@ -828,7 +828,9 @@ claims about the running application. Operator contracts are in
   On its first start the application seeds the module flags. A database
   that already holds operator data (settings, secrets, accounts, threads or
   usage rows) gets every module whose required settings are met enabled; an
-  empty database starts core only. `atrium settings set <name>_enabled true`
+  empty database starts core only. The platform checks settings, secrets and
+  usage rows; each module declares its own check (`HasOperatorData`: mail
+  checks accounts, the assistant checks threads). `atrium settings set <name>_enabled true`
   is refused with the unmet reasons. A module flag change takes effect after
   the atrium units restart: the running application has no control that
   writes a flag, a module's Settings page marks "Restart atrium to apply"
@@ -1066,10 +1068,14 @@ claims about the running application. Operator contracts are in
   opener or syncer passes through the module framework or the tool context.
   Mail binds its IMAP opener and post-proposal sync hook in its own module
   declaration, and its assistant tools take the opener from the same place.
-  `tools/adapterboundary` fails when `internal/module`, `internal/tool`,
-  `internal/ledger` or `internal/proposals` imports a unit package (mail,
-  media, calendar, contacts); the module flag's import of mail accounts is
-  the one recorded exception.
+  `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
+  `internal/tool`, `internal/ledger` or `internal/proposals` imports a unit
+  package (mail, media, calendar, contacts, kb, tasks, weather, grafana,
+  serverops, or the agent tools under `internal/assistant/tools`).
+  `internal/module` names only `core`; every other module name is a constant
+  in the leaf package `internal/unit`, the effect origins a module owns are
+  declared on its declaration (`EffectOrigins`), and the list of modules is
+  `internal/app/catalog.go`.
   Settlement continues on a cancellation-detached context. Resolving an
   unknown or partial effect appends actor, source, outcome, prior state and
   evidence to `effect_resolutions`; it does not rewrite the raw attempt.

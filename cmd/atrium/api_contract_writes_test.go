@@ -11,11 +11,12 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestSettingsPatchAppliesAtomicallyWithIfMatch(t *testing.T) {
 	f := newFixture(t, goldenData{}, nil, "")
-	pinned := module.FlagKey(module.Mail)
+	pinned := module.FlagKey(unit.Mail)
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, f.dir, "host.toml", "[core]\n"+pinned+" = false\n"))
 	token := localAPIToken(t, "api")
 	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")

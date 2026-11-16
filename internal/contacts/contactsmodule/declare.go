@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -33,11 +34,11 @@ func ToolDefinitions() []module.ToolDefinition {
 func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := contactsOperations()
 	return module.Declaration{
-		Name:       module.Contacts,
+		Name:       unit.Contacts,
 		Requires:   Requirements(),
 		Host:       contacts.HostSettings(),
 		Jobs:       []scheduler.Definition{CardDAVJob(m.Jobs)},
-		Commands:   []*cli.Command{{Name: "contacts", Commands: []*cli.Command{jobcmd.Delegating(syncCommand(openSync(mc.Env)), module.Contacts+"/"+passrun.CardDAV)}}},
+		Commands:   []*cli.Command{{Name: "contacts", Commands: []*cli.Command{jobcmd.Delegating(syncCommand(openSync(mc.Env)), unit.Contacts+"/"+passrun.CardDAV)}}},
 		Tools:      ToolDefinitions(),
 		Operations: operations,
 		Bindings:   bindings,

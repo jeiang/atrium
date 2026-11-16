@@ -8,8 +8,8 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 var trackPackageSchema = json.RawMessage(`{"type":"object","properties":{"package_id":{"type":"integer"},"tracking_number":{"type":"string"},"carrier":{"type":"string"},"destination_country":{"type":"string"},"destination_postcode":{"type":"string"}},"additionalProperties":false}`)
@@ -26,7 +26,7 @@ func trackingTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 		Contexts:  tool.Kinds{tool.Chat},
 		Approval: &tool.Approval{Apply: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			return trackPackage(ctx, tc, args, svc)
-		}, Label: "Track package", Icon: "package", Module: module.Mail, Detail: "tracking_number"},
+		}, Label: "Track package", Icon: "package", Module: unit.Mail, Detail: "tracking_number"},
 	})}
 }
 

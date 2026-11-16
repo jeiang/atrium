@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 var opsMetricNames = []string{
@@ -53,7 +53,7 @@ func readiness(t *testing.T, base string) (int, string) {
 
 func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Notifications, "false"))
 	opsBase := opsAddr(t)
 
 	path := filepath.Join(dir, "atrium.db")

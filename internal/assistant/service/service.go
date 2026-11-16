@@ -36,6 +36,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 var log = logx.Logger("atrium.agent.service")
@@ -240,7 +241,7 @@ func Admit(ctx context.Context, q db.Querier, env config.Env, root threads.Kind,
 }
 
 func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now float64, o Start) (int64, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return 0, err
 	}
@@ -337,7 +338,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 }
 
 func (s *Service) execute(ctx context.Context, runID int64, settled func(context.Context, *journal.Run, error, bool)) (*journal.Run, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +381,7 @@ func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error
 }
 
 func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return 0, err
 	}
@@ -605,7 +606,7 @@ func (s *Service) claim(ctx context.Context, runID int64) error {
 }
 
 func (s *Service) StartResume(ctx context.Context, runID int64) error {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return err
 	}
@@ -622,7 +623,7 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 }
 
 func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claimed map[int64]bool) (int, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return 0, err
 	}
@@ -641,7 +642,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claime
 }
 
 func (s *Service) ResumeRuns(ctx context.Context, runs []int64, dead string, admit func(context.Context, journal.Run) (bool, error)) error {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return err
 	}

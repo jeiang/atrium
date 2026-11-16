@@ -12,9 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
-const module = "mail"
+const module = unit.Mail
 
 const PassResource = "mail-pass"
 
@@ -45,7 +46,7 @@ func Settings() []settings.Def {
 		ui(KeyUncertainDest, settings.String, "Misc", nonBlank),
 		settings.Shown("Waiting on them after (days)", adv(KeyLoopsWaitingAfterDays, settings.Int, "3", atLeast(1))),
 		settings.Shown("Remind ahead of a due date (days)", adv(KeyLoopsRemindAheadDays, settings.Int, "1", atLeast(1))),
-		ui(KeyLoopsRemindHour, settings.Int, "9", settings.Between(0, 23)),
+		settings.Shown("Reminder hour (0 to 23)", ui(KeyLoopsRemindHour, settings.Int, "9", settings.Between(0, 23))),
 		settings.Shown("Default snooze (days)", adv(KeyLoopsSnoozeDefaultDays, settings.Int, "3", atLeast(1))),
 	}
 }

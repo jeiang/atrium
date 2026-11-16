@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestCommitmentResourceJoinsTasksAndMail(t *testing.T) {
@@ -240,14 +241,14 @@ func TestCommitmentResourceJoinsTasksAndMail(t *testing.T) {
 	}
 	apiData(t, s.do(http.MethodGet, "/api/v1/mail/commitments", s.token, nil), http.StatusOK)
 
-	seedSettings(t, map[string]string{module.FlagKey(module.Mail): "false"})
+	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "false"})
 	s.restart()
 	if got, counts := list(""); fmt.Sprint(got) != "[Buy seeds Fix the fence]" || counts["waiting"].(map[string]any)["open"] != float64(0) {
 		t.Fatalf("mail off = %v %v", got, counts)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/commitments/commitment:1", s.token, nil), http.StatusNotFound, "not_found")
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/commitments/commitment:1/done", s.token, nil), http.StatusNotFound, "not_found")
-	seedSettings(t, map[string]string{module.FlagKey(module.Mail): "true", module.FlagKey(module.Assistant): "false"})
+	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "true", module.FlagKey(unit.Assistant): "false"})
 	s.restart()
 	if got, _ := list(""); fmt.Sprint(got) != "[Send the garden sketch Water the plants Sam sends the invoice]" {
 		t.Fatalf("assistant off = %v", got)

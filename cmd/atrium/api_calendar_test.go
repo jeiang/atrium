@@ -14,7 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestCalendarContactsAPI(t *testing.T) {
@@ -188,7 +188,7 @@ func TestCalendarCandidatesAPIRunsThroughTheJobGates(t *testing.T) {
 		return &apiSite{t: t, base: base}, token
 	}
 
-	dir, api, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
+	dir, api, _ := moduleFixture(t, flagsExcept(unit.Mail, "false"))
 	seed(dir)
 	s, token := serve()
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/calendar/candidates", token, nil), http.StatusConflict, "refused")

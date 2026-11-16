@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func grafanaHealthServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
@@ -245,13 +246,13 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 
 func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testing.T) {
 	embed := newFakeOpenAI(t)
-	dir, api, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, api, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
 
 	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "ok") {
 		t.Fatalf("passing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("enabling mail after a passing Test: %d %q", on.code, on.stderr)
 	}
 	if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); !slices.Contains(names, "mail_search") {
@@ -301,7 +302,7 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 	if degraded := moduleDegraded(t, s, "mail"); !strings.Contains(degraded, "service/embedding is away until ") {
 		t.Fatalf("mail requirement during the outage: %q", degraded)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("mail held by an automatic failure: %d %q", on.code, on.stderr)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
@@ -341,14 +342,14 @@ func TestAFailedEmbeddingTestDoesNotHoldMailAndAnAutomaticPassClearsIt(t *testin
 	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
 
 	embed.setStatus(http.StatusInternalServerError)
 	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitError {
 		t.Fatalf("failing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("mail held by a failed Test: %d %q", on.code, on.stderr)
 	}
 
@@ -396,7 +397,7 @@ func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
 	if degraded := moduleDegraded(t, s, "notifications"); !strings.Contains(degraded, "service/webpush is unconfigured") {
 		t.Fatalf("notifications requirement without a subject: %q", degraded)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Notifications), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Notifications), "true"); on.code != cli.ExitOK {
 		t.Fatalf("an unconfigured connection held notifications: %d %q", on.code, on.stderr)
 	}
 }

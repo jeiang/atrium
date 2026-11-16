@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -523,11 +524,11 @@ func apiCommand[I, O any](p *apiPages, def application.Definition, shape applica
 	}
 	shape.Response = reflect.TypeFor[O]()
 	shape.BeforeBody = func(ctx context.Context) error {
-		_, err := module.BindOwner(ctx, module.Assistant)
+		_, err := module.BindOwner(ctx, unit.Assistant)
 		return apiErr(err)
 	}
 	return api.Command(d, def, shape, target, func(ctx context.Context, in I) (application.Change[O], error) {
-		ctx, err := module.BindOwner(ctx, module.Assistant)
+		ctx, err := module.BindOwner(ctx, unit.Assistant)
 		if err != nil {
 			return application.Change[O]{}, apiErr(err)
 		}

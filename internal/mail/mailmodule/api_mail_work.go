@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -318,7 +319,7 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 		}),
 		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
 			var r application.Change[mailapp.PollTrackersResult]
-			_, err := module.Invoke(ctx, d.DB, d.Cfg, module.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+			_, err := module.Invoke(ctx, d.DB, d.Cfg, unit.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 				var err error
 				r, err = svc().PollTrackers(ctx, struct{}{})
 				return scheduler.Result{}, err

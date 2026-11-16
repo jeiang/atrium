@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
+	"github.com/jeiang/atrium/internal/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -37,6 +38,7 @@ import (
 	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -73,7 +75,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
 		{Name: "loops", Title: "Open loops", Keys: []string{
-			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays,
+			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsRemindHour, mail.KeyLoopsSnoozeDefaultDays,
 		}},
 		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 	}
@@ -138,18 +140,20 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
-		Name:           module.Mail,
-		Operations:     operations,
-		Bindings:       append(bindings, finalBindings()...),
-		Recover:        recoverDrafts,
-		Settings:       slices.Concat(mail.Settings(), tracking.SettingsDefs()),
-		Host:           mail.HostSettings(),
-		Attention:      AttentionSources(),
-		Search:         SearchSources(),
-		Jobs:           []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
-		ServiceSets:    m.watchServices(mc.Env),
-		ServiceSetName: "mail/watch",
-		Requires:       Requirements(),
+		Name:            unit.Mail,
+		Operations:      operations,
+		Bindings:        append(bindings, finalBindings()...),
+		Recover:         recoverDrafts,
+		HasOperatorData: accounts.ExistsAny,
+		EffectOrigins:   []string{ledger.AutoOrigin, "operator_send"},
+		Settings:        slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Host:            mail.HostSettings(),
+		Attention:       AttentionSources(),
+		Search:          SearchSources(),
+		Jobs:            []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		ServiceSets:     m.watchServices(mc.Env),
+		ServiceSetName:  "mail/watch",
+		Requires:        Requirements(),
 		Pages: []web.Page{
 			{Module: func(_ chi.Router, d *web.Deps) {
 				mailAPIRoutes(d)
@@ -184,7 +188,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: open, Now: d.Now}
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			return module.Effects{
-				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
+				Proposals: slices.Concat(e.Proposals(unit.Mail), r.Proposals(unit.Mail)),
 				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB), openloops.Undo(), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoCommitmentSnooze, d.Now)}),
 				Resolve:   live.Resolve(),
 				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),

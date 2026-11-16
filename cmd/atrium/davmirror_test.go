@@ -16,9 +16,9 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -210,7 +210,7 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 func TestTriageSaysSoWhenThereIsNoContactSource(t *testing.T) {
 	for _, on := range []string{"true", "false"} {
 		t.Run("contacts_"+on, func(t *testing.T) {
-			dir, _, _ := moduleFixture(t, flagsExcept(module.Contacts, on))
+			dir, _, _ := moduleFixture(t, flagsExcept(unit.Contacts, on))
 			base := startServeIn(t, dir)
 			status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/triage", nil)
 			if status != http.StatusOK {

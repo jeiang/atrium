@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -231,7 +232,7 @@ func visible(ctx context.Context) (shown, []string, error) {
 			names = append(names, st.Name)
 		}
 	}
-	return shown{tasks: snap.Visible(module.Assistant), commitments: snap.Visible(module.Mail)}, names, nil
+	return shown{tasks: snap.Visible(unit.Assistant), commitments: snap.Visible(unit.Mail)}, names, nil
 }
 
 func fromTask(t tasks.Task, links []tasks.Link) CommitmentItem {

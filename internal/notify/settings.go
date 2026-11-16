@@ -4,6 +4,7 @@ import (
 	"context"
 
 	modules "github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -12,5 +13,5 @@ const (
 )
 
 func Enabled(ctx context.Context) bool {
-	return modules.IsEnabled(ctx, modules.Notifications)
+	return modules.IsEnabled(ctx, unit.Notifications)
 }
