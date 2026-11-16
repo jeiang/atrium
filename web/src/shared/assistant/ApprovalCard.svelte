@@ -24,8 +24,6 @@
     presentation?: Presentation | 'auto';
     decided?: DecidedElsewhere;
     blocked?: Blocked;
-    insetTop?: number;
-    insetBottom?: number;
     level?: 2 | 3 | 4;
     more?: Snippet;
     onapprove: Handler;
@@ -41,8 +39,6 @@
     presentation = 'auto',
     decided,
     blocked,
-    insetTop = 0,
-    insetBottom = 0,
     level = 3,
     more,
     onapprove,
@@ -59,6 +55,7 @@
   let sentinel = $state<HTMLElement>();
   let receiptEl = $state<HTMLElement>();
   let rowHeight = $state(0);
+  let chromeEnd = $state(0);
   let touch = $state(false);
   let endSeen = $state(false);
   let cardSeen = $state(false);
@@ -77,7 +74,7 @@
   const rowInert = $derived(away || arming || phase !== 'open');
   const heading = $derived(`h${level}`);
   const gated = $derived(approval.irreversible && !endSeen);
-  const margin = $derived(`${-insetTop}px 0px ${-insetBottom}px 0px`);
+  const margin = $derived(`0px 0px ${-chromeEnd}px 0px`);
 
   $effect(() => {
     const query = matchMedia(touchQuery);
@@ -87,9 +84,21 @@
 
   $effect(() => {
     if (!row) return;
-    const observer = new ResizeObserver(() => (rowHeight = row?.offsetHeight ?? 0));
-    observer.observe(row);
-    return () => observer.disconnect();
+    const target = row;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        rowHeight = target.offsetHeight;
+        chromeEnd = Number.parseFloat(getComputedStyle(target).insetBlockEnd) || 0;
+      });
+    });
+    observer.observe(target);
+    observer.observe(document.documentElement);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   });
 
   $effect(() => {
@@ -133,7 +142,7 @@
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) endSeen = true;
       },
-      { rootMargin: `${-insetTop}px 0px ${-(insetBottom + rowHeight)}px 0px` },
+      { rootMargin: `0px 0px ${-(chromeEnd + rowHeight)}px 0px` },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
