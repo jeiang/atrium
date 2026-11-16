@@ -35,7 +35,7 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 func assistantJob(name, kind, prompt, schedule, setting string, timeout time.Duration, spend scheduler.Spend) scheduler.Definition {
 	return scheduler.Definition{
 		Module: unit.Assistant, Key: unit.Assistant + "/" + name, Name: name, Kind: kind, Prompt: prompt,
-		Schedule: schedule, ScheduleSetting: setting, Persistent: true, Timeout: timeout, Spend: spend, Needs: []string{unit.Assistant},
+		Schedule: schedule, CarriedSetting: setting, Persistent: true, Timeout: timeout, Spend: spend, Needs: []string{unit.Assistant},
 	}
 }
 

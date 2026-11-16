@@ -37,7 +37,7 @@ func sweepJob(ctx context.Context, svc *mediaapp.Service) (any, error) {
 func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, shutdown scheduler.ShutdownPolicy, run mediacmd.Job) scheduler.Definition {
 	return scheduler.Definition{
 		Module: unit.Media, Key: unit.Media + "/" + name, Name: name, Kind: scheduler.JobBuiltin, Prompt: prompt,
-		Schedule: schedule, ScheduleSetting: setting, Persistent: true, Timeout: timeout, Spend: scheduler.ModelFree,
+		Schedule: schedule, CarriedSetting: setting, Persistent: true, Timeout: timeout, Spend: scheduler.ModelFree,
 		Shutdown: shutdown, Resources: []string{resource}, Needs: []string{unit.Media},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			svc, err := openService(ctx, e.Service.DB, e.Service.Env, e.Service.Cfg, e.Now)

@@ -845,6 +845,112 @@
         ],
         "type": "object"
       },
+      "BackupEntry": {
+        "properties": {
+          "format": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "header": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupHeader"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modified_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size_bytes",
+          "modified_at",
+          "format"
+        ],
+        "type": "object"
+      },
+      "BackupHeader": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "encryption": {
+            "$ref": "#/components/schemas/Encryption"
+          },
+          "files": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "schema": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created_at",
+          "schema",
+          "encryption",
+          "files"
+        ],
+        "type": "object"
+      },
+      "BackupList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BackupEntry"
+            },
+            "type": "array"
+          },
+          "location": {
+            "$ref": "#/components/schemas/BackupLocation"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location",
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
+      "BackupLocation": {
+        "properties": {
+          "host_key": {
+            "type": "string"
+          },
+          "nix_option": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "host_key",
+          "nix_option"
+        ],
+        "type": "object"
+      },
       "BackupRef": {
         "additionalProperties": false,
         "properties": {
@@ -4454,6 +4560,29 @@
           "label",
           "count",
           "items"
+        ],
+        "type": "object"
+      },
+      "Headroom": {
+        "properties": {
+          "ceiling_usd": {
+            "type": "number"
+          },
+          "class": {
+            "type": "string"
+          },
+          "headroom_usd": {
+            "type": "number"
+          },
+          "refused": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "class",
+          "ceiling_usd",
+          "headroom_usd",
+          "refused"
         ],
         "type": "object"
       },
@@ -10792,6 +10921,21 @@
         ],
         "type": "object"
       },
+      "ReadBackupList": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BackupList"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadCommandStatus": {
         "properties": {
           "data": {
@@ -12715,11 +12859,34 @@
             "format": "int64",
             "maximum": 9007199254740991,
             "type": "integer"
+          },
+          "job": {
+            "$ref": "#/components/schemas/ScheduleJob"
           }
         },
         "required": [
           "id",
           "enabled"
+        ],
+        "type": "object"
+      },
+      "ScheduleCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "prompt",
+          "schedule"
         ],
         "type": "object"
       },
@@ -12764,6 +12931,28 @@
               }
             ]
           },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_run_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "last_started_text": {
             "anyOf": [
               {
@@ -12797,10 +12986,29 @@
               }
             ]
           },
+          "next_run_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "prompt": {
             "type": "string"
           },
+          "protected": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string"
+          },
           "schedule": {
+            "type": "string"
+          },
+          "source": {
             "type": "string"
           }
         },
@@ -12809,6 +13017,9 @@
           "name",
           "kind",
           "created_by",
+          "source",
+          "protected",
+          "revision",
           "cadence",
           "schedule",
           "prompt",
@@ -12819,13 +13030,19 @@
       "SchedulePatch": {
         "additionalProperties": false,
         "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
           "schedule": {
             "type": "string"
           }
         },
-        "required": [
-          "schedule"
-        ],
         "type": "object"
       },
       "ScheduleRun": {
@@ -12882,6 +13099,29 @@
           "job_name",
           "status",
           "cost"
+        ],
+        "type": "object"
+      },
+      "ScheduleRunStarted": {
+        "properties": {
+          "job": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "run": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run",
+          "job",
+          "status"
         ],
         "type": "object"
       },
@@ -13944,6 +14184,243 @@
         "required": [
           "start",
           "end"
+        ],
+        "type": "object"
+      },
+      "Spend": {
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/InferenceStatus"
+          },
+          "by_class": {
+            "items": {
+              "$ref": "#/components/schemas/SpendSlice"
+            },
+            "type": "array"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/SpendDay"
+            },
+            "type": "array"
+          },
+          "by_kind": {
+            "items": {
+              "$ref": "#/components/schemas/SpendSlice"
+            },
+            "type": "array"
+          },
+          "by_model": {
+            "items": {
+              "$ref": "#/components/schemas/SpendSlice"
+            },
+            "type": "array"
+          },
+          "caps": {
+            "items": {
+              "$ref": "#/components/schemas/SpendCap"
+            },
+            "type": "array"
+          },
+          "headroom": {
+            "items": {
+              "$ref": "#/components/schemas/Headroom"
+            },
+            "type": "array"
+          },
+          "month": {
+            "type": "string"
+          },
+          "month_start": {
+            "type": "number"
+          },
+          "next_month": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string"
+          },
+          "top_runs": {
+            "items": {
+              "$ref": "#/components/schemas/SpendRun"
+            },
+            "type": "array"
+          },
+          "topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "month",
+          "month_start",
+          "next_month",
+          "budget",
+          "state",
+          "headroom",
+          "caps",
+          "by_class",
+          "by_kind",
+          "by_model",
+          "by_day",
+          "top_runs",
+          "topics"
+        ],
+        "type": "object"
+      },
+      "SpendCap": {
+        "properties": {
+          "editable": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "scope",
+          "unit",
+          "value",
+          "source",
+          "editable"
+        ],
+        "type": "object"
+      },
+      "SpendDay": {
+        "properties": {
+          "calls": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "committed_usd": {
+            "type": "number"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "calls",
+          "cost_usd",
+          "committed_usd"
+        ],
+        "type": "object"
+      },
+      "SpendRun": {
+        "properties": {
+          "calls": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "committed_usd": {
+            "type": "number"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "run_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "number"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "run_id",
+          "kind",
+          "model",
+          "started_at",
+          "calls",
+          "cost_usd",
+          "committed_usd"
+        ],
+        "type": "object"
+      },
+      "SpendSlice": {
+        "properties": {
+          "calls": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "committed_usd": {
+            "type": "number"
+          },
+          "cost_usd": {
+            "type": "number"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "calls",
+          "cost_usd",
+          "committed_usd"
         ],
         "type": "object"
       },
@@ -35850,6 +36327,146 @@
       }
     },
     "/maintenance/backups": {
+      "get": {
+        "operationId": "maintenance.backup.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadBackupList"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core"
+      },
       "post": {
         "operationId": "maintenance.backup",
         "parameters": [
@@ -42247,6 +42864,168 @@
         ],
         "x-atrium-area": "schedules",
         "x-atrium-module": "assistant"
+      },
+      "post": {
+        "operationId": "assistant.schedule.add",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleChanged"
+                }
+              }
+            },
+            "description": "Created",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "schedules"
+        ],
+        "x-atrium-area": "schedules",
+        "x-atrium-module": "assistant"
       }
     },
     "/schedules/{job_id}": {
@@ -42407,7 +43186,200 @@
         "x-atrium-undoable": true
       },
       "patch": {
+        "description": "Changes any of schedule, prompt, name and enabled. If-Match is optional: send the schedule's revision to refuse the change with 412 when it changed since it was read; without it the change applies as before.",
         "operationId": "assistant.schedule.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleChanged"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "schedules"
+        ],
+        "x-atrium-area": "schedules",
+        "x-atrium-module": "assistant",
+        "x-atrium-undoable": true
+      }
+    },
+    "/schedules/{job_id}/enabled": {
+      "put": {
+        "operationId": "assistant.schedule.enabled",
         "parameters": [
           {
             "in": "path",
@@ -42433,7 +43405,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SchedulePatch"
+                "$ref": "#/components/schemas/ScheduleEnabled"
               }
             }
           },
@@ -42576,13 +43548,13 @@
           "schedules"
         ],
         "x-atrium-area": "schedules",
-        "x-atrium-module": "assistant",
-        "x-atrium-undoable": true
+        "x-atrium-module": "assistant"
       }
     },
-    "/schedules/{job_id}/enabled": {
-      "put": {
-        "operationId": "assistant.schedule.enabled",
+    "/schedules/{job_id}/run": {
+      "post": {
+        "description": "Asks the running serve to run the schedule now, through the same pause, module and budget checks as a scheduled run, and answers at once with the requested run.",
+        "operationId": "assistant.schedule.run_now",
         "parameters": [
           {
             "in": "path",
@@ -42604,26 +43576,16 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ScheduleEnabled"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleChanged"
+                  "$ref": "#/components/schemas/ScheduleRunStarted"
                 }
               }
             },
-            "description": "OK",
+            "description": "Accepted",
             "headers": {
               "Atrium-Command-Id": {
                 "schema": {
@@ -44795,6 +45757,128 @@
         ],
         "x-atrium-area": "home",
         "x-atrium-module": "core"
+      }
+    },
+    "/spend": {
+      "get": {
+        "operationId": "assistant.spend",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Spend"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "usage"
+        ],
+        "x-atrium-area": "usage",
+        "x-atrium-module": "assistant"
       }
     },
     "/tasks": {

@@ -105,8 +105,8 @@ func TestServeRuntimeRunsADueJobOnceBesideAConcurrentTick(t *testing.T) {
 		t.Fatalf("weekly review status %s: %s", status, text)
 	}
 	after, afterErr := tickProcess(t)
-	if code := exitWithin(t, after, 60*time.Second); code != cli.ExitOK {
-		t.Fatalf("agent tick after the run exit %d: %s", code, afterErr)
+	if code := exitWithin(t, after, 60*time.Second); code != cli.ExitTempFail {
+		t.Fatalf("agent tick beside serve after the run exit %d, want the refusal: %s", code, afterErr)
 	}
 	if n := len(api.Requests()) - before; n != 1 {
 		t.Errorf("%d weekly review requests after release, want 1", n)

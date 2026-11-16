@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/runtime"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
@@ -80,7 +81,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{mediaCommand(mc.Env, m.Now)},
+		Commands: []*cli.Command{jobcmd.DelegatingSubs(mediaCommand(mc.Env, m.Now), map[string]string{"poll": unit.Media + "/" + media.JobChannels, "sweep": unit.Media + "/" + media.JobSweep})},
 		Tools:    ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			return module.Effects{

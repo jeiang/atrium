@@ -15,7 +15,38 @@ All configured public, emergency, and ops sockets must bind before readiness.
 A failed bind closes the sockets already opened. A listener failure while
 running stops the other listeners and produces a failed exit. A second serve
 on the same database is refused by its serve lock. `serve` runs scheduled work
-and mail watches; `agent tick` is a one-shot pass over due work. It exits 0
+and mail watches, and it is the only process that runs a declared job while it
+is up. `atrium job run <module>/<name>` asks the running serve to run a declared
+job now and prints the run record as JSON (`run`, `job`, `status`, `owner`,
+`error`). It exits 0 when the run ended in a non-error status, 1 when it ended
+`error`, 75 when the job was already running (the message names the running
+run) or serve did not take the request within 30 seconds, and 69 when no serve
+holds the database's serve lock; then nothing runs. Interrupting the wait
+leaves a started run running in serve.
+
+`atrium schedule list|create|edit|delete|run` manages schedules from the
+command line, with the same rules as the Scheduled page and the API. `create
+<name> --schedule <when> --prompt <text>` adds an operator schedule; recurring
+schedules closer together than `agent_schedule_min_interval_seconds` are
+refused. `edit <id>` changes any of `--schedule`, `--prompt`, `--name` and
+`--enabled`, and `--if-match <revision>` refuses the change when the schedule
+changed since it was listed. Built-in schedules keep their module's name and
+prompt; the mail pass and the backup cannot be disabled or deleted. `run <id>`
+asks serve to run the schedule now and prints the requested run (`run`, `job`,
+`status`) without waiting; the run passes the same pause, module and budget
+checks as a scheduled run. It exits 69 when no serve is running. The
+assistant's `schedule_list` shows schedules the operator made as read-only
+(`created_by: operator`, `read_only: true`) so it can say what is scheduled;
+its edit, cancel, enable and disable calls on them are refused.
+A scheduled run that fails after one that did not sends one push on the
+system channel; further failures stay quiet until a run succeeds.
+
+While serve is up, the one-shot commands `sync`, `calendar sync`,
+`calendar candidates`, `contacts sync`, `media poll` and `media sweep` hand
+their declared job to serve the same way and print its run record instead of
+their statistics. `sync --account` and `agent tick` refuse with exit 75 and
+name `atrium job run`. With no serve running they run in the calling process
+as before. `agent tick` is then a one-shot pass over due work. It exits 0
 when it finished work or nothing was due, 75 when every due job was locked by
 another invocation and nothing started, and 1 on an error.
 
@@ -163,6 +194,19 @@ failed backup creation does not prune archives. v2 archives named
 `atrium-*.backup` are subject to the same pruning, so a retained v2
 archive needs another name or location. Off-host copying belongs to the host.
 
+`atrium backup list` (with `--json`) and the API's `GET /maintenance/backups`
+show up to 100 of the newest `atrium-*.backup` archives in the backup directory,
+with the total count, each archive's size and modification time, and the
+facts its unencrypted header states (format, creation time, schema,
+encryption and key id, file count) or why that header cannot be read. The
+header is not checked for tampering; `POST /maintenance/backups/verify` with a
+listed name, or `atrium restore --verify`, checks the whole archive. Verify
+results are not stored. Symlinks, subdirectories and other names in the
+directory are not listed. Without `backup.directory` (host key
+`core.backup_directory`), the list reports that no directory is configured; a
+configured directory that does not exist yet is reported as missing. To write
+an archive named `list` in the current directory, run `atrium backup ./list`.
+
 Restore replaces database and uploaded state and requires resident users of the
 database to be stopped. `atrium restore --verify ARCHIVE` checks an archive
 without installing it. Restore stages the archive, refuses a newer schema,
@@ -232,7 +276,8 @@ keeps its row and credentials, and is announced once. Declaring it again
 enables it as `untested` with its earlier results cleared, so the next check
 tests it. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
-announce it.
+announce it. Connection notices open the Connections settings page,
+`/settings/connections`.
 
 qBittorrent and the embedding endpoint ride out short outages: a failure that
 follows an `ok` or `expiring` state starts a 6-hour grace window. The stored
@@ -382,6 +427,19 @@ A push notification carries only a title, a body and the path of the
 signed-in page for its subject, such as `/proposals/<id>`. It has no action
 buttons, carries no token, and opening it writes nothing.
 
+When a chat run started from the web or the API stops to ask you a question
+and no open page is following that run, you get one push, "atrium: question
+waiting", that opens the thread. The push names the thread but not the
+question. Answering marks the inbox entry read; a push already shown on a
+device stays there. When such a run fails and no page is following it, you
+get one push, "atrium: run failed", that names the thread and says in plain
+words why it stopped (a spending limit, a run limit, the model not set up,
+an error from the model service, or an internal error). Stopping a run
+yourself sends nothing. Runs started from the command line report to the
+command instead, and scheduled runs use the scheduled run push above.
+These pushes follow the notifications module and each channel's content
+setting and are not limited by the caps on the assistant's own notify tool.
+
 ## Assistant and daily work
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
@@ -435,10 +493,12 @@ the hosted model leaves the host.
 Spending is reserved before dispatch: the full cold prompt, the maximum output,
 8,000 input tokens per allowed web search, and the search fees. The monthly
 budget defaults to $150. Scheduled work stops at 80% of it, chat at its own
-share capped at 95%, and the last 5% is kept for classification. Each model has
-a per-run cap that also covers subagent runs, and every subagent request must
-fit each ancestor run's cap. A thread cap (default $10, lower if the composer
-set one) covers a thread and its subagent threads. An attempt with an unknown
+share capped at 95%, and the last 5% is kept for classification. One run cap,
+`max_run_cost_usd` (default $10), applies to every model and also covers
+subagent runs, and every subagent request must fit each ancestor run's cap.
+The old per-model run caps are retired and ignored. A thread cap (default $10,
+lower if the composer set one) covers a thread and its subagent threads. An
+attempt with an unknown
 outcome stays reserved and expires to an estimated charge after 24 hours. A
 stream stopped mid-generation is charged for what it delivered, never below the
 usage the provider reported. Reservations keep their calendar month, so a time
@@ -446,6 +506,13 @@ zone change does not move spend, and earlier-month reservations count until
 they settle or expire. A memory job refused by the monthly budget waits for the
 next month, a run-cap refusal fails it, and other refusals back off. A provider
 spend-cap reply stops the run as a budget stop.
+
+`GET /spend` gives the Spend page in one answer: the month's budget, committed,
+reserved and remaining spend, what is refused now (scheduled work when the
+state is `near`, chat as well when it is `exhausted`), every spending cap with
+its value and source, the month split by budget class, run kind, model and
+day in the configured time zone, and the largest runs with their thread and
+job. The monthly budget and the run cap are ordinary settings.
 
 Tool permissions, run-kind limits, and approval are enforced in code. A fixed
 untrusted-data preamble comes before the editable system prompt. Each tool has

@@ -51,12 +51,12 @@ func Compile(defs []Definition) ([]Definition, error) {
 			return nil, bad("has a negative interval or initial delay")
 		case def.InitialDelay > 0 && def.Every == 0:
 			return nil, bad("declares an initial delay without a fixed interval")
-		case def.ScheduleSetting != "" && def.ScheduleHost != "":
-			return nil, bad("takes its schedule from both a setting and the host")
-		case def.Every > 0 && (def.ScheduleSetting != "" || def.ScheduleHost != ""):
+		case def.CarriedSetting != "" && def.ScheduleHost != "":
+			return nil, bad("carries a setting and takes its schedule from the host")
+		case def.Every > 0 && (def.CarriedSetting != "" || def.ScheduleHost != ""):
 			return nil, bad("has a fixed interval and a configurable schedule")
-		case def.ScheduleSetting != "" && (settingKeys[def.ScheduleSetting] || def.ScheduleSetting == KeyMinInterval):
-			return nil, bad("needs its own schedule setting")
+		case def.CarriedSetting != "" && (settingKeys[def.CarriedSetting] || def.CarriedSetting == KeyMinInterval):
+			return nil, bad("needs its own carried setting")
 		case def.Overlap:
 			return nil, bad("may not overlap itself")
 		case def.Shutdown != "" && def.Shutdown != ShutdownDrain && def.Shutdown != ShutdownCancel:
@@ -80,8 +80,8 @@ func Compile(defs []Definition) ([]Definition, error) {
 			}
 		}
 		keys[def.Key], names[def.Name] = true, true
-		if def.ScheduleSetting != "" {
-			settingKeys[def.ScheduleSetting] = true
+		if def.CarriedSetting != "" {
+			settingKeys[def.CarriedSetting] = true
 		}
 		nightly = nightly || def.Kind == JobNightly
 	}
