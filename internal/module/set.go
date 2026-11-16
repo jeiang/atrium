@@ -282,14 +282,36 @@ func (n *Snapshot) Status(name string) (Status, bool) {
 
 func (n *Snapshot) Statuses() []Status { return slices.Clone(n.statuses) }
 
+type ModuleAttention struct {
+	Module  string
+	Sources []attention.Source
+}
+
 func (n *Snapshot) Attention() []attention.Source {
 	var out []attention.Source
+	for _, m := range n.AttentionByModule() {
+		out = append(out, m.Sources...)
+	}
+	return out
+}
+
+func (n *Snapshot) AttentionByModule() []ModuleAttention {
+	var out []ModuleAttention
 	for _, r := range n.set.decls {
-		if r.Core || n.Enabled(r.Name) {
-			out = append(out, r.Attention...)
+		if len(r.Attention) > 0 && (r.Core || n.Enabled(r.Name)) {
+			out = append(out, ModuleAttention{Module: r.Name, Sources: r.Attention})
 		}
 	}
 	return out
+}
+
+func (n *Snapshot) Visible(name string) bool {
+	for _, r := range n.set.decls {
+		if r.Name == name {
+			return r.Core || n.Enabled(name)
+		}
+	}
+	return name == ""
 }
 
 func (n *Snapshot) Enabled(name string) bool {

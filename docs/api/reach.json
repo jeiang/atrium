@@ -240,10 +240,12 @@
       "area": "review",
       "operations": [
         "attention.read",
-        "review.pending"
+        "review.pending",
+        "review.queue",
+        "review.queue.item"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "schedules",
@@ -295,13 +297,24 @@
     {
       "area": "tasks",
       "operations": [
+        "commitments.delete",
+        "commitments.dismiss",
+        "commitments.done",
+        "commitments.get",
+        "commitments.list",
+        "commitments.reopen",
+        "commitments.update",
         "tasks.add",
+        "tasks.delete",
+        "tasks.dismiss",
         "tasks.done",
+        "tasks.get",
         "tasks.list",
+        "tasks.reopen",
         "tasks.update"
       ],
-      "required": 4,
-      "bound": 4
+      "required": 15,
+      "bound": 15
     },
     {
       "area": "threads",
@@ -383,7 +396,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 200,
-  "total_bound": 200,
+  "total_required": 213,
+  "total_bound": 213,
   "total_approval_reached": 11
 }

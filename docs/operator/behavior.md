@@ -300,6 +300,37 @@ services as their dedicated views. `/chat/agenda` returns 404 when the calendar
 module is off and 503 when the calendar cannot be listed, for example when none
 is configured. Full page navigations are not conditional fragment responses.
 
+The Needs you count is the size of the one inbox: questions the assistant is
+waiting on, permission requests, pending proposals and those with an unknown
+outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
+items such as commitments, tasks and open loops. Items of a module that is off
+are not counted. Clients list the same items, in the same order, from
+`GET /api/v1/queue`. The Needs you page still lists only proposals and drafts.
+
+Tasks can be created, edited, completed, reopened, dismissed and deleted from
+`/api/v1/tasks`. Each of these can be undone: the response names one effect,
+and `POST /api/v1/undo/write:<effect>` reverses it. Delete removes the task at
+once, so clients confirm it first; its undo, also in Activity, restores the
+task with the same id. A task links to at most one thread, project, person,
+record or message. A link to something that no longer exists shows no title.
+Moving a task's reminder time to a new moment sends the reminder again; other
+edits do not.
+
+To do and Waiting come from one list, `GET /api/v1/commitments`: your tasks and
+the commitments from mail that you owe (To do), and the commitments other
+people owe you (Waiting). An item's `ref` is `task:<id>` or `commitment:<id>`,
+the same id the one inbox uses. Tasks disappear while the assistant is off and
+commitments while mail is off. Done, dismiss and reopen work on both and can be
+undone; a reopened commitment is not proposed as a reminder again. Only an open
+item can be completed or dismissed; the request is refused otherwise. The Done
+and Dismiss buttons on the open loops page and `/api/v1/mail/commitments` use
+the same verbs, so they can be undone too. A commitment
+from mail cannot be edited or deleted, because the next mail scan would bring it
+back. The assistant lists both with `commitment_list` (commitments only in
+chat, scheduled and subagent runs), and in chat it can edit, complete or
+dismiss a task with `task_update` and `task_close`. It never changes a
+commitment from mail.
+
 Assistant runs use the Anthropic connection and a static supported-model
 catalog. A missing key or refused budget prevents a paid start before a new
 thread exists. Unknown models fail closed. Model-free jobs do not require a

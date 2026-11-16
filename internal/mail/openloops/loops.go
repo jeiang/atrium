@@ -40,6 +40,8 @@ const (
 	KindReminder = "reminder"
 	UndoReminder = "reminder_cancel"
 
+	UndoCommitmentStatus = "commitment_status"
+
 	Day              = 86400.0
 	DefaultListLimit = 50
 )
