@@ -15,12 +15,11 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/day"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -156,7 +155,7 @@ func (s *Service) Home(ctx context.Context, in HomeInput) (application.Read[Home
 		if out.Digest, err = digestLines(ctx, q, day); err != nil {
 			return err
 		}
-		out.Agenda = module.IsEnabled(ctx, unit.Calendar)
+		out.Agenda = len(module.EnabledDaySources(ctx)) > 0
 		if out.About, err = s.about(ctx, q, in.About); err != nil {
 			return err
 		}
@@ -216,23 +215,18 @@ func span(d time.Duration) string {
 	return strconv.Itoa(h) + " h " + strconv.Itoa(m) + " min"
 }
 
-func agendaOf(rows []calendar.Row, tz *time.Location, now time.Time) []AgendaEvent {
-	out := make([]AgendaEvent, 0, len(rows))
-	for _, row := range rows {
-		fields := row.Dict(tz)
-		first, _ := fields["start"].(string)
-		last, _ := fields["end"].(string)
-		event := AgendaEvent{Time: "all day", Title: row.Title, Meta: row.Location, Ask: calendar.EventRef(now.Format(time.DateOnly), row.UID)}
-		start, err := time.ParseInLocation("2006-01-02T15:04:05", first[:min(len(first), 19)], tz)
-		end, endErr := time.ParseInLocation("2006-01-02T15:04:05", last[:min(len(last), 19)], tz)
-		if err == nil {
-			event.Time = start.Format("15:04")
-			if endErr == nil && end.After(start) {
-				event.Meta = strings.TrimPrefix(row.Location+" · "+span(end.Sub(start)), " · ")
+func agendaOf(entries []day.Entry, now time.Time) []AgendaEvent {
+	out := make([]AgendaEvent, 0, len(entries))
+	for _, e := range entries {
+		event := AgendaEvent{Time: "all day", Title: e.Title, Meta: e.Location, Ask: e.Ref}
+		if !e.AllDay {
+			event.Time = e.Start.Format("15:04")
+			if e.End.After(e.Start) {
+				event.Meta = strings.TrimPrefix(e.Location+" · "+span(e.End.Sub(e.Start)), " · ")
 				switch {
-				case !now.Before(end):
+				case !now.Before(e.End):
 					event.State = "past"
-				case !now.Before(start):
+				case !now.Before(e.Start):
 					event.State = "now"
 				}
 			}
@@ -242,24 +236,17 @@ func agendaOf(rows []calendar.Row, tz *time.Location, now time.Time) []AgendaEve
 	return out
 }
 
-func (s *Service) agenda(ctx context.Context, q db.Querier, day time.Time) (*Agenda, error) {
-	if !module.IsEnabled(ctx, unit.Calendar) {
-		return nil, notFound("calendar is off")
+func (s *Service) agenda(ctx context.Context, q db.Querier, now time.Time) (*Agenda, error) {
+	sources := module.EnabledDaySources(ctx)
+	if len(sources) == 0 {
+		return nil, notFound("no day source is on")
 	}
-	tz, err := calendar.Zone(ctx, s.env)
+	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	entries, err := day.Collect(ctx, q, sources, from, from.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, err
 	}
-	set, err := calendar.LoadSettings(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	now := day.In(tz)
-	listing, err := calendar.ListEvents(ctx, s.env, set, now.Format(time.DateOnly), now.AddDate(0, 0, 1).Format(time.DateOnly), calendar.Filter{})
-	if err != nil {
-		return nil, &application.Error{Code: application.Unavailable, Message: "The calendar is unavailable.", Cause: err}
-	}
-	out := &Agenda{Events: agendaOf(listing.Events, tz, now)}
+	out := &Agenda{Events: agendaOf(entries, now)}
 	for i, event := range out.Events {
 		if event.State != "past" && event.Time != "all day" {
 			out.Next = &out.Events[i]

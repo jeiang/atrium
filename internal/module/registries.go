@@ -69,6 +69,7 @@ type Attachment struct {
 
 type registries struct {
 	origins     map[string]string
+	day         daySources
 	direct      []string
 	channels    []string
 	refs        map[string]RefKind
@@ -91,6 +92,10 @@ func (c claims) take(hook, key, owner string) error {
 
 func compileRegistries(decls []Declaration) (registries, error) {
 	r := registries{origins: map[string]string{}, refs: map[string]RefKind{}}
+	var err error
+	if r.day, err = compileDay(decls); err != nil {
+		return registries{}, err
+	}
 	channels := claims{SystemChannel: platformOwner}
 	refs, tools, hubs, pages := claims{}, claims{}, claims{}, claims{}
 	categories := claims{review.CategorySettings: platformOwner, review.CategoryOperations: platformOwner}
