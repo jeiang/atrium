@@ -21,10 +21,13 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 	if s.reg != nil {
 		n = s.reg.notify
 	}
-	if n == nil || s.d == nil || previous == next || next == Untested {
+	if n == nil || s.d == nil || previous == next || next == Untested || next == Away {
 		return
 	}
 	if (previous == "" || previous == Untested) && next != Failing && next != NeedsReauth && next != Disabled {
+		return
+	}
+	if previous == Away && (next == OK || next == Expiring) {
 		return
 	}
 	label := string(id)
@@ -62,7 +65,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 		if !errors.As(err, &invalid) {
 			return View{}, err
 		}
-		return s.record(ctx, id, lease.revision, []Result{{State: Failing, Reason: err.Error()}}, false, commits...)
+		return s.record(ctx, id, lease.revision, 0, []Result{{State: Failing, Reason: err.Error()}}, commits...)
 	}
 	action := def.Test
 	if def.Silent != nil {
@@ -72,7 +75,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, results, false, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
 }
 
 type HealthState struct {
@@ -98,9 +101,29 @@ type outcome struct {
 	OK       bool
 }
 
+type RuntimeReport struct {
+	ID       ID
+	revision int64
+	store    *Store
+	result   Result
+}
+
+type observedKey struct {
+	store      *Store
+	id         ID
+	capability string
+}
+
+type observation struct {
+	state State
+	at    int64
+}
+
 var (
 	outcomes  = make(chan outcome, 64)
 	succeeded sync.Map
+	observed  sync.Map
+	reporters sync.Map
 )
 
 func Outcomes() <-chan outcome { return outcomes }
@@ -117,6 +140,63 @@ func report(id ID, revision int64, ok bool) {
 	case outcomes <- outcome{ID: id, Revision: revision, OK: ok}:
 	default:
 	}
+}
+
+func Reports(d *db.DB) (<-chan RuntimeReport, func()) {
+	ch := make(chan RuntimeReport, 64)
+	reporters.Store(d, ch)
+	return ch, func() { reporters.CompareAndDelete(d, ch) }
+}
+
+func (l *Lease) Report(r Result) {
+	if l.store == nil || l.store.d == nil || r.Capability == "" {
+		return
+	}
+	ch, ok := reporters.Load(l.store.d)
+	if !ok {
+		return
+	}
+	key := observedKey{store: l.store, id: l.id, capability: r.Capability}
+	now := time.Now().UnixNano()
+	if last, seen := observed.Load(key); seen {
+		if prev := last.(observation); prev.state == r.State && now-prev.at < int64(time.Minute) {
+			return
+		}
+	}
+	select {
+	case ch.(chan RuntimeReport) <- RuntimeReport{ID: l.id, revision: l.revision, store: l.store, result: r}:
+		observed.Store(key, observation{state: r.State, at: now})
+	default:
+	}
+}
+
+func (r RuntimeReport) Record(ctx context.Context) error {
+	current, err := r.store.Get(ctx, r.ID)
+	if err != nil || !changes(current, r.result) {
+		return err
+	}
+	if err := r.store.Observe(ctx, r.ID, r.revision, r.result); err != nil && !errors.As(err, new(*Conflict)) {
+		return err
+	}
+	return nil
+}
+
+func changes(current View, r Result) bool {
+	if current.State == Unconfigured || current.State == Disabled {
+		return false
+	}
+	for _, p := range current.Results {
+		if p.Capability == r.Capability {
+			return !same(p.State, r.State)
+		}
+	}
+	return r.State != OK
+}
+
+func same(a, b State) bool {
+	healthy := func(s State) bool { return s == OK || s == Expiring }
+	failed := func(s State) bool { return s == Failing || s == NeedsReauth }
+	return a == b || healthy(a) && healthy(b) || failed(a) && failed(b)
 }
 
 type reporter struct {

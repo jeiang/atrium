@@ -2,17 +2,21 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
@@ -239,7 +243,7 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 	}
 }
 
-func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
+func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testing.T) {
 	embed := newFakeOpenAI(t)
 	dir, api, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
@@ -281,6 +285,9 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 		var next float64
 		return d.Read.QueryRow("SELECT checked_at FROM connections WHERE id = 'service/embedding'").Scan(&next) == nil && next > checked
 	})
+	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
+		t.Fatalf("mail shows a degraded requirement before the outage: %q", degraded)
+	}
 
 	embed.setStatus(http.StatusInternalServerError)
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 600 WHERE id = 'service/embedding'"); err != nil {
@@ -288,8 +295,11 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 	}
 	runApp(t, "reindex")
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
-	if n := connectionNotices(t, dir, "Embedding"); n != 1 {
-		t.Fatalf("%d notices after the automatic failure, want 1", n)
+	if n := connectionNotices(t, dir, "Embedding"); n != 0 {
+		t.Fatalf("%d notices after an automatic failure inside the grace window, want 0", n)
+	}
+	if degraded := moduleDegraded(t, s, "mail"); !strings.Contains(degraded, "service/embedding is away until ") {
+		t.Fatalf("mail requirement during the outage: %q", degraded)
 	}
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("mail held by an automatic failure: %d %q", on.code, on.stderr)
@@ -298,7 +308,7 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 	if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); !slices.Contains(names, "mail_search") {
 		t.Fatalf("mail tools during the outage: %v", names)
 	}
-	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK || !strings.Contains(listed.stdout, "service/embedding") || !strings.Contains(listed.stdout, "failing") {
+	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK || !strings.Contains(listed.stdout, "service/embedding") || !strings.Contains(listed.stdout, "away until ") {
 		t.Fatalf("connections list during the outage: %d %q", listed.code, listed.stdout)
 	}
 
@@ -306,9 +316,28 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 	s.stop()
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
+	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
+		t.Fatalf("mail requirement after recovery: %q", degraded)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 0 {
+		t.Fatalf("%d notices after an outage that recovered inside the grace window, want 0", n)
+	}
 }
 
-func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing.T) {
+func moduleDegraded(t *testing.T, s *connectionSite, page string) string {
+	t.Helper()
+	code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/"+page, nil)
+	if code != http.StatusOK {
+		t.Fatalf("%s settings page: %d", page, code)
+	}
+	m := regexp.MustCompile(`data-degraded>([^<]*)<`).FindStringSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	return html.UnescapeString(m[1])
+}
+
+func TestAFailedEmbeddingTestDoesNotHoldMailAndAnAutomaticPassClearsIt(t *testing.T) {
 	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
@@ -319,38 +348,56 @@ func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing
 	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitError {
 		t.Fatalf("failing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code == cli.ExitOK {
-		t.Fatalf("mail enabled after an explicit failure: %q", on.stdout)
-	} else if !strings.Contains(on.stderr+on.stdout, "embed endpoint probe failed") {
-		t.Fatalf("the hold message: %q", on.stderr+on.stdout)
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("mail held by a failed Test: %d %q", on.code, on.stderr)
 	}
 
 	embed.setStatus(0)
-	s := &connectionSite{t: t, dir: dir}
-	s.start()
-	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code == cli.ExitOK {
-		t.Fatalf("an automatic pass released the hold: %q", on.stdout)
-	}
-	s.stop()
-
-	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK {
-		t.Fatalf("passing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
-	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
-		t.Fatalf("mail not released after a passing Test: %d %q", on.code, on.stderr)
-	}
-
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 90000 WHERE id = 'service/embedding'"); err != nil {
 		t.Fatal(err)
 	}
-	embed.setStatus(http.StatusInternalServerError)
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	defer s.stop()
-	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
-		t.Fatalf("an automatic failure held mail: %d %q", on.code, on.stderr)
+	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
+	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
+		t.Fatalf("mail requirement after an automatic pass: %q", degraded)
+	}
+}
+
+func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
+	t.Parallel()
+	requireCipher(t)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, "http://grafana.invalid", "http://anthropic.invalid"))
+
+	if got := runApp(t, "connections", "test", "service/anthropic"); got.code == cli.ExitOK || !strings.Contains(got.stdout+got.stderr, "unconfigured") {
+		t.Fatalf("anthropic test without a key: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if state := connectionState(t, dir, "service/anthropic"); state != "unconfigured" {
+		t.Fatalf("anthropic state without a key = %q, want unconfigured", state)
+	}
+
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	defer s.stop()
+	if degraded := moduleDegraded(t, s, "assistant"); !strings.Contains(degraded, "service/anthropic is unconfigured") {
+		t.Fatalf("assistant requirement without a key: %q", degraded)
+	}
+	moduleDegraded(t, s, "notifications")
+	if got := runApp(t, "connections", "test", "service/webpush"); got.code == cli.ExitOK {
+		t.Fatalf("web push test without a subject: exit %d stdout %q", got.code, got.stdout)
+	}
+	if state := connectionState(t, dir, "service/webpush"); state != "unconfigured" {
+		t.Fatalf("web push state without a subject = %q, want unconfigured", state)
+	}
+	if degraded := moduleDegraded(t, s, "notifications"); !strings.Contains(degraded, "service/webpush is unconfigured") {
+		t.Fatalf("notifications requirement without a subject: %q", degraded)
+	}
+	if on := runSettings(t, "set", module.FlagKey(module.Notifications), "true"); on.code != cli.ExitOK {
+		t.Fatalf("an unconfigured connection held notifications: %d %q", on.code, on.stderr)
 	}
 }
 
@@ -397,5 +444,177 @@ func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
 		if after := connectionNotices(t, dir, "Grafana"); after != before+1 {
 			t.Fatalf("%d notices after concurrent failing tests %d, want %d", after-before, i, 1)
 		}
+	}
+}
+
+type listedConnection struct {
+	ID         string     `json:"id"`
+	State      string     `json:"state"`
+	GraceUntil *time.Time `json:"grace_until"`
+}
+
+func listedEmbedding(t *testing.T) listedConnection {
+	t.Helper()
+	got := runApp(t, "connections", "list", "--json")
+	if got.code != cli.ExitOK {
+		t.Fatalf("connections list --json: %d %q", got.code, got.stderr)
+	}
+	var views []listedConnection
+	if err := json.Unmarshal([]byte(got.stdout), &views); err != nil {
+		t.Fatalf("connections list --json: %v\n%s", err, got.stdout)
+	}
+	for _, v := range views {
+		if v.ID == "service/embedding" {
+			return v
+		}
+	}
+	t.Fatalf("no service/embedding in %s", got.stdout)
+	return listedConnection{}
+}
+
+func TestGraceWindowKeepsAnEmbeddingOutageQuietUntilTheWindowEnds(t *testing.T) {
+	embed := newFakeOpenAI(t)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK {
+		t.Fatalf("passing test: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+
+	embed.setStatus(http.StatusInternalServerError)
+	before := time.Now()
+	got := runApp(t, "connections", "test", "service/embedding")
+	after := time.Now()
+	if got.code != cli.ExitError || !strings.Contains(got.stdout, "service/embedding\taway until ") {
+		t.Fatalf("failing test inside the grace window: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	listed := listedEmbedding(t)
+	if listed.State != "failing" || listed.GraceUntil == nil ||
+		listed.GraceUntil.Before(before.Add(6*time.Hour-time.Second)) || listed.GraceUntil.After(after.Add(6*time.Hour+time.Second)) {
+		t.Fatalf("embedding inside the grace window: %+v", listed)
+	}
+	until := "away until " + listed.GraceUntil.UTC().Format("2006-01-02 15:04 UTC")
+	if !strings.Contains(got.stdout, until) {
+		t.Fatalf("test output %q lacks %q", got.stdout, until)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 0 {
+		t.Fatalf("%d notices inside the grace window, want 0", n)
+	}
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	if body := s.page(); !strings.Contains(body, until) {
+		t.Fatalf("connections page lacks %q", until)
+	}
+	s.stop()
+
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	if _, err := d.Write.Exec("UPDATE connections SET results_json = json_set(results_json, '$[0].grace_until', ?), checked_at = checked_at - 30000 WHERE id = 'service/embedding'",
+		time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitError || !strings.Contains(got.stdout, "service/embedding\tfailing") {
+		t.Fatalf("failing test after the grace window: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if listed := listedEmbedding(t); listed.State != "failing" || listed.GraceUntil != nil {
+		t.Fatalf("embedding after the grace window: %+v", listed)
+	}
+	if n := titledNotices(t, d, "atrium: Embedding failing"); n != 1 {
+		t.Fatalf("%d failing notices after the grace window, want 1", n)
+	}
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitError {
+		t.Fatalf("second failing test: %d %q", got.code, got.stdout)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 1 {
+		t.Fatalf("%d notices after a repeated failure, want 1", n)
+	}
+
+	embed.setStatus(0)
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "service/embedding\tok") {
+		t.Fatalf("recovered test: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if n := connectionNotices(t, dir, "Embedding"); n != 2 {
+		t.Fatalf("%d notices after a failure past the window and a recovery, want 2", n)
+	}
+}
+
+func countingGrafana(t *testing.T, status int) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		switch {
+		case status != http.StatusOK:
+			w.WriteHeader(status)
+		case r.URL.Path == "/api/user":
+			_, _ = w.Write([]byte(`{"login":"sa-atrium"}`))
+		case r.URL.Path == "/api/search":
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &hits
+}
+
+func TestConnectionsCheckChangedChecksOnlyWhatTheHostFileChanged(t *testing.T) {
+	embed := newFakeOpenAI(t)
+	healthy, healthyHits := countingGrafana(t, http.StatusOK)
+	broken, brokenHits := countingGrafana(t, http.StatusInternalServerError)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	host := filepath.Join(dir, "host-check.toml")
+	embedding := fmt.Sprintf(`
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = "embeddinggemma" }
+capabilities = ["embeddings"]
+`, embed.URL+"/v1")
+	writeHost := func(grafana string) {
+		body := strings.Replace(hostConfigBodyWith(embedding, defaultWebPushConnection, ""), "http://grafana.invalid", grafana, 1)
+		if err := os.WriteFile(host, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	embedHits := func() int {
+		n := 0
+		for _, values := range embed.authorizations() {
+			n += len(values)
+		}
+		return n
+	}
+	writeHost(healthy.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", host)
+
+	first := runApp(t, "connections", "check", "--changed")
+	if !strings.Contains(first.stdout, "service/embedding\tok") || !strings.Contains(first.stdout, "service/grafana\tok") {
+		t.Fatalf("first changed check: %d %q %q", first.code, first.stdout, first.stderr)
+	}
+	embedded, grafana := embedHits(), healthyHits.Load()
+	if embedded == 0 || grafana == 0 {
+		t.Fatalf("first changed check reached embedding %d and grafana %d times", embedded, grafana)
+	}
+
+	if got := runApp(t, "connections", "check", "--changed"); got.code != cli.ExitOK || strings.TrimSpace(got.stdout) != "no connection to check" {
+		t.Fatalf("changed check with nothing changed: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if embedHits() != embedded || healthyHits.Load() != grafana {
+		t.Fatal("changed check with nothing changed reached a fake service")
+	}
+
+	writeHost(broken.URL)
+	got := runApp(t, "connections", "check", "--changed")
+	if got.code != cli.ExitError || !strings.HasPrefix(got.stdout, "service/grafana\tfailing\t") {
+		t.Fatalf("changed check after a failing edit: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout, "service/embedding") || embedHits() != embedded || healthyHits.Load() != grafana || brokenHits.Load() == 0 {
+		t.Fatalf("changed check after one edit touched more than the edited connection: %q", got.stdout)
+	}
+
+	writeHost(healthy.URL)
+	if got := runApp(t, "connections", "check", "--changed"); got.code != cli.ExitOK || !strings.HasPrefix(got.stdout, "service/grafana\tok") {
+		t.Fatalf("changed check after a fixing edit: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if embedHits() != embedded {
+		t.Fatal("changed check after a fixing edit reached the unchanged embedding service")
 	}
 }

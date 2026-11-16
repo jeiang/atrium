@@ -28,6 +28,7 @@ func Connections() []connections.Definition {
 			Kind:            KindQbittorrent,
 			CredentialSlots: []string{"api_key"},
 			Validate:        validateQbitConnection,
+			Grace:           connections.UnreachableGrace,
 			Test:            testQbitConnection,
 		},
 		{

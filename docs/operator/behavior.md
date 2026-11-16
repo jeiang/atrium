@@ -222,6 +222,53 @@ failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
 keeps its row and credentials, and is announced once.
 
+qBittorrent and the embedding endpoint ride out short outages: a failure that
+follows an `ok` or `expiring` state starts a 6-hour grace window. The stored
+state stays `failing`, but the CLI, the Connections page and the module
+settings header show `away until <time UTC>`, and the connection read model
+carries `grace_until`. Nothing is sent inside the window, and a recovery inside
+it is silent. The first check after the window that still fails shows
+`failing` and notifies once; the hourly watch rechecks these rows, so the
+notice arrives within about an hour of the window ending. A failure from any
+other state, such as the first check after a host change, has no window.
+Other connection kinds have no window.
+
+`atrium connections check` runs the silent check of every configured
+connection and records the result; `--changed` checks only connections that
+were added or whose host declaration changed since their last check, and
+prints `no connection to check` when there are none. Each checked connection
+prints its id, state (or `away until <time UTC>`) and reason. The command
+exits 1 when a checked connection is failing, in its window or not, or needs
+reauth. `connections test <id>` keeps the explicit test, which may have
+visible side effects such as a diagnostic push. `connections test --all` runs
+the silent check of every configured connection instead, so it sends no push;
+giving both an id and `--all`, or neither, is a usage error.
+
+Mail and iCloud connections also learn from real use while `serve` runs. An
+IMAP session that cannot connect marks the mail connection's `imap`
+capability failing, and a login the server refuses marks it as needing reauth,
+as the scheduled check does. An SMTP session that cannot connect or greet marks
+`smtp` failing, and a refused login (codes 530 to 535) marks it as needing
+reauth. A
+contacts or calendar mirror sync that the server refuses (401 or 403) marks
+`carddav` or `caldav` as needing reauth, and a server error, network error or
+TLS error marks it failing. A later session or sync that works marks the
+capability ok again. These four have no grace window, so the first failure
+notifies at once and the recovery notifies once. Errors about one message,
+such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
+not change the connection. Only a change of state class is written: a repeated
+failure or a repeated success writes nothing and sends no notice. A one-shot
+CLI command does not record these outcomes.
+
+A connection that lacks what it needs checks as `unconfigured`, not `ok` or
+`failing`: Anthropic without an API key, web push without a subject or VAPID
+key, and weather without a location name or both coordinates. Mail, the
+assistant and notifications keep running while their connection
+(`service/embedding`, `service/anthropic`, `service/webpush`) is unconfigured,
+failing, disabled or needs reauth; the module's settings header names the
+connection and its state, and the line clears once a check passes. A failed
+Test does not hold mail.
+
 Module flags are restart-only. Change `<name>_enabled` through `atrium settings
 set` or host configuration, then restart serve. Settings pages show module
 state and a restart notice when the stored flag differs; they do not toggle
