@@ -80,11 +80,15 @@ test.describe('reduced motion', () => {
 
   test('motion is allowed without the preference', async ({ page }) => {
     await gotoGallery(page);
+    await page.evaluate(() => {
+      const started: string[] = [];
+      Reflect.set(window, 'animationsStarted', started);
+      document.addEventListener('animationstart', (event) => started.push(event.animationName), { capture: true });
+    });
     await page.getByRole('button', { name: 'Rename thread' }).click();
-    const names = await page.evaluate(() =>
-      document.getAnimations().map((animation) => ('animationName' in animation ? animation.animationName : '')),
-    );
-    expect(names).toContain('rise');
+    await expect
+      .poll(() => page.evaluate(() => Reflect.get(window, 'animationsStarted') as string[]))
+      .toContain('rise');
   });
 });
 

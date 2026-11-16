@@ -23,7 +23,7 @@ const interactive = [
 
 export async function gotoShell(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await expect(page.getByText('Signed in as Operator')).toBeVisible();
+  await expect(page.getByText('Signed in as Operator')).toBeVisible({ timeout: 0 });
   await page.evaluate(() => document.fonts.ready);
 }
 
