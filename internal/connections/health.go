@@ -16,8 +16,6 @@ import (
 // Notifier delivers one operator notification for a health state transition.
 type Notifier func(ctx context.Context, d *db.DB, title, body string) error
 
-// announce reports a state change after its write committed. The first
-// observation of a connection notifies only when it is a failure.
 func (s *Store) announce(ctx context.Context, id ID, previous, next State, reason string) {
 	var n Notifier
 	if s.reg != nil {
@@ -105,8 +103,6 @@ var (
 	succeeded sync.Map
 )
 
-// Outcomes reports runtime requests that suggest the connection's health
-// changed: failures, and at most one success per connection a minute.
 func Outcomes() <-chan outcome { return outcomes }
 
 func report(id ID, revision int64, ok bool) {
