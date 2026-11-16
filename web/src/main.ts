@@ -1,6 +1,8 @@
+import './tokens/gen/tokens.css';
+import './tokens/fonts.css';
+import './shell/shell.css';
 import { mount } from 'svelte';
 import App from './shell/App.svelte';
-import './shell/shell.css';
 
 if (import.meta.env.MODE === 'mock') {
   const { startMocks } = await import('./mocks/browser');

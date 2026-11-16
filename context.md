@@ -1147,7 +1147,7 @@ claims about the running application. Operator contracts are in
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
-- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. It is not embedded in the binary or served yet; the server-rendered UI remains the web UI.
+- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build, but nothing serves it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).

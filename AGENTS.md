@@ -89,7 +89,7 @@ settings the operator edits in the UI or pins from the host.
 - Application calendar boundaries use `config.Location`, not process
   `time.Local`.
 - Stage web assets through the existing build. Do not commit
-  `internal/web/static`.
+  `internal/web/static` or `internal/web/app/dist`.
 - UI: avoid unnecessary secondary labels and descriptions. Let the layout
   do the explaining. No helper text that restates a control, no
   parenthetical notes repeated on every option.
