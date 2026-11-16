@@ -836,6 +836,112 @@
         ],
         "type": "object"
       },
+      "BackupEntry": {
+        "properties": {
+          "format": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "header": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupHeader"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modified_at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "size_bytes",
+          "modified_at",
+          "format"
+        ],
+        "type": "object"
+      },
+      "BackupHeader": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "encryption": {
+            "$ref": "#/components/schemas/Encryption"
+          },
+          "files": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "schema": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "created_at",
+          "schema",
+          "encryption",
+          "files"
+        ],
+        "type": "object"
+      },
+      "BackupList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BackupEntry"
+            },
+            "type": "array"
+          },
+          "location": {
+            "$ref": "#/components/schemas/BackupLocation"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "location",
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
+      "BackupLocation": {
+        "properties": {
+          "host_key": {
+            "type": "string"
+          },
+          "nix_option": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "host_key",
+          "nix_option"
+        ],
+        "type": "object"
+      },
       "BackupRef": {
         "additionalProperties": false,
         "properties": {
@@ -9811,6 +9917,21 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/AttentionResult"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadBackupList": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BackupList"
           },
           "revision": {
             "type": "string"
@@ -30007,6 +30128,146 @@
       }
     },
     "/maintenance/backups": {
+      "get": {
+        "operationId": "maintenance.backup.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadBackupList"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "settings"
+        ],
+        "x-atrium-area": "settings",
+        "x-atrium-module": "core"
+      },
       "post": {
         "operationId": "maintenance.backup",
         "parameters": [

@@ -280,6 +280,7 @@
         "auth.identity",
         "core.about",
         "maintenance.backup",
+        "maintenance.backup.list",
         "maintenance.check",
         "maintenance.verify-archive",
         "settings.read",
@@ -289,8 +290,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 20,
-      "bound": 20
+      "required": 21,
+      "bound": 21
     },
     {
       "area": "tasks",
@@ -383,7 +384,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 200,
-  "total_bound": 200,
+  "total_required": 201,
+  "total_bound": 201,
   "total_approval_reached": 11
 }

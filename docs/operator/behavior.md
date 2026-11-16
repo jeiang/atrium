@@ -135,6 +135,19 @@ failed backup creation does not prune archives. v2 archives named
 `atrium-*.backup` are subject to the same pruning, so a retained v2
 archive needs another name or location. Off-host copying belongs to the host.
 
+`atrium backup list` (with `--json`) and the API's `GET /maintenance/backups`
+show up to 100 of the newest `atrium-*.backup` archives in the backup directory,
+with the total count, each archive's size and modification time, and the
+facts its unencrypted header states (format, creation time, schema,
+encryption and key id, file count) or why that header cannot be read. The
+header is not checked for tampering; `POST /maintenance/backups/verify` with a
+listed name, or `atrium restore --verify`, checks the whole archive. Verify
+results are not stored. Symlinks, subdirectories and other names in the
+directory are not listed. Without `backup.directory` (host key
+`core.backup_directory`), the list reports that no directory is configured; a
+configured directory that does not exist yet is reported as missing. To write
+an archive named `list` in the current directory, run `atrium backup ./list`.
+
 Restore replaces database and uploaded state and requires resident users of the
 database to be stopped. `atrium restore --verify ARCHIVE` checks an archive
 without installing it. Restore stages the archive, refuses a newer schema,
