@@ -7,7 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/passrun"
 )
 
 type (
@@ -99,12 +98,7 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[Syn
 		return application.Change[SyncResult]{}, err
 	}
 	defer client.Close()
-	var out SyncResult
-	err = passrun.Track(ctx, s.db, passrun.NotionSync, func() error {
-		var err error
-		out, err = s.syncPass(ctx, client)
-		return err
-	})
+	out, err := s.syncPass(ctx, client)
 	if err != nil {
 		outcome := state.Failed
 		if ctx.Err() != nil {

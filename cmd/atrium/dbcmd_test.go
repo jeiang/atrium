@@ -32,7 +32,7 @@ func runProcessStdin(t *testing.T, stdin, args string, env ...string) cliRun {
 	return cliRun{exitCode(cmd.Run()), stdout.String(), stderr.String()}
 }
 
-func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.T) {
+func TestDatabaseCommandsRekeyCheckAndShellOnEncryptedDatabase(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -96,22 +96,21 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 		env  string
 		want db.KeyError
 	}{
-		"wrong key":                 {live, keyEnv(otherKeyHex), db.ErrWrongKey},
-		"no key on encrypted":       {live, keyEnv(""), db.ErrKeyMissing},
-		"key on a plaintext db":     {plain, keyEnv(rightKeyHex), db.ErrPlaintextDB},
-		"backup with the wrong key": {live, keyEnv(otherKeyHex), db.ErrWrongKey},
+		"wrong key":             {live, keyEnv(otherKeyHex), db.ErrWrongKey},
+		"no key on encrypted":   {live, keyEnv(""), db.ErrKeyMissing},
+		"key on a plaintext db": {plain, keyEnv(rightKeyHex), db.ErrPlaintextDB},
 	} {
-		args := "db check"
-		if strings.HasPrefix(name, "backup") {
-			args = "db backup " + filepath.Join(dir, "refused.db")
-		}
-		got := runProcess(t, args, dbEnv(tc.path), tc.env)
+		got := runProcess(t, "db check", dbEnv(tc.path), tc.env)
 		if got.code != cli.ExitError || !strings.Contains(got.stderr, string(tc.want)) || strings.Contains(got.stderr+got.stdout, rightKeyHex) {
 			t.Errorf("%s: exited %d, stdout %q, stderr %q; want %d and %q", name, got.code, got.stdout, got.stderr, cli.ExitError, tc.want)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "refused.db")); err == nil {
-		t.Error("a refused backup left a destination file")
+	refused := filepath.Join(dir, "refused.db")
+	if got := runProcess(t, "db backup "+refused, dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitUsage {
+		t.Errorf("db backup exited %d, stderr %q; want %d for the removed subcommand", got.code, got.stderr, cli.ExitUsage)
+	}
+	if _, err := os.Stat(refused); err == nil {
+		t.Error("the removed db backup left a destination file")
 	}
 	if got := runProcess(t, "db check", dbEnv(filepath.Join(dir, "missing.db")), keyEnv(rightKeyHex)); got.code != cli.ExitError {
 		t.Errorf("db check of a missing database exited %d, want %d", got.code, cli.ExitError)
@@ -124,30 +123,6 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	}
 	if left, _ := filepath.Glob(filepath.Join(dir, "missing.db*")); len(left) != 0 {
 		t.Errorf("db rekey of a missing database left %v", left)
-	}
-
-	backup := filepath.Join(dir, "backup.db")
-	got := runProcess(t, "db backup "+backup, dbEnv(live), keyEnv(rightKeyHex))
-	if got.code != cli.ExitOK || isPlaintextSQLite(t, backup) {
-		t.Fatalf("db backup exited %d, stderr %q, plaintext %v; want 0 and an encrypted file", got.code, got.stderr, isPlaintextSQLite(t, backup))
-	}
-	again := runProcess(t, "db backup "+backup, dbEnv(live), keyEnv(rightKeyHex))
-	if again.code != cli.ExitError || !strings.Contains(again.stderr, "already exists") {
-		t.Errorf("backup over an existing file exited %d, stderr %q; want %d and a refusal", again.code, again.stderr, cli.ExitError)
-	}
-	if left, _ := filepath.Glob(backup + "*"); len(left) != 1 {
-		t.Errorf("backup left %v, want only %s", left, backup)
-	}
-	fromBackup := runProcess(t, "db check", dbEnv(backup), keyEnv(rightKeyHex))
-	if fromBackup.code != cli.ExitOK || fromBackup.stdout != strings.Replace(check.stdout, live, backup, 1) {
-		t.Errorf("db check of the backup exited %d with stdout %q, stderr %q; want the live database's report %q", fromBackup.code, fromBackup.stdout, fromBackup.stderr, check.stdout)
-	}
-	if knn := runProcess(t, "notion search zzz", dbEnv(backup), keyEnv(rightKeyHex)); knn.code != cli.ExitOK || knn.stdout != hit {
-		t.Errorf("KNN on the backup exited %d with stdout %q, stderr %q; want %q", knn.code, knn.stdout, knn.stderr, hit)
-	}
-	plainBackup := filepath.Join(dir, "plain-backup.db")
-	if got := runProcess(t, "db backup "+plainBackup, dbEnv(plain)); got.code != cli.ExitOK || !isPlaintextSQLite(t, plainBackup) {
-		t.Errorf("backup of the plaintext database exited %d, stderr %q, plaintext %v; want 0 and a plaintext copy", got.code, got.stderr, isPlaintextSQLite(t, plainBackup))
 	}
 
 	shell := runProcessStdin(t, "SELECT count(*) FROM notion_pages;\nSELECT title, 'a;b' FROM notion_pages WHERE rid = 1;\n.tables\n", "db shell", dbEnv(live), keyEnv(rightKeyHex))
@@ -296,44 +271,5 @@ func TestDatabaseShellRollsBackAnOpenTransactionBeforeItsAudit(t *testing.T) {
 	}
 	if audits := strings.Join(maintenanceAudits(t, live, keyFor(t), "maintenance.sql"), ","); audits != "ok:cli" {
 		t.Errorf("shell audits = %q, want one ok row", audits)
-	}
-}
-
-func TestDatabaseBackupAuditsOnlyWhereTheAuditTableExists(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	live := filepath.Join(dir, "atrium.db")
-	cache := "ATRIUM_CACHE_DIR=" + filepath.Join(dir, "cache")
-	if got := runProcess(t, "settings set tz UTC", "ATRIUM_DB="+live, cache); got.code != cli.ExitOK {
-		t.Fatalf("create database: exit %d stderr %q", got.code, got.stderr)
-	}
-	copied := filepath.Join(dir, "copy.db")
-	if got := runProcess(t, "db backup "+copied, "ATRIUM_DB="+live, cache); got.code != cli.ExitOK {
-		t.Fatalf("db backup exited %d, stderr %q", got.code, got.stderr)
-	}
-	if _, err := os.Stat(copied); err != nil {
-		t.Fatal(err)
-	}
-	if audits := strings.Join(maintenanceAudits(t, live, keyFor(t), "maintenance.db-backup"), ","); audits != "ok:cli" {
-		t.Errorf("db backup audits = %q, want one ok row", audits)
-	}
-
-	empty := filepath.Join(dir, "empty.db")
-	if err := os.WriteFile(empty, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	emptyCopy := filepath.Join(dir, "empty-copy.db")
-	if got := runProcess(t, "db backup "+emptyCopy, "ATRIUM_DB="+empty, cache); got.code != cli.ExitOK {
-		t.Fatalf("db backup of a database without operation_audit exited %d, stderr %q; want %d", got.code, got.stderr, cli.ExitOK)
-	}
-	if _, err := os.Stat(emptyCopy); err != nil {
-		t.Fatal(err)
-	}
-	var tables int
-	if err := mustConnect(t, empty, keyFor(t)).Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").Scan(&tables); err != nil {
-		t.Fatal(err)
-	}
-	if tables != 0 {
-		t.Errorf("db backup created %d tables in the database without operation_audit", tables)
 	}
 }

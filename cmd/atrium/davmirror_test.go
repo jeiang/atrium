@@ -32,8 +32,9 @@ const (
 func passRows(t *testing.T, dir, job string) (ok, failed int, message string) {
 	t.Helper()
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE outcome = 'ok'), COUNT(*) FILTER (WHERE outcome = 'failed'), "+
-		"COALESCE((SELECT message FROM pass_runs WHERE job = ? ORDER BY id DESC LIMIT 1), '') FROM pass_runs WHERE job = ?", job, job).Scan(&ok, &failed, &message); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE r.status = 'ok'), COUNT(*) FILTER (WHERE r.status = 'error'), "+
+		"COALESCE((SELECT x.error FROM job_runs x JOIN jobs y ON y.id = x.job_id WHERE y.name = ? AND x.status = 'error' ORDER BY x.id DESC LIMIT 1), '') "+
+		"FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ?", job, job).Scan(&ok, &failed, &message); err != nil {
 		t.Fatal(err)
 	}
 	return ok, failed, message

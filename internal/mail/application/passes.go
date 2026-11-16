@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
 
@@ -128,11 +127,8 @@ func (s *Service) Sync(ctx context.Context, in SyncInput) (application.Change[Pa
 				return err
 			}
 		}
-		execute := func() error { out, passErr = s.syncPass(ctx, p, accounts); return passErr }
-		if s.pass != nil {
-			return execute()
-		}
-		return passrun.Track(ctx, s.db, passrun.Sync, execute)
+		out, passErr = s.syncPass(ctx, p, accounts)
+		return passErr
 	}
 	if !manual {
 		err := perform(ctx)

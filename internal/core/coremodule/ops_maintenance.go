@@ -51,11 +51,10 @@ type DatabaseCheck struct {
 func (m Module) maintenanceOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			maintenanceapp.DescribeCheck(), maintenanceapp.DescribeVerifyArchive(),
-			maintenanceapp.DescribeBackup(), maintenanceapp.DescribeDBBackup(), maintenanceapp.DescribeRestore(),
+			maintenanceapp.DescribeBackup(), maintenanceapp.DescribeRestore(),
 			maintenanceapp.DescribeEncrypt(), maintenanceapp.DescribeRekey(), maintenanceapp.DescribeSQL(),
 		}, append(m.maintenanceRoutes(nil), []application.Binding{
 			{Kind: application.CLI, Target: "db check", Uses: []application.Name{maintenanceapp.CheckName}},
-			{Kind: application.CLI, Target: "db backup", Uses: []application.Name{maintenanceapp.DBBackupName}},
 			{Kind: application.CLI, Target: "db encrypt", Uses: []application.Name{maintenanceapp.EncryptName}},
 			{Kind: application.CLI, Target: "db rekey", Uses: []application.Name{maintenanceapp.RekeyName}},
 			{Kind: application.CLI, Target: "db shell", Uses: []application.Name{maintenanceapp.SQLName}},
@@ -65,12 +64,12 @@ func (m Module) maintenanceOperations() ([]application.Definition, []application
 		}...)
 }
 
-func backupDestination(ctx context.Context, now func() float64, ext string) (string, string, error) {
+func backupDestination(ctx context.Context, now func() float64) (string, string, error) {
 	dir, err := backup.Directory(ctx)
 	if err != nil {
 		return "", "", notConfigured(err)
 	}
-	name := backup.ArchiveName(time.Unix(0, int64(now()*float64(time.Second))), ext)
+	name := backup.ArchiveName(time.Unix(0, int64(now()*float64(time.Second))), backup.ArchiveExt)
 	return filepath.Join(dir, name), name, nil
 }
 
@@ -101,8 +100,8 @@ func pathFree[T any](change T, err error) (T, error) {
 	return change, &out
 }
 
-func pruneBackups(ctx context.Context, ext string) error {
-	return backup.Prune(ctx, ext, time.Now())
+func pruneBackups(ctx context.Context) error {
+	return backup.Prune(ctx, time.Now())
 }
 
 func notConfigured(err error) error {
@@ -156,25 +155,13 @@ func (m Module) maintenanceRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Command(d, maintenanceapp.DescribeBackup(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: refusable},
 			"POST /maintenance/backups", func(ctx context.Context, _ struct{}) (application.Change[BackupCreated], error) {
-				dest, name, err := backupDestination(ctx, m.Now, backup.ArchiveExt)
+				dest, name, err := backupDestination(ctx, m.Now)
 				if err != nil {
 					return application.Change[BackupCreated]{}, err
 				}
 				change, err := pathFree(svc().Backup(ctx, maintenanceapp.BackupInput{Dest: dest}))
 				if err == nil {
-					err = pruneBackups(ctx, backup.ArchiveExt)
-				}
-				return created(name, change, err)
-			}),
-		api.Command(d, maintenanceapp.DescribeDBBackup(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: refusable},
-			"POST /maintenance/db-backups", func(ctx context.Context, _ struct{}) (application.Change[BackupCreated], error) {
-				dest, name, err := backupDestination(ctx, m.Now, ".db")
-				if err != nil {
-					return application.Change[BackupCreated]{}, err
-				}
-				change, err := pathFree(svc().DBBackup(ctx, maintenanceapp.BackupInput{Dest: dest}))
-				if err == nil {
-					err = pruneBackups(ctx, ".db")
+					err = pruneBackups(ctx)
 				}
 				return created(name, change, err)
 			}),
