@@ -656,7 +656,16 @@ claims about the running application. Operator contracts are in
   which counts finished runs from the stored run history at scrape time, so it
   survives restarts; operator schedules share the label `operator_schedule`,
   consecutive identical skips stored as one run count once, and within one
-  process the value never falls below what it last reported. The ops listener also serves
+  process the value never falls below what it last reported. Requests are
+  also counted per day, surface (`page`, `api`, `web`), method, route
+  pattern (`unmatched` for unknown paths, static files and `/healthz` skipped)
+  and agent mark in `usage_counters`: batched in memory, saved every minute
+  and at shutdown in one transaction that prunes days older than 400, exported
+  as `atrium_http_route_requests_total{surface,method,route,agent}` from the
+  saved rows, and listed by `atrium usage routes`. A request is agent traffic
+  when its bearer token was issued with `--agent`, or it sends
+  `Atrium-Agent: 1`, which under OIDC also marks the session row for good; the
+  mark grants nothing and shows in the token list and `/web/v1/session`. The ops listener also serves
   `/readyz` (ready, degraded, or not_ready with 503), `/livez` (503 when
   stalled), `/healthz` (runtime state) and, with `ops_pprof`, profiling.
   The host owns the scrape job and the traces endpoint.

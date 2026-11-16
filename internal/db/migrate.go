@@ -18,6 +18,21 @@ type migration struct {
 
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
+	{2, func(ctx context.Context, tx *sql.Tx) error {
+		return execAll(ctx, tx,
+			"CREATE TABLE usage_counters (day TEXT NOT NULL, surface TEXT NOT NULL, method TEXT NOT NULL, route TEXT NOT NULL, agent INTEGER NOT NULL CHECK (agent IN (0, 1)), count INTEGER NOT NULL CHECK (count >= 0), PRIMARY KEY (day, surface, method, route, agent))",
+			"ALTER TABLE auth_bearers ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1))",
+			"ALTER TABLE auth_sessions ADD COLUMN agent INTEGER NOT NULL DEFAULT 0 CHECK (agent IN (0, 1))")
+	}},
+}
+
+func execAll(ctx context.Context, tx *sql.Tx, statements ...string) error {
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type FutureSchemaError struct {
