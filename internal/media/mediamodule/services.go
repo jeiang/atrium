@@ -6,7 +6,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
@@ -24,7 +23,7 @@ func clock(now func() float64) func() float64 {
 func pageService(now func() float64) func(*web.Deps) *mediaapp.Service {
 	return func(d *web.Deps) *mediaapp.Service {
 		now := clock(now)
-		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, imapclient.Opener(d.Cfg), now)
+		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, d.Cfg, now)
 		if err != nil {
 			panic(err)
 		}
@@ -35,7 +34,7 @@ func pageService(now func() float64) func(*web.Deps) *mediaapp.Service {
 }
 
 func openService(ctx context.Context, d *db.DB, env config.Env, cfg config.Config, now func() float64) (*mediaapp.Service, error) {
-	effects, err := module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), now)
+	effects, err := module.SetFrom(ctx).Catalog().Ledger(d, env, cfg, now)
 	if err != nil {
 		return nil, err
 	}

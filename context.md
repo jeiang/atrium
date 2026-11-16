@@ -970,6 +970,15 @@ claims about the running application. Operator contracts are in
   Undo and resolve handlers come from the compiled module catalog at every
   entry point, including mail proposal effects and media effects; the effect
   state and the relevant write gate still determine whether an undo can run.
+  The catalog builds the ledger and the proposal registry from platform
+  resources only (database, configuration, environment, clock); no mail
+  opener or syncer passes through the module framework or the tool context.
+  Mail binds its IMAP opener and post-proposal sync hook in its own module
+  declaration, and its assistant tools take the opener from the same place.
+  `tools/adapterboundary` fails when `internal/module`, `internal/tool`,
+  `internal/ledger` or `internal/proposals` imports a unit package (mail,
+  media, calendar, contacts); the module flag's import of mail accounts is
+  the one recorded exception.
   Settlement continues on a cancellation-detached context. Resolving an
   unknown or partial effect appends actor, source, outcome, prior state and
   evidence to `effect_resolutions`; it does not rewrite the raw attempt.

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
@@ -23,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
@@ -32,6 +34,7 @@ type mrvMail struct {
 	dir  string
 	app  *cli.App
 	fake *mailtest.FakeClient
+	dial atomic.Bool
 }
 
 const mrvLogin = `S: {icloud.greeting}
@@ -157,8 +160,11 @@ func mrvMailFixture(t *testing.T, mode string) *mrvMail {
 	m.fake.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
 	h, x := mailtest.RawWith("Statement", "pay@bank.test", "statement-1", "Your statement is ready.")
 	inbox.Add(h, x, []string{`\Seen`}, nil)
-	f.app = newAppWith(f.lookup, func(config.Config) mail.OpenFunc {
+	f.app = newAppWith(f.lookup, func(cfg config.Config) mail.OpenFunc {
 		return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			if m.dial.Load() {
+				return imapclient.Opener(cfg)(ctx, opts)
+			}
 			return m.fake.Open(ctx, opts)
 		}
 	}, nil, quietLog)
@@ -283,6 +289,7 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, mrvCorrectionScript))
 	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
 	t.Setenv("ATRIUM_IMAP_CA", ca)
+	m.dial.Store(true)
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+correct, url.Values{"dest": {"Bills"}, "context": {"row"}}, hx...)
 	if code != http.StatusOK || !strings.Contains(body, "The message was moved.") {
 		t.Fatalf("live correction = %d: %.400s", code, body)
