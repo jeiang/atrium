@@ -51,20 +51,36 @@ func TestOperatorSchedulesRunOnTimeRunNowAndPushOncePerFailure(t *testing.T) {
 		t.Fatalf("run without serve exit %d, want unavailable: %s", ran.code, ran.stderr)
 	}
 
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "schedule_update", map[string]any{"id": job, "prompt": "Do nothing"})), asstReply("done"))
-	if ran := runApp(t, "agent", "run", "--text", "change my plant schedule", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	agentTool := func(name string, args map[string]any) string {
+		t.Helper()
+		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", name, args)), asstReply("done"))
+		if ran := runApp(t, "agent", "run", "--text", "about my plant schedule", "--kind", "chat"); ran.code != cli.ExitOK {
+			t.Fatalf("agent run %s: %d %s", name, ran.code, ran.stderr)
+		}
+		var thread int64
+		if err := d.Read.QueryRow("SELECT MAX(id) FROM threads").Scan(&thread); err != nil {
+			t.Fatal(err)
+		}
+		return asstToolResult(t, d, thread)
 	}
-	var thread int64
-	if err := d.Read.QueryRow("SELECT MAX(id) FROM threads").Scan(&thread); err != nil {
-		t.Fatal(err)
+	if got := agentTool("schedule_list", map[string]any{}); !strings.Contains(got, "Water the plants") || !strings.Contains(got, "read_only") {
+		t.Fatalf("agent list does not show the operator schedule read-only: %s", got)
 	}
-	if got := asstToolResult(t, d, thread); !strings.Contains(got, "managed by the operator") {
-		t.Fatalf("agent edit of an operator schedule was not refused: %s", got)
+	for _, call := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"schedule_update", map[string]any{"id": job, "prompt": "Do nothing"}},
+		{"schedule_update", map[string]any{"id": job, "enabled": false}},
+		{"schedule_cancel", map[string]any{"id": job}},
+	} {
+		if got := agentTool(call.name, call.args); !strings.Contains(got, "managed by the operator") {
+			t.Fatalf("agent %s %v of an operator schedule was not refused: %s", call.name, call.args, got)
+		}
 	}
-	var prompt string
-	if err := d.Read.QueryRow("SELECT prompt FROM jobs WHERE id = ?", job).Scan(&prompt); err != nil || prompt != "Remind me to water the plants" {
-		t.Fatalf("operator schedule prompt %q after the agent edit: %v", prompt, err)
+	var prompt, jobState string
+	if err := d.Read.QueryRow("SELECT prompt, state FROM jobs WHERE id = ?", job).Scan(&prompt, &jobState); err != nil || prompt != "Remind me to water the plants" || jobState != "active" {
+		t.Fatalf("operator schedule prompt %q state %q after the agent edits: %v", prompt, jobState, err)
 	}
 
 	token := localAPIToken(t, "operator-schedules")
