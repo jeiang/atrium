@@ -10,9 +10,9 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 )
 
 type TargetKind string
@@ -34,7 +34,7 @@ type UndoResult struct {
 	Outcome  proposals.UndoResult
 	Effect   *ledger.Effect
 	Undo     *ledger.Effect
-	Mail     *live.UndoResult
+	Action   *review.Undone
 }
 
 type ResolveInput struct {
@@ -46,7 +46,7 @@ type ResolveInput struct {
 type ResolveResult struct {
 	Proposal *proposals.Resolved
 	Effect   *ledger.Effect
-	Mail     *live.Resolved
+	Action   *review.Resolved
 }
 
 func targetOf(t Target) (string, error) {
@@ -57,24 +57,27 @@ func targetOf(t Target) (string, error) {
 	return "", invalid("target", "Name one proposal, effect or mail action.")
 }
 
-func (s *Service) knownAction(ctx context.Context, id int64) error {
-	found, err := s.live.Get(ctx, id)
+func (s *Service) knownAction(ctx context.Context, id int64) (*review.Actions, error) {
+	actions := s.actions()
+	if actions == nil {
+		return nil, notFound("Unknown action.")
+	}
+	found, err := actions.Get(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if found == nil {
-		return notFound("Unknown action.")
+		return nil, notFound("Unknown action.")
 	}
-	return nil
+	return actions, nil
 }
 
-func mailRefusal(err error) *application.Error {
+func actionRefusal(actions *review.Actions, err error) *application.Error {
 	if errors.As(err, new(*db.LockBusy)) {
 		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly"}
 	}
-	var refused live.UndoError
 	var disabled *module.OwnerDisabled
-	if errors.As(err, &refused) || errors.As(err, &disabled) {
+	if actions.Refused(err) || errors.As(err, &disabled) {
 		return &application.Error{Code: application.Refused, Message: err.Error()}
 	}
 	return nil
@@ -93,17 +96,18 @@ func (s *Service) Undo(ctx context.Context, in UndoInput) (application.Change[Un
 		return s.undoEffect(ctx, in.Target.ID, who, target)
 	}
 	if in.Target.Kind == MailTarget {
-		if err := s.knownAction(ctx, in.Target.ID); err != nil {
+		actions, err := s.knownAction(ctx, in.Target.ID)
+		if err != nil {
 			return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, nil)
 		}
-		done, err := s.live.Undo(ctx, in.Target.ID)
+		done, err := actions.Undo(ctx, in.Target.ID)
 		if err != nil {
-			if refused := mailRefusal(err); refused != nil {
+			if refused := actionRefusal(actions, err); refused != nil {
 				return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, refused, []int64{in.Target.ID})
 			}
 			return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, []int64{in.Target.ID})
 		}
-		return application.Change[UndoResult]{Data: UndoResult{Mail: &done}, EffectIDs: []int64{in.Target.ID, done.UndoEffectID}, AuditID: s.audit(ctx, UndoName, target, state.OK, []int64{in.Target.ID, done.UndoEffectID})}, nil
+		return application.Change[UndoResult]{Data: UndoResult{Action: &done}, EffectIDs: []int64{in.Target.ID, done.UndoEffectID}, AuditID: s.audit(ctx, UndoName, target, state.OK, []int64{in.Target.ID, done.UndoEffectID})}, nil
 	}
 	if err := s.known(ctx, in.Target.ID); err != nil {
 		return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, nil)
@@ -176,17 +180,18 @@ func (s *Service) Resolve(ctx context.Context, in ResolveInput) (application.Cha
 		}, nil
 	}
 	if in.Target.Kind == MailTarget {
-		if err := s.knownAction(ctx, in.Target.ID); err != nil {
+		actions, err := s.knownAction(ctx, in.Target.ID)
+		if err != nil {
 			return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, []int64{in.Target.ID})
 		}
-		done, err := s.live.Resolve(ctx, in.Target.ID, in.Outcome, who)
+		done, err := actions.Resolve(ctx, in.Target.ID, in.Outcome, who)
 		if err != nil {
-			if refused := mailRefusal(err); refused != nil {
+			if refused := actionRefusal(actions, err); refused != nil {
 				return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, refused, []int64{in.Target.ID})
 			}
 			return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, []int64{in.Target.ID})
 		}
-		return application.Change[ResolveResult]{Data: ResolveResult{Mail: &done}, EffectIDs: []int64{in.Target.ID}, AuditID: s.audit(ctx, ResolveName, target, state.OK, []int64{in.Target.ID})}, nil
+		return application.Change[ResolveResult]{Data: ResolveResult{Action: &done}, EffectIDs: []int64{in.Target.ID}, AuditID: s.audit(ctx, ResolveName, target, state.OK, []int64{in.Target.ID})}, nil
 	}
 	if err := s.known(ctx, in.Target.ID); err != nil {
 		return application.Change[ResolveResult]{}, s.refusal(ctx, ResolveName, target, err, nil)

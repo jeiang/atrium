@@ -317,7 +317,7 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			})
 			return out, err
 		}),
-		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
+		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable, application.Refused}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
 			var r application.Change[mailapp.PollTrackersResult]
 			_, err := module.Invoke(ctx, d.DB, d.Cfg, unit.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 				var err error

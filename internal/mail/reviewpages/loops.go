@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -36,11 +37,11 @@ type loopsPage struct {
 func (s *service) showLoops(w http.ResponseWriter, r *http.Request, notice *tpl.Toast) {
 	ctx := r.Context()
 	owe, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: mailapp.LoopOweReply, Limit: loopLimit, Snooze: true})
-	check(err)
+	hub.Check(err)
 	waiting, err := s.mail.OpenLoops(ctx, mailapp.OpenLoopsInput{State: mailapp.LoopWaiting, Limit: loopLimit})
-	check(err)
+	hub.Check(err)
 	commitments, err := s.mail.Commitments(ctx, mailapp.CommitmentsInput{Status: mailapp.CommitmentOpen, Limit: loopLimit})
-	check(err)
+	hub.Check(err)
 	snoozeDefault := owe.Data.SnoozeDefault
 	choices := snoozeChoicesFor(snoozeDefault)
 	s.page(w, r, http.StatusOK, "loops", "openloops.gohtml", loopsPage{Owe: owe.Data.Loops, Waiting: waiting.Data.Loops, Commitments: commitments.Data.Commitments, SnoozeChoices: choices, SnoozeDefault: snoozeDefault}, notice)
@@ -57,7 +58,7 @@ func (s *service) changed(w http.ResponseWriter, r *http.Request, err error) boo
 			return false
 		}
 	}
-	check(err)
+	hub.Check(err)
 	return true
 }
 
@@ -71,7 +72,7 @@ func plural(n int64, noun string) string {
 }
 
 func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
-	id, errs := pathInt(r, "loop_id")
+	id, errs := hub.PathInt(r, "loop_id")
 	var days *int64
 	if raw, given := web.Value(web.FormValues(r), "days"); given && raw != "" {
 		n, valid := mailapp.ClampDays(raw)
@@ -89,11 +90,11 @@ func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
 	if !s.changed(w, r, err) {
 		return
 	}
-	s.showLoops(w, r, toast("success", "Snoozed", "Hidden for "+plural(done.Data.Days, "day")+"."))
+	s.showLoops(w, r, hub.Toast("success", "Snoozed", "Hidden for "+plural(done.Data.Days, "day")+"."))
 }
 
 func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "loop_id")
+	id, ok := hub.PathID(w, r, "loop_id")
 	if !ok {
 		return
 	}
@@ -101,7 +102,7 @@ func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
 	if !s.changed(w, r, err) {
 		return
 	}
-	s.showLoops(w, r, toast("success", "Dismissed"))
+	s.showLoops(w, r, hub.Toast("success", "Dismissed"))
 }
 
 func (s *service) loopDismissAll(w http.ResponseWriter, r *http.Request) {
@@ -114,11 +115,11 @@ func (s *service) loopDismissAll(w http.ResponseWriter, r *http.Request) {
 	if !s.changed(w, r, err) {
 		return
 	}
-	s.showLoops(w, r, toast("success", "Dismissed", plural(done.Data.Count, "loop")+" cleared."))
+	s.showLoops(w, r, hub.Toast("success", "Dismissed", plural(done.Data.Count, "loop")+" cleared."))
 }
 
 func (s *service) commitmentUpdate(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "commitment_id")
+	id, ok := hub.PathID(w, r, "commitment_id")
 	if !ok {
 		return
 	}
@@ -138,5 +139,5 @@ func (s *service) commitmentUpdate(w http.ResponseWriter, r *http.Request) {
 	if !s.changed(w, r, err) {
 		return
 	}
-	s.showLoops(w, r, toast("success", title))
+	s.showLoops(w, r, hub.Toast("success", title))
 }

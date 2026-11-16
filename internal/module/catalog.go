@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
@@ -162,6 +163,16 @@ func (c *Catalog) ProposeKinds() []proposals.Definition {
 	var out []proposals.Definition
 	for _, decl := range c.decls {
 		out = append(out, decl.ProposeKinds...)
+	}
+	return out
+}
+
+func (c *Catalog) ReviewKinds(deps ReviewDeps) []review.Contribution {
+	var out []review.Contribution
+	for _, decl := range c.decls {
+		if decl.ReviewKinds != nil {
+			out = append(out, review.Contribution{Module: decl.Name, Category: decl.ActivityCategory, Kinds: decl.ReviewKinds(deps)})
+		}
 	}
 	return out
 }

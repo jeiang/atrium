@@ -206,17 +206,23 @@ failed backup creation does not prune archives. v2 archives named
 archive needs another name or location. Off-host copying belongs to the host.
 
 `atrium backup list` (with `--json`) and the API's `GET /maintenance/backups`
-show up to 100 of the newest `atrium-*.backup` archives in the backup directory,
-with the total count, each archive's size and modification time, and the
-facts its unencrypted header states (format, creation time, schema,
-encryption and key id, file count) or why that header cannot be read. The
-header is not checked for tampering; `POST /maintenance/backups/verify` with a
-listed name, or `atrium restore --verify`, checks the whole archive. Verify
-results are not stored. Symlinks, subdirectories and other names in the
-directory are not listed. Without `backup.directory` (host key
-`core.backup_directory`), the list reports that no directory is configured; a
-configured directory that does not exist yet is reported as missing. To write
-an archive named `list` in the current directory, run `atrium backup ./list`.
+show up to 100 of the newest atrium archives in the backup directory, with the
+total count, each archive's size and modification time, whether pruning may
+delete it, and the facts its unencrypted header states (format, creation time,
+schema, encryption and key id, file count) or that its format is too old or
+too new. Both the scheduled `atrium-*.backup` archives and named archives
+written there with `atrium backup PATH` (for example a pre-deploy
+`pre-<deploy>-<stamp>.archive`) are listed; named archives are never pruned
+and do not count toward the kept number. Any file whose header is not an
+atrium archive header is ignored, as are symlinks, subdirectories and names
+starting with a dot. Only the newest 1000 files in the directory are examined;
+the list reports how many older files were not. The header is not checked for
+tampering; `POST /maintenance/backups/verify` with a listed name, or
+`atrium restore --verify`, checks the whole archive. Verify results are not
+stored. Without `backup.directory` (host key `core.backup_directory`), the list
+reports that no directory is configured; a configured directory that does not
+exist yet is reported as missing. To write an archive named `list` in the
+current directory, run `atrium backup ./list`.
 
 Restore replaces database and uploaded state and requires resident users of the
 database to be stopped. `atrium restore --verify ARCHIVE` checks an archive
@@ -355,6 +361,35 @@ return 409 `module_disabled` before starting their work. Review and Activity kee
 historical proposals and effects visible; owning-module checks still apply to
 approval, undo, and other mutations.
 
+## Automation pause
+
+One pause stops all unattended work. The operator sets it with
+`atrium live pause` or `POST /api/v1/automation/pause` (optional `reason`) and
+clears it with `atrium live resume` or `POST /api/v1/automation/resume`;
+`GET /api/v1/automation/pause` and the `pause` field of `GET /api/v1/shell`
+show whether it is on, who set it, from where, since when and why. The older
+`POST /api/v1/mail/live/pause` and `/resume` act on the same pause. Agents
+cannot pause or resume.
+
+The pause is a `pause` file beside the database, so a pause set from a
+separate CLI process reaches a running serve: each automatic mail write and
+each run-now request checks it at once, and the scheduler applies it at its
+next tick (30 seconds). While paused:
+
+- Scheduled jobs are skipped and recorded as `skipped_pause`, except backups,
+  the CalDAV and CardDAV mirrors, and the mail sync and scan passes. Those
+  passes still read mail, but make no automatic mailbox writes.
+- A run-now request for any other job (package tracking, the media sweep,
+  calendar candidates) is refused.
+- Assistant jobs, schedules and the Grafana sampler do not run; chat stays
+  available, and the assistant's direct mailbox writes are refused.
+- Operator sends and approved proposals still work: pause blocks automatic
+  work, not consent.
+
+Resume releases everything at once. A write skipped while paused is done once
+on the next pass, and a write with an unknown outcome stays blocked until the
+operator resolves it.
+
 ## Mail modes and safety
 
 Mail sync and routing are application workflows, not decisions to run made by
@@ -469,9 +504,10 @@ items such as commitments, tasks and open loops. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
 `GET /api/v1/queue`, and `GET /api/v1/home` returns the count and the first
 three of them as `needs_you`. The Needs you page still lists only proposals and
-drafts. A task or commitment can be snoozed until a later time with
-`POST /api/v1/commitments/{ref}/snooze`; it leaves Needs you until then, and the
-snooze can be undone.
+drafts; with mail off it and `GET /api/v1/pending` list no drafts, and Activity
+keeps showing past mail actions. A task or commitment can be snoozed until a
+later time with `POST /api/v1/commitments/{ref}/snooze`; it leaves Needs you
+until then, and the snooze can be undone.
 
 Tasks can be created, edited, completed, reopened, dismissed and deleted from
 `/api/v1/tasks`. Each of these can be undone: the response names one effect,

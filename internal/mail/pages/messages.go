@@ -234,9 +234,9 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = toast("error", "Not undone", e.Message)
 	}
-	found, err := s.review.LiveAction(ctx, id)
+	found, err := s.review.Action(ctx, id)
 	check(err)
-	row, err := s.reads.TriageRow(ctx, found.MessageID)
+	row, err := s.reads.TriageRow(ctx, found.Activity.MessageID)
 	check(err)
 	if row == nil {
 		s.fail(w, r, http.StatusNotFound, "message has no decision")

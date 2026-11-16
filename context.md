@@ -513,19 +513,25 @@ claims about the running application. Operator contracts are in
   keep_days. No directory means `skipped_unconfigured`. `atrium backup`
   shares the job's claim. There is no backup unit or timer.
   `GET /maintenance/backups` (operation `maintenance.backup.list`, operator
-  only, not an agent tool) and `atrium backup list [--json]` list the
-  regular files named `atrium-*.backup` directly in `core.backup_directory`,
-  newest modification first, capped by `limit` (default 50, at most 100;
-  the CLI shows 100) with the full `total`. Symlinks, directories and other
-  names are skipped, and files are opened through an `os.Root` on that
-  directory. Each item carries the name, size, modification time and the
-  unauthenticated archive header (format, created time, schema, encryption
-  and key id, file count) or a `problem` (`not_archive`, `old_format`,
-  `newer_format`). No path is returned. `location.state` is `ready`,
-  `unconfigured` (no host key) or `missing` (the directory does not exist),
-  with the host key and NixOS option that set it. Verify takes a listed
-  name; verify results are not recorded. `atrium backup list` lists; an
-  archive named `list` is written with `atrium backup ./list`.
+  only, not an agent tool) and `atrium backup list [--json]` list every
+  atrium archive directly in `core.backup_directory`: the regular files,
+  without a leading dot, whose tar header entry parses as an archive header.
+  Scheduled and API archives (`atrium-*.backup`, `prunable: true`) and named
+  archives such as `pre-<deploy>-<stamp>.archive` from `atrium backup PATH`
+  (`prunable: false`; pruning never counts or deletes them) are listed
+  together, newest modification first, capped by `limit` (default 50, at
+  most 100; the CLI shows 100) with the full `total`. At most the newest
+  1000 candidate files are examined; `unexamined` counts the rest. Other
+  files, symlinks and directories are skipped silently, and files are opened
+  through an `os.Root` on that directory. Each item carries the name, size,
+  modification time, `prunable` and the unauthenticated archive header
+  (format, created time, schema, encryption and key id, file count) or a
+  `problem` (`old_format`, `newer_format`). No path is returned.
+  `location.state` is `ready`, `unconfigured` (no host key) or `missing`
+  (the directory does not exist), with the host key and NixOS option that
+  set it. Verify takes a listed name; verify results are not recorded.
+  `atrium backup list` lists; an archive named `list` is written with
+  `atrium backup ./list`.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -712,8 +718,14 @@ claims about the running application. Operator contracts are in
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
-  metrics, checks, proposals, effect handlers and scheduled jobs; module
-  enablement gates the applicable runtime projections. Each owner declares
+  metrics, checks, proposals, effect handlers, review kinds and scheduled
+  jobs; module enablement gates the applicable runtime projections. The
+  review hub (`/review`, `/proposals/*`, `/activity*`, the queue) lives in
+  `internal/review`, which imports no unit: mail contributes its mode,
+  drafts and live actions and the `mail` activity category, and the
+  assistant contributes ops findings, through `ReviewKinds` and
+  `ActivityCategory`. With mail off its drafts leave the hub, while its past
+  live actions stay in Activity. Each owner declares
   its built-in jobs (assistant six, calendar candidates, media three, mail
   package tracking, Grafana ops sampler); compiling the catalog checks their
   owner, keys, names, schedules and policies and derives the schedule
@@ -823,7 +835,7 @@ claims about the running application. Operator contracts are in
   atrium's own read-only CalDAV/CardDAV sync. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
-  calendar-candidate stage and notification sends are skipped (the mail pause
+  calendar-candidate stage and notification sends are skipped (the pause
   controls stay available), and its tables remain.
   On its first start the application seeds the module flags. A database
   that already holds operator data (settings, secrets, accounts, threads or
@@ -875,6 +887,26 @@ claims about the running application. Operator contracts are in
   after the publish lock and write connection are released; a failed
   starter marks its module unavailable with the error, is logged once per
   failure and is retried at the next publication.
+- One platform pause (`internal/pause`) covers all unattended work. Its state
+  is the `pause` file beside the database: the file's existence is the
+  pause, and its JSON body records who (`by`, `source`), when (`since`) and
+  an optional `reason`; an empty file written by an older binary reads as
+  paused since its modification time, and an older binary honors the new
+  file. Every check reads the file, so a pause set by a separate CLI process
+  stops a running `serve`: scheduled admission at its next tick (30 s),
+  run-now requests and each automatic mail write at once. A due job is
+  skipped as `skipped_pause` unless it runs while paused (backups, the mail
+  sync and scan passes, whose automatic writes the gate still refuses, and
+  the CalDAV/CardDAV mirrors); run-now of any other job is refused (409
+  `refused`). Chat stays available; the assistant's direct mailbox writes
+  are refused while paused. Mail's write gate delegates only its pause
+  check. `GET /automation/pause`, `POST /automation/pause` (optional
+  `reason`) and `POST /automation/resume` are operator-only on both
+  prefixes and never agent tools; the two commands are audited as
+  `automation.pause` and `automation.resume`, bump the `automation` event
+  topic and send the pause notice, and `GET /shell` carries the same state
+  as `pause`. `POST /api/v1/mail/live/pause` and `/resume` and `atrium live
+  pause|resume` are aliases of the same pause with unchanged shapes.
 - Module ownership is checked at build time. `tools/tableownership` keeps
   each table's SQL inside its owning module, and `tools/registrationownership`
   keeps every registration in the module catalog: it type-checks the
@@ -1007,8 +1039,8 @@ claims about the running application. Operator contracts are in
   `module_disabled`) and again during execution (503 `module_disabled` with
   `Retry-After: 5`). A binary API relay owned by a module (media content and
   artwork, file downloads) answers 409 `module_disabled` before relaying when
-  that module is off. Only
-  `POST /api/v1/mail/live/pause` is unowned. The
+  that module is off. Only the pause aliases
+  `POST /api/v1/mail/live/pause` and `/resume` are unowned. The
   owner generation follows a pending mutation to ledger admission: a halted
   owner cannot start a new effect, an effect already started finishes
   recording its result, and re-enabling an owner does not make an old
@@ -1429,7 +1461,8 @@ claims about the running application. Operator contracts are in
   the web session key on `/web/v1`, and each server instance owns its
   counts. Static assets are served from content-hashed immutable URLs.
 - Client read models (both prefixes): `GET /shell` (navigation, sections
-  and tabs, Needs you count, mail mode and pause, module states, version),
+  and tabs, Needs you count, mail mode, the platform `pause` state (paused,
+  by, source, since, reason), module states, version),
   `GET /about` (version, VCS build when stamped, schema version, modules),
   `GET /settings/schema` (offered settings per page with type, choices,
   bounds, default, source, editable, secret; secret values are never sent),

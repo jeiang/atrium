@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -127,9 +126,6 @@ func (m Module) draftNow(ctx context.Context, d *web.Deps, in calapp.DraftCandid
 		if !module.IsEnabled(ctx, need) {
 			return application.Change[candidates.Result]{}, &application.Error{Code: application.Refused, Message: "Event candidates need the " + need + " module, which is off."}
 		}
-	}
-	if !def.RunsWhilePaused && safety.IsPaused(d.Cfg.PausePath()) {
-		return application.Change[candidates.Result]{}, &application.Error{Code: application.Refused, Message: "atrium is paused."}
 	}
 	var out application.Change[candidates.Result]
 	var draftErr error

@@ -219,11 +219,14 @@
     {
       "area": "permissions",
       "operations": [
+        "automation.pause",
+        "automation.pause-status",
+        "automation.resume",
         "review.permissions",
         "review.permissions-update"
       ],
-      "required": 2,
-      "bound": 2
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "proposals",
@@ -399,7 +402,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 223,
-  "total_bound": 223,
+  "total_required": 226,
+  "total_bound": 226,
   "total_approval_reached": 11
 }

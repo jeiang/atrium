@@ -52,11 +52,11 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
@@ -109,7 +109,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Attention: AttentionSources(mc.Env),
 		Search:    SearchSources(),
 		Metrics:   opsmetrics.Metrics(),
-		Jobs:      Jobs(m.Jobs),
+		ReviewKinds: func(module.ReviewDeps) review.Kinds {
+			return review.Kinds{Findings: serverops.ReviewKindFindings}
+		},
+		Jobs: Jobs(m.Jobs),
 		Services: []runtime.ServiceDefinition{{Name: "assistant", Run: func(ctx context.Context, _ *runtime.Services) error {
 			if err := m.Start(ctx); err != nil {
 				return err
@@ -118,7 +121,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}}},
 		Pages: []web.Page{{
 			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI, Home: func(d *web.Deps) func(context.Context) (any, any, error) {
-				reader := mailmodule.ReviewReads(d)
+				reader := hub.Reads(d)
 				return func(ctx context.Context) (any, any, error) {
 					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
 					if err != nil {
@@ -128,7 +131,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 					if err != nil {
 						return nil, nil, err
 					}
-					return reviewpages.StripView(pending.Data), reviewpages.ReceiptsView(activity.Data), nil
+					return hub.StripView(pending.Data), hub.ReceiptsView(activity.Data), nil
 				}
 			}}),
 			Templates: chatpages.Templates(),
