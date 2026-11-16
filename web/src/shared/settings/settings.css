@@ -1,0 +1,101 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .settings-form {
+    display: grid;
+    gap: var(--s-4);
+    min-inline-size: 0;
+    max-inline-size: 44rem;
+  }
+
+  .settings-form__head {
+    display: grid;
+    gap: var(--s-2);
+  }
+
+  .settings-form__title {
+    margin: 0;
+    font-size: var(--t-lg);
+  }
+
+  .settings-form__result:empty {
+    display: none;
+  }
+
+  .settings-form__result:focus {
+    outline: none;
+  }
+
+  .settings-form__bar {
+    position: sticky;
+    inset-block-end: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-3);
+    align-items: center;
+    padding-block: var(--s-3);
+    background: var(--paper);
+    border-block-start: 1px solid var(--line);
+  }
+
+  .settings-form__bar .meta {
+    margin-inline-end: auto;
+  }
+
+  .setting {
+    display: grid;
+    gap: var(--s-2);
+    min-inline-size: 0;
+    padding-block-end: var(--s-4);
+    border-block-end: 1px solid var(--line);
+    scroll-margin-block: var(--s-6);
+  }
+
+  .setting:focus {
+    outline: none;
+  }
+
+  .setting__readonly {
+    display: grid;
+    gap: var(--s-1);
+    min-inline-size: 0;
+  }
+
+  .setting__label {
+    font-weight: 600;
+    padding: 0;
+  }
+
+  .setting__value {
+    overflow-wrap: anywhere;
+  }
+
+  .setting__pin {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--s-1);
+    align-items: center;
+    overflow-wrap: anywhere;
+  }
+
+  .setting__group {
+    display: grid;
+    gap: var(--s-2);
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .setting__choices {
+    display: grid;
+    gap: var(--s-1);
+  }
+
+  .setting__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    align-items: center;
+  }
+}

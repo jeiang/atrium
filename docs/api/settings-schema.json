@@ -609,7 +609,7 @@
       "fields": [
         {
           "key": "weather_location_name",
-          "label": "weather_location_name",
+          "label": "Place name",
           "module": "assistant",
           "type": "string",
           "multi": false,
@@ -625,7 +625,7 @@
         },
         {
           "key": "weather_latitude",
-          "label": "weather_latitude",
+          "label": "Latitude",
           "module": "assistant",
           "type": "float",
           "multi": false,
@@ -641,7 +641,7 @@
         },
         {
           "key": "weather_longitude",
-          "label": "weather_longitude",
+          "label": "Longitude",
           "module": "assistant",
           "type": "float",
           "multi": false,
@@ -825,7 +825,7 @@
       "fields": [
         {
           "key": "mail_enabled",
-          "label": "mail_enabled",
+          "label": "Mail app is on",
           "module": "core",
           "type": "bool",
           "multi": false,
@@ -850,7 +850,7 @@
       "fields": [
         {
           "key": "calendar_enabled",
-          "label": "calendar_enabled",
+          "label": "Calendar app is on",
           "module": "core",
           "type": "bool",
           "multi": false,
@@ -875,7 +875,7 @@
       "fields": [
         {
           "key": "media_enabled",
-          "label": "media_enabled",
+          "label": "Media app is on",
           "module": "core",
           "type": "bool",
           "multi": false,
@@ -900,7 +900,7 @@
       "fields": [
         {
           "key": "assistant_enabled",
-          "label": "assistant_enabled",
+          "label": "Assistant app is on",
           "module": "core",
           "type": "bool",
           "multi": false,
@@ -925,7 +925,7 @@
       "fields": [
         {
           "key": "notifications_enabled",
-          "label": "notifications_enabled",
+          "label": "Notifications app is on",
           "module": "core",
           "type": "bool",
           "multi": false,
