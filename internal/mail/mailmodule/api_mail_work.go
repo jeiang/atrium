@@ -14,13 +14,13 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -229,11 +229,7 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 	svc := func() *mailapp.Service { return service }
 	passes := mailPasses{d: d, m: m}
 	if d != nil {
-		open := imapclient.Opener(d.Cfg)
-		if m.Clients != nil {
-			open = m.Clients(d.Cfg)
-		}
-		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, mail.WallClock)
+		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, d.Cfg, mail.WallClock)
 		if err != nil {
 			panic(err)
 		}
@@ -323,7 +319,7 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 		}),
 		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
 			var r application.Change[mailapp.PollTrackersResult]
-			_, err := module.Invoke(ctx, d.DB, d.Cfg, module.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+			_, err := module.Invoke(ctx, d.DB, d.Cfg, unit.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 				var err error
 				r, err = svc().PollTrackers(ctx, struct{}{})
 				return scheduler.Result{}, err

@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 type Env struct {
@@ -54,7 +55,7 @@ func New(svc *service.Service, jobs []scheduler.Definition, o Options) *schedule
 				jobs[i].Run = owned(o.Own, jobs[i].Module, jobs[i].Run)
 			}
 		}
-		runCron = owned(o.Own, module.Assistant, runCron)
+		runCron = owned(o.Own, unit.Assistant, runCron)
 	}
 	now := func() float64 {
 		if svc.Now != nil {

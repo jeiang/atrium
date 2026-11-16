@@ -36,6 +36,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 var log = logx.Logger("atrium.agent.service")
@@ -240,7 +241,7 @@ func Admit(ctx context.Context, q db.Querier, env config.Env, root threads.Kind,
 }
 
 func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now float64, o Start) (int64, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return 0, err
 	}
@@ -333,19 +334,27 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 }
 
 func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	return s.execute(ctx, runID, nil)
+}
+
+func (s *Service) execute(ctx context.Context, runID int64, settled func(context.Context, *journal.Run, error, bool)) (*journal.Run, error) {
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return nil, err
 	}
 	client, err := s.ResolveClient(ctx)
 	var nc config.NotConfigured
 	if errors.As(err, &nc) {
+		watched := progress.Watched(runID)
 		if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
 			return nil, err
 		}
 		run, err := journal.GetRun(ctx, s.DB.Read, runID)
 		if err != nil {
 			return nil, err
+		}
+		if settled != nil && run != nil {
+			settled(ctx, run, nc, watched)
 		}
 		return run, nc
 	}
@@ -356,7 +365,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	if err != nil {
 		return nil, err
 	}
-	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference, Stop: s.stop})
+	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference, Stop: s.stop, Settled: settled})
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
@@ -372,7 +381,7 @@ func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error
 }
 
 func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o Start) (int64, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return 0, err
 	}
@@ -413,7 +422,7 @@ func (s *Service) background(runID int64, done func()) {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
 			}
 		}()
-		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) || errors.Is(err, progress.ErrShutdown) {
+		if _, err := s.execute(s.base, runID, s.away); errors.Is(err, context.Canceled) || errors.Is(err, progress.ErrShutdown) {
 			log.Info(fmt.Sprintf("background run %d interrupted", runID), logx.RunID, runID)
 		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
@@ -597,7 +606,7 @@ func (s *Service) claim(ctx context.Context, runID int64) error {
 }
 
 func (s *Service) StartResume(ctx context.Context, runID int64) error {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return err
 	}
@@ -614,7 +623,7 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 }
 
 func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claimed map[int64]bool) (int, error) {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return 0, err
 	}
@@ -633,7 +642,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claime
 }
 
 func (s *Service) ResumeRuns(ctx context.Context, runs []int64, dead string, admit func(context.Context, journal.Run) (bool, error)) error {
-	ctx, err := module.BindOwner(ctx, module.Assistant)
+	ctx, err := module.BindOwner(ctx, unit.Assistant)
 	if err != nil {
 		return err
 	}

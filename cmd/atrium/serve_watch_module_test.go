@@ -10,6 +10,7 @@ import (
 
 	mailrun "github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestServeWatchStopsWithTheMailModuleAndStaysStopped(t *testing.T) {
@@ -20,7 +21,7 @@ func TestServeWatchStopsWithTheMailModuleAndStaysStopped(t *testing.T) {
 	base, logs, _ := startServeWith(t, dir, true)
 	waitWatching(t, home, work)
 
-	asstSet(t, module.FlagKey(module.Mail), "false")
+	asstSet(t, module.FlagKey(unit.Mail), "false")
 	waitUntil(t, 60*time.Second, "the mail watches to stop with the module", func() bool {
 		return len(watchHealth(t, opsBase)) == 0 && home.Idling() == 0 && work.Idling() == 0
 	})

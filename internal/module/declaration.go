@@ -11,8 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/runtime"
@@ -59,6 +57,7 @@ type Declaration struct {
 	Tools             []ToolDefinition
 	ProposeKinds      []proposals.Definition
 	Effects           func(EffectDeps) Effects
+	EffectOrigins     []string
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync
 	AccountCredential config.AccountCredentialFunc
@@ -71,6 +70,7 @@ type Declaration struct {
 	ServiceSets       func(context.Context) ([]SetService, error)
 	ServiceSetName    string
 	Recover           func(context.Context, *db.DB, config.Config) error
+	HasOperatorData   func(context.Context, db.Querier) (bool, error)
 	Metrics           []ops.Metric
 	Checks            []ops.Check
 	Operations        []application.Definition
@@ -86,8 +86,7 @@ type EffectDeps struct {
 	DB        *db.DB
 	Ledger    *ledger.Store
 	Env       config.Env
-	Open      mail.OpenFunc
-	Syncer    *mailsync.Syncer
+	Cfg       config.Config
 	Now       func() float64
 	Resume    func(context.Context, int64) error
 	Tools     registry.Source

@@ -32,6 +32,7 @@ const (
 const (
 	UnreachableGrace = 6 * time.Hour
 	graceLayout      = "2006-01-02 15:04 UTC"
+	Screen           = "/settings/connections"
 )
 
 const (

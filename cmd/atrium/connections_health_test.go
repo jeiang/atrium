@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func grafanaHealthServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
@@ -245,13 +246,13 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 
 func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testing.T) {
 	embed := newFakeOpenAI(t)
-	dir, api, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, api, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
 
 	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "ok") {
 		t.Fatalf("passing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("enabling mail after a passing Test: %d %q", on.code, on.stderr)
 	}
 	if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); !slices.Contains(names, "mail_search") {
@@ -301,7 +302,7 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 	if degraded := moduleDegraded(t, s, "mail"); !strings.Contains(degraded, "service/embedding is away until ") {
 		t.Fatalf("mail requirement during the outage: %q", degraded)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("mail held by an automatic failure: %d %q", on.code, on.stderr)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
@@ -341,14 +342,14 @@ func TestAFailedEmbeddingTestDoesNotHoldMailAndAnAutomaticPassClearsIt(t *testin
 	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
-	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
 
 	embed.setStatus(http.StatusInternalServerError)
 	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitError {
 		t.Fatalf("failing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("mail held by a failed Test: %d %q", on.code, on.stderr)
 	}
 
@@ -396,7 +397,7 @@ func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
 	if degraded := moduleDegraded(t, s, "notifications"); !strings.Contains(degraded, "service/webpush is unconfigured") {
 		t.Fatalf("notifications requirement without a subject: %q", degraded)
 	}
-	if on := runSettings(t, "set", module.FlagKey(module.Notifications), "true"); on.code != cli.ExitOK {
+	if on := runSettings(t, "set", module.FlagKey(unit.Notifications), "true"); on.code != cli.ExitOK {
 		t.Fatalf("an unconfigured connection held notifications: %d %q", on.code, on.stderr)
 	}
 }
@@ -616,5 +617,151 @@ capabilities = ["embeddings"]
 	}
 	if embedHits() != embedded {
 		t.Fatal("changed check after a fixing edit reached the unchanged embedding service")
+	}
+}
+
+func TestHostCredentialFileEditsResetTheConnectionAndARedeclaredConnectionReturns(t *testing.T) {
+	embed := newFakeOpenAI(t)
+	grafana, _ := countingGrafana(t, http.StatusOK)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	host := filepath.Join(dir, "host-credentials.toml")
+	first, second := filepath.Join(dir, "embedding-first.key"), filepath.Join(dir, "embedding-second.key")
+	for path, key := range map[string]string{first: "first-key", second: "second-key"} {
+		if err := os.WriteFile(path, []byte(key+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeHost := func(declared bool, keyFile string) {
+		embedding := ""
+		if declared {
+			embedding = fmt.Sprintf(`
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = "embeddinggemma" }
+capabilities = ["embeddings"]
+`, embed.URL+"/v1")
+			if keyFile != "" {
+				embedding += fmt.Sprintf("credential_files = { bearer = %q }\n", keyFile)
+			}
+		}
+		body := strings.Replace(hostConfigBodyWith(embedding, defaultWebPushConnection, ""), "http://grafana.invalid", grafana.URL, 1)
+		if err := os.WriteFile(host, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type row struct {
+		enabled int
+		state   string
+		checked sql.NullFloat64
+		results string
+		ref     sql.NullString
+	}
+	read := func() row {
+		t.Helper()
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+		defer func() { _ = d.Close() }()
+		var r row
+		if err := d.Read.QueryRow("SELECT enabled, state, checked_at, results_json, "+
+			"(SELECT file_ref FROM connection_credentials WHERE connection_id = c.id AND slot = 'bearer') "+
+			"FROM connections c WHERE id = 'service/embedding'").Scan(&r.enabled, &r.state, &r.checked, &r.results, &r.ref); err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	reconcile := func(step string) row {
+		t.Helper()
+		if got := runApp(t, "connections", "list"); got.code != cli.ExitOK {
+			t.Fatalf("%s: connections list: %d %q", step, got.code, got.stderr)
+		}
+		return read()
+	}
+	untested := func(step string, r row, ref string) {
+		t.Helper()
+		if r.enabled != 1 || r.state != "untested" || r.checked.Valid || r.results != "{}" || r.ref.String != ref {
+			t.Fatalf("%s: row %+v, want enabled untested with no check and reference %q", step, r, ref)
+		}
+	}
+	checksEmbedding := func(step, key string) {
+		t.Helper()
+		before := embed.authorizations()
+		got := runApp(t, "connections", "check", "--changed")
+		if got.code != cli.ExitOK || !strings.HasPrefix(got.stdout, "service/embedding\tok\t") || strings.Count(got.stdout, "\n") != 1 {
+			t.Fatalf("%s: changed check: %d %q %q", step, got.code, got.stdout, got.stderr)
+		}
+		want := ""
+		if key != "" {
+			want = "Bearer " + key
+		}
+		var sent []string
+		for path, values := range embed.authorizations() {
+			sent = append(sent, values[len(before[path]):]...)
+		}
+		if len(sent) == 0 || slices.ContainsFunc(sent, func(v string) bool { return v != want }) {
+			t.Fatalf("%s: changed check sent %q to the embedding service, want only %q", step, sent, want)
+		}
+		if r := read(); r.state != "ok" || !r.checked.Valid {
+			t.Fatalf("%s: row after the changed check %+v", step, r)
+		}
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", host)
+
+	writeHost(true, "")
+	if got := runApp(t, "connections", "check", "--changed"); !strings.Contains(got.stdout, "service/embedding\tok") {
+		t.Fatalf("first changed check: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if r := read(); r.state != "ok" || !r.checked.Valid || r.ref.Valid {
+		t.Fatalf("row before the slot was declared: %+v", r)
+	}
+
+	writeHost(true, first)
+	untested("slot added", reconcile("slot added"), first)
+	checksEmbedding("slot added", "first-key")
+
+	writeHost(true, second)
+	untested("path changed", reconcile("path changed"), second)
+	checksEmbedding("path changed", "second-key")
+
+	settled := read()
+	for _, step := range []string{"first unchanged restart", "second unchanged restart"} {
+		if r := reconcile(step); r != settled {
+			t.Fatalf("%s reset the row: %+v, was %+v", step, r, settled)
+		}
+	}
+	if got := runApp(t, "connections", "check", "--changed"); got.code != cli.ExitOK || strings.TrimSpace(got.stdout) != "no connection to check" {
+		t.Fatalf("changed check after an unchanged restart: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if r := read(); r != settled {
+		t.Fatalf("changed check after an unchanged restart touched the row: %+v, was %+v", r, settled)
+	}
+
+	writeHost(true, "")
+	untested("slot removed", reconcile("slot removed"), "")
+	checksEmbedding("slot removed", "")
+
+	writeHost(false, "")
+	if r := reconcile("connection removed"); r.enabled != 0 || r.state != "disabled" {
+		t.Fatalf("row after the connection was removed from the host file: %+v", r)
+	}
+	writeHost(true, second)
+	untested("connection declared again", reconcile("connection declared again"), second)
+	checksEmbedding("connection declared again", "second-key")
+
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	if code, body := s.conn("/disconnect", url.Values{"id": {"service/embedding"}}); code != http.StatusSeeOther && code != http.StatusOK {
+		t.Fatalf("disconnect: %d %s", code, body)
+	}
+	s.stop()
+	if r := read(); r.enabled != 0 || r.state != "unconfigured" {
+		t.Fatalf("row after the operator disconnected it: %+v", r)
+	}
+	writeHost(false, "")
+	if r := reconcile("disconnected connection removed"); r.enabled != 0 || r.state == "disabled" {
+		t.Fatalf("host removal overwrote the operator's disconnect: %+v", r)
+	}
+	writeHost(true, second)
+	if r := reconcile("disconnected connection declared again"); r.enabled != 0 {
+		t.Fatalf("declaring a disconnected connection again enabled it: %+v", r)
 	}
 }

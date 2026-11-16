@@ -12,16 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const (
-	Core          = "core"
-	Mail          = "mail"
-	Calendar      = "calendar"
-	Media         = "media"
-	Assistant     = "assistant"
-	Notifications = "notifications"
-	Grafana       = "grafana"
-	Contacts      = "contacts"
-)
+const Core = "core"
 
 type Leaf struct {
 	Always bool

@@ -241,6 +241,16 @@ claims about the running application. Operator contracts are in
   generated `action_link_key` secret, or the host file's
   `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
   fingerprints; host-file bytes are never copied into the database.
+- A background chat run that parks on `ask_operator` while no client
+  watches its event stream sends one assistant push "atrium: question
+  waiting" (`ask:<tool call id>`, linking `/chat/<thread>`; the question
+  text stays out of it), and answering marks that inbox row read. A
+  background chat run that fails unwatched, other than an operator stop,
+  sends one system push "atrium: run failed" (`run-failed:<run id>`) naming
+  the thread and a plain failure class. Synchronous runs report to their
+  caller and scheduled runs keep the job failure push, so a run pushes at
+  most once. Connection health notices link `/settings/connections`. None
+  of these count against the agent notify caps.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -441,7 +451,8 @@ claims about the running application. Operator contracts are in
   none.
 - `atrium connections check` runs the silent check of every configured
   connection, and `--changed` only those never checked since they were
-  added or their host declaration changed. It exits non-zero when a
+  added, declared again, or their host declaration changed (including a
+  credential file slot added, removed or moved). It exits non-zero when a
   checked connection is failing (in its window or not) or needs reauth.
   The NixOS unit runs `connections check --changed` as `ExecStartPre`
   with failure ignored, so a deploy reports changed connections in the
@@ -815,7 +826,9 @@ claims about the running application. Operator contracts are in
   On its first start the application seeds the module flags. A database
   that already holds operator data (settings, secrets, accounts, threads or
   usage rows) gets every module whose required settings are met enabled; an
-  empty database starts core only. `atrium settings set <name>_enabled true`
+  empty database starts core only. The platform checks settings, secrets and
+  usage rows; each module declares its own check (`HasOperatorData`: mail
+  checks accounts, the assistant checks threads). `atrium settings set <name>_enabled true`
   is refused with the unmet reasons. A module flag change takes effect after
   the atrium units restart: the running application has no control that
   writes a flag, a module's Settings page marks "Restart atrium to apply"
@@ -1048,6 +1061,19 @@ claims about the running application. Operator contracts are in
   Undo and resolve handlers come from the compiled module catalog at every
   entry point, including mail proposal effects and media effects; the effect
   state and the relevant write gate still determine whether an undo can run.
+  The catalog builds the ledger and the proposal registry from platform
+  resources only (database, configuration, environment, clock); no mail
+  opener or syncer passes through the module framework or the tool context.
+  Mail binds its IMAP opener and post-proposal sync hook in its own module
+  declaration, and its assistant tools take the opener from the same place.
+  `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
+  `internal/tool`, `internal/ledger` or `internal/proposals` imports a unit
+  package (mail, media, calendar, contacts, kb, tasks, weather, grafana,
+  serverops, or the agent tools under `internal/assistant/tools`).
+  `internal/module` names only `core`; every other module name is a constant
+  in the leaf package `internal/unit`, the effect origins a module owns are
+  declared on its declaration (`EffectOrigins`), and the list of modules is
+  `internal/app/catalog.go`.
   Settlement continues on a cancellation-detached context. Resolving an
   unknown or partial effect appends actor, source, outcome, prior state and
   evidence to `effect_resolutions`; it does not rewrite the raw attempt.

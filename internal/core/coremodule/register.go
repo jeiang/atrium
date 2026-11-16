@@ -109,7 +109,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		return snap.Enabled(name), nil
 	}
 	store := func(d *db.DB, cfg config.Config) *ledger.Store {
-		s, err := mc.Catalog().Ledger(d, mc.Env, m.Clients(cfg), m.Now)
+		s, err := mc.Catalog().Ledger(d, mc.Env, cfg, m.Now)
 		if err != nil {
 			panic(err)
 		}
@@ -176,7 +176,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Recover:    recoverProposals,
 		Commands: []*cli.Command{
 			ledgercmd.Command(ledgercmd.Options{Now: m.Now, Open: openLedger}),
-			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}.session}),
+			proposalscmd.Command(proposalscmd.Options{Now: m.Now, Session: proposalsDeps{Env: mc.Env, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}.session}),
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
 			bearercmd.Command(authapp.CLI(mc.Env)),

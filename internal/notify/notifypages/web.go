@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	moduleowner "github.com/jeiang/atrium/internal/module"
 	notifyapp "github.com/jeiang/atrium/internal/notify/application"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -68,7 +69,7 @@ func (h handlers) ctx(r *http.Request) context.Context {
 
 func (h handlers) owned(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, err := moduleowner.BindOwner(r.Context(), moduleowner.Notifications)
+		ctx, err := moduleowner.BindOwner(r.Context(), unit.Notifications)
 		if err != nil {
 			h.done(w, r, err, "")
 			return

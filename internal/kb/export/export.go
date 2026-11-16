@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/render"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -69,7 +68,7 @@ func exportLedger(ctx context.Context, d *db.DB, env config.Env) (*ledger.Store,
 	if err != nil {
 		return nil, err
 	}
-	return module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), nil)
+	return module.SetFrom(ctx).Catalog().Ledger(d, env, cfg, nil)
 }
 
 func threadTitles(ctx context.Context, q db.Querier, records []kb.ExportRecord) (map[int64]string, error) {

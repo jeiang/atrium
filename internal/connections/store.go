@@ -243,7 +243,7 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 				return err
 			}
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id, state FROM connections WHERE config_source = 'host' AND NOT (enabled = 0 AND state = 'disabled')")
+		rows, err := tx.QueryContext(ctx, "SELECT id, state FROM connections WHERE config_source = 'host' AND enabled = 1")
 		if err != nil {
 			return err
 		}
@@ -355,10 +355,14 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		currentConfig, currentTransport string
 		currentRevision                 int64
 		currentSource                   string
+		currentEnabled                  int
+		currentState                    State
+		currentReason                   string
 	)
 	err = tx.QueryRowContext(ctx,
-		"SELECT config_json, transport_json, revision, config_source FROM connections WHERE id = ?", id).
-		Scan(&currentConfig, &currentTransport, &currentRevision, &currentSource)
+		"SELECT config_json, transport_json, revision, config_source, enabled, state, reason FROM connections WHERE id = ?", id).
+		Scan(&currentConfig, &currentTransport, &currentRevision, &currentSource, &currentEnabled, &currentState, &currentReason)
+	inserted := false
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		now := s.stamp()
@@ -368,13 +372,14 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 			id, hc.Kind, labelOr(hc.Label, string(id)), string(configJSON), string(transportJSON), now, now); err != nil {
 			return err
 		}
-		currentRevision = 1
+		inserted = true
 	case err != nil:
 		return err
 	default:
 		takeover := currentSource == SourceOperator
 		hostOwns := currentSource == SourceHost || takeover
-		changed := takeover || currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
+		redeclared := currentSource == SourceHost && currentEnabled == 0 && currentState == Disabled && currentReason == reasonRemovedFromHost
+		changed := takeover || redeclared || currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
 		if takeover {
 			if err := s.refuseCredentialMove(ctx, tx, id, currentConfig, string(configJSON), hc.CredentialFiles); err != nil {
 				return err
@@ -386,13 +391,14 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		}
 		if _, err := tx.ExecContext(ctx,
 			"UPDATE connections SET label = ?, transport_json = ?, revision = ?, "+
+				"enabled = CASE WHEN ? THEN 1 ELSE enabled END, "+
 				"state = CASE WHEN ? THEN 'untested' ELSE state END, "+
 				"reason = CASE WHEN ? THEN '' ELSE reason END, "+
 				"checked_at = CASE WHEN ? THEN NULL ELSE checked_at END, "+
 				"last_ok_at = CASE WHEN ? THEN NULL ELSE last_ok_at END, "+
 				"results_json = CASE WHEN ? THEN '{}' ELSE results_json END, updated_at = ? "+
 				"WHERE id = ?",
-			labelOr(hc.Label, string(id)), string(transportJSON), revision, changed, changed, changed, changed, changed, s.stamp(), id); err != nil {
+			labelOr(hc.Label, string(id)), string(transportJSON), revision, redeclared, changed, changed, changed, changed, changed, s.stamp(), id); err != nil {
 			return err
 		}
 		if hostOwns && changed {
@@ -400,7 +406,6 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 				return err
 			}
 		}
-		currentRevision = revision
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM connection_capabilities WHERE connection_id = ?", id); err != nil {
 		return err
@@ -424,40 +429,54 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 	if err != nil {
 		return err
 	}
+	credentialsChanged := false
 	for _, slot := range stored {
 		if _, declared := hc.CredentialFiles[slot]; !declared {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot); err != nil {
 				return err
 			}
+			credentialsChanged = true
 		}
 	}
 	for _, slot := range sortedKeys(hc.CredentialFiles) {
-		var prior string
-		err := tx.QueryRowContext(ctx, "SELECT source FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot).Scan(&prior)
+		var (
+			prior    string
+			priorRef sql.NullString
+		)
+		err := tx.QueryRowContext(ctx, "SELECT source, file_ref FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot).Scan(&prior, &priorRef)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		if prior == "host_file" {
+		declaredRef := hc.DeclaredCredentialFiles[slot]
+		if prior == "host_file" && priorRef.String == declaredRef {
+			continue
+		}
+		if prior == "host_file" && priorRef.String == hc.CredentialFiles[slot] {
+			if _, err := tx.ExecContext(ctx, "UPDATE connection_credentials SET file_ref = ? WHERE connection_id = ? AND slot = ?", declaredRef, id, slot); err != nil {
+				return err
+			}
 			continue
 		}
 		if prior == "database" {
 			log.Info("the host credential file replaces the database credential", logx.Integration, string(id), "SLOT", slot)
-			if _, err := tx.ExecContext(ctx,
-				"UPDATE connections SET revision = revision + 1, state = 'untested', reason = '', checked_at = NULL, "+
-					"last_ok_at = NULL, results_json = '{}', updated_at = ? WHERE id = ?", s.stamp(), id); err != nil {
-				return err
-			}
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO connection_credentials (connection_id, slot, source, file_ref, set_at, set_by) VALUES (?, ?, 'host_file', ?, ?, 'host')",
-			id, slot, hc.CredentialFiles[slot], s.stamp()); err != nil {
+			id, slot, declaredRef, s.stamp()); err != nil {
+			return err
+		}
+		credentialsChanged = true
+	}
+	if credentialsChanged && !inserted {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE connections SET revision = revision + 1, state = 'untested', reason = '', checked_at = NULL, "+
+				"last_ok_at = NULL, results_json = '{}', updated_at = ? WHERE id = ?", s.stamp(), id); err != nil {
 			return err
 		}
 	}
-	_ = currentRevision
 	return nil
 }
 

@@ -13,6 +13,7 @@ import (
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/module"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -52,7 +53,7 @@ func bindMail(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		ctx, err := module.BindOwner(r.Context(), module.Mail)
+		ctx, err := module.BindOwner(r.Context(), unit.Mail)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return

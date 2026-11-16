@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 var log = logx.Logger("atrium.run")
@@ -89,11 +90,11 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 	}
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
 	cat := module.SetFrom(ctx).Catalog()
-	store, err := cat.Ledger(d, env, open, now)
+	store, err := cat.Ledger(d, env, cfg, now)
 	if err != nil {
 		return nil, err
 	}
-	registry, err := cat.Proposals(module.EffectDeps{DB: d, Ledger: store, Open: open, Syncer: syncer, Now: now, Env: env, Approvals: cat.Approvals()})
+	registry, err := cat.Proposals(module.EffectDeps{DB: d, Ledger: store, Cfg: cfg, Now: now, Env: env, Approvals: cat.Approvals()})
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +112,7 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 	}
 	p.use(c)
 	p.Events = func(ctx context.Context, account string, paid *classify.Deferral) (int, int, error) {
-		if !module.IsEnabled(ctx, module.Calendar) {
+		if !module.IsEnabled(ctx, unit.Calendar) {
 			return 0, 0, nil
 		}
 		return candidates.ScanAccount(ctx, d, cfg, account, p.Classify, paid, env, now)
@@ -292,7 +293,7 @@ const checkpointWait = time.Second
 
 var passDeadline = 20 * time.Minute
 
-const SyncJobKey = module.Mail + "/" + passrun.Sync
+const SyncJobKey = unit.Mail + "/" + passrun.Sync
 
 type AccountSync struct {
 	Account string

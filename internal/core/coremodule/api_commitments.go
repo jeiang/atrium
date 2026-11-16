@@ -11,7 +11,6 @@ import (
 	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
@@ -105,15 +104,11 @@ func commitmentFilter(in CommitmentListRequest) (tasks.Filter, error) {
 
 func (m Module) commitmentService(d *web.Deps) func() *commitmentsapp.Service {
 	return sync.OnceValue(func() *commitmentsapp.Service {
-		open := imapclient.Opener(d.Cfg)
-		if m.Clients != nil {
-			open = m.Clients(d.Cfg)
-		}
 		now := m.Now
 		if now == nil {
 			now = mail.WallClock
 		}
-		store, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, now)
+		store, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, d.Cfg, now)
 		if err != nil {
 			panic(err)
 		}

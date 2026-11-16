@@ -10,6 +10,7 @@ import (
 	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const timeNote = "ISO-8601 (2026-10-16T09:00 or 2026-10-16); times without an offset are in the operator's timezone."
@@ -201,7 +202,7 @@ func baseTools() []tool.Tool {
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
-			Approval:  &tool.Approval{Apply: remove, Label: "Delete calendar event", Icon: "trash-2", Module: module.Calendar, Detail: "uid"},
+			Approval:  &tool.Approval{Apply: remove, Label: "Delete calendar event", Icon: "trash-2", Module: unit.Calendar, Detail: "uid"},
 		}),
 		{
 			Name: "event_propose",

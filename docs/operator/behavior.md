@@ -272,7 +272,12 @@ triggers a check within a minute. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
-keeps its row and credentials, and is announced once.
+keeps its row and credentials, and is announced once. Declaring it again
+enables it as `untested` with its earlier results cleared, so the next check
+tests it. A host connection the operator disconnected stays disconnected:
+removing it from the host file or declaring it again does not enable or
+announce it. Connection notices open the Connections settings page,
+`/settings/connections`.
 
 qBittorrent and the embedding endpoint ride out short outages: a failure that
 follows an `ok` or `expiring` state starts a 6-hour grace window. The stored
@@ -287,7 +292,9 @@ Other connection kinds have no window.
 
 `atrium connections check` runs the silent check of every configured
 connection and records the result; `--changed` checks only connections that
-were added or whose host declaration changed since their last check, and
+were added, declared again, or whose host declaration changed since their last
+check (a changed declaration includes adding, removing or moving a credential
+file slot; an unchanged restart changes nothing), and
 prints `no connection to check` when there are none. Each checked connection
 prints its id, state (or `away until <time UTC>`) and reason. The command
 exits 1 when a checked connection is failing, in its window or not, or needs
@@ -419,6 +426,19 @@ A partial undo must be checked and resolved rather than repeatedly invoked.
 A push notification carries only a title, a body and the path of the
 signed-in page for its subject, such as `/proposals/<id>`. It has no action
 buttons, carries no token, and opening it writes nothing.
+
+When a chat run started from the web or the API stops to ask you a question
+and no open page is following that run, you get one push, "atrium: question
+waiting", that opens the thread. The push names the thread but not the
+question. Answering marks the inbox entry read; a push already shown on a
+device stays there. When such a run fails and no page is following it, you
+get one push, "atrium: run failed", that names the thread and says in plain
+words why it stopped (a spending limit, a run limit, the model not set up,
+an error from the model service, or an internal error). Stopping a run
+yourself sends nothing. Runs started from the command line report to the
+command instead, and scheduled runs use the scheduled run push above.
+These pushes follow the notifications module and each channel's content
+setting and are not limited by the caps on the assistant's own notify tool.
 
 ## Assistant and daily work
 

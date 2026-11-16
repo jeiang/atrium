@@ -19,18 +19,18 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 func CandidatesJob(deps jobworker.Dependencies) scheduler.Definition {
 	return scheduler.Definition{
-		Module: module.Calendar, Key: module.Calendar + "/" + calendar.JobCandidates, Name: calendar.JobCandidates, Kind: scheduler.JobBuiltin,
+		Module: unit.Calendar, Key: unit.Calendar + "/" + calendar.JobCandidates, Name: calendar.JobCandidates, Kind: scheduler.JobBuiltin,
 		Prompt:   "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).",
 		Schedule: "0 * * * *", CarriedSetting: calendar.KeyScheduleCandidates, Persistent: true, Timeout: 30 * time.Minute,
-		Spend: scheduler.ConditionalSpends, Needs: []string{module.Calendar, module.Mail, module.Assistant},
+		Spend: scheduler.ConditionalSpends, Needs: []string{unit.Calendar, unit.Mail, unit.Assistant},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			out, err := draftCandidates(ctx, e, calapp.DraftCandidatesInput{})
 			return jobworker.Result{RunID: out.Data.RunID}, err
@@ -72,12 +72,11 @@ func (m Module) calendarCLI(env config.Env, tools registry.Source) calendarcmd.O
 		if err := config.Boot(ctx, env, d, cfg); err != nil {
 			return fail(err)
 		}
-		open := imapclient.Opener(cfg)
-		store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, open, assistant.Now)
+		store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, cfg, assistant.Now)
 		if err != nil {
 			return fail(err)
 		}
-		r, err := runner.New(tools, store, open)
+		r, err := runner.New(tools, store)
 		if err != nil {
 			return fail(err)
 		}

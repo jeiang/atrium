@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func agentConnectionTOML(base, token string) string {
@@ -228,7 +229,7 @@ func TestMediaAgentConnectionTest(t *testing.T) {
 	}
 	clearModuleEnv(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bare.toml", bare))
-	if got := runSettings(t, "set", module.FlagKey(module.Media), "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "bearer missing") {
+	if got := runSettings(t, "set", module.FlagKey(unit.Media), "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "bearer missing") {
 		t.Fatalf("enabling media with a bearer-less agent connection: exit %d stderr %q", got.code, got.stderr)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

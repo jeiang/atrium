@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -252,7 +253,7 @@ func (s *Service) queueItems(ctx context.Context, q db.Querier, now float64) ([]
 	}
 	for _, d := range needs {
 		item := QueueItem{Kind: QueueDraft, Title: cmp.Or(d.Subject, "(no subject)"), Summary: "To " + d.To, Source: QueueSource{Type: "draft", ID: strconv.FormatInt(d.ID, 10)},
-			ArrivedAt: d.CreatedAt, WaitingFor: WaitingSend, Module: module.Mail, rank: rankWaiting, at: d.CreatedAt}
+			ArrivedAt: d.CreatedAt, WaitingFor: WaitingSend, Module: unit.Mail, rank: rankWaiting, at: d.CreatedAt}
 		if d.Status == drafts.Unknown {
 			item.WaitingFor, item.Summary = WaitingResolve, "Send outcome unknown. To "+d.To
 		}

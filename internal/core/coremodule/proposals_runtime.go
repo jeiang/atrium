@@ -7,10 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
@@ -18,7 +15,6 @@ import (
 )
 
 type proposalsDeps struct {
-	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
 	Env     config.Env
 	Enabled func(context.Context, db.Querier, string) (bool, error)
@@ -52,15 +48,9 @@ func (o proposalsDeps) session(ctx context.Context, run func(proposalscmd.Runtim
 		Reads: reviewapp.New(reviewapp.Deps{DB: d}),
 		Review: func() *reviewapp.Service {
 			store := o.Store(d, cfg)
-			clients := o.Clients
-			if clients == nil {
-				clients = imapclient.Opener
-			}
-			open := clients(cfg)
 			cat := module.SetFrom(ctx).Catalog()
 			registry, err := cat.Proposals(module.EffectDeps{
-				DB: d, Ledger: store, Open: open,
-				Syncer: &mailsync.Syncer{DB: d, Cfg: cfg, Now: o.Now}, Now: o.Now, Env: env, Tools: o.Tools, Approvals: cat.Approvals(),
+				DB: d, Ledger: store, Cfg: cfg, Now: o.Now, Env: env, Tools: o.Tools, Approvals: cat.Approvals(),
 			})
 			if err != nil {
 				panic(err)

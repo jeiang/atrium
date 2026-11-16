@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -37,8 +38,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	}
 	return module.Declaration{
 		Operations: operations, Bindings: bindings,
-		Name:     module.Notifications,
-		Requires: []module.Requirement{module.ConnectionHealth(string(notify.KindWebPush))},
+		Name:          unit.Notifications,
+		EffectOrigins: []string{"notify"},
+		Requires:      []module.Requirement{module.ConnectionHealth(string(notify.KindWebPush))},
 		Pages: []web.Page{{Module: notifypages.Module(factory), Templates: notifypages.Templates(), Nav: []web.NavItem{
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 40},

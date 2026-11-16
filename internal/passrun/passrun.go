@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 const (
@@ -27,11 +28,11 @@ type pass struct {
 }
 
 var passes = map[string]pass{
-	module.Mail + "/" + Sync:        {Sync, time.Hour},
-	module.Mail + "/" + Scan:        {Scan, 35 * 24 * time.Hour},
-	module.Core + "/" + Backup:      {Backup, 8 * 24 * time.Hour},
-	module.Calendar + "/" + CalDAV:  {CalDAV, time.Hour},
-	module.Contacts + "/" + CardDAV: {CardDAV, time.Hour},
+	unit.Mail + "/" + Sync:        {Sync, time.Hour},
+	unit.Mail + "/" + Scan:        {Scan, 35 * 24 * time.Hour},
+	module.Core + "/" + Backup:    {Backup, 8 * 24 * time.Hour},
+	unit.Calendar + "/" + CalDAV:  {CalDAV, time.Hour},
+	unit.Contacts + "/" + CardDAV: {CardDAV, time.Hour},
 }
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
