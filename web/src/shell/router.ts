@@ -13,6 +13,7 @@ declare module 'sv-router' {
 const unavailable = () => ({ default: Unavailable });
 
 const placeholder = () => import('./PlaceholderPage.svelte').catch(unavailable);
+const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgePage.svelte').catch(unavailable));
 
 export const { p, navigate, isActive, route } = createRouter(
   {
@@ -31,17 +32,26 @@ export const { p, navigate, isActive, route } = createRouter(
       meta: { title: 'Chats' },
     },
     '/plan': {
-      '/': () => import('../features/plan/PlanPage.svelte'),
-      '/waiting': () => import('../features/plan/PlanPage.svelte'),
-      '/item/:ref': () => import('../features/plan/PlanPage.svelte'),
+      '/': () => import('../features/plan/PlanPage.svelte').catch(unavailable),
+      '/waiting': () => import('../features/plan/PlanPage.svelte').catch(unavailable),
+      '/item/:ref': () => import('../features/plan/PlanPage.svelte').catch(unavailable),
       '/tasks': {
-        '/': () => import('../features/plan/TasksPage.svelte'),
-        '/:id': () => import('../features/plan/TasksPage.svelte'),
+        '/': () => import('../features/plan/TasksPage.svelte').catch(unavailable),
+        '/:id': () => import('../features/plan/TasksPage.svelte').catch(unavailable),
         meta: { title: 'Tasks' },
       },
       meta: { title: 'Plan' },
     },
-    '/knowledge': { '/': placeholder, meta: { title: 'Knowledge' } },
+    '/knowledge': {
+      '/': knowledge,
+      '/subjects': knowledge,
+      '/instructions': knowledge,
+      '/map': placeholder,
+      '/spaces': placeholder,
+      '/:id': knowledge,
+      meta: { title: 'Knowledge' },
+    },
+    '/search': { '/': () => import('../features/search/SearchPage.svelte').catch(unavailable), meta: { title: 'Search' } },
     '/apps': {
       '/': () => import('./AppsPage.svelte').catch(unavailable),
       '/:app': () => import('./AppPage.svelte').catch(unavailable),

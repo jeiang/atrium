@@ -27849,6 +27849,13 @@
           },
           {
             "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "Idempotency-Key",
             "schema": {
               "maxLength": 255,

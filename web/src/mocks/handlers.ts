@@ -4,7 +4,9 @@ import { API_BASE } from '../contract';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
+import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
 import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
+import { type SearchScenario, searchHandlers } from './search';
 import { simulatorHandlers } from './simulator';
 
 export interface MockScenario {
@@ -19,13 +21,26 @@ export interface MockScenario {
   home?: HomeScenario;
   unreachable?: boolean;
   plan?: PlanScenario;
+  knowledge?: KnowledgeScenario;
+  search?: SearchScenario;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
 export const MOCK_EVENTS = 'atrium-mock-events';
 const CSRF = 'mock-csrf-token';
 const MODULES = ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'];
-const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant', 'tasks'];
+const TOPICS = [
+  'review',
+  'attention',
+  'effects',
+  'mail',
+  'settings',
+  'notify',
+  'connections',
+  'assistant',
+  'knowledge',
+  'tasks',
+];
 const encoder = new TextEncoder();
 
 function scenario(): MockScenario {
@@ -147,5 +162,7 @@ export const handlers = [
   ...planHandlers,
   ...chatHandlers,
   ...simulatorHandlers,
+  ...knowledgeHandlers,
+  ...searchHandlers,
   ...inboxHandlers,
 ];

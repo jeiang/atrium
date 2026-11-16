@@ -32,6 +32,7 @@
     undo: 'M9 14L4.5 9.5 9 5M5 9.5h9.5a5 5 0 0 1 0 10H11',
     tool: 'M14.5 5.5a4 4 0 0 0-5 5L4.5 15.5a2 2 0 0 0 3 3l5-5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z',
     arrow: 'M5 12h14M13 6l6 6-6 6',
+    search: 'M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M15.5 15.5L20 20',
   } as const;
 
   export type IconName = keyof typeof paths;

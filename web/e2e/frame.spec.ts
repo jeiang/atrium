@@ -85,7 +85,7 @@ test.describe('signed in', () => {
     await gotoShell(page, '/');
     const rail = page.getByRole('navigation', { name: 'Main' });
     await rail.getByRole('link', { name: 'Knowledge', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeFocused();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ilse de Wit' })).toBeVisible();
     await rail.getByRole('link', { name: 'Mail' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Mail' })).toBeVisible();
     await page.goBack();
@@ -94,7 +94,7 @@ test.describe('signed in', () => {
     await page.goBack();
     await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
     await page.goForward();
-    await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ilse de Wit' })).toBeVisible();
   });
 
   test('the skip link moves focus to the main region', async ({ page, browserName }) => {
@@ -246,7 +246,7 @@ test.describe('phone', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Spaces' })).toBeFocused();
     await expect(tabs.getByRole('link', { name: 'Spaces' })).toHaveAttribute('aria-current', 'page');
     await page.getByRole('link', { name: 'Knowledge' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ilse de Wit' })).toBeVisible();
     await expect(tabs.getByRole('link', { name: 'Spaces' })).toHaveAttribute('aria-current', 'page');
     await expectTouchTargets(page);
     await page.getByRole('button', { name: 'Account: Operator' }).click();
