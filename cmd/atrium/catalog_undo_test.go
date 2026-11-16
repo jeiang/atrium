@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -188,8 +190,24 @@ func TestCatalogProposeKindsAreSorted(t *testing.T) {
 			t.Fatal(err)
 		}
 		kinds := schema.Properties.Kind.Enum
-		if len(kinds) < 2 || !slices.IsSorted(kinds) {
+		if len(kinds) == 0 || !slices.IsSorted(kinds) {
 			t.Fatalf("propose kinds not sorted: %v", kinds)
+		}
+		doc, err := os.ReadFile("../../docs/tools.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var documented []string
+		for _, line := range strings.Split(string(doc), "\n") {
+			if _, kindsText, ok := strings.Cut(line, "| `propose` |"); ok {
+				_, listed, _ := strings.Cut(kindsText, "Kinds: ")
+				for _, m := range regexp.MustCompile(`([a-z_]+) \{`).FindAllStringSubmatch(listed, -1) {
+					documented = append(documented, m[1])
+				}
+			}
+		}
+		if !slices.Equal(kinds, documented) {
+			t.Fatalf("offered propose kinds %v, tools document lists %v", kinds, documented)
 		}
 		return
 	}
