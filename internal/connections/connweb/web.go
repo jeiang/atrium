@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -29,7 +28,7 @@ func Templates() fs.FS {
 	return sub
 }
 
-const path = connections.Screen
+const path = "/settings/connections"
 
 const googlePath = path + "/google"
 
