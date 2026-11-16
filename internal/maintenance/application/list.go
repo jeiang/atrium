@@ -14,7 +14,8 @@ import (
 const ListBackupsName application.Name = "maintenance.backup.list"
 
 const (
-	ListBackupsMax = 100
+	ListBackupsMax        = 100
+	ListBackupsExamineMax = backup.ExamineMax
 
 	LocationReady        = "ready"
 	LocationUnconfigured = "unconfigured"

@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 )
@@ -163,7 +162,7 @@ func listBackups(e *cli.Env, svc *maintenanceapp.Service, asJSON bool) int {
 	}
 	_, _ = fmt.Fprintf(w, "%d of %d archives\n", len(list.Items), list.Total)
 	if list.Unexamined > 0 {
-		_, _ = fmt.Fprintf(w, "%d older files beyond the newest %d were not examined\n", list.Unexamined, backup.ExamineMax)
+		_, _ = fmt.Fprintf(w, "%d older files beyond the newest %d were not examined\n", list.Unexamined, maintenanceapp.ListBackupsExamineMax)
 	}
 	return cli.ExitOK
 }
