@@ -97,6 +97,11 @@ var platform = map[string]bool{
 	"internal/web/tpl":            true,
 }
 
+const (
+	dayContract  = "internal/day"
+	calendarUnit = module + "/internal/calendar"
+)
+
 var units = []string{
 	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
 	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
@@ -131,9 +136,10 @@ func scan() ([]string, error) {
 		if err != nil {
 			return err
 		}
-		platformFile := platform[path.Dir(file)]
+		platformFile := platform[path.Dir(file)] || strings.HasPrefix(file, dayContract+"/")
 		adapterFile := isAdapter(file, src)
-		if !platformFile && !adapterFile {
+		dayReader := strings.HasPrefix(file, "internal/assistant/") && !strings.HasPrefix(file, "internal/assistant/tools/")
+		if !platformFile && !adapterFile && !dayReader {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
@@ -150,6 +156,9 @@ func scan() ([]string, error) {
 			}
 			if platformFile && unitImport(imp) {
 				edges = append(edges, "platform package imports a unit: "+file+"\t"+imp)
+			}
+			if dayReader && (imp == calendarUnit || strings.HasPrefix(imp, calendarUnit+"/")) {
+				edges = append(edges, "core assistant package imports calendar instead of reading the day contract: "+file+"\t"+imp)
 			}
 		}
 		return nil

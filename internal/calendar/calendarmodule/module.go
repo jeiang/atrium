@@ -49,6 +49,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Name:          unit.Calendar,
 		EffectOrigins: []module.EffectOrigin{{Name: "calendar", Direct: true}},
 		Refs:          []module.RefKind{eventRef(mc.Env)},
+		Day:           dayProvider{env: mc.Env},
 		Settings:      slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
 		Host:          calendar.HostSettings(),
 		Sections:      calendar.Sections(),
