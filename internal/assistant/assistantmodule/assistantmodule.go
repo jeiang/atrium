@@ -97,6 +97,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Host:      export.HostSettings(),
 		Sections:  export.Sections(),
 		Attention: AttentionSources(mc.Env),
+		Search:    SearchSources(),
 		Metrics:   opsmetrics.Metrics(),
 		Jobs:      Jobs(m.Jobs),
 		Services: []runtime.ServiceDefinition{{Name: "assistant", Run: func(ctx context.Context, _ *runtime.Services) error {

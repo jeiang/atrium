@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/search"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/tool"
@@ -64,6 +65,7 @@ type Declaration struct {
 	ProposalCreated   proposals.CreatedHook
 	ConnectionNotice  connections.Notifier
 	Attention         []attention.Source
+	Search            []search.Source
 	Jobs              []scheduler.Definition
 	Services          []runtime.ServiceDefinition
 	ServiceSets       func(context.Context) ([]SetService, error)

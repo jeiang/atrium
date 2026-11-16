@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/runtime"
+	"github.com/jeiang/atrium/internal/search"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -287,6 +288,16 @@ func (n *Snapshot) Attention() []attention.Source {
 	for _, r := range n.set.decls {
 		if r.Core || n.Enabled(r.Name) {
 			out = append(out, r.Attention...)
+		}
+	}
+	return out
+}
+
+func (n *Snapshot) Search() []search.Source {
+	var out []search.Source
+	for _, r := range n.set.decls {
+		if r.Core || n.Enabled(r.Name) {
+			out = append(out, r.Search...)
 		}
 	}
 	return out
