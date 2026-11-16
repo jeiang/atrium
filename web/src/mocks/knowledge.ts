@@ -262,8 +262,14 @@ function now(): string {
 }
 
 function plain(item: MockRecord): KnowledgeRecord {
-  const { kind: _kind, created_at: _created, facts_about: _about, value: _value, superseded: _superseded, ...rest } =
-    item;
+  const {
+    kind: _kind,
+    created_at: _created,
+    facts_about: _about,
+    value: _value,
+    superseded: _superseded,
+    ...rest
+  } = item;
   return rest;
 }
 

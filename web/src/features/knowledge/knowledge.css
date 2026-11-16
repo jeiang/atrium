@@ -152,10 +152,6 @@
     cursor: pointer;
   }
 
-  .kpage__details > .kmeta {
-    padding: 0 var(--s-3) var(--s-3);
-  }
-
   .kpage__editor {
     display: grid;
     gap: var(--s-4);
@@ -269,6 +265,10 @@
   .kmeta dd {
     margin: 0;
     color: var(--ink-2);
+  }
+
+  .kpage__details > .kmeta {
+    padding: 0 var(--s-3) var(--s-3);
   }
 
   .kmeta__link {

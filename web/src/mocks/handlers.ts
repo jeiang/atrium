@@ -26,7 +26,18 @@ export const SCENARIO_KEY = 'atrium.mock';
 export const MOCK_EVENTS = 'atrium-mock-events';
 const CSRF = 'mock-csrf-token';
 const MODULES = ['mail', 'calendar', 'notion', 'media', 'assistant', 'notifications'];
-const TOPICS = ['review', 'attention', 'effects', 'mail', 'settings', 'notify', 'connections', 'assistant', 'knowledge', 'tasks'];
+const TOPICS = [
+  'review',
+  'attention',
+  'effects',
+  'mail',
+  'settings',
+  'notify',
+  'connections',
+  'assistant',
+  'knowledge',
+  'tasks',
+];
 const encoder = new TextEncoder();
 
 function scenario(): MockScenario {

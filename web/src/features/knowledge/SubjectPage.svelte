@@ -15,7 +15,6 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { p } from '../../shell/router';
   import Markdown from '../chats/Markdown.svelte';
-  import LinkDialog from './LinkDialog.svelte';
   import {
     handleConfirm,
     handleRemoveLink,
@@ -33,6 +32,7 @@
     useSubject,
     writerLabel,
   } from './knowledge';
+  import LinkDialog from './LinkDialog.svelte';
 
   interface Props {
     id: number;
@@ -90,7 +90,10 @@
   }
 
   function linkMeta(link: KnowledgeLink, end: KnowledgeLink['target']): string {
-    const parts = [relationLabel(link.relation), end.kind === 'record' ? (KINDS[end.record_kind ?? ''] ?? 'Knowledge') : end.kind];
+    const parts = [
+      relationLabel(link.relation),
+      end.kind === 'record' ? (KINDS[end.record_kind ?? ''] ?? 'Knowledge') : end.kind,
+    ];
     if (end.state !== 'live') parts.push(end.state);
     parts.push(`added by ${writerLabel(link.writer)}`);
     return parts.join(' · ');
@@ -203,7 +206,10 @@
       const change = await handleRetract(id);
       const effects = change.effect_ids ?? [];
       toast(`Retracted: ${title}. Kept in history.`, {
-        action: effects.length > 0 ? { label: 'Undo', run: () => void handleUndo(effects, `Restored: ${title}.`) } : undefined,
+        action:
+          effects.length > 0
+            ? { label: 'Undo', run: () => void handleUndo(effects, `Restored: ${title}.`) }
+            : undefined,
       });
       await refreshKnowledge(client);
     } catch (error) {
@@ -260,13 +266,34 @@
 {#snippet details()}
   {#if data && subject}
     <dl class="kmeta">
-      <div><dt>Kind</dt><dd>{KINDS[data.kind] ?? data.kind}</dd></div>
-      <div><dt>Scope</dt><dd>{subject.scope === 'work' ? 'Work' : 'Personal'}{subject.private ? ', private' : ''}</dd></div>
-      <div><dt>Written by</dt><dd>{writerLabel(subject.writer)}</dd></div>
-      <div><dt>Created</dt><dd>{formatDayTime(data.created_at)}</dd></div>
-      <div><dt>Edited</dt><dd>{formatDayTime(subject.updated_at)}</dd></div>
-      <div><dt>Facts</dt><dd>{data.facts.length}{data.facts_truncated ? ' or more' : ''}</dd></div>
-      <div><dt>Links</dt><dd>{outgoing.length + incoming.length}</dd></div>
+      <div>
+        <dt>Kind</dt>
+        <dd>{KINDS[data.kind] ?? data.kind}</dd>
+      </div>
+      <div>
+        <dt>Scope</dt>
+        <dd>{subject.scope === 'work' ? 'Work' : 'Personal'}{subject.private ? ', private' : ''}</dd>
+      </div>
+      <div>
+        <dt>Written by</dt>
+        <dd>{writerLabel(subject.writer)}</dd>
+      </div>
+      <div>
+        <dt>Created</dt>
+        <dd>{formatDayTime(data.created_at)}</dd>
+      </div>
+      <div>
+        <dt>Edited</dt>
+        <dd>{formatDayTime(subject.updated_at)}</dd>
+      </div>
+      <div>
+        <dt>Facts</dt>
+        <dd>{data.facts.length}{data.facts_truncated ? ' or more' : ''}</dd>
+      </div>
+      <div>
+        <dt>Links</dt>
+        <dd>{outgoing.length + incoming.length}</dd>
+      </div>
       {#if subject.source}
         <div>
           <dt>Came from</dt>
@@ -287,19 +314,27 @@
   {/if}
 {/snippet}
 
-{#snippet linkRows(list: KnowledgeLink[], side: 'target' | 'source', label: string)}
+{#snippet linkRows(
+    list: KnowledgeLink[],
+    side: 'target' | 'source',
+    label: string,
+  )}
   <List {label}>
     {#each list as link (link.id)}
-      {@const other = link[side]}
-      <ListRow title={other.title || 'Untitled'} meta={linkMeta(link, other)} href={endHref(other)} pending={removing === link.id}>
+      <ListRow
+        title={link[side].title || 'Untitled'}
+        meta={linkMeta(link, link[side])}
+        href={endHref(link[side])}
+        pending={removing === link.id}
+      >
         {#snippet end()}
           <Button
             variant="quiet"
             size="sm"
             icon="close"
-            label="Remove the link to {other.title || 'Untitled'}"
+            label="Remove the link to {link[side].title || 'Untitled'}"
             pending={removing === link.id}
-            onclick={() => handleRemove(link, other)}
+            onclick={() => handleRemove(link, link[side])}
           />
         {/snippet}
       </ListRow>
@@ -331,7 +366,6 @@
     {/snippet}
   </ViewState>
 {:else}
-  {@const tag = stateTag(subject)}
   <article class="kpage" data-retracted={subject.retracted || undefined}>
     <div class="kpage__main">
       <header class="kpage__head">
@@ -340,7 +374,7 @@
         </p>
         <h1 class="page-title">{subject.title || 'Untitled'}</h1>
         <div class="kpage__tags">
-          <Badge tone={tag.tone}>{tag.label}</Badge>
+          <Badge tone={stateTag(subject).tone}>{stateTag(subject).label}</Badge>
           {#if subject.pinned || standing}
             <Badge tone="accent">Pinned</Badge>
           {/if}
@@ -358,7 +392,9 @@
           <div class="kpage__actions">
             <Button icon="tool" onclick={onEdit}>Edit</Button>
             {#if !subject.confirmed}
-              <Button variant="primary" icon="check" pending={busy === 'confirm'} onclick={handleConfirmPage}>Confirm</Button>
+              <Button variant="primary" icon="check" pending={busy === 'confirm'} onclick={handleConfirmPage}
+                >Confirm</Button
+              >
             {/if}
             <Button variant="quiet" pending={busy === 'retract'} onclick={handleRetractPage}>Retract</Button>
             {#if saveState === 'saved' && savedAt}
@@ -388,11 +424,16 @@
         <form class="kpage__editor" aria-label="Edit {subject.title || 'this page'}" onsubmit={handleSave}>
           {#if staleNote}
             <Notice tone="warn" variant="inline" title="This page changed since you opened it">
-              It has been reloaded. Your text is still here. Save again to replace the newer version, or cancel to
-              keep it.
+              It has been reloaded. Your text is still here. Save again to replace the newer version, or cancel to keep
+              it.
             </Notice>
           {/if}
-          <TextField label="Title" bind:value={draftTitle} required error={saveError === 'Give the page a title.' ? saveError : undefined} />
+          <TextField
+            label="Title"
+            bind:value={draftTitle}
+            required
+            error={saveError === 'Give the page a title.' ? saveError : undefined}
+          />
           <TextArea
             label="Text"
             help="Markdown works: headings, lists, bold and links."
@@ -420,15 +461,14 @@
         {:else}
           <List label="Facts">
             {#each data.facts as fact (fact.id)}
-              {@const factTag = stateTag(fact)}
               <ListRow
                 title={fact.title}
                 meta={factMeta(fact)}
                 href={p('/knowledge/:id', { params: { id: String(fact.id) } })}
               >
                 {#snippet end()}
-                  {#if factTag.tone !== 'ok'}
-                    <Badge tone={factTag.tone}>{factTag.label}</Badge>
+                  {#if !fact.confirmed || fact.superseded}
+                    <Badge tone={stateTag(fact).tone}>{stateTag(fact).label}</Badge>
                   {/if}
                 {/snippet}
               </ListRow>
@@ -442,7 +482,13 @@
 
       <Section title="Links">
         {#snippet actions()}
-          <Button size="sm" icon="plus" onclick={onLink} disabled={subject.retracted} reason="Restore the page to link it.">
+          <Button
+            size="sm"
+            icon="plus"
+            onclick={onLink}
+            disabled={subject.retracted}
+            reason="Restore the page to link it."
+          >
             Add a link
           </Button>
         {/snippet}

@@ -32,6 +32,8 @@ export const { p, navigate, isActive, route } = createRouter(
       '/': knowledge,
       '/subjects': knowledge,
       '/instructions': knowledge,
+      '/map': placeholder,
+      '/spaces': placeholder,
       '/:id': knowledge,
       meta: { title: 'Knowledge' },
     },

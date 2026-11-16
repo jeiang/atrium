@@ -211,6 +211,7 @@
     font-family: inherit;
     font-size: var(--t-xs);
     color: var(--ink-3);
+    border-radius: var(--r-sm);
   }
 
   .rail__foot {

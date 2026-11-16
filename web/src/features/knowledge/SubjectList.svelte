@@ -110,8 +110,8 @@
     {:else if rows.length === 0}
       <ViewState kind="empty" title={filtered ? 'No subject matches' : 'Nothing saved yet'} level={3}>
         {filtered
-          ? 'Try other words, or show every kind and scope.'
-          : 'Pages, facts and lessons appear here when you or the assistant save them.'}
+    ? 'Try other words, or show every kind and scope.'
+    : 'Pages, facts and lessons appear here when you or the assistant save them.'}
       </ViewState>
     {:else}
       <List label="Subjects">

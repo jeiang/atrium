@@ -5,9 +5,9 @@
   import Page from '../../shared/ui/Page.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { isActive, p, route } from '../../shell/router';
+  import { useInstructions, useSubjects } from './knowledge';
   import SubjectList from './SubjectList.svelte';
   import SubjectPage from './SubjectPage.svelte';
-  import { useInstructions, useSubjects } from './knowledge';
   import './knowledge.css';
 
   let phone = $state(false);
@@ -31,16 +31,29 @@
     first.data?.pages[0]?.items.find((row) => row.id !== instructions.data?.record.id)?.id ??
       instructions.data?.record.id,
   );
-  const shown = $derived(standing ? instructions.data?.record.id : opening ? firstId : named);
+  const firstStatus = $derived(first.status);
+  const instructionsStatus = $derived(instructions.status);
+  const settled = $derived(firstStatus !== 'pending' && instructionsStatus !== 'pending' ? firstId : undefined);
+  let opened = $state<number>();
+
+  $effect(() => {
+    if (!opening) opened = undefined;
+    else if (opened === undefined && settled !== undefined) opened = settled;
+  });
+
+  const shown = $derived(standing ? instructions.data?.record.id : opening ? (opened ?? settled) : named);
   const resolving = $derived(
-    (standing && instructions.isPending) || (opening && (first.isPending || instructions.isPending)),
+    (standing && instructionsStatus === 'pending') ||
+      (opening && (firstStatus === 'pending' || instructionsStatus === 'pending')),
   );
   const unresolved = $derived(
-    (standing && instructions.isError) || (opening && first.isError && instructions.isError),
+    (standing && instructionsStatus === 'error') ||
+      (opening && firstStatus === 'error' && instructionsStatus === 'error'),
   );
+  const firstFetch = $derived(first.fetchStatus);
+  const instructionsFetch = $derived(instructions.fetchStatus);
   const offline = $derived(
-    shown === undefined &&
-      ((standing && instructions.fetchStatus === 'paused') || (opening && first.fetchStatus === 'paused')),
+    shown === undefined && ((standing && instructionsFetch === 'paused') || (opening && firstFetch === 'paused')),
   );
 
   function onRetry(): void {

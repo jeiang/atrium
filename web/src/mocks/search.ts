@@ -17,16 +17,54 @@ function hit(type: Hit['type'], id: number, title: string, detail: string, snipp
 }
 
 const HITS: Hit[] = [
-  hit('thread', 401, 'Garden plans with Ilse', '', 'We talked through the garden beds and the compost.', '/threads/401'),
-  hit('message', 501, 'Re: Shared garden plans', 'Ilse de Wit', 'Thanks for the garden plans, see you Thursday.', '/mail/messages/501'),
+  hit(
+    'thread',
+    401,
+    'Garden plans with Ilse',
+    '',
+    'We talked through the garden beds and the compost.',
+    '/threads/401',
+  ),
+  hit(
+    'message',
+    501,
+    'Re: Shared garden plans',
+    'Ilse de Wit',
+    'Thanks for the garden plans, see you Thursday.',
+    '/mail/messages/501',
+  ),
   hit('record', 21, 'Ilse de Wit', 'Page', 'Ilse runs the shared garden on Mill Lane.', '/knowledge/21'),
-  hit('record', 22, 'Shared garden project', 'Page', 'Beds, compost and the seed order for next spring.', '/knowledge/22'),
+  hit(
+    'record',
+    22,
+    'Shared garden project',
+    'Page',
+    'Beds, compost and the seed order for next spring.',
+    '/knowledge/22',
+  ),
   hit('task', 7, 'Order raised bed timber', 'Garden', 'Order timber for the garden beds before December.', '/tasks/7'),
   hit('file', 601, 'garden-layout.pdf', 'Garden plans with Ilse', 'garden-layout.pdf', '/threads/401/files/601'),
   hit('file', 602, 'garden-seeds.csv', 'Garden space', 'garden-seeds.csv', '/knowledge/spaces/3/files/602'),
-  { ...hit('record', 24, 'Water the tomatoes in the morning', 'Lesson', 'Garden lesson about watering.', '/knowledge/24'), private: true },
+  {
+    ...hit(
+      'record',
+      24,
+      'Water the tomatoes in the morning',
+      'Lesson',
+      'Garden lesson about watering.',
+      '/knowledge/24',
+    ),
+    private: true,
+  },
   ...Array.from({ length: 24 }, (_, n) =>
-    hit('record', 100 + n, `Seed catalogue note ${n + 1}`, 'Page', `Garden seed packet ${n + 1}.`, `/knowledge/${100 + n}`),
+    hit(
+      'record',
+      100 + n,
+      `Seed catalogue note ${n + 1}`,
+      'Page',
+      `Garden seed packet ${n + 1}.`,
+      `/knowledge/${100 + n}`,
+    ),
   ),
 ];
 
@@ -50,7 +88,8 @@ export const searchHandlers = [
     const url = new URL(request.url);
     log.atriumSearchRequests = [...(log.atriumSearchRequests ?? []), `${url.pathname}${url.search}`];
     if (state.slow) await delay('infinite');
-    if (state.fail) return HttpResponse.json({ error: { code: 'internal', message: 'Search did not answer.' } }, { status: 500 });
+    if (state.fail)
+      return HttpResponse.json({ error: { code: 'internal', message: 'Search did not answer.' } }, { status: 500 });
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
     if (!q) {
       return HttpResponse.json(

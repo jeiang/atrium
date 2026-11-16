@@ -148,7 +148,8 @@
     if (index < 0) return;
     let next: HTMLElement | undefined;
     if (event.key === 'ArrowDown') next = list[index + 1];
-    else if (event.key === 'ArrowUp') next = index === 0 ? document.querySelector<HTMLElement>('[data-search-input]') ?? undefined : list[index - 1];
+    else if (event.key === 'ArrowUp')
+      next = index === 0 ? (document.querySelector<HTMLElement>('[data-search-input]') ?? undefined) : list[index - 1];
     else if (event.key === 'Home') next = list[0];
     else if (event.key === 'End') next = list.at(-1);
     else if (event.key === 'Escape') next = document.querySelector<HTMLElement>('[data-search-input]') ?? undefined;
@@ -170,18 +171,35 @@
   }
 </script>
 
-{#snippet hitRow(hit: Hit)}
+{#snippet hitRow(
+    hit: Hit,
+  )}
   <li>
-    <a class="hit" href={href(hit)} data-hit data-type={hit.type} download={hit.type === 'file' ? '' : undefined}>
+    <a
+      class="hit"
+      href={href(hit)}
+      onkeydown={onResultsKey}
+      data-hit
+      data-type={hit.type}
+      download={hit.type === 'file' ? '' : undefined}
+    >
       <span class="hit__title">{hit.title || hit.snippet}</span>
       {#if hit.snippet && hit.snippet !== hit.title}
         <span class="hit__snippet"
-          >{#each pieces(hit) as piece, index (index)}{#if piece.mark}<mark>{piece.text}</mark>{:else}{piece.text}{/if}{/each}</span
+          >{#each pieces(hit) as piece, index (index)}
+            {#if piece.mark}
+              <mark>{piece.text}</mark>
+            {:else}
+              {piece.text}
+            {/if}
+          {/each}</span
         >
       {/if}
       <span class="hit__meta">
         {meta(hit)}
-        {#if hit.private}<Badge>Private</Badge>{/if}
+        {#if hit.private}
+          <Badge>Private</Badge>
+        {/if}
       </span>
     </a>
   </li>
@@ -189,7 +207,7 @@
 
 <Page title="Search">
   <div class="search">
-    <form class="search__bar" role="search" onsubmit={(event) => event.preventDefault()}>
+    <search class="search__bar">
       <TextField
         data-search-input
         label="Search everything"
@@ -201,10 +219,9 @@
         onkeydown={onInputKey}
       />
       <Segmented label="Show" options={TYPES} bind:value={type} />
-    </form>
+    </search>
 
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="search__results" bind:this={results} onkeydown={onResultsKey} aria-busy={found.isFetching || undefined}>
+    <div class="search__results" bind:this={results} aria-busy={found.isFetching || undefined}>
       {#if urlQuery === ''}
         <ViewState kind="empty" title="Search chats, mail, knowledge, tasks and files" level={2}>
           Type a few words. Press Command K or Control K from anywhere to come back here.
@@ -265,7 +282,9 @@
               </ul>
             {/if}
             {#if group.more}
-              <Button size="sm" onclick={() => onShowType(group.type)}>More {(GROUPS[group.type] ?? group.type).toLowerCase()}</Button>
+              <Button size="sm" onclick={() => onShowType(group.type)}
+                >More {(GROUPS[group.type] ?? group.type).toLowerCase()}</Button
+              >
             {/if}
           </section>
         {/each}

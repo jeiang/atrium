@@ -164,7 +164,8 @@
       href={p('/search')}
       aria-label="Search"
       aria-current={isActive('/search') ? 'page' : undefined}
-      aria-keyshortcuts="Meta+K Control+K"><Icon name="search" /></a
+      aria-keyshortcuts="Meta+K Control+K"
+      ><Icon name="search" /></a
     >
     <div class="topbar__account">
       {#if signedIn}

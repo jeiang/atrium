@@ -34,10 +34,6 @@
     justify-items: start;
   }
 
-  .search__group > .hits {
-    inline-size: 100%;
-  }
-
   .search__heading {
     margin: 0;
     font-size: var(--t-md);
@@ -61,6 +57,10 @@
 
   .hits > li + li {
     border-block-start: 1px solid var(--line);
+  }
+
+  .search__group > .hits {
+    inline-size: 100%;
   }
 
   .hit {
