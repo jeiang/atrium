@@ -85,6 +85,16 @@ administrator role or remote emergency bypass.
   `access_emails`, and `access_domains` select admitted identities. Until the
   connection is configured, public sign-in stays closed; the emergency listener
   can still reach settings on the same database.
+- The connection's `client_auth` capability is proven only by a sign-in:
+  its test reports it `untested`. A sign-in with a client secret that succeeds
+  records it `ok`, and a token request the provider refuses as a bad client
+  (401 or `invalid_client`) records it `failing`. Tests and health passes keep
+  that recorded result, so the row stays `ok` (or `failing`) instead of going
+  back to `untested`. A change of the issuer, client ID or client secret
+  (saved settings, host file or secret file) drops it to `untested` until the
+  next sign-in. A host that has not signed in since this rule shipped shows
+  `untested` until its next sign-in, unless its last recorded event before the
+  upgrade was a sign-in.
 - Local and emergency listeners require a numeric loopback bind address and
   loopback socket peers; a non-loopback peer gets 403. A forwarded header never
   makes a remote peer local. Without an explicit allowed Host, a local listener

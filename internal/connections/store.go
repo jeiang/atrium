@@ -1334,21 +1334,14 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
 }
 
-func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, results []Result, commits ...Commit) (View, error) {
-	state, reason := aggregate(results, nil)
+func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, interactive []string, results []Result, commits ...Commit) (View, error) {
 	at := s.now()
 	now := float64(at.UnixNano()) / 1e9
-	var lastOK, reauthAt any
-	if state == OK {
-		lastOK = now
-	}
-	if state == NeedsReauth {
-		reauthAt = now
-	}
-	var previous, next State
+	var previous, next, state State
+	var reason string
 	updated := false
 	if err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		var (
@@ -1364,6 +1357,15 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 			return err
 		}
 		_ = json.Unmarshal([]byte(priorJSON), &priorResult)
+		keepInteractive(results, priorResult, interactive)
+		state, reason = aggregate(results, nil)
+		var lastOK, reauthAt any
+		if state == OK {
+			lastOK = now
+		}
+		if state == NeedsReauth {
+			reauthAt = now
+		}
 		carryGrace(results, priorResult, prior, grace, at)
 		previous, next = effective(prior, priorResult, timeOr(fromUnix(priorAt), at)), effective(state, results, at)
 		raw, err := json.Marshal(results)
@@ -1864,4 +1866,17 @@ func (s *Store) afterWrite(ctx context.Context, id ID) (View, error) {
 		return View{}, &CommittedError{Cause: err}
 	}
 	return view, nil
+}
+
+func keepInteractive(results, prior []Result, interactive []string) {
+	for i := range results {
+		if results[i].State != Untested || !slices.Contains(interactive, results[i].Capability) {
+			continue
+		}
+		for _, p := range prior {
+			if p.Capability == results[i].Capability && (p.State == OK || p.State == Failing) {
+				results[i] = p
+			}
+		}
+	}
 }

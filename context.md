@@ -512,6 +512,14 @@ claims about the running application. Operator contracts are in
   notifies once; the hourly watch rechecks such rows. A failure from any
   other state, including a host change, gets no window. Other kinds have
   none.
+- A connection kind lists in `Definition.Interactive` the capabilities only
+  an interactive use can prove (`service/oidc` lists `client_auth`). When a
+  test or health pass reports such a capability `untested`, `Store.record`
+  keeps the stored `ok` or `failing` result that a sign-in observed, at the
+  same revision. A save, a host config change or a credential rotation
+  writes fresh results and drops it. The OIDC flow observes `ok` after a
+  sign-in whose client secret matches the stored one, and `failing` when the
+  token endpoint refuses the client (401 or `invalid_client`).
 - `atrium connections check` runs the silent check of every configured
   connection, and `--changed` only those never checked since they were
   added, declared again, or their host declaration changed (including a

@@ -268,7 +268,7 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 		return Grant{}, err
 	}
 	if cfg.ClientSecret != "" {
-		s.recordClientAuth(ctx, cfg.ClientSecret)
+		s.recordClientAuth(ctx, cfg.ClientSecret, ProbeResult{Capability: "client_auth", State: "ok", Reason: "client authentication proved by an interactive login"})
 	}
 	return Grant{Token: token, ReturnTo: pending.returnTo, MaxAge: cfg.Max}, nil
 }
@@ -353,6 +353,9 @@ func (s *Service) tokens(ctx context.Context, cfg Config, p *provider, form url.
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(body, &problem)
+		if cfg.ClientSecret != "" && (status == http.StatusUnauthorized || problem.Error == "invalid_client") {
+			s.recordClientAuth(ctx, cfg.ClientSecret, ProbeResult{Capability: "client_auth", State: "failing", Reason: fmt.Sprintf("the identity provider refused the client (%d %s)", status, sanitize(problem.Error))})
+		}
 		return tokenReply{}, fmt.Errorf("%w: token endpoint answered %d %s", ErrRejected, status, sanitize(problem.Error))
 	}
 	var reply tokenReply
