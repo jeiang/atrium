@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,9 +15,39 @@ import (
 )
 
 // Notifier delivers one operator notification for a health state transition.
-type Notifier func(ctx context.Context, d *db.DB, title, body string) error
+type Notifier func(ctx context.Context, d *db.DB, title, body, occurrence string) error
+
+func (s *Store) AnnounceRemoved(ctx context.Context) error {
+	if s.d == nil {
+		return nil
+	}
+	type removed struct {
+		id       ID
+		revision int64
+	}
+	rows, err := s.d.Read.QueryContext(ctx,
+		"SELECT id, revision FROM connections WHERE config_source = 'host' AND enabled = 0 AND state = 'disabled' AND reason = ? ORDER BY id", reasonRemovedFromHost)
+	if err != nil {
+		return err
+	}
+	all, err := db.Collect(rows, func(r *sql.Rows) (removed, error) {
+		var row removed
+		return row, r.Scan(&row.id, &row.revision)
+	})
+	if err != nil {
+		return err
+	}
+	for _, row := range all {
+		s.notice(ctx, row.id, "", Disabled, reasonRemovedFromHost, fmt.Sprintf("connection-removed:%s:%d", row.id, row.revision))
+	}
+	return nil
+}
 
 func (s *Store) announce(ctx context.Context, id ID, previous, next State, reason string) {
+	s.notice(ctx, id, previous, next, reason, "")
+}
+
+func (s *Store) notice(ctx context.Context, id ID, previous, next State, reason, occurrence string) {
 	var n Notifier
 	if s.reg != nil {
 		n = s.reg.notify
@@ -31,6 +62,7 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 		return
 	}
 	label := string(id)
+	hint := ""
 	if view, err := s.Get(context.WithoutCancel(ctx), id); err == nil {
 		if view.Idle != "" {
 			return
@@ -38,20 +70,42 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 		if view.Label != "" {
 			label = view.Label
 		}
+		if next == NeedsReauth {
+			hint = RepairHint(view)
+		}
 	}
 	state := strings.ReplaceAll(string(next), "_", " ")
 	body := label + ": " + state
 	if reason != "" {
 		body += ": " + reason
 	}
+	if hint != "" {
+		body += "; " + hint
+	}
 	if RepairClass(next) != "" {
 		if features := s.affectedFeatures(context.WithoutCancel(ctx), id); len(features) > 0 {
 			body += "; affects " + strings.Join(features, ", ")
 		}
 	}
-	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil {
+	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body, occurrence); err != nil {
 		log.Warn("connection notification failed", logx.Integration, string(id), logx.Err, err.Error())
 	}
+}
+
+const PinnedHint = "the credential is changed in host configuration"
+
+func RepairHint(v View) string {
+	for _, c := range v.Credentials {
+		switch {
+		case c.Owner != "" && c.Pinned:
+			return "it uses the credential of " + string(c.Owner) + "; " + PinnedHint
+		case c.Owner != "":
+			return "it uses the credential of " + string(c.Owner) + "; change it there"
+		case c.Pinned:
+			return PinnedHint
+		}
+	}
+	return ""
 }
 
 // CheckOne re-verifies one connection, using its silent check when the

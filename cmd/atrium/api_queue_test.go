@@ -119,7 +119,7 @@ func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
 	if q := byID[question]; q.Kind != reviewapp.QueueAsk || q.WaitingFor != reviewapp.WaitingAnswer || q.Title != "Which calendar should I use?" {
 		t.Fatalf("question item: %+v", q)
 	}
-	if c := byID["commitment:2"]; c.Kind != reviewapp.QueueAttention || c.WaitingFor != reviewapp.WaitingDue || c.Due == nil || c.Module != unit.Mail {
+	if c := byID["commitment:2"]; c.Kind != reviewapp.QueueAttention || c.WaitingFor != reviewapp.WaitingDue || c.Due == nil || c.Module != unit.Signals {
 		t.Fatalf("commitment item: %+v", c)
 	}
 	if d := byID["draft:1"]; d.Kind != reviewapp.QueueDraft || d.WaitingFor != reviewapp.WaitingSend || d.Source != (reviewapp.QueueSource{Type: "draft", ID: "1"}) {

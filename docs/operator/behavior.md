@@ -126,6 +126,14 @@ administrator role or remote emergency bypass.
   replaces it. Disconnect asks first, then deletes the stored credentials and
   turns the connection off, and only applies to connections the operator set
   up. Fields and credentials the host owns are read-only there.
+- The `/next/` Downloads screen (`/next/apps/torrents`) and Library screens
+  (`/next/apps/media`) are not kept on the device. Removing a torrent asks
+  first and says whether its files are deleted. Removing it with its files
+  needs a press and hold on a phone or touch screen; on a desktop the request
+  is sent only after 10 seconds, and Undo in that time sends nothing. Undo
+  after a pause, resume, follow or unfollow sends the opposite request, because
+  atrium keeps no undo record for these operator changes. While Torrents is
+  off, Library shows that it is unavailable and links to the apps directory.
 
 Public requests are limited in process by token buckets owned by each listener:
 10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`
@@ -258,10 +266,23 @@ The Connections page shows configuration, credential presence, and observed
 health. Credentials are write-only. Database credentials require encryption;
 host file credentials stay files. Host-declared connections cannot be edited as
 operator-owned rows. Mail accounts have stable ids; account creation tests
-before saving, and deployment-pinned accounts cannot be removed. A host file
-credential replaces a value entered in the UI for the same slot at the next
-process start. A deployment-pinned mail account declared without a password
-file takes its password from the UI, and that value stays.
+before saving, and deployment-pinned accounts cannot be removed. A slot with a
+host credential file is pinned: both UIs show it as set in host configuration
+with no entry box, and a save of a new value for it is refused with 409
+`refused` ("pinned by host configuration; change it there") before anything is
+stored or tested. A connection that uses another
+connection's credential (the `icloud/<id>` connection uses the
+`mail/<id>` password) names and links to that connection. A successful save or
+a host file rotation of that credential rechecks the sharing connection within
+the usual recheck limits. A detected rotation updates the host file row's
+`set_at` so that recheck sees the change; the value still comes from the file.
+A credential save or disconnect re-evaluates app requirements in the same
+transaction, so an app that waited for that credential (for example Calendar
+on the iCloud password) starts without a restart. The iCloud DAV login strips
+whitespace from the shared password the same way IMAP and SMTP do.
+If a database value is still found on a newly pinned slot at start, the host
+file replaces it and one audit entry records that. A deployment-pinned mail account declared without a
+password file takes its password from the UI, and that value stays.
 
 A stored credential never follows a connection to a different endpoint. A
 URL/host change must replace every retained credential in that request, or the
@@ -292,7 +313,8 @@ triggers a check within a minute. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
-keeps its row and credentials, and is announced once. Declaring it again
+keeps its row and credentials, and is announced once, at the next start of
+`atrium serve` even when a CLI command opened the database first. Declaring it again
 enables it as `untested` with its earlier results cleared, so the next check
 tests it. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
@@ -606,8 +628,10 @@ edits do not.
 To do and Waiting come from one list, `GET /api/v1/commitments`: your tasks and
 the commitments from mail that you owe (To do), and the commitments other
 people owe you (Waiting). An item's `ref` is `task:<id>` or `commitment:<id>`,
-the same id the one inbox uses. Tasks disappear while the assistant is off and
-commitments while mail is off. Done, dismiss and reopen work on both and can be
+the same id the one inbox uses. Tasks disappear while the assistant is off.
+Commitments, open loops and the Loops page stay available while mail is off,
+showing what was found before; they show no message subject or sender then,
+and refreshing them waits for mail to be on. Done, dismiss and reopen work on both and can be
 undone; a reopened commitment is not proposed as a reminder again. Only an open
 item can be completed or dismissed; the request is refused otherwise. The Done
 and Dismiss buttons on the open loops page and `/api/v1/mail/commitments` use
@@ -803,7 +827,9 @@ are refused inputs.
   `library_follow` and `media_channel_remove` is `library_unfollow`. Their
   `tools.tool_<old name>_enabled` keys are retired. Ledger operations,
   undo kinds, job keys and the notification channel keep their `media`
-  names, so earlier history stays listed (Activity category `library`),
+  names, so earlier history stays listed (Activity category `library`, or
+  `downloads` for the Torrents operations such as `media_add_magnet` and
+  `media_stop`),
   attributed and undoable. A pending proposal made under an old tool name
   before this release has no executor; ask again.
 - The notification channel `media` keeps its key and stored choices and is

@@ -68,19 +68,29 @@ export function seedApps(): MockApp[] {
       nav: [],
     },
     {
+      id: 'torrents',
+      name: 'Torrents',
+      enabled: true,
+      switchable: true,
+      depends: [],
+      needs: [],
+      nav: [],
+    },
+    {
       id: 'media',
-      name: 'Media',
+      name: 'Library',
       enabled: true,
       switchable: true,
       state: 'needs-settings',
       reason: 'The library server refuses the saved key.',
-      depends: [],
+      depends: ['torrents'],
       needs: [
         need('media', 'media/jellyfin', 'library', false, { reason: 'HTTP 401 from /System/Info' }),
         need('media', 'media/qbittorrent', 'downloads', true),
       ],
       nav: [
         { label: 'Downloads', url: '/apps/media/downloads', settings: false },
+        { label: 'Channels', url: '/apps/media/channels', settings: false },
         { label: 'Library', url: '/apps/media/library', settings: false },
       ],
     },
@@ -122,13 +132,14 @@ export function entries(apps: readonly MockApp[], revision: string): AppEntry[] 
   return apps.map((app) => {
     const depends = apps.filter((other) => app.depends.includes(other.id));
     const unmet = depends.filter((other) => !other.enabled).map((other) => other.id);
-    const state = !app.enabled ? 'off' : (app.state ?? (unmet.length > 0 ? 'unavailable' : 'enabled'));
+    const state = !app.enabled ? 'off' : unmet.length > 0 ? 'needs-settings' : (app.state ?? 'enabled');
+    const reason = unmet.length > 0 ? `needs ${unmet.join(', ')}` : app.reason;
     return {
       id: app.id,
       name: app.name,
       enabled: app.enabled,
       state,
-      ...(app.reason && app.enabled ? { reason: app.reason } : {}),
+      ...(reason && app.enabled ? { reason } : {}),
       switchable: app.switchable,
       ...(app.pin ? { pin_source: app.pin } : {}),
       depends: depends.map(link),

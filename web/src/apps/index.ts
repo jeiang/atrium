@@ -5,7 +5,11 @@ export interface AppScreen {
   wide?: boolean;
 }
 
-export const screens: Readonly<Record<string, string>> = {};
+export const screens: Readonly<Record<string, string>> = {
+  '/apps/media/downloads': '/apps/torrents',
+  '/apps/media/library': '/apps/media',
+  '/apps/media/channels': '/apps/media/following',
+};
 
 export const appScreens: Readonly<Record<string, readonly AppScreen[]>> = {
   calendar: [

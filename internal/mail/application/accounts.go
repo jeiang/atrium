@@ -57,7 +57,7 @@ type AccountsResult struct {
 
 var MailFields = []settings.Field{
 	{Key: mail.KeyUncertainDest, Label: "Uncertain destination"},
-	{Key: mail.KeyLoopsRemindHour, Label: "Loop reminder hour", Number: true, Whole: true},
+	{Key: config.KeyLoopsRemindHour, Label: "Loop reminder hour", Number: true, Whole: true},
 }
 
 type AccountAddInput struct{ ID, Label, Preset, Login, AuthMethod, Password string }

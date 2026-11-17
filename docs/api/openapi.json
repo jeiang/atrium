@@ -3242,6 +3242,12 @@
           "name": {
             "type": "string"
           },
+          "owner": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
+          },
           "present": {
             "type": "boolean"
           },
@@ -3648,6 +3654,12 @@
           },
           "file_ref": {
             "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
           },
           "present": {
             "type": "boolean"
@@ -12205,6 +12217,9 @@
             "type": "array"
           },
           "fix": {
+            "type": "string"
+          },
+          "hint": {
             "type": "string"
           },
           "id": {
@@ -33546,7 +33561,7 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "signals"
       }
     },
     "/mail/commitments/{commitment_id}/dismiss": {
@@ -33710,7 +33725,7 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail",
+        "x-atrium-module": "signals",
         "x-atrium-undoable": true
       }
     },
@@ -33875,7 +33890,7 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail",
+        "x-atrium-module": "signals",
         "x-atrium-undoable": true
       }
     },
@@ -35086,7 +35101,7 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "signals"
       }
     },
     "/mail/loops/dismiss": {
@@ -35250,7 +35265,7 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "signals"
       }
     },
     "/mail/loops/refresh": {
@@ -35568,7 +35583,7 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "signals"
       }
     },
     "/mail/loops/{loop_id}/snooze": {
@@ -35742,7 +35757,7 @@
           "mail"
         ],
         "x-atrium-area": "mail",
-        "x-atrium-module": "mail"
+        "x-atrium-module": "signals"
       }
     },
     "/mail/messages": {

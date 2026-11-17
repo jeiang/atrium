@@ -5,14 +5,6 @@ const (
 	TuningAgentMessageCapBytes = 64 << 20
 	TuningAgentFileNameChars   = 80
 
-	TuningAgentGrafanaTimeoutSeconds = 15
-	TuningAgentGrafanaMaxSeries      = 20
-	TuningAgentGrafanaMaxMetricRows  = 50
-	TuningAgentGrafanaMaxLogRows     = 200
-	TuningAgentGrafanaMaxAlerts      = 50
-	TuningAgentGrafanaMaxDashboards  = 20
-	TuningAgentGrafanaCellChars      = 300
-
 	TuningAgentJournalLeaseSeconds = 1800
 
 	TuningAgentKbProfileTokens     = 2000

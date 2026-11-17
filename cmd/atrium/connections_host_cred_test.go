@@ -51,6 +51,12 @@ func TestHostCredentialFileReplacesADatabaseCredential(t *testing.T) {
 	if source != "host_file" || value != nil {
 		t.Fatalf("credential source %q value %v, want the host file only", source, value)
 	}
+	replaced := func() string {
+		return queryValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE key = 'connection.service/qbittorrent.api_key' AND secret = 1")
+	}
+	if audits := replaced(); audits != "1" {
+		t.Fatalf("replacement recorded %s audit entries, want one", audits)
+	}
 	if err := os.WriteFile(keyFile, []byte("qbt_rotated\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -60,5 +66,8 @@ func TestHostCredentialFileReplacesADatabaseCredential(t *testing.T) {
 	tested = runApp(t, "connections", "test", "service/qbittorrent")
 	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "ok") {
 		t.Fatalf("connections test after rotation: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	if audits := replaced(); audits != "1" {
+		t.Fatalf("after rotation: %s audit entries, want still one", audits)
 	}
 }

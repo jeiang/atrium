@@ -9,10 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	"github.com/jeiang/atrium/internal/cli"
-	grafanatools "github.com/jeiang/atrium/internal/grafana"
+	grafanatools "github.com/jeiang/atrium/internal/apps/serverops/grafana"
 )
 
 type dsQuery struct {
@@ -68,24 +66,14 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 		{grafanatools.VictoriaLogs, `_stream:{unit=~"atrium.*"} (error OR warn)`},
 	} {
 		t.Run(tc.dialect, func(t *testing.T) {
-			dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+			dir, fake, api, f, d := opsClassifierFixture(t, nil)
+			warm(t, api)
+			thread := opsWorkerThread(t, fake, api, f, d)
 			grafana, seen := fakeGrafana(t)
 			setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHostWith(t, dir, grafana.URL, "vm-uid", "logs-uid", tc.dialect))
-			api := &modelLog{Server: anthropictest.New(t,
+			requests := resumeOpsWorker(t, api, f, d, thread,
 				anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "atrium_self_diagnose", map[string]any{"scope": "both", "minutes": 30})),
-				anthropictest.Reply("end_turn", anthropictest.Text("healthy")),
-			)}
-			api.SetOnRequest(func(r anthropictest.Request) {
-				api.mu.Lock()
-				defer api.mu.Unlock()
-				api.seen = append(api.seen, r)
-			})
-			setEnv(t, anthropic.BaseURLEnv, api.URL)
-
-			ran := runApp(t, "agent", "run", "--text", "how are you doing?", "--kind", "chat")
-			if ran.code != cli.ExitOK {
-				t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
-			}
+				anthropictest.Reply("end_turn", anthropictest.Text("healthy")))
 			var metrics, logs []dsQuery
 			for _, q := range seen() {
 				switch q.Datasource["uid"] {
@@ -101,7 +89,6 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 			if len(metrics) == 0 || metrics[0].Expr != "atrium_job_stale == 1" {
 				t.Errorf("metric queries %+v, want the stale-job query first", metrics)
 			}
-			requests := api.Requests()
 			if len(requests) != 2 {
 				t.Fatalf("%d model requests, want 2", len(requests))
 			}

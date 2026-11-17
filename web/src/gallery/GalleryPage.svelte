@@ -13,6 +13,7 @@
   import Forms from './sections/Forms.svelte';
   import Foundations from './sections/Foundations.svelte';
   import Knowledge from './sections/Knowledge.svelte';
+  import Media from './sections/Media.svelte';
   import Overlays from './sections/Overlays.svelte';
   import Prose from './sections/Prose.svelte';
   import Settings from './sections/Settings.svelte';
@@ -54,4 +55,5 @@
   <Prose />
   <Knowledge />
   <Simulator />
+  <Media />
 </Page>

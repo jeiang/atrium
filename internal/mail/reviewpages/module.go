@@ -3,6 +3,7 @@ package reviewpages
 import (
 	"context"
 	"embed"
+	"errors"
 	"io/fs"
 	"net/http"
 
@@ -56,12 +57,6 @@ func MailModule(o Options) web.Module {
 		r.Post("/drafts/{draft_id}/discard", s.draftDiscard)
 		r.Post("/drafts/{draft_id}/send", s.draftSend)
 		r.Post("/drafts/{draft_id}/resolve", s.draftResolve)
-
-		r.Get("/loops", s.loopsPage)
-		r.Post("/loops/{loop_id}/snooze", s.loopSnooze)
-		r.Post("/loops/{loop_id}/dismiss", s.loopDismiss)
-		r.Post("/loops/dismiss-all", s.loopDismissAll)
-		r.Post("/loops/commitments/{commitment_id}/{outcome}", s.commitmentUpdate)
 
 		r.Get("/watches", s.watchesPage)
 		r.Post("/watches/packages/{package_id}/dismiss", s.packageDismiss)
@@ -146,4 +141,19 @@ type draftCardData struct {
 	D          hub.DraftView   `json:"d"`
 	Configured map[string]bool `json:"configured"`
 	Partial    bool            `json:"partial"`
+}
+
+func (s *service) changed(w http.ResponseWriter, r *http.Request, err error) bool {
+	if e, ok := errors.AsType[*application.Error](err); ok {
+		switch e.Code {
+		case application.NotFound:
+			s.fail(w, r, http.StatusNotFound, e.Message)
+			return false
+		case application.Invalid:
+			s.fail(w, r, http.StatusBadRequest, e.Message)
+			return false
+		}
+	}
+	hub.Check(err)
+	return true
 }

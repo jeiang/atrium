@@ -106,7 +106,6 @@ var invalidates = map[string]string{
 	"ntfy_channels":                      "notify",
 	"oauth_states":                       "connections",
 	"open_loops":                         "mail",
-	"ops_findings":                       "ops",
 	"ops_samples":                        "ops",
 	"package_events":                     "mail",
 	"packages":                           "mail",

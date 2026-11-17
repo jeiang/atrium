@@ -21,6 +21,7 @@ var migrations = []migration{
 	{2, dropUnreadTables},
 	{3, addUsageCounters},
 	{4, addRecordLinks},
+	{5, dropOpsFindings},
 }
 
 const (
@@ -51,6 +52,9 @@ CREATE INDEX record_links_target ON record_links (target_kind, target_id);
 CREATE TRIGGER IF NOT EXISTS record_links_read_insert AFTER INSERT ON record_links BEGIN INSERT INTO read_revisions(scope,value) VALUES('knowledge',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
 CREATE TRIGGER IF NOT EXISTS record_links_read_update AFTER UPDATE ON record_links BEGIN INSERT INTO read_revisions(scope,value) VALUES('knowledge',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
 CREATE TRIGGER IF NOT EXISTS record_links_read_delete AFTER DELETE ON record_links BEGIN INSERT INTO read_revisions(scope,value) VALUES('knowledge',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+`
+	opsFindingsDDL = `
+DROP TABLE ops_findings;
 `
 )
 
@@ -247,5 +251,10 @@ func applyPending(ctx context.Context, d *DB, path string) error {
 
 func RecordRetiredKey(ctx context.Context, tx *sql.Tx, oldID, newID string) error {
 	_, err := tx.ExecContext(ctx, "INSERT INTO db_key_history (key_id, replaced_by, retired_at) VALUES (?, ?, CAST(strftime('%s','now') AS REAL))", oldID, newID)
+	return err
+}
+
+func dropOpsFindings(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, opsFindingsDDL)
 	return err
 }

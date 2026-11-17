@@ -103,6 +103,10 @@ func (e *DuplicateRoute) Error() string {
 
 func compileOperations(decls []Declaration) ([]Operation, []Binding, error) {
 	owner := map[application.Name]string{}
+	cores := map[string]bool{}
+	for _, d := range decls {
+		cores[d.Name] = d.Core
+	}
 	defs := map[application.Name]application.Definition{}
 	var ops []Operation
 	for _, d := range decls {
@@ -122,7 +126,7 @@ func compileOperations(decls []Declaration) ([]Operation, []Binding, error) {
 	routes := map[string]string{}
 	for _, d := range decls {
 		for _, b := range d.Bindings {
-			if err := checkBinding(d, b, owner); err != nil {
+			if err := checkBinding(d, b, owner, cores); err != nil {
 				return nil, nil, err
 			}
 			if b.Kind == application.API {
@@ -163,7 +167,7 @@ func missingField(def application.Definition) string {
 	return ""
 }
 
-func checkBinding(d Declaration, b application.Binding, owner map[application.Name]string) error {
+func checkBinding(d Declaration, b application.Binding, owner map[application.Name]string, cores map[string]bool) error {
 	invalid := &InvalidBinding{Module: d.Name, Kind: b.Kind, Target: b.Target}
 	if strings.TrimSpace(b.Target) == "" || (b.Composite && !d.Core) {
 		return invalid
@@ -203,7 +207,7 @@ func checkBinding(d Declaration, b application.Binding, owner map[application.Na
 		return invalid
 	}
 	for _, name := range b.Delegates {
-		if !slices.Contains(b.Uses, name) || owner[name] != Core || owner[name] == d.Name {
+		if !slices.Contains(b.Uses, name) || !cores[owner[name]] || owner[name] == d.Name {
 			return invalid
 		}
 	}
@@ -212,7 +216,7 @@ func checkBinding(d Declaration, b application.Binding, owner map[application.Na
 		if !ok {
 			return &UnknownOperation{Module: d.Name, Target: b.Target, Name: name}
 		}
-		if mod != d.Name && !b.Composite && (mod != Core || !slices.Contains(b.Delegates, name)) {
+		if mod != d.Name && !b.Composite && (!cores[mod] || !slices.Contains(b.Delegates, name)) {
 			return &ForeignOperation{Module: d.Name, Owner: mod, Name: name}
 		}
 	}
