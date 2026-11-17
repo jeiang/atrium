@@ -79,6 +79,10 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 		case <-svc.UnitsChanged():
 			syncUnits()
 			observe(connectionsapp.ObserveHealthInput{})
+		case id := <-svc.Rechecks():
+			if _, err := svc.Recheck(ctx, connectionsapp.RecheckInput{ID: id}); err != nil && ctx.Err() == nil {
+				log.Info("a connection that shares a changed credential was not rechecked", logx.Integration, string(id), logx.Err, err.Error())
+			}
 		case r := <-reports:
 			if err := r.Record(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("connection outcome not recorded", logx.Integration, string(r.ID), logx.Err, err.Error())

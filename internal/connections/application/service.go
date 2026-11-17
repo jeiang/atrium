@@ -126,6 +126,10 @@ func classify(err error) *application.Error {
 	if errors.As(err, &app) {
 		return app
 	}
+	var pinned *connections.PinnedCredential
+	if errors.As(err, &pinned) {
+		return &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}
+	}
 	code := application.Internal
 	var unknown connections.UnknownID
 	var conflict *connections.Conflict

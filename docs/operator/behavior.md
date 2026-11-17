@@ -266,10 +266,23 @@ The Connections page shows configuration, credential presence, and observed
 health. Credentials are write-only. Database credentials require encryption;
 host file credentials stay files. Host-declared connections cannot be edited as
 operator-owned rows. Mail accounts have stable ids; account creation tests
-before saving, and deployment-pinned accounts cannot be removed. A host file
-credential replaces a value entered in the UI for the same slot at the next
-process start. A deployment-pinned mail account declared without a password
-file takes its password from the UI, and that value stays.
+before saving, and deployment-pinned accounts cannot be removed. A slot with a
+host credential file is pinned: both UIs show it as set in host configuration
+with no entry box, and a save of a new value for it is refused with 409
+`refused` ("pinned by host configuration; change it there") before anything is
+stored or tested. A connection that uses another
+connection's credential (the `icloud/<id>` connection uses the
+`mail/<id>` password) names and links to that connection. A successful save or
+a host file rotation of that credential rechecks the sharing connection within
+the usual recheck limits. A detected rotation updates the host file row's
+`set_at` so that recheck sees the change; the value still comes from the file.
+A credential save or disconnect re-evaluates app requirements in the same
+transaction, so an app that waited for that credential (for example Calendar
+on the iCloud password) starts without a restart. The iCloud DAV login strips
+whitespace from the shared password the same way IMAP and SMTP do.
+If a database value is still found on a newly pinned slot at start, the host
+file replaces it and one audit entry records that. A deployment-pinned mail account declared without a
+password file takes its password from the UI, and that value stays.
 
 A stored credential never follows a connection to a different endpoint. A
 URL/host change must replace every retained credential in that request, or the

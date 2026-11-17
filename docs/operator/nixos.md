@@ -73,7 +73,7 @@ contacting a changed endpoint.
 | `label` | null or string | `null` | Display name, falling back to the account id. |
 | `preset` | `"icloud"` or `"gmail"` | Required | Supplies provider hosts and folder behavior. |
 | `login` | string | Required | IMAP/SMTP login. |
-| `passwordFile` | null or string | `null` | App-password file delivered as `mail-account-<id>`; the file then owns the password and replaces a value entered in the UI at every start. When null, the operator enters the password in Settings, Connections and it is stored in the database. |
+| `passwordFile` | null or string | `null` | App-password file delivered as `mail-account-<id>`; the file then owns the password, and the UI shows it as set in host configuration and refuses a new value. When null, the operator enters the password in Settings, Connections and it is stored in the database. |
 | `enabled` | boolean | `true` | Whether the account is opened and synced. |
 
 Generated accounts use password authentication and `imap`/`smtp` capabilities.
