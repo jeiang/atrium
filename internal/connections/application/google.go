@@ -19,12 +19,15 @@ const (
 	OAuthConfigureName application.Name = "connections.oauth-configure"
 	OAuthStartName     application.Name = "connections.oauth-start"
 	OAuthCompleteName  application.Name = "connections.oauth-complete"
+
+	OAuthHandoffPrefix = "web."
 )
 
 type OAuthSetupInput struct{}
 type OAuthSetup struct {
 	ClientID        string        `json:"client_id"`
 	ClientSecretSet bool          `json:"client_secret_set"`
+	RedirectURI     string        `json:"redirect_uri"`
 	Capabilities    []GoogleGrant `json:"capabilities"`
 	Health          string        `json:"health"`
 	Reason          string        `json:"reason"`
@@ -37,6 +40,7 @@ type OAuthStartInput struct {
 	Capability string
 	Redirect   string
 	Loopback   bool
+	Handoff    bool
 }
 type OAuthStartResult struct {
 	URL string `json:"-"`
@@ -127,6 +131,9 @@ func (s *Service) OAuthStart(ctx context.Context, in OAuthStartInput) (applicati
 		state, err := googleToken(24)
 		if err != nil {
 			return err
+		}
+		if in.Handoff {
+			state = OAuthHandoffPrefix + state
 		}
 		verifier, err := googleToken(64)
 		if err != nil {

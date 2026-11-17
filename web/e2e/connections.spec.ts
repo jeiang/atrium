@@ -47,7 +47,7 @@ test.describe('the connections list', () => {
     await expect(table.locator('tr[data-key="service/webpush"]')).toContainText('No capability has been tested yet.');
     await expect(table.locator('tr[data-key="notion/workspace"] [data-state="disabled"]')).toHaveText('Disabled');
     await expect(table.locator('tr[data-key="mail/garden-club"] [data-state="unconfigured"]')).toHaveText('Not set up');
-    await expect(table.locator('tr[data-key="google/calendar"] [data-state="needs_reauth"]')).toHaveText(
+    await expect(table.locator('tr[data-key="google/default"] [data-state="needs_reauth"]')).toHaveText(
       'Needs sign-in',
     );
     await expect(table.locator('tr[data-key="service/embedding"] [data-state="expiring"]')).toHaveText('Expiring');
@@ -192,11 +192,11 @@ test.describe('a connection page', () => {
   });
 
   test('repair guidance follows the state', async ({ page }) => {
-    await openConnection(page, 'google/calendar', 'Family calendar');
-    await expect(page.getByRole('link', { name: 'Open Connections in the current interface' })).toHaveAttribute(
-      'href',
-      '/settings/connections',
-    );
+    await openConnection(page, 'google/default', 'Google');
+    await expect(page.getByText('Connect Google again in Google setup below, then Test now.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open Connections in the current interface' })).toHaveCount(0);
+    await openConnection(page, 'service/ship24', 'Ship24 parcels');
+    await expect(page.locator('#google-setup')).toHaveCount(0);
     await openConnection(page, 'mail/garden-club', 'Garden club mail');
     await expect(page.getByText('Fill in what is missing below, then choose Test and save.')).toBeVisible();
     await expect(page.locator('#connection-fields')).toContainText('Not set.');

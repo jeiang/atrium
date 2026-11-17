@@ -8,7 +8,7 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
   import ConnectionState from './ConnectionState.svelte';
-  import { ownerText, reasonText, splitId, useConnections, uses, when } from './connections';
+  import { GOOGLE_ID, ownerText, reasonText, splitId, useConnections, uses, when } from './connections';
   import './connections.css';
 
   const list = useConnections();
@@ -91,5 +91,12 @@
       empty="No connections"
       onopen={onOpen}
     />
+  {/if}
+  {#if list.data && !rows.some((row) => row.id === GOOGLE_ID)}
+    <div class="cluster">
+      <a class="btn btn--secondary" href={p('/settings/connections/:kind/:name', { params: splitId(GOOGLE_ID) })}
+        >Set up Google</a
+      >
+    </div>
   {/if}
 </Page>

@@ -32,6 +32,8 @@ func GoogleRedirect(origin string) string {
 	return origin + googlePath + "/callback"
 }
 
+const GoogleHandoff = "/next/settings/connections/google/default"
+
 func (h handlers) googlePage(r *http.Request) googlePage {
 	read, err := h.svc().OAuthSetup(r.Context(), connectionsapp.OAuthSetupInput{})
 	if err != nil {
@@ -89,6 +91,10 @@ func (h handlers) googleStart(w http.ResponseWriter, r *http.Request) {
 
 func (h handlers) googleCallback(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
+	if strings.HasPrefix(query.Get("state"), connectionsapp.OAuthHandoffPrefix) {
+		http.Redirect(w, r, GoogleHandoff+"?"+r.URL.RawQuery, http.StatusSeeOther)
+		return
+	}
 	h.googleComplete(w, r, query.Get("state"), query.Get("code"), query.Get("error"))
 }
 
