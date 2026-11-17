@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { defineConfig, type Plugin, transformWithOxc } from 'vite';
 
 const mockWorkerPath = fileURLToPath(import.meta.resolve('msw/mockServiceWorker.js'));
-const fontFamilies = ['alegreya-sans', 'fira-mono'];
+const lockfile = fileURLToPath(new URL('package-lock.json', import.meta.url));
+const licenseFile = /^(?:licen[cs]e|copying)(?:[.-].*)?$/i;
+const rule = '='.repeat(64);
 const customMedia = fileURLToPath(new URL('src/tokens/gen/media.css', import.meta.url));
 const workerSource = fileURLToPath(new URL('src/worker/sw.ts', import.meta.url));
 const contractHash = createHash('sha256')
@@ -52,18 +55,60 @@ function shellWorker(base: string): Plugin {
   };
 }
 
-function fontLicenses(): Plugin {
+function packageDir(root: string, id: string): string | undefined {
+  const path = resolve(root, id.replace(/^\0/, '').split('?')[0]).split(sep).join('/');
+  const at = path.lastIndexOf('/node_modules/');
+  if (at < 0) return undefined;
+  const [scope, name] = path.slice(at + '/node_modules/'.length).split('/');
+  return `${path.slice(0, at)}/node_modules/${scope.startsWith('@') ? `${scope}/${name}` : scope}`;
+}
+
+function thirdPartyNotices(): Plugin {
+  let root = '';
   return {
-    name: 'atrium-font-licenses',
-    generateBundle() {
-      for (const family of fontFamilies) {
-        const license = fileURLToPath(import.meta.resolve(`@fontsource/${family}/LICENSE`));
-        this.emitFile({
-          type: 'asset',
-          fileName: `fonts/LICENSE-${family}.txt`,
-          source: readFileSync(license, 'utf8'),
-        });
+    name: 'atrium-third-party-notices',
+    apply: 'build',
+    enforce: 'post',
+    configResolved(config) {
+      root = config.root;
+    },
+    generateBundle(_, bundle) {
+      const locked = JSON.parse(readFileSync(lockfile, 'utf8')).packages as Record<string, { version?: string }>;
+      const dirs = new Set<string>();
+      for (const item of Object.values(bundle)) {
+        for (const id of item.type === 'chunk' ? item.moduleIds : item.originalFileNames) {
+          const dir = packageDir(root, id);
+          if (dir) dirs.add(dir);
+        }
       }
+      const entries = new Map<string, string>();
+      for (const dir of dirs) {
+        const key = dir.slice(dir.indexOf('/node_modules/') + 1);
+        const meta = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+          name: string;
+          version: string;
+          license?: string;
+        };
+        if (locked[key]?.version !== meta.version) {
+          this.error(`${meta.name} ${meta.version} is in the bundle but not at ${key} in package-lock.json`);
+        }
+        const file = readdirSync(dir).find((name) => licenseFile.test(name));
+        if (!file) this.error(`${meta.name} ${meta.version} is in the bundle without a license file`);
+        const text = readFileSync(join(dir, file), 'utf8').trim();
+        entries.set(
+          `${meta.name}@${meta.version}`,
+          `${rule}\n${meta.name} ${meta.version} (${meta.license ?? 'see license text'})\n${rule}\n\n${text}\n`,
+        );
+      }
+      if (entries.size === 0) this.error('no npm package found in the bundle');
+      this.emitFile({
+        type: 'asset',
+        fileName: 'third-party-notices.txt',
+        source: [...entries.keys()]
+          .sort()
+          .map((key) => entries.get(key))
+          .join(''),
+      });
     },
   };
 }
@@ -71,7 +116,7 @@ function fontLicenses(): Plugin {
 export default defineConfig(({ mode }) => ({
   plugins: [
     svelte({ preprocess: { style: ({ content }) => ({ code: `${readFileSync(customMedia, 'utf8')}${content}` }) } }),
-    fontLicenses(),
+    thirdPartyNotices(),
     mode === 'mock' ? mockWorker() : shellWorker('/'),
   ],
   define: { __ATRIUM_CONTRACT__: JSON.stringify(contractHash) },
