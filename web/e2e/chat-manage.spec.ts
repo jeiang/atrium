@@ -181,7 +181,7 @@ test.describe('the last turn', () => {
     await field.fill('Does the shed roof need four new sheets?');
     await page.getByRole('button', { name: 'Send edit (new run)' }).click();
     await expect(field).toHaveCount(0);
-    await expect(transcript(page).getByText('Does the shed roof need four new sheets?')).toBeVisible();
+    await expect(transcript(page).getByText('Does the shed roof need four new sheets?', { exact: true })).toBeVisible();
     await expect(transcript(page).getByText('Delivery takes three days')).toBeVisible({ timeout: 15_000 });
     await settled(page);
     await expect(transcript(page).getByText('Does the shed roof need new sheets?')).toHaveCount(0);
