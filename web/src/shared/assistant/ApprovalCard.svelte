@@ -416,7 +416,7 @@
       {#if onedit}
         <Button variant="secondary" onclick={onedit}>Edit</Button>
       {/if}
-      {#if !blocked}
+      {#if !blocked || !('outcomes' in blocked)}
         <Button variant="secondary" pending={busyOn === 'decline'} onclick={onDecline}>Decline</Button>
       {/if}
       {#if onlater}

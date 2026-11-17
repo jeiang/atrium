@@ -44,10 +44,20 @@ test.describe('the apps hub', () => {
       'href',
       '/settings/mail',
     );
-    await expect(card(page, 'orchard').getByRole('link', { name: /^Trees/ })).toHaveAttribute(
-      'href',
-      '/apps/orchard/trees',
-    );
+    const media = card(page, 'media');
+    for (const [name, href] of [
+      ['Downloads', '/apps/torrents'],
+      ['Channels', '/apps/media/following'],
+      ['Library', '/apps/media'],
+    ] as const) {
+      await expect(media.getByRole('link', { name, exact: true })).toHaveAttribute('href', href);
+    }
+    await expect(card(page, 'orchard').getByRole('link', { name: /^Trees/ })).toHaveCount(0);
+    for (const link of await list.getByRole('link').all()) {
+      expect(await link.getAttribute('href')).not.toMatch(
+        /^\/(?:triage|rules|live|watches|apps\/media\/(?:downloads|channels|library))/,
+      );
+    }
   });
 
   test('an unmet need shows its state and links to the repair', async ({ page }) => {
@@ -65,7 +75,7 @@ test.describe('the apps hub', () => {
   test('an app the client does not know opens as a generic page', async ({ page }) => {
     await gotoShell(page, '/apps/orchard');
     await expect(page.getByRole('heading', { level: 1, name: 'Orchard' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /^Trees/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Trees/ })).toHaveCount(0);
     await gotoShell(page, '/apps/grafana');
     await expect(page.getByRole('heading', { level: 1, name: 'Not found' })).toBeVisible();
   });

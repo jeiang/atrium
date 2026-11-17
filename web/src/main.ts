@@ -35,4 +35,6 @@ const target = document.getElementById('app');
 if (!target) throw new Error('#app is missing from index.html');
 target.replaceChildren();
 mount(App, { target });
-if (import.meta.env.MODE !== 'mock') void startWorker();
+if (import.meta.env.MODE !== 'mock') {
+  void startWorker(started.then(() => session.view.status === 'signed-in' && !session.view.cached));
+}

@@ -9,6 +9,7 @@
   import { useShell } from '../../shell/frame';
   import { navigate, p, route } from '../../shell/router';
   import { session } from '../../shell/session.svelte';
+  import About from './About.svelte';
   import Backups from './Backups.svelte';
   import Notifications from './Notifications.svelte';
   import { BACKUPS, GROUPS, NOTIFICATIONS } from './placement';
@@ -143,6 +144,8 @@
           </SettingsForm>
           {#if open.id === 'settings.sign_in'}
             <Tokens {locked} {phone} />
+          {:else if open.id === 'settings.general'}
+            <About />
           {/if}
         {/key}
       {/if}

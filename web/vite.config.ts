@@ -72,7 +72,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     svelte({ preprocess: { style: ({ content }) => ({ code: `${readFileSync(customMedia, 'utf8')}${content}` }) } }),
     fontLicenses(),
-    mode === 'mock' ? mockWorker() : shellWorker('/next/'),
+    mode === 'mock' ? mockWorker() : shellWorker('/'),
   ],
   define: { __ATRIUM_CONTRACT__: JSON.stringify(contractHash) },
   css: {
@@ -87,7 +87,7 @@ export default defineConfig(({ mode }) => ({
       },
     ],
   },
-  base: mode === 'mock' ? '/' : '/next/',
+  base: '/',
   server: { fs: { allow: ['.', '../docs/api/settings-schema.json'] } },
   build: {
     outDir: mode === 'mock' ? 'dist-mock' : 'dist',

@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { expectNoHorizontalScroll, expectNoSeriousAxeFindings, expectTouchTargets, gotoShell } from './checks.ts';
+import {
+  expectNoBlue,
+  expectNoHorizontalScroll,
+  expectNoSeriousAxeFindings,
+  expectRoundedSurfaces,
+  expectTouchTargets,
+  gotoShell,
+} from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
 import { expectLostAnswer } from './lost.ts';
 
@@ -292,6 +299,47 @@ test.describe('settings lost answers', () => {
           .getByRole('button', { name: /Verify/ })
           .first()
           .click(),
+    });
+  });
+});
+
+test.describe('About on Settings > General', () => {
+  for (const layout of layouts) {
+    test(`shows the running version and links the notices at ${layout.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await gotoShell(page, '/settings/general');
+      const about = page.getByRole('region', { name: 'About' });
+      for (const [term, value] of [
+        ['Version', '1.18.0'],
+        ['Build', 'fictional-build-2219'],
+        ['Go', 'go1.26.1'],
+        ['API version', '1'],
+        ['Database schema', '9'],
+      ] as const) {
+        await expect(about.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) })).toBeVisible();
+        await expect(about.getByRole('definition').filter({ hasText: new RegExp(`^${value}$`) })).toBeVisible();
+      }
+      const notices = about.getByRole('link', { name: 'Third-party notices' });
+      await expect(notices).toHaveAttribute('href', '/third-party-notices.txt');
+      await expect(notices).toHaveAttribute('target', '_self');
+      await expectNoHorizontalScroll(page);
+      await expectRoundedSurfaces(page);
+      if (layout.touch) await expectTouchTargets(page);
+      await expectNoBlue(page);
+      await expectNoSeriousAxeFindings(page);
+    });
+  }
+
+  test.describe('when atrium cannot read the version', () => {
+    test.use({ allowStatus: [500] });
+
+    test('it says so and can be tried again', async ({ page }) => {
+      await useScenario(page, { settings: { about: 'fail' } });
+      await gotoShell(page, '/settings/general');
+      const about = page.getByRole('region', { name: 'About' });
+      await expect(about.getByText('atrium could not say which version runs')).toBeVisible({ timeout: 15_000 });
+      await expect(about.getByRole('button', { name: 'Try again' })).toBeVisible();
+      await expect(about.getByRole('link', { name: 'Third-party notices' })).toBeVisible();
     });
   });
 });

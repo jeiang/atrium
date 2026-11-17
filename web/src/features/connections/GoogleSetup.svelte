@@ -14,6 +14,7 @@
   import RadioGroup from '../../shared/ui/RadioGroup.svelte';
   import Section from '../../shared/ui/Section.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
+  import TextArea from '../../shared/ui/TextArea.svelte';
   import TextField from '../../shared/ui/TextField.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, route } from '../../shell/router';
@@ -30,7 +31,7 @@
   import SecretField from './SecretField.svelte';
 
   type Outcome = { tone: 'ok' | 'warn' | 'error'; title?: string; text: string };
-  type Busy = 'save' | 'start' | 'finish';
+  type Busy = 'save' | 'start' | 'finish' | 'paste';
 
   let { view }: { view: ConnectionView | undefined } = $props();
 
@@ -52,6 +53,9 @@
   let started = $state<Outcome>();
   let finished = $state<Outcome>();
   let handled = $state<string>();
+  let pasted = $state('');
+  let pasteError = $state<string>();
+  let fromPaste = $state<Outcome>();
 
   const data = $derived(setup.data);
   const ready = $derived(data !== undefined && data.client_id !== '' && data.client_secret_set);
@@ -158,6 +162,52 @@
     } catch (error) {
       finished = failure(error, 'finish connecting Google', reload);
       if (!(refusedOffline(error) && error instanceof Error)) leaveReturn(back.state);
+    } finally {
+      busy = undefined;
+    }
+  }
+
+  function pastedAnswer(): { state: string; code: string } | string {
+    const text = pasted.trim();
+    if (text === '') return 'Paste the full address from the address bar after Google sent you back.';
+    let url: URL;
+    try {
+      url = new URL(text);
+    } catch {
+      return 'That is not a web address. Paste the full address from the address bar, starting with https://.';
+    }
+    const denied = url.searchParams.get('error');
+    if (denied) return `Google answered ${denied}. Nothing was connected. Continue to Google again when you are ready.`;
+    const state = url.searchParams.get('state') ?? '';
+    const code = url.searchParams.get('code') ?? '';
+    if (!state || !code) {
+      return 'This address has no answer from Google. Paste the whole address, including everything after the question mark.';
+    }
+    return { state, code };
+  }
+
+  async function onPaste(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (busy) return;
+    fromPaste = undefined;
+    const answer = pastedAnswer();
+    if (typeof answer === 'string') {
+      pasteError = answer;
+      return;
+    }
+    pasteError = undefined;
+    busy = 'paste';
+    try {
+      const grant = ok(await connectionsOauthComplete(answer, gesture())).data;
+      pasted = '';
+      fromPaste = {
+        tone: 'ok',
+        title: `Connected ${grant.label}`,
+        text: 'atrium stored the access Google gave it. Test now checks that it works.',
+      };
+      reload();
+    } catch (error) {
+      fromPaste = failure(error, 'finish connecting Google', reload);
     } finally {
       busy = undefined;
     }
@@ -271,6 +321,31 @@
           </div>
           {#if started}
             <Notice tone={started.tone} variant="inline" title={started.title}>{started.text}</Notice>
+          {/if}
+        </form>
+      </li>
+      <li>
+        <form class="stack conn-form" novalidate aria-labelledby="google-paste" onsubmit={onPaste}>
+          <h3 class="conn-step" id="google-paste">If Google cannot send you back</h3>
+          <p>
+            When the redirect address does not open atrium, copy the whole address Google sent you to and paste it here.
+          </p>
+          <TextArea
+            label="Address Google sent you to"
+            bind:value={pasted}
+            error={pasteError}
+            rows={3}
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+          />
+          <div class="cluster">
+            <Button type="submit" pending={busy === 'paste'} disabled={busy !== undefined && busy !== 'paste'}>
+              Finish from the address
+            </Button>
+          </div>
+          {#if fromPaste}
+            <Notice tone={fromPaste.tone} variant="inline" title={fromPaste.title}>{fromPaste.text}</Notice>
           {/if}
         </form>
       </li>

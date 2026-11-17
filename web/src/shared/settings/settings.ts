@@ -1,5 +1,6 @@
 import { createQuery, type QueryClient } from '@tanstack/svelte-query';
 import {
+  coreAbout,
   maintenanceBackupList,
   ok,
   type Setting,
@@ -47,6 +48,13 @@ export function useBackups() {
     queryKey: ['settings', 'backups'],
     queryFn: async ({ signal }) => ok(await maintenanceBackupList(undefined, { signal })),
     meta: { topics: TOPICS },
+  }));
+}
+
+export function useAbout() {
+  return createQuery(() => ({
+    queryKey: ['settings', 'about'],
+    queryFn: async ({ signal }) => ok(await coreAbout({ signal })),
   }));
 }
 

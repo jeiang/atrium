@@ -69,4 +69,33 @@
       min-block-size: 44px;
     }
   }
+
+  .settings-about {
+    display: grid;
+    gap: var(--s-3);
+    max-inline-size: 44rem;
+    margin-block-start: var(--s-6);
+  }
+
+  .settings-about__title {
+    margin: 0;
+    font-size: var(--t-md);
+  }
+
+  .settings-about__list {
+    display: grid;
+    gap: var(--s-3);
+    margin: 0;
+  }
+
+  .settings-about__list dd {
+    margin: 0;
+  }
+
+  .settings-about__notices {
+    justify-self: start;
+    min-block-size: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
 }

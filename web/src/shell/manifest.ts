@@ -1,5 +1,5 @@
 import { createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { appScreens, screens } from '../apps';
+import { appScreens, movedScreens, screens } from '../apps';
 import { type AppEntry, appsList, type Binding, ok } from '../contract';
 import type { Tone } from '../shared/ui/Badge.svelte';
 import { p } from './router';
@@ -40,28 +40,23 @@ export function refreshApps(client: QueryClient): void {
 export interface NavLink {
   label: string;
   href: string;
-  leaves: boolean;
 }
 
-/** The new place for a server page path, or undefined when the new client has none. */
 export function newPlace(url: string): string | undefined {
-  const path = screens[url];
-  return path === undefined ? undefined : `${base}${path}`;
+  const parsed = new URL(url, 'http://atrium.invalid');
+  const exact = screens[`${parsed.pathname}${parsed.search}`] ?? screens[parsed.pathname];
+  if (exact !== undefined) return `${base}${exact}`;
+  const moved = movedScreens.find(([pattern]) => pattern.test(parsed.pathname));
+  return moved ? `${base}${parsed.pathname.replace(moved[0], moved[1])}` : undefined;
 }
 
 export function navLinks(app: AppEntry): NavLink[] {
-  const own = (appScreens[app.id] ?? []).map((item) => ({
-    label: item.label,
-    href: `${base}${item.path}`,
-    leaves: false,
-  }));
-  const legacy = app.nav
-    .map((item) => {
-      const href = newPlace(item.url);
-      return { label: item.label, href: href ?? item.url, leaves: href === undefined };
-    })
-    .filter((item) => !own.some((mine) => mine.href === item.href));
-  return [...own, ...legacy];
+  const own = (appScreens[app.id] ?? []).map((item) => ({ label: item.label, href: `${base}${item.path}` }));
+  const mapped = app.nav.flatMap((item) => {
+    const href = newPlace(item.url);
+    return href === undefined || own.some((mine) => mine.href === href) ? [] : [{ label: item.label, href }];
+  });
+  return [...own, ...mapped];
 }
 
 export function unmetNeeds(app: AppEntry): Binding[] {

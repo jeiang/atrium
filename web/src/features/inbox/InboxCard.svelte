@@ -10,7 +10,7 @@
   import Notice from '../../shared/ui/Notice.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { p } from '../../shell/router';
+  import { navigate, p } from '../../shell/router';
   import {
     handleApprove,
     handleDecline,
@@ -45,7 +45,7 @@
   const blocked = $derived.by((): Blocked | undefined => {
     if (!shown?.blocked) return undefined;
     if (shown.stuck) return stuckChoices[shown.stuck];
-    return { reason: shown.blocked, repair: 'Open in the current interface' };
+    return { reason: shown.blocked, repair: 'Open Connections' };
   });
 
   function refused(error: unknown): { tone: 'warn' | 'error'; title: string; text: string } {
@@ -143,7 +143,7 @@
   }
 
   function onRepair(): void {
-    location.assign('/review');
+    void navigate('/settings/connections');
   }
 
   function onRetry(): void {
