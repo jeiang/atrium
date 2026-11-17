@@ -4,39 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"mime/multipart"
 	"net"
 	"net/http"
-	"net/textproto"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/jeiang/atrium/internal/web"
 )
-
-func htmlRequest(t *testing.T, s *apiSite, client *http.Client, method, path, contentType string, body io.Reader, headers ...string) *http.Request {
-	t.Helper()
-	req, err := http.NewRequest(method, s.base+path, body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("Remote-User", "owner")
-	req.Header.Set("Remote-Groups", "atrium_access,atrium_admin")
-	for _, c := range client.Jar.Cookies(req.URL) {
-		req.AddCookie(c)
-		if c.Name == web.CSRFCookie {
-			req.Header.Set(web.CSRFHeader, c.Value)
-		}
-	}
-	for i := 0; i+1 < len(headers); i += 2 {
-		req.Header.Set(headers[i], headers[i+1])
-	}
-	return req
-}
 
 func htmlDo(t *testing.T, req *http.Request) (int, string, http.Header) {
 	t.Helper()
@@ -50,25 +24,6 @@ func htmlDo(t *testing.T, req *http.Request) (int, string, http.Header) {
 		t.Fatal(err)
 	}
 	return resp.StatusCode, string(text), resp.Header
-}
-
-func composerBody(t *testing.T, text string) ([]byte, string) {
-	t.Helper()
-	var b bytes.Buffer
-	mw := multipart.NewWriter(&b)
-	if err := mw.WriteField("text", text); err != nil {
-		t.Fatal(err)
-	}
-	h := textproto.MIMEHeader{}
-	h.Set("Content-Disposition", `form-data; name="upload"; filename=""`)
-	h.Set("Content-Type", "application/octet-stream")
-	if _, err := mw.CreatePart(h); err != nil {
-		t.Fatal(err)
-	}
-	if err := mw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return b.Bytes(), mw.FormDataContentType()
 }
 
 func htmlThread(t *testing.T, s *apiSite, owner string) int64 {
