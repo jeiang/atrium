@@ -106,6 +106,7 @@ credential_files = { "mail/icloud/password" = %q }
 	run := func(refused bool, want string) {
 		t.Helper()
 		refuse.Store(refused)
+		endBackoff(t, dir)
 		before := schedulerRuns(t, d, passrun.CardDAV)
 		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, davJobKeys[1])
 		waitUntil(t, 60*time.Second, "the scheduled CardDAV run", func() bool {
