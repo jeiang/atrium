@@ -28,7 +28,7 @@ func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
 		got := client.do(http.MethodPatch, "/web/v1/mail/accounts/work", map[string]any{"label": "Work", "login": login, "password": password, "enabled": true, "auth_method": "password"})
 		return got.status, got.body
 	}
-	if code, body := update("me@other.test", "work-pass"); code != http.StatusUnprocessableEntity {
+	if code, body := update("me@other.test", "work-pass"); code != http.StatusConflict || !strings.Contains(body, `"refused"`) {
 		t.Fatalf("update to a login the password cannot authenticate = %d: %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))

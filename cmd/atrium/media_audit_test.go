@@ -68,7 +68,7 @@ func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
 		t.Fatal(err)
 	}
 	const hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": mediaMagnet(hash, "Lanterns")}); got.status != http.StatusBadGateway {
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": mediaMagnet(hash, "Lanterns")}); got.status != http.StatusConflict || !strings.Contains(got.body, "effect_partial") {
 		t.Fatalf("add with a failing selection = %d: %.300s", got.status, got.body)
 	}
 	mediaEffectID(t, d, contract.OpAddMagnet, hash, "done")
