@@ -104,4 +104,16 @@
     font-size: var(--t-md);
     font-weight: 700;
   }
+
+  .notify__group {
+    display: grid;
+    gap: var(--s-3);
+    min-inline-size: 0;
+  }
+
+  .notify__title {
+    margin: var(--s-2) 0 0;
+    font-size: var(--t-md);
+    font-weight: 700;
+  }
 }

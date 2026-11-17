@@ -87,3 +87,39 @@ worker.addEventListener('fetch', (event) => {
     event.respondWith(navigate(request));
   }
 });
+
+function sameOrigin(value: unknown): string {
+  try {
+    const url = new URL(typeof value === 'string' && value ? value : BASE, worker.location.origin);
+    return url.origin === worker.location.origin ? url.href : new URL(BASE, worker.location.origin).href;
+  } catch {
+    return new URL(BASE, worker.location.origin).href;
+  }
+}
+
+worker.addEventListener('push', (event) => {
+  let data: { title?: unknown; body?: unknown; url?: unknown } = {};
+  try {
+    data = event.data?.json() ?? {};
+  } catch {
+    data = {};
+  }
+  event.waitUntil(
+    worker.registration.showNotification(typeof data.title === 'string' && data.title ? data.title : 'atrium', {
+      body: typeof data.body === 'string' ? data.body : '',
+      data: { url: sameOrigin(data.url) },
+    }),
+  );
+});
+
+worker.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data: unknown = event.notification.data;
+  const target = sameOrigin(data && typeof data === 'object' && 'url' in data ? data.url : undefined);
+  event.waitUntil(
+    worker.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => client.url === target);
+      return open ? open.focus() : worker.clients.openWindow(target);
+    }),
+  );
+});
