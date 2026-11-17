@@ -15,7 +15,6 @@ import (
 )
 
 func TestARefusedBackgroundRequestHoldsAcrossARestartUntilASuccess(t *testing.T) {
-	t.Parallel()
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
