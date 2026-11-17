@@ -43,7 +43,10 @@ async function fakePush(page: Page, engine: Engine, allow = true): Promise<void>
       if (engine === 'unsupported' || engine === 'install') {
         if (proto) Reflect.deleteProperty(proto, 'pushManager');
         Reflect.deleteProperty(globalThis, 'PushManager');
-        if (engine === 'install') Object.defineProperty(navigator, 'standalone', { configurable: true, value: false });
+        if (engine === 'install') {
+          Object.defineProperty(navigator, 'standalone', { configurable: true, value: false });
+          Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 });
+        }
         return;
       }
       if (!('PushManager' in globalThis)) Object.defineProperty(globalThis, 'PushManager', { value: class {} });
@@ -306,6 +309,19 @@ test.describe('notifications failures', () => {
           .getByRole('dialog', { name: 'Remove Safari on iOS?' })
           .getByRole('button', { name: 'Remove device' })
           .click();
+      },
+    });
+  });
+
+  test('a channel save whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await fakePush(page, 'granted');
+    await expectLostAnswer(page, {
+      method: 'PUT',
+      path: '/notifications/channels/system',
+      open: '/settings/notifications',
+      press: async (page) => {
+        await page.getByLabel('System').selectOption('full');
+        await page.getByRole('button', { name: 'Save' }).click();
       },
     });
   });

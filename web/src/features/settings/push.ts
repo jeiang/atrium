@@ -57,8 +57,8 @@ export async function readDevice(): Promise<DeviceState> {
   const registration = await pushWorker();
   const permission: Permission = 'Notification' in globalThis ? Notification.permission : 'unknown';
   if (!registration) {
-    const standalone: unknown = Reflect.get(navigator, 'standalone');
-    return { support: standalone === false ? 'install' : 'unsupported', permission };
+    const homeScreen = Reflect.get(navigator, 'standalone') === false && navigator.maxTouchPoints > 0;
+    return { support: homeScreen ? 'install' : 'unsupported', permission };
   }
   const own = await registration.pushManager.getSubscription();
   const classic = await classicWorker(registration);
