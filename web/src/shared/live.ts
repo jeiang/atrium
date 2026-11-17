@@ -7,19 +7,44 @@ declare module '@tanstack/svelte-query' {
   }
 }
 
+const TOPIC_SPACING_MS = 2_000;
+
 export function topicInvalidator(client: QueryClient): (notice: AppNotice) => void {
   const revisions = new Map<string, number>();
-  const invalidate = (topic: string): void => {
-    const covers = (query: Query): boolean => query.meta?.topics?.includes(topic) ?? false;
-    // A refetch joins a first load still in flight instead of restarting it,
-    // so that load could answer from before the change. Cancel those loads
-    // first (back to pending, no error), then refetch.
-    void client
-      .cancelQueries({
-        predicate: (query) => covers(query) && query.state.fetchStatus === 'fetching' && query.state.data === undefined,
-      })
-      .then(() => client.invalidateQueries({ predicate: covers }));
+  const behind = new Set<string>();
+  const timers = new Map<string, number>();
+
+  const schedule = (query: Query): void => {
+    if (query.state.fetchStatus !== 'idle') {
+      behind.add(query.queryHash);
+      return;
+    }
+    if (timers.has(query.queryHash)) return;
+    const settled = Math.max(query.state.dataUpdatedAt, query.state.errorUpdatedAt);
+    const wait = Math.max(0, settled + TOPIC_SPACING_MS - Date.now());
+    timers.set(
+      query.queryHash,
+      window.setTimeout(() => {
+        timers.delete(query.queryHash);
+        void client.invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false });
+      }, wait),
+    );
   };
+
+  client.getQueryCache().subscribe((event) => {
+    if (event.type !== 'updated' || event.query.state.fetchStatus !== 'idle') return;
+    if (behind.delete(event.query.queryHash)) schedule(event.query);
+  });
+
+  const invalidate = (topic: string): void => {
+    for (const query of client.getQueryCache().findAll({
+      predicate: (query) => query.meta?.topics?.includes(topic) ?? false,
+    })) {
+      if (query.isActive()) schedule(query);
+      else query.invalidate();
+    }
+  };
+
   return (notice) => {
     if (notice.kind === 'change') {
       const known = revisions.get(notice.topic);

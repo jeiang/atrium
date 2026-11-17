@@ -18,7 +18,17 @@ export interface CalendarRequest {
 }
 
 const ZONE = '+01:00';
-const log = globalThis as typeof globalThis & { atriumCalendarRequests?: CalendarRequest[] };
+const EVENTS = 'atrium-mock-events';
+const log = globalThis as typeof globalThis & {
+  atriumCalendarRequests?: CalendarRequest[];
+  atriumCalendarReads?: number;
+};
+
+function publish(topic: string): void {
+  const channel = new BroadcastChannel(EVENTS);
+  channel.postMessage({ topic });
+  channel.close();
+}
 
 function shift(monday: string, days: number): string {
   const [y = 0, m = 1, d = 1] = monday.split('-').map(Number);
@@ -197,6 +207,8 @@ export function calendarHandlers(read: () => { calendar?: CalendarScenario }) {
   return [
     http.get(`*${API_BASE}/calendar/events`, async ({ request }) => {
       const state = scenario();
+      log.atriumCalendarReads = (log.atriumCalendarReads ?? 0) + 1;
+      publish('connections');
       if (state.delay) await delay(state.delay);
       if (state.error) return refusal(503, 'unavailable', 'The calendar mirror is not reachable.');
       const url = new URL(request.url);
