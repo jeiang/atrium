@@ -185,8 +185,8 @@ func queueRead[T any](ctx context.Context, s *Service, name application.Name, in
 	covered := struct {
 		Input   any      `json:"input"`
 		Modules []string `json:"modules"`
-		Minute  int64    `json:"minute"`
-	}{input, shown, int64(now) / 60}
+		Data    T        `json:"data"`
+	}{input, shown, data}
 	return application.Read[T]{Revision: application.Revision(state.Revision(string(name), counters, covered, "operator")), Data: data}, nil
 }
 
