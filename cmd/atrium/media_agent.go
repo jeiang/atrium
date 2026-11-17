@@ -48,11 +48,11 @@ func serveMediaAgent(ctx context.Context, path string, stdout, stderr io.Writer)
 	for _, key := range agent.Quarantined() {
 		_, _ = fmt.Fprintf(stderr, "warning: receipt %s is unreadable and was quarantined\n", key)
 	}
-	ln, err := agent.Listen()
+	ln, err := agent.Listen(os.Getenv("ATRIUM_MEDIA_AGENT_LISTEN_FD"))
 	if err != nil {
 		return fail(err)
 	}
-	vpn, err := agent.ListenVPN()
+	vpn, err := agent.ListenVPN(os.Getenv("ATRIUM_MEDIA_AGENT_VPN_FD"))
 	if err != nil {
 		_ = ln.Close()
 		return fail(err)

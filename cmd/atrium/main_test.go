@@ -141,6 +141,9 @@ func startServeAppArgs(t *testing.T, app *cli.App, logs *lockedBuffer, auth ...s
 		<-done
 		return "", logs, nil, err
 	}
+	for _, handed := range []string{"ATRIUM_SERVE_LISTEN_FD", "ATRIUM_EMERGENCY_LISTEN_FD"} {
+		setEnv(t, handed, "")
+	}
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()

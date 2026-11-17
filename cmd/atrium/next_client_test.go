@@ -75,7 +75,7 @@ func nextAsset(t *testing.T) (name string, gzipped []byte) {
 
 func TestNextClientServesTheShell(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	port := freeLocalPort(t)
+	port := handOverEmergency(t)
 	s := startAPISite(t, dir, api, "--emergency-port", port)
 	shell, err := fs.ReadFile(app.FS, "index.html")
 	if err != nil {

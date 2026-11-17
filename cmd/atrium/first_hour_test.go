@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,15 +36,26 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 	} {
 		setEnv(t, name, value)
 	}
-	start := func(name string, args ...string) *serveProcess {
+	start := func(name string, emergency net.Listener, args ...string) *serveProcess {
 		t.Helper()
 		addrFile := filepath.Join(dir, name+"-addr")
 		cmd := cliExitProcessArgs(t, append([]string{"serve", "--host", "127.0.0.1", "--port", "0"}, args...))
 		cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_SERVE_ADDR_FILE="+addrFile)
+		if emergency != nil {
+			f, err := emergency.(*net.TCPListener).File()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = f.Close() }()
+			cmd.ExtraFiles = []*os.File{f}
+			cmd.Env = append(cmd.Env, "ATRIUM_EMERGENCY_LISTEN_FD=3")
+		}
 		return startServeProcess(t, cmd, addrFile)
 	}
-	emergencyPort := freeLocalPort(t)
-	public := start("public", "--auth", "oidc", "--allowed-host", "127.0.0.1", "--emergency-port", emergencyPort)
+	listener := heldListener(t)
+	_, emergencyPort, _ := net.SplitHostPort(listener.Addr().String())
+	public := start("public", listener, "--auth", "oidc", "--allowed-host", "127.0.0.1", "--emergency-port", emergencyPort)
+	_ = listener.Close()
 	base := "http://" + public.addr
 	if code, _, _ := wimGet(t, base+"/login"); code != http.StatusOK {
 		t.Fatalf("unconfigured sign-in status = %d, want 200", code)
@@ -69,7 +81,7 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 	if code := public.stop(t, syscall.SIGTERM); code != cli.ExitOK {
 		t.Fatalf("public serve stop = %d, want 0", code)
 	}
-	local := start("local", "--auth", "local")
+	local := start("local", nil, "--auth", "local")
 	if code, _, _ := wimGet(t, "http://"+local.addr+"/settings/auth"); code != http.StatusOK {
 		t.Fatalf("local settings on the same keyed database = %d, want 200", code)
 	}

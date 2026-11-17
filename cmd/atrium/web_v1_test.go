@@ -183,7 +183,7 @@ func TestWebChatPageReads(t *testing.T) {
 
 func TestWebSurfaceAdmitsOnlyTheWebSession(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	port := freeLocalPort(t)
+	port := handOverEmergency(t)
 	s := startAPISite(t, dir, api, "--emergency-port", port)
 	owner := s.token("owner")
 

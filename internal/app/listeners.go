@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/jeiang/atrium/internal/listenfd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -23,27 +24,27 @@ type listeners struct {
 	public, emergency, ops *listener
 }
 
-func bind(plan web.Plan, opsAddr string) (*listeners, error) {
+func bind(plan web.Plan, opsAddr, publicFD, emergencyFD string) (*listeners, error) {
 	ls := &listeners{}
 	var err error
-	if ls.public, err = listen("public", plan.Public.Addr); err != nil {
+	if ls.public, err = listen("public", publicFD, plan.Public.Addr); err != nil {
 		return nil, err
 	}
 	if plan.Emergency != nil {
-		if ls.emergency, err = listen("emergency", plan.Emergency.Addr); err != nil {
+		if ls.emergency, err = listen("emergency", emergencyFD, plan.Emergency.Addr); err != nil {
 			return nil, errors.Join(err, ls.close())
 		}
 	}
 	if opsAddr != "" {
-		if ls.ops, err = listen("ops", opsAddr); err != nil {
+		if ls.ops, err = listen("ops", "", opsAddr); err != nil {
 			return nil, errors.Join(err, ls.close())
 		}
 	}
 	return ls, nil
 }
 
-func listen(name, addr string) (*listener, error) {
-	l, err := net.Listen("tcp", addr)
+func listen(name, fd, addr string) (*listener, error) {
+	l, err := listenfd.Listen(fd, addr)
 	if err != nil {
 		return nil, fmt.Errorf("%s listener: %w", name, err)
 	}
