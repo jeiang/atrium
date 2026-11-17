@@ -127,13 +127,12 @@ func ICloudLogin(ctx context.Context, login Login) (config.CalDAVLogin, error) {
 	}
 	password := ""
 	if login.DAV != nil && login.DAV.ID() == ICloudID(account.Name) {
-		if value, err := login.DAV.Credential("mail/" + account.Name + "/password"); err == nil {
-			password = value
-		}
+		password, _ = icloudPassword(ctx, login.DAV, account.Name)
 	}
 	if password == "" {
 		password, _ = config.From(ctx).Password(account.Name)
 	}
+	password = config.NormalizePassword(password)
 	if password == "" {
 		return config.CalDAVLogin{}, config.NotConfigured("the iCloud app password is not set")
 	}
@@ -209,7 +208,12 @@ func outcome(capability string, err error) (connections.Result, bool) {
 }
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Validate: validateICloud, Test: testICloud}}
+	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Shares: sharedPassword, Validate: validateICloud, Test: testICloud}}
+}
+
+func sharedPassword(id connections.ID) (connections.ID, string) {
+	account := strings.TrimPrefix(string(id), "icloud/")
+	return connections.ID("mail/" + account), "mail/" + account + "/password"
 }
 
 func validateICloud(c connections.Candidate) error {
@@ -239,7 +243,19 @@ func validateICloud(c connections.Candidate) error {
 }
 
 func icloudPassword(ctx context.Context, lease *connections.Lease, account string) (string, error) {
-	password, err := lease.Credential("mail/" + account + "/password")
+	password, err := rawICloudPassword(ctx, lease, account)
+	if password = config.NormalizePassword(password); err == nil && password == "" {
+		err = errors.New("the iCloud app password is not set")
+	}
+	return password, err
+}
+
+func rawICloudPassword(ctx context.Context, lease *connections.Lease, account string) (string, error) {
+	password, err := lease.OwnerCredential(ctx)
+	if err == nil && password != "" {
+		return password, nil
+	}
+	password, err = lease.Credential("mail/" + account + "/password")
 	if err == nil && password != "" {
 		return password, nil
 	}
@@ -302,8 +318,11 @@ func testICloud(ctx context.Context, lease *connections.Lease, caps []connection
 			results = append(results, connections.Result{Capability: cap.Name, State: connections.Failing, Reason: err.Error()})
 		default:
 			data, _ := json.Marshal(map[string]any{"collections": len(collections)})
-			results = append(results, connections.Result{Capability: cap.Name, State: connections.OK,
-				Reason: fmt.Sprintf("%d collections", len(collections)), Data: data})
+			reason := fmt.Sprintf("%d collections", len(collections))
+			if len(collections) == 1 {
+				reason = "1 collection"
+			}
+			results = append(results, connections.Result{Capability: cap.Name, State: connections.OK, Reason: reason, Data: data})
 		}
 	}
 	if len(results) == 0 {

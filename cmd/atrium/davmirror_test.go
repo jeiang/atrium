@@ -316,11 +316,12 @@ credential_files = { "mail/icloud/password" = %q }
 }
 
 type icloudTest struct {
-	ID      string `json:"id"`
-	Enabled bool   `json:"enabled"`
-	State   string `json:"state"`
-	Reason  string `json:"reason"`
-	Results []struct {
+	ID       string `json:"id"`
+	Enabled  bool   `json:"enabled"`
+	State    string `json:"state"`
+	Reason   string `json:"reason"`
+	ReauthAt string `json:"reauth_at"`
+	Results  []struct {
 		Capability string `json:"capability"`
 		State      string `json:"state"`
 		Reason     string `json:"reason"`
@@ -426,5 +427,16 @@ func TestOneICloudConnectionServesContactsAndCalendarWhileEitherUnitIsOff(t *tes
 	}
 	if rows, credentials := icloudRows(t, dir); rows != 1 || credentials != 1 {
 		t.Fatalf("icloud rows after a wrong password = %d with %d credentials, want one row with one credential", rows, credentials)
+	}
+	since := view.ReauthAt
+	if since == "" {
+		t.Fatalf("a wrong password left no sign-in time: %+v", view)
+	}
+	if again := testICloudConnection(t); again.ReauthAt != since {
+		t.Errorf("a second refusal moved the sign-in time from %s to %s", since, again.ReauthAt)
+	}
+	sharedICloudHost(t, dir, davPassword)
+	if view = testICloudConnection(t); view.State != "ok" || view.ReauthAt != "" {
+		t.Errorf("after the right password the connection is %s with sign-in time %q, want ok and none", view.State, view.ReauthAt)
 	}
 }

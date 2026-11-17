@@ -62,6 +62,7 @@ type Repair struct {
 	Severity   string   `json:"severity"`
 	Features   []string `json:"features"`
 	Fix        string   `json:"fix"`
+	Hint       string   `json:"hint,omitempty"`
 }
 
 type Dependent struct {
@@ -250,6 +251,9 @@ func (r *Registry) Resolve(views []View) Dependencies {
 		}
 		rep := Repair{ID: RepairID(v.ID, class), Connection: v.ID, Label: v.Label, Class: class, State: state, Reason: reason,
 			Owner: v.ConfigSource, Severity: SeverityNotice, Features: []string{}, Fix: Screen}
+		if class == RepairAuth {
+			rep.Hint = RepairHint(v)
+		}
 		for _, b := range affected[v.ID] {
 			for _, f := range b.Features {
 				if !slices.Contains(rep.Features, f) {

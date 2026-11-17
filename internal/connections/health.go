@@ -31,6 +31,7 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 		return
 	}
 	label := string(id)
+	hint := ""
 	if view, err := s.Get(context.WithoutCancel(ctx), id); err == nil {
 		if view.Idle != "" {
 			return
@@ -38,11 +39,17 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 		if view.Label != "" {
 			label = view.Label
 		}
+		if next == NeedsReauth {
+			hint = RepairHint(view)
+		}
 	}
 	state := strings.ReplaceAll(string(next), "_", " ")
 	body := label + ": " + state
 	if reason != "" {
 		body += ": " + reason
+	}
+	if hint != "" {
+		body += "; " + hint
 	}
 	if RepairClass(next) != "" {
 		if features := s.affectedFeatures(context.WithoutCancel(ctx), id); len(features) > 0 {
@@ -52,6 +59,22 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil {
 		log.Warn("connection notification failed", logx.Integration, string(id), logx.Err, err.Error())
 	}
+}
+
+const PinnedHint = "the credential is changed in host configuration"
+
+func RepairHint(v View) string {
+	for _, c := range v.Credentials {
+		switch {
+		case c.Owner != "" && c.Pinned:
+			return "it uses the credential of " + string(c.Owner) + "; " + PinnedHint
+		case c.Owner != "":
+			return "it uses the credential of " + string(c.Owner) + "; change it there"
+		case c.Pinned:
+			return PinnedHint
+		}
+	}
+	return ""
 }
 
 // CheckOne re-verifies one connection, using its silent check when the
