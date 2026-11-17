@@ -36,32 +36,32 @@ import (
 )
 
 type (
-	Skip                   = mailops.Skip
-	TextsFunc              = embed.TextsFunc
-	ServiceUnavailable     = httpx.ServiceUnavailable
-	SearchFilters          = search.Filters
-	NotConfigured          = config.NotConfigured
-	BacklogError           = backlog.Error
-	ReplaySummary          = replay.Summary
-	RuleError              = rules.RuleError
-	RuleAction             = rules.Action
-	RulePreviewResult      = ruleedit.Preview
-	ScanResult             = scanutil.Result
-	CorrectionError        = corrections.Error
-	MessageView            = message.View
-	TriageRow              = triage.Row
-	TriageFolder           = triage.Folder
-	TriageFilterError      = triage.FilterError
-	DraftRow               = drafts.Row
-	DraftStatus            = drafts.Status
-	DraftError             = drafts.Error
-	DraftStale             = drafts.Stale
-	DraftSendOutcome       = drafts.Result
-	DraftOutcomeUnknown    = drafts.OutcomeUnknown
-	UnknownAccount         = run.UnknownAccount
-	OpenFunc               = mail.OpenFunc
-	Pass                   = run.Pass
-	Config                 = config.Config
+	Skip                = mailops.Skip
+	TextsFunc           = embed.TextsFunc
+	ServiceUnavailable  = httpx.ServiceUnavailable
+	SearchFilters       = search.Filters
+	NotConfigured       = config.NotConfigured
+	BacklogError        = backlog.Error
+	ReplaySummary       = replay.Summary
+	RuleError           = rules.RuleError
+	RuleAction          = rules.Action
+	RulePreviewResult   = ruleedit.Preview
+	ScanResult          = scanutil.Result
+	CorrectionError     = corrections.Error
+	MessageView         = message.View
+	TriageRow           = triage.Row
+	TriageFolder        = triage.Folder
+	TriageFilterError   = triage.FilterError
+	DraftRow            = drafts.Row
+	DraftStatus         = drafts.Status
+	DraftError          = drafts.Error
+	DraftStale          = drafts.Stale
+	DraftSendOutcome    = drafts.Result
+	DraftOutcomeUnknown = drafts.OutcomeUnknown
+	UnknownAccount      = run.UnknownAccount
+	OpenFunc            = mail.OpenFunc
+	Pass                = run.Pass
+	Config              = config.Config
 )
 
 const (

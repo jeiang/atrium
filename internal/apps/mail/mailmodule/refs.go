@@ -5,7 +5,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/drafts"
-	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -15,10 +14,6 @@ func Refs() []module.RefKind {
 		module.NumberedRef("mail", func(ctx context.Context, q db.Querier, id int64, number string) (*module.Ref, error) {
 			label, err := mail.Subject(ctx, q, id)
 			return &module.Ref{Label: label, Line: "About mail message " + number + "."}, err
-		}),
-		module.NumberedRef("package", func(ctx context.Context, q db.Querier, id int64, number string) (*module.Ref, error) {
-			label, err := tracking.Label(ctx, q, id)
-			return &module.Ref{Label: label, Line: "About tracked package " + number + "."}, err
 		}),
 	}
 }

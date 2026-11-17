@@ -23,7 +23,6 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/apps/mail/run"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
-	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -63,7 +62,7 @@ func (m Module) classifiers(ctx context.Context, env config.Env, d *db.DB, cfg c
 }
 
 func AttentionSources() []attention.Source {
-	return []attention.Source{attentionsources.Drafts(), attentionsources.Packages()}
+	return []attention.Source{attentionsources.Drafts()}
 }
 
 func Requirements() []module.Requirement {
@@ -81,7 +80,6 @@ func SettingGroups() []settings.Group {
 		{Name: "loops", Title: "Open loops", Keys: []string{
 			config.KeyLoopsWaitingAfterDays, config.KeyLoopsRemindAheadDays, config.KeyLoopsRemindHour, config.KeyLoopsSnoozeDefaultDays,
 		}},
-		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 	}
 }
 
@@ -116,7 +114,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	}
 	cmds = append(cmds, mailCmds.ScanCommands()...)
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
-	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	operations, bindings := mailReadOperations()
 	accountOps, accountBindings := mailAccountOperations()
 	operations = append(operations, accountOps...)
@@ -151,24 +148,23 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Kind: connections.Kind(endpoint.KindEmbedding), Capability: "embeddings", Features: []string{"mail search"}},
 			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilityIMAP, Features: []string{"mail sync"}},
 			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilitySMTP, Features: []string{"mail sending"}},
-			{Kind: tracking.KindShip24, Soft: true, Capability: "api", Features: []string{"package tracking"}},
 		},
 		Packages: []string{"internal/apps/mail"},
 		Tables: []string{"accounts", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state",
-			"mail_scans", "mailboxes", "message_fts", "messages", "package_events", "packages", "rules", "watch_dismissed"},
+			"mail_scans", "mailboxes", "message_fts", "messages", "rules", "watch_dismissed"},
 		Operations:      operations,
 		Bindings:        append(bindings, finalBindings()...),
 		Recover:         recoverDrafts,
 		HasOperatorData: accounts.ExistsAny,
-		EffectOrigins:   []module.EffectOrigin{{Name: ledger.AutoOrigin}, {Name: "operator_send"}, {Name: "tracking", Direct: true}},
+		EffectOrigins:   []module.EffectOrigin{{Name: ledger.AutoOrigin}, {Name: "operator_send"}},
 		Refs:            Refs(),
 		Communications:  feed{env: mc.Env},
 		Attachments:     []module.Attachment{draftAttachment()},
-		Settings:        slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Settings:        mail.Settings(),
 		Host:            mail.HostSettings(),
 		Attention:       AttentionSources(),
 		Search:          SearchSources(),
-		Jobs:            []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		Jobs:            []scheduler.Definition{m.syncJob(mc.Env), m.scanJob(mc.Env)},
 		ServiceSets:     m.watchServices(mc.Env),
 		ServiceSetName:  "mail/watch",
 		Requires:        Requirements(),
@@ -186,9 +182,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule(mailPageService)},
-			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
-				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
-			}},
+			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates()},
 			{Module: accountpages.Module(mailPageService, mailSettingsService), Templates: accountpages.Templates()},
 		},
 		Groups:   SettingGroups(),
@@ -218,7 +212,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return review.Kinds{Mode: mail.Mode, Needs: drafts.ReviewNeeds, Drafts: store.ReviewDrafts, Actions: l.ReviewActions()}
 		},
 		ActivityCategory: unit.Mail,
-		Connections:      slices.Concat(Connections(), tracking.Connections()),
+		Connections:      Connections(),
 		AccountSync:      mailconn.AccountSync(),
 		Corpora:          []embed.Corpus{mailembedding.Corpus},
 		Queues:           Queues(),

@@ -27,7 +27,7 @@ var exceptions = []exception{
 	{"internal/apps/mail/mailtools", "internal/assistant/application", "P13.2b"},
 	{"internal/apps/mail/run", "internal/assistant/classifier", "P13.1b"},
 	{"internal/apps/mail/run", "internal/calendar/candidates", "P12.2"},
-	{"internal/apps/mail/watches", "internal/assistant/classifier", "P13.2b"},
+	{"internal/apps/packages/watches", "internal/assistant/classifier", "P13.2b"},
 	{"internal/apps/serverops", "internal/assistant", unplanned},
 	{"internal/apps/serverops", "internal/assistant/classifier", unplanned},
 	{"internal/apps/serverops", "internal/assistant/jobworker", unplanned},
