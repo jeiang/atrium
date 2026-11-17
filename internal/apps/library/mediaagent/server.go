@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
+	"github.com/jeiang/atrium/internal/listenfd"
 )
 
 const (
@@ -115,8 +116,8 @@ func (a *Agent) Close() error {
 	return a.state.close()
 }
 
-func (a *Agent) Listen() (net.Listener, error) {
-	ln, err := net.Listen("tcp", a.cfg.Control.Listen)
+func (a *Agent) Listen(fd string) (net.Listener, error) {
+	ln, err := listenfd.Listen(fd, a.cfg.Control.Listen)
 	if err != nil {
 		return nil, err
 	}

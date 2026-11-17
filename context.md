@@ -1724,7 +1724,11 @@ claims about the running application. Operator contracts are in
   regardless of forwarded address headers. `serve --emergency-port` runs such a
   listener beside the public one in the same process, sharing the database,
   settings and API tokens but not the rate limiter; public, emergency and ops
-  listeners are all bound before readiness. There is no flag that serves
+  listeners are all bound before readiness. `serve --listen-fd` and
+  `--emergency-listen-fd` (and `media-agent --listen-fd` and
+  `--vpn-listen-fd`) serve an inherited, already-bound socket instead of
+  binding the configured address; the socket must be bound to the configured
+  host. The tests use them to hand over a port they hold. There is no flag that serves
   without authentication on a non-loopback address. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database, or the host file's `app_keys.link_key_file`, whose bytes are
