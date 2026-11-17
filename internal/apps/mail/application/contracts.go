@@ -117,7 +117,15 @@ func Zone(ctx context.Context, env config.Env) (*time.Location, error) {
 func SelectAccounts(ctx context.Context) ([]string, error) { return run.SelectAccounts(ctx, "") }
 
 func (s *Service) TriageRow(ctx context.Context, messageID int64) (*triage.Row, error) {
-	return triage.Get(ctx, s.db.Read, messageID)
+	row, err := triage.Get(ctx, s.db.Read, messageID)
+	if err != nil || row == nil {
+		return row, err
+	}
+	rows := []triage.Row{*row}
+	if err := linkRules(ctx, s.db.Read, rows); err != nil {
+		return nil, err
+	}
+	return &rows[0], nil
 }
 
 func (s *Service) Paused() bool { return pause.Paused(s.cfg.PausePath()) }

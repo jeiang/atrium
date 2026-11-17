@@ -267,14 +267,24 @@ func (s *service) ruleUpdate(w http.ResponseWriter, r *http.Request) {
 	s.saveRule(w, r, web.PathParam(r, "rule_id"), false, readRuleForm(web.FormValues(r)))
 }
 
+const ruleDecisionsPage = 20
+
 func (s *service) ruleEdit(w http.ResponseWriter, r *http.Request) {
-	read, err := s.reads.Rules(r.Context(), mailapp.RulesInput{ID: web.PathParam(r, "rule_id"), Form: true})
+	id := web.PathParam(r, "rule_id")
+	read, err := s.reads.Rules(r.Context(), mailapp.RulesInput{ID: id, Form: true})
 	var problem *application.Error
 	if errors.As(err, &problem) && problem.Code == application.NotFound {
 		s.fail(w, r, http.StatusNotFound, "unknown rule")
 		return
 	}
 	check(err)
+	offset, ok := laxInt64(web.ValueOr(r.URL.Query(), "decisions", "0"))
+	if !ok || offset < 0 {
+		offset = 0
+	}
+	decisions, err := s.reads.RuleDecisions(r.Context(), mailapp.RuleDecisionsInput{ID: id, Offset: int(offset), Limit: ruleDecisionsPage})
+	check(err)
+	read.Data.Edit.Decisions = &decisions.Data
 	s.page(w, r, http.StatusOK, "rules", "rule_edit.gohtml", read.Data.Edit, nil)
 }
 
