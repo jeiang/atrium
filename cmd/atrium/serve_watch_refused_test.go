@@ -40,8 +40,6 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 	if work := health["mail-watch/work"]; work.Status != "running" || work.Restarts != 0 {
 		t.Fatalf("work watch beside the refused home login %+v, want running and untouched", work)
 	}
-	// Other paths (the connection check, the sync job) may still dial home;
-	// the watch itself must not start again inside its hold.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := work.Wake(ctx); err != nil {

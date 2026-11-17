@@ -1631,8 +1631,6 @@ func (s *Store) Disconnect(ctx context.Context, id ID, commits ...Commit) error 
 
 const observeRefresh = time.Minute
 
-// Recover records capability as ok after a real request to it succeeded,
-// without a check request. A row changed since v was read is left alone.
 func (s *Store) Recover(ctx context.Context, v View, capability string) error {
 	err := s.Observe(ctx, v.ID, v.revision, Result{Capability: capability, State: OK})
 	if errors.As(err, new(*Conflict)) {

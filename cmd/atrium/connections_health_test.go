@@ -307,9 +307,6 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 
 	embed.setStatus(http.StatusInternalServerError)
 	s.stop()
-	// Request outcomes reach only the serving app's health watch, so the
-	// automatic failure comes from the start sweep of a row last checked a day
-	// ago, still inside the grace window of its last success.
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 90000 WHERE id = 'service/embedding'"); err != nil {
 		t.Fatal(err)
 	}

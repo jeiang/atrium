@@ -68,8 +68,6 @@ func validate(defs []ServiceDefinition) ([]ServiceDefinition, error) {
 	return out, nil
 }
 
-// HoldError asks the supervisor to wait at least For before the next start,
-// in place of a shorter backoff delay.
 type HoldError struct {
 	Err error
 	For time.Duration
@@ -78,5 +76,4 @@ type HoldError struct {
 func (e *HoldError) Error() string { return e.Err.Error() }
 func (e *HoldError) Unwrap() error { return e.Err }
 
-// Hold wraps err so the service waits at least d before it starts again.
 func Hold(err error, d time.Duration) error { return &HoldError{Err: err, For: d} }

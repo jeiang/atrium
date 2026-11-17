@@ -167,11 +167,9 @@ func HealthStates(ctx context.Context, q db.Querier) ([]HealthState, error) {
 }
 
 type outcome struct {
-	ID       ID
-	Revision int64
-	OK       bool
-	// Capability is the capability the request used, when the kind says
-	// which one its endpoint serves.
+	ID         ID
+	Revision   int64
+	OK         bool
 	Capability string
 }
 
@@ -206,9 +204,6 @@ var (
 	reporters sync.Map
 )
 
-// Outcomes receives the request outcomes of leases opened under reg, the
-// connection registry of one running app. Each serving app registers its own
-// channel, so outcomes never cross to another app in the same process.
 func Outcomes(reg *Registry) (<-chan outcome, func()) {
 	ch := make(chan outcome, 64)
 	outcomes.Store(reg, ch)
@@ -228,7 +223,6 @@ func report(reg *Registry, o outcome) {
 		}
 		succeeded.Store(key, now)
 	} else {
-		// The first success after a failure is the one that recovers.
 		succeeded.Delete(key)
 	}
 	select {
@@ -370,8 +364,6 @@ func (l *Lease) reporting(endpoint string, client *http.Client) *http.Client {
 	return client
 }
 
-// serves names the capability that requests to endpoint use, or "" when the
-// kind does not say and offers more than one.
 func (l *Lease) serves(endpoint string) string {
 	def, ok := l.store.reg.Lookup(l.kind)
 	switch {

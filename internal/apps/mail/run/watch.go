@@ -39,8 +39,6 @@ var watchBackoff = runtime.Backoff{
 	ResetAfter: 10 * time.Minute,
 }
 
-// refusedLogins counts consecutive refused logins per account and
-// credential revision; a new credential starts the count again.
 var refusedLogins = struct {
 	sync.Mutex
 	byAccount map[string]refusal
@@ -69,8 +67,6 @@ func loginAccepted(account string) {
 	delete(refusedLogins.byAccount, account)
 }
 
-// refusedHold is how long the watch waits after its nth consecutive refused
-// login: 1 h, 3 h, 6 h, then 12 h.
 func refusedHold(n int) time.Duration {
 	switch {
 	case n <= 1:
@@ -230,8 +226,6 @@ func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) 
 				return err
 			}
 			if !healthy {
-				// Only a completed IDLE or NOOP round trip resets the
-				// restart backoff; a session that drops at once does not.
 				s.Healthy()
 				healthy = true
 			}
