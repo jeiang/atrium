@@ -690,9 +690,15 @@ releases the block and governs later undo. Resolving a draft as sent updates
 the draft but leaves its original SMTP attempt unknown; it does not resend.
 A partial undo must be checked and resolved rather than repeatedly invoked.
 
-A push notification carries only a title, a body and the path of the
-signed-in page for its subject, such as `/proposals/<id>`. It has no action
-buttons, carries no token, and opening it writes nothing.
+A push notification carries only a title, a body and the path of the page
+for its subject in the new client, such as `/next/proposals/<id>`. It has no
+action buttons, carries no token, and opening it writes nothing. A click
+brings forward a window already showing that page, else moves an open atrium
+window there, else opens a new one. Notifications sent before this change
+still open their item, and a resend from the notification inbox uses the new
+path. If the item was already decided or no longer exists, the Inbox opens and
+says nothing waits there. If you are signed out, atrium asks you to sign in and
+then shows the item.
 
 When a chat run started from the web or the API stops to ask you a question
 and no open page is following that run, you get one push, "atrium: question

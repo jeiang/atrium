@@ -252,7 +252,15 @@ claims about the running application. Operator contracts are in
   `service/webpush` connection's `credential_files.vapid_private` host file,
   and the subject comes from `webpush_subject`, edited on the Notifications page,
   which the notifications module requires. A push carries the title, a body of at most 240 characters and a
-  URL path to the signed-in page for its subject; it has no action buttons and opening it writes nothing. It is encrypted per
+  path in the new client for its subject; it has no action buttons and opening it writes nothing. The notifier maps the
+  stored link at send time (`urlx.ClientBase`, `/next/` until the client moves to `/`): `/proposals/{id}`, `/drafts/{id}`
+  and `/chat/{id}` keep their path under the base, the Notifications and Connections settings pages map to their
+  new-client pages, `/scheduled` maps to Routines and anything else opens the Inbox. Stored notification rows keep their
+  original link, and a resend maps it again. A click focuses a window already on that address, else navigates the
+  worker's open window there, else opens one; both the new client worker and the classic root worker (which holds
+  older subscriptions) do this. The new client worker also sends an already shown `/proposals/{id}`, `/drafts/{id}` or
+  `/chat/{id}` to its base. A decided or unknown item opens the Inbox saying nothing waits there; signed out, sign-in
+  returns to the card. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
@@ -320,7 +328,7 @@ claims about the running application. Operator contracts are in
   contacts/calendar concern and are not an open-loop source.
 - Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain.
 - A permission proposal sends an assistant notification whose push opens
-  `/proposals/{id}`, where the operator decides it while signed in. The
+  `/next/proposals/{id}`, where the operator decides it while signed in. The
   generated `action_link_key` secret, or the host file's
   `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
   fingerprints; host-file bytes are never copied into the database.

@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { Home, PendingBody } from '../src/contract/index.ts';
+import type { Draft, Home, PendingBody } from '../src/contract/index.ts';
 import type { Handler } from './server.ts';
 
 export const CSRF = 'csrf-fictional-7f3a91';
@@ -10,6 +10,8 @@ export interface Api {
   needsYou: number;
   logouts: number;
   calls: string[];
+  drafts?: Draft[];
+  loginUrl?: string;
 }
 
 export const names: Record<string, string> = { 'op-1': 'Ada Operator', 'op-2': 'Grace Operator' };
@@ -132,7 +134,13 @@ export function fakeApi(api: Api): Handler {
     const path = pathname.slice('/web/v1'.length);
     api.calls.push(`${method} ${path}`);
     if (path === '/session' && method === 'GET') {
-      if (!api.signedIn) return json(res, 401, { error: { code: 'unauthenticated', message: 'Sign in to continue.' } });
+      if (!api.signedIn) {
+        const signIn = api.loginUrl ? { modes: ['oidc'], login_url: api.loginUrl, csrf_token: CSRF } : undefined;
+        return json(res, 401, {
+          error: { code: 'unauthenticated', message: 'Sign in to continue.' },
+          ...(signIn ? { sign_in: signIn } : {}),
+        });
+      }
       return json(res, 200, {
         auth_mode: 'oidc',
         csrf_token: CSRF,
@@ -154,6 +162,15 @@ export function fakeApi(api: Api): Handler {
     if (path === '/home') return json(res, 200, home);
     if (path === '/pending') return json(res, 200, pending);
     if (path === '/apps') return json(res, 200, { data: { apps: [] }, revision: '1' });
+    if (path === '/queue' && api.drafts) {
+      return json(res, 200, {
+        data: { items: [], total: 0, counts: { ask: 0, proposal: 0, draft: 0, attention: 0 } },
+        revision: 1,
+      });
+    }
+    const draft = /^\/drafts\/(\d+)$/.exec(path);
+    const found = draft && api.drafts?.find((item) => item.id === Number(draft[1]));
+    if (found) return json(res, 200, found);
     if (path === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' }).end('event: sync\ndata: {"topics":[]}\n\n');
       return true;
