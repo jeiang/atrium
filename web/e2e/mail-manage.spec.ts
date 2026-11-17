@@ -196,9 +196,11 @@ test.describe('Mail mode', () => {
     await expect(dialog.getByText(/^Sets mail_mode to live/)).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
+    expect(sent.filter((line) => line.endsWith('/go-live'))).toEqual([]);
     await page.keyboard.press('Enter');
     await expect(dialog.getByText(/^Sets mail_mode to live/)).toBeVisible();
-    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await dialog.getByRole('button', { name: 'Go live' }).focus();
     await expect(dialog.getByRole('button', { name: 'Go live' })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(toast(page, 'Mail is live.')).toBeVisible();

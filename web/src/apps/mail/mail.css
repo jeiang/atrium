@@ -90,6 +90,10 @@
     contain-intrinsic-size: auto none auto 8rem;
   }
 
+  .mail-list--paged > .mail-item-wrap {
+    content-visibility: visible;
+  }
+
   .mail-item {
     position: relative;
     display: grid;

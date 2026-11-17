@@ -87,15 +87,20 @@
     </ViewState>
   {:else}
     <p class="meta">{plural(total, 'decision')}</p>
-    <ul class="mail-list mail-list--cards" aria-label="Decisions">
+    <ul class="mail-list mail-list--cards mail-list--paged" aria-label="Decisions">
       {#each items as decision (decision.decision_id)}
         <DecisionCard {decision} />
       {/each}
     </ul>
     {#if decisions.hasNextPage}
-      <Button variant="secondary" pending={decisions.isFetchingNextPage} onclick={() => void decisions.fetchNextPage()}
-        >Show more</Button
-      >
+      <span class="cluster">
+        <Button
+          variant="secondary"
+          pending={decisions.isFetchingNextPage}
+          onclick={() => void decisions.fetchNextPage()}
+          >Show more</Button
+        >
+      </span>
     {/if}
   {/if}
 </MailFrame>
