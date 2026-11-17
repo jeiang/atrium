@@ -16,6 +16,7 @@ import (
 )
 
 func TestOperatorSchedulesRunOnTimeRunNowAndPushOncePerFailure(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {

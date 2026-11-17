@@ -64,6 +64,7 @@ func waitParkedPermission(t *testing.T, d *db.DB, thread int64) int64 {
 }
 
 func TestDeniedFetchResumesWithARefusal(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -106,6 +107,7 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 }
 
 func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -183,6 +185,7 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 }
 
 func TestContactIdentifiersBlockTheInternetButKeepTasksAndNotify(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	contactsDir := filepath.Join(dir, "contacts")
 	setEnv(t, settingEnv(contacts.DirKey), contactsDir)
@@ -234,6 +237,7 @@ func TestContactIdentifiersBlockTheInternetButKeepTasksAndNotify(t *testing.T) {
 }
 
 func TestTaskWrittenFromAMarkedThreadMarksItsReader(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	api.Push(
@@ -274,6 +278,7 @@ func TestTaskWrittenFromAMarkedThreadMarksItsReader(t *testing.T) {
 }
 
 func TestScheduleFromAMarkedThreadStartsMarked(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	api.Push(
@@ -336,6 +341,7 @@ func TestScheduleFromAMarkedThreadStartsMarked(t *testing.T) {
 }
 
 func TestScheduledRunAfterMailReadNotifiesButCannotFetch(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	srv, pages := webPages(t)
 	warm(t, api)

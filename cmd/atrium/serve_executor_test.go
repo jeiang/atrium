@@ -230,6 +230,7 @@ func TestJobRunWithoutServeFails(t *testing.T) {
 }
 
 func TestSyncWithServeRunningDelegates(t *testing.T) {
+	t.Parallel()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mrvMailFixture(t, "shadow")
 	f := fixtureFor(t)
@@ -280,6 +281,7 @@ func TestSyncWithServeRunningDelegates(t *testing.T) {
 }
 
 func TestServeRecoversAStaleMailRunWithoutRerunningIt(t *testing.T) {
+	t.Parallel()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mrvMailFixture(t, "shadow")
 	f := fixtureFor(t)

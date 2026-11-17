@@ -141,6 +141,7 @@ func TestDraftSentFromTheThreadGoesThroughTheSendGate(t *testing.T) {
 }
 
 func TestCalendarCreateAsksInTheThreadAndWritesOnlyOnApproval(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	id := proposalID(t, toolResult(t, "calendar_create", map[string]any{
 		"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00",

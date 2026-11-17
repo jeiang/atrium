@@ -18,6 +18,7 @@ func byTitle(t *testing.T, items []any) map[string]map[string]any {
 }
 
 func TestKnowledgeSubjectPages(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	person := apiData(t, s.do(http.MethodPost, "/api/v1/knowledge", token, map[string]any{
 		"title": "Ana Lima", "aliases": []string{"Ana"}, "scope": "personal",

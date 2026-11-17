@@ -136,6 +136,7 @@ func setLocation(t *testing.T, kv map[string]string) {
 }
 
 func TestHomeWeatherRefreshesInTheBackground(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	startWeatherService(t, dir, `"forecast", "geocoding"`)
 	s := startAPISite(t, dir, api)
@@ -167,6 +168,7 @@ func TestHomeWeatherRefreshesInTheBackground(t *testing.T) {
 }
 
 func TestHomeWeatherNeverWaitsForTheService(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	ws := startWeatherService(t, dir, `"forecast", "geocoding"`)
 	ws.mode.Store("hang")
@@ -184,6 +186,7 @@ func TestHomeWeatherNeverWaitsForTheService(t *testing.T) {
 }
 
 func TestHomeWeatherFailedAndOff(t *testing.T) {
+	t.Parallel()
 	t.Run("failed", func(t *testing.T) {
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 		ws := startWeatherService(t, dir, `"forecast", "geocoding"`)

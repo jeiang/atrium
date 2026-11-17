@@ -119,6 +119,7 @@ func exportPost(t *testing.T, w *asstWeb, action string, fields [][2]string, hx 
 }
 
 func TestObsidianFolderIsHostConfiguration(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := obsidianFixture(t)
 	w := asstBrowse(t, startServeIn(t, dir))
 	const action = "/settings/sections/export_obsidian"
@@ -149,6 +150,7 @@ func lastExportRun(t *testing.T, d *db.DB) (string, string) {
 }
 
 func TestExportWithoutAFolderFails(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	setEnv(t, settingEnv("public_url"), "https://atrium.invalid")
 	if ran := runApp(t, "settings", "set", kbexport.ObsidianKindsKey, "pii,messages,personal"); ran.code != cli.ExitOK {
@@ -179,6 +181,7 @@ func TestExportWithoutAFolderFails(t *testing.T) {
 }
 
 func TestExportToAnUnwritableFolderFails(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	blocker := filepath.Join(t.TempDir(), "taken")
 	if err := os.WriteFile(blocker, []byte("not a folder"), 0o644); err != nil {
@@ -198,6 +201,7 @@ func TestExportToAnUnwritableFolderFails(t *testing.T) {
 }
 
 func TestExportIgnoresRemovedTargetRowsAndUpdatesInPlace(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	vault := filepath.Join(t.TempDir(), "knowledge")
 	obsidianEnable(t, vault)
@@ -243,6 +247,7 @@ func TestExportIgnoresRemovedTargetRowsAndUpdatesInPlace(t *testing.T) {
 }
 
 func TestLegacyExportEffectDoesNotBlockObsidian(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	obsidianEnable(t, vault)
@@ -290,6 +295,7 @@ func obsidianEnable(t *testing.T, vault string) {
 }
 
 func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
+	t.Parallel()
 	dir, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	obsidianEnable(t, vault)
@@ -466,6 +472,7 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 }
 
 func TestInterruptedObsidianWriteBlocksTheExport(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	obsidianEnable(t, vault)
@@ -503,6 +510,7 @@ func TestInterruptedObsidianWriteBlocksTheExport(t *testing.T) {
 }
 
 func TestObsidianRenameKeepsTheMappingUntilTheOldFileIsRemoved(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	obsidianEnable(t, vault)
@@ -548,6 +556,7 @@ func TestObsidianRenameKeepsTheMappingUntilTheOldFileIsRemoved(t *testing.T) {
 }
 
 func TestUndoingAnObsidianExportRemovesItsMapping(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	obsidianEnable(t, vault)

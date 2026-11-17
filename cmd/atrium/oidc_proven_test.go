@@ -9,6 +9,7 @@ import (
 )
 
 func TestWimOIDCKeepsAProvenClientAuthAcrossTestsUntilItsSecretChanges(t *testing.T) {
+	t.Parallel()
 	s := wimOIDCSite(t)
 	b := s.browser()
 	b.mustSignIn("admin")

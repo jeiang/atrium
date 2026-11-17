@@ -33,6 +33,7 @@ func searchHits(t *testing.T, d *db.DB, threadID int64, toolUseID string) ([]int
 }
 
 func TestPrivateSpaceSummariesStayOutOfOtherReaders(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -114,6 +115,7 @@ func TestPrivateSpaceSummariesStayOutOfOtherReaders(t *testing.T) {
 }
 
 func TestPrivateSpacePinnedFactsStayOutOfOtherPrompts(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

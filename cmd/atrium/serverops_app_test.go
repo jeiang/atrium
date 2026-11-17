@@ -86,6 +86,7 @@ func readOpsPage(t *testing.T, d *db.DB, fact string) (opsPage, int) {
 }
 
 func TestServerOpsToolsRunOnlyInWorkerRuns(t *testing.T) {
+	t.Parallel()
 	dir, fake, api, f, d := opsClassifierFixture(t, nil)
 	warm(t, api)
 	thread := opsWorkerThread(t, fake, api, f, d)
@@ -131,6 +132,7 @@ func TestServerOpsToolsRunOnlyInWorkerRuns(t *testing.T) {
 }
 
 func TestOpsFindingUpdatesItsPageInPlace(t *testing.T) {
+	t.Parallel()
 	_, fake, api, f, d := opsClassifierFixture(t, nil)
 	warm(t, api)
 	thread := opsWorkerThread(t, fake, api, f, d)
@@ -167,6 +169,7 @@ func TestOpsFindingUpdatesItsPageInPlace(t *testing.T) {
 }
 
 func TestServerOpsAppOffLeavesGrafanaIdle(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{up: 1}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)

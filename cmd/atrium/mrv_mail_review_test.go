@@ -527,6 +527,7 @@ func mrvAtoi(t *testing.T, s string) int {
 }
 
 func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -607,6 +608,7 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 }
 
 func TestMrvDecisionsListEachDecisionOnceAcrossCheckAndFiled(t *testing.T) {
+	t.Parallel()
 	m := mrvMailFixture(t, "shadow")
 	h, x := mailtest.RawWith("Second statement", "pay@bank.test", "statement-2", "Another statement is ready.")
 	m.fake.Boxes["INBOX"].Box.Add(h, x, []string{`\Seen`}, nil)

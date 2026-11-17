@@ -96,6 +96,7 @@ func pageAll(t *testing.T, s *apiSite, token, path string) (first []any, rest []
 }
 
 func TestKnowledgeAPILifecycle(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	created := apiData(t, s.do(http.MethodPost, "/api/v1/knowledge", token, map[string]any{
 		"title": "Boiler code", "body": "The boiler code is 4417.", "scope": "work", "marks": []string{"pii"},

@@ -30,6 +30,7 @@ func openBrowserStream(t *testing.T, client *http.Client, base string, threadID,
 }
 
 func TestStreamCapsPerBrowser(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	free := s.hold()
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("late")))
@@ -51,6 +52,7 @@ func TestStreamCapsPerBrowser(t *testing.T) {
 }
 
 func TestStreamBrowserRouteAnswersTheContract(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("browser answer")))
 	threadID, runID := s.start("browser contract")
@@ -74,6 +76,7 @@ func TestStreamBrowserRouteAnswersTheContract(t *testing.T) {
 }
 
 func TestStreamSignOutClosesTheBrowserStream(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	d := asstDB(t, s.dir)
 	release := make(chan struct{})

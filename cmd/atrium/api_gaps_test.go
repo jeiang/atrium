@@ -45,6 +45,7 @@ func kindHits(data map[string]any) map[string][]map[string]any {
 }
 
 func TestKnowledgeWritesReportUndoable(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	if _, err := d.Write.Exec("INSERT INTO projects (id, name, instructions, effort, context_limit, private, created_at, updated_at) VALUES (7, 'Harbor', '', 'high', 200000, 0, 0, 0)"); err != nil {
 		t.Fatal(err)
@@ -76,6 +77,7 @@ func subjectTitles(t *testing.T, s *apiSite, token, path string) ([]string, stri
 }
 
 func TestKnowledgeSubjectsSort(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	for _, row := range []struct {
 		title            string
@@ -114,6 +116,7 @@ func queueItem(t *testing.T, s *apiSite, token, id string) map[string]any {
 }
 
 func TestQueueLoopItemCarriesLoopID(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	if _, err := d.Write.Exec("INSERT INTO open_loops (rowid, thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) VALUES (41, 'thread-a', 'work', 'owe_reply', 9, 100, 'ana@example.com', 'Lease renewal', 100)"); err != nil {
 		t.Fatal(err)
@@ -131,6 +134,7 @@ func TestQueueLoopItemCarriesLoopID(t *testing.T) {
 }
 
 func TestAssistantSubagentRolesRead(t *testing.T) {
+	t.Parallel()
 	s, token, _ := localAPISite(t)
 	items := apiItems(t, apiBody(t, s.do(http.MethodGet, "/api/v1/assistant/subagent-roles", token, nil), http.StatusOK))
 	mail := spaceItem(t, items, "name", "mail")
@@ -144,6 +148,7 @@ func TestAssistantSubagentRolesRead(t *testing.T) {
 }
 
 func TestMailSearchLeavesOutDisabledAccounts(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	for _, stmt := range []string{
 		"INSERT OR IGNORE INTO accounts (name, kind) VALUES ('icloud', 'imap'), ('retired', 'imap')",
@@ -173,6 +178,7 @@ func TestMailSearchLeavesOutDisabledAccounts(t *testing.T) {
 }
 
 func TestCommitmentSnoozeHidesFromQueueAndUndoes(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	if _, err := d.Write.Exec("INSERT INTO tasks (id, title, notes, status, priority, due, created_ts, updated_ts) VALUES (5, 'Pay rent', '', 'open', 'normal', '2020-01-01', 0, 0)"); err != nil {
 		t.Fatal(err)
@@ -199,6 +205,7 @@ func TestCommitmentSnoozeHidesFromQueueAndUndoes(t *testing.T) {
 }
 
 func TestSpaceCreateDefaultsAndRenameIfMatch(t *testing.T) {
+	t.Parallel()
 	s, token, _ := localAPISite(t)
 	id := number(t, apiBody(t, s.do(http.MethodPost, "/api/v1/knowledge/spaces", token, map[string]any{"name": "Harbor"}), http.StatusCreated)["id"])
 	path := fmt.Sprintf("/api/v1/knowledge/spaces/%d", id)
@@ -221,6 +228,7 @@ func TestSpaceCreateDefaultsAndRenameIfMatch(t *testing.T) {
 }
 
 func TestSearchAllFindsSpacesAndContacts(t *testing.T) {
+	t.Parallel()
 	s, token, d, contactsDir := linksSite(t)
 	if err := os.MkdirAll(contactsDir, 0o700); err != nil {
 		t.Fatal(err)
@@ -244,6 +252,7 @@ func TestSearchAllFindsSpacesAndContacts(t *testing.T) {
 }
 
 func TestHomeNeedsYouReadsTheQueue(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	if _, err := d.Write.Exec("INSERT INTO tasks (id, title, notes, status, priority, due, created_ts, updated_ts) VALUES (6, 'Renew the passport', '', 'open', 'normal', '2020-01-01', 0, 0)"); err != nil {
 		t.Fatal(err)

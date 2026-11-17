@@ -45,6 +45,7 @@ func weatherToolRun(t *testing.T, site *connectionSite, api *modelLog) []string 
 }
 
 func TestWeatherAppSwitchesItsToolHomeCardAndConnectionRow(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	reply := openMeteoHandler(t)
@@ -123,6 +124,7 @@ func TestWeatherAppSwitchesItsToolHomeCardAndConnectionRow(t *testing.T) {
 }
 
 func TestWeatherFlagInheritsTheAssistantOnce(t *testing.T) {
+	t.Parallel()
 	flagAudit := func(t *testing.T, dir string) (n int, actor, source string) {
 		t.Helper()
 		d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))

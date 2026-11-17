@@ -30,6 +30,7 @@ func noAppChange(t *testing.T, frames <-chan appFrame, topic string, within time
 }
 
 func TestUsingOrTestingAConnectionWithoutAVisibleChangePublishesNoConnectionsChange(t *testing.T) {
+	t.Parallel()
 	dir, _ := davFixture(t)
 	var working atomic.Bool
 	var refreshes atomic.Int64

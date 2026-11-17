@@ -10,6 +10,7 @@ import (
 )
 
 func TestTaskVerbsLinksFiltersAndUndo(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	frames := appFrames(t, s.openApp())
 	synced := syncedRevisions(t, nextAppFrame(t, frames, "sync"))

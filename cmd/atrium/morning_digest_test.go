@@ -65,6 +65,7 @@ func runJob(t *testing.T, f *fixture, d *db.DB, name string) int64 {
 }
 
 func TestMorningDigestPostsToTodayAndPushes(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
@@ -127,6 +128,7 @@ func TestMorningDigestPostsToTodayAndPushes(t *testing.T) {
 }
 
 func TestDigestStaysQuietWhenNothingToAct(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	push, _ := pushRig(t, dir)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {

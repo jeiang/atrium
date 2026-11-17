@@ -166,6 +166,7 @@ func requestTracking(t *testing.T, api *modelLog, d *db.DB, useID string, packag
 }
 
 func TestShip24ConnectionTestRecordsOkAndRefusesA401(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -197,6 +198,7 @@ func seedTrackRegistrations(t *testing.T, d *db.DB, n int) {
 }
 
 func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -256,6 +258,7 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 }
 
 func TestPackagePollingUpdatesStatusAndNotifiesOnceOnDelivered(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -357,6 +360,7 @@ func TestPackagePollingUpdatesStatusAndNotifiesOnceOnDelivered(t *testing.T) {
 }
 
 func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -397,6 +401,7 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 }
 
 func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -450,6 +455,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 }
 
 func TestPackagePollWithoutAKeyDoesNothing(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -479,6 +485,7 @@ func TestPackagePollWithoutAKeyDoesNothing(t *testing.T) {
 }
 
 func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -530,6 +537,7 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 }
 
 func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -567,6 +575,7 @@ func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
 }
 
 func TestShip24ProbeDropsTheBearerOutsideTheBasePathOnRedirect(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	var mu sync.Mutex
 	seen := map[string]string{}
@@ -611,6 +620,7 @@ func TestShip24ProbeDropsTheBearerOutsideTheBasePathOnRedirect(t *testing.T) {
 }
 
 func TestTrackPackageDoesNotReplayTheTrackerCreationOnARedirect(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit", redirectCreate: "/public/v1/replayed"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))

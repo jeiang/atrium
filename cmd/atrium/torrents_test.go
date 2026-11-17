@@ -16,6 +16,7 @@ import (
 )
 
 func TestTorrentsIntakeKeysAgentWritesToItsOwnTags(t *testing.T) {
+	t.Parallel()
 	const (
 		legacy  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		stamped = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -82,6 +83,7 @@ func TestTorrentsIntakeKeysAgentWritesToItsOwnTags(t *testing.T) {
 }
 
 func TestTorrentsOperatorRemovesAnyTorrentThroughTheAPI(t *testing.T) {
+	t.Parallel()
 	const plain = "cccccccccccccccccccccccccccccccccccccccc"
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
@@ -106,6 +108,7 @@ func TestTorrentsOperatorRemovesAnyTorrentThroughTheAPI(t *testing.T) {
 }
 
 func TestTorrentsShimAddLandsOnDownloadsWhileLibraryIsOn(t *testing.T) {
+	t.Parallel()
 	const fresh = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
@@ -126,6 +129,7 @@ func TestTorrentsShimAddLandsOnDownloadsWhileLibraryIsOn(t *testing.T) {
 }
 
 func TestTorrentsAddWithoutLibraryStaysOnTheAddPage(t *testing.T) {
+	t.Parallel()
 	const fresh = "ffffffffffffffffffffffffffffffffffffffff"
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Media, "false"))
 	mnpMediaRoot(t, dir)
@@ -144,6 +148,7 @@ func TestTorrentsAddWithoutLibraryStaysOnTheAddPage(t *testing.T) {
 }
 
 func TestTorrentsFlagFollowsLibraryOnceAtSeed(t *testing.T) {
+	t.Parallel()
 	flag := module.FlagKey(unit.Torrents)
 	rows := func(t *testing.T, dir string) (settings, audits, migrated string) {
 		t.Helper()

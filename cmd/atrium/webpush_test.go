@@ -391,6 +391,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 }
 
 func TestConnectionsCLIWebPushTestDeliversDropsGoneAndBlocksPrivateEndpoints(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "connections", "list"); ran.code != 0 {
@@ -641,6 +642,7 @@ func clearBootNotices(t *testing.T, d *db.DB) {
 }
 
 func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testing.T) {
+	t.Parallel()
 	srv, _ := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
@@ -738,6 +740,7 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 }
 
 func TestWebPushRedirectDoesNotDeleteDevice(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	if got := runApp(t, "connections", "list"); got.code != 0 {

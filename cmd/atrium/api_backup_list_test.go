@@ -13,6 +13,7 @@ import (
 )
 
 func TestBackupListThroughCLIAndAPI(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, goldenData{}, nil, "")
 	backups := filepath.Join(t.TempDir(), "backups")
 	elsewhere := t.TempDir()

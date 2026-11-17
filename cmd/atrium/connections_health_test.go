@@ -251,6 +251,7 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 }
 
 func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testing.T) {
+	t.Parallel()
 	embed := newFakeOpenAI(t)
 	dir, api, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
@@ -480,6 +481,7 @@ func listedEmbedding(t *testing.T) listedConnection {
 }
 
 func TestGraceWindowKeepsAnEmbeddingOutageQuietUntilTheWindowEnds(t *testing.T) {
+	t.Parallel()
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
@@ -564,6 +566,7 @@ func countingGrafana(t *testing.T, status int) (*httptest.Server, *atomic.Int32)
 }
 
 func TestConnectionsCheckChangedChecksOnlyWhatTheHostFileChanged(t *testing.T) {
+	t.Parallel()
 	embed := newFakeOpenAI(t)
 	healthy, healthyHits := countingGrafana(t, http.StatusOK)
 	broken, brokenHits := countingGrafana(t, http.StatusInternalServerError)
@@ -627,6 +630,7 @@ capabilities = ["embeddings"]
 }
 
 func TestHostCredentialFileEditsResetTheConnectionAndARedeclaredConnectionReturns(t *testing.T) {
+	t.Parallel()
 	embed := newFakeOpenAI(t)
 	grafana, _ := countingGrafana(t, http.StatusOK)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))

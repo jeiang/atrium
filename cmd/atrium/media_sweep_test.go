@@ -13,6 +13,7 @@ import (
 )
 
 func TestMediaSweepOnlyDeletesMediaTorrents(t *testing.T) {
+	t.Parallel()
 	const mediaHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const plainHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	torrents := []contract.Torrent{
@@ -50,6 +51,7 @@ func TestMediaSweepOnlyDeletesMediaTorrents(t *testing.T) {
 }
 
 func TestMediaSweepJobFailsWhenQbittorrentFails(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "down", http.StatusServiceUnavailable)
 	}))

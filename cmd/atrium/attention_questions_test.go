@@ -14,6 +14,7 @@ import (
 )
 
 func TestAttentionListsParkedQuestionUntilAnswered(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()

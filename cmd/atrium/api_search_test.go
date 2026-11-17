@@ -25,6 +25,7 @@ func searchIDs(t *testing.T, items []any, nested bool) []int64 {
 }
 
 func TestSearchAPI(t *testing.T) {
+	t.Parallel()
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, model)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))

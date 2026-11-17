@@ -22,6 +22,7 @@ import (
 )
 
 func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -123,6 +124,7 @@ func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
 }
 
 func TestEffectResolveRecoversAnExpiredIntentAndRefusesAFreshLease(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
@@ -193,6 +195,7 @@ func TestEffectResolveRecoversAnExpiredIntentAndRefusesAFreshLease(t *testing.T)
 }
 
 func TestFreshDirectIntentBlocksASecondWrite(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -259,6 +262,7 @@ func (c *leaseClock) Advance(seconds float64) {
 }
 
 func TestRunningExternalWriteRenewsItsLeasePastTheStuckThreshold(t *testing.T) {
+	t.Parallel()
 	clock := &leaseClock{at: float64(time.Now().Unix())}
 	dir, api, _ := moduleFixtureAt(t, flagsExcept("", ""), clock.Now)
 	var recovered int64
@@ -321,6 +325,7 @@ func TestRunningExternalWriteRenewsItsLeasePastTheStuckThreshold(t *testing.T) {
 }
 
 func TestResolvedUnknownEffectCanBeUndone(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -378,6 +383,7 @@ func TestResolvedUnknownEffectCanBeUndone(t *testing.T) {
 }
 
 func TestAcceptedPartialEffectReleasesItsClaims(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -440,6 +446,7 @@ func TestAcceptedPartialEffectReleasesItsClaims(t *testing.T) {
 }
 
 func TestEffectsCLIUsesTheProposalUndoers(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -497,6 +504,7 @@ func TestEffectsCLIUsesTheProposalUndoers(t *testing.T) {
 }
 
 func TestOperationKeyAdmissionRefusesASecondSuccessfulAttempt(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, "http://ship24.invalid/public/v1", "dummy"))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {

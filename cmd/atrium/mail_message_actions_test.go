@@ -85,6 +85,7 @@ func topLevel(t *testing.T, got apiReply) map[string]any {
 }
 
 func TestMailMessageActionsReadAndFlagWriteRecordAndUndo(t *testing.T) {
+	t.Parallel()
 	fake, inbox := standardInbox(true)
 	h, x := dinner()
 	uid := inbox.Add(h, x, []string{`\Seen`}, nil)
@@ -139,6 +140,7 @@ func TestMailMessageActionsReadAndFlagWriteRecordAndUndo(t *testing.T) {
 }
 
 func TestMailMessageArchiveCopiesDeletesExpungesAndUndoes(t *testing.T) {
+	t.Parallel()
 	fake, inbox := standardInbox(true)
 	h, x := dinner()
 	inbox.Add(h, x, []string{`\Seen`}, nil)
@@ -169,6 +171,7 @@ func TestMailMessageArchiveCopiesDeletesExpungesAndUndoes(t *testing.T) {
 }
 
 func TestMailMessageArchiveOnGmailRemovesTheInboxLabelAndUndoes(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	fake.Gmail = true
 	all := fake.AddBox("[Gmail]/All Mail", mailtest.NewBox(9), `\All`)
@@ -190,6 +193,7 @@ func TestMailMessageArchiveOnGmailRemovesTheInboxLabelAndUndoes(t *testing.T) {
 }
 
 func TestMailMessageActionsRefuseInShadowModeButRunWhilePaused(t *testing.T) {
+	t.Parallel()
 	fake, inbox := standardInbox(true)
 	h, x := dinner()
 	inbox.Add(h, x, []string{`\Seen`}, nil)
@@ -221,6 +225,7 @@ func TestMailMessageActionsRefuseInShadowModeButRunWhilePaused(t *testing.T) {
 }
 
 func TestMailMessageArchiveRefusesWithoutAnArchiveFolderOrFromAProtectedFolder(t *testing.T) {
+	t.Parallel()
 	fake, inbox := standardInbox(false)
 	h, x := dinner()
 	inbox.Add(h, x, []string{`\Seen`}, nil)
@@ -243,6 +248,7 @@ func TestMailMessageArchiveRefusesWithoutAnArchiveFolderOrFromAProtectedFolder(t
 }
 
 func TestMailMessageActionUnknownOutcomeBlocksTheNextWriteWithoutRetry(t *testing.T) {
+	t.Parallel()
 	fake, inbox := standardInbox(true)
 	h, x := dinner()
 	inbox.Add(h, x, []string{`\Seen`}, nil)
@@ -325,6 +331,7 @@ func TestMailReplyForwardAndOperatorDrafts(t *testing.T) {
 }
 
 func TestMailMessagePageActionsAndLoopsLink(t *testing.T) {
+	t.Parallel()
 	fake, inbox := standardInbox(true)
 	h, x := dinner()
 	uid := inbox.Add(h, x, []string{`\Seen`}, nil)
@@ -360,6 +367,7 @@ func TestMailMessagePageActionsAndLoopsLink(t *testing.T) {
 }
 
 func TestMailMessageActionsAreNotAssistantTools(t *testing.T) {
+	t.Parallel()
 	m := mrvMailFixture(t, "live")
 	for _, name := range []string{"mail_message_archive", "mail_message_read", "mail_message_flag"} {
 		result := toolResult(t, name, map[string]any{"message_id": 1})

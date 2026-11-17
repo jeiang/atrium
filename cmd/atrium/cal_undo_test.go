@@ -142,6 +142,7 @@ func seedEffect(t *testing.T, d *db.DB, e seededEffect) int64 {
 }
 
 func TestCalendarDeleteUndoRecreatesTheEventAndRecordsIt(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	created := proposalID(t, toolResult(t, "calendar_create", map[string]any{
 		"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00",
@@ -202,6 +203,7 @@ func TestCalendarDeleteUndoRecreatesTheEventAndRecordsIt(t *testing.T) {
 }
 
 func TestCalendarCreateUndoKeepsTheEventTrackedWhenTheDeleteFails(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	created := proposalID(t, toolResult(t, "calendar_create", map[string]any{
 		"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00",
@@ -307,6 +309,7 @@ func TestProposalsResolveRefusesAMixedDirectionOutcomeWithoutCommitting(t *testi
 }
 
 func TestCalendarDeleteRefusesUntrackedEvent(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	path := caldavtest.CalendarPath(0) + "lunch.ics"
 	srv.SetObject(path, invite)

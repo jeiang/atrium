@@ -96,6 +96,7 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 }
 
 func TestComposerThreadCostCapRefusesTheNextRequest(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	seedSettings(t, map[string]string{assistant.KeyDefaultModel: pricing.HaikuID})
 	warm(t, api)

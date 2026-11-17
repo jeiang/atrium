@@ -15,6 +15,7 @@ import (
 )
 
 func TestHostCredentialFileReplacesADatabaseCredential(t *testing.T) {
+	t.Parallel()
 	gate := &qbitGate{token: "qbt_file_secret"}
 	srv := httptest.NewTLSServer(http.HandlerFunc(gate.handler))
 	t.Cleanup(srv.Close)

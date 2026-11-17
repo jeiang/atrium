@@ -277,6 +277,7 @@ func TestConcurrentSettingsCommitsDoNotStallTheDrain(t *testing.T) {
 }
 
 func TestServeStaysUpAndNotReadyUntilSchedulerRecoverySucceeds(t *testing.T) {
+	t.Parallel()
 	d, api, f, before := startWeeklyReview(t, asstReply("abandoned"), asstReply("reviewed"))
 	g, seen := holdJobRequests(t, api, 1)
 	interruptTickDuringWeeklyReview(t, api, g, seen, d)

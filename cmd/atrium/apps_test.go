@@ -65,6 +65,7 @@ func lastRequestJSON(t *testing.T, api *modelLog) string {
 }
 
 func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	raw, err := os.ReadFile(defaultHostConfig)
@@ -243,6 +244,7 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 }
 
 func TestAppFlagsKeepTheirStoredStates(t *testing.T) {
+	t.Parallel()
 	flags := flagsExcept(unit.Media, "false")
 	delete(flags, unit.Calendar)
 	dir, _, _ := moduleFixture(t, flags)
