@@ -7975,6 +7975,44 @@
         ],
         "type": "object"
       },
+      "MailListedRule": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "file",
+              "delete",
+              "none"
+            ],
+            "type": "string"
+          },
+          "decision_count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "dest": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "when": {
+            "items": {
+              "$ref": "#/components/schemas/MailCondition"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "when",
+          "decision_count"
+        ],
+        "type": "object"
+      },
       "MailLoopSnooze": {
         "additionalProperties": false,
         "properties": {
@@ -8341,6 +8379,39 @@
         ],
         "type": "object"
       },
+      "MailRuleDecisionsPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Row"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rule": {
+            "$ref": "#/components/schemas/RuleRef"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rule",
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
       "MailRuleInput": {
         "additionalProperties": false,
         "properties": {
@@ -8444,7 +8515,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/MailRule"
+              "$ref": "#/components/schemas/MailListedRule"
             },
             "type": "array"
           },
@@ -12332,6 +12403,21 @@
         ],
         "type": "object"
       },
+      "ReadMailRuleDecisionsPage": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MailRuleDecisionsPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadMailRulesDocument": {
         "properties": {
           "data": {
@@ -13213,6 +13299,16 @@
             "maximum": 9007199254740991,
             "type": "integer"
           },
+          "rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "seen": {
             "type": "boolean"
           },
@@ -13253,6 +13349,36 @@
         },
         "required": [
           "deleted"
+        ],
+        "type": "object"
+      },
+      "RuleRef": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "current",
+              "changed",
+              "removed"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "state"
         ],
         "type": "object"
       },
@@ -40012,6 +40138,175 @@
         ],
         "x-atrium-area": "mail",
         "x-atrium-module": "mail"
+      }
+    },
+    "/mail/rules/{rule_id}/decisions": {
+      "get": {
+        "operationId": "mail.rule-decisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadMailRuleDecisionsPage"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail",
+        "x-atrium-operation": "mail.rules"
       }
     },
     "/mail/scans/deletions": {

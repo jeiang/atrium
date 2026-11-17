@@ -107,13 +107,13 @@ export function seedApps(): MockApp[] {
       nav: [{ label: 'Dashboards', url: '/apps/grafana', settings: false }],
     },
     {
-      id: 'parcels',
-      name: 'Parcels',
+      id: 'packages',
+      name: 'Packages',
       enabled: false,
       switchable: true,
       depends: ['mail'],
-      needs: [],
-      nav: [{ label: 'Parcels', url: '/watches', settings: false }],
+      needs: [need('packages', 'service/ship24', 'tracking', true, { soft: true })],
+      nav: [{ label: 'Packages', url: '/watches', settings: false }],
     },
     {
       id: 'orchard',

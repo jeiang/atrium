@@ -24,16 +24,31 @@ const agreementSQL = "CASE WHEN actual IS NULL THEN 'gone' WHEN actual_inbox = 1
 	"WHEN dest IS NOT NULL AND instr('|' || actual || '|', '|' || dest || '|') > 0 THEN 'agree' " +
 	"ELSE 'disagree' END"
 
-var latestSQL = "SELECT d.id AS decision_id, d.ts, d.stage, d.key, d.action, d.dest, d.confidence, d.detail, " +
+var rowSQL = "SELECT d.id AS decision_id, d.ts, d.stage, d.key, d.action, d.dest, d.confidence, d.detail, " +
 	"m.id AS message_id, m.account, m.subject, m.from_addr, m.from_name, m.date_ts, m.seen, m.flagged, " +
 	report.ActualSQL + ", c.folder AS corrected_to, " +
 	"NULL AS action_id, NULL AS action_kind, NULL AS action_state, NULL AS action_error, " +
 	"NULL AS action_undone_ts, 0 AS action_has_undo " +
 	"FROM decisions d JOIN messages m ON m.id = d.message_id " +
-	"LEFT JOIN corrections c ON c.message_id = m.id " +
-	"WHERE d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = d.message_id)"
+	"LEFT JOIN corrections c ON c.message_id = m.id"
+
+var latestSQL = rowSQL + " WHERE d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = d.message_id)"
 
 var base = "SELECT *, " + agreementSQL + " AS agreement FROM (" + latestSQL + ")"
+
+const RuleStage = "operator"
+
+const (
+	RuleCurrent = "current"
+	RuleChanged = "changed"
+	RuleRemoved = "removed"
+)
+
+type RuleRef struct {
+	ID    string  `json:"id"`
+	Title *string `json:"title"`
+	State string  `json:"state" api:"enum=current|changed|removed"`
+}
 
 type Applied struct {
 	ID       int64   `json:"id"`
@@ -73,6 +88,7 @@ type Row struct {
 	Current        *string  `json:"current"`
 	More           int      `json:"more"`
 	Applied        *Applied `json:"applied"`
+	Rule           *RuleRef `json:"rule"`
 }
 
 func scanRow(r *sql.Rows) (Row, error) { return scanInto(r) }
@@ -270,6 +286,46 @@ func Get(ctx context.Context, q report.Querier, messageID int64) (*Row, error) {
 		return nil, err
 	}
 	return &found[0], nil
+}
+
+func RuleDecisions(ctx context.Context, q report.Querier, ruleID string, limit, offset int) (Page, error) {
+	inner := "SELECT *, " + agreementSQL + " AS agreement FROM (" + rowSQL + " WHERE d.stage = ? AND d.key = ?)"
+	var page Page
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM decisions WHERE stage = ? AND key = ?", RuleStage, ruleID).Scan(&page.Total); err != nil {
+		return page, err
+	}
+	rows, err := q.QueryContext(ctx, inner+" ORDER BY decision_id DESC LIMIT ? OFFSET ?", RuleStage, ruleID, limit, offset)
+	if err != nil {
+		return page, err
+	}
+	if page.Rows, err = db.Collect(rows, scanRow); err != nil {
+		return page, err
+	}
+	if err := enrich(ctx, q, page.Rows); err != nil {
+		return page, err
+	}
+	if page.Rows == nil {
+		page.Rows = []Row{}
+	}
+	return page, nil
+}
+
+func RuleDecisionCounts(ctx context.Context, q report.Querier) (map[string]int, error) {
+	rows, err := q.QueryContext(ctx, "SELECT key, COUNT(*) FROM decisions WHERE stage = ? AND key IS NOT NULL GROUP BY key", RuleStage)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]int{}
+	for rows.Next() {
+		var key string
+		var n int
+		if err := rows.Scan(&key, &n); err != nil {
+			return nil, err
+		}
+		out[key] = n
+	}
+	return out, rows.Err()
 }
 
 type Destination struct {

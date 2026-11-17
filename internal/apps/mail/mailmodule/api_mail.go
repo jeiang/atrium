@@ -127,9 +127,28 @@ type MailRuleOrder struct {
 	Account   string `json:"account,omitempty"`
 	Direction string `json:"direction" api:"enum=up|down"`
 }
+type MailListedRule struct {
+	ID            string          `json:"id"`
+	Account       *string         `json:"account,omitempty"`
+	Action        string          `json:"action" api:"enum=file|delete|none"`
+	Dest          *string         `json:"dest,omitempty"`
+	When          []MailCondition `json:"when"`
+	DecisionCount int             `json:"decision_count"`
+}
 type MailRulesPage struct {
-	Items      []MailRule `json:"items"`
-	NextCursor *string    `json:"next_cursor" api:"nullable"`
+	Items      []MailListedRule `json:"items"`
+	NextCursor *string          `json:"next_cursor" api:"nullable"`
+}
+type MailRuleDecisionsRequest struct {
+	ID     string     `path:"rule_id" json:"-"`
+	Cursor api.Cursor `query:"cursor" json:"-"`
+	Limit  api.Limit  `query:"limit" json:"-"`
+}
+type MailRuleDecisionsPage struct {
+	Rule       triage.RuleRef `json:"rule"`
+	Items      []triage.Row   `json:"items"`
+	Total      int            `json:"total"`
+	NextCursor *string        `json:"next_cursor" api:"nullable"`
 }
 type MailRulesDocument struct {
 	Rules []MailRule `json:"rules"`
@@ -343,13 +362,28 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 			if err != nil {
 				return application.Read[MailRulesPage]{}, err
 			}
-			items, err := mailWire[[]MailRule](r.Data.List.Rules)
+			items, err := mailWire[[]MailListedRule](r.Data.List.Rules)
 			if err != nil {
 				return application.Read[MailRulesPage]{}, err
 			}
 			items, next, err := mailSlice(items, in.Cursor, in.Limit)
 			page := MailRulesPage{Items: items, NextCursor: next}
 			return application.Read[MailRulesPage]{Revision: servedRevision(mailapp.RulesName, page), Data: page}, err
+		}),
+		api.Query(d, mailapp.DescribeRules(), application.APIShape{Area: area, ID: "mail.rule-decisions", Errors: refusable}, "GET /mail/rules/{rule_id}/decisions", func(ctx context.Context, in MailRuleDecisionsRequest) (application.Read[MailRuleDecisionsPage], error) {
+			offset, err := mailOffset(in.Cursor)
+			if err != nil {
+				return application.Read[MailRuleDecisionsPage]{}, err
+			}
+			r, err := svc().RuleDecisions(ctx, mailapp.RuleDecisionsInput{ID: in.ID, Offset: offset, Limit: int(in.Limit)})
+			if err != nil {
+				return application.Read[MailRuleDecisionsPage]{}, err
+			}
+			page := MailRuleDecisionsPage{Rule: r.Data.Rule, Items: r.Data.Rows, Total: r.Data.Total}
+			if r.Data.NextOffset != 0 {
+				page.NextCursor = in.Cursor.Next(r.Data.NextOffset)
+			}
+			return application.Read[MailRuleDecisionsPage]{Revision: r.Revision, Data: page}, nil
 		}),
 		api.Query(d, mailapp.DescribeRulePreview(), application.APIShape{Area: area, Body: application.BodyJSON, ReadOnlyPost: true, Errors: refusable}, "POST /mail/rules/preview", func(ctx context.Context, in MailRuleRequest) (application.Read[ruleedit.Preview], error) {
 			raw, err := mailRuleMap(in.Rule)

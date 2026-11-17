@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
@@ -21,18 +21,46 @@ env:
   MAX_SUBSTITUTION_JOBS: "32"
   HTTP_CONNECTIONS: "64"
 
-  GO_CACHE_PATHS: |
-    ~/.cache/go-build
-    ~/.cache/golangci-lint
-    ~/go/pkg/mod
-
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      go: ${{ github.event_name != 'pull_request' || steps.go.outputs.go == 'true' }}
+      web: ${{ github.event_name != 'pull_request' || steps.web.outputs.web == 'true' }}
+    steps:
+      - name: Changes outside web/
+        id: go
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+        with:
+          predicate-quantifier: every
+          filters: |
+            go:
+              - '**'
+              - '!web/**'
+
+      - name: Changes to the client, its API and CI
+        id: web
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+        with:
+          filters: |
+            web:
+              - 'web/**'
+              - 'docs/api/**'
+              - 'design/tokens/**'
+              - '.ci/**'
+              - '.github/**'
+
   discover:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       nix: ${{ steps.discover.outputs.nix }}
-      go-test-shards: ${{ steps.discover.outputs.go-test-shards }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -53,59 +81,16 @@ jobs:
         env:
           MAIN: ${{ github.event_name != 'pull_request' }}
         run: |
-          targets=$(nix eval --impure --json '.#checks' --apply "checks: import ./.ci/targets.nix {inherit checks; main = $MAIN;}")
-          nix=$(jq -c .nix <<<"$targets")
-          shards=$(jq -c .goTestShards <<<"$targets")
-          if [ "$nix" = "[]" ] || [ "$shards" = "[]" ]; then
+          nix=$(nix eval --impure --json '.#checks' --apply "checks: import ./.ci/targets.nix {inherit checks; main = $MAIN;}" | jq -c .nix)
+          if [ "$nix" = "[]" ]; then
             echo "::error::no checks discovered for the configured runners"
             exit 1
           fi
           echo "nix=$nix" >> "$GITHUB_OUTPUT"
-          echo "go-test-shards=$shards" >> "$GITHUB_OUTPUT"
 
-  go-test:
-    needs: discover
-    strategy:
-      fail-fast: false
-      matrix:
-        target: ${{ fromJson(needs.discover.outputs.go-test-shards) }}
-    name: go-test (${{ matrix.target.shard }} of ${{ matrix.target.total }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
-        with:
-          extra_nix_config: |
-            extra-substituters = ${{ env.GARRET_SUBSTITUTER }}
-            extra-trusted-public-keys = ${{ env.GARRET_PUBLIC_KEY }}
-            max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
-            http-connections = ${{ env.HTTP_CONNECTIONS }}
-
-      - name: Restore the Go caches
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: ${{ env.GO_CACHE_PATHS }}
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-
-            go-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Allow the loopback test namespace
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
-      - name: Run the shard
-        env:
-          SHARD: ${{ matrix.target.shard }}
-          TOTAL: ${{ matrix.target.total }}
-        run: nix develop .#ci -c bash tools/go-test-shard "$SHARD" "$TOTAL"
-
-  go-static:
+  assets:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -123,22 +108,106 @@ jobs:
             max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
             http-connections = ${{ env.HTTP_CONNECTIONS }}
 
-      - name: Restore the Go caches
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Build the static assets and the client stub
+        run: |
+          stage=$RUNNER_TEMP/go-assets
+          mkdir -p "$stage/internal/web/app"
+          cp -r --no-preserve=mode "$(nix build --no-link --print-out-paths .#atrium-static)" "$stage/internal/web/static"
+          cp -r --no-preserve=mode "$(nix build --no-link --print-out-paths .#atrium-web.stub)" "$stage/internal/web/app/dist"
+
+      - name: Upload the staged assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          path: ${{ env.GO_CACHE_PATHS }}
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-
-            go-${{ runner.os }}-${{ runner.arch }}-
+          name: go-assets
+          path: ${{ runner.temp }}/go-assets
+          retention-days: 1
+          if-no-files-found: error
+
+  go-test:
+    needs: assets
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    name: go-test (${{ matrix.shard }} of 6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: ./.github/actions/go
+
+      - name: Allow the loopback test namespace
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Run the shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          ATRIUM_GO_TEST_JSON: ${{ runner.temp }}/go-test.json
+        run: bash tools/go-test-shard "$SHARD" 6
+
+      - name: Upload the timings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: go-test-${{ matrix.shard }}
+          path: ${{ runner.temp }}/go-test.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  go-static:
+    needs: assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        id: go
+        uses: ./.github/actions/go
+
+      - name: gofmt
+        run: |
+          unformatted=$(find . -name vendor -prune -o -name '*.go' -print | xargs -r gofmt -l)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would reformat:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
 
       - name: Vet, build, generated documents and ownership
-        run: nix develop .#ci -c bash -c 'just verify && go run ./tools/tableownership && just settingsgen-check'
+        run: |
+          go vet ./...
+          go build ./...
+          go run ./cmd/toolsdocs check
+          go run ./tools/tableownership
+          go run ./tools/registrationownership
+          go run ./tools/adapterboundary
+          go run ./cmd/atrium catalog openapi --check docs/api
+          go run ./cmd/atrium catalog operations --require-api >/dev/null
+          out=$(mktemp -d)
+          go run ./tools/settingsgen "$out"
+          diff -r docs/config "$out"
+
+      - name: OpenAPI breaking changes
+        run: bash tools/openapi-diff/openapi-diff.sh
 
       - name: Lint
-        run: nix develop .#ci -c just lint --build-tags libsqlite3,sqlite_fts5 ./...
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
+        with:
+          version: v${{ steps.go.outputs.golangci-lint }}
+          args: --build-tags libsqlite3,sqlite_fts5 ./...
+          skip-cache: true
 
   go-cache:
+    needs: assets
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -148,28 +217,167 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
-        with:
-          extra_nix_config: |
-            extra-substituters = ${{ env.GARRET_SUBSTITUTER }}
-            extra-trusted-public-keys = ${{ env.GARRET_PUBLIC_KEY }}
-            max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
-            http-connections = ${{ env.HTTP_CONNECTIONS }}
+      - name: Set up Go
+        id: go
+        uses: ./.github/actions/go
 
-      - name: Build from an empty cache
+      - name: Build from the restored cache
         run: |
-          nix develop .#ci -c bash -c '
-            go build ./... &&
-            go vet ./... &&
-            go test -race -count=1 -exec true ./... >/dev/null &&
-            just lint --build-tags libsqlite3,sqlite_fts5 ./...'
+          go build ./...
+          go vet ./...
+          go test -race -count=1 -exec true ./... >/dev/null
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
+        with:
+          version: v${{ steps.go.outputs.golangci-lint }}
+          args: --build-tags libsqlite3,sqlite_fts5 ./...
+          skip-cache: true
 
       - name: Save the Go caches
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: ${{ env.GO_CACHE_PATHS }}
-          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-${{ github.sha }}
+          path: |
+            ~/.cache/go-build
+            ~/.cache/golangci-lint
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', '.ci/pins.json') }}-${{ github.sha }}
+
+  web-build:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      engines: ${{ steps.engines.outputs.engines }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: ./.github/actions/web
+
+      - name: Build the production and mock clients
+        working-directory: web
+        run: |
+          npm run build
+          npm run build:mock
+
+      - name: Browser engines
+        id: engines
+        run: echo "engines=$(jq -c . web/e2e/engines.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Size budgets
+        working-directory: web
+        run: node scripts/size.ts dist
+
+      - name: Upload the builds
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: web-dist
+          path: |
+            web/dist
+            web/dist-mock
+          retention-days: 1
+          if-no-files-found: error
+
+  web-lint:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        id: web
+        uses: ./.github/actions/web
+
+      - name: Install Biome
+        env:
+          BIOME: ${{ steps.web.outputs.biome }}
+        run: npm install --global --no-audit --no-fund "@biomejs/biome@$BIOME"
+
+      - name: Lint and type check
+        working-directory: web
+        run: |
+          npm run lint
+          npm run check
+
+  web-e2e:
+    needs: web-build
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: ${{ fromJSON(needs.web-build.outputs.engines) }}
+        shard: [1, 2, 3]
+        total: [3]
+    name: web-e2e (${{ matrix.engine }} ${{ matrix.shard }} of ${{ matrix.total }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node and ${{ matrix.engine }}
+        uses: ./.github/actions/web
+        with:
+          browsers: ${{ matrix.engine }}
+
+      - name: Download the builds
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: web-dist
+          path: web
+
+      - name: Run the shard
+        working-directory: web
+        env:
+          ENGINE: ${{ matrix.engine }}
+          SHARD: ${{ matrix.shard }}/${{ matrix.total }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/playwright.json
+        run: npx playwright test --project="$ENGINE" --shard="$SHARD" --reporter=line,json
+
+      - name: Upload the timings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: playwright-${{ matrix.engine }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/playwright.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  web-lighthouse:
+    needs: web-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node and Chromium
+        uses: ./.github/actions/web
+        with:
+          browsers: chromium
+
+      - name: Download the builds
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: web-dist
+          path: web
+
+      - name: Lighthouse budgets
+        working-directory: web
+        run: node scripts/lighthouse.ts dist
 
   nix:
     needs: discover
@@ -207,10 +415,6 @@ jobs:
         continue-on-error: true
         run: ./.ci/garret.sh watch
 
-      - name: Allow the loopback test namespace inside the build sandbox
-        if: runner.os == 'Linux'
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
       - name: Build checks
         env:
           INSTALLABLES: ${{ matrix.target.installables }}
@@ -226,18 +430,26 @@ jobs:
         run: ./.ci/garret.sh drain
 
   check:
-    needs: [discover, go-test, go-static, nix]
+    needs: [changes, discover, assets, go-test, go-static, web-build, web-lint, web-e2e, web-lighthouse, nix]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify discovery and all checks passed
+      - name: Verify every job passed or was skipped for an unchanged area
         env:
+          REQUIRED: ${{ needs.changes.result }} ${{ needs.discover.result }} ${{ needs.nix.result }}
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "discover go-test go-static nix: $RESULTS"
-          for result in $RESULTS; do
+          echo "changes discover nix: $REQUIRED"
+          echo "all: $RESULTS"
+          for result in $REQUIRED; do
             if [ "$result" != "success" ]; then
+              echo "::error::Discovery or the Nix builds did not succeed."
+              exit 1
+            fi
+          done
+          for result in $RESULTS; do
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
               echo "::error::One or more required checks did not succeed."
               exit 1
             fi

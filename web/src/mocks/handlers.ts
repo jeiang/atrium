@@ -12,6 +12,7 @@ import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inbo
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
 import { type MediaScenario, mediaHandlers } from './media';
 import { type NotificationsScenario, notificationHandlers } from './notifications';
+import { type PackagesScenario, packageHandlers } from './packages';
 import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
 import { type SearchScenario, searchHandlers } from './search';
 import { type SettingsScenario, settingsHandlers } from './settings';
@@ -29,6 +30,7 @@ export interface MockScenario {
   apps?: AppsScenario;
   calendar?: CalendarScenario;
   media?: MediaScenario;
+  packages?: PackagesScenario;
   inbox?: InboxScenario;
   chat?: ChatScenario;
   connections?: ConnectionsScenario;
@@ -200,6 +202,7 @@ export const handlers = [
   ...appHandlers(scenario),
   ...calendarHandlers(scenario),
   ...mediaHandlers(scenario),
+  ...packageHandlers(scenario),
   ...fileHandlers,
   ...chatHandlers,
   ...simulatorHandlers,

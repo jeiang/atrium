@@ -1,22 +1,32 @@
 import { createInfiniteQuery, createQuery, type QueryClient } from '@tanstack/svelte-query';
 import {
   ApiError,
+  type ChangeKnowledgeBatch,
   type ChangeKnowledgeChanged,
   type ChangeKnowledgeLink,
+  type KnowledgeFieldsScope,
   type KnowledgeLink,
   type KnowledgeLinkRequestRelation,
   type KnowledgeLinkRequestTargetKind,
+  type KnowledgeMatchingRequestState,
   type KnowledgeSubjectsKind,
   type KnowledgeSubjectsScope,
   knowledgeConfirm,
+  knowledgeConfirmMatching,
+  knowledgeConfirmSelected,
+  knowledgeCreate,
   knowledgeDetail,
   knowledgeEdit,
   knowledgeInstructions,
   knowledgeLink,
   knowledgeLinks,
+  knowledgeList,
   knowledgeMap,
+  knowledgeProfile,
+  knowledgePurge,
   knowledgeRestore,
   knowledgeRetract,
+  knowledgeRetractRun,
   knowledgeSpaceArchive,
   knowledgeSpaceCreate,
   knowledgeSpaceDetail,
@@ -31,6 +41,7 @@ import {
   reviewUndoEffect,
   searchAll,
 } from '../../contract';
+import { plural } from '../../shared/assistant/format';
 import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import type { ListOption } from '../../shared/ui/Listbox.svelte';
 
@@ -91,6 +102,39 @@ export function useSubjects(filter: () => SubjectFilter) {
       meta: { topics: TOPICS },
     };
   });
+}
+
+export interface ReviewFilter {
+  state: KnowledgeMatchingRequestState;
+  q: string;
+  scope: '' | KnowledgeFieldsScope;
+}
+
+export function useReview(filter: () => ReviewFilter) {
+  return createInfiniteQuery(() => {
+    const { state, q, scope } = filter();
+    return {
+      queryKey: ['knowledge', 'list', state, q, scope],
+      queryFn: async ({ pageParam, signal }) =>
+        ok(
+          await knowledgeList(
+            { state, q: q || undefined, scope: scope || undefined, cursor: pageParam || undefined, limit: PAGE },
+            { signal },
+          ),
+        ).data,
+      initialPageParam: '',
+      getNextPageParam: (last) => last.next_cursor ?? undefined,
+      meta: { topics: TOPICS },
+    };
+  });
+}
+
+export function useProfile() {
+  return createQuery(() => ({
+    queryKey: ['knowledge', 'profile'],
+    queryFn: async ({ signal }) => ok(await knowledgeProfile({ signal })).data,
+    meta: { topics: TOPICS },
+  }));
 }
 
 export function useInstructions() {
@@ -192,6 +236,42 @@ export async function handleRemoveLink(linkId: number): Promise<ChangeKnowledgeL
 
 export async function handleUndoEffects(effects: readonly number[]): Promise<void> {
   for (const effect of effects) ok(await reviewUndoEffect(effect, oneGesture()));
+}
+
+export async function handleCreate(fields: {
+  title: string;
+  body: string;
+  scope: KnowledgeFieldsScope;
+  private: boolean;
+  pinned: boolean;
+}): Promise<ChangeKnowledgeChanged> {
+  return ok(await knowledgeCreate(fields, oneGesture()));
+}
+
+export async function handleConfirmSelected(ids: readonly number[]): Promise<ChangeKnowledgeBatch> {
+  return ok(await knowledgeConfirmSelected({ ids: [...ids] }, oneGesture()));
+}
+
+export async function handleConfirmMatching(filter: ReviewFilter): Promise<ChangeKnowledgeBatch> {
+  const { state, q, scope } = filter;
+  return ok(await knowledgeConfirmMatching({ state, q: q || undefined, scope: scope || undefined }, oneGesture()));
+}
+
+export async function handleRetractRun(runId: number): Promise<ChangeKnowledgeBatch> {
+  return ok(await knowledgeRetractRun({ run_id: runId }, oneGesture()));
+}
+
+export async function handlePurge(id: number): Promise<void> {
+  ok(await knowledgePurge(id, oneGesture()));
+}
+
+export function batchText(batch: ChangeKnowledgeBatch, done: (count: number) => string): string {
+  const { committed, refused, failed } = batch.data;
+  const parts = [done(committed.length)];
+  if (refused.length)
+    parts.push(`${plural(refused.length, 'record was', 'records were')} refused: ${refused[0]?.message}.`);
+  if (failed.length) parts.push(`${plural(failed.length, 'record')} failed: ${failed[0]?.message}.`);
+  return parts.join(' ');
 }
 
 export function refreshKnowledge(client: QueryClient): Promise<void> {
