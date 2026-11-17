@@ -18,7 +18,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -119,11 +118,12 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 		}
 	}
 
-	if got := setG4(local, "assistant", map[string]any{assistant.KeyDefaultEffort: "high", assistant.KeyDefaultContextLimit: "200000"}); got.status != http.StatusOK {
+	if got := local.do(http.MethodPut, "/web/v1/assistant/defaults", map[string]any{"effort": "high", "context_limit": 200000}); got.status != http.StatusOK {
 		t.Fatalf("save on the emergency listener: %d %.300s", got.status, got.body)
 	}
-	if _, values := settingsG4(browser, "assistant"); values[assistant.KeyDefaultContextLimit] != "200000" || values[assistant.KeyDefaultEffort] != "high" {
-		t.Fatalf("the public listener does not show the setting saved on the emergency listener: %v", values)
+	cfg := browser.do(http.MethodGet, "/web/v1/assistant/configuration", nil)
+	if defaults, _ := cfg.json["defaults"].(map[string]any); cfg.status != http.StatusOK || defaults["context_limit"] != float64(200000) || defaults["effort"] != "high" {
+		t.Fatalf("the public listener does not show the setting saved on the emergency listener: %d %s", cfg.status, cfg.body)
 	}
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "", nil), http.StatusUnauthorized, "unauthenticated")

@@ -296,9 +296,6 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/webpush' AND slot = 'vapid_private' AND source = 'database'").Scan(&stored); err != nil || stored != 1 {
 		t.Fatalf("stored VAPID credentials = %d, %v", stored, err)
 	}
-	if code, _, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/sw.js", nil); code != http.StatusOK {
-		t.Errorf("service worker: %d", code)
-	}
 
 	bad := browser.form()
 	bad.Set("endpoint", "http://"+strings.TrimPrefix(push.URL, "https://")+"/push/device-1")

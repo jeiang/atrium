@@ -29,30 +29,6 @@ func webAsG4(t *testing.T, base string, browser *http.Client) *webClient {
 	return c
 }
 
-func settingsG4(c *webClient, group string) (string, map[string]string) {
-	c.t.Helper()
-	got := c.do(http.MethodGet, "/web/v1/settings?"+url.Values{"group": {group}, "limit": {"100"}}.Encode(), nil)
-	items, _ := dataG4(got)["items"].([]any)
-	if got.status != http.StatusOK {
-		c.t.Fatalf("GET /web/v1/settings?group=%s = %d: %s", group, got.status, got.body)
-	}
-	values := map[string]string{}
-	for _, raw := range items {
-		item, _ := raw.(map[string]any)
-		key, _ := item["key"].(string)
-		value, _ := item["value"].(string)
-		values[key] = value
-	}
-	revision, _ := got.json["revision"].(string)
-	return revision, values
-}
-
-func setG4(c *webClient, group string, set map[string]any) apiReply {
-	c.t.Helper()
-	revision, _ := settingsG4(c, group)
-	return c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": set}, "If-Match", `W/"`+revision+`"`)
-}
-
 func startG4(c *webClient, text string) (int64, int64) {
 	c.t.Helper()
 	made := c.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": text})
