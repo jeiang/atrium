@@ -1,15 +1,19 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
 	"github.com/jeiang/atrium/internal/cli"
@@ -332,5 +336,34 @@ func TestMailModeNeverChangesThroughAnAgentPath(t *testing.T) {
 	}
 	if s.mode(t) != "shadow" || s.m.scalar(t, "SELECT COUNT(*) FROM settings_audit WHERE key = ?", mail.KeyMode) != s.m.scalar(t, "SELECT COUNT(*) FROM settings_audit WHERE key = ? AND source != 'tool'", mail.KeyMode) {
 		t.Fatalf("mode after the job worker ran: %s", s.mode(t))
+	}
+
+	api := anthropictest.New(t,
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "mail_go_live", map[string]any{"confirm_token": "x"})),
+		anthropictest.Reply("end_turn", anthropictest.Text("done")),
+	)
+	setEnv(t, anthropic.BaseURLEnv, api.URL)
+	created := runApp(t, "schedule", "create", "Go live", "--schedule", "daily 03:00", "--prompt", "Switch mail to live")
+	var made struct {
+		ID int64 `json:"id"`
+	}
+	if created.code != cli.ExitOK || json.Unmarshal([]byte(created.stdout), &made) != nil || made.ID == 0 {
+		t.Fatalf("schedule create: %d %s %s", created.code, created.stdout, created.stderr)
+	}
+	if ran := runApp(t, "schedule", "run", strconv.FormatInt(made.ID, 10)); ran.code != cli.ExitOK {
+		t.Fatalf("schedule run: %d %s", ran.code, ran.stderr)
+	}
+	var result string
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		result = s.m.scalar(t, "SELECT COALESCE((SELECT m.content_json FROM thread_messages m WHERE m.thread_id IN (SELECT r.thread_id FROM job_runs r WHERE r.job_id = ? AND r.ended_at IS NOT NULL UNION SELECT t.thread_id FROM job_run_threads t JOIN job_runs r ON r.id = t.job_run_id WHERE r.job_id = ? AND r.ended_at IS NOT NULL) AND m.role = 'user' AND m.content_json LIKE '%tool_result%' ORDER BY m.seq DESC LIMIT 1), '')", made.ID, made.ID)
+		if result != "" {
+			break
+		}
+	}
+	if !strings.Contains(strings.ToLower(result), "unknown tool") || !strings.Contains(result, `"is_error":true`) {
+		t.Fatalf("scheduled job tool result: %.400s", result)
+	}
+	if s.mode(t) != "shadow" {
+		t.Fatalf("mode after the scheduled agent job: %s", s.mode(t))
 	}
 }
