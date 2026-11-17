@@ -16,6 +16,7 @@ import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
 import { type SearchScenario, searchHandlers } from './search';
 import { type SettingsScenario, settingsHandlers } from './settings';
 import { simulatorHandlers } from './simulator';
+import { type TokensScenario, tokenHandlers } from './tokens';
 
 export interface MockScenario {
   session?: 'signed-in' | 'signed-out' | 'signed-out-proxy' | 'unavailable';
@@ -32,6 +33,7 @@ export interface MockScenario {
   chat?: ChatScenario;
   connections?: ConnectionsScenario;
   settings?: SettingsScenario;
+  tokens?: TokensScenario;
   notifications?: NotificationsScenario;
   home?: HomeScenario;
   unreachable?: boolean;
@@ -192,6 +194,7 @@ export const handlers = [
   ...planHandlers,
   ...assistantHandlers(scenario),
   ...settingsHandlers(scenario),
+  ...tokenHandlers(scenario),
   ...notificationHandlers(scenario),
   ...connectionHandlers(scenario),
   ...appHandlers(scenario),
