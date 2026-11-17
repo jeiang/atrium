@@ -343,6 +343,7 @@ test.describe('while atrium is unreachable', () => {
     await page.getByRole('button', { name: 'Regenerate (new run)' }).click();
     await expect(toasts(page).getByText('Cannot reach atrium. No new run was started.')).toBeVisible();
     await page.getByRole('button', { name: 'Branch from here' }).click();
+    await expect(toasts(page)).toContainText('Cannot reach atrium. No branch was made.');
     await expect(toasts(page).getByText('Cannot reach atrium. No branch was made.')).toBeVisible();
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.getByRole('textbox', { name: 'Edit your last message' }).fill('Does the roof leak?');
