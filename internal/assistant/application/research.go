@@ -24,7 +24,6 @@ const (
 	LookupName    application.Name = "assistant.lookup"
 	SearchWebName application.Name = "assistant.search-web"
 	WebFetchName  application.Name = "assistant.web-fetch"
-	WeatherName   application.Name = "assistant.weather"
 )
 
 var agentCallers = []application.Authority{application.Agent, application.Approved}

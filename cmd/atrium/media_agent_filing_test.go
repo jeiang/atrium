@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/mediaagent/protocol"
+	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
 	"golang.org/x/sys/unix"
 )
 

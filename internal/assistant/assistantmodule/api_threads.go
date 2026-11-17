@@ -24,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/homecard"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
@@ -429,7 +430,7 @@ type apiHome struct {
 	About    *asstapp.About       `json:"about"`
 	Defaults threads.Options      `json:"defaults"`
 	Composer asstapp.ComposerView `json:"composer"`
-	Weather  asstapp.HomeWeather  `json:"weather"`
+	Weather  homecard.Weather     `json:"weather"`
 	NeedsYou *apiNeedsYou         `json:"needs_you,omitempty"`
 }
 
@@ -771,8 +772,10 @@ func apiBindings(p *apiPages) []application.Binding {
 				}
 				h := read.Data
 				out := apiHome{Threads: h.Threads, Q: h.Q, View: h.View, Welcome: h.Welcome, Date: h.Date, Digest: h.Digest,
-					Agenda: h.Agenda, About: h.About, Defaults: h.Defaults, Composer: h.Composer, Weather: svc.HomeWeather(ctx)}
-				queue, err := reviewapp.New(reviewapp.Deps{DB: p.deps.DB}).Queue(module.WithSet(ctx, cmp.Or(module.SetFrom(ctx), module.SetFrom(p.deps.Ctx))), reviewapp.QueueInput{Limit: homeNeedsLimit})
+					Agenda: h.Agenda, About: h.About, Defaults: h.Defaults, Composer: h.Composer}
+				withSet := module.WithSet(ctx, cmp.Or(module.SetFrom(ctx), module.SetFrom(p.deps.Ctx)))
+				out.Weather = svc.HomeWeather(withSet)
+				queue, err := reviewapp.New(reviewapp.Deps{DB: p.deps.DB}).Queue(withSet, reviewapp.QueueInput{Limit: homeNeedsLimit})
 				if err != nil {
 					return application.Read[apiHome]{}, err
 				}

@@ -72,8 +72,10 @@ type registries struct {
 	origins        map[string]string
 	day            daySources
 	communications communications.Feed
+	weather        weatherCard
 	direct         []string
 	channels       []string
+	titles         map[string]string
 	refs           map[string]RefKind
 	attachments    []Attachment
 	categories     []review.Category
@@ -93,9 +95,12 @@ func (c claims) take(hook, key, owner string) error {
 }
 
 func compileRegistries(decls []Declaration) (registries, error) {
-	r := registries{origins: map[string]string{}, refs: map[string]RefKind{}}
+	r := registries{origins: map[string]string{}, refs: map[string]RefKind{}, titles: map[string]string{}}
 	var err error
 	if r.day, err = compileDay(decls); err != nil {
+		return registries{}, err
+	}
+	if r.weather, err = compileWeatherCard(decls); err != nil {
 		return registries{}, err
 	}
 	if r.communications, err = compileCommunications(decls); err != nil {
@@ -149,6 +154,7 @@ func compileRegistries(decls []Declaration) (registries, error) {
 				return registries{}, err
 			}
 			r.channels = append(r.channels, name)
+			r.titles[name] = d.Title
 		}
 		for _, ref := range d.Refs {
 			if strings.TrimSpace(ref.Kind) == "" || ref.Resolve == nil {
@@ -219,6 +225,8 @@ func compileRegistries(decls []Declaration) (registries, error) {
 func (c *Catalog) DirectOrigins() []string { return slices.Clone(c.regs.direct) }
 
 func (c *Catalog) Channels() []string { return slices.Clone(c.regs.channels) }
+
+func (c *Catalog) ChannelTitle(name string) string { return c.regs.titles[name] }
 
 func (c *Catalog) Ref(kind string) (RefKind, bool) {
 	ref, ok := c.regs.refs[kind]

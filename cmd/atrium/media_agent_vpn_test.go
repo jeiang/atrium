@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 const vpnHost = "media.vpn.test"
@@ -94,7 +94,7 @@ func TestVPNListenerServesOnlyLibraryFiles(t *testing.T) {
 		"/library/import/x",
 		"/library/tv/",
 		"/library/tv",
-		media.FilePrefix + "tv/" + (&url.URL{Path: episode}).EscapedPath() + "?exp=4000000000&sig=00",
+		library.FilePrefix + "tv/" + (&url.URL{Path: episode}).EscapedPath() + "?exp=4000000000&sig=00",
 	} {
 		if code, got := vpnRequest(t, http.MethodGet, base+target, vpnHost, bearer); code != http.StatusNotFound || strings.Contains(got, body) || strings.Contains(got, "downloads secret") {
 			t.Errorf("GET %s = %d %.200q, want 404", target, code, got)
@@ -167,7 +167,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 		if base == "vpn" {
 			value, base = "HTTP://"+addr+"/", "http://"+addr
 		}
-		setEnv(t, settingEnv(media.KeyVPNBaseURL), value)
+		setEnv(t, settingEnv(library.KeyVPNBaseURL), value)
 		asstWarm(t)
 		d := asstDB(t, dir)
 		w := asstBrowse(t, startServeIn(t, dir))
@@ -219,13 +219,13 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	t.Run("refused bases", func(t *testing.T) {
 		moduleFixture(t, flagsExcept("", ""))
 		for _, value := range []string{"http://media.example.org", "https://media.example.org/library", "https://user@media.example.org", "https://media.example.org?x=1", "ftp://media.example.org", "https://media.example.org#", "https://media.example.org/#"} {
-			setEnv(t, settingEnv(media.KeyVPNBaseURL), value)
-			if got := runApp(t, "settings", "list"); got.code == cli.ExitOK || !strings.Contains(strings.ToLower(got.stderr), media.KeyVPNBaseURL) {
+			setEnv(t, settingEnv(library.KeyVPNBaseURL), value)
+			if got := runApp(t, "settings", "list"); got.code == cli.ExitOK || !strings.Contains(strings.ToLower(got.stderr), library.KeyVPNBaseURL) {
 				t.Errorf("base %q: exit %d stderr %q", value, got.code, got.stderr)
 			}
 		}
 		for _, value := range []string{"https://media.example.org:8443/", "http://localhost:8483", "http://[::1]:8483"} {
-			setEnv(t, settingEnv(media.KeyVPNBaseURL), value)
+			setEnv(t, settingEnv(library.KeyVPNBaseURL), value)
 			if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 				t.Errorf("base %q: exit %d stderr %q", value, got.code, got.stderr)
 			}

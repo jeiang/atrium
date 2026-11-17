@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/mediaagent/protocol"
+	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
 )
 
 func dirIdentity(t *testing.T, path string) protocol.Identity {

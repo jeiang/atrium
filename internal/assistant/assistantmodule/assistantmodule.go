@@ -41,7 +41,6 @@ import (
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
-	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
 	webfetchtools "github.com/jeiang/atrium/internal/assistant/tools/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/attention"
@@ -70,7 +69,6 @@ import (
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/unit"
-	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -100,10 +98,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Needs: []module.Need{
 			{Kind: anthropicconn.Kind, Soft: true, Capability: "models", Features: []string{"assistant chat", "scheduled runs", "web search"}},
 			{Kind: webfetch.KindWebfetch, Soft: true, Capability: "egress", Features: []string{"web fetch"}},
-			{Kind: weather.KindWeather, Soft: true, Capability: "forecast", Features: []string{"weather"}},
-			{Kind: weather.KindWeather, Soft: true, Capability: "geocoding", Features: []string{"weather place lookup"}},
 		},
-		Packages: []string{"internal/assistant", "internal/attention/application", "internal/attention/sources", "internal/commitments", "internal/kb", "internal/tasks", "internal/weather"},
+		Packages: []string{"internal/assistant", "internal/attention/application", "internal/attention/sources", "internal/commitments", "internal/kb", "internal/tasks"},
 		Tables: []string{"context_ledger", "context_projections", "export_pages", "kb_fts", "kb_records", "memory_fts", "memory_jobs", "memory_nodes", "memory_state", "memory_views",
 			"projects", "record_links", "run_events", "run_streams", "runs", "skills", "subagents", "tasks", "thread_files", "thread_fts", "thread_messages", "thread_plans",
 			"thread_queue", "threads", "tool_calls", "tool_results"},
@@ -117,7 +113,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, dependencyBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), digest.Settings(),
 			registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
-			export.Settings(), weather.SettingsDefs(), scheduler.Settings(unit.Assistant)),
+			export.Settings(), scheduler.Settings(unit.Assistant)),
 		Host: export.HostSettings(),
 		Recover: func(ctx context.Context, d *db.DB, _ config.Config) error {
 			return kb.EnsureInstructions(ctx, d, prompts.System, assistant.Now())
@@ -171,7 +167,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				Resolve:   export.Resolve(d.Ledger),
 			}
 		},
-		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections(), weather.Connections()),
+		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections()),
 	}
 }
 
@@ -196,13 +192,13 @@ func AttentionSources(env config.Env) []attention.Source {
 }
 
 func SettingGroups() []settings.Group {
-	return append([]settings.Group{
+	return []settings.Group{
 		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, classifier.OpsRunCapKey, classifier.OpsMonthlyCapKey}},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 		}},
 		{Name: "schedules", Title: "Schedules", Keys: []string{digest.NotifyKey, scheduler.KeyMinInterval}},
-	}, weather.SettingGroups()...)
+	}
 }
 
 func ToolDefinitions() []module.ToolDefinition {
@@ -211,7 +207,7 @@ func ToolDefinitions() []module.ToolDefinition {
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService, commitmentToolService),
-		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService),
+		kbtools.Tools(knowledgeToolService),
 		dependencytools.Tools(dependencyToolService),
 	} {
 		for _, t := range tools {

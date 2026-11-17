@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/weather"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/weather"
 )
 
 func TestWeatherToolReturnsAForecast(t *testing.T) {
