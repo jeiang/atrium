@@ -159,12 +159,17 @@ type Scope struct {
 	RunID      *int64
 }
 
+type Addition struct {
+	Hash  string
+	Scope Scope
+}
+
 type Consumer struct {
 	Label    string
 	Consumed string
 	Title    string
 	Skipped  string
-	Added    func(ctx context.Context, d Deps, in Intake, scope Scope) error
+	Added    func(ctx context.Context, d Deps, in Intake, a Addition) error
 }
 
 type AddRequest struct {

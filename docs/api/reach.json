@@ -215,6 +215,7 @@
         "media.poll",
         "media.queue",
         "media.release-preview",
+        "media.requests",
         "media.select-files",
         "media.show-lookup",
         "media.show-search",
@@ -222,8 +223,8 @@
         "media.torrent-files",
         "torrents.control"
       ],
-      "required": 22,
-      "bound": 22
+      "required": 23,
+      "bound": 23
     },
     {
       "area": "permissions",
@@ -414,7 +415,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 238,
-  "total_bound": 238,
+  "total_required": 239,
+  "total_bound": 239,
   "total_approval_reached": 11
 }

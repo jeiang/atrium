@@ -185,7 +185,7 @@ func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	_, scrape, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
+	_, scrape, _ := fetch(t, http.DefaultClient, "GET", opsBase()+"/metrics", nil)
 	for _, name := range []string{
 		"atrium_http_requests_total", "atrium_http_request_duration_seconds",
 		"atrium_llm_requests_total", "atrium_llm_tokens_total", "atrium_llm_cost_usd_total",

@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -89,6 +90,7 @@ type Lease struct {
 	shared       *shared
 	closed       bool
 	workedBefore bool
+	cause        func()
 }
 
 func New(d *db.DB, host config.Host, r *Registry) (*Store, error) {
@@ -937,7 +939,7 @@ func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisable
 			s.recheckSharers(ctx, id, rotated)
 		}
 	}
-	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds, workedBefore: lastOK != nil}
+	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds, workedBefore: lastOK != nil, cause: scheduler.CauseReporter(ctx)}
 	lease.defaults = s.defaultsFor(v.Kind)
 	lease.shared = s.sharedFor(id, revision)
 	return lease, nil
@@ -1334,21 +1336,14 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
 }
 
-func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, results []Result, commits ...Commit) (View, error) {
-	state, reason := aggregate(results, nil)
+func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, interactive []string, results []Result, commits ...Commit) (View, error) {
 	at := s.now()
 	now := float64(at.UnixNano()) / 1e9
-	var lastOK, reauthAt any
-	if state == OK {
-		lastOK = now
-	}
-	if state == NeedsReauth {
-		reauthAt = now
-	}
-	var previous, next State
+	var previous, next, state State
+	var reason string
 	updated := false
 	if err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		var (
@@ -1364,6 +1359,15 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 			return err
 		}
 		_ = json.Unmarshal([]byte(priorJSON), &priorResult)
+		keepInteractive(results, priorResult, interactive)
+		state, reason = aggregate(results, nil)
+		var lastOK, reauthAt any
+		if state == OK {
+			lastOK = now
+		}
+		if state == NeedsReauth {
+			reauthAt = now
+		}
 		carryGrace(results, priorResult, prior, grace, at)
 		previous, next = effective(prior, priorResult, timeOr(fromUnix(priorAt), at)), effective(state, results, at)
 		raw, err := json.Marshal(results)
@@ -1864,4 +1868,17 @@ func (s *Store) afterWrite(ctx context.Context, id ID) (View, error) {
 		return View{}, &CommittedError{Cause: err}
 	}
 	return view, nil
+}
+
+func keepInteractive(results, prior []Result, interactive []string) {
+	for i := range results {
+		if results[i].State != Untested || !slices.Contains(interactive, results[i].Capability) {
+			continue
+		}
+		for _, p := range prior {
+			if p.Capability == results[i].Capability && (p.State == OK || p.State == Failing) {
+				results[i] = p
+			}
+		}
+	}
 }

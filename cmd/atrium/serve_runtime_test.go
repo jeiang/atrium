@@ -187,14 +187,14 @@ func TestServeRuntimeEmbedderFaultRestartsOnlyItsService(t *testing.T) {
 	if embedder.resets.Load() == 0 {
 		t.Fatal("the embedder never saw a request")
 	}
-	if status, state := readiness(t, opsBase); status != http.StatusOK {
+	if status, state := readiness(t, opsBase()); status != http.StatusOK {
 		t.Errorf("readyz during the embedder fault = %d %s, want 200", status, state)
 	}
 	waitUntil(t, 60*time.Second, "healthz to report the embedder outage as degraded", func() bool {
-		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/healthz", nil)
+		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/healthz", nil)
 		return status == http.StatusOK && strings.Contains(body, `"degraded":true`) && strings.Contains(body, `"ready":true`) && strings.Contains(body, `"draining":false`)
 	})
-	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/livez", nil); status != http.StatusOK {
+	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/livez", nil); status != http.StatusOK {
 		t.Errorf("livez during the embedder fault = %d %s, want 200", status, body)
 	}
 	for _, page := range []struct{ path, want string }{
