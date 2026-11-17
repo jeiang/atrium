@@ -406,6 +406,23 @@ export function mailManageHandlers(read: () => { mailManage?: MailManageScenario
       s.rules.push(made);
       return HttpResponse.json({ data: { ...body.rule, id } }, { status: 201 });
     }),
+    http.put(`*${API_BASE}/mail/rules/order`, async ({ request }) => {
+      record(request);
+      await wait();
+      const body = (await request.json()) as { id?: string; direction?: string };
+      if (!body.id || (body.direction !== 'up' && body.direction !== 'down'))
+        return error('invalid', 'id and direction are required', 422);
+      const s = current();
+      const index = s.rules.findIndex((rule) => rule.id === body.id);
+      if (index < 0) return error('not_found', 'unknown rule', 404);
+      const target = body.direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= s.rules.length) return HttpResponse.json({ data: { moved: false } });
+      const rules = [...s.rules];
+      rules.splice(target, 0, ...rules.splice(index, 1));
+      s.rules = rules;
+      if (scenario().command === 'unknown') return HttpResponse.error();
+      return HttpResponse.json({ data: { moved: true } });
+    }),
     http.patch(`*${API_BASE}/mail/rules/:id`, async ({ params, request }) => {
       record(request);
       await wait();

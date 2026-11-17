@@ -38,8 +38,16 @@
 
 <Section id="g-mail-manage" data-gallery="mail-manage" title="Mail rules and mode">
   <ol class="mail-list" aria-label="Rule cards">
-    {#each rules as rule (rule.id)}
-      <RuleCard {rule} vocabulary={mailVocabulary} />
+    {#each rules as rule, index (rule.id)}
+      <RuleCard
+        {rule}
+        vocabulary={mailVocabulary}
+        position={index + 1}
+        total={rules.length}
+        moving={undefined}
+        blocked={false}
+        onmove={() => undefined}
+      />
     {/each}
   </ol>
   <RuleForm

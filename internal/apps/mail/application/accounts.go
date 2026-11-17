@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -184,7 +185,7 @@ func (s *Service) drop(ctx context.Context, a config.AccountSpec) {
 
 func (s *Service) save(ctx context.Context, a config.AccountSpec) error {
 	if err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		return config.SaveStoredAccount(ctx, tx, a, s.now())
+		return accounts.SaveStoredAccount(ctx, tx, a, s.now())
 	}); err != nil {
 		return err
 	}
@@ -218,7 +219,7 @@ func (s *Service) AccountAdd(ctx context.Context, in AccountAddInput) (applicati
 	kept := map[string]string{"id": strings.TrimSpace(in.ID), "label": strings.TrimSpace(in.Label), "preset": strings.TrimSpace(in.Preset), "login": strings.TrimSpace(in.Login), "auth_method": strings.TrimSpace(in.AuthMethod)}
 	password := config.NormalizePassword(in.Password)
 	err := func() error {
-		a, err := config.NewAccount(kept["id"], kept["label"], kept["preset"], kept["login"], true)
+		a, err := accounts.NewAccount(kept["id"], kept["label"], kept["preset"], kept["login"], true)
 		if err == nil {
 			a.AuthMethod, err = config.ParseAuthMethod(kept["auth_method"])
 		}
@@ -251,7 +252,7 @@ func (s *Service) AccountAdd(ctx context.Context, in AccountAddInput) (applicati
 		}
 		if err != nil {
 			if attempted {
-				_ = config.DeleteStoredAccount(ctx, s.db.Write, a.Name)
+				_ = accounts.DeleteStoredAccount(ctx, s.db.Write, a.Name)
 				s.drop(ctx, a)
 				_ = config.From(ctx).LoadStoredAccounts(ctx, s.db.Read)
 			}
@@ -268,7 +269,7 @@ func (s *Service) AccountUpdate(ctx context.Context, in AccountUpdateInput) (app
 	if err == nil {
 		password := config.NormalizePassword(in.Password)
 		login := strings.TrimSpace(accountValue(in.Login, current.Login))
-		a, err = config.NewAccount(id, strings.TrimSpace(accountValue(in.Label, current.Label)), current.Preset, login, in.Enabled)
+		a, err = accounts.NewAccount(id, strings.TrimSpace(accountValue(in.Label, current.Label)), current.Preset, login, in.Enabled)
 		if err == nil {
 			a.AuthMethod, err = config.ParseAuthMethod(accountValue(in.AuthMethod, string(current.AuthMethod)))
 		}
@@ -306,7 +307,7 @@ func (s *Service) AccountRemove(ctx context.Context, in AccountInput) (applicati
 	_, err := s.stored(ctx, id)
 	if err == nil {
 		err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
-			return config.DeleteStoredAccount(ctx, tx, id)
+			return accounts.DeleteStoredAccount(ctx, tx, id)
 		})
 	}
 	if err == nil {

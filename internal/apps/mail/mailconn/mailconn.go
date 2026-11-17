@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/apps/mail/smtp"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -50,14 +51,14 @@ func IMAPHost(lease *connections.Lease, spec config.AccountSpec) string {
 	if host := strings.TrimSpace(Settings(lease)["imap_host"]); host != "" {
 		return host
 	}
-	return spec.Host()
+	return accounts.IMAPHost(spec)
 }
 
 func SMTPHost(lease *connections.Lease, spec config.AccountSpec) string {
 	if host := strings.TrimSpace(Settings(lease)["smtp_host"]); host != "" {
 		return host
 	}
-	return spec.SMTPHost()
+	return accounts.SMTPHost(spec)
 }
 
 func Password(lease *connections.Lease, account string) (string, error) {
@@ -97,6 +98,7 @@ func SMTPOutcome(err error) (connections.Result, bool) {
 func AccountSync() *connections.AccountSync {
 	return &connections.AccountSync{
 		Accounts:  HostAccounts,
+		Rows:      accounts.LoadStored,
 		Validate:  validateHostAccounts,
 		Reconcile: reconcileAccounts,
 		Reload:    reloadAccounts,
@@ -120,7 +122,7 @@ func HostAccounts(host config.Host) ([]config.AccountSpec, map[string]string, er
 		if value, ok := cfg["enabled"]; ok {
 			enabled = value != "false"
 		}
-		spec, err := config.NewAccount(account, c.Label, cfg["preset"], cfg["login"], enabled)
+		spec, err := accounts.NewAccount(account, c.Label, cfg["preset"], cfg["login"], enabled)
 		if err != nil {
 			return nil, nil, fmt.Errorf("config: connection %q: %w", id, err)
 		}
@@ -162,11 +164,11 @@ func reconcileAccounts(ctx context.Context, tx *sql.Tx, host config.Host) error 
 	keep := make(map[string]bool, len(list))
 	for _, a := range list {
 		keep[a.Name] = true
-		if err := config.SavePinnedAccount(ctx, tx, a, string(ID(a.Name)), stamp()); err != nil {
+		if err := accounts.SavePinnedAccount(ctx, tx, a, string(ID(a.Name)), stamp()); err != nil {
 			return err
 		}
 	}
-	pinned, err := config.PinnedAccounts(ctx, tx)
+	pinned, err := accounts.PinnedAccounts(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -174,7 +176,7 @@ func reconcileAccounts(ctx context.Context, tx *sql.Tx, host config.Host) error 
 		if keep[id] {
 			continue
 		}
-		if err := config.DeleteStoredAccount(ctx, tx, id); err != nil {
+		if err := accounts.DeleteStoredAccount(ctx, tx, id); err != nil {
 			return err
 		}
 	}

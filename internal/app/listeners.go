@@ -48,6 +48,9 @@ func listen(name, fd, addr string) (*listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s listener: %w", name, err)
 	}
+	if fd == "" && !listenfd.Assigned(addr) {
+		log.Warn(fmt.Sprintf("%s listener address %s is not assigned to this host yet; the listener accepts connections once the address comes up", name, addr))
+	}
 	return &listener{name: name, net: l, done: make(chan error, 1)}, nil
 }
 

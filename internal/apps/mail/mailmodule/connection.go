@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/apps/mail/gmailauth"
 	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
@@ -30,7 +31,7 @@ func validateConnection(c connections.Candidate) error {
 	for key, value := range cfg {
 		switch key {
 		case "preset":
-			if _, err := config.NewAccount("probe", "probe", value, "probe", true); err != nil {
+			if _, err := accounts.NewAccount("probe", "probe", value, "probe", true); err != nil {
 				return fmt.Errorf("mail preset: %w", err)
 			}
 		case "login", "imap_host", "smtp_host":
@@ -112,7 +113,7 @@ func candidateSpec(account string, cfg map[string]string) (config.AccountSpec, e
 	if value, ok := cfg["enabled"]; ok {
 		enabled = value != "false"
 	}
-	spec, err := config.NewAccount(account, "", cfg["preset"], cfg["login"], enabled)
+	spec, err := accounts.NewAccount(account, "", cfg["preset"], cfg["login"], enabled)
 	if err != nil {
 		return spec, err
 	}

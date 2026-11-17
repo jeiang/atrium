@@ -2,12 +2,15 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,8 +18,10 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 	"golang.org/x/sys/unix"
@@ -251,6 +256,32 @@ func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 			}
 			_ = l.Close()
 		})
+	}
+}
+
+func TestServeStartsWhenTheOpsListenerAddressIsNotAssignedYet(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("binding an address the host does not have yet needs IP_FREEBIND, which only Linux offers")
+	}
+	_, _, f := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(ops.ListenKey), "192.0.2.10:0")
+	opsFile := filepath.Join(t.TempDir(), "ops-addr")
+	setEnv(t, "ATRIUM_OPS_ADDR_FILE", opsFile)
+	previous := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	base, logs, stop, err := startServeAppArgs(t, newAppWith(f.lookup, imapclient.Opener, nil, logx.Setup), &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatalf("serve did not start with an unassigned ops address: %v", err)
+	}
+	t.Cleanup(stop)
+	if status, _, _ := fetch(t, jarClient(t), http.MethodGet, base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat on the public listener = %d", status)
+	}
+	if raw, err := os.ReadFile(opsFile); err != nil || !strings.HasPrefix(string(raw), "192.0.2.10:") {
+		t.Fatalf("ops listener address %q, %v", raw, err)
+	}
+	if want := "ops listener address 192.0.2.10:0 is not assigned to this host yet"; !strings.Contains(logs.String(), want) {
+		t.Fatalf("serve logs lack %q:\n%s", want, logs.String())
 	}
 }
 
