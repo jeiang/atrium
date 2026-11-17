@@ -8,6 +8,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, storedKeys, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet'];
 
@@ -279,6 +280,37 @@ test.describe('calendar on a desktop', () => {
       page.getByRole('navigation', { name: 'Calendar' }).getByRole('link', { name: 'Week' }),
     ).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('.rail').getByRole('link', { name: 'Calendar' })).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+test.describe('calendar with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('a new event whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/calendar/events',
+      open: '/apps/calendar',
+      press: async (page) => {
+        await page.getByRole('button', { name: 'New event' }).click();
+        const dialog = page.getByRole('dialog', { name: 'New event' });
+        await dialog.getByLabel('Title').fill('Bike repair');
+        await dialog.getByRole('button', { name: 'Add event' }).click();
+      },
+    });
+  });
+
+  test('a delete whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'DELETE',
+      path: '/calendar/events/.+',
+      open: '/apps/calendar',
+      press: async (page) => {
+        await row(page, /Dinner with Ilse/).click();
+        await page.getByRole('dialog', { name: 'Dinner with Ilse' }).getByRole('button', { name: 'Delete' }).click();
+        await page.getByRole('dialog', { name: 'Delete this event?' }).getByRole('button', { name: 'Delete' }).click();
+      },
+    });
   });
 });
 

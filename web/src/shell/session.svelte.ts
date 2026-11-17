@@ -12,6 +12,7 @@ import { onReconnect } from '../shared/device.svelte';
 import { queryClient } from '../shared/query';
 import { cachedSession, restore, wipe } from '../shared/readcache';
 import { toast } from '../shared/ui/toast.svelte';
+import { appWorker } from '../shared/worker';
 
 export type SessionView =
   | { status: 'loading' }
@@ -58,7 +59,7 @@ function signedOut(signIn: WebSignIn | undefined, redirect: boolean, after: 'log
     flushSync(() => {
       session.view = { status: 'redirecting' };
     });
-    location.assign(target.href);
+    void appWorker.then(() => location.assign(target.href));
     return;
   }
   session.view = { status: 'signed-out', signIn, after };

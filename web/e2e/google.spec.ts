@@ -9,6 +9,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, reconnect, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -158,6 +159,34 @@ test.describe('Google setup without atrium', () => {
     await reconnect(page, /\/web\/v1\/connections$/);
     await expect(setup.getByRole('radio', { name: 'Gmail' })).toHaveAccessibleDescription(/^Connected /);
     expect(await completions(page)).toHaveLength(1);
+  });
+
+  test('a client save whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PUT',
+      path: '/connections/google/oauth',
+      open: page_,
+      scenario: { connections: { google: 'fresh' } },
+      press: async (page) => {
+        const setup = page.locator('#google-setup');
+        await setup.getByRole('textbox', { name: 'Client ID' }).fill('fictional-client');
+        await setup.getByRole('textbox', { name: 'Client secret', exact: true }).fill('fictional-secret-2219');
+        await setup.getByRole('button', { name: 'Save client details' }).click();
+      },
+    });
+  });
+
+  test('a consent start whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/connections/google/oauth/start',
+      open: page_,
+      press: async (page) => {
+        const setup = page.locator('#google-setup');
+        await setup.getByRole('radio', { name: 'Gmail' }).check();
+        await setup.getByRole('button', { name: 'Continue to Google' }).click();
+      },
+    });
   });
 });
 

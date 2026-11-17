@@ -8,7 +8,8 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks.ts';
-import { expect, galleryLayouts, test, useScenario } from './fixtures.ts';
+import { expect, galleryLayouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet'];
 
@@ -149,6 +150,72 @@ test.describe('tasks on a desktop', () => {
       });
     }
   });
+});
+
+test.describe('tasks with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  const detail = (page: Page) => page.getByRole('article');
+  const commands = [
+    {
+      name: 'an add',
+      method: 'POST',
+      path: '/tasks',
+      open: '/plan/tasks',
+      press: async (page: Page) => {
+        await page.getByRole('textbox', { name: 'New task' }).fill('Fix the gate latch');
+        await page.getByRole('button', { name: 'Add task' }).click();
+      },
+    },
+    {
+      name: 'an edit',
+      method: 'PATCH',
+      path: '/tasks/32',
+      open: '/plan/tasks/32',
+      press: async (page: Page) => {
+        await detail(page).getByRole('button', { name: 'Edit' }).click();
+        await detail(page).getByRole('textbox', { name: 'Title' }).fill('Book the bike service for Friday');
+        await detail(page).getByRole('button', { name: 'Save task' }).click();
+      },
+    },
+    {
+      name: 'a done',
+      method: 'POST',
+      path: '/tasks/33/done',
+      open: '/plan/tasks/33',
+      press: (page: Page) => detail(page).getByRole('button', { name: 'Done' }).click(),
+    },
+    {
+      name: 'a dismiss',
+      method: 'POST',
+      path: '/tasks/33/dismiss',
+      open: '/plan/tasks/33',
+      press: (page: Page) => detail(page).getByRole('button', { name: 'Dismiss' }).click(),
+    },
+    {
+      name: 'a reopen',
+      method: 'POST',
+      path: '/tasks/33/reopen',
+      open: '/plan/tasks/33',
+      press: async (page: Page) => {
+        await detail(page).getByRole('button', { name: 'Done' }).click();
+        await detail(page).getByRole('button', { name: 'Reopen' }).click();
+      },
+    },
+    {
+      name: 'a delete',
+      method: 'DELETE',
+      path: '/tasks/33',
+      open: '/plan/tasks/33',
+      press: (page: Page) => detail(page).getByRole('button', { name: 'Delete' }).click(),
+    },
+  ];
+
+  for (const { name, ...command } of commands) {
+    test(`${name} whose answer is lost reads as unknown and is never sent again`, async ({ page }) => {
+      await expectLostAnswer(page, command);
+    });
+  }
 });
 
 test.describe('tasks on a phone', () => {

@@ -8,6 +8,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer, expectNeverAgain, pressWithFault } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 
@@ -361,6 +362,98 @@ test.describe('Mail on a phone', () => {
     await page.keyboard.press('Enter');
     await expect(toast(page, 'Sent to mina@okafor.example.')).toBeVisible();
     expect(sent).toEqual(['POST /drafts', 'POST /drafts/500/send']);
+  });
+});
+
+test.describe('Mail drafts with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  const commands = [
+    {
+      name: 'a new draft',
+      method: 'POST',
+      path: '/drafts',
+      open: '/apps/mail',
+      press: async (page: Page) => {
+        await newEmail(page);
+        await compose(page).getByRole('button', { name: 'Save draft' }).click();
+      },
+    },
+    {
+      name: 'a draft save',
+      method: 'PATCH',
+      path: '/drafts/\\d+',
+      open: '/apps/mail',
+      press: async (page: Page) => {
+        await newEmail(page);
+        await compose(page).getByRole('button', { name: 'Save draft' }).click();
+        await expect(toast(page, 'Draft saved.')).toBeVisible();
+        await compose(page).getByLabel('Subject').fill('Bean and pea seeds');
+        await compose(page).getByRole('button', { name: 'Save draft' }).click();
+      },
+    },
+    {
+      name: 'a reply',
+      method: 'POST',
+      path: '/mail/messages/101/reply',
+      open: '/apps/mail/message/101',
+      press: (page: Page) => page.getByRole('button', { name: 'Reply' }).click(),
+    },
+    {
+      name: 'a forward',
+      method: 'POST',
+      path: '/mail/messages/101/forward',
+      open: '/apps/mail/message/101',
+      press: async (page: Page) => {
+        await page.getByRole('button', { name: 'Forward' }).click();
+        await compose(page).getByLabel('To', { exact: true }).fill('teo@lindqvist.example');
+        await compose(page).getByRole('button', { name: 'Continue' }).click();
+      },
+    },
+    {
+      name: 'a discard',
+      method: 'POST',
+      path: '/drafts/\\d+/discard',
+      open: '/apps/mail/message/101',
+      press: async (page: Page) => {
+        await page.getByRole('button', { name: 'Reply' }).click();
+        await expect(compose(page).getByRole('heading', { name: 'Reply' })).toBeVisible();
+        await compose(page).getByRole('button', { name: 'Discard' }).click();
+      },
+    },
+  ];
+
+  for (const { name, ...command } of commands) {
+    test(`${name} whose answer is lost reads as unknown and is never sent again`, async ({ page }) => {
+      await expectLostAnswer(page, command);
+    });
+  }
+
+  test('marking a stuck change as done whose answer is lost reads as unknown and is never sent again', async ({
+    page,
+  }) => {
+    const sent = await pressWithFault(
+      page,
+      {
+        method: 'POST',
+        path: '/effects/\\d+/resolve',
+        open: '/apps/mail/message/103',
+        scenario: { mailbox: { action: 'unknown' } },
+        press: async (page) => {
+          await page.getByRole('button', { name: 'Flag', exact: true }).click();
+          await page.getByRole('button', { name: 'Mark as done' }).click();
+          await page
+            .getByRole('dialog', { name: 'Mark this change as done?' })
+            .getByRole('button', { name: 'Mark as done' })
+            .click();
+        },
+      },
+      'lost',
+    );
+    await expect(
+      page.getByText('The connection failed before atrium answered. atrium did not try again.'),
+    ).toBeVisible();
+    await expectNeverAgain(page, sent);
   });
 });
 

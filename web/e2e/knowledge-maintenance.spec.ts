@@ -243,6 +243,121 @@ test.describe('knowledge maintenance', () => {
         },
       });
     });
+
+    const writes = [
+      {
+        name: 'a confirm',
+        method: 'POST',
+        path: '/knowledge/23/confirm',
+        open: '/knowledge/23',
+        press: (page: Page) => page.locator('.kpage__actions').getByRole('button', { name: 'Confirm' }).click(),
+      },
+      {
+        name: 'confirming the selected',
+        method: 'POST',
+        path: '/knowledge/confirm',
+        open: '/knowledge/review',
+        press: async (page: Page) => {
+          await page
+            .getByRole('list', { name: 'Waiting for review' })
+            .getByRole('checkbox', { name: 'Select Garden weather station' })
+            .check();
+          await page.getByRole('button', { name: /^Confirm selected/ }).click();
+        },
+      },
+      {
+        name: 'confirming all that match',
+        method: 'POST',
+        path: '/knowledge/confirm-matching',
+        open: '/knowledge/review',
+        press: (page: Page) => page.getByRole('button', { name: 'Confirm all that match' }).click(),
+      },
+      {
+        name: 'a new fact',
+        method: 'POST',
+        path: '/knowledge',
+        open: '/knowledge/subjects',
+        press: async (page: Page) => {
+          await page.getByRole('button', { name: 'New fact' }).click();
+          const dialog = page.getByRole('dialog', { name: 'New fact' });
+          await dialog.getByLabel('Title').fill('Compost turns in March');
+          await dialog.getByLabel('Text').fill('Turn both bins in the first week.');
+          await dialog.getByRole('radio', { name: 'Work' }).check();
+          await dialog.getByRole('button', { name: 'Save the fact' }).click();
+        },
+      },
+      {
+        name: 'an edit',
+        method: 'PATCH',
+        path: '/knowledge/21',
+        open: '/knowledge/21',
+        press: async (page: Page) => {
+          await page.getByRole('button', { name: 'Edit' }).click();
+          await page.getByRole('textbox', { name: 'Text' }).fill('Ilse runs the garden.');
+          await page.getByRole('button', { name: 'Save' }).click();
+        },
+      },
+      {
+        name: 'a restore',
+        method: 'POST',
+        path: '/knowledge/21/restore',
+        open: '/knowledge/21',
+        press: async (page: Page) => {
+          await page.getByRole('button', { name: 'Retract' }).click();
+          await page.locator('.kpage').getByRole('button', { name: 'Restore' }).click();
+        },
+      },
+      {
+        name: 'removing a link',
+        method: 'POST',
+        path: '/knowledge/links/71/retract',
+        open: '/knowledge/21',
+        press: (page: Page) => page.getByRole('button', { name: 'Remove the link to Shared garden project' }).click(),
+      },
+      {
+        name: 'a new space',
+        method: 'POST',
+        path: '/knowledge/spaces',
+        open: '/knowledge/spaces',
+        press: async (page: Page) => {
+          await page.getByRole('button', { name: 'New space' }).click();
+          const dialog = page.getByRole('dialog', { name: 'New space' });
+          await dialog.getByLabel('Name').fill('Allotment');
+          await dialog.getByRole('button', { name: 'Make the space' }).click();
+        },
+      },
+      {
+        name: 'a space rename',
+        method: 'PATCH',
+        path: '/knowledge/spaces/5',
+        open: '/knowledge/spaces/5',
+        press: async (page: Page) => {
+          await page.getByRole('button', { name: 'Rename' }).click();
+          const dialog = page.getByRole('dialog', { name: 'Rename Shared garden' });
+          await dialog.getByLabel('Name').fill('Shared garden 2');
+          await dialog.getByRole('button', { name: 'Rename' }).click();
+        },
+      },
+      {
+        name: 'archiving a space',
+        method: 'POST',
+        path: '/knowledge/spaces/5/archive',
+        open: '/knowledge/spaces/5',
+        press: async (page: Page) => {
+          await page.getByRole('button', { name: 'Archive' }).click();
+          await page
+            .getByRole('dialog', { name: 'Archive Shared garden?' })
+            .getByRole('button', { name: 'Archive space' })
+            .click();
+        },
+      },
+    ];
+
+    for (const { name, ...command } of writes) {
+      test(`${name} whose answer is lost reads as unknown and is never sent again`, async ({ page }) => {
+        await expectLostAnswer(page, command);
+      });
+    }
   });
 
   for (const layout of layouts) {
