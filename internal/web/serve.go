@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"maps"
 	"net"
 	"net/http"
@@ -23,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const (
@@ -34,16 +32,13 @@ const (
 
 var ErrNoTrustedProxy = errors.New("proxy mode needs --trusted-proxy or host web.trusted_proxy_cidrs naming the reverse proxy")
 
-type NavItem = tpl.NavItem
-
 type Page struct {
-	Module    Module
-	Templates fs.FS
-	Globals   map[string]any
-	Public    func(config.Config, config.Env, *db.DB, *settings.Registry) func(*http.Request) bool
-	Nav       []tpl.NavItem
-	OIDC      oidc.Source
-	Bindings  map[string][]application.Binding
+	Module   Module
+	Enabled  func(string) bool
+	Public   func(config.Config, config.Env, *db.DB, *settings.Registry) func(*http.Request) bool
+	Nav      []NavItem
+	OIDC     oidc.Source
+	Bindings map[string][]application.Binding
 }
 
 type Resource struct {
@@ -183,10 +178,9 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 		return nil, nil, ErrNoTrustedProxy
 	}
 	var modules []Module
-	var templates []fs.FS
-	globals := map[string]any{}
+	var enabled func(string) bool
 	var checks []func(*http.Request) bool
-	var nav []tpl.NavItem
+	var nav []NavItem
 	var oidcSource oidc.Source
 	bindings := map[string][]application.Binding{}
 	for _, page := range site.Pages {
@@ -196,21 +190,17 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 		if page.Public != nil {
 			checks = append(checks, page.Public(site.Cfg, site.Env, site.DB, site.Settings))
 		}
-		if page.Templates != nil {
-			templates = append(templates, page.Templates)
-		}
 		if page.OIDC != nil {
 			oidcSource = page.OIDC
 		}
-		maps.Copy(globals, page.Globals)
+		if page.Enabled != nil {
+			enabled = page.Enabled
+		}
 		maps.Copy(bindings, page.Bindings)
 		nav = append(nav, page.Nav...)
 	}
 	build := func(e Endpoint, sessions *oidc.Service, start func(*Deps) error) (*Server, error) {
-		render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals, State: site.State}, nav...)
-		if err != nil {
-			return nil, err
-		}
+		render := NewRenderer(enabled, nav...)
 		var account *authapp.Service
 		if site.DB != nil {
 			account = authapp.New(site.DB, sessions, bearer.New(site.DB, sessions))

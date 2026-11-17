@@ -99,7 +99,7 @@ func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why erro
 		expireCookie(w, sessionCookie, isHTTPS(r))
 	}
 	get := r.Method == http.MethodGet || r.Method == http.MethodHead
-	if get && !IsPartial(r) {
+	if get {
 		if next := oidc.SafeReturn(r.URL.RequestURI()); next != "/" {
 			q.Set("next", next)
 		}
@@ -107,11 +107,6 @@ func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why erro
 	target := loginPath
 	if len(q) > 0 {
 		target += "?" + q.Encode()
-	}
-	if IsPartial(r) {
-		w.Header().Set("HX-Redirect", target)
-		deny(w, http.StatusUnauthorized, "Unauthorized")
-		return
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }
@@ -153,7 +148,7 @@ const continueDocument = `<!doctype html>
 `
 
 func crossSiteNavigation(r *http.Request) bool {
-	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && !IsPartial(r) &&
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
 		r.Header.Get("Sec-Fetch-Site") == "cross-site" && r.Header.Get("Sec-Fetch-Mode") == "navigate"
 }
 

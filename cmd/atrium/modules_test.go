@@ -381,6 +381,15 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 		if reason, _ := modules["media"]["reason"].(string); modules["media"]["state"] == "enabled" || !strings.Contains(reason, "torrents") {
 			t.Fatalf("the media module does not name the unavailable Torrents dependency: %v", modules["media"])
 		}
+		apps := client.do(http.MethodGet, "/web/v1/apps", nil)
+		if apps.status != http.StatusOK {
+			t.Fatalf("GET /web/v1/apps with unavailable modules = %d: %.600s", apps.status, apps.body)
+		}
+		for _, name := range []string{"mail", "torrents"} {
+			if !strings.Contains(apps.body, `"id":"`+name+`"`) || !strings.Contains(apps.body, `"state":"unavailable"`) {
+				t.Fatalf("the apps list does not show %s as unavailable: %.1200s", name, apps.body)
+			}
+		}
 	})
 	t.Run("core", func(t *testing.T) {
 		dir, _, f := moduleFixture(t, allFlagsTrue())

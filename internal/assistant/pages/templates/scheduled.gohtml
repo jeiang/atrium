@@ -1,5 +1,0 @@
-{{define "title"}}Scheduled{{end}}
-{{define "heading"}}Scheduled{{end}}
-{{define "content"}}{{$d := .Data}}
-{{template "scheduled_list" (dict "jobs" $d.Jobs "runs" $d.Runs "tz" $d.TZ)}}
-{{end}}

@@ -79,10 +79,6 @@ func TestGuardOIDCCrossSiteArrivalGetsOneSameSiteContinue(t *testing.T) {
 	if unmarked := anon.get(target); unmarked.status != http.StatusSeeOther || !strings.HasPrefix(unmarked.location(), "/login?next=") {
 		t.Fatalf("an arrival without fetch metadata: %d %q", unmarked.status, unmarked.location())
 	}
-	hx := anon.get(target, append([]string{"HX-Request", "true"}, crossSiteNavigation...)...)
-	if hx.status != http.StatusUnauthorized || hx.header.Get("HX-Redirect") != "/login" {
-		t.Fatalf("cross-site partial: %d %q", hx.status, hx.header.Get("HX-Redirect"))
-	}
 
 	signedIn := s.browser()
 	signedIn.mustSignIn("admin")

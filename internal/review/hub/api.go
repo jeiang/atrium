@@ -229,7 +229,9 @@ func EffectRead(w http.ResponseWriter, r *http.Request, s *reviewapp.Service) {
 
 func apiRaw(v any) json.RawMessage {
 	raw, err := json.Marshal(v)
-	Check(err)
+	if err != nil {
+		panic(err)
+	}
 	return raw
 }
 

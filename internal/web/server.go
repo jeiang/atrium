@@ -31,7 +31,6 @@ import (
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web/app"
-	"github.com/jeiang/atrium/internal/web/tpl"
 	"github.com/jeiang/atrium/internal/webusage"
 )
 
@@ -59,8 +58,6 @@ type Provided struct {
 	ResumeRun func(ctx context.Context, runID int64) error
 }
 
-type SettingsRender func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame))
-
 type Deps struct {
 	Ctx      context.Context
 	Cfg      config.Config
@@ -72,12 +69,9 @@ type Deps struct {
 	Render   *Renderer
 	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
 	NotFound http.HandlerFunc
-	OnFrame  func(FrameFunc)
 	OnShell  func(ShellFunc)
 	Stopping <-chan struct{}
 	Provided
-
-	settingsPages map[string]SettingsRender
 
 	commands      func(pattern string, next http.Handler) http.Handler
 	router        chi.Router
@@ -92,21 +86,6 @@ func (d *Deps) DrainOnStop(drain func(context.Context) error) {
 	if d.drain != nil {
 		d.drain(drain)
 	}
-}
-
-func (d *Deps) SettingsAt(url string, render SettingsRender) {
-	d.settingsPages[url] = render
-}
-
-func (d *Deps) SettingsPage(w http.ResponseWriter, r *http.Request, status int, url string, mutate func(*tpl.Frame)) bool {
-	render, ok := d.settingsPages[url]
-	if !ok {
-		return false
-	}
-	at := r.Clone(r.Context())
-	at.URL.Path, at.URL.RawQuery = url, ""
-	render(w, at, status, mutate)
-	return true
 }
 
 func (d *Deps) Public(method, pattern string, h http.HandlerFunc) {
@@ -216,12 +195,11 @@ func New(o Options) (*Server, error) {
 	s.stop = make(chan struct{})
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Account: s.account, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
-		OnFrame: func(FrameFunc) {}, OnShell: func(ShellFunc) {}, settingsPages: map[string]SettingsRender{},
+		OnShell:  func(ShellFunc) {},
 		drain:    o.Drain,
 		commands: o.Commands, router: core, routes: &s.routes, operations: new([]operation), owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
-		deps.OnFrame = o.Render.OnFrame
 		deps.OnShell = o.Render.OnShell
 	}
 	s.secure = func(r *http.Request) bool {
@@ -376,12 +354,6 @@ func (s *Server) Close() error {
 	s.StopStreams()
 	s.closeUsage()
 	return nil
-}
-
-func IsPartial(r *http.Request) bool {
-	_, hx := r.Header["Hx-Request"]
-	_, restore := r.Header["Hx-History-Restore-Request"]
-	return hx && !restore
 }
 
 var methods = [...]string{http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}
