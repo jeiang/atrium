@@ -23,6 +23,7 @@ func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:     KindWeather,
 		Offers:   []string{"forecast", "geocoding"},
+		Docs:     "open-meteo",
 		Validate: validateConnection,
 		Test:     testConnection,
 	}}

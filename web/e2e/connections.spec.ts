@@ -9,6 +9,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -69,6 +70,27 @@ test.describe('the connections list', () => {
   test('an unknown address says no such connection', async ({ page }) => {
     await gotoShell(page, '/settings/connections/service/nowhere');
     await expect(page.getByRole('heading', { name: 'No such connection' })).toBeVisible();
+  });
+
+  test('a connection with a setup guide links to its section, in a new tab', async ({ page }) => {
+    const guide = (name: string) => `https://github.com/jeiang/atrium/blob/main/docs/integrations.md#${name}`;
+    await openConnection(page, 'service/anthropic', 'Anthropic');
+    const link = page.getByRole('link', { name: /^Setup guide\s*, opens in a new tab$/ });
+    await expect(link).toHaveAttribute('href', guide('anthropic'));
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+
+    await openConnection(page, 'google/default', 'Google');
+    await expect(link).toHaveAttribute('href', guide('google'));
+
+    await useScenario(page, { connections: { google: 'absent' } });
+    await gotoShell(page, '/settings/connections/google/default');
+    await expect(page.getByRole('heading', { name: 'Client details' })).toBeVisible();
+    await expect(link).toHaveAttribute('href', guide('google'));
+
+    await openConnection(page, 'service/weather', 'Open-Meteo');
+    await expect(page.locator('#connection-status')).toBeVisible();
+    await expect(link).toHaveCount(0);
   });
 });
 
@@ -284,6 +306,32 @@ test.describe('offline', () => {
     await status.getByRole('button', { name: 'Test now' }).click();
     await expect(status.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
     expect((await requests(page)).filter((item) => item.path.endsWith('/test'))).toHaveLength(0);
+  });
+});
+
+test.describe('lost answers', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('a credential save whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PATCH',
+      path: '/connections/service/ship24',
+      open: '/settings/connections/service/ship24',
+      press: async (page) => {
+        const fields = page.locator('#connection-fields');
+        await fields.getByLabel('API key', { exact: true }).fill(secret);
+        await fields.getByRole('button', { name: 'Save without testing' }).click();
+      },
+    });
+  });
+
+  test('a test whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/connections/media/jellyfin/test',
+      open: '/settings/connections/media/jellyfin',
+      press: (page) => page.locator('#connection-status').getByRole('button', { name: 'Test now' }).click(),
+    });
   });
 });
 

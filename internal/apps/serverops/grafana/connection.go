@@ -27,6 +27,7 @@ func Connections() []connections.Definition {
 		Kind:            KindGrafana,
 		Offers:          []string{"viewer"},
 		CredentialSlots: []string{"viewer_token", "api_key"},
+		Docs:            "grafana",
 		Validate:        validateConnection,
 		Test:            testConnection,
 	}}

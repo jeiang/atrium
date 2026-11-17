@@ -7,6 +7,7 @@ func finalBindings() []application.Binding {
 		{Kind: application.ProtocolOnly, Target: "GET /about", Reason: "static"},
 		{Kind: application.ProtocolOnly, Target: "catalog operations", Reason: "coordinator"},
 		{Kind: application.ProtocolOnly, Target: "catalog openapi", Reason: "coordinator"},
+		{Kind: application.ProtocolOnly, Target: "catalog integrations", Reason: "coordinator"},
 		{Kind: application.ProtocolOnly, Target: "job run", Reason: "coordinator"},
 		{Kind: application.ProtocolOnly, Target: "recovery", Reason: "lifecycle"},
 		{Kind: application.ProtocolOnly, Target: "embedding-index", Reason: "lifecycle"},

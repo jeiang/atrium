@@ -13,6 +13,7 @@
   import Button from '../../shared/ui/Button.svelte';
   import DataTable, { type Column } from '../../shared/ui/DataTable.svelte';
   import Dialog from '../../shared/ui/Dialog.svelte';
+  import Icon from '../../shared/ui/Icon.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
   import Page from '../../shared/ui/Page.svelte';
   import Section from '../../shared/ui/Section.svelte';
@@ -30,6 +31,7 @@
     GOOGLE_ID,
     gesture,
     graceText,
+    guideFor,
     hostSlot,
     normalized,
     ownerText,
@@ -61,6 +63,7 @@
   const name = $derived(route.params.name ?? '');
   const id = $derived(`${kind}/${name}`);
   const view = $derived(list.data?.find((row) => row.id === id));
+  const guide = $derived(guideFor(schema.data, view?.kind ?? (id === GOOGLE_ID ? 'google' : '')));
   const fields = $derived(fieldsFor(schema.data, id));
   const offline = $derived(unreachable(list));
   const textFields = $derived(fields.filter((field) => !field.secret));
@@ -327,6 +330,13 @@
 {/snippet}
 
 <Page title={view?.label ?? 'Connection'} eyebrow="Connections">
+  {#snippet actions()}
+    {#if guide}
+      <a class="btn btn--secondary" href={guide} target="_blank" rel="noopener noreferrer"
+        >Setup guide<Icon name="external" /><span class="visually-hidden">, opens in a new tab</span></a
+      >
+    {/if}
+  {/snippet}
   <a class="link conn-back" href={p('/settings/connections')}>All connections</a>
   {#if offline}
     <ViewState kind="offline" title="Cannot reach atrium">

@@ -452,9 +452,11 @@
   }
 
   function message(error: unknown): string {
-    if (error instanceof TypeError || refusedOffline(error))
-      return 'Cannot reach atrium. Nothing was sent. The message was kept.';
-    return error instanceof Error && error.message ? error.message : 'The message was not sent.';
+    if (refusedOffline(error)) return 'Cannot reach atrium. Nothing was sent. The message was kept.';
+    if (error instanceof ApiError) return error.message || 'The message was not sent.';
+    void queryClient.invalidateQueries({ queryKey: ['threads'] });
+    if (id !== undefined) void queryClient.invalidateQueries({ queryKey: ['thread', id] });
+    return 'The outcome is unknown. The connection failed before atrium answered, so this may or may not have happened. atrium reloaded the chat and did not try again. The message was kept.';
   }
 
   async function onSend(text: string): Promise<void> {

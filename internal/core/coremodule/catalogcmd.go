@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/apischema"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
@@ -142,6 +143,26 @@ func catalogCommand(mc module.Context) *cli.Command {
 					}
 				default:
 					_, _ = env.Stdout.Write(files[apischema.OpenAPIFile])
+				}
+				return cli.ExitOK
+			}
+		},
+	}, {
+		Name: "integrations",
+		Help: "exit 1 when the integrations document misses or misstates a connection kind or OIDC preset",
+		Setup: func(a *cli.Args) cli.Handler {
+			doc := a.Arg("document", cli.Opt{Help: "path to docs/integrations.md"})
+			return func(env *cli.Env) int {
+				raw, err := os.ReadFile(*doc)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				problems := integrationsDocProblems(mc.Catalog().Connections(), oidc.PresetNames(), string(raw))
+				for _, problem := range problems {
+					_, _ = fmt.Fprintf(env.Stderr, "%s: %s\n", *doc, problem)
+				}
+				if len(problems) > 0 {
+					return cli.ExitError
 				}
 				return cli.ExitOK
 			}

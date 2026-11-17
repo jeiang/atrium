@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import type { NotificationsRequest } from '../src/mocks/notifications.ts';
 import { expectNoHorizontalScroll, expectNoSeriousAxeFindings, expectTouchTargets, gotoShell } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 type Engine = 'granted' | 'default' | 'denied' | 'unsupported' | 'install';
 
@@ -281,6 +282,32 @@ test.describe('notifications failures', () => {
     await page.getByRole('button', { name: 'Send a test push' }).click();
     expect(await requests(page)).toEqual([]);
     expect((await pushLog(page)).prompts).toBe(0);
+  });
+
+  test('a test push whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await fakePush(page, 'granted');
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/devices/test',
+      open: '/settings/notifications',
+      press: (page) => page.getByRole('button', { name: 'Send a test push' }).click(),
+    });
+  });
+
+  test('a device removal whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await fakePush(page, 'granted');
+    await expectLostAnswer(page, {
+      method: 'DELETE',
+      path: '/devices/2',
+      open: '/settings/notifications',
+      press: async (page) => {
+        await page.getByRole('button', { name: 'Remove Safari on iOS' }).click();
+        await page
+          .getByRole('dialog', { name: 'Remove Safari on iOS?' })
+          .getByRole('button', { name: 'Remove device' })
+          .click();
+      },
+    });
   });
 });
 

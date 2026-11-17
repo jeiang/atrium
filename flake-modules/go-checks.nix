@@ -94,6 +94,7 @@
         go run -tags ${tags} ./cmd/toolsdocs check
         go run -tags ${tags} ./cmd/atrium catalog openapi --check docs/api
         go run -tags ${tags} ./cmd/atrium catalog operations --require-api >/dev/null
+        go run -tags ${tags} ./cmd/atrium catalog integrations docs/integrations.md
       '';
 
       openapi-diff = goCheck "openapi-diff" [pkgs.jq] "bash tools/openapi-diff/openapi-diff.sh";

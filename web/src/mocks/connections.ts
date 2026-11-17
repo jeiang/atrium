@@ -49,6 +49,12 @@ const declaredSlots: Record<string, string[]> = {
   google: ['oauth/client_secret', 'oauth/calendar/refresh', 'oauth/gmail/refresh'],
 };
 
+const guides: Record<string, string> = {
+  'service/anthropic': 'anthropic',
+  'service/ship24': 'ship24',
+  google: 'google',
+};
+
 function seed(): ConnectionView[] {
   const rows: Omit<ConnectionView, 'dependents'>[] = [
     {
@@ -649,6 +655,7 @@ export function connectionHandlers(read: () => { connections?: ConnectionsScenar
       return HttpResponse.json({
         kinds: Object.entries(declaredSlots).map(([kind, slots]) => ({
           kind,
+          ...(guides[kind] ? { docs: guides[kind] } : {}),
           fields: [
             { name: 'label', type: 'text', secret: false, host_owned: false, present: false },
             ...slots.map((name) => ({ name, type: 'secret', secret: true, host_owned: false, present: false })),

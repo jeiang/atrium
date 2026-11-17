@@ -8,6 +8,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 
@@ -364,6 +365,52 @@ test.describe('Mail management offline', () => {
     for (const button of await rules(page).getByRole('button').all()) await expect(button).toBeDisabled();
     await rules(page).getByRole('button', { name: /down$/ }).first().click({ force: true });
     expect(sent).toEqual([]);
+  });
+});
+
+test.describe('Mail rules with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  async function editFolder(page: Page): Promise<void> {
+    await page.getByRole('button', { name: 'Edit rule' }).click();
+    await page.getByLabel('Folder').fill('Club news');
+  }
+
+  test('a new rule whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/mail/rules',
+      open: '/apps/mail/rules/new',
+      press: async (page) => {
+        await page.getByLabel('Value 1').fill('news@club.example.test');
+        await page.getByLabel('Folder').fill('Club news');
+        await page.getByRole('button', { name: 'Save rule' }).click();
+      },
+    });
+  });
+
+  test('a rule edit whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PATCH',
+      path: '/mail/rules/newsletters',
+      open: '/apps/mail/rules/newsletters',
+      press: async (page) => {
+        await editFolder(page);
+        await page.getByRole('button', { name: 'Save rule' }).click();
+      },
+    });
+  });
+
+  test('a preview whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/mail/rules/preview',
+      open: '/apps/mail/rules/newsletters',
+      press: async (page) => {
+        await editFolder(page);
+        await page.getByRole('button', { name: 'Preview matches' }).click();
+      },
+    });
   });
 });
 

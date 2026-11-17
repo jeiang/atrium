@@ -75,6 +75,7 @@ type Definition struct {
 	Kind            Kind
 	Offers          []string
 	CredentialSlots []string
+	Docs            string
 	Shares          func(ID) (owner ID, slot string)
 	Defaults        map[string]string
 	Validate        func(Candidate) error
