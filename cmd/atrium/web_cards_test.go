@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -155,8 +154,8 @@ func TestCalendarCreateAsksInTheThreadAndWritesOnlyOnApproval(t *testing.T) {
 	}
 
 	approved := dataG3(t, "approve", w.do(http.MethodPost, "/web/v1/approvals/"+id+"/approve", map[string]any{}))
-	if approval, _ := approved["approval"].(map[string]any); approval == nil || fmt.Sprint(approval["thread_id"]) != thread {
-		t.Fatalf("approval = %v, want it tied to thread %s", approved, thread)
+	if approval, _ := approved["approval"].(map[string]any); approval == nil || approval["applied_at"] == nil {
+		t.Fatalf("approval = %v, want it applied", approved)
 	}
 	if len(srv.Puts) != 1 || len(srv.Deleted) != 0 {
 		t.Fatalf("approval wrote %d events and deleted %d, want one PUT", len(srv.Puts), len(srv.Deleted))
