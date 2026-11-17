@@ -423,6 +423,16 @@ reauth. `connections test <id>` keeps the explicit test, which may have
 visible side effects such as a diagnostic push. `connections test --all` runs
 the silent check of every configured connection instead, so it sends no push;
 giving both an id and `--all`, or neither, is a usage error.
+`connections test <id> --trace <capability>` runs that capability's check
+without saving anything, which iCloud offers for `caldav` and `carddav`. It
+prints each DAV request and response: the step, method and URL; the request
+header names, `Depth` and `Content-Type`; whether an `Authorization` header was
+attached, never its value; the request body; the status; the response headers
+with `Set-Cookie` values withheld; and the first 800 bytes of the response
+body. The DAV user, the mail login, email addresses, numeric path segments and
+numbers of five or more digits are masked. The last line is
+`result: <capability> <state> <reason>`, and the command exits 1 when that state
+is failing or needs reauth. `--trace` with `--all` or `--json` is a usage error.
 
 Mail and iCloud connections also learn from real use while `serve` runs. An
 IMAP session that cannot connect marks the mail connection's `imap`

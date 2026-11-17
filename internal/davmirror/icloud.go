@@ -226,7 +226,7 @@ func failure(capability string, err error) (connections.Result, bool) {
 }
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Shares: sharedPassword, Validate: validateICloud, Test: testICloud}}
+	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Shares: sharedPassword, Validate: validateICloud, Test: testICloud, Trace: traceICloud}}
 }
 
 func sharedPassword(id connections.ID) (connections.ID, string) {
@@ -285,67 +285,98 @@ func rawICloudPassword(ctx context.Context, lease *connections.Lease, account st
 }
 
 func testICloud(ctx context.Context, lease *connections.Lease, caps []connections.Capability) ([]connections.Result, error) {
-	account := strings.TrimPrefix(string(lease.ID()), "icloud/")
-	spec, ok := config.From(ctx).Account(account)
-	if !ok || spec.Preset != config.ICloud {
-		return []connections.Result{{Capability: CapabilityCalDAV, State: connections.Unconfigured, Reason: "no enabled iCloud mail account"}}, nil
+	session, early, err := openICloud(ctx, lease, nil)
+	if err != nil || early != nil {
+		return resultList(early), err
 	}
-	password, err := icloudPassword(ctx, lease, account)
-	if err != nil {
-		return []connections.Result{{Capability: CapabilityCalDAV, State: connections.NeedsReauth, Reason: err.Error()}}, nil
-	}
-	var cfg map[string]string
-	_ = json.Unmarshal(lease.Config(), &cfg)
-	apple := strings.TrimSpace(cfg["apple_id"])
-	if apple == "" {
-		apple = spec.Login
-	}
-	base, err := lease.Transport()
-	if err != nil {
-		return nil, err
-	}
-	httpClient := BasicClient(base, apple, password)
-	endpoints := EndpointsFrom(config.OS)
 	results := make([]connections.Result, 0, len(caps))
 	for _, cap := range caps {
-		if !cap.Enabled {
-			continue
-		}
-		var kind Kind
-		var endpoint string
-		switch cap.Name {
-		case CapabilityCalDAV:
-			kind, endpoint = Calendars, endpoints.CalDAV
-		case CapabilityCardDAV:
-			kind, endpoint = Contacts, endpoints.CardDAV
-		default:
-			results = append(results, connections.Result{Capability: cap.Name, State: connections.Failing, Reason: "unknown iCloud capability"})
-			continue
-		}
-		client, err := New(httpClient, endpoint)
-		if err != nil {
-			results = append(results, connections.Result{Capability: cap.Name, State: connections.Failing, Reason: err.Error()})
-			continue
-		}
-		collections, err := client.Collections(ctx, kind)
-		switch {
-		case err != nil:
-			result, ok := failure(cap.Name, err)
-			if !ok {
-				result = connections.Result{Capability: cap.Name, State: connections.Failing, Reason: err.Error()}
-			}
-			results = append(results, result)
-		default:
-			data, _ := json.Marshal(map[string]any{"collections": len(collections)})
-			reason := fmt.Sprintf("%d collections", len(collections))
-			if len(collections) == 1 {
-				reason = "1 collection"
-			}
-			results = append(results, connections.Result{Capability: cap.Name, State: connections.OK, Reason: reason, Data: data})
+		if cap.Enabled {
+			results = append(results, session.check(ctx, cap.Name))
 		}
 	}
 	if len(results) == 0 {
 		return []connections.Result{{Capability: CapabilityCalDAV, State: connections.Unconfigured, Reason: "no iCloud capability is enabled"}}, nil
 	}
 	return results, nil
+}
+
+func resultList(r *connections.Result) []connections.Result {
+	if r == nil {
+		return nil
+	}
+	return []connections.Result{*r}
+}
+
+type icloudSession struct {
+	http      *http.Client
+	user      string
+	source    string
+	login     string
+	password  string
+	endpoints Endpoints
+}
+
+func openICloud(ctx context.Context, lease *connections.Lease, wrap func(http.RoundTripper) http.RoundTripper) (icloudSession, *connections.Result, error) {
+	account := strings.TrimPrefix(string(lease.ID()), "icloud/")
+	spec, ok := config.From(ctx).Account(account)
+	if !ok || spec.Preset != config.ICloud {
+		return icloudSession{}, &connections.Result{Capability: CapabilityCalDAV, State: connections.Unconfigured, Reason: "no enabled iCloud mail account"}, nil
+	}
+	password, err := icloudPassword(ctx, lease, account)
+	if err != nil {
+		return icloudSession{}, &connections.Result{Capability: CapabilityCalDAV, State: connections.NeedsReauth, Reason: err.Error()}, nil
+	}
+	var cfg map[string]string
+	_ = json.Unmarshal(lease.Config(), &cfg)
+	s := icloudSession{user: strings.TrimSpace(cfg["apple_id"]), source: "the connection's apple_id", login: spec.Login, password: password, endpoints: EndpointsFrom(config.OS)}
+	if s.user == "" {
+		s.user, s.source = spec.Login, "the mail account login"
+	}
+	base, err := lease.Transport()
+	if err != nil {
+		return icloudSession{}, nil, err
+	}
+	if wrap != nil {
+		traced := *base
+		traced.Transport = wrap(base.Transport)
+		base = &traced
+	}
+	s.http = BasicClient(base, s.user, password)
+	return s, nil, nil
+}
+
+func (s icloudSession) kind(capability string) (Kind, string, bool) {
+	switch capability {
+	case CapabilityCalDAV:
+		return Calendars, s.endpoints.CalDAV, true
+	case CapabilityCardDAV:
+		return Contacts, s.endpoints.CardDAV, true
+	}
+	return Kind{}, "", false
+}
+
+func (s icloudSession) check(ctx context.Context, capability string) connections.Result {
+	kind, endpoint, ok := s.kind(capability)
+	if !ok {
+		return connections.Result{Capability: capability, State: connections.Failing, Reason: "unknown iCloud capability"}
+	}
+	client, err := New(s.http, endpoint)
+	if err != nil {
+		return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}
+	}
+	collections, err := client.Collections(ctx, kind)
+	if err != nil {
+		result, ok := failure(capability, err)
+		if !ok {
+			result = connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}
+		}
+		return result
+	}
+	data, _ := json.Marshal(map[string]any{"collections": len(collections)})
+	reason := fmt.Sprintf("%d collections", len(collections))
+	if len(collections) == 1 {
+		reason = "1 collection"
+	}
+	return connections.Result{Capability: capability, State: connections.OK, Reason: reason, Data: data}
 }

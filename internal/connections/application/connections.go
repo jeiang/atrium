@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -45,6 +46,11 @@ type DisconnectInput struct{ ID ID }
 type TestInput struct {
 	ID  ID
 	All bool
+}
+type TraceInput struct {
+	ID         ID
+	Capability string
+	Out        io.Writer
 }
 type ObserveHealthInput struct {
 	ID        ID
@@ -184,6 +190,10 @@ func (s *Service) Test(ctx context.Context, in TestInput) (application.Change[[]
 		return err
 	})
 	return application.Change[[]View]{Data: out, AuditID: auditID}, err
+}
+
+func (s *Service) Trace(ctx context.Context, in TraceInput) (connections.Result, error) {
+	return s.store.Trace(ctx, in.ID, in.Capability, in.Out)
 }
 
 func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (application.Change[struct{}], error) {
