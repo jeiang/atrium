@@ -12,7 +12,11 @@ it requires `--port`. Authentication modes are repeatable `--auth proxy` and
 and also starts an emergency listener on `127.0.0.1:8481` in the same process.
 
 All configured public, emergency, and ops sockets must bind before readiness.
-A failed bind closes the sockets already opened. A listener failure while
+A failed bind closes the sockets already opened. On Linux, a listener whose
+configured address the host does not have yet (an interface still coming up at
+boot) binds anyway with `IP_FREEBIND` and starts accepting once the address
+appears; serve logs the warning "<name> listener address <addr> is not
+assigned to this host yet" instead of exiting. A listener failure while
 running stops the other listeners and produces a failed exit. A second serve
 on the same database is refused by its serve lock. `serve` runs scheduled work
 and mail watches, and it is the only process that runs a declared job while it
