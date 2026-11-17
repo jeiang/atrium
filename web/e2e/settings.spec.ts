@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expectNoHorizontalScroll, expectNoSeriousAxeFindings, expectTouchTargets, gotoShell } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 interface SettingsRequest {
   method: string;
@@ -274,6 +275,24 @@ test.describe('settings offline', () => {
       dispatchEvent(new PopStateEvent('popstate'));
     });
     await expect(form(page).getByText('Cannot reach atrium')).toBeVisible();
+  });
+});
+
+test.describe('settings lost answers', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('a verify whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/maintenance/backups/verify',
+      open: '/settings/backups',
+      press: (page) =>
+        page
+          .getByRole('list', { name: 'Backups', exact: true })
+          .getByRole('button', { name: /Verify/ })
+          .first()
+          .click(),
+    });
   });
 });
 

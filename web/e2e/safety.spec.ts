@@ -1,19 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
-import type { MockScenario } from '../src/mocks/handlers.ts';
-import { gotoShell } from './checks.ts';
-import { expect, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expect, test, unreachableConsole } from './fixtures.ts';
+import { expectLostAnswer, expectNeverAgain, pressWithFault, type UnsafeCommand } from './lost.ts';
 
-const API = '/web/v1';
 const packagesOn = { apps: { on: ['packages'] } };
 
-interface Command {
+interface Command extends UnsafeCommand {
   name: string;
-  method: string;
-  path: string;
-  open: string;
-  scenario?: MockScenario;
-  clock?: boolean;
-  press: (page: Page) => Promise<void>;
   unknown?: string;
   choices?: string[];
 }
@@ -410,39 +402,6 @@ const commands: Command[] = [
   },
 ];
 
-function record(page: Page, command: Command): string[] {
-  const sent: string[] = [];
-  const pattern = new RegExp(`^${API}${command.path}$`);
-  page.on('request', (request) => {
-    if (request.method() === command.method && pattern.test(new URL(request.url()).pathname)) {
-      sent.push(request.headers()['idempotency-key'] ?? '');
-    }
-  });
-  return sent;
-}
-
-async function start(page: Page, command: Command, answer: string): Promise<string[]> {
-  await useScenario(page, {
-    ...command.scenario,
-    fault: { method: command.method, path: command.path, answer },
-  });
-  const sent = record(page, command);
-  if (command.clock) await page.clock.install();
-  await gotoShell(page, command.open);
-  await command.press(page);
-  await expect.poll(() => sent.length).toBe(1);
-  return sent;
-}
-
-async function neverAgain(page: Page, sent: string[]): Promise<void> {
-  await page.waitForTimeout(2_000);
-  expect(sent).toHaveLength(1);
-  await page.reload();
-  await expect(page.getByRole('button', { name: 'Account: Operator' })).toBeVisible();
-  await page.waitForTimeout(2_000);
-  expect(sent).toHaveLength(1);
-}
-
 test.describe('Unsafe commands', () => {
   test.use({ viewport: { width: 1440, height: 900 }, allowStatus: [409], allowConsole: unreachableConsole });
 
@@ -450,10 +409,7 @@ test.describe('Unsafe commands', () => {
     test(`${command.name}: a lost answer reads as unknown, is sent once and never again, even after a reload`, async ({
       page,
     }) => {
-      const sent = await start(page, command, 'lost');
-      expect(sent[0]).toMatch(/^[0-9a-f-]{36}$/);
-      await expect(page.getByText(/unknown/i).first()).toBeVisible();
-      await neverAgain(page, sent);
+      await expectLostAnswer(page, command);
     });
 
     const unknown = command.unknown;
@@ -461,12 +417,12 @@ test.describe('Unsafe commands', () => {
       test(`${command.name}: ${unknown} shows as blocked with its choices and is never sent again`, async ({
         page,
       }) => {
-        const sent = await start(page, command, unknown);
+        const sent = await pressWithFault(page, command, unknown);
         await expect(page.getByText(/unknown/i).first()).toBeVisible();
         for (const choice of command.choices ?? []) {
           await expect(page.getByRole('button', { name: choice }).first()).toBeVisible();
         }
-        await neverAgain(page, sent);
+        await expectNeverAgain(page, sent);
       });
     }
   }

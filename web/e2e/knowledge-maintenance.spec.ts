@@ -9,6 +9,7 @@ import {
   gotoShell,
 } from './checks';
 import { expect, goUnreachable, layouts, reconnect, test, unreachableConsole, useScenario } from './fixtures';
+import { expectLostAnswer } from './lost.ts';
 
 interface Sent {
   method: string;
@@ -223,6 +224,24 @@ test.describe('knowledge maintenance', () => {
       expect(await deletes()).toEqual(['/web/v1/knowledge/21']);
       await reconnect(page, /\/web\/v1\/knowledge\/21\/page$/);
       expect(await deletes()).toEqual(['/web/v1/knowledge/21']);
+    });
+
+    test('retracting a run whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+      await expectLostAnswer(page, {
+        method: 'POST',
+        path: '/knowledge/retract-run',
+        open: '/knowledge/23',
+        press: async (page) => {
+          await page
+            .getByRole('region', { name: 'From the same run' })
+            .getByRole('button', { name: 'Retract the run' })
+            .click();
+          await page
+            .getByRole('dialog', { name: 'Retract 2 records from this run?' })
+            .getByRole('button', { name: 'Retract 2 records' })
+            .click();
+        },
+      });
     });
   });
 
