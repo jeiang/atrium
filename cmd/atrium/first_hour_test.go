@@ -48,13 +48,12 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 			}
 			defer func() { _ = f.Close() }()
 			cmd.ExtraFiles = []*os.File{f}
-			cmd.Args = append(cmd.Args, "--emergency-listen-fd", "3")
 		}
 		return startServeProcess(t, cmd, addrFile)
 	}
 	listener := heldListener(t)
 	_, emergencyPort, _ := net.SplitHostPort(listener.Addr().String())
-	public := start("public", listener, "--auth", "oidc", "--allowed-host", "127.0.0.1", "--emergency-port", emergencyPort)
+	public := start("public", listener, "--auth", "oidc", "--allowed-host", "127.0.0.1", "--emergency-port", emergencyPort, "--emergency-listen-fd", "3")
 	_ = listener.Close()
 	base := "http://" + public.addr
 	if code, _, _ := wimGet(t, base+"/login"); code != http.StatusOK {
