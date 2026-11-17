@@ -137,7 +137,7 @@ type ScheduleJob struct {
 
 type ScheduleRun struct {
 	ID          int64   `json:"id"`
-	JobID       int64   `json:"job_id"`
+	JobID       int64   `json:"job_id,omitempty"`
 	JobName     string  `json:"job_name"`
 	Status      string  `json:"status"`
 	StartedText *string `json:"started_text"`

@@ -13864,7 +13864,6 @@
         },
         "required": [
           "id",
-          "job_id",
           "job_name",
           "status",
           "cost"
