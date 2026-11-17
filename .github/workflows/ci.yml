@@ -81,7 +81,7 @@ jobs:
         env:
           MAIN: ${{ github.event_name != 'pull_request' }}
         run: |
-          nix=$(nix eval --impure --json '.#checks' --apply "checks: import ./.ci/targets.nix {inherit checks; main = $MAIN;}")
+          nix=$(nix eval --impure --json '.#checks' --apply "checks: import ./.ci/targets.nix {inherit checks; main = $MAIN;}" | jq -c .nix)
           if [ "$nix" = "[]" ]; then
             echo "::error::no checks discovered for the configured runners"
             exit 1

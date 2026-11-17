@@ -50,7 +50,7 @@ runs:
           echo "CGO_ENABLED=1"
           echo "GOFLAGS=-tags=libsqlite3,sqlite_fts5"
           echo "CGO_CFLAGS=-I$HOME/.cache/atrium-sqlcipher/include"
-          echo "CGO_LDFLAGS=-L$HOME/.cache/atrium-sqlcipher/lib"
+          echo "CGO_LDFLAGS=-L$HOME/.cache/atrium-sqlcipher/lib -Wl,--push-state,--no-as-needed -lcrypto -Wl,--pop-state"
         } >>"$GITHUB_ENV"
 
     - name: Download the staged web assets

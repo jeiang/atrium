@@ -9,8 +9,7 @@ prefix=$1
 pins=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/pins.json
 version=$(jq -r .sqlcipher "$pins")
 sha256=$(jq -r .sqlcipherSha256 "$pins")
-libcrypto=/usr/lib/$(gcc -dumpmachine)/libcrypto.a
-if [ ! -e "$libcrypto" ]; then
+if [ ! -e /usr/include/openssl/evp.h ]; then
   sudo apt-get update -qq
   sudo apt-get install -y -qq libssl-dev
 fi
@@ -56,12 +55,6 @@ flags=(
 make -j"$(nproc)" libsqlite3.a >/dev/null
 
 mkdir -p "$prefix/lib" "$prefix/include"
-ar -M <<MRI
-create $prefix/lib/libsqlite3.a
-addlib libsqlite3.a
-addlib $libcrypto
-save
-end
-MRI
+cp libsqlite3.a "$prefix/lib/"
 cp sqlite3.h sqlite3ext.h "$prefix/include/"
 grep -q 'sqlite3_key(' "$prefix/include/sqlite3.h"
