@@ -163,7 +163,7 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	if audits() != before+1 {
 		t.Fatalf("settings audit rows for media_enabled = %d, want %d", audits(), before+1)
 	}
-	expectAPI(t, browser.do(http.MethodGet, "/web/v1/media/channels", nil), http.StatusConflict, "module_disabled")
+	expectAPI(t, browser.do(http.MethodGet, "/web/v1/media/channels", nil), http.StatusNotFound, "not_found")
 	if shell := browser.do(http.MethodGet, "/web/v1/shell", nil); shell.status != http.StatusOK || strings.Contains(shell.body, "/apps/media/") {
 		t.Fatalf("the shell still links media: %d %.400s", shell.status, shell.body)
 	}

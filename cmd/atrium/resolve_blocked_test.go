@@ -195,10 +195,26 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Fatalf("the auto action does not show its blocked undo: %v", got)
 	}
 	expectAPI(t, web.do(http.MethodPost, "/web/v1/approvals/"+id(viaWeb)+"/resolve", map[string]any{"outcome": "applied"}, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
-	expectAPI(t, web.do(http.MethodPost, "/web/v1/effects/"+id(undoWeb)+"/resolve", map[string]any{"outcome": "undone"}, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
+	undoRecord := func() string {
+		t.Helper()
+		check, err := db.Connect(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = check.Close() }()
+		var undo int64
+		if err := check.Read.QueryRow("SELECT id FROM effects WHERE undo_of = ?", undoWeb).Scan(&undo); err != nil {
+			t.Fatal(err)
+		}
+		return id(undo)
+	}()
+	expectAPI(t, web.do(http.MethodPost, "/web/v1/effects/"+undoRecord+"/resolve", map[string]any{"outcome": "undone"}, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
 	webOKG1(t, web.do(http.MethodPost, "/web/v1/approvals/"+id(viaWeb)+"/resolve", map[string]any{"outcome": "applied"}))
-	webOKG1(t, web.do(http.MethodPost, "/web/v1/effects/"+id(undoWeb)+"/resolve", map[string]any{"outcome": "undone"}))
-	expectAPI(t, web.do(http.MethodPost, "/web/v1/effects/"+id(undoWeb)+"/resolve", map[string]any{"outcome": "undone"}), http.StatusConflict, "not_resolved")
+	webOKG1(t, web.do(http.MethodPost, "/web/v1/effects/"+undoRecord+"/resolve", map[string]any{"outcome": "undone"}))
+	expectAPI(t, web.do(http.MethodPost, "/web/v1/effects/"+undoRecord+"/resolve", map[string]any{"outcome": "undone"}), http.StatusConflict, "not_resolved")
+	if got := webOKG1(t, web.do(http.MethodGet, "/web/v1/effects/"+id(undoWeb), nil)); got["undo_blocked"] == true {
+		t.Errorf("the resolved undo still shows as blocked: %v", got)
+	}
 	if blockedWrite(id(viaWeb)) {
 		t.Errorf("settled proposal still offers resolve")
 	}

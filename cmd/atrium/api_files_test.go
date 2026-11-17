@@ -417,7 +417,9 @@ func TestFilesAndSpacesAPI(t *testing.T) {
 	body, media = uploadBody(t, nil, "refused.txt", "no")
 	expectAPI(t, s.do(http.MethodPost, spacePath(project, "/files"), token, body, "Content-Type", media), 409, "project_archived")
 	for i := range 105 {
-		createSpaceG1(t, s, token, fmt.Sprintf("Page %03d", i))
+		if _, err := d.Write.Exec("INSERT INTO projects (name, instructions, effort, context_limit, created_at, updated_at) VALUES (?, '', 'high', 200000, ?, ?)", fmt.Sprintf("Page %03d", i), i+1, i+1); err != nil {
+			t.Fatalf("bulk project fixture: %v", err)
+		}
 	}
 	token = localAPIToken(t, "project-pages")
 	first = s.do(http.MethodGet, "/api/v1/knowledge/spaces?limit=100", token, nil)
@@ -438,13 +440,6 @@ func TestFilesAndSpacesAPI(t *testing.T) {
 	archivedList := s.do(http.MethodGet, "/api/v1/knowledge/spaces?archived=true", token, nil)
 	if len(apiReplyItems(t, archivedList)) != 1 || number(t, apiReplyItems(t, archivedList)[0].(map[string]any)["id"]) != project {
 		t.Fatalf("archived list: %s", archivedList.body)
-	}
-}
-
-func createSpaceG1(t *testing.T, s *apiSite, token, name string) {
-	t.Helper()
-	if got := s.do(http.MethodPost, "/api/v1/knowledge/spaces", token, map[string]any{"name": name, "effort": "high", "context_limit": 200000}); got.status != http.StatusCreated {
-		t.Fatalf("bulk project fixture: %d %s", got.status, got.body)
 	}
 }
 

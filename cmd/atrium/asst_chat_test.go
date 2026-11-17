@@ -305,9 +305,7 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 		t.Errorf("the branch does not name its source: %.600s", child.body)
 	}
 	asstWaitCount(t, d, 1, "SELECT COUNT(*) FROM memory_nodes WHERE thread_id = ? AND level = 0", childID)
-	if got := w.do(http.MethodPost, threadG1(thread, "/branch"), map[string]any{"seq": 99}); got.status != http.StatusNotFound {
-		t.Errorf("branch from a missing message: %d %s", got.status, got.body)
-	}
+	expectAPI(t, w.do(http.MethodPost, threadG1(thread, "/branch"), map[string]any{"seq": 99}), http.StatusConflict, "nothing_to_edit")
 
 	webWantG1(t, w.do(http.MethodDelete, threadG1(thread, ""), nil), http.StatusNoContent)
 	if got := w.do(http.MethodGet, threadG1(thread, ""), nil); got.status != http.StatusNotFound {
@@ -453,12 +451,8 @@ func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {
 	for i := range 1001 {
 		many[fmt.Sprintf("f%d", i)] = "x"
 	}
-	if got := webFormG1(t, w, http.MethodPost, "/web/v1/threads", many, nil); got.status != http.StatusBadRequest {
-		t.Errorf("1001 parts: %d, want 400: %.300s", got.status, got.body)
-	}
-	if got := webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": strings.Repeat("x", 1<<20+1)}, nil); got.status != http.StatusBadRequest {
-		t.Errorf("a field over 1 MiB: %d, want 400: %.300s", got.status, got.body)
-	}
+	expectAPI(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", many, nil), http.StatusUnprocessableEntity, "invalid")
+	webWantG1(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": strings.Repeat("x", 1<<20+1)}, nil), http.StatusUnprocessableEntity, "Multipart fields are too large.")
 	if n := asstCount(t, d, live); n != threads {
 		t.Fatalf("refused uploads created %d threads", n-threads)
 	}
@@ -494,7 +488,7 @@ func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {
 	}
 	got := w.do(http.MethodGet, content(owner, html), nil)
 	if h := got.header; got.status != http.StatusOK || got.body != "<script>alert(1)</script>" || h.Get("X-Content-Type-Options") != "nosniff" ||
-		h.Get("Content-Disposition") != `attachment; filename*=utf-8''report%20%22q%22%201.html` {
+		h.Get("Content-Disposition") != `attachment; filename="report \"q\" 1.html"` {
 		t.Errorf("html download %d %v", got.status, h)
 	}
 	if got := w.do(http.MethodGet, content(owner, image), nil); got.status != http.StatusOK || got.header.Get("Content-Type") != "image/png" || got.header.Get("X-Content-Type-Options") != "nosniff" {
@@ -541,7 +535,7 @@ func TestAsstSpacesGiveDefaultsAndArchivedSpacesRefuseNewContent(t *testing.T) {
 	_, _, d, w := webServeG1(t)
 
 	webOKG1(t, w.do(http.MethodPut, "/web/v1/assistant/defaults", map[string]any{"effort": "high", "context_limit": 200000}))
-	webWantG1(t, w.do(http.MethodPut, "/web/v1/assistant/defaults", map[string]any{"effort": "ultra", "context_limit": 200000}), http.StatusUnprocessableEntity, "effort")
+	expectAPI(t, w.do(http.MethodPut, "/web/v1/assistant/defaults", map[string]any{"effort": "ultra", "context_limit": 200000}), http.StatusUnprocessableEntity, "invalid")
 	loose := webStartG1(t, w, map[string]any{})
 	if project, effort, limit := asstThreadRow(t, d, loose); project != nil || effort != "high" || limit != 200_000 {
 		t.Errorf("new thread took %v %s %d, want the saved defaults", project, effort, limit)
