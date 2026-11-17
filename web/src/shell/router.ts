@@ -68,6 +68,10 @@ export const { p, navigate, isActive, route } = createRouter(
         meta: { title: 'All apps' },
       },
       '/calendar': { '/': calendar, '/week': calendar, '/candidates': calendar, meta: { title: 'Calendar' } },
+      '/packages': {
+        '/': () => import('../apps/packages/PackagesPage.svelte').catch(unavailable),
+        meta: { title: 'Packages' },
+      },
       '/torrents': {
         '/': () => import('../apps/torrents/DownloadsPage.svelte').catch(unavailable),
         meta: { title: 'Downloads' },
