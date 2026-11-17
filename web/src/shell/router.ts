@@ -51,6 +51,8 @@ export const { p, navigate, isActive, route } = createRouter(
       '/': knowledge,
       '/subjects': knowledge,
       '/instructions': knowledge,
+      '/review': knowledge,
+      '/me': knowledge,
       '/map': () => import('../features/knowledge/MapPage.svelte').catch(unavailable),
       '/files': () => import('../features/files/FilesPage.svelte').catch(unavailable),
       '/spaces': { '/': spaces, '/:space': spaces, '/:space/files/:file': filePage },

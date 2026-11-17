@@ -68,7 +68,7 @@ test.describe('knowledge', () => {
     const list = page.getByRole('list', { name: 'Subjects' });
     await expect(list.getByRole('listitem')).toHaveCount(49);
     await page.getByRole('button', { name: 'Show more' }).click();
-    await expect(list.getByRole('listitem')).toHaveCount(60);
+    await expect(list.getByRole('listitem')).toHaveCount(67);
     await page.getByLabel('Find a subject').fill('weather');
     await expect(list.getByRole('listitem')).toHaveCount(1);
     await expect(list.getByRole('link', { name: /Garden weather station/ })).toBeVisible();
