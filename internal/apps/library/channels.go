@@ -355,7 +355,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 			if rule.Primed || opts.Force {
 				_, err := settings.Intake.Add(ctx, contract.AddRequest{
 					Magnet: t.MagnetURL, Label: TagMedia, Scope: contract.Scope{Actor: contract.Job},
-					OperationKey: "media:channel:" + strconv.FormatInt(rule.ID, 10) + ":" + t.Hash + ":" + request,
+					OperationKey: ChannelKey(rule.ID, t.Hash, request),
 					Done: func(ctx context.Context, tx *sql.Tx) error {
 						return markSeen(ctx, tx, t.Hash, stamp)
 					},

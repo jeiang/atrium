@@ -34,9 +34,9 @@ func Poll(ctx context.Context, svc *mediaapp.Service) (any, error) {
 func Sweep(ctx context.Context, svc *mediaapp.Service) (any, error) {
 	swept, err := svc.Sweep(ctx, mediaapp.SweepInput{})
 	if err != nil {
-		return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "errors": anys(swept.Data.Errors)}, err
+		return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "filed": anys(swept.Data.Filed), "errors": anys(swept.Data.Errors)}, err
 	}
-	return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "errors": anys(swept.Data.Errors)}, nil
+	return map[string]any{"selected": anys(swept.Data.Selected), "removed": anys(swept.Data.Removed), "filed": anys(swept.Data.Filed), "errors": anys(swept.Data.Errors)}, nil
 }
 
 func anys(items []string) []any {
@@ -52,7 +52,7 @@ func Command(o Options) *cli.Command {
 		Name: "media",
 		Commands: []*cli.Command{
 			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(o.Run, o.PollJob, Poll)},
-			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(o.Run, o.SweepJob, Sweep)},
+			{Name: "sweep", Help: "select files in new media torrents, remove filed torrents qBittorrent stopped, and file exact plans for approved requests and followed shows", Setup: handler(o.Run, o.SweepJob, Sweep)},
 			{Name: "inspect-filing", Help: "show the media agent receipt and current file evidence for a filing effect", Setup: inspectFiling(o.Inspect)},
 		},
 	}

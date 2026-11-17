@@ -1168,6 +1168,27 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
+- Automatic filing: the `media-sweep` job, after selection and removal, files
+  a completed, unfiled, unignored media torrent without the operator when it
+  is approved and its plan is exact (`located.exact` in
+  `internal/apps/library/application/filing.go`). Approved means a
+  `library_requests` row (written by the Torrents consumer hook for an
+  operator screen or API add, `approved_by` `operator`, or an approved
+  `download_add` proposal, `approved_by` `proposal`, with its thread) or a
+  done `media_add_*` effect whose operation key is
+  `media:channel:<id>:...` for a channel that still exists. Exact means the
+  Intake default plan has no error, title and year are known, a movie has one
+  video file, every TV video file has an episode, no two files share a
+  destination, and the agent prepares it. Not exact leaves the request
+  `waiting` with the reason. An item with any earlier `media_file` effect is
+  never filed automatically (no retry after failure, no refile after undo).
+  Automatic filings use operation keys `media:auto-file:<hash>:...` (manual:
+  `media:file:`), request `filed_by` `job`, audit `media.file-item` details
+  `automatic: true`, the same receipt and undo, and send one `media`
+  notification per filing (occurrence `media-filed:<effect-id>`, linked to the
+  request thread). Request states are `requested`, `waiting`, `filed` and
+  `failed`; `GET /media/requests` (operation `media.requests`, both
+  prefixes) lists them.
 - The library catalogue, `library_search` and library pages read from
   the agent. The host key
   `media_root` is refused at startup (exit 78) and at Nix evaluation, naming
