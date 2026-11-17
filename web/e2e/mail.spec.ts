@@ -73,6 +73,17 @@ test.describe('Mail messages', () => {
     await page.getByRole('button', { name: 'Search' }).click();
     await expect(list.getByRole('article')).toHaveCount(1);
     await expect(list).toContainText('Your order has shipped');
+    await page.getByRole('button', { name: 'Clear' }).click();
+    const folder = page.getByRole('combobox', { name: 'Folder' });
+    await expect(folder).toBeDisabled();
+    await page.getByRole('combobox', { name: 'Account' }).selectOption('garden-club');
+    await expect(folder).toBeEnabled();
+    await expect(folder.locator('option')).toContainText(['Any folder', 'Archive', 'Bills', 'INBOX']);
+    await folder.selectOption('Bills');
+    await page.getByRole('button', { name: 'Search' }).click();
+    await expect(list.getByRole('article')).toHaveCount(0);
+    await page.getByRole('combobox', { name: 'Account' }).selectOption('');
+    await expect(folder).toHaveValue('');
   });
 
   test('the message page shows the text and attachments, and read, flag and archive offer Undo', async ({ page }) => {
@@ -215,6 +226,86 @@ test.describe('Mail refusals', () => {
   });
 });
 
+test.describe('Mail corrections', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowStatus: [422], allowConsole: unreachableConsole });
+
+  async function correctTo(page: Page, folder: string): Promise<void> {
+    await page.getByRole('button', { name: 'Correct', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Correct this decision' });
+    await dialog.getByRole('combobox', { name: 'Where should this go?' }).selectOption(folder);
+    await dialog.getByRole('button', { name: 'Correct', exact: true }).click();
+  }
+
+  test('live mode moves the message once and offers Undo', async ({ page }) => {
+    const sent = writes(page);
+    await useScenario(page, { mailManage: { status: 'live' } });
+    await gotoShell(page, '/apps/mail/message/102');
+    await page.getByRole('button', { name: 'Correct', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Correct this decision' });
+    await expect(dialog).toContainText('Records the correction and moves the message to this folder.');
+    await expect(dialog.getByRole('option', { name: 'INBOX' })).toHaveCount(0);
+    await dialog.getByRole('combobox', { name: 'Where should this go?' }).selectOption('Receipts');
+    await dialog.getByRole('button', { name: 'Correct', exact: true }).click();
+    await expect(toast(page, 'Corrected to Receipts. The message was moved.')).toBeVisible();
+    await toast(page, 'Corrected to Receipts.').getByRole('button', { name: 'Undo' }).click();
+    await expect(toast(page, 'Moved back to where it was.')).toBeVisible();
+    expect(sent).toEqual(['POST /mail/messages/102/correction', 'POST /undo/write:5000']);
+  });
+
+  test('shadow mode records the correction without Undo and preselects it next time', async ({ page }) => {
+    const sent = writes(page);
+    await gotoShell(page, '/apps/mail/message/102');
+    await page.getByRole('button', { name: 'Correct', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Correct this decision' });
+    await expect(dialog).toContainText('The message stays where it is.');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await correctTo(page, 'Bills');
+    await expect(toast(page, 'Corrected to Bills.')).toBeVisible();
+    await expect(toast(page, 'Corrected to Bills.').getByRole('button', { name: 'Undo' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Correct', exact: true }).click();
+    await expect(dialog.getByRole('combobox', { name: 'Where should this go?' })).toHaveValue('Bills');
+    expect(sent).toEqual(['POST /mail/messages/102/correction']);
+  });
+
+  test('a refusal stays in the dialog and says why', async ({ page }) => {
+    const sent = writes(page);
+    await useScenario(page, { mailbox: { refuse: 'sent_message' } });
+    await gotoShell(page, '/apps/mail/message/102');
+    await correctTo(page, 'Bills');
+    const dialog = page.getByRole('dialog', { name: 'Correct this decision' });
+    await expect(dialog).toContainText('cannot correct a sent message Nothing was changed.');
+    expect(sent).toEqual(['POST /mail/messages/102/correction']);
+  });
+
+  test('an unknown outcome is sent once and blocks correcting until the message is checked', async ({ page }) => {
+    const sent = writes(page);
+    await useScenario(page, { mailbox: { action: 'unknown' } });
+    await gotoShell(page, '/apps/mail/message/102');
+    await correctTo(page, 'Bills');
+    await expect(page.getByText("The correction's outcome is unknown")).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Correct', exact: true })).toHaveAttribute('aria-disabled', 'true');
+    expect(sent).toEqual(['POST /mail/messages/102/correction']);
+    await page.getByRole('button', { name: 'Check the message' }).click();
+    await expect(page.getByText("The correction's outcome is unknown")).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Correct', exact: true })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(sent).toEqual(['POST /mail/messages/102/correction']);
+  });
+
+  test('offline turns Correct off and sends nothing', async ({ page }) => {
+    const sent = writes(page);
+    await gotoShell(page, '/apps/mail/message/102');
+    await expect(page.getByRole('button', { name: 'Correct', exact: true })).toBeVisible();
+    await goUnreachable(page);
+    await expect(page.getByRole('button', { name: 'Correct', exact: true })).toHaveAttribute('aria-disabled', 'true');
+    await page.getByRole('button', { name: 'Correct', exact: true }).click({ force: true });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(sent).toEqual([]);
+  });
+});
+
 test.describe('Mail offline', () => {
   test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
 
@@ -304,6 +395,18 @@ test.describe('Mail layouts', () => {
         await expectNoHorizontalScroll(page);
         await expectRoundedSurfaces(page, edges);
         if (layout.touch) await expectTouchTargets(page);
+        await expectNoBlue(page);
+      });
+
+      test('the correct dialog fits, rounds and passes axe', async ({ page }) => {
+        await gotoShell(page, '/apps/mail/message/102');
+        await page.getByRole('button', { name: 'Correct', exact: true }).click();
+        await expect(page.getByRole('combobox', { name: 'Where should this go?' })).toBeVisible();
+        await page.waitForTimeout(400);
+        await expectNoSeriousAxeFindings(page);
+        await expectNoHorizontalScroll(page);
+        await expectRoundedSurfaces(page, edges);
+        if (layout.touch) await expectTouchTargets(page, 'dialog[open]');
         await expectNoBlue(page);
       });
 

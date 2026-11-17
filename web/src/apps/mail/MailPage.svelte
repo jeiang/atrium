@@ -16,7 +16,7 @@
   import Compose, { type Start } from './Compose.svelte';
   import MailNav from './MailNav.svelte';
   import MessageCard from './MessageCard.svelte';
-  import { type Filter, refreshMail, useAccounts, useMessages } from './mail';
+  import { type Filter, refreshMail, useAccountFolders, useAccounts, useMessages } from './mail';
   import './mail.css';
 
   const client = useQueryClient();
@@ -45,10 +45,22 @@
     ...(accounts.data ?? []).map((item) => ({ value: item.id, label: item.label || item.id })),
   ]);
   const filtered = $derived(filter.q !== '' || filter.account !== '' || filter.folder !== '');
+  const folders = useAccountFolders(
+    () => account,
+    () => ready,
+  );
+  const folderOptions = $derived([
+    { value: '', label: 'Any folder' },
+    ...(account === '' ? [] : (folders.data ?? [])).map((item) => ({ value: item.folder, label: item.folder })),
+  ]);
+
+  function onAccount(): void {
+    folder = '';
+  }
 
   function onSearch(event: SubmitEvent): void {
     event.preventDefault();
-    filter = { q: q.trim(), account, folder: folder.trim() };
+    filter = { q: q.trim(), account, folder: account === '' ? '' : folder };
   }
 
   function onClear(): void {
@@ -101,8 +113,14 @@
       <search>
         <form class="mail-filters" onsubmit={onSearch}>
           <TextField label="Search mail" type="search" bind:value={q} enterkeyhint="search" />
-          <SelectField label="Account" options={accountOptions} bind:value={account} />
-          <TextField label="Folder" bind:value={folder} placeholder="Any folder" enterkeyhint="search" />
+          <SelectField label="Account" options={accountOptions} bind:value={account} oninput={onAccount} />
+          <SelectField
+            label="Folder"
+            options={folderOptions}
+            bind:value={folder}
+            disabled={account === ''}
+            help={account === '' ? 'Choose an account to pick a folder.' : undefined}
+          />
           <span class="cluster mail-filters__go">
             <Button type="submit" variant="secondary" icon="search">Search</Button>
             {#if filtered}
