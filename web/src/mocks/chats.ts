@@ -1,8 +1,6 @@
 import { delay, HttpResponse, http, passthrough } from 'msw';
 import type {
   ListedThread,
-  Model,
-  ModelConfiguration,
   ProposalDetail,
   Run,
   RunStreamEvent,
@@ -12,6 +10,7 @@ import type {
   TranscriptItem,
 } from '../contract';
 import { API_BASE } from '../contract';
+import { configuration, models } from './assistant';
 import { G3_RUN, G3_THREAD, g3Events } from './g3';
 import { extraRunScripts, type RunScript } from './runs';
 import { findRunScript, simulateRun } from './simulator';
@@ -38,32 +37,6 @@ interface MockThread {
 const BASE = Date.UTC(2026, 10, 16, 9, 0) / 1000;
 const SCENARIO_KEY = 'atrium.mock';
 const decoder = new TextDecoder();
-
-const models: Model[] = [
-  model('sonnet-5.5', 'Sonnet 5.5', ['low', 'medium', 'high'], 15),
-  model('opus-5', 'Opus 5', ['low', 'medium', 'high', 'max'], 75),
-  model('haiku-5', 'Haiku 5', ['low', 'medium'], 5),
-];
-
-function model(id: string, name: string, efforts: string[], output: number): Model {
-  return {
-    id,
-    name,
-    efforts,
-    context_window: 200_000,
-    max_output: 64_000,
-    thinking: [],
-    rates: {
-      input: output / 5,
-      output,
-      cache_read: output / 50,
-      cache_write_5m: output / 4,
-      cache_write_1h: output / 2.5,
-    },
-    forced_tools: false,
-    run_cap_usd: 5,
-  };
-}
 
 function scenario(): ChatScenario {
   try {
@@ -136,7 +109,7 @@ function thread(id: number, title: string, minutesAgo: number): Thread {
     id,
     title,
     kind: 'chat',
-    model: 'sonnet-5.5',
+    model: 'claude-sonnet-5-5',
     effort: 'high',
     thinking: 'adaptive',
     context_limit: 200_000,
@@ -209,6 +182,17 @@ function seed(): Map<number, MockThread> {
     queued: [],
     cost: 0.5,
   });
+  add({
+    thread: thread(11, 'Check the shed roof', 20),
+    items: [
+      item(1, 'user', 'Does the shed roof need new sheets?', { run_id: 105 }),
+      item(2, 'activity', '', { run_id: 105, steps: [thinking('Two sheets are cracked in the photos.')] }),
+      item(2, 'assistant', 'Yes: **two** roof sheets need replacing.', { run_id: 105 }),
+    ],
+    active: null,
+    queued: [],
+    cost: 0.03,
+  });
   for (let index = 0; index < 34; index++) {
     add({
       thread: thread(300 + index, `Notes on the allotment, week ${index + 1}`, 600 + index * 240),
@@ -269,42 +253,100 @@ function nextSeq(value: MockThread): number {
   return (value.items.at(-1)?.seq ?? 0) + 1;
 }
 
+function thinking(text: string): Step {
+  return blank('thinking', null, text);
+}
+
+function blank(kind: string, id: string | null, text: string): Step {
+  return {
+    kind,
+    id,
+    name: '',
+    args: '',
+    text,
+    state: null,
+    is_error: false,
+    child_thread_id: null,
+    error: null,
+    results: [],
+    result: null,
+  };
+}
+
+type Block = { kind: 'thinking' | 'text'; text: string } | { kind: 'tool_start'; data: Record<string, unknown> };
+
+function runItems(events: RunStreamEvent[], run: number, first: number): TranscriptItem[] {
+  const turns: Block[][] = [[]];
+  const done: Record<string, unknown>[] = [];
+  let afterResults = false;
+  for (const event of events) {
+    const data = event.data as Record<string, unknown>;
+    if (data.run_id !== run) continue;
+    if (event.event === 'tool_done') {
+      done.push(data);
+      afterResults = true;
+      continue;
+    }
+    if (event.event !== 'thinking' && event.event !== 'text' && event.event !== 'tool_start') continue;
+    if (afterResults) turns.push([]);
+    afterResults = false;
+    const turn = turns.at(-1) ?? [];
+    const last = turn.at(-1);
+    if (event.event === 'tool_start') turn.push({ kind: 'tool_start', data });
+    else if (last && last.kind === event.event) last.text += String(data.text);
+    else turn.push({ kind: event.event, text: String(data.text) });
+  }
+  const items: TranscriptItem[] = [];
+  const calls = new Map<string, Step>();
+  let activity: TranscriptItem | undefined;
+  const step = (seq: number, found: Step): void => {
+    if (!activity) {
+      activity = item(seq, 'activity', '', { run_id: run, steps: [] });
+      items.push(activity);
+    }
+    activity.steps?.push(found);
+  };
+  turns.forEach((turn, index) => {
+    const seq = first + index * 2;
+    const final = !turn.some((block) => block.kind === 'tool_start');
+    for (const block of turn) {
+      if (block.kind === 'tool_start') {
+        const found = blank('tool', String(block.data.id), '');
+        found.name = String(block.data.name);
+        found.args = String(block.data.args);
+        calls.set(String(block.data.id), found);
+        step(seq, found);
+      } else if (block.kind === 'thinking') {
+        if (block.text) step(seq, thinking(block.text));
+      } else if (!final) {
+        if (block.text.trim()) step(seq, blank('note', null, block.text));
+      } else {
+        activity = undefined;
+        const last = items.at(-1);
+        if (last?.kind === 'assistant' && last.seq === seq) last.text += block.text;
+        else items.push(item(seq, 'assistant', block.text, { run_id: run }));
+      }
+    }
+  });
+  for (const data of done) {
+    const found = calls.get(String(data.id));
+    if (!found) continue;
+    found.result = String(data.preview);
+    found.is_error = data.ok === false;
+    found.results = (data.results as Step['results'] | undefined) ?? [];
+  }
+  return items;
+}
+
 function finish(threadId: number, run: number, state: string): void {
   const value = threads.get(threadId);
   if (!value || value.active?.id !== run) return;
-  const script = findRunScript(threadId, run);
-  const steps: Step[] = [];
-  let text = '';
-  for (const event of script?.events ?? []) {
-    const data = event.data as Record<string, unknown>;
-    if (data.run_id !== run) continue;
-    if (event.event === 'text') text += String(data.text);
-    if (event.event === 'tool_start') {
-      steps.push({
-        kind: 'tool',
-        id: String(data.id),
-        name: String(data.name),
-        args: String(data.args),
-        text: '',
-        is_error: false,
-        child_thread_id: null,
-        error: null,
-        results: [],
-        result: null,
-      });
-    }
-    if (event.event === 'tool_done') {
-      const step = steps.find((entry) => entry.id === data.id);
-      if (step) {
-        step.result = String(data.preview);
-        step.is_error = data.ok === false;
-        step.results = (data.results as Step['results'] | undefined) ?? [];
-      }
-    }
+  value.items.push(...runItems(findRunScript(threadId, run)?.events ?? [], run, nextSeq(value)));
+  if (state === 'stopped') {
+    const last = value.items.at(-1);
+    if (last?.kind === 'assistant' && last.run_id === run) last.text += '\n\nStopped.';
+    else value.items.push(item(nextSeq(value), 'assistant', 'Stopped.', { run_id: run }));
   }
-  if (steps.length > 0) value.items.push(item(nextSeq(value), 'activity', '', { run_id: run, steps }));
-  if (state === 'stopped') text = text ? `${text}\n\nStopped.` : 'Stopped.';
-  if (text) value.items.push(item(nextSeq(value), 'assistant', text, { run_id: run }));
   value.active = null;
   value.thread.updated_at = BASE;
 }
@@ -353,35 +395,6 @@ function startReply(value: MockThread, text: string): number {
   value.active = runOf(run, 'running');
   value.thread.updated_at = BASE;
   return run;
-}
-
-function configuration(): ModelConfiguration {
-  const defaults = {
-    model: 'sonnet-5.5',
-    effort: 'high',
-    context_limit: 200_000,
-    thinking: 'adaptive',
-    web_search: true,
-  };
-  return {
-    models,
-    defaults,
-    efforts: ['low', 'medium', 'high', 'max'],
-    context_limits: [200_000],
-    composer: {
-      ...defaults,
-      cliff: false,
-      coding: false,
-      context: 0,
-      context_limits: [200_000],
-      effort_fixed: false,
-      efforts: ['low', 'medium', 'high'].map((value) => ({ Value: value, Disabled: false })),
-      known: true,
-      live: 0,
-      models,
-      thinking_options: [],
-    },
-  };
 }
 
 function decide(id: number, status: string, reply: string): Response | undefined {
@@ -437,7 +450,7 @@ export const chatHandlers = [
     const created: MockThread = {
       thread: {
         ...thread(nextThread++, text.slice(0, 48), 0),
-        model: body.model ?? 'sonnet-5.5',
+        model: body.model ?? 'claude-sonnet-5-5',
         effort: body.effort ?? 'high',
       },
       items: [],
@@ -507,7 +520,17 @@ export const chatHandlers = [
     if (body.effort) value.thread.effort = body.effort;
     return HttpResponse.json({ thread_id: value.thread.id });
   }),
-  http.get(`*${API_BASE}/composer-options`, () => HttpResponse.json(configuration())),
+  http.get(`*${API_BASE}/composer-options`, ({ request }) => {
+    const query = new URL(request.url).searchParams;
+    const model = query.get('model') ?? '';
+    if (!models.some((entry) => entry.id === model))
+      return problem(422, 'invalid', 'The thread options are not valid.');
+    const body = configuration();
+    return HttpResponse.json({
+      ...body,
+      composer: { ...body.composer, model, effort: query.get('effort') || body.composer.effort },
+    });
+  }),
   http.get(`*${API_BASE}/proposals/:id`, ({ params }) => {
     const proposal = proposals.get(Number(params.id));
     if (!proposal) return undefined;
@@ -534,6 +557,7 @@ export const chatHandlers = [
     if (fault) url.searchParams.set('fault', fault);
     if (fault === 'expired') finish(threadId, run, 'done');
     const response = simulateRun(new Request(url, { headers: request.headers, signal: request.signal }), threadId, run);
+    if (response.type === 'error') return response;
     if (response.status === 204) {
       finish(threadId, run, 'done');
       return new HttpResponse(null, { status: 204 });

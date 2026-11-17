@@ -68,7 +68,7 @@ test.describe('chat list', () => {
     );
     await expect(list.getByRole('listitem')).toHaveCount(30);
     await page.getByRole('button', { name: 'Show more chats' }).click();
-    await expect(list.getByRole('listitem')).toHaveCount(39);
+    await expect(list.getByRole('listitem')).toHaveCount(40);
     await expect(page.getByRole('button', { name: 'Show more chats' })).toHaveCount(0);
     await list.getByRole('link', { name: /Winter tyre sizes/ }).click();
     await expect(page).toHaveURL(/\/chat\/9$/);
@@ -81,6 +81,21 @@ test.describe('chat list', () => {
     await page.getByRole('link', { name: 'Start a chat' }).click();
     await expect(page).toHaveURL(/\/chat\/new$/);
     await expect(page.getByRole('heading', { level: 1, name: 'New chat' })).toBeVisible();
+  });
+
+  test('opens a chat whose reply thought first and shares its seq with that activity', async ({ page }) => {
+    const options: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/composer-options')) options.push(request.url());
+    });
+    await openChat(page, '/chat/11');
+    await expect(page.getByRole('heading', { level: 1, name: 'Check the shed roof' })).toBeVisible();
+    await expect(transcript(page).getByText('Does the shed roof need new sheets?')).toBeVisible();
+    await expect(transcript(page).getByText('roof sheets need replacing.', { exact: false })).toBeVisible();
+    await expect(transcript(page).getByRole('listitem')).toHaveCount(2);
+    await expect(page.getByText('Loading the chat')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Sonnet 5.5 · high' })).toBeVisible();
+    expect(options).toEqual([]);
   });
 
   test.describe('failures', () => {
@@ -235,6 +250,27 @@ test.describe('streaming', () => {
     });
   });
 
+  test.describe('lost streams', () => {
+    test.use({ allowConsole: unreachableConsole });
+
+    test('a stream that closes without done ends finished after a failed reconnect', async ({ page }) => {
+      const cursors: (string | null)[] = [];
+      page.on('request', (request) => {
+        const url = new URL(request.url());
+        if (/\/threads\/7\/runs\/101\/events$/.test(url.pathname) && !url.searchParams.has('speed')) {
+          cursors.push(request.headers()['last-event-id'] ?? null);
+        }
+      });
+      await openChat(page, '/chat/7', { faults: ['nodone', 'error'] });
+      const messages = transcript(page);
+      await expect(messages.getByText(finalText)).toBeVisible({ timeout: 15_000 });
+      await settled(page);
+      expect(cursors).toEqual([null, '9', '9']);
+      await expect(page.getByText(/Connection lost/)).toHaveCount(0);
+      await expect(messages.getByText(finalText)).toHaveCount(1);
+    });
+  });
+
   test('a parked run shows the ask inside the waiting tool card and approves', async ({ page }) => {
     test.setTimeout(45_000);
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
@@ -386,15 +422,15 @@ test.describe('composer', () => {
     await openChat(page, '/chat/9');
     await expect(transcript(page).getByText('Answer 40:', { exact: false })).toBeVisible();
     await page.getByRole('button', { name: 'Sonnet 5.5 · high' }).click();
-    await page.getByRole('menuitem', { name: /^Opus 5/ }).click();
+    await page.getByRole('menuitem', { name: /^Opus 5\.5/ }).click();
     await expect(
-      page.getByRole('button', { name: 'Opus 5 · high, from the next message, $75 per million output tokens' }),
+      page.getByRole('button', { name: 'Opus 5.5 · high, from the next message, $75 per million output tokens' }),
     ).toBeVisible();
     expect(patches).toEqual([]);
     await composer(page).fill('Compare the two shops');
     await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByRole('button', { name: 'Opus 5 · high', exact: true })).toBeVisible();
-    expect(patches).toEqual([{ model: 'opus-5', effort: 'high' }]);
+    await expect(page.getByRole('button', { name: 'Opus 5.5 · high', exact: true })).toBeVisible();
+    expect(patches).toEqual([{ model: 'claude-opus-5-5', effort: 'high' }]);
   });
 
   test('a new chat starts from the composer and opens its page', async ({ page }) => {
