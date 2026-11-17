@@ -147,3 +147,22 @@ func knowledgeCreateG5(t *testing.T, c *webClient, fields map[string]any) int64 
 	}
 	return changedIDG5(t, got)
 }
+
+func noFollowG5(t *testing.T, method, url string) (int, string, http.Header) {
+	t.Helper()
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, string(body), resp.Header
+}

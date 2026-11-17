@@ -184,8 +184,8 @@ func TestClientServesAtRoot(t *testing.T) {
 				t.Fatalf("%s%s still served: %d", base, gone, old.status)
 			}
 		}
-		if post := nextPost(t, base, "/inbox"); post.status == http.StatusOK {
-			t.Fatalf("%s POST to a client path reached the shell", base)
+		if status, body, _ := noFollowG5(t, http.MethodPost, base+"/inbox"); status == http.StatusOK || strings.Contains(body, "<title>atrium</title>") {
+			t.Fatalf("%s POST to a client path reached the shell: %d", base, status)
 		}
 	}
 	if healthz := nextGet(t, s.base, "/healthz"); healthz.status != http.StatusOK || healthz.header.Get("Content-Security-Policy") != serverPolicy {

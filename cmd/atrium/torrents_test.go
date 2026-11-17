@@ -115,14 +115,19 @@ func TestTorrentsShimAddLandsOnDownloadsWhileLibraryIsOn(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
+	base := startServeIn(t, dir)
+	b := localWebG5(t, base)
 	magnet := mediaMagnet(fresh, "Lanterns.S01E14")
-	b.want(http.MethodGet, "/apps/media/add?magnet="+url.QueryEscape(magnet), nil, http.StatusOK, "Add torrent", fresh)
+	status, _, header := noFollowG5(t, http.MethodGet, base+"/apps/media/add?magnet="+url.QueryEscape(magnet))
+	if status != http.StatusMovedPermanently || !strings.HasPrefix(header.Get("Location"), "/apps/torrents") || !strings.Contains(header.Get("Location"), fresh) {
+		t.Fatalf("shim link = %d %q, want a redirect to the torrents app carrying the magnet", status, header.Get("Location"))
+	}
 	if qb.count("add") != 0 {
 		t.Fatal("opening the shim link added a torrent")
 	}
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK,
-		"Added the magnet link", "Ready to file")
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status != http.StatusOK || !strings.Contains(got.body, fresh) {
+		t.Fatalf("add = %d %.300s", got.status, got.body)
+	}
 	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium+","+library.TagMedia {
 		t.Fatalf("shim add sent tags %q", got.Get("tags"))
 	}
@@ -135,12 +140,12 @@ func TestTorrentsAddWithoutLibraryStaysOnTheAddPage(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusNotFound)
-	body := b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(fresh, "Lanterns.S01E15")}}, http.StatusOK,
-		"Added the magnet link", "Add torrent")
-	if strings.Contains(body, "Ready to file") {
-		t.Fatal("the add landed on the Library page while Library is off")
+	b := localWebG5(t, startServeIn(t, dir))
+	if got := b.do(http.MethodGet, "/web/v1/media/library", nil); got.status != http.StatusNotFound {
+		t.Fatalf("library while Library is off = %d %.300s", got.status, got.body)
+	}
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": mediaMagnet(fresh, "Lanterns.S01E15")}); got.status != http.StatusOK {
+		t.Fatalf("add without Library = %d %.300s", got.status, got.body)
 	}
 	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium || qb.count("torrents/filePrio") != 0 {
 		t.Fatalf("add without Library sent tags %q writes %v", got.Get("tags"), qb.writes)

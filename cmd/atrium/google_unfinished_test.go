@@ -54,6 +54,9 @@ func TestAnAbandonedGoogleWizardIsUnconfiguredWhileAWorkingGoogleThatLosesItsCli
 		}
 	}
 
+	if opened := browser.do(http.MethodGet, "/web/v1/connections/google/oauth", nil); opened.status != http.StatusOK {
+		t.Fatalf("google wizard: %d %s", opened.status, opened.body)
+	}
 	test()
 	unconfigured("an abandoned wizard")
 	if got := reason(); got != "google client ID is not set" {

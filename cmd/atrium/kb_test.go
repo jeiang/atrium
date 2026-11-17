@@ -370,7 +370,7 @@ func TestKnowledgeListRevision(t *testing.T) {
 func knowledgeAudits(t *testing.T, d *db.DB, operation string, id int64, outcome string) int {
 	t.Helper()
 	var n int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND target = ? AND outcome = ? AND source = 'ui'",
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND target = ? AND outcome = ? AND source = 'api'",
 		operation, strconv.FormatInt(id, 10), outcome).Scan(&n); err != nil {
 		t.Fatal(err)
 	}

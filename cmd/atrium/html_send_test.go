@@ -95,7 +95,8 @@ func TestHTMLSendRetryAfterAbort(t *testing.T) {
 	id := htmlThread(t, s, owner)
 	requests := len(api.Requests())
 	path := "/web/v1/threads/" + strconv.FormatInt(id, 10) + "/messages"
-	body, contentType := composerBody(t, "aborted note")
+	form, contentType := asstMultipart(t, map[string]string{"text": "aborted note"}, nil)
+	body := form.Bytes()
 
 	first := rawWebG5(client, http.MethodPost, path, contentType, bytes.NewReader(body), "Idempotency-Key", "abort-key")
 	conn, err := net.Dial("tcp", first.URL.Host)
@@ -173,7 +174,8 @@ func TestHTMLSendTextWhileUploadsHeld(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	body, contentType := composerBody(t, "text while held")
+	form, contentType := asstMultipart(t, map[string]string{"text": "text while held"}, nil)
+	body := form.Bytes()
 	status, text, header := htmlDo(t, rawWebG5(client, http.MethodPost, "/web/v1/threads/"+strconv.FormatInt(id, 10)+"/messages", contentType, bytes.NewReader(body), "Idempotency-Key", "held-web"))
 	if status != http.StatusAccepted || header.Get("Atrium-Command-Id") == "" {
 		t.Fatalf("web text send while uploads are held: %d\n%s", status, text)

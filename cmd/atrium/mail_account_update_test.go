@@ -73,13 +73,13 @@ func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
 		t.Fatalf("empty fields changed account values: label=%q login=%q auth=%q", label, login, authMethod)
 	}
 	var added, saved, refused int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-add' AND outcome = 'ok' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&added); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-add' AND outcome = 'ok' AND source = 'api' AND actor != '' AND target = 'work'").Scan(&added); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'ok' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&saved); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'ok' AND source = 'api' AND actor != '' AND target = 'work'").Scan(&saved); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'refused' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&refused); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'refused' AND source = 'api' AND actor != '' AND target = 'work'").Scan(&refused); err != nil {
 		t.Fatal(err)
 	}
 	if added != 1 || saved != 2 || refused != 1 {
