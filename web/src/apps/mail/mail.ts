@@ -222,7 +222,10 @@ const refusals: Record<string, { title: string; text: string }> = {
     text: 'atrium could not confirm an earlier change to this message. Record what happened to it first.',
   },
   invalid_draft: { title: 'The draft is not complete', text: 'Check the recipients and the message.' },
-  stale: { title: 'The draft changed elsewhere', text: 'atrium reloaded the latest version. Check it, then try again.' },
+  stale: {
+    title: 'The draft changed elsewhere',
+    text: 'atrium reloaded the latest version. Check it, then try again.',
+  },
   not_sent: { title: 'The email was not sent', text: 'The mail server refused it.' },
 };
 

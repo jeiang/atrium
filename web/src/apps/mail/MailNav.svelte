@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Icon from '../../shared/ui/Icon.svelte';
   import type { AppEntry } from '../../contract';
+  import Icon from '../../shared/ui/Icon.svelte';
   import { navLinks } from '../../shell/manifest';
   import { p } from '../../shell/router';
 

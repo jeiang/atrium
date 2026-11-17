@@ -75,9 +75,7 @@ test.describe('Mail messages', () => {
     await expect(list).toContainText('Your order has shipped');
   });
 
-  test('the message page shows the text and attachments, and read, flag and archive offer Undo', async ({
-    page,
-  }) => {
+  test('the message page shows the text and attachments, and read, flag and archive offer Undo', async ({ page }) => {
     const sent = writes(page);
     await gotoShell(page, '/apps/mail');
     await page.getByRole('link', { name: 'Plot 14 renewal' }).click();
@@ -208,7 +206,10 @@ test.describe('Mail refusals', () => {
     await expect(page.getByText('The outcome is unknown')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Archive' })).toBeDisabled();
     await page.getByRole('button', { name: 'Mark as done' }).click();
-    await page.getByRole('dialog', { name: 'Mark this change as done?' }).getByRole('button', { name: 'Mark as done' }).click();
+    await page
+      .getByRole('dialog', { name: 'Mark this change as done?' })
+      .getByRole('button', { name: 'Mark as done' })
+      .click();
     await expect(toast(page, 'Marked as done.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Archive' })).toBeEnabled();
   });

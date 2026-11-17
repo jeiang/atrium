@@ -130,16 +130,17 @@
         </ul>
       {:else if items.length === 0}
         <ViewState kind="empty" title={filtered ? 'Nothing matches' : 'No messages yet'}>
-          {filtered
-            ? 'No message matches these filters.'
-            : 'Messages show here once atrium has read the mailbox.'}
+          {filtered ? 'No message matches these filters.' : 'Messages show here once atrium has read the mailbox.'}
         </ViewState>
       {:else}
         <div class="mail-bar">
           <p class="meta">{plural(items.length, 'message')}{messages.hasNextPage ? ' so far' : ''}</p>
           <Segmented
             label="Show messages as"
-            options={[{ value: 'cards', label: 'Cards' }, { value: 'list', label: 'List' }]}
+            options={[
+    { value: 'cards', label: 'Cards' },
+    { value: 'list', label: 'List' },
+  ]}
             bind:value={view}
           />
         </div>

@@ -1,7 +1,10 @@
 <script lang="ts" module>
   import type { Draft } from './mail';
 
-  export type Start = { kind: 'new' } | { kind: 'forward'; message: number; subject: string } | { kind: 'draft'; draft: Draft };
+  export type Start =
+    | { kind: 'new' }
+    | { kind: 'forward'; message: number; subject: string }
+    | { kind: 'draft'; draft: Draft };
 </script>
 
 <script lang="ts">
@@ -20,7 +23,6 @@
   import TextArea from '../../shared/ui/TextArea.svelte';
   import TextField from '../../shared/ui/TextField.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
-  import Unresolved from './Unresolved.svelte';
   import {
     firstName,
     handleCreate,
@@ -34,6 +36,7 @@
     problemOf,
     unknownOutcome,
   } from './mail';
+  import Unresolved from './Unresolved.svelte';
 
   interface Props {
     open?: boolean;
@@ -70,7 +73,11 @@
   const busy = $derived(phase === 'saving' || phase === 'sending');
   const locked = $derived(phase !== 'edit');
   const offline = $derived(!device.online);
-  const options = $derived(accounts.filter((item) => item.enabled).map((item) => ({ value: item.id, label: item.label || item.login || item.id })));
+  const options = $derived(
+    accounts
+      .filter((item) => item.enabled)
+      .map((item) => ({ value: item.id, label: item.label || item.login || item.id })),
+  );
 
   $effect(() => {
     const query = matchMedia(touchQuery);
@@ -178,9 +185,7 @@
       open = false;
       const who = firstName(sent.draft.to);
       toast(
-        sent.refused.length > 0
-          ? `Sent to ${who}. The server refused ${sent.refused.join(', ')}.`
-          : `Sent to ${who}.`,
+        sent.refused.length > 0 ? `Sent to ${who}. The server refused ${sent.refused.join(', ')}.` : `Sent to ${who}.`,
         { tone: sent.refused.length > 0 ? 'error' : 'neutral' },
       );
       phase = 'edit';
@@ -292,7 +297,8 @@
       {#if draft?.unexpected_recipients?.length}
         <Notice tone="warn" variant="inline" title="Check the recipients">
           {draft.unexpected_recipients.join(', ')}
-          {draft.unexpected_recipients.length === 1 ? 'was' : 'were'} not on the original message.
+          {draft.unexpected_recipients.length === 1 ? 'was' : 'were'}
+          not on the original message.
         </Notice>
       {/if}
     {:else}

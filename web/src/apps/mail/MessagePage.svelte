@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useQueryClient } from '@tanstack/svelte-query';
-  import { inboxPath } from '../../shared/assistant/inboxId';
   import { formatDayTime } from '../../shared/assistant/format';
+  import { inboxPath } from '../../shared/assistant/inboxId';
   import type { Stuck } from '../../shared/assistant/stuck';
   import { device, unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
@@ -9,8 +9,8 @@
   import Page from '../../shared/ui/Page.svelte';
   import Section from '../../shared/ui/Section.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
-  import ViewState from '../../shared/ui/ViewState.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
+  import ViewState from '../../shared/ui/ViewState.svelte';
   import { appGone, useApps } from '../../shell/manifest';
   import NotFound from '../../shell/NotFound.svelte';
   import { p, route } from '../../shell/router';

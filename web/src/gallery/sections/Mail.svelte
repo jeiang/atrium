@@ -51,12 +51,19 @@
   {/if}
   <div class="mail-actions">
     <Button variant="secondary" onclick={() => onCompose({ kind: 'new' })}>Open a new email</Button>
-    <Button variant="secondary" onclick={() => onCompose({ kind: 'forward', message: 101, subject: 'Seed swap on Saturday' })}
+    <Button
+      variant="secondary"
+      onclick={() => onCompose({ kind: 'forward', message: 101, subject: 'Seed swap on Saturday' })}
       >Open a forward</Button
     >
   </div>
   <ReceiptLine tone="pending" title="Sending to Odile Marsh in 7 s" onundo={() => undefined} />
-  <ReceiptLine title="Archived" at={Date.parse('2026-11-10T09:30:00Z')} undoUntil={Number.MAX_SAFE_INTEGER} onundo={() => undefined} />
+  <ReceiptLine
+    title="Archived"
+    at={Date.parse('2026-11-10T09:30:00Z')}
+    undoUntil={Number.MAX_SAFE_INTEGER}
+    onundo={() => undefined}
+  />
   <Notice tone="warn" title="Mail is in shadow mode">
     atrium only watches the mailbox in shadow mode. Switch Mail to live mode to change messages. Nothing was changed.
   </Notice>

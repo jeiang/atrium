@@ -37,10 +37,7 @@ const ME = 'Wren Halloway <wren@garden-club.example>';
 const DAY = 86_400_000;
 const NOW = Date.parse('2026-11-10T09:30:00Z');
 
-export const mailAccountsSeed: Account[] = [
-  account('garden-club', 'Garden club'),
-  account('home', 'Home'),
-];
+export const mailAccountsSeed: Account[] = [account('garden-club', 'Garden club'), account('home', 'Home')];
 
 const loops: Loop[] = [
   {
@@ -162,7 +159,13 @@ export function seedMailbox(scenario: MailboxScenario = {}): Row[] {
   if (scenario.messages !== 'many') return rows;
   for (let index = 0; index < 40; index += 1) {
     rows.push(
-      row(200 + index, 'Garden club list <list@garden-club.example>', `Weekly notes ${index + 1}`, 'Notes.', (6 + index) * DAY),
+      row(
+        200 + index,
+        'Garden club list <list@garden-club.example>',
+        `Weekly notes ${index + 1}`,
+        'Notes.',
+        (6 + index) * DAY,
+      ),
     );
   }
   return rows;
@@ -426,10 +429,22 @@ export function mailHandlers(read: () => { mailbox?: MailboxScenario; apps?: App
     }),
     http.post(`*${API_BASE}/drafts`, async ({ request }) => {
       record(request);
-      const input = (await request.clone().json()) as { account: string; to: string; cc?: string; subject?: string; body: string };
+      const input = (await request.clone().json()) as {
+        account: string;
+        to: string;
+        cc?: string;
+        subject?: string;
+        body: string;
+      };
       if (!input.to?.trim() || !input.body?.trim()) return error('invalid_draft', 'to and body are required', 422);
       return HttpResponse.json(
-        makeDraft({ account: input.account, to: input.to, cc: input.cc ?? '', subject: input.subject ?? '', body: input.body }),
+        makeDraft({
+          account: input.account,
+          to: input.to,
+          cc: input.cc ?? '',
+          subject: input.subject ?? '',
+          body: input.body,
+        }),
       );
     }),
     http.get(`*${API_BASE}/drafts/:id`, ({ params }) => {
