@@ -78,6 +78,7 @@ type Definition struct {
 	Defaults        map[string]string
 	Validate        func(Candidate) error
 	Grace           time.Duration
+	Interactive     []string
 	Test            func(context.Context, *Lease, []Capability) ([]Result, error)
 	// Silent replaces Test during a periodic health pass when the explicit
 	// test has a visible side effect, such as a diagnostic push.

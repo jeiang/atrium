@@ -22,6 +22,7 @@ type wimSite struct {
 	base  string
 	idp   *oidctest.Provider
 	db    *db.DB
+	dir   string
 	peers int
 }
 
@@ -71,7 +72,7 @@ func wimOIDCSite(t *testing.T) *wimSite {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-	return &wimSite{t: t, base: base, idp: idp, db: d}
+	return &wimSite{t: t, base: base, idp: idp, db: d, dir: dir}
 }
 
 func (s *wimSite) count(query string, args ...any) int {

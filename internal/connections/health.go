@@ -135,7 +135,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 		if !errors.As(err, &invalid) {
 			return View{}, err
 		}
-		return s.record(ctx, id, lease.revision, 0, []Result{{State: Failing, Reason: err.Error()}}, commits...)
+		return s.record(ctx, id, lease.revision, 0, nil, []Result{{State: Failing, Reason: err.Error()}}, commits...)
 	}
 	action := def.Test
 	if def.Silent != nil {
@@ -145,7 +145,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
 }
 
 type HealthState struct {
