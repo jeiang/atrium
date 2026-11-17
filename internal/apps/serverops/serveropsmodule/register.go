@@ -1,18 +1,18 @@
-package grafanamodule
+package serveropsmodule
 
 import (
 	"context"
 	"errors"
 	"time"
 
-	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/apps/serverops"
+	opsapp "github.com/jeiang/atrium/internal/apps/serverops/application"
+	grafanatools "github.com/jeiang/atrium/internal/apps/serverops/grafana"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
-	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/serverops"
-	opsapp "github.com/jeiang/atrium/internal/serverops/application"
 	"github.com/jeiang/atrium/internal/unit"
 )
 
@@ -38,7 +38,7 @@ func ToolDefinitions() []module.ToolDefinition {
 	return toolDefinitions()
 }
 
-func (m Module) Declare(module.Context) module.Declaration {
+func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := opsOperations()
 	return module.Declaration{
 		Name:        unit.Grafana,
@@ -46,8 +46,9 @@ func (m Module) Declare(module.Context) module.Declaration {
 		App:         true,
 		Depends:     []string{unit.Assistant},
 		Needs:       []module.Need{{Kind: grafanatools.KindGrafana, Capability: "viewer", Features: []string{"server health", "server tools"}}},
-		Packages:    []string{"internal/assistant/tools/grafana", "internal/assistant/tools/ops", "internal/grafana", "internal/serverops"},
-		Tables:      []string{"ops_findings", "ops_samples"},
+		Packages:    []string{"internal/apps/serverops"},
+		Tables:      []string{"ops_samples"},
+		Attention:   []attention.Source{serverops.AttentionSource(mc.Env)},
 		Settings:    serverops.Settings(),
 		Host:        serverops.HostSettingDefs(),
 		Requires:    Requirements(),
@@ -62,18 +63,6 @@ func (m Module) Declare(module.Context) module.Declaration {
 func sample(ctx context.Context, e jobworker.Env) error {
 	_, err := opsapp.New(e.Service.DB, e.Service.Env, e.Now).Sample(ctx, opsapp.SampleInput{})
 	return err
-}
-
-func opsOperations() ([]application.Definition, []application.Binding) {
-	uses := func(name application.Name) []application.Name { return []application.Name{name} }
-	return opsapp.DescribeGrafana(), []application.Binding{
-		{Kind: application.Tool, Target: "grafana_datasources", Uses: uses(opsapp.DatasourcesName)},
-		{Kind: application.Tool, Target: "grafana_query", Uses: uses(opsapp.QueryName)},
-		{Kind: application.Tool, Target: "grafana_alerts", Uses: uses(opsapp.AlertsName)},
-		{Kind: application.Tool, Target: "grafana_search_dashboards", Uses: uses(opsapp.DashboardSearchName)},
-		{Kind: application.Tool, Target: "atrium_self_diagnose", Uses: uses(opsapp.SelfDiagnoseName)},
-		{Kind: application.Job, Target: unit.Grafana + "/" + grafanatools.JobSampler, Uses: uses(opsapp.SampleName)},
-	}
 }
 
 func samplerJob(deps jobworker.Dependencies, sample func(context.Context, jobworker.Env) error) scheduler.Definition {

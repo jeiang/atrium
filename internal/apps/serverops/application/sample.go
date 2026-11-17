@@ -13,10 +13,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/apps/serverops"
+	grafanatools "github.com/jeiang/atrium/internal/apps/serverops/grafana"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	grafanatools "github.com/jeiang/atrium/internal/grafana"
-	"github.com/jeiang/atrium/internal/serverops"
 )
 
 const retentionDays = 14

@@ -12,14 +12,12 @@ import (
 )
 
 const (
-	DatasourcesName     application.Name = "ops.datasources"
-	QueryName           application.Name = "ops.query"
-	AlertsName          application.Name = "ops.alerts"
-	DashboardSearchName application.Name = "ops.dashboard-search"
-	SelfDiagnoseName    application.Name = "ops.self-diagnose"
-	ObservationsName    application.Name = "ops.observations"
-	FindingName         application.Name = "ops.finding"
-	SampleName          application.Name = "ops.sample"
+	QueryName        application.Name = "ops.query"
+	AlertsName       application.Name = "ops.alerts"
+	SelfDiagnoseName application.Name = "ops.self-diagnose"
+	ObservationsName application.Name = "ops.observations"
+	FindingName      application.Name = "ops.finding"
+	SampleName       application.Name = "ops.sample"
 )
 
 var agentCallers = []application.Authority{application.Agent}
@@ -43,10 +41,8 @@ func (s *Service) WithLedger(store *ledger.Store) *Service {
 
 func DescribeGrafana() []application.Definition {
 	return []application.Definition{
-		application.Describe[DatasourcesInput, map[string]any](DatasourcesName, application.Query, agentCallers, application.NoEffect, false),
 		application.Describe[QueryInput, any](QueryName, application.Query, agentCallers, application.NoEffect, false),
 		application.Describe[AlertsInput, map[string]any](AlertsName, application.Query, agentCallers, application.NoEffect, false),
-		application.Describe[DashboardSearchInput, map[string]any](DashboardSearchName, application.Query, agentCallers, application.NoEffect, false),
 		application.Describe[SelfDiagnoseInput, map[string]any](SelfDiagnoseName, application.Query, agentCallers, application.NoEffect, false),
 		application.Describe[SampleInput, SampleResult](SampleName, application.Command, []application.Authority{application.System}, application.NoEffect, true),
 	}

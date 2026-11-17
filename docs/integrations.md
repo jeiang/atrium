@@ -16,7 +16,7 @@ summary; the sections below cover the console work atrium cannot do for you.
 | Connection | Kind | Auth | What it permits | Limits |
 |---|---|---|---|---|
 | Anthropic | `service/anthropic` | Console API key | Assistant model calls | Key is workspace-bound; use one workspace per instance with a monthly spend limit |
-| Grafana | `service/grafana` | Service account token | Read-only dashboard and datasource queries | Viewer role is enough; optional token expiry |
+| Grafana | `service/grafana` | Service account token | Read-only metric, log and alert queries for the opt-in Server ops app | Viewer role is enough; optional token expiry |
 | Embedding endpoint | `service/embedding` | Optional host-file bearer | Embeddings for mail search and routing | A hosted endpoint sends mail content off this host |
 | qBittorrent | `service/qbittorrent` | API key | Media torrent and library operations | API keys need qBittorrent 5.2 or newer |
 | TMDB | `service/tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |

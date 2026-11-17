@@ -5,16 +5,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/serverops"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -27,15 +27,11 @@ type SampleFilter struct {
 }
 
 type ObservationsInput struct {
-	Samples   *SampleFilter
-	Findings  int64
-	FindingID int64
+	Samples SampleFilter
 }
 
 type Observations struct {
-	Samples  []serverops.SampleRow  `json:"samples,omitempty"`
-	Findings []serverops.FindingRow `json:"findings,omitempty"`
-	Finding  *serverops.FindingRow  `json:"finding,omitempty"`
+	Samples []serverops.SampleRow `json:"samples"`
 }
 
 type FindingInput struct {
@@ -51,33 +47,21 @@ type FindingResult struct {
 	Severity string  `json:"severity"`
 	Title    string  `json:"title"`
 	Written  float64 `json:"written"`
+	Expires  float64 `json:"expires"`
 }
 
 func (s *Service) Observations(ctx context.Context, in ObservationsInput) (application.Read[Observations], error) {
 	var out Observations
-	if in.Samples != nil && in.Samples.Metric != "" && !slices.Contains(serverops.Metrics, in.Samples.Metric) {
+	if in.Samples.Metric != "" && !slices.Contains(serverops.Metrics, in.Samples.Metric) {
 		return application.Read[Observations]{}, tool.Error("metric is unknown")
 	}
 	now := s.clock()
-	inv, _ := application.InvocationOf(ctx)
-	threadID := inv.ThreadID
 	rev, err := s.snapshot(ctx, ObservationsName, struct {
 		Input  ObservationsInput `json:"input"`
-		Thread int64             `json:"thread"`
 		Minute int64             `json:"minute"`
-	}{in, threadID, int64(now) / 60}, func(q db.Querier) error {
+	}{in, int64(now) / 60}, func(q db.Querier) error {
 		var err error
-		switch {
-		case in.Samples != nil:
-			out.Samples, err = serverops.Samples(ctx, q, now-float64(in.Samples.Hours)*3600, in.Samples.Host, in.Samples.Metric, sampleRowCap)
-		case in.FindingID != 0:
-			out.Finding, err = serverops.FindingByID(ctx, q, in.FindingID)
-			if err == nil && out.Finding == nil {
-				err = tool.Error(fmt.Sprintf("finding %d is unknown", in.FindingID))
-			}
-		default:
-			out.Findings, err = serverops.FindingsByThread(ctx, q, threadID, in.Findings)
-		}
+		out.Samples, err = serverops.Samples(ctx, q, now-float64(in.Samples.Hours)*3600, in.Samples.Host, in.Samples.Metric, sampleRowCap)
 		return err
 	})
 	if err != nil {
@@ -99,24 +83,25 @@ func (s *Service) Finding(ctx context.Context, in FindingInput) (application.Cha
 		return application.Change[FindingResult]{}, err
 	}
 	now := s.clock()
-	var id, auditID int64
+	var rec kb.Record
+	var auditID int64
 	err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		var err error
-		id, err = serverops.WriteFindingTx(ctx, s.ledger, tx, serverops.Finding{
+		rec, err = serverops.WriteFindingTx(ctx, s.ledger, tx, serverops.Finding{
 			Fact: in.Fact, Severity: in.Severity, Title: in.Title, Body: in.Body, Marks: marks,
 			ThreadID: inv.ThreadID, RunID: inv.RunID, Tool: "ops_finding", Now: now,
 		})
 		if err != nil {
 			return err
 		}
-		auditID, err = s.state.Audit(ctx, tx, state.Entry{Operation: string(FindingName), Outcome: state.OK, Target: "ops_finding:" + strconv.FormatInt(id, 10)})
+		auditID, err = s.state.Audit(ctx, tx, state.Entry{Operation: string(FindingName), Outcome: state.OK, Target: "kb:" + strconv.FormatInt(rec.ID, 10)})
 		return err
 	})
 	if err != nil {
 		return application.Change[FindingResult]{}, err
 	}
 	return application.Change[FindingResult]{
-		Data:    FindingResult{ID: id, Fact: in.Fact, Severity: in.Severity, Title: in.Title, Written: now},
+		Data:    FindingResult{ID: rec.ID, Fact: in.Fact, Severity: in.Severity, Title: in.Title, Written: now, Expires: now + serverops.FindingTTL},
 		AuditID: auditID,
 	}, nil
 }
