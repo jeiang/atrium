@@ -39,6 +39,8 @@ type ConnectionField struct {
 	Secret    bool   `json:"secret"`
 	HostOwned bool   `json:"host_owned"`
 	Present   bool   `json:"present"`
+	Pinned    bool   `json:"pinned,omitempty"`
+	Owner     ID     `json:"owner,omitempty"`
 }
 
 func (s *Service) Schema(ctx context.Context, in ListInput) (application.Read[ConnectionsSchema], error) {
@@ -65,7 +67,7 @@ func (s *Service) Schema(ctx context.Context, in ListInput) (application.Read[Co
 			fields = append(fields, ConnectionField{Name: "url", Type: FieldURL, HostOwned: host, Present: url != ""})
 		}
 		for _, c := range v.Credentials {
-			fields = append(fields, ConnectionField{Name: c.Slot, Type: FieldSecret, Secret: true, HostOwned: strings.HasPrefix(c.Source, connections.SourceHost), Present: c.Present})
+			fields = append(fields, ConnectionField{Name: c.Slot, Type: FieldSecret, Secret: true, HostOwned: c.Pinned || strings.HasPrefix(c.Source, connections.SourceHost), Present: c.Present, Pinned: c.Pinned, Owner: c.Owner})
 		}
 		for _, slot := range unsetSlots(v, slots[v.Kind]) {
 			fields = append(fields, ConnectionField{Name: slot, Type: FieldSecret, Secret: true})

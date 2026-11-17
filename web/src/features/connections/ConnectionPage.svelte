@@ -35,7 +35,9 @@
     reasonText,
     refreshConnections,
     remember,
+    repairHint,
     slotLabel,
+    splitId,
     stale,
     useConnections,
     useSchema,
@@ -65,19 +67,22 @@
       .filter((field) => field.secret)
       .map((field) => ({ field, stored: view?.credentials.find((item) => item.slot === field.name) })),
   );
-  const editable = $derived(fields.some((field) => !field.host_owned));
+  const editable = $derived(fields.some((field) => !field.host_owned && !field.owner));
   const config = $derived(configEntries(view?.config).filter(([key]) => key !== 'url'));
   const currentUrl = $derived(configEntries(view?.config).find(([key]) => key === 'url')?.[1] ?? '');
-  const hostDeclared = $derived(view?.credentials.some((credential) => hostSlot(credential.source)) ?? false);
+  const hostDeclared = $derived(
+    view?.credentials.some((credential) => !credential.owner && (credential.pinned || hostSlot(credential.source))) ??
+      false,
+  );
+  const ownCredentials = $derived(view?.credentials.filter((credential) => !credential.owner) ?? []);
   const removable = $derived(
     view !== undefined &&
       view.config_source === 'operator' &&
       !hostDeclared &&
-      (view.credentials.some((credential) => credential.present) || configEntries(view.config).length > 0),
+      (ownCredentials.some((credential) => credential.present) || configEntries(view.config).length > 0),
   );
-  const storedSlots = $derived(
-    view?.credentials.filter((credential) => credential.present).map((c) => slotLabel(c.slot)) ?? [],
-  );
+  const storedSlots = $derived(ownCredentials.filter((credential) => credential.present).map((c) => slotLabel(c.slot)));
+  const hint = $derived(repairHint(view));
 
   let label = $state('');
   let url = $state('');
@@ -109,7 +114,7 @@
   function draft(): Draft {
     const out: Draft = { credentials: {} };
     for (const field of fields) {
-      if (field.host_owned) continue;
+      if (field.host_owned || field.owner) continue;
       if (field.name === 'label' && label.trim() !== view?.label) out.label = label.trim();
       else if (field.name === 'url' && url.trim() !== currentUrl) out.url = url.trim();
       else if (field.secret && secrets[field.name]) out.credentials[field.name] = secrets[field.name] as string;
@@ -120,6 +125,18 @@
   function failure(error: unknown, action: string): Outcome {
     if (refusedOffline(error) && error instanceof Error) {
       return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+    }
+    if (
+      error instanceof ApiError &&
+      error.code === 'refused' &&
+      error.message.includes('pinned by host configuration')
+    ) {
+      refreshConnections(client);
+      return {
+        tone: 'error',
+        title: 'This credential is set in host configuration',
+        text: 'atrium saved nothing. Change the credential in host configuration, then Test now.',
+      };
     }
     if (stale(error)) {
       refreshConnections(client);
@@ -388,9 +405,26 @@
       </dl>
       {#if view.state === 'needs_reauth'}
         <Notice tone="warn" variant="inline" title="To repair">
-          Sign in again in the current interface, then come back and Test now.
+          {#if hint?.owner}
+            This connection uses the credential of {hint.owner}.
+            {hint.pinned
+              ? 'That credential is changed in host configuration; change it there, then Test now.'
+              : 'Change it on that connection, then Test now.'}
+          {:else if hint?.pinned}
+            The credential is changed in host configuration. Change it there, then Test now.
+          {:else}
+            Sign in again in the current interface, then come back and Test now.
+          {/if}
           {#snippet action()}
-            <a class="btn btn--secondary" href="/settings/connections">Open Connections in the current interface</a>
+            {#if hint?.owner}
+              <a
+                class="btn btn--secondary"
+                href={p('/settings/connections/:kind/:name', { params: splitId(hint.owner) })}
+                >Open {hint.owner}</a
+              >
+            {:else if !hint?.pinned}
+              <a class="btn btn--secondary" href="/settings/connections">Open Connections in the current interface</a>
+            {/if}
           {/snippet}
         </Notice>
       {:else if view.state === 'unconfigured' && view.enabled}
@@ -464,7 +498,26 @@
             {/if}
           {/each}
           {#each secretFields as { field, stored } (field.name)}
-            {#if field.host_owned}
+            {#if field.owner}
+              <dl class="facts facts--single">
+                <div>
+                  <dt>{slotLabel(field.name)}</dt>
+                  <dd class="stack">
+                    <span
+                      >Uses the credential of {field.owner}.
+                      {field.pinned
+                        ? 'It is set in host configuration.'
+                        : 'Change it on that connection.'}</span
+                    >
+                    <a
+                      class="btn btn--secondary"
+                      href={p('/settings/connections/:kind/:name', { params: splitId(field.owner) })}
+                      >Open {field.owner}</a
+                    >
+                  </dd>
+                </div>
+              </dl>
+            {:else if field.host_owned}
               <dl class="facts facts--single">
                 <div>
                   <dt>{slotLabel(field.name)}</dt>
