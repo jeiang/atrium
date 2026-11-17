@@ -41,6 +41,7 @@ type partitionedDAV struct {
 	rootHome         bool
 	partitionRefuses bool
 	refuseTimes      int
+	retryAfter       string
 	requests         []string
 	seen             map[string]int
 	authorized       map[string]int
@@ -82,7 +83,7 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 	if good {
 		p.authorized[host]++
 	}
-	redirect, partition, rootHome, partitionRefuses := p.redirectTo, p.partition, p.rootHome, p.partitionRefuses
+	redirect, partition, rootHome, partitionRefuses, retryAfter := p.redirectTo, p.partition, p.rootHome, p.partitionRefuses, p.retryAfter
 	if good && host == partitionHost && p.refuseTimes > 0 {
 		p.refuseTimes--
 		partitionRefuses = true
@@ -113,6 +114,9 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = io.WriteString(w, "<html><body>account 1234567890 for operator@icloud.invalid</body></html>")
 	case host == partitionHost && partitionRefuses:
+		if retryAfter != "" {
+			w.Header().Set("Retry-After", retryAfter)
+		}
 		w.WriteHeader(http.StatusUnauthorized)
 	case r.URL.Path == "/42/principal/":
 		p.multistatus(w, davResponse(r.URL.Path, `<CR:addressbook-home-set><D:href>`+p.origin(host)+`/42/carddavhome/</D:href></CR:addressbook-home-set>`))
@@ -253,8 +257,8 @@ func TestCardDAVFindsAPartitionedAddressBookAndNeverSendsTheCredentialToAForeign
 	want := "iCloud accepted the app password but refused the principal request on the partition host (HTTP 401, no WWW-Authenticate challenge); " +
 		"also refused the principal request on the configured host (HTTP 401, with a WWW-Authenticate challenge) " +
 		"and the well-known request on the partition host (HTTP 401, no WWW-Authenticate challenge)"
-	if state, reason := carddav(view); state != "failing" || reason != want {
-		t.Errorf("carddav refused on every host = %s %q, want failing %q", state, reason, want)
+	if state, reason := carddav(view); state != "failing" || !strings.HasPrefix(reason, want+"; atrium sends iCloud no request for this until ") {
+		t.Errorf("carddav refused on every host = %s %q, want failing %q and the backoff end", state, reason, want)
 	}
 	if got := runApp(t, "contacts", "sync"); got.code == cli.ExitOK {
 		t.Errorf("contacts sync refused on every host succeeded: %q", got.stdout)

@@ -154,7 +154,7 @@ func DAVClient(ctx context.Context, login Login, endpoint, capability string) (*
 	if err != nil {
 		return nil, err
 	}
-	client.cache = cacheKey(capability, endpoint, creds.AppleID, creds.Password)
+	client.cache, client.credential = cacheKey(capability, endpoint, creds.AppleID, creds.Password), credentialTag(creds.Password)
 	return client, nil
 }
 
@@ -182,12 +182,28 @@ func mirror(ctx context.Context, login Login, endpoint, dir string, k Kind, capa
 	if err != nil {
 		return Stats{}, err
 	}
+	var prev hold
+	if login.DAV != nil {
+		if stored, ok := login.DAV.Stored(ctx, capability); ok {
+			prev = heldBy(stored, client.credential)
+		}
+		if prev.active(time.Now()) {
+			log.Info("dav sync skipped while backing off", "capability", capability, "until", prev.until())
+			return Stats{}, skipped(login.DAV, capability, prev)
+		}
+	}
+	client.retryCap = prev.retries()
 	syncOutcomes.Delete(client.cache)
+	syncing.Store(client.cache, true)
 	collections, err := client.Fetch(ctx, k)
+	syncing.Delete(client.cache)
 	if result, ok := outcome(capability, err); ok && ctx.Err() == nil {
+		result = settle(result, err, prev, client.credential, time.Now())
 		rememberSync(client.cache, result)
 		if login.DAV != nil {
-			login.DAV.Report(result)
+			if serr := login.DAV.Settle(ctx, result); serr != nil {
+				log.Warn("recording the dav sync outcome failed", "capability", capability, "error", serr.Error())
+			}
 		}
 	}
 	if err != nil {
@@ -221,6 +237,8 @@ func failure(capability string, err error) (connections.Result, bool) {
 			return connections.Result{Capability: capability, State: connections.Failing, Reason: reason}, true
 		case status.Status >= http.StatusInternalServerError:
 			return connections.Result{Capability: capability, State: connections.Failing, Reason: fmt.Sprintf("iCloud failed the %s request on %s (HTTP %d)", status.Step, status.Host, status.Status)}, true
+		case status.Status == http.StatusTooManyRequests:
+			return connections.Result{Capability: capability, State: connections.Failing, Reason: fmt.Sprintf("iCloud asked atrium to slow down on the %s request on %s (HTTP 429)", status.Step, status.Host)}, true
 		}
 		return connections.Result{}, false
 	}
@@ -312,6 +330,17 @@ func checkICloud(ctx context.Context, lease *connections.Lease, caps []connectio
 			continue
 		}
 		key := session.key(cap.Name)
+		var prev hold
+		stored, found := lease.Stored(ctx, cap.Name)
+		if found {
+			prev = heldBy(stored, credentialTag(session.password))
+		}
+		now := time.Now()
+		_, running := syncing.Load(key)
+		if reuse && found && (prev.active(now) || running) {
+			results = append(results, stored)
+			continue
+		}
 		if synced, fresh := recentSync(key); reuse && fresh {
 			results = append(results, synced)
 			continue
@@ -319,7 +348,12 @@ func checkICloud(ctx context.Context, lease *connections.Lease, caps []connectio
 		if !reuse {
 			discoveries.Delete(key)
 		}
-		results = append(results, session.check(ctx, cap.Name, key))
+		result, err := session.check(ctx, cap.Name, key, prev.retries())
+		result = settle(result, err, prev, credentialTag(session.password), time.Now())
+		if !reuse && prev.active(now) {
+			result.Reason = "tested at the operator's request during a backoff that was to end " + prev.until() + ": " + result.Reason
+		}
+		results = append(results, result)
 	}
 	if len(results) == 0 {
 		return []connections.Result{{Capability: CapabilityCalDAV, State: connections.Unconfigured, Reason: "no iCloud capability is enabled"}}, nil
@@ -387,28 +421,28 @@ func (s icloudSession) kind(capability string) (Kind, string, bool) {
 	return Kind{}, "", false
 }
 
-func (s icloudSession) check(ctx context.Context, capability, cache string) connections.Result {
+func (s icloudSession) check(ctx context.Context, capability, cache string, retries int) (connections.Result, error) {
 	kind, endpoint, ok := s.kind(capability)
 	if !ok {
-		return connections.Result{Capability: capability, State: connections.Failing, Reason: "unknown iCloud capability"}
+		return connections.Result{Capability: capability, State: connections.Failing, Reason: "unknown iCloud capability"}, nil
 	}
 	client, err := New(s.http, endpoint)
 	if err != nil {
-		return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}
+		return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}, nil
 	}
-	client.cache, client.verify = cache, true
+	client.cache, client.verify, client.retryCap = cache, true, retries
 	collections, err := client.Collections(ctx, kind)
 	if err != nil {
 		result, ok := failure(capability, err)
 		if !ok {
 			result = connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}
 		}
-		return result
+		return result, err
 	}
 	data, _ := json.Marshal(map[string]any{"collections": len(collections)})
 	reason := fmt.Sprintf("%d collections", len(collections))
 	if len(collections) == 1 {
 		reason = "1 collection"
 	}
-	return connections.Result{Capability: capability, State: connections.OK, Reason: reason, Data: data}
+	return connections.Result{Capability: capability, State: connections.OK, Reason: reason, Data: data}, nil
 }

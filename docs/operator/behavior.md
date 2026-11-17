@@ -476,11 +476,33 @@ named, or a sibling host) without the request address, and a refusal says
 whether it carried a `WWW-Authenticate` challenge and lists the other
 refusals of the same discovery. A 401 with no challenge and an empty body,
 after an earlier request of the same sync or check accepted the password, is
-treated as transient: that request is sent again after about 2 seconds and
-then about 6 seconds (each jittered by a quarter), at most twice per sync or
-check, and each retry is logged; if it is still refused the capability is
-failing, never needing reauth. Error texts show numeric path segments of DAV
-addresses as `<id>`. A later session or sync that works marks the
+treated as transient: that request is sent again once, after about 2 seconds
+(jittered by a quarter), and not at all when the previous sync or check of
+that capability also ended in a refusal; the retry is logged, and if it is
+still refused the capability is failing, never needing reauth. Error texts
+show numeric path segments of DAV addresses as `<id>`.
+
+A CalDAV or CardDAV sync or check that ends in a refusal (401 or 403 on any
+step, with or without a challenge) or in HTTP 429 or 503 starts a backoff for
+that capability: atrium sends iCloud no request for it for 1 hour after the
+first such run in a row, then 3 hours, then 6 hours, then 12 hours for every
+later one, or for the server's `Retry-After` when that is longer. The stored
+result keeps the failing state, and its reason ends with
+`atrium sends iCloud no request for this until <time UTC>, backing off after
+<n> refusal(s) in a row`. While the backoff lasts, the scheduled sync and
+`contacts sync` or `calendar sync` send nothing and end as
+`skipped_dependency` with `skipped, backing off until <time UTC> after <n>
+refusal(s); no request was sent`, and health checks (the hourly sweep, the
+check at start, rechecks and `connections check`) send nothing and keep the
+stored result. The backoff is read from the stored result, so a restart
+neither ends it nor sends anything. The first sync or check that works ends
+it, and so does a changed app password. `connections test <id>` still runs
+during a backoff because the operator asked for it; its reason starts with
+`tested at the operator's request during a backoff that was to end <time
+UTC>:`, and it ends the backoff when it works or counts as one more refusal
+when it is refused.
+
+A later session or sync that works marks the
 capability ok again. These four have no grace window, so the
 first failure notifies at once and the recovery notifies once. Errors about one message,
 such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
