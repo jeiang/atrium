@@ -20,7 +20,35 @@
       <dt class="text-muted-foreground">Date</dt>
       <dd>{{template "when" (dict "epoch" $m.DateTS "style" "datetime")}}</dd>
     </dl>
-    <a class="btn self-start" data-size="sm" data-variant="outline" href="/chat?about=mail:{{$m.ID}}">{{icon "messages-square"}}Ask about this</a>
+    <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Message actions">
+      <a class="btn" data-size="sm" data-variant="outline" href="/chat?about=mail:{{$m.ID}}">{{icon "messages-square"}}Ask about this</a>
+      <form method="post" action="/messages/{{$m.ID}}/reply">
+        <input type="hidden" name="csrf_token" value="{{.csrf}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "reply"}}Reply</button>
+      </form>
+      {{if $m.InInbox}}
+      <form method="post" action="/messages/{{$m.ID}}/archive">
+        <input type="hidden" name="csrf_token" value="{{.csrf}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "archive"}}Archive</button>
+      </form>
+      {{end}}
+      <form method="post" action="/messages/{{$m.ID}}/read">
+        <input type="hidden" name="csrf_token" value="{{.csrf}}">
+        <input type="hidden" name="on" value="{{if $m.Seen}}0{{else}}1{{end}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon (ternary $m.Seen "mail" "mail-open")}}{{if $m.Seen}}Mark unread{{else}}Mark read{{end}}</button>
+      </form>
+      <form method="post" action="/messages/{{$m.ID}}/flag">
+        <input type="hidden" name="csrf_token" value="{{.csrf}}">
+        <input type="hidden" name="on" value="{{if $m.Flagged}}0{{else}}1{{end}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon (ternary $m.Flagged "flag-off" "flag")}}{{if $m.Flagged}}Unflag{{else}}Flag{{end}}</button>
+      </form>
+      <form method="post" action="/messages/{{$m.ID}}/forward" class="flex items-center gap-1">
+        <input type="hidden" name="csrf_token" value="{{.csrf}}">
+        <label for="forward-to-{{$m.ID}}" class="sr-only">Forward to</label>
+        <input id="forward-to-{{$m.ID}}" name="to" type="email" class="input h-8 w-48 text-sm" placeholder="Forward to" required>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "forward"}}Forward</button>
+      </form>
+    </div>
   </header>
 
   {{template "mail_decision_card" (dict "m" $m "mode" $mode "toast" (opt . "toast" nil) "correct" (opt . "correct" nil))}}
@@ -69,4 +97,4 @@
   </section>
 </article>
 {{end}}
-{{template "mail_message" (dict "m" .Data.Message "mode" .Mode "toast" .Toast)}}
+{{template "mail_message" (dict "m" .Data.Message "mode" .Mode "toast" .Toast "csrf" .CSRF)}}

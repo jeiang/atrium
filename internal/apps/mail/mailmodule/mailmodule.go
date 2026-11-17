@@ -160,7 +160,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Bindings:        append(bindings, finalBindings()...),
 		Recover:         recoverDrafts,
 		HasOperatorData: accounts.ExistsAny,
-		EffectOrigins:   []module.EffectOrigin{{Name: ledger.AutoOrigin}, {Name: "operator_send"}, {Name: "tracking", Direct: true}},
+		EffectOrigins:   []module.EffectOrigin{{Name: ledger.AutoOrigin}, {Name: "operator_send"}, {Name: "tracking", Direct: true}, {Name: mailapp.OperatorOrigin, Direct: true}},
 		Refs:            Refs(),
 		Communications:  feed{env: mc.Env},
 		Attachments:     []module.Attachment{draftAttachment()},

@@ -19,11 +19,7 @@
     </div>
     <a class="text-sm font-medium underline-offset-4 hover:underline" href="/messages/{{.LastMessageID}}">{{or (str .Subject) "(no subject)"}}</a>
     <div class="flex flex-wrap items-center gap-2">
-      <form method="post" action="/chat">
-        <input type="hidden" name="csrf_token" value="{{$csrf}}">
-        <input type="hidden" name="text" value="Draft a reply to mail {{.LastMessageID}}">
-        <button type="submit" class="btn" data-size="sm">{{icon "pencil"}}Draft reply</button>
-      </form>
+      <a class="btn" data-size="sm" href="/messages/{{.LastMessageID}}">{{icon "mail"}}Open message</a>
       <form method="post" action="/loops/{{.ID}}/snooze" class="flex items-center gap-2">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
         <select name="days" aria-label="Snooze for" class="select">

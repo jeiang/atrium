@@ -159,6 +159,17 @@ func (in *MailRulesImport) DecodeMultipart(r *multipart.Reader) error {
 	return nil
 }
 
+type MailMessageRead struct {
+	ID   int64 `path:"message_id" json:"-" api:"min=1"`
+	Read bool  `json:"read"`
+}
+type MailMessageFlag struct {
+	ID      int64 `path:"message_id" json:"-" api:"min=1"`
+	Flagged bool  `json:"flagged"`
+}
+
+var messageActionErrors = []application.Code{application.Forbidden, application.NotFound, application.Conflict, application.Refused, application.NotConfigured, application.Unknown, application.Partial}
+
 type MailCorrection struct {
 	ID     int64               `path:"message_id" json:"-" api:"min=1"`
 	Folder string              `json:"folder"`
@@ -269,7 +280,7 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 			panic(err)
 		}
 		l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: store, Open: open, Registry: registry, Now: mail.WallClock}
-		service = mailPageService(d).WithLive(l).WithApplier(applier.New(l, open, syncer))
+		service = mailPageService(d).WithLive(l).WithApplier(applier.New(l, open, syncer)).WithOpen(open).WithEffects(store)
 	}
 	const area = "mail"
 	refusable := []application.Code{application.Invalid, application.Refused, application.NotFound, application.Conflict, application.Unknown, application.Unavailable}
@@ -379,6 +390,15 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 		}),
 		api.Command(d, mailapp.DescribeRuleDelete(), application.APIShape{Area: area, Body: application.BodyNone, Errors: refusable}, "DELETE /mail/rules/{rule_id}", func(ctx context.Context, in MailRuleRef) (application.Change[mailapp.RuleDeleteResult], error) {
 			return svc().RuleDelete(ctx, mailapp.RuleDeleteInput{ID: in.ID})
+		}),
+		api.Command(d, mailapp.DescribeMessageArchive(), application.APIShape{Area: area, Body: application.BodyNone, Errors: messageActionErrors}, "POST /mail/messages/{message_id}/archive", func(ctx context.Context, in MailMessageRef) (application.Change[mailapp.MessageActionResult], error) {
+			return svc().MessageArchive(ctx, mailapp.MessageActionInput{ID: in.ID})
+		}),
+		api.Command(d, mailapp.DescribeMessageRead(), application.APIShape{Area: area, Errors: messageActionErrors}, "POST /mail/messages/{message_id}/read", func(ctx context.Context, in MailMessageRead) (application.Change[mailapp.MessageActionResult], error) {
+			return svc().MessageRead(ctx, mailapp.MessageActionInput{ID: in.ID, On: in.Read})
+		}),
+		api.Command(d, mailapp.DescribeMessageFlag(), application.APIShape{Area: area, Errors: messageActionErrors}, "POST /mail/messages/{message_id}/flag", func(ctx context.Context, in MailMessageFlag) (application.Change[mailapp.MessageActionResult], error) {
+			return svc().MessageFlag(ctx, mailapp.MessageActionInput{ID: in.ID, On: in.Flagged})
 		}),
 		api.Command(d, mailapp.DescribeCorrect(), application.APIShape{Area: area, Errors: refusable}, "POST /mail/messages/{message_id}/correction", func(ctx context.Context, in MailCorrection) (application.Change[mailapp.CorrectResult], error) {
 			if in.Mode != mailapp.Immediate && in.Mode != mailapp.Deferred {
