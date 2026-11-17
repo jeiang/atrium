@@ -375,6 +375,11 @@ function scenario(): KnowledgeScenario {
   }
 }
 
+export function mockSpace(id: number): Space | undefined {
+  scenario();
+  return spaces.find((item) => item.space.id === id)?.space;
+}
+
 function find(id: unknown): MockRecord | undefined {
   return store.records.find((item) => item.id === Number(id));
 }

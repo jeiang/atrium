@@ -337,7 +337,13 @@ func (s *Service) move(ctx context.Context, in MoveInput) (MoveResult, []int64, 
 			return mailops.Error("none of the messages are still where they were; use mail_search to find them again")
 		}
 		for _, g := range mailops.GroupByMailbox(items) {
-			n, ids, err := s.moveGroup(ctx, inv, in.ProposalID, client, account, g, imapName)
+			n, ids, err := s.moveGroup(ctx, client, account, g, imapName, func(target string) ledger.New {
+				return ledger.New{
+					Origin: "agent", Operation: "mail_move", OperationKey: "mail_move:" + ledger.NewKey(),
+					Target: target, ThreadID: &inv.ThreadID, RunID: &inv.RunID, ProposalID: in.ProposalID,
+					Resources: []ledger.Resource{{Key: "mail_move:" + target}},
+				}
+			})
 			effects = append(effects, ids...)
 			moved += n
 			if err != nil {
@@ -382,7 +388,7 @@ func validityOrNil(copied *mail.CopyUID) any {
 	return copied.UIDValidity
 }
 
-func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, proposalID *int64, client mail.Client, account string, g mailops.Group, destIMAP string) (moved int, effects []int64, err error) {
+func (s *Service) moveGroup(ctx context.Context, client mail.Client, account string, g mailops.Group, destIMAP string, effect func(target string) ledger.New) (moved int, effects []int64, err error) {
 	uids, byUID := sortedUIDs(g.Items)
 	size, err := mailops.BatchSize(ctx, client)
 	if err != nil {
@@ -391,11 +397,7 @@ func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, pro
 	chunks := mailops.Chunks(uids, size)
 	target := account + ":" + g.IMAPName + "->" + destIMAP
 	begin := func() (ledger.Ticket, error) {
-		return s.effects.Begin(ctx, ledger.New{
-			Origin: "agent", Operation: "mail_move", OperationKey: "mail_move:" + ledger.NewKey(),
-			Target: target, ThreadID: &inv.ThreadID, RunID: &inv.RunID, ProposalID: proposalID,
-			Resources: []ledger.Resource{{Key: "mail_move:" + target}},
-		}, nil)
+		return s.effects.Begin(ctx, effect(target), nil)
 	}
 	ticket, err := begin()
 	if err != nil {
