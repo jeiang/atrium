@@ -106,12 +106,35 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 		state := connectionState(t, dir, "service/tmdb")
 		return state != "" && state != "untested"
 	})
-	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
-		t.Fatal(err)
+	backdate := func() {
+		t.Helper()
+		if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
+			t.Fatal(err)
+		}
 	}
+	searches := 0
+	search := func() {
+		searches++
+		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again+"+strconv.Itoa(searches), nil)
+	}
+	backdate()
 	status.Store(http.StatusInternalServerError)
-	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again", nil)
-	waitUntil(t, 60*time.Second, "the failed TMDB request to check the connection", func() bool { return connectionState(t, dir, "service/tmdb") == "failing" })
+	search()
+	waitUntil(t, 60*time.Second, "the failed TMDB request to check the connection", func() bool {
+		var state string
+		var checked float64
+		if err := d.Read.QueryRow("SELECT state, COALESCE(checked_at, 0) FROM connections WHERE id = 'service/tmdb'").Scan(&state, &checked); err != nil {
+			t.Fatal(err)
+		}
+		if state == "failing" {
+			return true
+		}
+		if time.Since(time.Unix(int64(checked), 0)) < 5*time.Minute {
+			backdate()
+			search()
+		}
+		return false
+	})
 
 	for i := range 5 {
 		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+"+strconv.Itoa(i), nil)

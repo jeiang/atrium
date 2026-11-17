@@ -51,14 +51,32 @@ func TestAConnectionFlappingAcrossARestartIsNoticedOncePerFlapWindow(t *testing.
 		searches++
 		_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+"+strconv.Itoa(searches), nil)
 	}
-	fail := func(what string) {
+	backdate := func() {
 		t.Helper()
 		if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
 			t.Fatal(err)
 		}
+	}
+	fail := func(what string) {
+		t.Helper()
+		backdate()
 		status.Store(http.StatusInternalServerError)
 		search()
-		waitUntil(t, time.Minute, what, func() bool { return connectionState(t, dir, "service/tmdb") == "failing" })
+		waitUntil(t, time.Minute, what, func() bool {
+			var state string
+			var checked float64
+			if err := d.Read.QueryRow("SELECT state, COALESCE(checked_at, 0) FROM connections WHERE id = 'service/tmdb'").Scan(&state, &checked); err != nil {
+				t.Fatal(err)
+			}
+			if state == "failing" {
+				return true
+			}
+			if time.Since(time.Unix(int64(checked), 0)) < 5*time.Minute {
+				backdate()
+				search()
+			}
+			return false
+		})
 	}
 	heal := func(what string) {
 		t.Helper()
