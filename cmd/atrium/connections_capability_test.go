@@ -361,7 +361,7 @@ func TestHostOwnedConnectionsStayReadOnlyAndTheOwnersCheckFlagsADrift(t *testing
 	defer func() { s.stop() }()
 	checks := func() (string, map[string]string) {
 		t.Helper()
-		_, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/readyz", nil)
+		_, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/readyz", nil)
 		var got struct {
 			Status string
 			Checks map[string]string

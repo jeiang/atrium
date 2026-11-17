@@ -132,7 +132,7 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 		t.Fatalf("the public listener shares the emergency rate limiter: %d %s", me.status, me.body)
 	}
 
-	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/metrics", nil); status != http.StatusOK || !strings.Contains(body, "# TYPE ") {
+	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/metrics", nil); status != http.StatusOK || !strings.Contains(body, "# TYPE ") {
 		t.Fatalf("ops /metrics = %d", status)
 	}
 	for _, base := range []string{s.base, emergency.base} {

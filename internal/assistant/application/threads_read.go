@@ -73,6 +73,7 @@ type Transcript struct {
 	Question        *Question       `json:"question"`
 	History         bool            `json:"-"`
 	Earlier         int64           `json:"-"`
+	EarlierKeep     int             `json:"-"`
 }
 
 type Question struct {
@@ -101,6 +102,7 @@ type TranscriptInput struct {
 	ID     int64
 	Limit  int
 	Before int64
+	Keep   int
 }
 
 type ThreadListInput struct {
@@ -302,14 +304,22 @@ func transcript(ctx context.Context, q db.Querier, in TranscriptInput) (Transcri
 	}
 	if in.Before > 0 {
 		end := len(out.Items)
-		for end > 0 && out.Items[end-1].Seq >= in.Before {
+		for end > 0 && out.Items[end-1].Seq > in.Before {
 			end--
 		}
-		out.Items = out.Items[:end]
+		start := end
+		for start > 0 && out.Items[start-1].Seq == in.Before {
+			start--
+		}
+		out.Items = out.Items[:min(end, start+max(in.Keep, 0))]
 	}
 	if in.Limit > 0 && len(out.Items) > in.Limit {
-		out.Items = out.Items[len(out.Items)-in.Limit:]
-		out.Earlier = out.Items[0].Seq
+		cut := len(out.Items) - in.Limit
+		out.Earlier = out.Items[cut].Seq
+		for i := cut - 1; i >= 0 && out.Items[i].Seq == out.Earlier; i-- {
+			out.EarlierKeep++
+		}
+		out.Items = out.Items[cut:]
 	}
 	out.History = hasHistory(ctx, q, in.ID)
 	return out, nil
