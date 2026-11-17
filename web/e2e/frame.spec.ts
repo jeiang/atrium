@@ -102,7 +102,7 @@ test.describe('signed in', () => {
     await gotoShell(page, '/');
     const rail = page.getByRole('navigation', { name: 'Main' });
     await expect(rail.getByRole('link', { name: 'Mail' })).toBeVisible();
-    for (const name of ['Plan', 'Knowledge', 'Assistant', 'Media']) {
+    for (const name of ['Plan', 'Knowledge', 'Assistant', 'Library']) {
       await expect(rail.getByRole('link', { name, exact: true })).toHaveCount(0);
     }
     await gotoShell(page, '/apps/media');
