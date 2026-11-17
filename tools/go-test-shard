@@ -12,7 +12,11 @@ flags=(-race ${ATRIUM_GO_TAGS:+-tags "$ATRIUM_GO_TAGS"})
 bin=$(mktemp -d)
 trap 'rm -rf "$bin"' EXIT
 go build ${ATRIUM_GO_TAGS:+-tags "$ATRIUM_GO_TAGS"} -o "$bin/atrium" ./cmd/atrium
-go test "${flags[@]}" -count=1 -exec true ./... >/dev/null
+if [ "$shard" -eq 1 ]; then
+  go test "${flags[@]}" -count=1 -exec true ./... >/dev/null
+else
+  go test "${flags[@]}" -count=1 -exec true "$pkg" >/dev/null
+fi
 export ATRIUM_E2E_BINARY=$bin/atrium
 
 mapfile -t names < <(go test "${flags[@]}" -list '^(Test|Example|Fuzz)' "$pkg" | grep -E '^(Test|Example|Fuzz)' | LC_ALL=C sort | awk -v n="$total" -v k="$shard" '(NR - 1) % n == k - 1')
@@ -22,9 +26,25 @@ if [ ${#names[@]} -eq 0 ]; then
 fi
 echo "go-test-shard: shard $shard of $total runs ${#names[@]} tests of $pkg" >&2
 
+run_tests() {
+  if [ -z "${ATRIUM_GO_TEST_JSON:-}" ]; then
+    bash tools/e2e-loopback go test "${flags[@]}" -count=1 -timeout 60m "$@"
+    return
+  fi
+  local status=0
+  bash tools/e2e-loopback go test "${flags[@]}" -json -count=1 -timeout 60m "$@" >"$bin/report.json" || status=$?
+  cat "$bin/report.json" >>"$ATRIUM_GO_TEST_JSON"
+  if [ "$status" -ne 0 ]; then
+    jq -rj 'select(.Action == "output" or .Action == "build-output") | .Output' "$bin/report.json"
+  else
+    jq -rj 'select(.Action == "output" and .Test == null) | .Output' "$bin/report.json"
+  fi
+  return "$status"
+}
+
 if [ "$shard" -eq 1 ]; then
   mapfile -t rest < <(go list ./... | grep -v '/cmd/atrium$')
-  bash tools/e2e-loopback go test "${flags[@]}" -count=1 -timeout 60m "${rest[@]}"
+  run_tests "${rest[@]}"
 fi
 run=$(IFS='|'; echo "${names[*]}")
-bash tools/e2e-loopback go test "${flags[@]}" -count=1 -timeout 60m -run "^($run)\$" "$pkg"
+run_tests -run "^($run)\$" "$pkg"

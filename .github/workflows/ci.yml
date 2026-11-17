@@ -147,7 +147,17 @@ jobs:
       - name: Run the shard
         env:
           SHARD: ${{ matrix.shard }}
+          ATRIUM_GO_TEST_JSON: ${{ runner.temp }}/go-test.json
         run: bash tools/go-test-shard "$SHARD" 6
+
+      - name: Upload the timings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: go-test-${{ matrix.shard }}
+          path: ${{ runner.temp }}/go-test.json
+          retention-days: 7
+          if-no-files-found: ignore
 
   go-static:
     needs: assets
