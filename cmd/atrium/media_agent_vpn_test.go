@@ -20,15 +20,14 @@ import (
 
 const vpnHost = "media.vpn.test"
 
-func freeLoopbackAddr(t *testing.T) string {
+func heldListener(t *testing.T) net.Listener {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := ln.Addr().String()
-	_ = ln.Close()
-	return addr
+	t.Cleanup(func() { _ = ln.Close() })
+	return ln
 }
 
 func vpnTable(addr, peers string) string {
@@ -60,8 +59,9 @@ func vpnRequest(t *testing.T, method, target, host string, header http.Header) (
 }
 
 func TestVPNListenerServesOnlyLibraryFiles(t *testing.T) {
-	addr := freeLoopbackAddr(t)
-	agent := startMediaAgent(t, mediaAgentOpts{extra: vpnTable(addr, "127.0.0.1/32")})
+	vpn := heldListener(t)
+	addr := vpn.Addr().String()
+	agent := startMediaAgent(t, mediaAgentOpts{vpn: vpn, extra: vpnTable(addr, "127.0.0.1/32")})
 	episode := "Lanterns/Season 01/Lanterns - S01E01.mkv"
 	body := strings.Repeat("0123456789", 10)
 	writeMediaFile(t, filepath.Join(agent.roots["tv"], episode), body)
@@ -116,7 +116,9 @@ func TestVPNListenerServesOnlyLibraryFiles(t *testing.T) {
 	}
 
 	agent.terminate(t)
-	restarted := startMediaAgent(t, mediaAgentOpts{dir: agent.dir, extra: vpnTable(addr, "10.0.0.0/8")})
+	vpn = heldListener(t)
+	addr = vpn.Addr().String()
+	restarted := startMediaAgent(t, mediaAgentOpts{dir: agent.dir, vpn: vpn, extra: vpnTable(addr, "10.0.0.0/8")})
 	for i := range 300 {
 		conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 		if err != nil {
@@ -153,8 +155,9 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	search := func(t *testing.T, base string) (*asstWeb, librarySearch, librarySearch, librarySearch, *mediaAgent, string) {
 		t.Helper()
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-		addr := freeLoopbackAddr(t)
-		agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: t.TempDir(), extra: vpnTable(addr, "127.0.0.1/32")})
+		vpn := heldListener(t)
+		addr := vpn.Addr().String()
+		agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: t.TempDir(), vpn: vpn, extra: vpnTable(addr, "127.0.0.1/32")})
 		writeMediaFile(t, filepath.Join(agent.roots["movies"], libraryMovie, libraryMovie+".mkv"), "movie bytes")
 		writeMediaFile(t, filepath.Join(agent.roots["tv"], strings.TrimPrefix(libraryEpisode, "tv/")), "episode bytes")
 		writeMediaFile(t, filepath.Join(agent.roots["movies"], oddMovie, oddFile), "odd bytes")

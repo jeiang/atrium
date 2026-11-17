@@ -58,9 +58,10 @@ func vpnCertificate(t *testing.T) (string, string, *x509.CertPool) {
 
 func TestVPNListenerOverTLSServesRangesOverHTTP1(t *testing.T) {
 	t.Parallel()
-	addr := freeLoopbackAddr(t)
+	vpn := heldListener(t)
+	addr := vpn.Addr().String()
 	cert, key, pool := vpnCertificate(t)
-	agent := startMediaAgent(t, mediaAgentOpts{extra: vpnTable(addr, "127.0.0.1/32") + "tls_cert = " + strconv.Quote(cert) + "\ntls_key = " + strconv.Quote(key) + "\n"})
+	agent := startMediaAgent(t, mediaAgentOpts{vpn: vpn, extra: vpnTable(addr, "127.0.0.1/32") + "tls_cert = " + strconv.Quote(cert) + "\ntls_key = " + strconv.Quote(key) + "\n"})
 	body := strings.Repeat("abcdefghij", 10)
 	writeMediaFile(t, filepath.Join(agent.roots["movies"], "Film (2020)", "Film (2020).mkv"), body)
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: vpnHost}, ForceAttemptHTTP2: true}}
@@ -97,8 +98,9 @@ func TestRefusedVPNPeersCannotExhaustTheListener(t *testing.T) {
 		t.Skipf("needs a second loopback address (127.0.0.2): %v", err)
 	}
 	_ = probe.Close()
-	addr := freeLoopbackAddr(t)
-	agent := startMediaAgent(t, mediaAgentOpts{extra: vpnTable(addr, "127.0.0.1/32")})
+	vpn := heldListener(t)
+	addr := vpn.Addr().String()
+	agent := startMediaAgent(t, mediaAgentOpts{vpn: vpn, extra: vpnTable(addr, "127.0.0.1/32")})
 	writeMediaFile(t, filepath.Join(agent.roots["movies"], "Film", "film.mkv"), "film bytes")
 	file := "http://" + addr + "/library/movies/Film/film.mkv"
 	waitFor(t, func() bool {

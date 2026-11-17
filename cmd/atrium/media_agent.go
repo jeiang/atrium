@@ -22,13 +22,17 @@ func runMediaAgent(ctx context.Context, args []string, stdout, stderr io.Writer)
 		Help: "serve the rooted media filesystem to the main atrium process",
 		Setup: func(a *cli.Args) cli.Handler {
 			path := a.String("config", "", cli.Opt{Required: true, Metavar: "FILE", Help: "media agent TOML configuration file"})
-			return func(env *cli.Env) int { return serveMediaAgent(env.Ctx, *path, env.Stdout, env.Stderr) }
+			listenFD := a.String("listen-fd", "", cli.Opt{Metavar: "FD", Help: "inherited, already-bound socket for the control listener instead of binding control.listen"})
+			vpnFD := a.String("vpn-listen-fd", "", cli.Opt{Metavar: "FD", Help: "inherited, already-bound socket for the VPN listener instead of binding vpn.listen"})
+			return func(env *cli.Env) int {
+				return serveMediaAgent(env.Ctx, *path, *listenFD, *vpnFD, env.Stdout, env.Stderr)
+			}
 		},
 	})
 	return c.Run(ctx, args, stdout, stderr)
 }
 
-func serveMediaAgent(ctx context.Context, path string, stdout, stderr io.Writer) int {
+func serveMediaAgent(ctx context.Context, path, listenFD, vpnFD string, stdout, stderr io.Writer) int {
 	fail := func(err error) int {
 		_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
 		if _, permanent := errors.AsType[*mediaagent.ConfigError](err); permanent {
@@ -48,11 +52,11 @@ func serveMediaAgent(ctx context.Context, path string, stdout, stderr io.Writer)
 	for _, key := range agent.Quarantined() {
 		_, _ = fmt.Fprintf(stderr, "warning: receipt %s is unreadable and was quarantined\n", key)
 	}
-	ln, err := agent.Listen()
+	ln, err := agent.Listen(listenFD)
 	if err != nil {
 		return fail(err)
 	}
-	vpn, err := agent.ListenVPN()
+	vpn, err := agent.ListenVPN(vpnFD)
 	if err != nil {
 		_ = ln.Close()
 		return fail(err)

@@ -19,17 +19,33 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
+	"golang.org/x/sys/unix"
 )
 
-func freeLocalPort(t *testing.T) string {
+func handOver(t *testing.T) (string, string) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = l.Close() }()
+	raw, err := l.(*net.TCPListener).SyscallConn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fd int
+	var dupErr error
+	if err := raw.Control(func(s uintptr) { fd, dupErr = unix.FcntlInt(s, unix.F_DUPFD_CLOEXEC, 3) }); err != nil || dupErr != nil {
+		t.Fatalf("duplicating the listener: %v %v", err, dupErr)
+	}
 	_, port, _ := net.SplitHostPort(l.Addr().String())
-	_ = l.Close()
-	return port
+	return strconv.Itoa(fd), port
+}
+
+func handOverEmergency(t *testing.T) (string, []string) {
+	t.Helper()
+	fd, port := handOver(t)
+	return port, []string{"--emergency-port", port, "--emergency-listen-fd", fd}
 }
 
 func jarClient(t *testing.T) *http.Client {
@@ -58,8 +74,8 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 		setEnv(t, name, value)
 	}
 	opsBase := opsAddr(t)
-	port := freeLocalPort(t)
-	s := startAPISite(t, dir, api, "--emergency-port", port)
+	port, flags := handOverEmergency(t)
+	s := startAPISite(t, dir, api, flags...)
 	emergency := &apiSite{t: t, base: "http://127.0.0.1:" + port}
 	notify.Wait("READY=1")
 	notify.Wait("WATCHDOG=1")
@@ -202,19 +218,21 @@ func TestServeExitsWithTheConfigCodeOnARemovedMediaHostKey(t *testing.T) {
 
 func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
-	for _, tc := range []struct{ name, public, emergency, ops string }{
-		{"public and emergency", "a", "a", "b"},
-		{"public and ops", "a", "b", "a"},
-		{"emergency and ops", "c", "a", "a"},
+	for _, tc := range []struct{ name, handed, collides string }{
+		{"public and emergency", "public", "emergency"},
+		{"public and ops", "public", "ops"},
+		{"emergency and ops", "emergency", "ops"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ports := map[string]string{"a": freeLocalPort(t), "b": freeLocalPort(t), "c": freeLocalPort(t)}
+			fd, port := handOver(t)
+			ports := map[string]string{"public": "0", "emergency": "0", "ops": "0"}
+			ports[tc.handed], ports[tc.collides] = port, port
 			notify := sdnotifytest.Listen(t, 200*time.Millisecond)
 			for name, value := range notify.Env() {
 				setEnv(t, name, value)
 			}
-			setEnv(t, settingEnv(ops.ListenKey), "127.0.0.1:"+ports[tc.ops])
-			got := runApp(t, "serve", "--host", "127.0.0.1", "--port", ports[tc.public], "--auth", "local", "--emergency-port", ports[tc.emergency])
+			setEnv(t, settingEnv(ops.ListenKey), "127.0.0.1:"+ports["ops"])
+			got := runApp(t, "serve", "--host", "127.0.0.1", "--port", ports["public"], "--auth", "local", "--emergency-port", ports["emergency"], map[string]string{"public": "--listen-fd", "emergency": "--emergency-listen-fd"}[tc.handed], fd)
 			if got.code != cli.ExitError {
 				t.Fatalf("serve with a port collision exited %d, want %d (transient, restarted by systemd)", got.code, cli.ExitError)
 			}
@@ -222,13 +240,11 @@ func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 			if slices.Contains(notify.Messages(), "READY=1") {
 				t.Fatalf("READY after a bind failure: %q", notify.Messages())
 			}
-			for _, port := range []string{ports[tc.public], ports[tc.emergency], ports[tc.ops]} {
-				l, err := net.Listen("tcp", "127.0.0.1:"+port)
-				if err != nil {
-					t.Fatalf("port %s is still bound after the failed serve: %v", port, err)
-				}
-				_ = l.Close()
+			l, err := net.Listen("tcp", "127.0.0.1:"+port)
+			if err != nil {
+				t.Fatalf("port %s is still bound after the failed serve: %v", port, err)
 			}
+			_ = l.Close()
 		})
 	}
 }
@@ -238,8 +254,8 @@ func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	port := freeLocalPort(t)
-	base, _, stop, err := startServeAppArgs(t, freshApp(f), &lockedBuffer{}, "--auth", "local", "--emergency-port", port)
+	port, flags := handOverEmergency(t)
+	base, _, stop, err := startServeAppArgs(t, freshApp(f), &lockedBuffer{}, append([]string{"--auth", "local"}, flags...)...)
 	if err != nil {
 		t.Fatalf("serve did not start: %v", err)
 	}

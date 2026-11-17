@@ -8,15 +8,16 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
+	"github.com/jeiang/atrium/internal/listenfd"
 )
 
 const vpnPrefix = "/library/"
 
-func (a *Agent) ListenVPN() (net.Listener, error) {
+func (a *Agent) ListenVPN(fd string) (net.Listener, error) {
 	if a.cfg.VPN == nil {
 		return nil, nil
 	}
-	ln, err := net.Listen("tcp", a.cfg.VPN.Listen)
+	ln, err := listenfd.Listen(fd, a.cfg.VPN.Listen)
 	if err != nil {
 		return nil, err
 	}
