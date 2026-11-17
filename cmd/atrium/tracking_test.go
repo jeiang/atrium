@@ -185,18 +185,29 @@ func TestShip24ConnectionTestRecordsOkAndRefusesA401(t *testing.T) {
 	}
 }
 
+func seedTrackRegistrations(t *testing.T, d *db.DB, n int) {
+	t.Helper()
+	now := float64(time.Now().UnixNano()) / 1e9
+	for i := range n {
+		if _, err := d.Write.Exec("INSERT INTO effects (created_at, settled_at, lease_at, token, origin, operation, operation_key, direction, target, state) "+
+			"VALUES (?, ?, ?, ?, 'test', 'track_package', ?, 'forward', 'seeded', 'done')", now, now, now, fmt.Sprintf("seeded-%d", i), fmt.Sprintf("seeded-%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "1"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
+	seedTrackRegistrations(t, d, tracking.TuningMailShip24MonthlyQuota-1)
 	for i, number := range []string{"1Z999AA10123456784", "1Z999AA10123456785"} {
 		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
 			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, 'UPS', ?, 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)",
@@ -351,7 +362,6 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
@@ -392,12 +402,12 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "1"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
+	seedTrackRegistrations(t, d, tracking.TuningMailShip24MonthlyQuota-1)
 	for i, number := range []string{"1Z999AA10123456784", "1Z999AA10123456785"} {
 		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
 			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, 'UPS', ?, 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)",
@@ -525,7 +535,6 @@ func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
@@ -607,7 +616,6 @@ func TestTrackPackageDoesNotReplayTheTrackerCreationOnARedirect(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}

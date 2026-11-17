@@ -73,6 +73,7 @@ type ProposalRequest struct {
 
 type QueueRequest struct {
 	Kind   string     `query:"kind" json:"-" api:"enum=ask|proposal|draft|attention"`
+	Module string     `query:"module" json:"-"`
 	Cursor api.Cursor `query:"cursor" json:"-"`
 	Limit  api.Limit  `query:"limit" json:"-"`
 }
@@ -91,8 +92,9 @@ type QueueItemRequest struct {
 const queueTopics = "Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due."
 
 const queueDescription = "The one inbox: everything that waits for the operator, in one order with one count. " +
-	"`total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `cursor` and `limit` are. " +
+	"`total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `module`, `cursor` and `limit` are. " +
 	"Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. " +
+	"`module` keeps only the items of that module. Proposal items carry the proposal's `proposal_kind`. " +
 	"Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. " + queueTopics
 
 const queueItemDescription = "One queue item by `id`. `proposal:<proposal_id>` and `draft:<draft_id>` are the items behind `/proposals/{proposal_id}` and `/drafts/{draft_id}`. " +
@@ -214,7 +216,7 @@ func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Bind
 	return append([]application.Binding{
 		api.Query(d, reviewapp.DescribeOne(reviewapp.QueueName), application.APIShape{Area: "review", Description: queueDescription, Errors: []application.Code{application.Invalid}},
 			"GET /queue", func(ctx context.Context, in QueueRequest) (application.Read[QueuePage], error) {
-				input := reviewapp.QueueInput{Kind: in.Kind, Limit: int(in.Limit)}
+				input := reviewapp.QueueInput{Kind: in.Kind, Module: in.Module, Limit: int(in.Limit)}
 				if in.Cursor.Set() {
 					input.After = &reviewapp.QueueKey{}
 					if err := in.Cursor.Last(input.After); err != nil {
@@ -292,7 +294,7 @@ func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Bind
 			"GET /permissions", func(ctx context.Context, in reviewapp.PermissionsInput) (application.Read[reviewapp.Permissions], error) {
 				return svc().Permissions(ctx, in)
 			}),
-		api.Command(d, reviewapp.DescribeOne(reviewapp.PermissionsUpdateName), application.APIShape{Area: "permissions", Errors: []application.Code{application.Invalid, application.Refused}},
+		api.Command(d, reviewapp.DescribeOne(reviewapp.PermissionsUpdateName), application.APIShape{Area: "permissions", Errors: []application.Code{application.Invalid, application.Refused, application.Precondition}, Description: "Sets permission rules. If-Match is optional: send the ETag of GET /permissions to refuse the change with 412 when the rules or pending requests changed since it was read; without it the change applies as before."},
 			"PUT /permissions", func(ctx context.Context, in reviewapp.PermissionsUpdateInput) (application.Change[reviewapp.PermissionsUpdated], error) {
 				return svc().UpdatePermissions(ctx, in)
 			}),

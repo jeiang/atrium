@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"time"
@@ -71,10 +72,13 @@ type Result struct {
 
 type Definition struct {
 	Kind            Kind
+	Offers          []string
 	CredentialSlots []string
+	Shares          func(ID) (owner ID, slot string)
 	Defaults        map[string]string
 	Validate        func(Candidate) error
 	Grace           time.Duration
+	Interactive     []string
 	Test            func(context.Context, *Lease, []Capability) ([]Result, error)
 	// Silent replaces Test during a periodic health pass when the explicit
 	// test has a visible side effect, such as a diagnostic push.
@@ -82,14 +86,19 @@ type Definition struct {
 }
 
 type Registry struct {
-	mu     sync.RWMutex
-	defs   map[Kind]Definition
-	sync   *AccountSync
-	notify Notifier
+	mu       sync.RWMutex
+	defs     map[Kind]Definition
+	needs    []Need
+	active   func(string) bool
+	on       func(string) bool
+	sync     *AccountSync
+	notify   Notifier
+	units    chan struct{}
+	rechecks chan ID
 }
 
-func Compile(defs []Definition, sync *AccountSync, notify Notifier) (*Registry, error) {
-	r := &Registry{defs: make(map[Kind]Definition, len(defs)), sync: sync, notify: notify}
+func Compile(defs []Definition, needs []Need, sync *AccountSync, notify Notifier) (*Registry, error) {
+	r := &Registry{defs: make(map[Kind]Definition, len(defs)), sync: sync, notify: notify, units: make(chan struct{}, 1), rechecks: make(chan ID, 16)}
 	for _, d := range defs {
 		if d.Kind == "" {
 			return nil, errors.New("connections: a definition needs a kind")
@@ -100,9 +109,37 @@ func Compile(defs []Definition, sync *AccountSync, notify Notifier) (*Registry, 
 		if _, dup := r.defs[d.Kind]; dup {
 			return nil, fmt.Errorf("connections: duplicate kind %q", d.Kind)
 		}
+		if len(d.Offers) == 0 {
+			return nil, fmt.Errorf("connections: %s offers no capability", d.Kind)
+		}
+		for i, c := range d.Offers {
+			if c == "" || slices.Contains(d.Offers[:i], c) {
+				return nil, fmt.Errorf("connections: %s offers an empty or repeated capability", d.Kind)
+			}
+		}
 		r.defs[d.Kind] = d
 	}
+	for _, n := range needs {
+		d, ok := r.defs[n.Kind]
+		if !ok || n.Capability == "" || !slices.Contains(d.Offers, n.Capability) {
+			return nil, &UnknownCapability{Module: n.Module, Kind: n.Kind, Capability: n.Capability}
+		}
+		if len(n.Features) == 0 || slices.Contains(n.Features, "") {
+			return nil, fmt.Errorf("connections: %s needs %s from %s without naming the features it serves", n.Module, n.Capability, n.Kind)
+		}
+		r.needs = append(r.needs, n)
+	}
 	return r, nil
+}
+
+type UnknownCapability struct {
+	Module     string
+	Kind       Kind
+	Capability string
+}
+
+func (e *UnknownCapability) Error() string {
+	return fmt.Sprintf("connections: %s needs the capability %q from %s, which that kind does not offer", e.Module, e.Capability, e.Kind)
 }
 
 func (r *Registry) Lookup(kind Kind) (Definition, bool) {
@@ -175,6 +212,8 @@ type CredentialView struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	SetAt     *time.Time `json:"set_at,omitempty"`
 	SetBy     string     `json:"set_by,omitempty"`
+	Pinned    bool       `json:"pinned,omitempty"`
+	Owner     ID         `json:"owner,omitempty"`
 }
 
 type View struct {
@@ -194,6 +233,8 @@ type View struct {
 	ReauthAt     *time.Time       `json:"reauth_at,omitempty"`
 	Results      []Result         `json:"results"`
 	GraceUntil   *time.Time       `json:"grace_until,omitempty"`
+	Dependents   []Dependent      `json:"dependents"`
+	Idle         string           `json:"idle,omitempty"`
 
 	revision  int64
 	transport transportOptions
@@ -324,6 +365,15 @@ type MissingCredential struct{ Slot string }
 
 func (e MissingCredential) Error() string {
 	return "connections: credential " + e.Slot + " is not set"
+}
+
+type PinnedCredential struct {
+	ID   ID
+	Slot string
+}
+
+func (e *PinnedCredential) Error() string {
+	return "connections: " + string(e.ID) + " credential " + e.Slot + " is pinned by host configuration; change it there"
 }
 
 type NotConfigured struct{ ID ID }

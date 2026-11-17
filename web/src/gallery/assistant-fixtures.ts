@@ -356,6 +356,9 @@ export const digestLines: DigestLine[] = [
 ];
 
 export const weather: HomeWeather = {
+  state: 'ok',
+  fetched_at: 1_795_075_200,
+  failure: null,
   location: 'Hillfield',
   timezone: 'Europe/Amsterdam',
   current: {

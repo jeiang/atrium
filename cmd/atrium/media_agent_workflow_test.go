@@ -15,11 +15,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
+	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 func useMediaAgent(t *testing.T, dir, qbURL, agentBase, token, root string) {
@@ -28,7 +29,7 @@ func useMediaAgent(t *testing.T, dir, qbURL, agentBase, token, root string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefix := "\n[media]\n" + media.KeyDownloadPrefix + " = " + strconv.Quote(filepath.Join(root, "downloads")) + "\n"
+	prefix := "\n[media]\n" + library.KeyDownloadPrefix + " = " + strconv.Quote(filepath.Join(root, "downloads")) + "\n"
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-agent.toml", withAgentConnection(string(raw), agentBase, token)+prefix))
 }
 
@@ -50,7 +51,7 @@ func TestFilingThroughTheAgentTwiceHasOneResult(t *testing.T) {
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E01.mkv"), []byte("one"))
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E02.mkv"), []byte("two"))
-	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
@@ -63,11 +64,11 @@ func TestFilingThroughTheAgentTwiceHasOneResult(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	id := mediaEffectID(t, d, media.OpFile, hash, "done")
-	if n := mediaEffectCount(t, d, media.OpFile, hash); n != 1 {
+	id := mediaEffectID(t, d, library.OpFile, hash, "done")
+	if n := mediaEffectCount(t, d, library.OpFile, hash); n != 1 {
 		t.Fatalf("filing effects = %d, want 1", n)
 	}
-	if tags, _ := qb.state(hash); !slices.Contains(tags, media.TagFiled) {
+	if tags, _ := qb.state(hash); !slices.Contains(tags, library.TagFiled) {
 		t.Fatalf("tags after filing %v", tags)
 	}
 	season := filepath.Join(root, "tv", "Lanterns (2026)", "Season 01")
@@ -153,7 +154,7 @@ func TestFilingUnknownBlocksAndIsInspectable(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	root := filepath.Join(dir, "library")
 	useMediaAgent(t, dir, qbURL, srv.URL, token, root)
-	qb.put(mnpTorrent{hash: hash, name: "Movie.2020", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: filepath.Join(root, "downloads", "Movie.2020")})
+	qb.put(mnpTorrent{hash: hash, name: "Movie.2020", tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: filepath.Join(root, "downloads", "Movie.2020")})
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
@@ -164,17 +165,17 @@ func TestFilingUnknownBlocksAndIsInspectable(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	id := mediaEffectID(t, d, media.OpFile, hash, "unknown")
+	id := mediaEffectID(t, d, library.OpFile, hash, "unknown")
 	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
 		t.Fatal("the repeat of an unknown filing succeeded")
 	}
 	fake.mu.Lock()
 	puts := slices.Clone(fake.puts)
 	fake.mu.Unlock()
-	if len(puts) != 1 || mediaEffectCount(t, d, media.OpFile, hash) != 1 {
-		t.Fatalf("filing attempts %v, effects %d", puts, mediaEffectCount(t, d, media.OpFile, hash))
+	if len(puts) != 1 || mediaEffectCount(t, d, library.OpFile, hash) != 1 {
+		t.Fatalf("filing attempts %v, effects %d", puts, mediaEffectCount(t, d, library.OpFile, hash))
 	}
-	if tags, _ := qb.state(hash); slices.Contains(tags, media.TagFiled) {
+	if tags, _ := qb.state(hash); slices.Contains(tags, library.TagFiled) {
 		t.Fatalf("an unknown filing tagged the torrent %v", tags)
 	}
 	ran := runApp(t, "media", "inspect-filing", fmt.Sprint(id))
@@ -205,8 +206,8 @@ func TestFilingRefusesUntaggedAndOutsidePrefix(t *testing.T) {
 	mnpWrite(t, filepath.Join(elsewhere, "Movie.2020.mkv"), []byte("outside"))
 	inside := filepath.Join(root, "downloads", "Plain.2021")
 	mnpWrite(t, filepath.Join(inside, "Plain.2021.mkv"), []byte("plain"))
-	qb.put(mnpTorrent{hash: outside, name: "Movie.2020", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: elsewhere})
-	qb.put(mnpTorrent{hash: plain, name: "Plain.2021", state: media.StoppedUP, progress: 1, content: inside})
+	qb.put(mnpTorrent{hash: outside, name: "Movie.2020", tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: elsewhere})
+	qb.put(mnpTorrent{hash: plain, name: "Plain.2021", state: contract.StoppedUP, progress: 1, content: inside})
 
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
@@ -217,7 +218,7 @@ func TestFilingRefusesUntaggedAndOutsidePrefix(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	if mediaEffectCount(t, d, media.OpFile, outside)+mediaEffectCount(t, d, media.OpFile, plain) != 0 {
+	if mediaEffectCount(t, d, library.OpFile, outside)+mediaEffectCount(t, d, library.OpFile, plain) != 0 {
 		t.Fatal("a refused filing recorded an effect")
 	}
 	if entries, err := os.ReadDir(filepath.Join(root, "movies")); err != nil || len(entries) != 0 {
@@ -243,8 +244,8 @@ func TestImportFilingRenamesAndCleansUp(t *testing.T) {
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {media.Import + "/Movie.2020"}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {media.Import + "/Other.2021"}, "action": {"file"}, "kind": {"movie"}, "title": {"Other"}, "year": {"2021"}}, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Movie.2020"}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Other.2021"}, "action": {"file"}, "kind": {"movie"}, "title": {"Other"}, "year": {"2021"}}, http.StatusOK)
 	placed := filepath.Join(root, "movies", "Movie (2020)", "Movie (2020).mkv")
 	if body, err := os.ReadFile(placed); err != nil || string(body) != "movie bytes" {
 		t.Fatalf("filed movie %q %v", body, err)
@@ -260,9 +261,9 @@ func TestImportFilingRenamesAndCleansUp(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	mediaEffectID(t, d, media.OpImportCleanup, media.Import+"/Movie.2020", "done")
-	mediaEffectID(t, d, media.OpImportCleanup, media.Import+"/Other.2021", "done")
-	filed := mediaEffectID(t, d, media.OpFile, media.Import+"/Movie.2020", "done")
+	mediaEffectID(t, d, library.OpImportCleanup, library.Import+"/Movie.2020", "done")
+	mediaEffectID(t, d, library.OpImportCleanup, library.Import+"/Other.2021", "done")
+	filed := mediaEffectID(t, d, library.OpFile, library.Import+"/Movie.2020", "done")
 	if ran := runApp(t, "effects", "undo", fmt.Sprint(filed)); ran.code != cli.ExitOK {
 		t.Fatalf("undo after cleanup: %d %s", ran.code, ran.stderr)
 	}
@@ -280,7 +281,7 @@ func TestImportFilingRenamesAndCleansUp(t *testing.T) {
 	if ran := runApp(t, "effects", "undo", fmt.Sprint(filed)); ran.code == cli.ExitOK || ran.stderr == "" {
 		t.Fatalf("a second undo was accepted: %d %s", ran.code, ran.stdout)
 	}
-	id := mediaEffectID(t, d, media.OpFile, media.Import+"/Other.2021", "done")
+	id := mediaEffectID(t, d, library.OpFile, library.Import+"/Other.2021", "done")
 	changed := filepath.Join(root, "movies", "Other (2021)", "Other (2021).mkv")
 	if err := os.WriteFile(changed+".new", []byte("replaced by hand"), 0o664); err != nil {
 		t.Fatal(err)
@@ -313,7 +314,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E01.mkv"), []byte("one"))
 	mnpWrite(t, filepath.Join(content, "Lanterns.S02E01.mkv"), []byte("two"))
-	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 	show := filepath.Join(root, "tv", "Lanterns (2026)")
 	if err := os.Mkdir(show, 0o775); err != nil {
 		t.Fatal(err)
@@ -334,7 +335,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	if n := mediaEffectCount(t, d, media.OpFile, hash); n != 0 {
+	if n := mediaEffectCount(t, d, library.OpFile, hash); n != 0 {
 		t.Fatalf("a refused plan recorded %d effects", n)
 	}
 	if _, err := os.Stat(filepath.Join(show, "Season 01")); !os.IsNotExist(err) {
@@ -354,7 +355,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
 		t.Fatal("a filing stopped by a read-only season folder reported success")
 	}
-	id := mediaEffectID(t, d, media.OpFile, hash, "partial")
+	id := mediaEffectID(t, d, library.OpFile, hash, "partial")
 	if counts := mediaAudit(t, d, "media.file-item", "partial"); counts["placed"] != 1 {
 		t.Fatalf("partial audit %v, want placed=1", counts)
 	}
@@ -369,7 +370,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(blocked, "Lanterns (2026) - S02E01.mkv")); !os.IsNotExist(err) {
 		t.Fatalf("the blocked placement exists: %v", err)
 	}
-	if tags, _ := qb.state(hash); slices.Contains(tags, media.TagFiled) {
+	if tags, _ := qb.state(hash); slices.Contains(tags, library.TagFiled) {
 		t.Fatalf("a partial filing tagged the torrent %v", tags)
 	}
 	shown := runApp(t, "effects", "show", fmt.Sprint(id))
@@ -414,7 +415,7 @@ func TestLegacyFilingUndoIsRefused(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	store := ledger.NewStore(d, nil)
 	ctx := context.Background()
-	ticket, err := store.Begin(ctx, ledger.New{Origin: "media", Operation: media.OpFile, OperationKey: "media:file:legacy:1", Target: "import/Old.2001", Action: json.RawMessage(`{"item":"import/Old.2001"}`)}, nil)
+	ticket, err := store.Begin(ctx, ledger.New{Origin: "media", Operation: library.OpFile, OperationKey: "media:file:legacy:1", Target: "import/Old.2001", Action: json.RawMessage(`{"item":"import/Old.2001"}`)}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,12 +468,12 @@ func TestDisabledFileCapabilityStopsFiling(t *testing.T) {
 	if body := b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK); !strings.Contains(body, "the media library is unavailable") {
 		t.Fatalf("the queue does not show the unavailable agent: %s", body)
 	}
-	if code, body := b.do(http.MethodPost, "/apps/media/file", url.Values{"id": {media.Import + "/Movie.2020"}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "the media library is unavailable") {
+	if code, body := b.do(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Movie.2020"}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "the media library is unavailable") {
 		t.Fatalf("filing with file disabled = %d %s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	if n := mediaEffectCount(t, d, media.OpFile, media.Import+"/Movie.2020"); n != 0 {
+	if n := mediaEffectCount(t, d, library.OpFile, library.Import+"/Movie.2020"); n != 0 {
 		t.Fatalf("filing with file disabled recorded %d effects", n)
 	}
 	if _, err := os.Stat(movie); err != nil {

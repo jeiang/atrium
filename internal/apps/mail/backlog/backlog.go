@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	mailaccounts "github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/apps/mail/live"
 	"github.com/jeiang/atrium/internal/apps/mail/mailops"
 	"github.com/jeiang/atrium/internal/apps/mail/scanutil"
@@ -206,7 +207,7 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	if golive == nil {
 		return out, Error("the live service has not run yet: no go-live baseline exists")
 	}
-	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	accounts, err := mailaccounts.Existing(ctx, d.Read)
 	if err != nil {
 		return out, err
 	}

@@ -48,7 +48,7 @@ func searchRoutes(d *web.Deps, now func() float64) []application.Binding {
 				}
 				types, ok := search.ParseTypes(in.Types)
 				if !ok {
-					return application.Read[search.Result]{}, invalidSearch("types", "List types from thread, message, record, task and file, separated by commas.")
+					return application.Read[search.Result]{}, invalidSearch("types", "List types from thread, message, record, task, file, space and contact, separated by commas.")
 				}
 				req := search.Request{Text: q, Types: types, Limit: in.Limit, Now: now()}
 				if req.Limit == 0 {

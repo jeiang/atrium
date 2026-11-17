@@ -50,15 +50,17 @@ var moduleCases = []moduleCase{
 		command: []string{"rules", "export"}, output: nonEmpty},
 	{module: unit.Calendar, tool: "calendar_list", table: "agent_events",
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
-	{module: unit.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
+	{module: unit.Media, tool: "library_following", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
+	{module: unit.Torrents, tool: "downloads", method: "GET", path: "/apps/media/add", status: http.StatusOK},
 	{module: unit.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
 		command: []string{"agent", "run", "--text", "hello", "--kind", "chat"}, output: func(stdout, _ string, code int) bool {
 			return code == cli.ExitOK && strings.HasPrefix(stdout, "{")
 		}},
 	{module: unit.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
-	{module: unit.Grafana, tool: "grafana_datasources"},
+	{module: unit.Grafana, table: "ops_samples"},
 	{module: unit.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
+	{module: unit.Weather, tool: "weather"},
 }
 
 type appRun struct {
@@ -362,7 +364,7 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 		}
 		base, logs := startServeLogged(t, dir)
 		waitFor(t, func() bool { return strings.Count(logs.String(), "module is unavailable") == 2 })
-		for _, name := range []string{"mail", "media"} {
+		for _, name := range []string{"mail", "torrents"} {
 			if text := logs.String(); !strings.Contains(text, "MODULE="+name+" STATE=unavailable REASON=") || !strings.Contains(text, "expires_at") {
 				t.Fatalf("the unavailable %s module and its reason are not logged: %s", name, text)
 			}
@@ -375,6 +377,9 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/settings/media", nil)
 		if status != http.StatusOK || !strings.Contains(body, "Unavailable") || !strings.Contains(body, "data-unavailable") || !strings.Contains(body, "expires_at") || strings.Contains(body, "data-restart") {
 			t.Fatalf("media settings page = %d, want the unavailable state and its reason: %s", status, body)
+		}
+		if !strings.Contains(body, "Torrents is unavailable: ") {
+			t.Fatalf("media settings page does not name the unavailable Torrents dependency: %s", body)
 		}
 	})
 	t.Run("core", func(t *testing.T) {
@@ -405,7 +410,7 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 }
 
 func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
-	dir, api, _ := moduleFixture(t, allFlagsTrue())
+	dir, _, _ := moduleFixture(t, allFlagsTrue())
 	ca := filepath.Join(dir, "grafana-ca.pem")
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigEdit(t, dir, "host-grafana-ca.toml", map[string]string{
 		`capabilities = ["viewer"]`: `capabilities = ["viewer"]` + "\ntransport = { ca_file = " + strconv.Quote(ca) + " }",
@@ -426,32 +431,6 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 			t.Fatalf("%v with a broken Grafana CA: exit %d stderr %q", args, got.code, got.stderr)
 		}
 	}
-	base := startServeIn(t, dir)
-	w := asstBrowse(t, base)
-	d := asstDB(t, dir)
-	offered := func() bool {
-		t.Helper()
-		start := len(api.Requests())
-		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-		thread := w.start(map[string]string{"text": "check grafana"})
-		if state, detail := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
-			t.Fatalf("chat run: %s %s", state, detail)
-		}
-		requests := api.Requests()
-		if len(requests) <= start {
-			t.Fatal("chat run made no model request")
-		}
-		tools, _ := requests[len(requests)-1].JSON(t)["tools"].([]any)
-		for _, raw := range tools {
-			if entry, ok := raw.(map[string]any); ok && entry["name"] == "grafana_datasources" {
-				return true
-			}
-		}
-		return false
-	}
-	if offered() {
-		t.Fatal("grafana tools are offered while the Grafana connection is broken")
-	}
 	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "false"); got.code != cli.ExitOK {
 		t.Fatalf("disable the broken module: exit %d stderr %q", got.code, got.stderr)
 	}
@@ -467,8 +446,8 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "true"); got.code != cli.ExitOK {
 		t.Fatalf("enable the repaired module: exit %d stderr %q", got.code, got.stderr)
 	}
-	if !offered() {
-		t.Fatal("grafana tools are not offered after the repair")
+	if got := runApp(t, "connections", "list", "--json"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"service/grafana"`) {
+		t.Fatalf("connections list after the repair: exit %d stderr %q", got.code, got.stderr)
 	}
 }
 

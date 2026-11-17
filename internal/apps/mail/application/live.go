@@ -4,10 +4,9 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/apps/mail/live"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/notify"
+	pauseapp "github.com/jeiang/atrium/internal/pause/application"
 )
 
 const (
@@ -54,19 +53,8 @@ func (s *Service) Resume(ctx context.Context, in PauseInput) (application.Change
 	return s.setPaused(ctx, false)
 }
 func (s *Service) setPaused(ctx context.Context, paused bool) (application.Change[PauseResult], error) {
-	l := s.liveService()
-	name := ResumeName
-	if paused {
-		name = PauseName
-	}
-	err := l.SetPaused(paused)
-	var out PauseResult
-	if err == nil {
-		out.NoticeError = notify.PauseChanged(ctx, s.db, s.env, paused)
-		out.Paused = l.Paused()
-	}
-	id, err := s.settle(ctx, name, "", err, state.OK)
-	return application.Change[PauseResult]{Data: out, AuditID: id}, err
+	changed, err := pauseapp.New(s.db, s.cfg, s.env).Set(ctx, paused, "")
+	return application.Change[PauseResult]{Data: PauseResult{Paused: changed.State.Paused, NoticeError: changed.NoticeError}, AuditID: changed.AuditID}, err
 }
 func (s *Service) LiveStatus(ctx context.Context, in struct{}) (application.Read[live.Status], error) {
 	out, err := s.liveService().Status(ctx)

@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/logx"
@@ -131,7 +130,7 @@ func judgePackage(ctx context.Context, c *classifier.Service, row mailscan.Messa
 	if packageSchemaErr != nil {
 		return nil, packageSchemaErr
 	}
-	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Package, Item: classifier.MessageItem(row.Account, row.ID),
+	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Package, Item: classify.MessageItem(row.Account, row.ID),
 		System: PackageSystem, User: rowText(row, body, bodyChars), Schema: packageSchemaJSON})
 	if err != nil {
 		return nil, err
@@ -386,14 +385,9 @@ type scanResult struct {
 }
 
 func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanResult, error) {
-	r := endpoint.Read(ctx, d.Read)
 	limit := mail.TuningWatchesScanLimit
 	window := mail.TuningWatchesPackageWindowDays
 	bodyChars := mail.TuningWatchesBodyChars
-	carrierDomains := r.List(mail.KeyWatchesCarrierDomains)
-	if err := r.Err(); err != nil {
-		return scanResult{}, err
-	}
 	paid := o.Paid
 	if paid == nil {
 		paid = &classify.Deferral{}
@@ -401,7 +395,7 @@ func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanRe
 	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
 		Kind: packages, Hint: "m.sent = 0 AND (" + PackageHint + ")", WindowDays: window, FetchLimit: limit, Limit: limit, Paid: paid,
 		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
-			items := regexPackages(row, body, carrierDomains)
+			items := regexPackages(row, body, mail.TuningWatchesCarrierDomains)
 			if len(items) == 0 {
 				if err := paid.Err(); err != nil {
 					return 0, err

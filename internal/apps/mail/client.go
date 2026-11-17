@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -224,7 +225,7 @@ func (g gate) check(ctx context.Context, action, target string) error {
 type ModeFunc func(ctx context.Context) (string, error)
 
 func WriteGate(ctx context.Context, current ModeFunc, action, target string) error {
-	if pausePath, ok := safety.AutomaticWritesPause(ctx); ok && safety.IsPaused(pausePath) {
+	if pausePath, ok := safety.AutomaticWritesPause(ctx); ok && pause.Paused(pausePath) {
 		return safety.WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", strconv.Quote(action)))
 	}
 	if safety.ApprovalIsConsent(ctx) {

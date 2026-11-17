@@ -23,7 +23,7 @@ func TestServeWatchStopsWithTheMailModuleAndStaysStopped(t *testing.T) {
 
 	asstSet(t, module.FlagKey(unit.Mail), "false")
 	waitUntil(t, 60*time.Second, "the mail watches to stop with the module", func() bool {
-		return len(watchHealth(t, opsBase)) == 0 && home.Idling() == 0 && work.Idling() == 0
+		return len(watchHealth(t, opsBase())) == 0 && home.Idling() == 0 && work.Idling() == 0
 	})
 	passes := strings.Count(logs.String(), ": 0 new, 0 gone")
 
@@ -36,7 +36,7 @@ func TestServeWatchStopsWithTheMailModuleAndStaysStopped(t *testing.T) {
 		t.Fatalf("disconnect work = %d: %.300s", code, body)
 	}
 	time.Sleep(3 * time.Second)
-	if health := watchHealth(t, opsBase); len(health) != 0 {
+	if health := watchHealth(t, opsBase()); len(health) != 0 {
 		t.Fatalf("healthz mail watches %+v after an account change with mail off, want none", health)
 	}
 	if home.Idling() != 0 || work.Idling() != 0 {

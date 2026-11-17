@@ -38,6 +38,8 @@ const (
 type Def struct {
 	Key       string
 	Label     string
+	Help      string
+	Restart   bool
 	Module    string
 	Type      Type
 	Default   string

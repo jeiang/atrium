@@ -23,6 +23,9 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		if strings.TrimSpace(d.Name) == "" {
 			return nil, &InvalidDeclaration{Module: d.Name, Field: "name"}
 		}
+		if strings.TrimSpace(d.Title) == "" {
+			return nil, &InvalidDeclaration{Module: d.Name, Field: "title"}
+		}
 		if _, ok := byName[d.Name]; ok {
 			return nil, DuplicateModule(d.Name)
 		}
@@ -41,16 +44,23 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		return nil, &InvalidCore{Reason: "exactly one module must be named " + Core}
 	}
 	for _, d := range decls {
-		if d.Core && (len(d.Needs) > 0 || len(d.Requires) > 0) {
+		if d.Core && (d.App || len(d.Depends) > 0 || len(d.Needs) > 0 || len(d.Requires) > 0) {
 			return nil, &InvalidCore{Module: d.Name}
 		}
-		for _, dep := range d.Needs {
-			if _, ok := byName[dep]; !ok {
+		for _, dep := range d.Depends {
+			target, ok := byName[dep]
+			if !ok {
 				return nil, &UnknownDependency{Module: d.Name, Dependency: dep}
+			}
+			if !d.App && target.App {
+				return nil, &InvalidDependency{Module: d.Name, Dependency: dep}
 			}
 		}
 	}
-	if _, err := byNeeds(decls); err != nil {
+	if _, err := byDepends(decls); err != nil {
+		return nil, err
+	}
+	if err := checkContract(decls); err != nil {
 		return nil, err
 	}
 	jobs, err := compileJobs(decls, byName)
@@ -249,6 +259,7 @@ func compileJobs(decls []Declaration, byName map[string]Declaration) ([]schedule
 func compileConnections(decls []Declaration) (*connections.Registry, proposals.Hooks, config.AccountCredentialFunc, error) {
 	var (
 		defs        []connections.Definition
+		needs       []connections.Need
 		sync        *connections.AccountSync
 		notice      connections.Notifier
 		credential  config.AccountCredentialFunc
@@ -260,6 +271,9 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 	)
 	for _, d := range decls {
 		defs = append(defs, d.Connections...)
+		for _, n := range d.Needs {
+			needs = append(needs, connections.Need{Module: d.Name, Kind: n.Kind, Capability: n.Capability, Soft: n.Soft, Features: n.Features})
+		}
 		if d.AccountSync != nil {
 			if syncOwner != "" {
 				return nil, proposals.Hooks{}, nil, &DuplicateHook{Hook: "account sync", Modules: []string{syncOwner, d.Name}}
@@ -285,7 +299,7 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 			created, createdBy = d.ProposalCreated, d.Name
 		}
 	}
-	reg, err := connections.Compile(defs, sync, notice)
+	reg, err := connections.Compile(defs, needs, sync, notice)
 	if err != nil {
 		return nil, proposals.Hooks{}, nil, err
 	}

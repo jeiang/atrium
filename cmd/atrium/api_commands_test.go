@@ -161,7 +161,7 @@ func TestInterruptedCommandNeverReruns(t *testing.T) {
 	unblock := func() { once.Do(func() { close(release) }) }
 	t.Cleanup(unblock)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, srv.URL, "", "", ""))
-	id := proposalID(t, toolResult(t, "media_add_magnet", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E11")}))
+	id := proposalID(t, toolResult(t, "download_add", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E11")}))
 	token := localAPIToken(t, "phone")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
@@ -253,7 +253,7 @@ func TestLiveCommandOutlivesARecoveryTick(t *testing.T) {
 	unblock := func() { once.Do(func() { close(release) }) }
 	t.Cleanup(unblock)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, srv.URL, "", "", ""))
-	id := proposalID(t, toolResult(t, "media_add_magnet", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E12")}))
+	id := proposalID(t, toolResult(t, "download_add", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E12")}))
 	token := localAPIToken(t, "phone")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()

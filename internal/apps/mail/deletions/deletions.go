@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	mailaccounts "github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/apps/mail/mailops"
 	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	"github.com/jeiang/atrium/internal/apps/mail/scanutil"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
@@ -258,7 +258,7 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	if err != nil {
 		return scanutil.Result{}, err
 	}
-	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	accounts, err := mailaccounts.Existing(ctx, d.Read)
 	if err != nil {
 		return scanutil.Result{}, err
 	}

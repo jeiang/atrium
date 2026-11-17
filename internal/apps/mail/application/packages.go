@@ -6,35 +6,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/apps/mail/birthdays"
 	"github.com/jeiang/atrium/internal/apps/mail/tracking"
 	"github.com/jeiang/atrium/internal/apps/mail/watches"
-	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 )
 
 const (
-	PackagesName          application.Name = "mail.packages"
-	UpcomingBirthdaysName application.Name = "mail.upcoming-birthdays"
-	PackageDismissName    application.Name = "mail.package-dismiss"
-	ProposeTrackingName   application.Name = "mail.propose-tracking"
-	PollTrackersName      application.Name = "mail.poll-trackers"
+	PackagesName        application.Name = "mail.packages"
+	PackageDismissName  application.Name = "mail.package-dismiss"
+	ProposeTrackingName application.Name = "mail.propose-tracking"
+	PollTrackersName    application.Name = "mail.poll-trackers"
 )
 
 type PackagesInput struct{ ActiveOnly bool }
 type PackagesResult struct {
 	Packages []watches.Package `json:"packages"`
-}
-type UpcomingBirthdaysInput struct {
-	Today time.Time
-	Days  *int64
-}
-type UpcomingBirthdaysResult struct {
-	Upcoming []birthdays.Item `json:"upcoming"`
 }
 type PackageInput struct{ ID int64 }
 type ProposeTrackingInput struct {
@@ -52,9 +41,6 @@ func (e *TrackingFailure) Unwrap() error { return e.Err }
 
 func DescribePackages() application.Definition {
 	return application.Describe[PackagesInput, PackagesResult](PackagesName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
-}
-func DescribeUpcomingBirthdays() application.Definition {
-	return application.Describe[UpcomingBirthdaysInput, UpcomingBirthdaysResult](UpcomingBirthdaysName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
 }
 func DescribePackageDismiss() application.Definition {
 	return application.Describe[PackageInput, struct{}](PackageDismissName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
@@ -75,30 +61,6 @@ func (s *Service) Packages(ctx context.Context, in PackagesInput) (application.R
 		return err
 	})
 	return application.Read[PackagesResult]{Revision: rev, Data: data}, err
-}
-
-func (s *Service) UpcomingBirthdays(ctx context.Context, in UpcomingBirthdaysInput) (application.Read[UpcomingBirthdaysResult], error) {
-	var data UpcomingBirthdaysResult
-	rev, err := s.snapshot(ctx, UpcomingBirthdaysName, in, func(q db.Querier) error {
-		defaultDays, maxDays, err := birthdays.Limits(ctx, q)
-		if err != nil {
-			return err
-		}
-		days := int64(defaultDays)
-		if in.Days != nil {
-			days = max(0, min(*in.Days, int64(maxDays)))
-		}
-		found, ok, err := birthdays.UpcomingFor(ctx, q, in.Today, int(days))
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return &application.Error{Code: application.NotConfigured, Message: contacts.DirKey + " is not set"}
-		}
-		data.Upcoming = found
-		return nil
-	})
-	return application.Read[UpcomingBirthdaysResult]{Revision: rev, Data: data}, err
 }
 
 func (s *Service) PackageDismiss(ctx context.Context, in PackageInput) (application.Change[struct{}], error) {

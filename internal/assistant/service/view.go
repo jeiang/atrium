@@ -253,6 +253,9 @@ func Items(messages []journal.Message, calls []journal.ToolCall, rows map[string
 			activity = &item
 			items = append(items, activity)
 		}
+		if found.Results == nil {
+			found.Results = []SearchResult{}
+		}
 		activity.Steps = append(activity.Steps, found)
 		return found
 	}

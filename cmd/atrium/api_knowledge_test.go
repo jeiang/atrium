@@ -103,8 +103,10 @@ func TestKnowledgeAPILifecycle(t *testing.T) {
 	id := number(t, created["id"])
 	record := fmt.Sprintf("/api/v1/knowledge/%d", id)
 	tag := expectConditional(t, s, token, record)
+	read := apiData(t, s.do(http.MethodGet, record, token, nil), http.StatusOK)["record"].(map[string]any)["updated_at"].(string)
 
-	edit := s.do(http.MethodPatch, record, token, map[string]any{"title": "Boiler code", "body": "The boiler code is 9001.", "scope": "work", "marks": []string{"pii"}})
+	edit := s.do(http.MethodPatch, record, token, map[string]any{"title": "Boiler code", "body": "The boiler code is 9001.", "scope": "work", "marks": []string{"pii"}}, "If-Match", read)
+	expectAPI(t, s.do(http.MethodPatch, record, token, map[string]any{"body": "Overwritten."}, "If-Match", read), http.StatusConflict, "stale")
 	effects, _ := edit.json["effect_ids"].([]any)
 	if apiData(t, edit, http.StatusOK)["id"] != created["id"] || len(effects) != 1 {
 		t.Fatalf("edit: %s", edit.body)

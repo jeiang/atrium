@@ -13,11 +13,11 @@ import (
 )
 
 func ConnectionNotice() connections.Notifier {
-	return func(ctx context.Context, d *db.DB, title, body string) error {
+	return func(ctx context.Context, d *db.DB, title, body, occurrence string) error {
 		if !notify.Enabled(ctx) {
 			return nil
 		}
-		_, err := New(d).Send(ctx, SendInput{Message: notify.Message{Channel: notify.System, Priority: 4, Title: title, Body: body, Click: connections.Screen}})
+		_, err := New(d).Send(ctx, SendInput{Message: notify.Message{Channel: notify.System, Priority: 4, Title: title, Body: body, Click: connections.Screen, Occurrence: occurrence}})
 		return err
 	}
 }

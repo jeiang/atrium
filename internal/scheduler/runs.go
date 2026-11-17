@@ -20,6 +20,7 @@ const (
 	StatusSkippedPause        Status = "skipped_pause"
 	StatusSkippedModule       Status = "skipped_module"
 	StatusSkippedUnconfigured Status = "skipped_unconfigured"
+	StatusSkippedDependency   Status = "skipped_dependency"
 	StatusMissed              Status = "missed_coalesced"
 	StatusRequested           Status = "requested"
 	StatusRefused             Status = "refused"
@@ -41,8 +42,8 @@ type Failure struct {
 	Error    string
 }
 
-func (s *Scheduler) failed(ctx context.Context, claim Claim, result Result) {
-	if s.deps.Failed == nil {
+func (s *Scheduler) failed(ctx context.Context, claim Claim, result Result, reported bool) {
+	if s.deps.Failed == nil || reported {
 		return
 	}
 	var previous Status

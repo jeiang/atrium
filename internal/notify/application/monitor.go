@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 const staleEvery = 5 * time.Minute
@@ -45,7 +46,7 @@ func noticeStale(ctx context.Context, d *db.DB) error {
 	at := float64(time.Now().UnixNano()) / 1e9
 	for _, l := range latest {
 		stale, why := l.Stale(at)
-		if !stale {
+		if !stale || l.Failed && scheduler.CauseReported(d, l.JobID, l.RunID) {
 			continue
 		}
 		since := 0.0

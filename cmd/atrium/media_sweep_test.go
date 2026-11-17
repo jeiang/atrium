@@ -7,23 +7,24 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func TestMediaSweepOnlyDeletesMediaTorrents(t *testing.T) {
 	const mediaHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const plainHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	torrents := []media.Torrent{
-		{Hash: mediaHash, Name: "Filed.Show", State: media.StoppedUP, Tags: "media,selected,filed"},
-		{Hash: plainHash, Name: "Filed.Plain", State: media.StoppedUP, Tags: "filed"},
+	torrents := []contract.Torrent{
+		{Hash: mediaHash, Name: "Filed.Show", State: contract.StoppedUP, Tags: "media,selected,filed"},
+		{Hash: plainHash, Name: "Filed.Plain", State: contract.StoppedUP, Tags: "filed"},
 	}
 	var deleted []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v2/torrents/info":
 			out := torrents
-			if r.URL.Query().Get("tag") == media.TagMedia {
+			if r.URL.Query().Get("tag") == library.TagMedia {
 				out = torrents[:1]
 			}
 			_ = json.NewEncoder(w).Encode(out)
@@ -67,7 +68,7 @@ func TestMediaSweepJobFailsWhenQbittorrentFails(t *testing.T) {
 		t.Fatalf("media sweep output %q (%v), want reported errors", ran.stdout, err)
 	}
 	d := mustConnect(t, dir+"/atrium.db", keyFor(t))
-	run := runJob(t, f, d, media.JobSweep)
+	run := runJob(t, f, d, library.JobSweep)
 	var status string
 	if err := d.Read.QueryRow("SELECT status FROM job_runs WHERE id = ?", run).Scan(&status); err != nil {
 		t.Fatal(err)

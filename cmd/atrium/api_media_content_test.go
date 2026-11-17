@@ -11,7 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/apps/library"
+	"github.com/jeiang/atrium/internal/apps/torrents"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 )
 
 func TestMediaLibraryAPIRange(t *testing.T) {
@@ -86,7 +88,7 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 		t.Fatalf("bearer-only: %+v", got)
 	}
 	for _, suffix := range []string{"", "?exp=1&sig=invalid"} {
-		public := media.FilePrefix + mnpQuote(rel) + suffix
+		public := library.FilePrefix + mnpQuote(rel) + suffix
 		for _, bearer := range []string{"", token} {
 			got := request("GET", public, bearer, nil, "", "Remote-User", "operator", "Remote-Groups", "atrium_access")
 			if got.status != 403 {
@@ -115,7 +117,7 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 		return request("POST", "/api/v1/media/torrents", token, &buf, writer.FormDataContentType())
 	}
 	torrent := []byte("d4:infod6:lengthi1e4:name8:test.mkv12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee")
-	hash, err := media.TorrentHash(torrent)
+	hash, err := torrents.TorrentHash(torrent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,8 +125,8 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 	if added.status != 200 || qb.count("add") != 1 {
 		t.Fatalf("torrent add: %+v, adds %d", added, qb.count("add"))
 	}
-	mediaEffectID(t, d, media.OpAddFile, hash, "done")
-	for _, input := range [][]byte{[]byte("not a torrent"), bytes.Repeat([]byte("a"), media.TuningMediaTorrentUploadBytes)} {
+	mediaEffectID(t, d, contract.OpAddFile, hash, "done")
+	for _, input := range [][]byte{[]byte("not a torrent"), bytes.Repeat([]byte("a"), torrents.TuningMediaTorrentUploadBytes)} {
 		if got := upload(input, ""); got.status != 422 || qb.count("add") != 1 {
 			t.Fatalf("invalid torrent: %+v", got)
 		}
@@ -136,14 +138,14 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 		t.Fatalf("v2-only torrent: %+v", got)
 	}
 	hybrid := []byte("d4:infod9:file treede6:lengthi1e12:meta versioni2e4:name9:test2.mkv12:piece lengthi16384e6:pieces20:bbbbbbbbbbbbbbbbbbbbee")
-	hybridHash, err := media.TorrentHash(hybrid)
+	hybridHash, err := torrents.TorrentHash(hybrid)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := upload(hybrid, ""); got.status != 200 || qb.count("add") != 2 {
 		t.Fatalf("hybrid torrent: %+v, adds %d", got, qb.count("add"))
 	}
-	mediaEffectID(t, d, media.OpAddFile, hybridHash, "done")
+	mediaEffectID(t, d, contract.OpAddFile, hybridHash, "done")
 	for _, id := range []string{mediaAPIID("downloads/secret.mkv"), mediaAPIID("movies/../secret.mkv"), mediaAPIID("movies/" + libraryMovie + "/missing.mkv")} {
 		if got := request("GET", "/api/v1/media/files/"+id+"/content", token, nil, ""); got.status != 404 {
 			t.Fatalf("bad id: %+v", got)
@@ -176,7 +178,9 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 
 func TestMediaRelayRefusesWhenMediaIsOffAtBoot(t *testing.T) {
 	const rel = "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
-	_, _, f := moduleFixture(t, flagsExcept("media", "false"))
+	flags := flagsExcept("media", "false")
+	flags["torrents"] = "false"
+	_, _, f := moduleFixture(t, flags)
 	token := localAPIToken(t, "media-off")
 	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {

@@ -303,7 +303,7 @@ func TestServeStaysUpAndNotReadyUntilSchedulerRecoverySucceeds(t *testing.T) {
 		return strings.Count(s.stderr.String(), "service scheduler failed; restarting in ") >= 2
 	})
 	notify.Wait("READY=1")
-	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/readyz", nil)
+	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/readyz", nil)
 	if status != http.StatusServiceUnavailable || !strings.Contains(body, "scheduler recovery has not finished") {
 		t.Fatalf("readyz while recovery fails = %d %s, want 503 naming the recovery", status, body)
 	}
@@ -315,7 +315,7 @@ func TestServeStaysUpAndNotReadyUntilSchedulerRecoverySucceeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitUntil(t, 30*time.Second, "readiness after the recovery", func() bool {
-		status, _ := readiness(t, opsBase)
+		status, _ := readiness(t, opsBase())
 		return status == http.StatusOK
 	})
 	notify.Wait("WATCHDOG=1")

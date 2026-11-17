@@ -42,3 +42,5 @@ const (
 	TuningWatchesStalePackageDays   = 60
 	TuningWriteAttempts             = 3
 )
+
+var TuningWatchesCarrierDomains = []string{"ups.com", "fedex.com", "usps.com", "dhl.com", "usps.gov", "dhl.de"}

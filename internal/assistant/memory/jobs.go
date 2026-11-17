@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -61,30 +60,6 @@ func Queue(ctx context.Context, q db.Querier, threadID int64, now float64) error
 			"SELECT thread_id, id, level, idx, ?, 0, ?, ? FROM memory_nodes WHERE thread_id = ? AND state = ?",
 		Queued, now, now, threadID, Pending)
 	return err
-}
-
-func Model(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, ModelKey)
-	if err != nil {
-		return "", err
-	}
-	value := strings.TrimSpace(found.Value)
-	if value == "" {
-		value = "claude-haiku-5-5"
-	}
-	return value, nil
-}
-
-func Effort(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, EffortKey)
-	if err != nil {
-		return "", err
-	}
-	value := strings.TrimSpace(found.Value)
-	if value == "" {
-		value = "low"
-	}
-	return value, nil
 }
 
 // Work drains one batch of queued summarizer jobs for a thread. It returns

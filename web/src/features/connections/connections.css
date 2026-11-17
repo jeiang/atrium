@@ -1,0 +1,85 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .conn-back {
+    justify-self: start;
+  }
+
+  .conn-name {
+    font-weight: 600;
+  }
+
+  .conn-kind {
+    display: block;
+  }
+
+  .conn-status {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--s-1) var(--s-2);
+    align-items: center;
+    min-inline-size: 0;
+  }
+
+  .conn-reason,
+  .conn-value {
+    overflow-wrap: anywhere;
+  }
+
+  .dtable .conn-prefix {
+    display: none;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: var(--s-3) var(--s-5);
+    margin: 0;
+  }
+
+  .facts--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .facts div {
+    display: grid;
+    gap: var(--s-1);
+    min-inline-size: 0;
+  }
+
+  .facts dt {
+    font-size: var(--t-xs);
+    font-weight: 700;
+    color: var(--ink-3);
+  }
+
+  .facts dd {
+    display: grid;
+    gap: var(--s-1);
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .conn-form {
+    max-inline-size: 40rem;
+  }
+
+  .secret {
+    display: flex;
+    gap: var(--s-2);
+    align-items: stretch;
+  }
+
+  .secret__input {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  @media (--touch) {
+    .conn-back {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: var(--target);
+    }
+  }
+}

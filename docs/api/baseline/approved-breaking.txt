@@ -15,3 +15,4 @@ api-path-removed-without-deprecation DELETE /subagents/{name} ruling 1; roles ar
 api-path-removed-without-deprecation PUT /subagents/{name} ruling 1; roles are fixed in code (P7.3, #902)
 api-path-removed-without-deprecation PUT /subagents/{name}/enabled ruling 1; roles are fixed in code (P7.3, #902)
 response-body-any-of-added GET /events document corrected to match the wire since v3.0.0
+api-path-removed-without-deprecation GET /mail/birthdays D33, R1.43; birthdays are the derived Birthdays calendar (P11.2, #936)
