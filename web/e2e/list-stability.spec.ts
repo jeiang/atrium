@@ -63,3 +63,41 @@ test.describe('Long lists stay put under the finger', () => {
     await expect.poll(() => page.locator('.mail-item-wrap').count()).toBeGreaterThan(30);
   });
 });
+
+test.describe('The Inbox stays put when the queue arrives', () => {
+  const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
+  for (const layout of [phone, desktop]) {
+    test(`at ${layout.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await useScenario(page, { inbox: { readDelay: 1000 } });
+      const list = page.locator(layout.touch ? '.deck' : '.inbox');
+      await page.goto('/inbox');
+      await expect(list.locator('.skel-group').first()).toBeVisible();
+      const before = await list.evaluate((el) => el.getBoundingClientRect().top);
+      await expect(page.locator('.page-lede')).toContainText('waiting on you');
+      expect(await list.evaluate((el) => el.getBoundingClientRect().top)).toBe(before);
+    });
+  }
+});
+
+test.describe('Later Inbox pages do not move what is on screen', () => {
+  const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
+  for (const layout of [phone, desktop]) {
+    test(`at ${layout.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await useScenario(page, { inbox: { pageSize: 2, pageDelay: 600 } });
+      const list = page.locator(layout.touch ? '.deck' : '.inbox__list');
+      const first = layout.touch ? list.locator('[data-item]').first() : list.locator('tr[data-key]').first();
+      await page.goto('/inbox');
+      await expect(first).toBeVisible();
+      await expect(list).toHaveAttribute('aria-busy', 'true');
+      const lede = await page.locator('.page-lede').textContent();
+      const top = await first.evaluate((el) => el.getBoundingClientRect().top);
+      if (!layout.touch) await expect(list.locator('tr[data-key]')).toHaveCount(2);
+      await expect(list).not.toHaveAttribute('aria-busy', 'true', { timeout: 10_000 });
+      if (!layout.touch) expect(await list.locator('tr[data-key]').count()).toBeGreaterThan(2);
+      expect(await first.evaluate((el) => el.getBoundingClientRect().top)).toBe(top);
+      await expect(page.locator('.page-lede')).toHaveText(lede ?? '');
+    });
+  }
+});

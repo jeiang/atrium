@@ -1,4 +1,4 @@
-import { createQuery, type QueryClient } from '@tanstack/svelte-query';
+import { createQuery, experimental_streamedQuery, type QueryClient } from '@tanstack/svelte-query';
 import {
   ApiError,
   assistantRunAnswer,
@@ -108,15 +108,23 @@ export function queueRow(item: QueueItem): InboxRow {
 export function useQueue() {
   return createQuery(() => ({
     queryKey: ['inbox', 'queue'],
-    queryFn: async ({ signal }): Promise<Queue> => {
-      let page = ok(await reviewQueue({ limit: QUEUE_PAGE }, { signal })).data;
-      const items = [...page.items];
-      while (page.next_cursor) {
-        page = ok(await reviewQueue({ limit: QUEUE_PAGE, cursor: page.next_cursor }, { signal })).data;
-        items.push(...page.items);
-      }
-      return { rows: items.map(queueRow), total: page.total, counts: page.counts };
-    },
+    queryFn: experimental_streamedQuery({
+      streamFn: async function* ({ signal }) {
+        let cursor: string | undefined;
+        do {
+          const page = ok(await reviewQueue({ limit: QUEUE_PAGE, cursor }, { signal })).data;
+          yield page;
+          cursor = page.next_cursor || undefined;
+        } while (cursor);
+      },
+      reducer: (queue: Queue | undefined, page): Queue => ({
+        rows: [...(queue?.rows ?? []), ...page.items.map(queueRow)],
+        total: page.total,
+        counts: page.counts,
+      }),
+      initialValue: undefined,
+      refetchMode: 'replace',
+    }),
     meta: { topics: QUEUE_TOPICS },
   }));
 }
