@@ -1,5 +1,5 @@
 import { createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { screens } from '../apps';
+import { appScreens, screens } from '../apps';
 import { type AppEntry, appsList, type Binding, ok } from '../contract';
 import type { Tone } from '../shared/ui/Badge.svelte';
 import { p } from './router';
@@ -33,10 +33,16 @@ export interface NavLink {
 }
 
 export function navLinks(app: AppEntry): NavLink[] {
-  return app.nav.map((item) => {
+  const own = (appScreens[app.id] ?? []).map((item) => ({
+    label: item.label,
+    href: `${base}${item.path}`,
+    leaves: false,
+  }));
+  const legacy = app.nav.map((item) => {
     const path: string | undefined = screens[item.url];
     return { label: item.label, href: path ? `${base}${path}` : item.url, leaves: path === undefined };
   });
+  return [...own, ...legacy];
 }
 
 export function unmetNeeds(app: AppEntry): Binding[] {

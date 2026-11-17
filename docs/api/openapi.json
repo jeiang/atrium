@@ -1208,6 +1208,9 @@
           "connection": {
             "type": "string"
           },
+          "connection_label": {
+            "type": "string"
+          },
           "features": {
             "items": {
               "type": "string"
@@ -1304,6 +1307,51 @@
           "notes",
           "recurring",
           "revision"
+        ],
+        "type": "object"
+      },
+      "CalendarList": {
+        "properties": {
+          "calendars": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarSource"
+            },
+            "type": "array"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "today": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "calendars",
+          "today",
+          "timezone"
+        ],
+        "type": "object"
+      },
+      "CalendarSource": {
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "read_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "read_only",
+          "available"
         ],
         "type": "object"
       },
@@ -4637,6 +4685,9 @@
       },
       "Event": {
         "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
           "calendar": {
             "type": "string"
           },
@@ -4646,7 +4697,27 @@
           "location": {
             "type": "string"
           },
+          "notes": {
+            "type": "string"
+          },
+          "read_only": {
+            "type": "boolean"
+          },
+          "recurring": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string"
+          },
           "start": {
+            "type": "string"
+          },
+          "target": {
+            "enum": [
+              "icloud",
+              "google",
+              "birthdays"
+            ],
             "type": "string"
           },
           "title": {
@@ -4735,6 +4806,12 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "today": {
+            "type": "string"
           },
           "truncated": {
             "type": "boolean"
@@ -9003,6 +9080,23 @@
         ],
         "type": "object"
       },
+      "MediaRequests": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Request"
+            },
+            "type": "array"
+          },
+          "next": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "MediaSelectInput": {
         "additionalProperties": false,
         "properties": {
@@ -9079,6 +9173,10 @@
             "maximum": 9007199254740991,
             "type": "integer"
           },
+          "filed": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
           "removed": {
             "maximum": 9007199254740991,
             "type": "integer"
@@ -9091,6 +9189,7 @@
         "required": [
           "selected",
           "removed",
+          "filed",
           "errors"
         ],
         "type": "object"
@@ -11324,6 +11423,9 @@
           "module": {
             "type": "string"
           },
+          "proposal_kind": {
+            "type": "string"
+          },
           "source": {
             "$ref": "#/components/schemas/QueueSource"
           },
@@ -11518,6 +11620,21 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/CalendarEvent"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadCalendarList": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CalendarList"
           },
           "revision": {
             "type": "string"
@@ -12329,6 +12446,109 @@
           "stored_stage",
           "stored_action",
           "vector"
+        ],
+        "type": "object"
+      },
+      "Request": {
+        "properties": {
+          "approved_at": {
+            "type": "number"
+          },
+          "approved_by": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "download": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effect_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hash": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "hash",
+          "approved_by",
+          "approved_at",
+          "state",
+          "created_at",
+          "updated_at"
         ],
         "type": "object"
       },
@@ -13722,6 +13942,11 @@
             ]
           },
           "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "job_id": {
             "format": "int64",
             "maximum": 9007199254740991,
             "type": "integer"
@@ -19319,6 +19544,129 @@
         ],
         "x-atrium-area": "permissions",
         "x-atrium-module": "core"
+      }
+    },
+    "/calendar/calendars": {
+      "get": {
+        "description": "The calendars events can be read from and written to. The id is the calendar path segment of the event routes and the calendar of POST /calendar/events; read_only calendars take no writes. today and timezone are the server's date and zone.",
+        "operationId": "calendar.calendars",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadCalendarList"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "home"
+        ],
+        "x-atrium-area": "home",
+        "x-atrium-module": "calendar"
       }
     },
     "/calendar/candidates": {
@@ -42533,6 +42881,156 @@
         "x-atrium-module": "media"
       }
     },
+    "/media/requests": {
+      "get": {
+        "operationId": "media.requests",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaRequests"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "media"
+        ],
+        "x-atrium-area": "media",
+        "x-atrium-module": "media"
+      }
+    },
     "/media/shows": {
       "get": {
         "operationId": "media.show-search",
@@ -45529,7 +46027,7 @@
     },
     "/queue": {
       "get": {
-        "description": "The one inbox: everything that waits for the operator, in one order with one count. `total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `cursor` and `limit` are. Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
+        "description": "The one inbox: everything that waits for the operator, in one order with one count. `total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `module`, `cursor` and `limit` are. Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. `module` keeps only the items of that module. Proposal items carry the proposal's `proposal_kind`. Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
         "operationId": "review.queue",
         "parameters": [
           {
@@ -45542,6 +46040,13 @@
                 "draft",
                 "attention"
               ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "module",
+            "schema": {
               "type": "string"
             }
           },
@@ -46203,6 +46708,156 @@
               }
             },
             "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "schedules"
+        ],
+        "x-atrium-area": "schedules",
+        "x-atrium-module": "assistant"
+      }
+    },
+    "/schedules/runs": {
+      "get": {
+        "operationId": "assistant.schedule.runs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 2048,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListScheduleRun"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "422": {
             "content": {

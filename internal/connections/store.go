@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -77,17 +78,19 @@ type transportOptions struct {
 }
 
 type Lease struct {
-	store    *Store
-	id       ID
-	kind     Kind
-	revision int64
-	config   json.RawMessage
-	options  transportOptions
-	caps     []Capability
-	creds    map[string]credential
-	defaults map[string]string
-	shared   *shared
-	closed   bool
+	store        *Store
+	id           ID
+	kind         Kind
+	revision     int64
+	config       json.RawMessage
+	options      transportOptions
+	caps         []Capability
+	creds        map[string]credential
+	defaults     map[string]string
+	shared       *shared
+	closed       bool
+	workedBefore bool
+	cause        func()
 }
 
 func New(d *db.DB, host config.Host, r *Registry) (*Store, error) {
@@ -233,39 +236,35 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	for _, id := range sortedKeys(s.host.Connections) {
 		declared[id] = true
 	}
-	type dropped struct {
-		id    ID
-		state State
-	}
-	var removed []dropped
+	var removed []ID
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, id := range sortedKeys(s.host.Connections) {
 			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id]); err != nil {
 				return err
 			}
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id, state FROM connections WHERE config_source = 'host' AND enabled = 1")
+		rows, err := tx.QueryContext(ctx, "SELECT id FROM connections WHERE config_source = 'host' AND enabled = 1")
 		if err != nil {
 			return err
 		}
 		removed = nil
 		for rows.Next() {
-			var row dropped
-			if err := rows.Scan(&row.id, &row.state); err != nil {
+			var id ID
+			if err := rows.Scan(&id); err != nil {
 				_ = rows.Close()
 				return err
 			}
-			if !declared[string(row.id)] {
-				removed = append(removed, row)
+			if !declared[string(id)] {
+				removed = append(removed, id)
 			}
 		}
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		for _, row := range removed {
+		for _, id := range removed {
 			if _, err := tx.ExecContext(ctx,
 				"UPDATE connections SET enabled = 0, state = 'disabled', reason = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
-				reasonRemovedFromHost, s.stamp(), row.id); err != nil {
+				reasonRemovedFromHost, s.stamp(), id); err != nil {
 				return err
 			}
 		}
@@ -282,9 +281,8 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, row := range removed {
-		log.Warn("a host-declared connection was removed from the host configuration and is disabled", logx.Integration, string(row.id))
-		s.announce(ctx, row.id, row.state, Disabled, reasonRemovedFromHost)
+	for _, id := range removed {
+		log.Warn("a host-declared connection was removed from the host configuration and is disabled", logx.Integration, string(id))
 	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reload != nil {
 		return s.reg.sync.Reload(ctx, s)
@@ -941,7 +939,7 @@ func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisable
 			s.recheckSharers(ctx, id, rotated)
 		}
 	}
-	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds}
+	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds, workedBefore: lastOK != nil, cause: scheduler.CauseReporter(ctx)}
 	lease.defaults = s.defaultsFor(v.Kind)
 	lease.shared = s.sharedFor(id, revision)
 	return lease, nil
@@ -1338,21 +1336,14 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
 }
 
-func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, results []Result, commits ...Commit) (View, error) {
-	state, reason := aggregate(results, nil)
+func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, interactive []string, results []Result, commits ...Commit) (View, error) {
 	at := s.now()
 	now := float64(at.UnixNano()) / 1e9
-	var lastOK, reauthAt any
-	if state == OK {
-		lastOK = now
-	}
-	if state == NeedsReauth {
-		reauthAt = now
-	}
-	var previous, next State
+	var previous, next, state State
+	var reason string
 	updated := false
 	if err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		var (
@@ -1368,6 +1359,15 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 			return err
 		}
 		_ = json.Unmarshal([]byte(priorJSON), &priorResult)
+		keepInteractive(results, priorResult, interactive)
+		state, reason = aggregate(results, nil)
+		var lastOK, reauthAt any
+		if state == OK {
+			lastOK = now
+		}
+		if state == NeedsReauth {
+			reauthAt = now
+		}
 		carryGrace(results, priorResult, prior, grace, at)
 		previous, next = effective(prior, priorResult, timeOr(fromUnix(priorAt), at)), effective(state, results, at)
 		raw, err := json.Marshal(results)
@@ -1723,7 +1723,7 @@ func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate
 	if current.ConfigSource == SourceHost {
 		config = current.Config
 	}
-	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
+	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds, workedBefore: current.LastOKAt != nil}
 	lease.defaults = s.defaultsFor(current.Kind)
 	lease.shared = &shared{clients: map[string]*http.Client{}, tokens: map[string]string{}}
 	return lease, nil
@@ -1868,4 +1868,17 @@ func (s *Store) afterWrite(ctx context.Context, id ID) (View, error) {
 		return View{}, &CommittedError{Cause: err}
 	}
 	return view, nil
+}
+
+func keepInteractive(results, prior []Result, interactive []string) {
+	for i := range results {
+		if results[i].State != Untested || !slices.Contains(interactive, results[i].Capability) {
+			continue
+		}
+		for _, p := range prior {
+			if p.Capability == results[i].Capability && (p.State == OK || p.State == Failing) {
+				results[i] = p
+			}
+		}
+	}
 }

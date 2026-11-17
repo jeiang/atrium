@@ -17,6 +17,7 @@ type SweepInput struct{}
 type Swept struct {
 	Selected []string
 	Removed  []string
+	Filed    []string
 	Errors   []string
 }
 
@@ -31,23 +32,27 @@ func (s *Service) Sweep(ctx context.Context, _ SweepInput) (application.Change[S
 	if failure == nil && len(out.Errors) > 0 {
 		failure = SweepFailure(out)
 	}
-	if failure != nil && len(out.Selected)+len(out.Removed) > 0 {
+	if failure != nil && out.worked() {
 		failure = &application.Error{Code: application.Partial, Message: "Media sweep stopped after completing some work.", Cause: failure}
 		if err != nil {
 			err = failure
 		}
 	}
 	outcome := state.OK
-	if len(out.Selected)+len(out.Removed) == 0 {
+	if !out.worked() {
 		outcome = state.Noop
 	}
-	id, _ := s.recordOutcome(ctx, SweepName, "", map[string]any{"selected": len(out.Selected), "removed": len(out.Removed), "errors": len(out.Errors)}, outcome, failure)
+	id, _ := s.recordOutcome(ctx, SweepName, "", map[string]any{"selected": len(out.Selected), "removed": len(out.Removed), "filed": len(out.Filed), "errors": len(out.Errors)}, outcome, failure)
 	return application.Change[Swept]{Data: out, AuditID: id}, err
+}
+
+func (out Swept) worked() bool {
+	return len(out.Selected)+len(out.Removed)+len(out.Filed) > 0
 }
 
 func SweepFailure(out Swept) error {
 	code := application.Unavailable
-	if len(out.Selected)+len(out.Removed) > 0 {
+	if out.worked() {
 		code = application.Partial
 	}
 	return &application.Error{Code: code, Message: fmt.Sprintf("media sweep: %d errors", len(out.Errors))}
@@ -65,5 +70,9 @@ func (s *Service) sweep(ctx context.Context) (Swept, error) {
 	}
 	swept, err := library.Sweep(ctx, set)
 	out.Removed, out.Errors = swept.Removed, swept.Errors
-	return out, classify(err)
+	if err != nil {
+		return out, classify(err)
+	}
+	out.Filed = s.autoFile(ctx, set)
+	return out, nil
 }

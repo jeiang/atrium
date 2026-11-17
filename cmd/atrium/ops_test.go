@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,16 +29,19 @@ var opsMetricNames = []string{
 	"atrium_http_route_requests_total",
 }
 
-func opsAddr(t *testing.T) string {
+func opsAddr(t *testing.T) func() string {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	path := filepath.Join(t.TempDir(), "ops-addr")
+	setEnv(t, settingEnv(ops.ListenKey), "127.0.0.1:0")
+	setEnv(t, "ATRIUM_OPS_ADDR_FILE", path)
+	return func() string {
+		t.Helper()
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("the ops listener did not report its address: %v", err)
+		}
+		return "http://" + strings.TrimSpace(string(raw))
 	}
-	addr := l.Addr().String()
-	_ = l.Close()
-	setEnv(t, settingEnv(ops.ListenKey), addr)
-	return "http://" + addr
 }
 
 func readiness(t *testing.T, base string) (int, string) {
@@ -72,7 +75,7 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 
 	base := startServeIn(t, dir)
 
-	status, body, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
+	status, body, _ := fetch(t, http.DefaultClient, "GET", opsBase()+"/metrics", nil)
 	if status != http.StatusOK {
 		t.Fatalf("ops /metrics = %d", status)
 	}
@@ -94,10 +97,10 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 	if status, _, _ := fetch(t, http.DefaultClient, "GET", base+"/healthz", nil); status != http.StatusOK {
 		t.Errorf("public /healthz = %d", status)
 	}
-	if status, _, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/debug/pprof/", nil); status != http.StatusNotFound {
+	if status, _, _ := fetch(t, http.DefaultClient, "GET", opsBase()+"/debug/pprof/", nil); status != http.StatusNotFound {
 		t.Errorf("ops pprof = %d with pprof off, want 404", status)
 	}
-	if status, state := readiness(t, opsBase); status != http.StatusOK || state != ops.StateReady {
+	if status, state := readiness(t, opsBase()); status != http.StatusOK || state != ops.StateReady {
 		t.Errorf("readyz = %d %s, want 200 ready", status, state)
 	}
 
@@ -105,7 +108,7 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (9999, 0)"); err != nil {
 		t.Fatal(err)
 	}
-	if status, state := readiness(t, opsBase); status != http.StatusServiceUnavailable || state != ops.StateNotReady {
+	if status, state := readiness(t, opsBase()); status != http.StatusServiceUnavailable || state != ops.StateNotReady {
 		t.Errorf("readyz with a newer schema = %d %s, want 503 not_ready", status, state)
 	}
 }
@@ -117,7 +120,7 @@ func TestOpsPprofFollowsItsSetting(t *testing.T) {
 	opsBase := opsAddr(t)
 	startServeIn(t, dir)
 
-	if status, _, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/debug/pprof/", nil); status != http.StatusOK {
+	if status, _, _ := fetch(t, http.DefaultClient, "GET", opsBase()+"/debug/pprof/", nil); status != http.StatusOK {
 		t.Errorf("ops pprof = %d with pprof on, want 200", status)
 	}
 }

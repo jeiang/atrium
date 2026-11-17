@@ -157,7 +157,8 @@ type apiAnswer struct {
 }
 
 type seqCursor struct {
-	Seq int64 `json:"seq"`
+	Seq  int64 `json:"seq"`
+	Keep int   `json:"keep,omitempty"`
 }
 
 func threadOut(t threads.Thread) apiThread {
@@ -604,6 +605,7 @@ func apiBindings(p *apiPages) []application.Binding {
 						return application.Read[apiTranscript]{}, err
 					}
 					req.Before = c.Seq
+					req.Keep = c.Keep
 				}
 				read, err := svc.Transcript(ctx, req)
 				return readAs(read, err, func(v asstapp.Transcript) apiTranscript { return transcriptOut(v, in.Cursor) })
@@ -808,7 +810,7 @@ func transcriptOut(v asstapp.Transcript, cursor api.Cursor) apiTranscript {
 		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{},
 	}
 	if v.Earlier != 0 {
-		out.NextCursor = cursor.Next(seqCursor{Seq: v.Earlier})
+		out.NextCursor = cursor.Next(seqCursor{Seq: v.Earlier, Keep: v.EarlierKeep})
 	}
 	for _, item := range v.Items {
 		out.Items = append(out.Items, itemOut(item))

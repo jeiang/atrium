@@ -30,6 +30,7 @@ const (
 	ScheduleCancelName  application.Name = "assistant.schedule.cancel"
 	ScheduleListName    application.Name = "assistant.schedule.list"
 	ScheduleHistoryName application.Name = "assistant.schedule.history"
+	ScheduleRunsName    application.Name = "assistant.schedule.runs"
 	ScheduleAddName     application.Name = "assistant.schedule.add"
 	ScheduleRunNowName  application.Name = "assistant.schedule.run_now"
 
@@ -136,6 +137,7 @@ type ScheduleJob struct {
 
 type ScheduleRun struct {
 	ID          int64   `json:"id"`
+	JobID       int64   `json:"job_id,omitempty"`
 	JobName     string  `json:"job_name"`
 	Status      string  `json:"status"`
 	StartedText *string `json:"started_text"`
@@ -195,6 +197,10 @@ func DescribeScheduleList() application.Definition {
 
 func DescribeScheduleHistory() application.Definition {
 	return describeRead[ScheduleHistoryInput, []ScheduleRun](ScheduleHistoryName)
+}
+
+func DescribeScheduleRuns() application.Definition {
+	return describeRead[ScheduleHistoryInput, []ScheduleRun](ScheduleRunsName)
 }
 
 func DescribeScheduleAdd() application.Definition {
@@ -282,7 +288,7 @@ func scheduleRunOf(run scheduler.ListedRun, zone *time.Location) ScheduleRun {
 	if strings.HasPrefix(hint, "skipped_") && (run.Tokens > 0 || run.Cost > 0) {
 		hint += "_partial"
 	}
-	return ScheduleRun{ID: run.ID, JobName: run.JobName, Status: run.Status, StartedText: scheduleStamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
+	return ScheduleRun{ID: run.ID, JobID: run.JobID, JobName: run.JobName, Status: run.Status, StartedText: scheduleStamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
 }
 
 func (s *Service) scheduleZone(ctx context.Context) (string, *time.Location, error) {

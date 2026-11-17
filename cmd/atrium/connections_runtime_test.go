@@ -105,8 +105,8 @@ func TestMailRuntimeFailuresFlipTheConnectionOnceAndASuccessRestoresIt(t *testin
 		t.Fatalf("a refused login sent the draft: %s", sent.body)
 	}
 	waitUntil(t, 10*time.Second, "the refused login to need reauth", func() bool { return connectionState(t, dir, "mail/home") == "needs_reauth" })
-	if n := connectionNotices(t, dir, label) - notices; n != 3 {
-		t.Fatalf("%d notices after the refused login, want 3", n)
+	if n := connectionNotices(t, dir, label) - notices; n != 2 {
+		t.Fatalf("%d notices after a refused login within the damping window, want 2", n)
 	}
 	smtp.setPassword("me@home.test", "app-pass")
 	if sent := send("Accepted"); sent.status != http.StatusOK {
@@ -115,8 +115,8 @@ func TestMailRuntimeFailuresFlipTheConnectionOnceAndASuccessRestoresIt(t *testin
 		t.Fatalf("send after the password returned: %d %s %s", sent.status, sent.body, result)
 	}
 	waitUntil(t, 10*time.Second, "a working send to restore the connection", func() bool { return connectionState(t, dir, "mail/home") == "ok" })
-	if n := connectionNotices(t, dir, label) - notices; n != 4 {
-		t.Fatalf("%d notices after the working send, want 4", n)
+	if n := connectionNotices(t, dir, label) - notices; n != 2 {
+		t.Fatalf("%d notices after a recovery from a held failure, want 2", n)
 	}
 }
 

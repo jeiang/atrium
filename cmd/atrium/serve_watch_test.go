@@ -28,9 +28,9 @@ type watchReport struct {
 	Restarts int    `json:"restarts"`
 }
 
-func watchHealth(t *testing.T, opsBase string) map[string]watchReport {
+func watchHealth(t *testing.T, base string) map[string]watchReport {
 	t.Helper()
-	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/healthz", nil)
+	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/healthz", nil)
 	if status != http.StatusOK {
 		t.Fatalf("healthz = %d: %s", status, body)
 	}
@@ -131,7 +131,7 @@ func TestServeWatchesHostICloudAccountAfterTransientCLI(t *testing.T) {
 	if fake.Idling() != 1 || strings.Contains(logs.String(), "missing credentials for icloud") {
 		t.Fatalf("the iCloud watch did not reconnect: %s", logs.String())
 	}
-	if health := watchHealth(t, opsBase); health["mail-watch/icloud"].Status != "running" {
+	if health := watchHealth(t, opsBase()); health["mail-watch/icloud"].Status != "running" {
 		t.Fatalf("iCloud watch health: %+v", health)
 	}
 	if strings.Contains(logs.String(), "watch failed") {
@@ -162,7 +162,7 @@ func TestServeWatchesEachAccountAndRestartsOnlyTheDroppedOne(t *testing.T) {
 	opsBase := opsAddr(t)
 	_, logs, _ := startServeWith(t, dir, true)
 	waitWatching(t, home, work)
-	health := watchHealth(t, opsBase)
+	health := watchHealth(t, opsBase())
 	if len(health) != 2 || health["mail-watch/home"].Status != "running" || health["mail-watch/work"].Status != "running" {
 		t.Fatalf("healthz mail watches %+v, want home and work running", health)
 	}
@@ -181,7 +181,7 @@ func TestServeWatchesEachAccountAndRestartsOnlyTheDroppedOne(t *testing.T) {
 	if starts, failures := serviceStarts(logs, mailrun.WatchServiceName("home")), serviceFailures(logs, mailrun.WatchServiceName("home")); starts != 1 || failures != 0 {
 		t.Fatalf("the home watch started %d times and failed %d times beside the work fault, want 1 and 0", starts, failures)
 	}
-	health = watchHealth(t, opsBase)
+	health = watchHealth(t, opsBase())
 	if health["mail-watch/work"].Restarts != 1 || health["mail-watch/home"].Restarts != 0 || health["mail-watch/work"].Status != "running" {
 		t.Fatalf("healthz mail watches after the fault %+v, want work restarted once and running, home untouched", health)
 	}
@@ -209,7 +209,7 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 	opsBase := opsAddr(t)
 	base, logs, _ := startServeWith(t, dir, true)
 	waitWatching(t, home)
-	if health := watchHealth(t, opsBase); len(health) != 1 || health["mail-watch/home"].Status != "running" {
+	if health := watchHealth(t, opsBase()); len(health) != 1 || health["mail-watch/home"].Status != "running" {
 		t.Fatalf("healthz mail watches %+v, want only home", health)
 	}
 	jar, _ := cookiejar.New(nil)
@@ -240,13 +240,13 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 		t.Fatalf("remove work = %d: %.300s", code, body)
 	}
 	waitUntil(t, 60*time.Second, "the removed account to lose its watch", func() bool {
-		_, present := watchHealth(t, opsBase)["mail-watch/work"]
+		_, present := watchHealth(t, opsBase())["mail-watch/work"]
 		return !present && work.Idling() == 0
 	})
 	if starts, failures := serviceStarts(logs, mailrun.WatchServiceName("home")), serviceFailures(logs, mailrun.WatchServiceName("home")); starts != 1 || failures != 0 {
 		t.Fatalf("the home watch started %d times and failed %d times across work's changes, want 1 and 0", starts, failures)
 	}
-	if health := watchHealth(t, opsBase); health["mail-watch/home"].Status != "running" {
+	if health := watchHealth(t, opsBase()); health["mail-watch/home"].Status != "running" {
 		t.Fatalf("healthz mail watches after the removal %+v, want home running", health)
 	}
 }

@@ -64,6 +64,7 @@
         "assistant.about",
         "assistant.home",
         "assistant.today.ensure",
+        "calendar.calendars",
         "calendar.event",
         "calendar.event-create",
         "calendar.event-delete",
@@ -73,8 +74,8 @@
         "core.shell",
         "state.events"
       ],
-      "required": 11,
-      "bound": 11
+      "required": 12,
+      "bound": 12
     },
     {
       "area": "inbox",
@@ -214,6 +215,7 @@
         "media.poll",
         "media.queue",
         "media.release-preview",
+        "media.requests",
         "media.select-files",
         "media.show-lookup",
         "media.show-search",
@@ -221,8 +223,8 @@
         "media.torrent-files",
         "torrents.control"
       ],
-      "required": 22,
-      "bound": 22
+      "required": 23,
+      "bound": 23
     },
     {
       "area": "permissions",
@@ -268,10 +270,11 @@
         "assistant.schedule.history",
         "assistant.schedule.list",
         "assistant.schedule.run_now",
+        "assistant.schedule.runs",
         "assistant.schedule.update"
       ],
-      "required": 7,
-      "bound": 7
+      "required": 8,
+      "bound": 8
     },
     {
       "area": "search",
@@ -412,7 +415,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 236,
-  "total_bound": 236,
+  "total_required": 239,
+  "total_bound": 239,
   "total_approval_reached": 11
 }

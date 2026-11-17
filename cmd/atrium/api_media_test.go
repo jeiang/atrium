@@ -377,6 +377,25 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	if swept.json["removed"] != float64(1) || swept.json["errors"] != float64(0) || qb.count("delete") != 1 {
 		t.Fatalf("sweep: %s", swept.body)
 	}
+	const download = "cccccccccccccccccccccccccccccccccccccccc"
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/media/torrents", token, map[string]any{"magnet": mediaMagnet(download, "Activity.Check")}), 200, "")
+	listed := func(category string, effect int64) string {
+		t.Helper()
+		for _, raw := range apiItems(t, apiData(t, get("/activity?category="+category+"&limit=100"), http.StatusOK)) {
+			item := raw.(map[string]any)
+			ids, _ := item["effect_ids"].([]any)
+			for _, id := range ids {
+				if number(t, id) == effect {
+					return fmt.Sprint(item["category"])
+				}
+			}
+		}
+		return ""
+	}
+	added, filing := mediaEffectID(t, d, contract.OpAddMagnet, download, "done"), mediaEffectID(t, d, library.OpFile, hash, "done")
+	if got := [4]string{listed("downloads", added), listed("library", added), listed("library", filing), listed("downloads", filing)}; got != [4]string{"downloads", "", "library", ""} {
+		t.Fatalf("activity categories for the torrent add and the filing = %q", got)
+	}
 
 	if err := os.RemoveAll(agent.roots["tv"]); err != nil {
 		t.Fatal(err)

@@ -79,7 +79,7 @@ func birthdayRows(dir string, ws, we time.Time, tz *time.Location) ([]Row, bool)
 				if !asDT(start, tz).Before(we) || !asDT(end, tz).After(ws) {
 					continue
 				}
-				rows = append(rows, Row{UID: uid, Calendar: Birthdays, Start: start, End: end, Title: birthdayTitle(card.Name, date.Year, year)})
+				rows = append(rows, Row{UID: uid, Calendar: Birthdays, Target: Birthdays, Start: start, End: end, Title: birthdayTitle(card.Name, date.Year, year), Recurring: true})
 			}
 		}
 	}

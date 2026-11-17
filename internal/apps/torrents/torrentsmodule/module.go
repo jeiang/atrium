@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/torrents/pages"
 	"github.com/jeiang/atrium/internal/apps/torrents/torrenttools"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/review"
 	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -73,6 +74,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Operations:  ops,
 		Bindings:    append(bindings, routes(nil, nil)...),
 		Connections: torrents.Connections(),
+		EffectCategories: []review.Category{{Name: "downloads", Operations: []string{
+			torrents.OpAddMagnet, torrents.OpAddFile, torrents.OpPriority, torrents.OpTagAdd, torrents.OpTagRemove,
+			torrents.OpStart, torrents.OpStop, torrents.OpDelete, torrents.UndoTorrent,
+		}}},
 		Effects: func(d module.EffectDeps) module.Effects {
 			return module.Effects{Undo: m.App.Undo(d.Ledger, d.Env)}
 		},

@@ -29,6 +29,7 @@ type capabilityNeed struct {
 	Features     []string `json:"features"`
 	Candidates   []string `json:"candidates"`
 	Connection   string   `json:"connection"`
+	Label        string   `json:"connection_label"`
 	State        string   `json:"state"`
 	Met          bool     `json:"met"`
 	Availability string   `json:"availability"`
@@ -151,7 +152,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 
 	model := capabilityDependencies(t, s.base, token)
 	viewer := model.need(t, "grafana", "viewer")
-	if viewer.Connection != "service/grafana-b" || !viewer.Met || viewer.Availability != "available" || viewer.Soft ||
+	if viewer.Connection != "service/grafana-b" || viewer.Label != "Grafana B" || !viewer.Met || viewer.Availability != "available" || viewer.Soft ||
 		!slices.Equal(viewer.Candidates, []string{"service/grafana", "service/grafana-b"}) {
 		t.Fatalf("grafana viewer with the first connection failing = %+v, want bound to the healthy second", viewer)
 	}
@@ -361,7 +362,7 @@ func TestHostOwnedConnectionsStayReadOnlyAndTheOwnersCheckFlagsADrift(t *testing
 	defer func() { s.stop() }()
 	checks := func() (string, map[string]string) {
 		t.Helper()
-		_, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/readyz", nil)
+		_, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/readyz", nil)
 		var got struct {
 			Status string
 			Checks map[string]string

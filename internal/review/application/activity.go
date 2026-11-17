@@ -314,18 +314,21 @@ func (p *sourcePage) saw(k ActivityKey, rows, fetch int) {
 }
 
 func writeCategory(categories []review.Category, operation string) string {
-	fallback := ""
+	fallback, best, length := "", "", -1
 	for _, c := range categories {
 		if len(c.Operations) == 0 {
 			fallback = c.Name
 		}
 		for _, prefix := range c.Operations {
-			if strings.HasPrefix(operation, prefix) {
-				return c.Name
+			if strings.HasPrefix(operation, prefix) && len(prefix) > length {
+				best, length = c.Name, len(prefix)
 			}
 		}
 	}
-	return fallback
+	if length < 0 {
+		return fallback
+	}
+	return best
 }
 
 func effectFilter(categories []review.Category, origins []string, category string, limit int) ledger.Filter {
@@ -337,6 +340,13 @@ func effectFilter(categories []review.Category, origins []string, category strin
 		if len(c.Operations) > 0 {
 			for _, prefix := range c.Operations {
 				f.OperationLike = append(f.OperationLike, prefix+"%")
+				for _, other := range categories {
+					for _, longer := range other.Operations {
+						if other.Name != c.Name && len(longer) > len(prefix) && strings.HasPrefix(longer, prefix) {
+							f.OperationNotLike = append(f.OperationNotLike, longer+"%")
+						}
+					}
+				}
 			}
 			continue
 		}

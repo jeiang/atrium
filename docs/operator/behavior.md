@@ -85,6 +85,16 @@ administrator role or remote emergency bypass.
   `access_emails`, and `access_domains` select admitted identities. Until the
   connection is configured, public sign-in stays closed; the emergency listener
   can still reach settings on the same database.
+- The connection's `client_auth` capability is proven only by a sign-in:
+  its test reports it `untested`. A sign-in with a client secret that succeeds
+  records it `ok`, and a token request the provider refuses as a bad client
+  (401 or `invalid_client`) records it `failing`. Tests and health passes keep
+  that recorded result, so the row stays `ok` (or `failing`) instead of going
+  back to `untested`. A change of the issuer, client ID or client secret
+  (saved settings, host file or secret file) drops it to `untested` until the
+  next sign-in. A host that has not signed in since this rule shipped shows
+  `untested` until its next sign-in, unless its last recorded event before the
+  upgrade was a sign-in.
 - Local and emergency listeners require a numeric loopback bind address and
   loopback socket peers; a non-loopback peer gets 403. A forwarded header never
   makes a remote peer local. Without an explicit allowed Host, a local listener
@@ -126,6 +136,14 @@ administrator role or remote emergency bypass.
   replaces it. Disconnect asks first, then deletes the stored credentials and
   turns the connection off, and only applies to connections the operator set
   up. Fields and credentials the host owns are read-only there.
+- The `/next/` Downloads screen (`/next/apps/torrents`) and Library screens
+  (`/next/apps/media`) are not kept on the device. Removing a torrent asks
+  first and says whether its files are deleted. Removing it with its files
+  needs a press and hold on a phone or touch screen; on a desktop the request
+  is sent only after 10 seconds, and Undo in that time sends nothing. Undo
+  after a pause, resume, follow or unfollow sends the opposite request, because
+  atrium keeps no undo record for these operator changes. While Torrents is
+  off, Library shows that it is unavailable and links to the apps directory.
 
 Public requests are limited in process by token buckets owned by each listener:
 10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`
@@ -305,7 +323,8 @@ triggers a check within a minute. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
-keeps its row and credentials, and is announced once. Declaring it again
+keeps its row and credentials, and is announced once, at the next start of
+`atrium serve` even when a CLI command opened the database first. Declaring it again
 enables it as `untested` with its earlier results cleared, so the next check
 tests it. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
@@ -314,6 +333,21 @@ announce it. Connection notices open the Connections settings page,
 `; affects <features>` when features of an enabled module depend on that
 connection and no other connection serves them; the title is unchanged, and
 recovery sends the same single notice as before.
+
+One cause sends one notice. When a scheduled job's run fails because its
+connection reported a failing or needs-reauth result, the connection notice is
+the only one: that run sends no `Failed: <job>` notice, and the stale check
+does not send `<pass> is stale` for it. A failed run with any other cause keeps
+its job-failed and stale notices.
+
+A connection that alternates between working and failing sends at most one
+failing notice and one recovery notice in 6 hours. A failure within 6 hours of
+the last failing notice is held: its state shows on the Connections page at
+once, but it notifies only if it is still failing on a check 30 minutes or more
+after it began. A recovery notifies only when its failure was notified. The
+service keeps this memory in process: after a restart the first change notifies
+as before, and `atrium connections test` run as its own process notifies each
+change as before.
 
 A built-in connection that atrium creates itself (Open-Meteo, Web fetch, TMDB,
 EZTV, Embedding) follows the apps that need it while it is still
@@ -818,7 +852,9 @@ are refused inputs.
   `library_follow` and `media_channel_remove` is `library_unfollow`. Their
   `tools.tool_<old name>_enabled` keys are retired. Ledger operations,
   undo kinds, job keys and the notification channel keep their `media`
-  names, so earlier history stays listed (Activity category `library`),
+  names, so earlier history stays listed (Activity category `library`, or
+  `downloads` for the Torrents operations such as `media_add_magnet` and
+  `media_stop`),
   attributed and undoable. A pending proposal made under an old tool name
   before this release has no executor; ask again.
 - The notification channel `media` keeps its key and stored choices and is
@@ -843,6 +879,21 @@ are refused inputs.
 - qBittorrent content paths must fit `media_download_path_prefix`. Only a
   confirmed successful filing tags the torrent filed. A lost agent answer
   leaves an unknown effect, blocks repetition, and requires inspection.
+- The media sweep (every 10 minutes, or `atrium media sweep`) also files
+  approved downloads on its own when the plan is exact. Approved means added
+  on the Downloads screen or the API, added by an approved download proposal,
+  or added by a followed show that is still followed. Exact means the default
+  Intake plan has no error, a known title and year, one video file for a
+  movie, an episode for every TV video file, no shared destination, and the
+  agent accepts it. Anything else waits on the Intake list as before, and the
+  request shows why. An item is filed automatically at most once: a failed or
+  unknown attempt is not retried, and an undone filing is not filed again.
+  Each automatic filing sends one Library notification (linked to the chat
+  that requested it) and is undone like a manual one: `atrium effects undo
+  ID` or the Activity page removes the placed links and keeps the download.
+  The first sweep after upgrading files completed, unfiled downloads that a
+  still-followed show added, when their plan is exact. `GET /media/requests`
+  lists requests and their states.
 - Sources must already belong to the configured library group and be
   group-readable, with directories group-writable; otherwise the agent refuses
   them and does not change download inodes.

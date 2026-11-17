@@ -192,18 +192,24 @@ capabilities = ["embeddings"]
 
 	s.stop()
 	setEnv(t, "ATRIUM_HOST_CONFIG", host(broken.URL+"/v1", false))
-	s.start()
-	if state := connectionState(t, dir, "service/qbittorrent"); state != "disabled" {
-		t.Fatalf("state of a connection dropped from the host file = %q", state)
-	}
-	if n := titledNotices(t, d, "atrium: qBittorrent disabled"); n != 1 {
-		t.Fatalf("%d notices for a connection dropped from the host file, want 1", n)
-	}
 	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK || !strings.Contains(listed.stdout, "removed from host configuration") {
 		t.Fatalf("connections list after the host row was dropped: %d %q", listed.code, listed.stdout)
 	}
+	if state := connectionState(t, dir, "service/qbittorrent"); state != "disabled" {
+		t.Fatalf("state of a connection dropped from the host file = %q", state)
+	}
+	if n := titledNotices(t, d, "atrium: qBittorrent disabled"); n != 0 {
+		t.Fatalf("%d notices from a CLI process that reconciled the dropped host row, want 0", n)
+	}
+	s.start()
+	waitFor(t, func() bool { return titledNotices(t, d, "atrium: qBittorrent disabled") > 0 })
+	if n := titledNotices(t, d, "atrium: qBittorrent disabled"); n != 1 {
+		t.Fatalf("%d notices for a connection dropped from the host file, want 1", n)
+	}
+	checked = checkedAt("service/embedding")
 	s.start()
 	defer s.stop()
+	waitFor(t, func() bool { return checkedAt("service/embedding") > checked })
 	if n := titledNotices(t, d, "atrium: qBittorrent disabled"); n != 1 {
 		t.Fatalf("%d notices after restarting without the host row, want 1", n)
 	}
@@ -223,7 +229,7 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 		t.Fatalf("grafana test: %d %s", code, body)
 	}
 	scrape := func() string {
-		code, body, _ := fetch(t, http.DefaultClient, http.MethodGet, ops+"/metrics", nil)
+		code, body, _ := fetch(t, http.DefaultClient, http.MethodGet, ops()+"/metrics", nil)
 		if code != http.StatusOK {
 			t.Fatalf("GET /metrics = %d", code)
 		}
