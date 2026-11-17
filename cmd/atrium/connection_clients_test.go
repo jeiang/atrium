@@ -62,7 +62,6 @@ func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnc
 }
 
 func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
-	t.Parallel()
 	var status atomic.Int32
 	tmdb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if code := status.Load(); code != 0 {

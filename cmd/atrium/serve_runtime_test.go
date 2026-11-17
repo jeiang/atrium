@@ -121,7 +121,6 @@ func TestServeRuntimeRunsADueJobOnceBesideAConcurrentTick(t *testing.T) {
 }
 
 func TestServeRuntimeStartsEachMonitorOnce(t *testing.T) {
-	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	embedder := newFakeOpenAI(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embedder.URL+"/v1", "embeddinggemma", ""))
@@ -176,7 +175,6 @@ func TestServeRuntimeStartsEachMonitorOnce(t *testing.T) {
 }
 
 func TestServeRuntimeEmbedderFaultRestartsOnlyItsService(t *testing.T) {
-	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	embedder := newFaultyEmbedder(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embedder.URL+"/v1", "embeddinggemma", ""))
@@ -231,7 +229,6 @@ func TestServeRuntimeEmbedderFaultRestartsOnlyItsService(t *testing.T) {
 }
 
 func TestServeRuntimeDisablingAModuleStopsItsJobAndRestartsOneInstance(t *testing.T) {
-	t.Parallel()
 	d, api, f, before := startWeeklyReview(t, asstReply("reviewed"))
 	release := asstHold(t, api)
 	_, logs := startServeLogged(t, f.dir)

@@ -156,7 +156,6 @@ func TestServeWatchesHostICloudAccountAfterTransientCLI(t *testing.T) {
 }
 
 func TestServeWatchesEachAccountAndRestartsOnlyTheDroppedOne(t *testing.T) {
-	t.Parallel()
 	dir, fakes := watchRig(t, map[string]string{"me@home.test": "home-pass", "me@work.test": "work-pass"},
 		mailAccount{"home", "icloud", "me@home.test", "home-pass", false}, mailAccount{"work", "icloud", "me@work.test", "work-pass", false})
 	home, work := fakes["home"], fakes["work"]
@@ -382,7 +381,6 @@ func TestServeDrainFinishesTheCurrentWatchPass(t *testing.T) {
 }
 
 func TestServeWatchInShadowWritesNothing(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "shadow")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)
@@ -410,7 +408,6 @@ func TestServeWatchInShadowWritesNothing(t *testing.T) {
 }
 
 func TestServeQuietWatchPassesLeaveNoOperationAudit(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "shadow")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)

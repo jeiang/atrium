@@ -435,7 +435,6 @@ func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 }
 
 func TestAsstWebFetchRefusesUntypedAndNonPublicURLs(t *testing.T) {
-	t.Parallel()
 	var hits atomic.Int32
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
