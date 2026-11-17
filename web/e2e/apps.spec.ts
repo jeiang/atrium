@@ -25,7 +25,13 @@ test.describe('the apps hub', () => {
     await gotoShell(page, '/apps');
     await expect(page.getByRole('heading', { level: 1, name: 'Apps' })).toBeVisible();
     const list = page.getByRole('list', { name: 'Apps', exact: true });
-    await expect(list.getByRole('heading', { level: 2 })).toHaveText(['Mail', 'Calendar', 'Media', 'Orchard']);
+    await expect(list.getByRole('heading', { level: 2 })).toHaveText([
+      'Mail',
+      'Calendar',
+      'Torrents',
+      'Library',
+      'Orchard',
+    ]);
     await expect(card(page, 'grafana')).toHaveCount(0);
     const decisions = card(page, 'mail').getByRole('link', { name: /^Mail decisions.*opens the current interface$/ });
     await expect(decisions).toHaveAttribute('href', '/triage');
@@ -56,7 +62,7 @@ test.describe('the apps hub', () => {
   });
 
   test('with every app off the hub points to the directory', async ({ page }) => {
-    await useScenario(page, { apps: { off: ['mail', 'calendar', 'media', 'orchard'] } });
+    await useScenario(page, { apps: { off: ['mail', 'calendar', 'torrents', 'media', 'orchard'] } });
     await gotoShell(page, '/apps');
     await expect(page.getByText('No apps are on')).toBeVisible();
     await page.getByRole('link', { name: 'Open the directory' }).click();
@@ -181,7 +187,7 @@ test.describe('apps design checks', () => {
     test.describe(layout.name, () => {
       test.use({ viewport: { width: layout.width, height: layout.height }, hasTouch: layout.touch });
 
-      for (const path of ['/apps', '/apps/directory', '/apps/media']) {
+      for (const path of ['/apps', '/apps/directory', '/apps/orchard']) {
         test(`${path} fits, rounds and passes axe`, async ({ page }) => {
           await useScenario(page, { pause: { paused: true } });
           await gotoShell(page, path);
