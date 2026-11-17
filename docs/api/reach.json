@@ -64,6 +64,7 @@
         "assistant.about",
         "assistant.home",
         "assistant.today.ensure",
+        "calendar.calendars",
         "calendar.event",
         "calendar.event-create",
         "calendar.event-delete",
@@ -73,8 +74,8 @@
         "core.shell",
         "state.events"
       ],
-      "required": 11,
-      "bound": 11
+      "required": 12,
+      "bound": 12
     },
     {
       "area": "inbox",
@@ -412,7 +413,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 236,
-  "total_bound": 236,
+  "total_required": 237,
+  "total_bound": 237,
   "total_approval_reached": 11
 }

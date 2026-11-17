@@ -61,18 +61,19 @@ type QueueSource struct {
 }
 
 type QueueItem struct {
-	ID         string      `json:"id"`
-	Kind       string      `json:"kind" api:"enum=ask|proposal|draft|attention"`
-	Title      string      `json:"title"`
-	Summary    string      `json:"summary"`
-	Source     QueueSource `json:"source"`
-	ArrivedAt  float64     `json:"arrived_at"`
-	Due        *float64    `json:"due,omitempty"`
-	WaitingFor string      `json:"waiting_for" api:"enum=answer|permission|approval|send|resolve|review|due"`
-	LoopID     *int64      `json:"loop_id,omitempty"`
-	Module     string      `json:"module"`
-	rank       int
-	at         float64
+	ID           string      `json:"id"`
+	Kind         string      `json:"kind" api:"enum=ask|proposal|draft|attention"`
+	Title        string      `json:"title"`
+	Summary      string      `json:"summary"`
+	Source       QueueSource `json:"source"`
+	ArrivedAt    float64     `json:"arrived_at"`
+	Due          *float64    `json:"due,omitempty"`
+	WaitingFor   string      `json:"waiting_for" api:"enum=answer|permission|approval|send|resolve|review|due"`
+	LoopID       *int64      `json:"loop_id,omitempty"`
+	ProposalKind string      `json:"proposal_kind,omitempty"`
+	Module       string      `json:"module"`
+	rank         int
+	at           float64
 }
 
 type QueueCounts struct {
@@ -93,9 +94,10 @@ func (k QueueKey) Valid() bool {
 }
 
 type QueueInput struct {
-	Kind  string
-	After *QueueKey
-	Limit int
+	Kind   string
+	Module string
+	After  *QueueKey
+	Limit  int
 }
 
 type Queue struct {
@@ -119,7 +121,7 @@ func (s *Service) Queue(ctx context.Context, in QueueInput) (application.Read[Qu
 	return queueRead(ctx, s, QueueName, in, func(items []QueueItem) (Queue, error) {
 		out := Queue{Items: []QueueItem{}, Total: len(items), Counts: countQueue(items)}
 		for _, item := range items {
-			if in.Kind != "" && item.Kind != in.Kind {
+			if in.Kind != "" && item.Kind != in.Kind || in.Module != "" && item.Module != in.Module {
 				continue
 			}
 			if in.After != nil && item.Key().compare(*in.After) <= 0 {
@@ -229,7 +231,7 @@ func (s *Service) queueItems(ctx context.Context, q db.Querier, now float64) ([]
 	for _, p := range pending {
 		kind := s.proposalKind(p.Kind)
 		item := QueueItem{Kind: QueueProposal, Title: p.Title, Summary: cmp.Or(kind.Label, p.Kind), Source: QueueSource{Type: "proposal", ID: strconv.FormatInt(p.ID, 10)},
-			ArrivedAt: p.CreatedTS, WaitingFor: WaitingApproval, Module: kind.Module, rank: rankWaiting, at: p.CreatedTS}
+			ArrivedAt: p.CreatedTS, WaitingFor: WaitingApproval, ProposalKind: p.Kind, Module: kind.Module, rank: rankWaiting, at: p.CreatedTS}
 		if p.Kind == permission.Kind {
 			item.Kind, item.WaitingFor, item.rank = QueueAsk, WaitingPermission, rankBlocksAssistant
 		}
@@ -243,7 +245,7 @@ func (s *Service) queueItems(ctx context.Context, q db.Querier, now float64) ([]
 		kind := s.proposalKind(p.Kind)
 		add(QueueItem{Kind: QueueProposal, Title: p.Title, Summary: cmp.Or(kind.Label, p.Kind) + ": " + cmp.Or(p.BlockedError, proposals.UnknownOutcomeText),
 			Source: QueueSource{Type: "proposal", ID: strconv.FormatInt(p.ID, 10)}, ArrivedAt: p.CreatedTS, WaitingFor: WaitingResolve, Module: kind.Module,
-			rank: rankWaiting, at: p.CreatedTS})
+			ProposalKind: p.Kind, rank: rankWaiting, at: p.CreatedTS})
 	}
 
 	for _, c := range s.kinds {

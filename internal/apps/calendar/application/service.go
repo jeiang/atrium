@@ -19,6 +19,7 @@ import (
 const (
 	ListName          application.Name = "calendar.list"
 	FindSlotName      application.Name = "calendar.find-slot"
+	CalendarsName     application.Name = "calendar.calendars"
 	ProposeCreateName application.Name = "calendar.propose-create"
 	ProposeUpdateName application.Name = "calendar.propose-update"
 	ProposeRSVPName   application.Name = "calendar.propose-rsvp"
@@ -51,6 +52,10 @@ func Describe() []application.Definition {
 		application.Describe[DeleteInput, Deleted](RequestDeleteName, application.Command,
 			[]application.Authority{application.Approved}, application.External, true),
 	}
+}
+
+func DescribeCalendars() application.Definition {
+	return application.Describe[CalendarsInput, CalendarList](CalendarsName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
 }
 
 func (s *Service) read(ctx context.Context, name application.Name, scopes []string, input, data any) (application.Revision, error) {
