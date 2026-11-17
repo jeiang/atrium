@@ -1,9 +1,55 @@
 @font-face {
   font-family: "Alegreya Sans Fallback";
+  font-style: normal;
+  font-weight: 400;
   src: local("Arial");
   size-adjust: 84.95%;
   ascent-override: 105.94%;
   descent-override: 35.31%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Alegreya Sans Fallback";
+  font-style: italic;
+  font-weight: 400;
+  src: local("Arial Italic"), local("Arial-ItalicMT");
+  size-adjust: 77.78%;
+  ascent-override: 115.71%;
+  descent-override: 38.57%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Alegreya Sans Fallback";
+  font-style: normal;
+  font-weight: 500;
+  src: local("Arial");
+  size-adjust: 85.99%;
+  ascent-override: 104.66%;
+  descent-override: 34.89%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Alegreya Sans Fallback";
+  font-style: normal;
+  font-weight: 700;
+  src: local("Arial Bold"), local("Arial-BoldMT");
+  size-adjust: 81.49%;
+  ascent-override: 110.44%;
+  descent-override: 36.81%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Alegreya Sans Fallback";
+  font-style: normal;
+  font-weight: 800;
+  src: local("Arial Bold"), local("Arial-BoldMT");
+  size-adjust: 82.50%;
+  ascent-override: 109.09%;
+  descent-override: 36.36%;
   line-gap-override: 0%;
 }
 

@@ -8,6 +8,7 @@ import { startWorker, useWorker } from './shared/worker';
 import App from './shell/App.svelte';
 import { firstView } from './shell/firstView';
 import { shellQuery } from './shell/frame';
+import { preload, route } from './shell/router';
 import { loadSession, session } from './shell/session.svelte';
 import faces from './tokens/faces.css?url';
 
@@ -16,6 +17,13 @@ if (import.meta.env.MODE === 'mock') {
   useWorker(await startMocks());
 }
 const started = loadSession();
+void preload(route.pathname as Parameters<typeof preload>[0]);
+const chat = /^\/chat\/([1-9]\d*)$/.exec(route.pathname);
+if (chat) {
+  void import('./features/chats/thread')
+    .then(({ prefetchThread }) => prefetchThread(Number(chat[1])))
+    .catch(() => undefined);
+}
 void queryClient.prefetchQuery(shellQuery);
 if (location.pathname === import.meta.env.BASE_URL) {
   void queryClient.prefetchQuery(homeQuery);

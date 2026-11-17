@@ -60,7 +60,7 @@
   });
   const offline = $derived(unreachable(pending));
   const lede = $derived.by(() => {
-    if (!pending.data) return undefined;
+    if (!pending.data) return pending.isPending && !offline ? '\u00a0' : undefined;
     if (waiting === 0) return 'Nothing waits on you.';
     const head = `${plural(waiting, 'item')} waiting on you`;
     return counts ? `${head}: ${counts}` : head;

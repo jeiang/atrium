@@ -83,10 +83,10 @@
       <SelectField label="Scope" options={scopeOptions} bind:value={scope} />
     </div>
   </div>
-  {#if instructions.data && !filtered}
+  {#if !filtered}
     <List label="Pinned" class="subjects__pinned">
       <ListRow
-        title={instructions.data.record.title || 'Standing instructions'}
+        title={instructions.data?.record.title || 'Standing instructions'}
         meta="Read on every run"
         href={p('/knowledge/instructions')}
         selected={standing}

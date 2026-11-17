@@ -18,7 +18,7 @@ const filePage = () => preloadMarkdown(import('../features/files/FilePage.svelte
 
 const settingsPage = () => import('../features/settings/SettingsPage.svelte').catch(unavailable);
 const calendar = () => import('../apps/calendar/CalendarPage.svelte').catch(unavailable);
-export const { p, navigate, isActive, route } = createRouter(
+export const { p, navigate, isActive, route, preload } = createRouter(
   {
     hooks: { afterLoad: routeLoaded },
     '/': { '/': () => import('../features/home/HomePage.svelte').catch(unavailable), meta: { title: 'Home' } },

@@ -121,6 +121,7 @@
       (root + "/web/package.json")
       (root + "/web/budgets.json")
       (root + "/web/scripts/size.ts")
+      (root + "/web/src/shell/router.ts")
     ];
   };
 in {
