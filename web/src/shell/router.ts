@@ -16,6 +16,7 @@ const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgeP
 const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
 
 const settingsPage = () => import('../features/settings/SettingsPage.svelte').catch(unavailable);
+const calendar = () => import('../apps/calendar/CalendarPage.svelte').catch(unavailable);
 export const { p, navigate, isActive, route } = createRouter(
   {
     hooks: { afterLoad: routeLoaded },
@@ -63,6 +64,7 @@ export const { p, navigate, isActive, route } = createRouter(
         '/': () => import('../features/apps/DirectoryPage.svelte').catch(unavailable),
         meta: { title: 'All apps' },
       },
+      '/calendar': { '/': calendar, '/week': calendar, '/candidates': calendar, meta: { title: 'Calendar' } },
       '/:app': () => import('../features/apps/AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },
     },
