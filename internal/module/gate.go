@@ -41,9 +41,7 @@ func (s *Set) Pages() []web.Page {
 		}
 	}
 	groups, generic, control := s.settingPages()
-	settingsPage := settingspage.Page(groups, generic, control, s.cat.Sections())
-	settingsPage.Module = web.Owned(Core, settingsPage.Module, nil)
-	return append(pages, settingsPage)
+	return append(pages, settingspage.Page(groups, generic, control, s.cat.Sections()))
 }
 
 func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error) {
