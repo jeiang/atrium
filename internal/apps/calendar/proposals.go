@@ -72,6 +72,9 @@ type undoPlan struct {
 	UID      string `json:"uid"`
 	ICS      string `json:"ics,omitempty"`
 	Google   string `json:"google,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Revision string `json:"revision,omitempty"`
+	after    *Event
 }
 
 type ExecuteResult struct {
@@ -225,7 +228,7 @@ func encode(v any) (json.RawMessage, error) {
 	return raw, nil
 }
 
-func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, operation string, target Target, uid string,
+func (p *Proposals) begin(ctx context.Context, proposalID *int64, operation string, target Target, uid string,
 	action, before, undo any) (ledger.Ticket, error) {
 	key := string(target) + ":" + uid
 	body, err := encode(action)
@@ -242,7 +245,7 @@ func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, operati
 	}
 	return p.Ledger.Begin(ctx, ledger.New{
 		Origin: "calendar", Operation: operation, OperationKey: operation + ":" + ledger.NewKey(),
-		Target: key, ProposalID: &prop.ID, Action: body, Before: prior, Undo: plan,
+		Target: key, ProposalID: proposalID, Action: body, Before: prior, Undo: plan,
 		Resources: []ledger.Resource{{Key: "calendar:" + key}},
 	}, nil)
 }
@@ -292,7 +295,7 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	}
 	action := actionPayload{Type: Kind, Calendar: string(target), UID: spec.UID}
 	undo := undoPlan{Op: UndoOp, Calendar: string(target), UID: spec.UID}
-	ticket, err := p.begin(ctx, prop, Kind, target, spec.UID, action, nil, undo)
+	ticket, err := p.begin(ctx, &prop.ID, Kind, target, spec.UID, action, nil, undo)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +331,14 @@ func (p *Proposals) Proposals(owner string) []proposals.Definition {
 }
 
 func (p *Proposals) Undo() []ledger.UndoDefinition {
-	return []ledger.UndoDefinition{{Operation: RestoreOp, Undoer: ledger.Undoer{
+	return []ledger.UndoDefinition{
+		{Operation: RestoreOp, Undoer: undoer(p.Restore)},
+		{Operation: UndeleteOp, Undoer: undoer(p.Undelete)},
+	}
+}
+
+func undoer(run func(context.Context, json.RawMessage) (any, error)) ledger.Undoer {
+	return ledger.Undoer{
 		Validate: func(raw json.RawMessage) error {
 			var info undoPlan
 			if err := json.Unmarshal(raw, &info); err != nil || info.Calendar == "" || info.UID == "" {
@@ -337,7 +347,7 @@ func (p *Proposals) Undo() []ledger.UndoDefinition {
 			return nil
 		},
 		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			value, err := p.Restore(ctx, raw)
+			value, err := run(ctx, raw)
 			if err != nil {
 				var failed Error
 				switch {
@@ -354,5 +364,5 @@ func (p *Proposals) Undo() []ledger.UndoDefinition {
 			}
 			return ledger.Result{State: ledger.Done, After: after}, nil
 		},
-	}}}
+	}
 }

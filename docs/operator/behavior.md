@@ -447,8 +447,8 @@ next tick (30 seconds). While paused:
   calendar candidates) is refused.
 - Assistant jobs, schedules and the Grafana sampler do not run; chat stays
   available, and the assistant's direct mailbox writes are refused.
-- Operator sends and approved proposals still work: pause blocks automatic
-  work, not consent.
+- Operator sends, operator calendar event writes and approved proposals still
+  work: pause blocks automatic work, not consent.
 
 Resume releases everything at once. A write skipped while paused is done once
 on the next pass, and a write with an unknown outcome stays blocked until the
@@ -518,6 +518,16 @@ or interruption can leave the result unknown. atrium never treats that as
 permission to repeat the write. Review shows pending and blocked proposals;
 Activity shows recorded effects and available undo. Undo is a new guarded
 effect, not deletion of history, and can itself fail or become unknown.
+
+Operator calendar event writes (create, edit and delete on iCloud or Google,
+through the API or the web client) are each one effect with undo: undoing a
+create deletes the event, undoing an edit puts the old fields back, and
+undoing a delete puts the event back. Undo of an edit is refused when the
+event changed again after the edit. An edit needs the event's current
+revision in `If-Match`, so a change made elsewhere since the read is not
+overwritten. A write with an unknown outcome blocks further writes to that
+event until it is resolved; it is never retried. The Birthdays calendar is
+read-only.
 
 Check the external mailbox, calendar, or media state before resolving an
 unknown or partial result. The effect detail and `atrium effects` commands
