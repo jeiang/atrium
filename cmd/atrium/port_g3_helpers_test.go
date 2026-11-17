@@ -22,6 +22,15 @@ func okG3(t *testing.T, label string, got apiReply) map[string]any {
 	return got.json
 }
 
+func dataG3(t *testing.T, label string, got apiReply) map[string]any {
+	t.Helper()
+	body := okG3(t, label, got)
+	if data, ok := body["data"].(map[string]any); ok {
+		return data
+	}
+	return body
+}
+
 func listG3(t *testing.T, label string, got apiReply, field string) []map[string]any {
 	t.Helper()
 	data, _ := okG3(t, label, got)["data"].(map[string]any)
@@ -30,6 +39,17 @@ func listG3(t *testing.T, label string, got apiReply, field string) []map[string
 	for _, item := range raw {
 		m, _ := item.(map[string]any)
 		out = append(out, m)
+	}
+	return out
+}
+
+func activityG3(t *testing.T, c *webClient, query, source string, id int64) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, item := range listG3(t, "activity", c.do(http.MethodGet, "/web/v1/activity"+query, nil), "items") {
+		if item["source"] == source && item["id"] == float64(id) {
+			out = append(out, item)
+		}
 	}
 	return out
 }
@@ -70,12 +90,12 @@ func needStateG3(t *testing.T, base, module, connection string) string {
 			continue
 		}
 		candidates, _ := need["candidates"].([]any)
-		if need["connection"] == connection || slices.Contains(candidates, any(connection)) {
+		if need["kind"] == connection || need["connection"] == connection || slices.Contains(candidates, any(connection)) {
 			state, _ := need["state"].(string)
 			return state
 		}
 	}
-	t.Fatalf("no %s need on %s: %.1200s", module, connection, got.body)
+	t.Fatalf("no %s need on %s: %.4000s", module, connection, got.body)
 	return ""
 }
 

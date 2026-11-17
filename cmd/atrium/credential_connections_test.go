@@ -84,17 +84,17 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 		}
 	}
 
-	try("service/grafana", "glsa_bad", http.StatusConflict, "", "Grafana refused the token")
+	try("service/grafana", "glsa_bad", http.StatusUnprocessableEntity, "", "Grafana refused the token")
 	if stored("service/grafana", "api_key") {
 		t.Error("a Grafana token that failed Test was stored")
 	}
-	try("service/grafana", "glsa_none", http.StatusConflict, "", "may not search dashboards")
+	try("service/grafana", "glsa_none", http.StatusUnprocessableEntity, "", "may not search dashboards")
 	if stored("service/grafana", "api_key") {
 		t.Error("a Grafana token that failed Test was stored")
 	}
 	try("service/grafana", "glsa_good", http.StatusOK, "ok", "signed in as sa-atrium")
 
-	try("service/anthropic", "sk-ant-bad", http.StatusConflict, "", "Anthropic refused the key")
+	try("service/anthropic", "sk-ant-bad", http.StatusUnprocessableEntity, "", "Anthropic refused the key")
 	if stored("service/anthropic", "api_key") {
 		t.Error("a refused Anthropic key was stored")
 	}

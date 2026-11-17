@@ -60,6 +60,6 @@ func TestAppSubNavigationFollowsTheModuleFlag(t *testing.T) {
 	}
 	waitFor(t, func() bool { return mailSection() == nil })
 	for _, path := range mailReads {
-		expectAPI(t, browser.do(http.MethodGet, path, nil), http.StatusConflict, "module_disabled")
+		expectAPI(t, browser.do(http.MethodGet, path, nil), http.StatusNotFound, "not_found")
 	}
 }

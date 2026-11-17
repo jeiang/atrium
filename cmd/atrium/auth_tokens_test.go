@@ -229,7 +229,7 @@ func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
 	if got := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": " "}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "name") {
 		t.Fatalf("a blank name was not refused: %d %.300s", got.status, got.body)
 	}
-	if got := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "x", "expires_at": "tomorrow"}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "RFC 3339") {
+	if got := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "x", "expires_at": "tomorrow"}); got.status != http.StatusBadRequest || !strings.Contains(got.body, "parsing time") {
 		t.Fatalf("a bad expiry was not refused: %d %.300s", got.status, got.body)
 	}
 	expectAPI(t, browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "csrf"}, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
