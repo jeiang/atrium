@@ -78,7 +78,7 @@ func (s *Store) notice(ctx context.Context, id ID, previous, next State, reason,
 			hint = RepairHint(view)
 		}
 	}
-	if !s.damp(id, previous, next) {
+	if !s.damp(context.WithoutCancel(ctx), id, previous, next) {
 		return
 	}
 	state := strings.ReplaceAll(string(next), "_", " ")
@@ -167,12 +167,12 @@ func HealthStates(ctx context.Context, q db.Querier) ([]HealthState, error) {
 }
 
 type outcome struct {
-	ID       ID
-	Revision int64
-	OK       bool
-	// Capability is the capability the request used, when the kind says
-	// which one its endpoint serves.
+	ID         ID
+	Revision   int64
+	OK         bool
 	Capability string
+	Held       *Hold
+	Refused    Result
 }
 
 type RuntimeReport struct {
@@ -206,9 +206,6 @@ var (
 	reporters sync.Map
 )
 
-// Outcomes receives the request outcomes of leases opened under reg, the
-// connection registry of one running app. Each serving app registers its own
-// channel, so outcomes never cross to another app in the same process.
 func Outcomes(reg *Registry) (<-chan outcome, func()) {
 	ch := make(chan outcome, 64)
 	outcomes.Store(reg, ch)
@@ -216,19 +213,22 @@ func Outcomes(reg *Registry) (<-chan outcome, func()) {
 }
 
 func report(reg *Registry, o outcome) {
+	if o.OK && o.Capability != "" {
+		succeededHold(reg, o.ID, o.Capability)
+	}
 	ch, registered := outcomes.Load(reg)
 	if !registered {
 		return
 	}
 	key := succeededKey{reg: reg, id: o.ID, capability: o.Capability}
-	if o.OK {
+	switch {
+	case o.OK:
 		now := time.Now().UnixNano()
 		if last, seen := succeeded.Load(key); seen && now-last.(int64) < int64(time.Minute) {
 			return
 		}
 		succeeded.Store(key, now)
-	} else {
-		// The first success after a failure is the one that recovers.
+	default:
 		succeeded.Delete(key)
 	}
 	select {
@@ -244,6 +244,11 @@ func Reports(d *db.DB) (<-chan RuntimeReport, func()) {
 }
 
 func (l *Lease) Report(r Result) {
+	if r.State == OK && l.store != nil && r.Capability != "" {
+		if v, ok := holds.Load(l.holdKey(r.Capability)); ok && v.(Hold).Refusals > 0 {
+			report(l.store.reg, outcome{ID: l.id, Revision: l.revision, Capability: r.Capability, OK: true})
+		}
+	}
 	if l.store == nil || l.store.d == nil || r.Capability == "" {
 		return
 	}
@@ -336,6 +341,7 @@ func same(a, b State) bool {
 }
 
 type reporter struct {
+	lease      *Lease
 	reg        *Registry
 	id         ID
 	revision   int64
@@ -344,12 +350,29 @@ type reporter struct {
 }
 
 func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
+	capability := r.capability
+	if named, ok := req.Context().Value(servingKey{}).(string); ok {
+		capability = named
+	}
+	if capability != "" {
+		if err := r.lease.skipUnattended(req.Context(), capability); err != nil {
+			if req.Body != nil {
+				_ = req.Body.Close()
+			}
+			return nil, err
+		}
+	}
 	resp, err := r.next.RoundTrip(req)
 	switch {
 	case err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500):
-		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: r.capability})
+		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: capability})
 	case err == nil && resp.StatusCode < http.StatusBadRequest:
-		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: r.capability, OK: true})
+		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: capability, OK: true})
+	}
+	if err == nil && capability != "" {
+		if wait := RetryAfter(resp.Header.Get("Retry-After"), time.Now()); Refuses(resp.StatusCode, wait) {
+			r.lease.refused(req.Context(), resp.StatusCode, wait, Result{Capability: capability, State: Failing, Reason: fmt.Sprintf("%s answered %d", req.URL.Host, resp.StatusCode)})
+		}
 	}
 	return resp, err
 }
@@ -366,12 +389,16 @@ func (l *Lease) reporting(endpoint string, client *http.Client) *http.Client {
 	if client.Transport == nil || l.store == nil || l.store.reg == nil {
 		return client
 	}
-	client.Transport = reporter{reg: l.store.reg, id: l.id, revision: l.revision, capability: l.serves(endpoint), next: client.Transport}
+	client.Transport = reporter{lease: l, reg: l.store.reg, id: l.id, revision: l.revision, capability: l.serves(endpoint), next: client.Transport}
 	return client
 }
 
-// serves names the capability that requests to endpoint use, or "" when the
-// kind does not say and offers more than one.
+type servingKey struct{}
+
+func Serving(ctx context.Context, capability string) context.Context {
+	return context.WithValue(ctx, servingKey{}, capability)
+}
+
 func (l *Lease) serves(endpoint string) string {
 	def, ok := l.store.reg.Lookup(l.kind)
 	switch {
@@ -396,37 +423,48 @@ const (
 	lastingAfter = 30 * time.Minute
 )
 
-type noticeKey struct {
-	d  *db.DB
-	id ID
-}
-
 type noticeMemory struct {
-	toldAt time.Time
-	open   bool
-	heldAt time.Time
+	ToldAt time.Time `json:"told_at,omitzero"`
+	Open   bool      `json:"open"`
+	HeldAt time.Time `json:"held_at,omitzero"`
 }
 
-var (
-	noticesMu sync.Mutex
-	notices   = map[noticeKey]noticeMemory{}
-)
+var noticesMu sync.Mutex
 
 func unhealthy(s State) bool { return s == Failing || s == NeedsReauth }
 
-func (s *Store) damp(id ID, previous, next State) bool {
-	key := noticeKey{d: s.d, id: id}
+func (s *Store) damp(ctx context.Context, id ID, previous, next State) bool {
 	noticesMu.Lock()
 	defer noticesMu.Unlock()
-	m, seen := notices[key]
-	if !seen {
-		m = noticeMemory{open: unhealthy(previous)}
-	}
-	send, m := dampNotice(m, previous, next, s.now())
-	if unhealthy(next) || next == OK || next == Expiring {
-		notices[key] = m
-	} else {
-		delete(notices, key)
+	send := true
+	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE connections SET notice_json = notice_json WHERE id = ?", id); err != nil {
+			return err
+		}
+		var raw string
+		if err := tx.QueryRowContext(ctx, "SELECT notice_json FROM connections WHERE id = ?", id).Scan(&raw); err != nil {
+			return err
+		}
+		m := noticeMemory{Open: unhealthy(previous)}
+		if raw != "{}" {
+			if err := json.Unmarshal([]byte(raw), &m); err != nil {
+				return err
+			}
+		}
+		send, m = dampNotice(m, previous, next, s.now())
+		stored := []byte("{}")
+		if unhealthy(next) || next == OK || next == Expiring {
+			var err error
+			if stored, err = json.Marshal(m); err != nil {
+				return err
+			}
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE connections SET notice_json = ? WHERE id = ?", string(stored), id)
+		return err
+	})
+	if err != nil {
+		log.Warn("connection notice memory failed", logx.Integration, string(id), logx.Err, err.Error())
+		return true
 	}
 	return send
 }
@@ -434,24 +472,24 @@ func (s *Store) damp(id ID, previous, next State) bool {
 func dampNotice(m noticeMemory, previous, next State, now time.Time) (bool, noticeMemory) {
 	switch {
 	case unhealthy(next) && previous == next:
-		if m.open || m.heldAt.IsZero() || now.Sub(m.heldAt) < lastingAfter {
+		if m.Open || m.HeldAt.IsZero() || now.Sub(m.HeldAt) < lastingAfter {
 			return false, m
 		}
-		return true, noticeMemory{toldAt: now, open: true}
+		return true, noticeMemory{ToldAt: now, Open: true}
 	case unhealthy(next):
-		if !m.toldAt.IsZero() && now.Sub(m.toldAt) < flapWindow {
-			if !m.open && m.heldAt.IsZero() {
-				m.heldAt = now
+		if !m.ToldAt.IsZero() && now.Sub(m.ToldAt) < flapWindow {
+			if !m.Open && m.HeldAt.IsZero() {
+				m.HeldAt = now
 			}
 			return false, m
 		}
-		return true, noticeMemory{toldAt: now, open: true}
+		return true, noticeMemory{ToldAt: now, Open: true}
 	case unhealthy(previous) && (next == OK || next == Expiring):
-		m.heldAt = time.Time{}
-		if !m.open {
+		m.HeldAt = time.Time{}
+		if !m.Open {
 			return false, m
 		}
-		m.open = false
+		m.Open = false
 		return true, m
 	}
 	return true, m

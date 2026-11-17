@@ -74,6 +74,7 @@ func (s Settings) Agent(capability string) (*agentclient.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	client.Capability = capability
 	if s.Store != nil {
 		lease, store := s.AgentLease, s.Store
 		client.Observe = func(ctx context.Context, state connections.State, reason string) {

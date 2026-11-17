@@ -262,6 +262,13 @@ func TestARefusedIMAPLoginNeedsReauthOnceAtRuntimeAndInTheCheck(t *testing.T) {
 	if _, err := d.Write.Exec(`UPDATE connections SET state = 'ok', reason = 'seeded', checked_at = ?, results_json = '[{"capability":"imap","state":"ok"},{"capability":"smtp","state":"ok"}]' WHERE id = 'mail/home'`, float64(time.Now().Unix())); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if t.Failed() {
+			var state, reason, results string
+			_ = d.Read.QueryRow("SELECT state, reason, results_json FROM connections WHERE id = 'mail/home'").Scan(&state, &reason, &results)
+			t.Logf("connection row at failure: %s %s %s", state, reason, results)
+		}
+	})
 	label, _, _ := runtimeRow(t, dir, "mail/home")
 	notices := connectionNotices(t, dir, label)
 

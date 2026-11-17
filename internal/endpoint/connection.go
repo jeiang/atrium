@@ -182,21 +182,26 @@ func (e *Embedding) Post(ctx context.Context, base string, payload any) (json.Ra
 	return raw, err
 }
 
-func (e *Embedding) Probe(ctx context.Context) (string, int) {
-	reason, dim, _ := e.ProbeWithStatus(ctx)
-	return reason, dim
+func (e *Embedding) Probe(ctx context.Context) (int, error) {
+	dim, _, err := e.probe(ctx)
+	return dim, err
 }
 
 func (e *Embedding) ProbeWithStatus(ctx context.Context) (string, int, int) {
-	raw, status, err := e.post(ctx, e.Base, map[string]any{"model": e.Model, "input": []string{"atrium probe"}})
-	if err != nil {
-		return err.Error(), 0, status
-	}
-	dim, err := embeddingDimension(raw)
+	dim, status, err := e.probe(ctx)
 	if err != nil {
 		return err.Error(), 0, status
 	}
 	return "", dim, status
+}
+
+func (e *Embedding) probe(ctx context.Context) (int, int, error) {
+	raw, status, err := e.post(ctx, e.Base, map[string]any{"model": e.Model, "input": []string{"atrium probe"}})
+	if err != nil {
+		return 0, status, err
+	}
+	dim, err := embeddingDimension(raw)
+	return dim, status, err
 }
 
 func (e *Embedding) post(ctx context.Context, base string, payload any) (json.RawMessage, int, error) {
@@ -221,6 +226,9 @@ func (e *Embedding) post(ctx context.Context, base string, payload any) (json.Ra
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, 0, ctx.Err()
+		}
+		if _, held := connections.HeldUntil(err); held {
+			return nil, 0, err
 		}
 		return nil, 0, &httpx.ServiceUnavailable{Msg: fmt.Sprintf("%s: %s", rawURL, httpx.Reason(err))}
 	}

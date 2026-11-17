@@ -86,6 +86,14 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 		t.Fatalf("channels search: %d %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() {
+		if t.Failed() {
+			var state, reason, results string
+			var checked float64
+			_ = d.Read.QueryRow("SELECT state, reason, results_json, COALESCE(checked_at,0) FROM connections WHERE id = 'service/tmdb'").Scan(&state, &reason, &results, &checked)
+			t.Logf("connection row at failure: %s %s %s %.0f now %d", state, reason, results, checked, time.Now().Unix())
+		}
+	})
 	observed := func() (rows, noop, foreign int) {
 		t.Helper()
 		if err := d.Read.QueryRow(`SELECT COUNT(*), COALESCE(SUM(outcome = 'noop'), 0), COALESCE(SUM(actor <> 'service:connection-health' OR source <> 'job'), 0)
@@ -94,20 +102,39 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 		}
 		return rows, noop, foreign
 	}
-	// Let the start check settle and age it past the 5 minute limit, so the
-	// failed request below is the one that triggers the next check. The health
-	// watch takes request outcomes between its passes, and the start pass also
-	// waits on the unreachable qBittorrent host, so allow it a minute.
 	waitFor(t, func() bool {
 		state := connectionState(t, dir, "service/tmdb")
 		return state != "" && state != "untested"
 	})
-	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
-		t.Fatal(err)
+	backdate := func() {
+		t.Helper()
+		if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
+			t.Fatal(err)
+		}
 	}
+	searches := 0
+	search := func() {
+		searches++
+		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again+"+strconv.Itoa(searches), nil)
+	}
+	backdate()
 	status.Store(http.StatusInternalServerError)
-	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again", nil)
-	waitUntil(t, 60*time.Second, "the failed TMDB request to check the connection", func() bool { return connectionState(t, dir, "service/tmdb") == "failing" })
+	search()
+	waitUntil(t, 60*time.Second, "the failed TMDB request to check the connection", func() bool {
+		var state string
+		var checked float64
+		if err := d.Read.QueryRow("SELECT state, COALESCE(checked_at, 0) FROM connections WHERE id = 'service/tmdb'").Scan(&state, &checked); err != nil {
+			t.Fatal(err)
+		}
+		if state == "failing" {
+			return true
+		}
+		if time.Since(time.Unix(int64(checked), 0)) < 5*time.Minute {
+			backdate()
+			search()
+		}
+		return false
+	})
 
 	for i := range 5 {
 		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+"+strconv.Itoa(i), nil)
@@ -189,9 +216,6 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 		t.Fatalf("the recheck after the backoff did not record: reason %q err %v", reason, err)
 	}
 
-	// Failing for 2 hours: the backoff is 3 hours from the last check. The
-	// refused request left the row needing reauthorization, so the time is
-	// counted from reauth_at.
 	before = observed()
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ?, last_ok_at = ?, reauth_at = ? WHERE id = 'service/tmdb'",
 		float64(now.Add(-2*time.Hour).Unix()), float64(now.Add(-4*time.Hour).Unix()), float64(now.Add(-4*time.Hour).Unix())); err != nil {
@@ -207,8 +231,6 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 		t.Fatalf("observe-health rows after a refused request inside a 3 hour backoff and one after it: %d, want 1", rows)
 	}
 
-	// A real request that works recovers the connection at once, inside its
-	// backoff, without a check request of its own.
 	before = observed()
 	status.Store(0)
 	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+back", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {

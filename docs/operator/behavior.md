@@ -386,9 +386,8 @@ failing notice and one recovery notice in 6 hours. A failure within 6 hours of
 the last failing notice is held: its state shows on the Connections page at
 once, but it notifies only if it is still failing on a check 30 minutes or more
 after it began. A recovery notifies only when its failure was notified. The
-service keeps this memory in process: after a restart the first change notifies
-as before, and `atrium connections test` run as its own process notifies each
-change as before.
+memory is stored with the connection, so it holds across a restart, and
+`atrium connections test` run as its own process is damped the same way.
 
 A built-in connection that atrium creates itself (Open-Meteo, Web fetch, TMDB,
 EZTV, Embedding) follows the apps that need it while it is still
@@ -454,7 +453,9 @@ prints `no connection to check` when there are none. Each checked connection
 prints its id, state (or `away until <time UTC>`) and reason. The command
 exits 1 when a checked connection is failing, in its window or not, or needs
 reauth. `connections test <id>` keeps the explicit test, which may have
-visible side effects such as a diagnostic push. `connections test --all` runs
+visible side effects such as a diagnostic push. When the connection changed
+while its test ran, the result is not saved and the command exits 1 with
+`changed since revision`; run it again. `connections test --all` runs
 the silent check of every configured connection instead, so it sends no push;
 giving both an id and `--all`, or neither, is a usage error.
 `connections test <id> --trace <capability>` runs that capability's check
@@ -515,6 +516,20 @@ during a backoff because the operator asked for it; its reason starts with
 `tested at the operator's request during a backoff that was to end <time
 UTC>:`, and it ends the backoff when it works or counts as one more refusal
 when it is refused.
+
+Every other connection backs off the same way when a service refuses atrium.
+An answer of 401, 403 or 429, or 503 with `Retry-After`, to any request over a
+connection's client starts a hold on the capability that request used: 1 hour,
+then 3, 6 and 12 hours for later refusals in a row, or the `Retry-After` when
+that is longer. A refused mail login (IMAP) does the same for that account.
+The hold is stored in the capability's result, so a restart keeps it. While it
+lasts, work nobody is waiting on sends nothing for that capability: scheduled
+job runs end as `skipped_dependency`, the mail watch waits (`<account> watch
+paused after refused logins, retrying in <time>`), the embedding index pauses,
+and the media catalogue refresh and qBittorrent poll skip their requests.
+`Run now`, Test, `connections test` and requests a person makes still go out,
+and a refusal during a running hold does not make it longer. The first request
+that works ends the hold, and so does a changed credential.
 
 A later session or sync that works marks the
 capability ok again. These four have no grace window, so the

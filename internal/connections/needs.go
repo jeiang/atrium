@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -302,6 +303,7 @@ type Unmet struct {
 	Capability string
 	Repair     string
 	Reason     string
+	Until      time.Time
 }
 
 func (e *Unmet) Error() string {

@@ -54,9 +54,8 @@ type TraceInput struct {
 	Out        io.Writer
 }
 type ObserveHealthInput struct {
-	ID        ID
-	Recovered bool
-	// Capability is the capability a runtime request used, when known.
+	ID         ID
+	Recovered  bool
 	Capability string
 	Start      bool
 }
@@ -212,8 +211,6 @@ func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (app
 	var ids, checked []ID
 	for _, v := range views {
 		if in.ID != "" && in.Recovered && v.ID == in.ID && v.Idle == "" && capabilityFailed(v, in.Capability) {
-			// A real request to the failing capability worked: that is the
-			// recovery, so no check request is sent.
 			return application.Change[struct{}]{}, s.store.Recover(ctx, v, in.Capability)
 		}
 		if !checkable(v) || v.Idle != "" || in.ID != "" && !wanted(v, in) || in.ID == "" && !due(v, in.Start) {
@@ -331,17 +328,10 @@ func failed(v View) bool {
 	return v.State == connections.Failing || v.State == connections.NeedsReauth
 }
 
-// backingOff reports whether an automatic recheck of a failing connection
-// must wait: a sibling capability's success, a runtime failure or a boot
-// does not check it again before its failure backoff ends. Explicit tests,
-// checks and credential changes do not consult it.
 func backingOff(v View, now time.Time) bool {
 	return failed(v) && v.CheckedAt != nil && now.Before(v.CheckedAt.Add(failureBackoff(v)))
 }
 
-// failureBackoff is 1 h, 3 h, 6 h or 12 h by how long the connection had
-// been failing at its last check, measured from its last success, or from
-// the start of its reauthorization need.
 func failureBackoff(v View) time.Duration {
 	since := v.LastOKAt
 	if v.State == connections.NeedsReauth && v.ReauthAt != nil {

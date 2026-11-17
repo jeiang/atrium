@@ -543,12 +543,13 @@ claims about the running application. Operator contracts are in
   sooner; Test, `connections check` and credential changes still do.
   Request outcomes reach only the health watch of the app whose
   connection registry opened the lease (`Outcomes`). A first failing result notifies once,
-  also after a host change. Notices are damped per connection in process
+  also after a host change. Notices are damped per connection
   (`flapWindow` 6 hours, `lastingAfter` 30 minutes in
   `internal/connections/health.go`): at most one failing and one recovery
   notice per 6 hours; a held failure notifies once it lasts 30 minutes; a
-  recovery notifies only after a notified failure. A CLI process keeps its
-  own memory, so `connections test` notifies each change. A scheduled run whose
+  recovery notifies only after a notified failure. The memory is stored in
+  `connections.notice_json` (migration 9), so it holds across restarts and
+  CLI processes, and `connections test` is damped the same way. A scheduled run whose
   connection lease reported a failing or needs-reauth result
   (`scheduler.CauseReporter`) sends no job-failed notice and no stale
   notice for that run (that memory is in process, so after a restart the
@@ -595,7 +596,19 @@ claims about the running application. Operator contracts are in
   `Retry-After`). Syncs end as `connections.Unmet` (`skipped_dependency`).
   A working run or a different password clears it; the explicit test runs
   anyway. The sync writes its outcome synchronously with `Lease.Settle`
-  (serve only), not through the buffered `Report`.
+  (serve only), not through the buffered `Report`. The hold type, steps and
+  wording live in `internal/connections/backoff.go` and are shared with
+  every other connection: a leased HTTP client's reporter starts a hold on
+  401/403/429 (or 503 with `Retry-After`) for the request's capability
+  (`Definition.Serves`, or `connections.Serving(ctx, capability)` for a
+  client that serves several), keeps it in process per registry, and sends
+  it as an outcome that the connection health watch stores with
+  `Store.RecordHold`; `Observe` and checks carry a stored hold while the
+  capability stays failing. Requests under `runtime.Unattended(ctx)`
+  (scheduled non-manual runs, the mail watch, the embedding index, the media
+  catalogue refresh and the qBittorrent poll) are skipped during a hold with
+  a `connections.Unmet` that carries `Until`; `connections.HeldUntil(err)`
+  reads it. Any success on the capability clears the hold.
 - qBittorrent and the embedding endpoint have a 6-hour grace window,
   compiled into their connection kinds. A failure right after an `ok` or
   `expiring` state stores `failing` with the window end in its result;
@@ -815,6 +828,9 @@ claims about the running application. Operator contracts are in
   triggers on the `knowledge` scope, with no row rewrite.
   Migration 5 drops the `ops_findings` table with its indexes and
   triggers; server-ops findings live in `kb_records`.
+  Migration 9 adds `connections.notice_json` (default `{}`), the stored
+  notice damping memory, with no row rewrite; the connections read
+  revision ignores it.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
@@ -888,9 +904,10 @@ claims about the running application. Operator contracts are in
   that refuses (75) when another process holds the serve lock.
   Each account watch (`mail-watch/<account>`) restarts with a jittered 5 to
   300 second backoff that only a completed IDLE or NOOP round trip (or a
-  10-minute session) resets; a refused login (`mail.ErrLoginRefused`) holds
-  it for 1, 3, 6, then 12 hours (`runtime.Hold`), counted in process per
-  credential revision. The NixOS
+  10-minute session) resets; a refused login (`mail.ErrLoginRefused`) starts
+  the shared connection hold on `mail/<account>` `imap` (`Lease.Refuse` in
+  the IMAP opener), and the watch waits it out with `runtime.Hold`, also
+  after a restart. The NixOS
   module ships `atrium.service`, the optional `atrium-media-agent.service`
   and no atrium timers. `atrium job run <key>` (`internal/scheduler/jobcmd`)
   inserts a `job_runs` row with status `requested`; serve's scheduler polls
