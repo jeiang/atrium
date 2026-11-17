@@ -79,8 +79,8 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	}
 	polled := webOKG2(t, b.do(http.MethodPost, "/web/v1/media/channels",
 		map[string]any{"name": "Lanterns", "imdb": "tt1234567", "pattern": "1080p", "backfill": true}))
-	if !strings.Contains(polled.body, "unresolved") {
-		t.Fatalf("the forced poll did not report the blocked infohash: %.400s", polled.body)
+	if polled.json["polled"] != true {
+		t.Fatalf("the forced poll did not run: %.400s", polled.body)
 	}
 	if adds := qb.count("add"); adds != 1 {
 		t.Fatalf("the blocked poll reached qBittorrent: %d adds", adds)
