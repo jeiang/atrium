@@ -454,8 +454,8 @@ next tick (30 seconds). While paused:
   calendar candidates) is refused.
 - Assistant jobs, schedules and the Grafana sampler do not run; chat stays
   available, and the assistant's direct mailbox writes are refused.
-- Operator sends and approved proposals still work: pause blocks automatic
-  work, not consent.
+- Operator sends, operator calendar event writes and approved proposals still
+  work: pause blocks automatic work, not consent.
 
 Resume releases everything at once. A write skipped while paused is done once
 on the next pass, and a write with an unknown outcome stays blocked until the
@@ -526,6 +526,16 @@ permission to repeat the write. Review shows pending and blocked proposals;
 Activity shows recorded effects and available undo. Undo is a new guarded
 effect, not deletion of history, and can itself fail or become unknown.
 
+Operator calendar event writes (create, edit and delete on iCloud or Google,
+through the API or the web client) are each one effect with undo: undoing a
+create deletes the event, undoing an edit puts the old fields back, and
+undoing a delete puts the event back. Undo of an edit is refused when the
+event changed again after the edit. An edit needs the event's current
+revision in `If-Match`, so a change made elsewhere since the read is not
+overwritten. A write with an unknown outcome blocks further writes to that
+event until it is resolved; it is never retried. The Birthdays calendar is
+read-only.
+
 Check the external mailbox, calendar, or media state before resolving an
 unknown or partial result. The effect detail and `atrium effects` commands
 expose its evidence. `atrium effects resolve ID --outcome
@@ -586,6 +596,8 @@ and `POST /api/v1/undo/write:<effect>` reverses it. Delete removes the task at
 once, so clients confirm it first; its undo, also in Activity, restores the
 task with the same id. A task links to at most one thread, project, person,
 record or message. A link to something that no longer exists shows no title.
+While mail is off a message link shows no title and a new message link is
+refused, because messages are read only through mail.
 Moving a task's reminder time to a new moment sends the reminder again; other
 edits do not.
 
@@ -762,9 +774,30 @@ and exact Host, has no bearer, and serves only GET/HEAD under
 `media.media_vpn_base_url`; `media_root`, `media_movies_url`, and `media_tv_url`
 are refused inputs.
 
-- Only media-tagged torrents are changed. Adds take one magnet or one torrent
+- Adds take one magnet or one torrent
   file, not both. A v1 info hash is required; v2-only torrents are refused, and
   hybrid torrents with v1 pieces are accepted.
+- Torrents (`/apps/media/torrents`, the qBittorrent connection, the tools
+  `downloads`, `download_add` and `download_control`) is its own app; Library
+  depends on it. Every write goes through one gate. The operator may change any
+  torrent. Agents and jobs change only torrents tagged `atrium` (stamped on
+  every new add) or `media`, and never remove a tag. A job removes only a
+  torrent Library has tagged `filed` and qBittorrent has stopped. Undo of an
+  add is refused once the torrent is filed. The first start of this release
+  turns Torrents on when Library is on and Torrents has no stored choice and
+  no pin; otherwise Torrents stays off until enabled.
+  Library depends on Torrents: the app switch refuses to turn Torrents off
+  while Library is on (`dependent_on`) and to turn Library on while Torrents
+  is off (`dependency_off`). When Torrents is unavailable, `/settings/media`
+  shows Library as unavailable with "Torrents is unavailable:" and its reason.
+- Tool renames: `media_downloads` is now `downloads` and `media_add_magnet` is
+  now `download_add`; `download_control` (pause, resume, remove) is new. The
+  old `tools.tool_media_downloads_enabled` and
+  `tools.tool_media_add_magnet_enabled` keys are retired: an environment pin is
+  ignored with a warning, as for any retired key.
+- A successful add on `/apps/media/add` shows the Downloads page with an
+  "Added" notice when Library is on, and the add page with the notice when it
+  is off.
 - Filing prepares without writing. Durable receipt-keyed steps then hardlink
   downloads or rename imports without overwriting destinations or copying
   across devices. A repeated receipt returns its prior result, including

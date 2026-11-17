@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/media"
 )
@@ -14,9 +15,9 @@ import (
 func TestMediaSweepOnlyDeletesMediaTorrents(t *testing.T) {
 	const mediaHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const plainHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	torrents := []media.Torrent{
-		{Hash: mediaHash, Name: "Filed.Show", State: media.StoppedUP, Tags: "media,selected,filed"},
-		{Hash: plainHash, Name: "Filed.Plain", State: media.StoppedUP, Tags: "filed"},
+	torrents := []contract.Torrent{
+		{Hash: mediaHash, Name: "Filed.Show", State: contract.StoppedUP, Tags: "media,selected,filed"},
+		{Hash: plainHash, Name: "Filed.Plain", State: contract.StoppedUP, Tags: "filed"},
 	}
 	var deleted []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

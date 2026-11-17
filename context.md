@@ -36,6 +36,27 @@ claims about the running application. Operator contracts are in
   when no calendar is configured. `tools/adapterboundary` fails when an
   assistant package imports `internal/apps/calendar` outside its listed
   exceptions, or when `internal/day` imports any unit.
+- Core reads stored messages only through the read-only `communications`
+  feed (`internal/communications`): a message summary (id, account, sender,
+  recipients, subject, date, seen, flagged, inbox, sent and gone flags, and
+  thread hints: Message-ID, In-Reply-To, References, Gmail thread id), a
+  filtered list in id order (account, ids, inbox, unseen, received, present,
+  after an id, limit), the indexed plain-text body, the MIME part list in
+  pre-order (part id `1`, `1.1`, ...; content type and parameters, file name,
+  attachment disposition) and a size-capped fetch of one decoded part. A unit
+  sets `Communications` on its declaration; `module.Compile` fails start when
+  two units provide it. Mail is the one provider, over its message store and
+  MIME parser; the feed has no write method, so mail writes stay behind
+  Mail's write gate. `module.Communications` answers the enabled provider;
+  with Mail off every feed call returns nothing and no error, so a task's
+  message link has no title, a new message link is refused as missing, a
+  lookup report's `mail_message` id is unknown, and queued event candidates
+  are not listed. Event candidates read invitations and message bodies from
+  the feed; the mail pass still calls them, passing its paid event judge.
+  The drafts, loops, commitments and packages attention sources live in
+  `internal/mail/attentionsources`. `internal/communications` is a platform
+  package, so the unit-boundary guard rejects any import of Mail from core
+  outside its listed exceptions.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.
@@ -817,7 +838,8 @@ claims about the running application. Operator contracts are in
   connection they need is unavailable and the run did no work:
   `mail/package_tracking` (Ship24 absent while packages wait, or every
   tracker request failed) and `media/channels` (every EZTV feed failed, or
-  every qBittorrent add failed with nothing added). The run error names
+  every qBittorrent add failed with nothing added; a magnet with no v1 hash
+  is recorded on its release and is not an add failure). The run error names
   the capability, the connection and the repair id. These rows do not
   coalesce. The `packages poll` CLI and the channels poll API keep their
   results.
@@ -1064,7 +1086,12 @@ claims about the running application. Operator contracts are in
   group-readable (directories also group-writable and searchable), or the
   agent refuses it. Crash recovery only inspects receipts; identical replay
   returns the terminal result and never resumes.
-- Main files media through the agent. The downloads queue maps each tagged
+- Main files media through the agent. Torrents (`internal/apps/torrents`)
+  owns qBittorrent: one intake gates every write by actor (operator any
+  torrent; agent and job only `atrium` or `media` tagged; no tag removal; a
+  job removes only `filed`, stopped torrents) and stamps `atrium` on every
+  add. Library consumes it through `internal/apps/torrents/contract`.
+  The downloads queue maps each tagged
   torrent's qBittorrent content path to the agent `downloads` root by the
   `media_download_path_prefix` string prefix (no main-side stat). Filing
   re-checks the torrent (hash, `media` tag, complete, unchanged path),
@@ -1248,6 +1275,23 @@ claims about the running application. Operator contracts are in
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium effects
   resolve <id>` or the Activity page.
+- The operator creates, edits and deletes events in either provider through
+  `GET`/`PATCH`/`DELETE /calendar/events/{calendar}/{uid}` and
+  `POST /calendar/events` on both `/api/v1` and `/web/v1`
+  (`calendar.event`, `calendar.event-create`, `calendar.event-update`,
+  `calendar.event-delete`). These operations have operator authority only
+  and no tool binding, so agents keep the proposal path. They share the
+  proposal write path per provider: each write records an effect first, an
+  edit or delete reads the live event on the same fetch that plans the
+  write, and the event's revision (a hash of its calendar, uid, title,
+  start, end, all-day flag, location and notes) is its ETag. Edits require
+  `If-Match` and deletes accept it; a stale revision gets 412 with nothing
+  written. Undo deletes a created event, restores an edited event only while
+  it still has the revision the edit left, and puts a deleted event back
+  (the recorded ICS object for iCloud, the recorded fields for Google). An
+  unknown outcome refuses further operator writes to that event until it is
+  resolved. Birthdays and `birthday-` uids are refused as read-only. Pause
+  does not block these writes: they are operator consent.
 - The knowledge export is export-only and has one destination, a Markdown
   folder declared by the host (`export.export_obsidian_dir`). The daily
   `knowledge-export` job renders live, non-expired records into it and

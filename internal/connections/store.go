@@ -753,6 +753,11 @@ func (s *Store) fill(ctx context.Context, v *View) error {
 		return err
 	}
 	v.Credentials = creds
+	for _, slot := range sortedKeys(s.host.Connections[string(v.ID)].CredentialFiles) {
+		if !slices.ContainsFunc(v.Credentials, func(c CredentialView) bool { return c.Slot == slot }) {
+			v.Credentials = append(v.Credentials, CredentialView{Slot: slot, Source: "host_file", Pinned: true})
+		}
+	}
 	if err := s.fillShared(ctx, v); err != nil {
 		return err
 	}
