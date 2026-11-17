@@ -889,7 +889,7 @@ claims about the running application. Operator contracts are in
   `ActivityCategory`. With mail off its drafts leave the hub, while its past
   live actions stay in Activity. Each owner declares
   its built-in jobs (assistant six, calendar candidates, media three, mail
-  package tracking, Grafana ops sampler); compiling the catalog checks their
+  package tracking and replay, Grafana ops sampler); compiling the catalog checks their
   owner, keys, names, schedules and policies and derives the schedule
   settings from them. The neutral `internal/scheduler` package owns the
   `jobs`, `job_runs`, `job_run_threads` and `job_resource_leases` tables,
