@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	kbexport "github.com/jeiang/atrium/internal/kb/export"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/unit"
@@ -35,8 +35,8 @@ func TestHostRowsCannotChangeBehavior(t *testing.T) {
 
 	seedSetting(t, d, "public_url", "https://poisoned.example")
 	seedSetting(t, d, kbexport.ObsidianDirKey, vault)
-	seedSetting(t, d, media.KeyDownloadPrefix, vault)
-	seedSetting(t, d, media.KeyQbitURL, "http://poisoned.invalid:8081")
+	seedSetting(t, d, library.KeyDownloadPrefix, vault)
+	seedSetting(t, d, library.KeyQbitURL, "http://poisoned.invalid:8081")
 
 	if got := pinRowOf(t, runSettings(t, "get", "public_url")); got.Value != "" || got.Source != "host" {
 		t.Errorf("a host row reached the public URL: %+v", got)
@@ -44,7 +44,7 @@ func TestHostRowsCannotChangeBehavior(t *testing.T) {
 	if got := pinRowOf(t, runSettings(t, "get", kbexport.ObsidianDirKey)); got.Value != "" || got.Source != "host" {
 		t.Errorf("a host row reached the export folder: %+v", got)
 	}
-	if got := pinRowOf(t, runSettings(t, "get", media.KeyDownloadPrefix)); got.Value != filepath.Join(dir, "downloads") || got.Source != "host" {
+	if got := pinRowOf(t, runSettings(t, "get", library.KeyDownloadPrefix)); got.Value != filepath.Join(dir, "downloads") || got.Source != "host" {
 		t.Errorf("a host row overrode the host download prefix: %+v", got)
 	}
 	runExport(t, f, d)
