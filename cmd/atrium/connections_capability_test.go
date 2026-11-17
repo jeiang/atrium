@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -276,9 +275,10 @@ func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *test
 	token := localAPIToken(t, "capabilities")
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	b := mnpNewBrowser(t, s.base)
-	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}}, http.StatusOK)
+	b := webG4(t, s.base)
+	if got := b.do(http.MethodPost, "/web/v1/media/channels", map[string]any{"name": "Lanterns", "imdb": "tt1234567", "pattern": "1080p"}); got.status != http.StatusOK {
+		t.Fatalf("add channel: %d %s", got.status, got.body)
+	}
 	model := capabilityDependencies(t, s.base, token)
 	indexer := model.need(t, "media", "indexer")
 	if indexer.Kind != "service/eztv" || indexer.Connection != "service/eztv" || !indexer.Soft || !slices.Contains(indexer.Features, "media channels") {
@@ -391,7 +391,7 @@ func TestHostOwnedConnectionsStayReadOnlyAndTheOwnersCheckFlagsADrift(t *testing
 		return raw
 	}
 	before := config()
-	s.conn("/test", url.Values{"id": {"service/grafana"}, "url": {"http://elsewhere.invalid"}, "api_key": {"glsa_other"}})
+	connPutG4(webG4(t, s.base), "service/grafana", "http://elsewhere.invalid", map[string]string{"api_key": "glsa_other"})
 	if after := config(); after != before || strings.Contains(after, "elsewhere") {
 		t.Fatalf("a UI test changed the host-owned config from %s to %s", before, after)
 	}

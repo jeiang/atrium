@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -27,13 +25,8 @@ func TestServeWatchStopsWithTheMailModuleAndStaysStopped(t *testing.T) {
 	})
 	passes := strings.Count(logs.String(), ": 0 new, 0 gone")
 
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/connections", nil); code != http.StatusOK {
-		t.Fatalf("connections settings: %d", code)
-	}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/connections/disconnect", url.Values{"id": {"mail/work"}}); code != http.StatusSeeOther {
-		t.Fatalf("disconnect work = %d: %.300s", code, body)
+	if got := webAsG4(t, base, nil).do(http.MethodDelete, "/web/v1/connections/mail/work", nil); got.status != http.StatusNoContent {
+		t.Fatalf("disconnect work = %d: %.300s", got.status, got.body)
 	}
 	time.Sleep(3 * time.Second)
 	if health := watchHealth(t, opsBase()); len(health) != 0 {

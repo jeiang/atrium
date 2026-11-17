@@ -4,29 +4,24 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	"github.com/jeiang/atrium/internal/web"
 )
 
-func openBrowserStream(t *testing.T, client *http.Client, base string, threadID, runID int64, headers ...string) *http.Response {
+func openBrowserStream(t *testing.T, c *webClient, path string, headers ...string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/chat/%d/events?run=%d", base, threadID, runID), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i := 0; i+1 < len(headers); i += 2 {
-		req.Header.Set(headers[i], headers[i+1])
-	}
-	resp, err := client.Do(req)
+	resp, err := c.http.Do(c.request(http.MethodGet, path, nil, headers...))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = resp.Body.Close() })
 	return resp
+}
+
+func browserEventsG4(threadID, runID int64) string {
+	return fmt.Sprintf("/web/v1/threads/%d/runs/%d/events", threadID, runID)
 }
 
 func TestStreamCapsPerBrowser(t *testing.T) {
@@ -36,16 +31,16 @@ func TestStreamCapsPerBrowser(t *testing.T) {
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("late")))
 	threadID, runID := s.start("caps per browser")
 	waitRunning(t, s.d, runID)
-	laptop, phone := asstBrowse(t, s.base), asstBrowse(t, s.base)
+	laptop, phone := webAsG4(t, s.base, nil), webAsG4(t, s.base, nil)
 	for i := range 4 {
-		if resp := openBrowserStream(t, laptop.client, s.base, threadID, runID); resp.StatusCode != http.StatusOK {
+		if resp := openBrowserStream(t, laptop, browserEventsG4(threadID, runID)); resp.StatusCode != http.StatusOK {
 			t.Fatalf("laptop stream %d: %d", i+1, resp.StatusCode)
 		}
 	}
-	if resp := openBrowserStream(t, laptop.client, s.base, threadID, runID); resp.StatusCode != http.StatusTooManyRequests {
+	if resp := openBrowserStream(t, laptop, browserEventsG4(threadID, runID)); resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("fifth laptop stream: %d", resp.StatusCode)
 	}
-	if resp := openBrowserStream(t, phone.client, s.base, threadID, runID); resp.StatusCode != http.StatusOK {
+	if resp := openBrowserStream(t, phone, browserEventsG4(threadID, runID)); resp.StatusCode != http.StatusOK {
 		t.Fatalf("a second browser shared the first browser's slots: %d", resp.StatusCode)
 	}
 	free()
@@ -57,12 +52,12 @@ func TestStreamBrowserRouteAnswersTheContract(t *testing.T) {
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("browser answer")))
 	threadID, runID := s.start("browser contract")
 	_, last := s.events(s.token, threadID, runID, "")
-	browser := asstBrowse(t, s.base)
-	if resp := openBrowserStream(t, browser.client, s.base, threadID, runID, "Last-Event-ID", last); resp.StatusCode != http.StatusNoContent {
+	browser := webAsG4(t, s.base, nil)
+	if resp := openBrowserStream(t, browser, browserEventsG4(threadID, runID), "Last-Event-ID", last); resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("browser resume at the terminal: %d", resp.StatusCode)
 	}
-	if code, _, _ := browser.get(fmt.Sprintf("/chat/%d/events?run=%d&after=%s", threadID, runID, last), false); code != http.StatusNoContent {
-		t.Fatalf("browser after at the terminal: %d", code)
+	if got := browser.do(http.MethodGet, browserEventsG4(threadID, runID)+"?after="+url.QueryEscape(last), nil); got.status != http.StatusNoContent {
+		t.Fatalf("browser after at the terminal: %d %s", got.status, got.body)
 	}
 	for _, path := range []string{
 		fmt.Sprintf("/api/v1/threads/%d/runs/%d/events?after=x", threadID, runID),
@@ -70,9 +65,7 @@ func TestStreamBrowserRouteAnswersTheContract(t *testing.T) {
 	} {
 		expectAPI(t, s.do(http.MethodGet, path, s.token, nil), http.StatusBadRequest, "bad_request")
 	}
-	if code, body, _ := browser.get(fmt.Sprintf("/chat/%d/events?run=%d&after=x", threadID, runID), false); code != http.StatusBadRequest {
-		t.Fatalf("browser malformed after: %d %s", code, body)
-	}
+	expectAPI(t, browser.do(http.MethodGet, browserEventsG4(threadID, runID)+"?after=x", nil), http.StatusBadRequest, "bad_request")
 }
 
 func TestStreamSignOutClosesTheBrowserStream(t *testing.T) {
@@ -95,32 +88,15 @@ func TestStreamSignOutClosesTheBrowserStream(t *testing.T) {
 	}
 	threadID, runID := number(t, made.json["thread"].(map[string]any)["id"]), number(t, made.json["run_id"])
 	waitRunning(t, d, runID)
-	browser := oidcBrowser(t, s.base, s.idp, "owner")
-	resp := openBrowserStream(t, browser, s.base, threadID, runID)
+	browser := webAsG4(t, s.base, oidcBrowser(t, s.base, s.idp, "owner"))
+	resp := openBrowserStream(t, browser, browserEventsG4(threadID, runID))
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("browser stream: %d", resp.StatusCode)
 	}
 	lines := streamLines(resp.Body)
 	awaitLine(t, lines, 5*time.Second, "event: run_start")
-	u, _ := url.Parse(s.base)
-	token := ""
-	for _, c := range browser.Jar.Cookies(u) {
-		if c.Name == web.CSRFCookie {
-			token = c.Value
-		}
-	}
-	req, err := http.NewRequest(http.MethodPost, s.base+"/logout", strings.NewReader(url.Values{"csrf_token": {token}}.Encode()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	out, err := browser.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = out.Body.Close()
-	if out.StatusCode != http.StatusSeeOther && out.StatusCode != http.StatusFound {
-		t.Fatalf("logout: %d", out.StatusCode)
+	if out := browser.do(http.MethodPost, "/web/v1/session/logout", nil); out.status != http.StatusNoContent {
+		t.Fatalf("logout: %d %s", out.status, out.body)
 	}
 	deadline := time.After(20 * time.Second)
 	for {

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
 	"strings"
 	"testing"
 
@@ -14,22 +12,19 @@ func TestAsstComposerFollowUpWithPendingMemoryJobSucceeds(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
-	base, logs := startServeLogged(t, dir)
-	w := asstBrowse(t, base)
+	base, _ := startServeLogged(t, dir)
+	c := webG4(t, base)
 
 	long := strings.Repeat("evidence ", 120)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("ack")))
-	thread := w.start(map[string]string{"text": long})
+	thread, _ := startG4(c, long)
 	if state, errText := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 		t.Fatalf("first run %s %q", state, errText)
 	}
 	asstWaitCount(t, d, 1, "SELECT CASE WHEN COUNT(*) > 0 THEN 1 ELSE 0 END FROM memory_jobs WHERE thread_id = ? AND state = 'queued'", thread)
 
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("follow-up answer")))
-	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "plain follow-up", "edit": ""}, nil, true)
-	if code != http.StatusOK {
-		t.Fatalf("plain follow-up = %d: %s; server log: %s", code, body, logs.String())
-	}
+	sendG4(c, thread, "plain follow-up")
 	if state, errText := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 		t.Fatalf("follow-up run %s %q", state, errText)
 	}

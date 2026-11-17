@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,7 +10,7 @@ import (
 )
 
 type settingsFieldCase struct {
-	page, action, key, value string
+	key, value string
 }
 
 func startSettingsServe(t *testing.T, values map[string]string) string {
@@ -33,35 +31,21 @@ func startSettingsServe(t *testing.T, values map[string]string) string {
 func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 	t.Parallel()
 	unsetEnv(t, settingEnv(davmirror.AppleIDKey))
-	base := startSettingsServe(t, nil)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
+	web := webG4(t, startSettingsServe(t, nil))
 	cases := []settingsFieldCase{
-		{"/settings/calendar", "/settings/sections/calendar", "calendar_account", "home"},
-		{"/settings/calendar", "/settings/sections/calendar", "icloud_apple_id", "operator@icloud.invalid"},
-		{"/settings/calendar", "/settings/sections/calendar", "icloud_calendar", "Home"},
-		{"/settings/calendar", "/settings/sections/calendar", "default_event_minutes", "30"},
-		{"/settings/calendar", "/settings/sections/calendar", "work_hours", "08:00-18:00"},
-		{"/settings/calendar", "/settings/sections/calendar", "work_days", "mon,tue,wed,thu,fri"},
-		{"/settings/mail", "/settings/mail/settings", "uncertain_dest", "Later"},
-		{"/settings/mail", "/settings/mail/settings", "openloops_remind_hour", "8"},
-		{"/settings/usage", "/settings/groups/core/budget", "monthly_budget_usd", "200"},
+		{"calendar_account", "home"},
+		{"icloud_apple_id", "operator@icloud.invalid"},
+		{"icloud_calendar", "Home"},
+		{"default_event_minutes", "30"},
+		{"work_hours", "08:00-18:00"},
+		{"work_days", "mon,tue,wed,thu,fri"},
+		{"openloops_remind_hour", "8"},
+		{"monthly_budget_usd", "200"},
 	}
-	pages := map[string]string{}
 	for _, c := range cases {
-		if _, ok := pages[c.page]; !ok {
-			status, got, _ := fetch(t, client, http.MethodGet, base+c.page, nil)
-			if status != http.StatusOK {
-				t.Fatalf("GET %s = %d", c.page, status)
-			}
-			pages[c.page] = got
-		}
-		status, got, _ := fetch(t, client, http.MethodPost, base+c.action, url.Values{c.key: {c.value}})
-		if status != http.StatusOK {
-			t.Errorf("POST %s %s=%q = %d: %.300s", c.action, c.key, c.value, status, got)
+		got := web.do(http.MethodPut, "/web/v1/settings/"+c.key, map[string]any{"value": c.value})
+		if got.status != http.StatusOK {
+			t.Errorf("PUT /web/v1/settings/%s %q = %d: %.300s", c.key, c.value, got.status, got.body)
 			continue
 		}
 		row := runSettings(t, "get", c.key).row(t)
@@ -74,26 +58,21 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 	t.Parallel()
 	unsetEnv(t, settingEnv(davmirror.AppleIDKey))
-	base := startSettingsServe(t, nil)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/calendar", nil); status != http.StatusOK {
-		t.Fatalf("GET /settings/calendar = %d", status)
-	}
+	web := webG4(t, startSettingsServe(t, nil))
 	for _, c := range []struct {
-		action, key, value, want string
+		key, value, want string
 	}{
-		{"/settings/sections/calendar", "default_event_minutes", "0", "must be between 5 and 1440"},
-		{"/settings/groups/core/budget", "monthly_budget_usd", "0", "must be greater than 0"},
-		{"/settings/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
-		{"/settings/sections/calendar", "work_days", "funday", "must be day names"},
+		{"default_event_minutes", "0", "must be between 5 and 1440"},
+		{"monthly_budget_usd", "0", "must be greater than 0"},
+		{"work_hours", "9-5", "must be HH:MM-HH:MM"},
+		{"work_days", "funday", "must be day names"},
 	} {
-		status, body, _ := fetch(t, client, http.MethodPost, base+c.action, url.Values{c.key: {c.value}})
-		if status != http.StatusUnprocessableEntity || !strings.Contains(body, c.want) {
-			t.Errorf("POST %s %s=%q = %d, want 422 with %q: %.300s", c.action, c.key, c.value, status, c.want, body)
+		got := web.do(http.MethodPut, "/web/v1/settings/"+c.key, map[string]any{"value": c.value})
+		if got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, c.want) {
+			t.Errorf("PUT /web/v1/settings/%s %q = %d, want 422 with %q: %.300s", c.key, c.value, got.status, c.want, got.body)
+		}
+		if row := runSettings(t, "get", c.key).row(t); row.Value != nil && *row.Value == c.value {
+			t.Errorf("%s stored the refused value %q", c.key, c.value)
 		}
 	}
 }

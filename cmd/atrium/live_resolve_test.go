@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
-
-	"fmt"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -50,22 +47,23 @@ func TestOperatorResolvesAForwardInterruptedAction(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := func(n int64) string { return strconv.FormatInt(n, 10) }
-	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	c := webG4(t, startServeIn(t, dir))
+	listed := c.do(http.MethodGet, "/web/v1/effects?blocked=true", nil)
+	items, _ := listed.json["items"].([]any)
+	var blocked bool
+	for _, raw := range items {
+		if e, _ := raw.(map[string]any); number(t, e["id"]) == interrupted && e["blocked"] == true {
+			blocked = true
+		}
 	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	status, body, _ := fetch(t, client, "GET", base+"/activity", nil)
-	if status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+id(interrupted)+"/resolve") ||
-		!strings.Contains(body, ">It happened<") || !strings.Contains(body, ">It did not happen<") {
-		t.Fatalf("GET /activity = %d, want the forward resolve controls: %.400s", status, body)
+	if listed.status != http.StatusOK || !blocked {
+		t.Fatalf("GET /web/v1/effects = %d, want the interrupted forward action blocked for a decision: %.400s", listed.status, listed.body)
 	}
 	if got := runApp(t, "live", "resolve", id(interrupted), "--outcome", "undone"); got.code == 0 || !strings.Contains(got.stderr, "applied") {
 		t.Fatalf("resolve with an undo outcome = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if status, _, _ := fetch(t, client, "POST", base+"/activity/mail/"+id(interrupted)+"/resolve", url.Values{"outcome": {"applied"}}); status != http.StatusSeeOther {
-		t.Fatalf("resolve applied = %d", status)
+	if got := c.do(http.MethodPost, "/web/v1/effects/"+id(interrupted)+"/resolve", map[string]any{"outcome": "applied"}); got.status != http.StatusOK {
+		t.Fatalf("resolve applied = %d %s", got.status, got.body)
 	}
 	if got := runApp(t, "live", "resolve", id(unknown), "--outcome", "not-applied"); got.code != 0 {
 		t.Fatalf("resolve not-applied = %d %q", got.code, got.stderr)

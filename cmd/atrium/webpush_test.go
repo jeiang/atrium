@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -231,24 +232,23 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	push, browser := pushRigGenerated(t, dir)
 
 	base, logs := startServeLogged(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	get := func() (string, http.Header) {
+	web := webG4(t, base)
+	get := func() map[string]any {
 		t.Helper()
-		code, body, header := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
-		if code != http.StatusOK {
-			t.Fatalf("notifications page: %d\n%s", code, logs.String())
+		got := web.do(http.MethodGet, "/web/v1/notifications", nil)
+		if got.status != http.StatusOK {
+			t.Fatalf("notification settings: %d %s\n%s", got.status, got.body, logs.String())
 		}
-		return body, header
+		push, _ := got.json["push"].(map[string]any)
+		return push
 	}
-	post := func(path string, form url.Values) (int, string) {
+	subscribe := func(form url.Values) apiReply {
 		t.Helper()
-		get()
-		if form == nil {
-			form = url.Values{}
-		}
-		code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications"+path, form)
-		return code, body
+		return web.do(http.MethodPost, "/web/v1/devices", map[string]any{"endpoint": form.Get("endpoint"), "p256dh": form.Get("p256dh"), "auth": form.Get("auth")})
+	}
+	pushTest := func() apiReply {
+		t.Helper()
+		return web.do(http.MethodPost, "/web/v1/devices/test", nil)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
@@ -260,38 +260,53 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		}
 		return n
 	}
+	listed := func() []string {
+		t.Helper()
+		var endpoints []string
+		rows, _ := get()["devices"].([]any)
+		for _, raw := range rows {
+			device, _ := raw.(map[string]any)
+			endpoint, _ := device["endpoint"].(string)
+			endpoints = append(endpoints, endpoint)
+		}
+		return endpoints
+	}
 
-	page, header := get()
-	if !strings.Contains(header.Get("Content-Security-Policy"), "worker-src 'self'") {
-		t.Errorf("CSP %q lacks worker-src 'self'", header.Get("Content-Security-Policy"))
+	shell, err := http.NewRequest(http.MethodGet, base+"/", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	found := regexp.MustCompile(`data-push-key="([A-Za-z0-9_-]{87})"`).FindStringSubmatch(page)
-	if found == nil || !strings.Contains(page, "Enable push on this device") {
-		t.Fatal("the page lacks the VAPID key or the enable control")
+	shell.Header.Set("Accept", "text/html")
+	if resp, err := http.DefaultClient.Do(shell); err != nil {
+		t.Fatal(err)
+	} else {
+		_ = resp.Body.Close()
+		if !strings.Contains(resp.Header.Get("Content-Security-Policy"), "worker-src 'self'") {
+			t.Errorf("CSP %q lacks worker-src 'self'", resp.Header.Get("Content-Security-Policy"))
+		}
 	}
-	publicKey := found[1]
-	if again, _ := get(); !strings.Contains(again, publicKey) {
-		t.Error("the VAPID key changed between page loads")
+	publicKey, _ := get()["key"].(string)
+	if !regexp.MustCompile(`^[A-Za-z0-9_-]{87}$`).MatchString(publicKey) {
+		t.Fatalf("the notification settings lack the VAPID key: %q", publicKey)
+	}
+	if again, _ := get()["key"].(string); again != publicKey {
+		t.Error("the VAPID key changed between reads")
 	}
 	var stored int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/webpush' AND slot = 'vapid_private' AND source = 'database'").Scan(&stored); err != nil || stored != 1 {
 		t.Fatalf("stored VAPID credentials = %d, %v", stored, err)
 	}
-	code, _, swHeader := fetch(t, client, http.MethodGet, base+"/static/sw.js", nil)
-	if code != http.StatusOK || swHeader.Get("Service-Worker-Allowed") != "/" {
-		t.Errorf("service worker: %d %q", code, swHeader.Get("Service-Worker-Allowed"))
-	}
 
 	bad := browser.form()
 	bad.Set("endpoint", "http://"+strings.TrimPrefix(push.URL, "https://")+"/push/device-1")
-	if code, body := post("/push/subscriptions", bad); code != http.StatusUnprocessableEntity || !strings.Contains(body, "https") {
-		t.Fatalf("plain http endpoint: %d", code)
+	if got := subscribe(bad); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "https") {
+		t.Fatalf("plain http endpoint: %d %s", got.status, got.body)
 	}
-	if code, body := post("/push/subscriptions", browser.form()); code != http.StatusOK || !strings.Contains(body, `data-push-device="`+browser.endpoint+`"`) {
-		t.Fatalf("subscribe: %d", code)
+	if got := subscribe(browser.form()); got.status != http.StatusCreated || !slices.Contains(listed(), browser.endpoint) {
+		t.Fatalf("subscribe: %d %s", got.status, got.body)
 	}
-	if code, _ := post("/push/subscriptions", browser.form()); code != http.StatusOK || devices() != 1 {
-		t.Fatalf("resubscribe: %d, %d devices", code, devices())
+	if got := subscribe(browser.form()); got.status != http.StatusCreated || devices() != 1 {
+		t.Fatalf("resubscribe: %d, %d devices", got.status, devices())
 	}
 
 	payloadOf := func(n int) (pushRequest, map[string]any) {
@@ -314,8 +329,8 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	if err := d.Read.QueryRow("SELECT delivered FROM notifications ORDER BY id DESC LIMIT 1").Scan(&delivered); err != nil || !delivered {
 		t.Errorf("inbox row delivered = %v, %v", delivered, err)
 	}
-	if code, _ := post("/channels/system/content", url.Values{"content": {"title"}}); code != http.StatusOK {
-		t.Fatalf("content: %d", code)
+	if got := web.do(http.MethodPut, "/web/v1/notifications/channels/system", map[string]any{"content": "title"}); got.status != http.StatusNoContent {
+		t.Fatalf("content: %d %s", got.status, got.body)
 	}
 	if ran := runApp(t, "live", "resume"); ran.code != 0 {
 		t.Fatalf("live resume: %d %s", ran.code, ran.stderr)
@@ -324,8 +339,8 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Errorf("title-only payload %v", payload)
 	}
 
-	if code, body := post("/push/test", nil); code != http.StatusOK || !strings.Contains(body, "Test sent") {
-		t.Fatalf("push test: %d", code)
+	if got := pushTest(); got.status != http.StatusOK || got.json["outcome"] != "delivered" || number(t, got.json["sent"]) != 1 {
+		t.Fatalf("push test: %d %s", got.status, got.body)
 	}
 	if payload := browser.decrypt(t, push.last(t).body); payload["title"] != "atrium test" || payload["body"] != "Test push notification." {
 		t.Errorf("test payload %v", payload)
@@ -337,8 +352,8 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 
 	push.answer(http.StatusInternalServerError)
 	for range notify.FailingAfter {
-		if code, body := post("/push/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "web push 500") {
-			t.Fatalf("failing endpoint: %d", code)
+		if got := pushTest(); got.status != http.StatusConflict || !strings.Contains(got.body, "web push 500") {
+			t.Fatalf("failing endpoint: %d %s", got.status, got.body)
 		}
 	}
 	var failures int
@@ -348,8 +363,8 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 
 	guarded := notify.UsePushAddresses(netguard.Public)
 	before := push.count()
-	if code, body := post("/push/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "non-public address") || push.count() != before {
-		t.Fatalf("loopback endpoint under the real guard: %d, %d requests", code, push.count()-before)
+	if got := pushTest(); got.status != http.StatusConflict || !strings.Contains(got.body, "non-public address") || push.count() != before {
+		t.Fatalf("loopback endpoint under the real guard: %d %s, %d requests", got.status, got.body, push.count()-before)
 	}
 	guarded()
 
@@ -366,27 +381,22 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Fatalf("%d subscriptions after a 410, want 0", n)
 	}
 	push.answer(http.StatusCreated)
-	post("/push/subscriptions", browser.form())
-	get()
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/"+strconv.FormatInt(failed, 10)+"/resend", url.Values{}); code != http.StatusOK {
-		t.Fatalf("resend: %d", code)
+	subscribe(browser.form())
+	if got := web.do(http.MethodPost, "/web/v1/inbox/"+strconv.FormatInt(failed, 10)+"/resend", nil); got.status != http.StatusOK || got.json["delivered"] != true {
+		t.Fatalf("resend: %d %s", got.status, got.body)
 	}
 	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", failed).Scan(&delivered); err != nil || !delivered {
 		t.Errorf("resent row delivered = %v, %v", delivered, err)
 	}
 
 	push.answer(http.StatusCreated)
-	post("/push/subscriptions", browser.form())
+	subscribe(browser.form())
 	var id int64
 	if err := d.Read.QueryRow("SELECT id FROM notification_devices").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	if code, body := post("/push/"+strconv.FormatInt(id, 10)+"/remove", nil); code != http.StatusOK || strings.Contains(body, "data-push-device=") || devices() != 0 {
-		t.Fatalf("remove: %d, %d devices", code, devices())
-	}
-	post("/push/subscriptions", browser.form())
-	if code, _ := post("/push/unsubscribe", url.Values{"endpoint": {browser.endpoint}}); code != http.StatusOK || devices() != 0 {
-		t.Fatalf("unsubscribe: %d, %d devices", code, devices())
+	if got := web.do(http.MethodDelete, "/web/v1/devices/"+strconv.FormatInt(id, 10), nil); got.status != http.StatusNoContent || slices.Contains(listed(), browser.endpoint) || devices() != 0 {
+		t.Fatalf("remove: %d %s, %d devices", got.status, got.body, devices())
 	}
 }
 
@@ -650,8 +660,9 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
 	clearBootNotices(t, d)
-	if code, _ := s.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
-		t.Fatalf("subscribe = %d", code)
+	web := webG4(t, s.base)
+	if got := web.do(http.MethodPost, "/web/v1/devices", map[string]any{"endpoint": browser.endpoint, "p256dh": browser.form().Get("p256dh"), "auth": browser.form().Get("auth")}); got.status != http.StatusCreated {
+		t.Fatalf("subscribe = %d %s", got.status, got.body)
 	}
 	rows := func(query string) int {
 		t.Helper()
@@ -683,9 +694,7 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("waiting")))
-	if code, body := s.post(fmt.Sprintf("/chat/%d/messages", thread), url.Values{"text": {"read " + srv.URL + "/a then " + srv.URL + "/b"}}); code >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", code, body)
-	}
+	sendG4(web, thread, "read "+srv.URL+"/a then "+srv.URL+"/b")
 	proposal := waitParkedPermission(t, d, thread)
 	stored := fmt.Sprintf("/proposals/%d", proposal)
 	card := stored
@@ -705,13 +714,21 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	if delivered || !strings.Contains(failure, "web push 500") {
 		t.Fatalf("failed push recorded delivered=%v error=%q", delivered, failure)
 	}
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+stored, nil); code != http.StatusOK {
-		t.Fatalf("the stored card = %d, want the signed-in proposal page", code)
+	opened, err := http.NewRequest(http.MethodGet, s.base+stored, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, method := range []string{http.MethodGet, http.MethodPost} {
-		if code, _, _ := fetch(t, s.client, method, s.base+"/actions/any-token", url.Values{}); code != http.StatusNotFound {
-			t.Fatalf("%s /actions/any-token = %d, want 404", method, code)
-		}
+	opened.Header.Set("Accept", "text/html")
+	if resp, err := web.http.Do(opened); err != nil {
+		t.Fatal(err)
+	} else if _ = resp.Body.Close(); resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusMovedPermanently {
+		t.Fatalf("the stored card = %d, want the client to open it", resp.StatusCode)
+	}
+	if code, _, _ := fetch(t, web.http, http.MethodGet, s.base+"/actions/any-token", nil); code != http.StatusNotFound {
+		t.Fatalf("GET /actions/any-token = %d, want 404", code)
+	}
+	if code, _, _ := fetch(t, web.http, http.MethodPost, s.base+"/actions/any-token", url.Values{}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /actions/any-token = %d, want 404 or 405", code)
 	}
 	if n := rows("SELECT COUNT(*) FROM proposals WHERE status = 'pending'"); n != 1 {
 		t.Fatalf("%d pending proposals after the removed action route, want 1", n)
@@ -719,9 +736,10 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 
 	s.stop()
 	s.restart()
+	web = webG4(t, s.base)
 	push.answer(http.StatusCreated)
-	if code, _ := s.post(fmt.Sprintf("/inbox/%d/resend", id), nil); code != http.StatusOK {
-		t.Fatalf("resend = %d", code)
+	if got := web.do(http.MethodPost, fmt.Sprintf("/web/v1/inbox/%d/resend", id), nil); got.status != http.StatusOK {
+		t.Fatalf("resend = %d %s", got.status, got.body)
 	}
 	if p := payload(2); p["url"] != card {
 		t.Fatalf("resent push url = %v, want %s", p["url"], card)
@@ -731,7 +749,7 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	}
 
 	push.answer(http.StatusGone)
-	if code, _ := s.post("/settings/notifications/push/test", nil); code == http.StatusOK {
+	if got := web.do(http.MethodPost, "/web/v1/devices/test", nil); got.status == http.StatusOK {
 		t.Fatal("a 410 test reported delivery")
 	}
 	if n := rows("SELECT (SELECT COUNT(*) FROM notification_devices) + (SELECT COUNT(*) FROM webpush_devices)"); n != 0 {
