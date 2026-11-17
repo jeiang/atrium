@@ -29,6 +29,7 @@ env:
 jobs:
   discover:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       nix: ${{ steps.discover.outputs.nix }}
       go-test-shards: ${{ steps.discover.outputs.go-test-shards }}
@@ -70,6 +71,7 @@ jobs:
         target: ${{ fromJson(needs.discover.outputs.go-test-shards) }}
     name: go-test (${{ matrix.target.shard }} of ${{ matrix.target.total }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -105,6 +107,7 @@ jobs:
 
   go-static:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -138,6 +141,7 @@ jobs:
   go-cache:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -178,6 +182,7 @@ jobs:
         target: ${{ fromJson(needs.discover.outputs.nix) }}
     name: nix (${{ matrix.target.system }}.${{ matrix.target.name }})
     runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: ${{ matrix.target.timeout }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -224,6 +229,7 @@ jobs:
     needs: [discover, go-test, go-static, nix]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Verify discovery and all checks passed
         env:

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
 )
 
 func TestMailAccountAddLeavesNothingWhenTheTestFails(t *testing.T) {

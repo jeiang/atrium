@@ -5,6 +5,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   outputDir: 'test-results',
   forbidOnly: true,
+  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   fullyParallel: true,
   retries: 0,
   reporter: [['list']],
