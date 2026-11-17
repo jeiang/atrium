@@ -23,7 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/apps/mail/run"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"

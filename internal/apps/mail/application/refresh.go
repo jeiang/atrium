@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/apps/mail/watches"
+	"github.com/jeiang/atrium/internal/apps/packages/watches"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/module"
 )

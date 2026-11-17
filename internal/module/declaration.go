@@ -79,6 +79,7 @@ type Declaration struct {
 	HomeWeather           homecard.WeatherCard
 	Communications        communications.Provider
 	CommunicationsRefresh Refresher
+	MessageScans          []MessageScan
 	Attachments           []Attachment
 	Connections           []connections.Definition
 	AccountSync           *connections.AccountSync
@@ -93,6 +94,7 @@ type Declaration struct {
 	ServiceSetName        string
 	Recover               func(context.Context, *db.DB, config.Config) error
 	HasOperatorData       func(context.Context, db.Querier) (bool, error)
+	OptIn                 func(context.Context, db.Querier) (bool, error)
 	Metrics               []ops.Metric
 	Queues                []ops.Queue
 	Corpora               []embed.Corpus

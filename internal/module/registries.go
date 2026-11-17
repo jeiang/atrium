@@ -73,6 +73,7 @@ type registries struct {
 	day            daySources
 	communications communications.Feed
 	refresh        Refresher
+	messageScans   []namedScan
 	weather        weatherCard
 	direct         []string
 	channels       []string
@@ -108,6 +109,9 @@ func compileRegistries(decls []Declaration) (registries, error) {
 		return registries{}, err
 	}
 	if r.refresh, err = compileRefresh(decls); err != nil {
+		return registries{}, err
+	}
+	if r.messageScans, err = compileMessageScans(decls); err != nil {
 		return registries{}, err
 	}
 	channels := claims{SystemChannel: platformOwner}

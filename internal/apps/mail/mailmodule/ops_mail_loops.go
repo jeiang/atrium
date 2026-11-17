@@ -3,7 +3,7 @@ package mailmodule
 import (
 	"github.com/jeiang/atrium/internal/application"
 	mailapp "github.com/jeiang/atrium/internal/apps/mail/application"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/unit"
 )
 

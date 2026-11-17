@@ -38,6 +38,7 @@ type Result struct {
 type Definition struct {
 	Module          string
 	Key             string
+	KeyOwner        string
 	Name            string
 	Kind            string
 	Prompt          string
@@ -59,4 +60,11 @@ type Definition struct {
 	Needs           []string
 	Run             func(context.Context, Run) (Result, error)
 	Recover         Recovery
+}
+
+func (d Definition) owner() string {
+	if d.KeyOwner != "" {
+		return d.KeyOwner
+	}
+	return d.Module
 }

@@ -4,23 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"regexp"
 
-	"github.com/jeiang/atrium/internal/apps/mail"
-	"github.com/jeiang/atrium/internal/apps/mail/classify"
-	"github.com/jeiang/atrium/internal/apps/mail/mailscan"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
+	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/timex"
 	"golang.org/x/text/cases"
@@ -69,13 +70,8 @@ var (
 	}
 )
 
-var PackageHint = "m.k_order = 1 OR " + strings.Join(func() []string {
-	var out []string
-	for _, w := range [...]string{"shipped", "tracking", "delivered", "out for delivery", "on its way", "your package"} {
-		out = append(out, "lower(m.subject) LIKE '%"+w+"%'")
-	}
-	return out
-}(), " OR ")
+var PackagePrefilter = communications.Prefilter{Received: true, Ordered: true,
+	Subject: []string{"shipped", "tracking", "delivered", "out for delivery", "on its way", "your package"}}
 
 const PackageSystem = "You read one email for the mailbox owner and decide whether it is an order confirmation, shipping notice or " +
 	"delivery update for a physical package. is_order=false for marketing, receipts for services, and anything else. " +
@@ -115,22 +111,22 @@ func clip(text string, limit int) string {
 	return textx.Clip(text, limit-1) + "…"
 }
 
-func rowText(row mailscan.Message, body string, bodyChars int) string {
-	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, textx.Clip(body, bodyChars))
+func rowText(row communications.Message, body string, bodyChars int) string {
+	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.From.Name, row.From.Addr, row.Subject, textx.Clip(body, bodyChars))
 }
 
 type Options struct {
 	Classifier *classifier.Service
-	Paid       *classify.Deferral
+	Paid       communications.Deferral
 	Clock      func() float64
 	Env        config.Env
 }
 
-func judgePackage(ctx context.Context, c *classifier.Service, row mailscan.Message, body string, bodyChars int) (any, error) {
+func judgePackage(ctx context.Context, c *classifier.Service, row communications.Message, body string, bodyChars int) (any, error) {
 	if packageSchemaErr != nil {
 		return nil, packageSchemaErr
 	}
-	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Package, Item: classify.MessageItem(row.Account, row.ID),
+	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Package, Item: classifier.Item{Key: row.Account + ":" + strconv.FormatInt(row.ID, 10)},
 		System: PackageSystem, User: rowText(row, body, bodyChars), Schema: packageSchemaJSON})
 	if err != nil {
 		return nil, err
@@ -202,14 +198,14 @@ func classifyStatus(subject, body string) string {
 	return ordered
 }
 
-func senderMerchant(row mailscan.Message, carrierDomains []string) string {
-	domain := cases.Fold().String(row.FromDomain)
+func senderMerchant(row communications.Message, carrierDomains []string) string {
+	domain := cases.Fold().String(row.Mailing.Domain)
 	for _, d := range carrierDomains {
 		if domain == d || strings.HasSuffix(domain, "."+d) {
 			return ""
 		}
 	}
-	return clip(row.FromName, 80)
+	return clip(row.From.Name, 80)
 }
 
 type item struct {
@@ -221,7 +217,7 @@ type item struct {
 	StatusText     string
 }
 
-func regexPackages(row mailscan.Message, body string, carrierDomains []string) []item {
+func regexPackages(row communications.Message, body string, carrierDomains []string) []item {
 	text := row.Subject + "\n" + body
 	numbers := findTracking(text)
 	if len(numbers) == 0 {
@@ -385,20 +381,22 @@ type scanResult struct {
 }
 
 func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanResult, error) {
-	limit := mail.TuningWatchesScanLimit
-	window := mail.TuningWatchesPackageWindowDays
-	bodyChars := mail.TuningWatchesBodyChars
-	paid := o.Paid
-	if paid == nil {
-		paid = &classify.Deferral{}
+	limit := TuningWatchesScanLimit
+	window := TuningWatchesPackageWindowDays
+	bodyChars := TuningWatchesBodyChars
+	feed := module.Communications(ctx)
+	if feed.Provider == nil {
+		return scanResult{}, nil
 	}
-	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
-		Kind: packages, Hint: "m.sent = 0 AND (" + PackageHint + ")", WindowDays: window, FetchLimit: limit, Limit: limit, Paid: paid,
-		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
-			items := regexPackages(row, body, mail.TuningWatchesCarrierDomains)
+	result, err := feed.Scan(ctx, d, now, communications.Scan{
+		Kind: packages, Prefilter: PackagePrefilter, WindowDays: window, FetchLimit: limit, Limit: limit, Paid: o.Paid,
+		Judge: func(ctx context.Context, row communications.Message, body string) (int, error) {
+			items := regexPackages(row, body, TuningWatchesCarrierDomains)
 			if len(items) == 0 {
-				if err := paid.Err(); err != nil {
-					return 0, err
+				if o.Paid != nil {
+					if err := o.Paid.Err(); err != nil {
+						return 0, err
+					}
 				}
 				answer, err := judgePackage(ctx, o.Classifier, row, body, bodyChars)
 				if err != nil {
@@ -414,7 +412,7 @@ func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanRe
 			}
 			found := 0
 			for _, item := range items {
-				id, err := upsertPackage(ctx, d.Write, item, row.ID, row.DateTS, now)
+				id, err := upsertPackage(ctx, d.Write, item, row.ID, row.Date, now)
 				if err != nil {
 					return found, err
 				}
@@ -458,7 +456,7 @@ type Package struct {
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
 	stale := 0
 	if activeOnly {
-		stale = mail.TuningWatchesStalePackageDays
+		stale = TuningWatchesStalePackageDays
 	}
 	where := " WHERE dismissed = 0"
 	if includeDismissed {
@@ -530,4 +528,30 @@ func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (refreshResu
 		return refreshResult{}, err
 	}
 	return refreshResult{Packages: result}, nil
+}
+
+func AddPackage(ctx context.Context, q db.Querier, carrier, number, merchant string, now float64) (int64, bool, error) {
+	var existing int64
+	err := q.QueryRowContext(ctx, "SELECT id FROM packages WHERE tracking_number = ?", number).Scan(&existing)
+	if err == nil {
+		return existing, false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, err
+	}
+	res, err := q.ExecContext(ctx,
+		"INSERT INTO packages (carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, ?, ?, ?, '', ?, '', 0, 0, ?, ?)",
+		carrier, number, clip(merchant, 80), merchantKey(merchant), ordered, now, now)
+	if err != nil {
+		return 0, false, err
+	}
+	id, err := res.LastInsertId()
+	return id, true, err
+}
+
+func HasPackages(ctx context.Context, q db.Querier) (bool, error) {
+	var found bool
+	err := q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM packages)").Scan(&found)
+	return found, err
 }

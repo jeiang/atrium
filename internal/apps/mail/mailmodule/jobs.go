@@ -9,7 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/run"
 	"github.com/jeiang/atrium/internal/apps/mail/scans"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"

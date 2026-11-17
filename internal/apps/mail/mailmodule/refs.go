@@ -5,7 +5,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/drafts"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 )

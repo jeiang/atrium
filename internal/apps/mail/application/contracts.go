@@ -20,9 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/scans"
 	"github.com/jeiang/atrium/internal/apps/mail/scanutil"
 	"github.com/jeiang/atrium/internal/apps/mail/search"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
 	"github.com/jeiang/atrium/internal/apps/mail/triage"
-	"github.com/jeiang/atrium/internal/apps/mail/watches"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -43,11 +41,6 @@ type (
 	ServiceUnavailable     = httpx.ServiceUnavailable
 	SearchFilters          = search.Filters
 	NotConfigured          = config.NotConfigured
-	TrackingQuotaError     = tracking.QuotaError
-	TrackingError          = tracking.Error
-	TrackingStatusError    = tracking.StatusError
-	TrackingRateLimitError = tracking.RateLimitError
-	TrackingTransportError = tracking.TransportError
 	BacklogError           = backlog.Error
 	ReplaySummary          = replay.Summary
 	RuleError              = rules.RuleError
@@ -65,7 +58,6 @@ type (
 	DraftStale             = drafts.Stale
 	DraftSendOutcome       = drafts.Result
 	DraftOutcomeUnknown    = drafts.OutcomeUnknown
-	Package                = watches.Package
 	UnknownAccount         = run.UnknownAccount
 	OpenFunc               = mail.OpenFunc
 	Pass                   = run.Pass
@@ -80,7 +72,6 @@ const (
 	MailTriage             = executors.MailTriage
 	TriageArchive          = executors.TriageArchive
 	TriageLabel            = executors.TriageLabel
-	UndoUntrack            = tracking.UndoUntrack
 	ReplayStageNone        = replay.StageNone
 	RuleAgeField           = rules.AgeField
 	RuleAgeOp              = rules.AgeOp

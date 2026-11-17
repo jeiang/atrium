@@ -205,6 +205,15 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 		if only != nil && !only[r.Name] {
 			continue
 		}
+		if value == "true" && r.OptIn != nil {
+			has, err := r.OptIn(ctx, q)
+			if err != nil {
+				return err
+			}
+			if !has {
+				value = "false"
+			}
+		}
 		if settings.HostOwnedKey(FlagKey(r.Name)) {
 			continue
 		}
@@ -217,8 +226,12 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 		if err := s.reg.Set(ctx, q, FlagKey(r.Name), value); err != nil {
 			return err
 		}
-		if st.State == Enabled {
+		if value == "true" {
 			log.Info("module enabled by migration", logx.Module, r.Name, logx.State, string(st.State))
+			continue
+		}
+		if st.State == Enabled {
+			log.Info("opt-in module left off by migration", logx.Module, r.Name)
 			continue
 		}
 		log.Warn("module left in needs-settings by migration", logx.Module, r.Name, logx.State, string(st.State), logx.Reason, st.Reason())

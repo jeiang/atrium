@@ -12,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/drafts"
 	"github.com/jeiang/atrium/internal/apps/mail/live"
 	"github.com/jeiang/atrium/internal/apps/mail/mailops"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/safety"
