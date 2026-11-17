@@ -70,7 +70,7 @@ test.describe('chat list', () => {
     );
     await expect(list.getByRole('listitem')).toHaveCount(30);
     await page.getByRole('button', { name: 'Show more chats' }).click();
-    await expect(list.getByRole('listitem')).toHaveCount(40);
+    await expect(list.getByRole('listitem')).toHaveCount(41);
     await expect(page.getByRole('button', { name: 'Show more chats' })).toHaveCount(0);
     await list.getByRole('link', { name: /Winter tyre sizes/ }).click();
     await expect(page).toHaveURL(/\/chat\/9$/);
@@ -396,6 +396,36 @@ test.describe('streaming', () => {
       timeout: 20_000,
     });
     await expect(transcript(page).getByRole('heading', { name: 'Declined' })).toBeVisible();
+  });
+
+  test('an approved download reads as applied with Undo, and Undo reverses it', async ({ page }) => {
+    test.setTimeout(45_000);
+    const sent: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'GET') sent.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    });
+    await page.setViewportSize({ width: desktop.width, height: desktop.height });
+    await openChat(page, '/chat/13');
+    const messages = transcript(page);
+    const card = messages.locator('[data-approval="502"]');
+    await showRow(card);
+    await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
+    await card.getByRole('button', { name: 'Add torrent' }).click();
+    const confirm = page.getByRole('dialog', { name: 'Send this now?' });
+    if (await confirm.isVisible()) await confirm.getByRole('button', { name: 'Send now' }).click();
+    await expect(messages.getByRole('heading', { name: 'Approved and applied' })).toBeVisible({ timeout: 20_000 });
+    await expect(messages.getByText('Add the Debian netinstall torrent')).toBeVisible();
+    await expect(messages.getByRole('heading', { name: 'Declined' })).toHaveCount(0);
+    const undo = messages.getByRole('button', { name: 'Undo', exact: true });
+    await expect(undo).toBeVisible();
+    await expectNoHorizontalScroll(page);
+    await expectRoundedSurfaces(page, edgeSurfaces);
+    await expectNoSeriousAxeFindings(page);
+
+    await undo.click();
+    await expect(messages.getByRole('heading', { name: 'Approved, then undone' })).toBeVisible();
+    await expect(undo).toHaveCount(0);
+    expect(sent).toEqual(['POST /web/v1/approvals/502/approve', 'POST /web/v1/effects/1202/undo']);
   });
 
   test('Stop ends the run and says what happened', async ({ page }) => {
