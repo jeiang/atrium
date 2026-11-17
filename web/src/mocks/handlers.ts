@@ -6,6 +6,7 @@ import { type AssistantScenario, assistantHandlers } from './assistant';
 import { type CalendarScenario, calendarHandlers } from './calendar';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type ConnectionsScenario, connectionHandlers } from './connections';
+import { fileHandlers } from './files';
 import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
@@ -196,6 +197,7 @@ export const handlers = [
   ...appHandlers(scenario),
   ...calendarHandlers(scenario),
   ...mediaHandlers(scenario),
+  ...fileHandlers,
   ...chatHandlers,
   ...simulatorHandlers,
   ...knowledgeHandlers,

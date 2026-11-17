@@ -34,6 +34,7 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
   import { useConfiguration } from '../assistant/assistant';
+  import ChatFiles from './ChatFiles.svelte';
   import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';
@@ -457,6 +458,9 @@
   <header class="chat__head">
     <a class="chat__back link" href={p('/chat')}><Icon name="chevron" />All chats</a>
     <h1 class="chat__title" tabindex="-1">{title}</h1>
+    {#if id !== undefined && !invalid}
+      <ChatFiles thread={id} />
+    {/if}
   </header>
 
   {#if invalid}

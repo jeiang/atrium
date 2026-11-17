@@ -56,6 +56,21 @@
     outline: none;
   }
 
+  .chat__files {
+    justify-self: start;
+  }
+
+  .chat__filelist {
+    display: grid;
+    gap: var(--s-3);
+  }
+
+  .chat__filenote {
+    margin: 0;
+    font-size: var(--t-sm);
+    color: var(--ink-3);
+  }
+
   .chat__skeleton {
     min-block-size: 20rem;
   }

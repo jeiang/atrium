@@ -17,9 +17,12 @@ import {
   knowledgeMap,
   knowledgeRestore,
   knowledgeRetract,
+  knowledgeSpaceArchive,
   knowledgeSpaceCreate,
   knowledgeSpaceDetail,
   knowledgeSpaceEdit,
+  knowledgeSpaceFileDelete,
+  knowledgeSpaceFileUpload,
   knowledgeSpaceList,
   knowledgeSubject,
   knowledgeSubjects,
@@ -207,15 +210,23 @@ export function useMap(id: () => number | undefined) {
   });
 }
 
-export function useSpaces() {
-  return createInfiniteQuery(() => ({
-    queryKey: ['knowledge', 'spaces'],
-    queryFn: async ({ pageParam, signal }) =>
-      ok(await knowledgeSpaceList({ cursor: pageParam || undefined, limit: PAGE }, { signal })),
-    initialPageParam: '',
-    getNextPageParam: (last) => last.next_cursor ?? undefined,
-    meta: { topics: TOPICS },
-  }));
+export function useSpaces(archived: () => boolean) {
+  return createInfiniteQuery(() => {
+    const shelf = archived();
+    return {
+      queryKey: ['knowledge', 'spaces', shelf],
+      queryFn: async ({ pageParam, signal }: { pageParam: string; signal: AbortSignal }) =>
+        ok(
+          await knowledgeSpaceList(
+            { archived: shelf || undefined, cursor: pageParam || undefined, limit: PAGE },
+            { signal },
+          ),
+        ),
+      initialPageParam: '',
+      getNextPageParam: (last: { next_cursor?: string | null }) => last.next_cursor ?? undefined,
+      meta: { topics: TOPICS },
+    };
+  });
 }
 
 export function useSpace(id: () => number | undefined) {
@@ -251,6 +262,18 @@ export async function handleCreateSpace(fields: { name: string; effort: string; 
 
 export async function handleRenameSpace(id: number, name: string): Promise<void> {
   ok(await knowledgeSpaceEdit(id, { name }, oneGesture()));
+}
+
+export async function handleArchiveSpace(id: number, archived: boolean): Promise<void> {
+  ok(await knowledgeSpaceArchive(id, { archived }, oneGesture()));
+}
+
+export async function handleUploadFiles(space: number, files: readonly File[]): Promise<number> {
+  return ok(await knowledgeSpaceFileUpload(space, { upload: [...files] }, oneGesture())).file_ids?.length ?? 0;
+}
+
+export async function handleDeleteFile(space: number, file: number): Promise<void> {
+  ok(await knowledgeSpaceFileDelete(space, file, oneGesture()));
 }
 
 export async function handleAddToSpace(
