@@ -561,8 +561,9 @@ claims about the running application. Operator contracts are in
   `--repeat <n>` (at most 5, 3 s apart) resends the last refused request.
   `internal/davmirror` keeps an in-memory discovery cache per capability,
   endpoint and credential hash (home set, collections, relisted hourly,
-  dropped on 401/403/404/410), a 20-minute memory of each sync's result that
-  the iCloud `Silent` check reuses, and retries a challenge-less, empty 401
+  dropped on 401/403/404/410), a 20-minute memory of each finished sync's
+  result that the iCloud `Silent` check reuses (otherwise it relists the
+  cached home set), and retries a challenge-less, empty 401
   after the password was accepted at most twice per run (2 s and 6 s,
   jittered).
 - qBittorrent and the embedding endpoint have a 6-hour grace window,

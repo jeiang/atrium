@@ -163,7 +163,8 @@ It discovers again from the root only when a remembered address answers 401,
 everything. A contacts sync is therefore one `REPORT` per address book, with
 one extra `PROPFIND` an hour. The silent health check of the iCloud
 connection reuses the result of a sync of the same capability from the last 20
-minutes and sends nothing; without one it checks through the same memory. The
+minutes and sends nothing; without one, or while a sync of that capability is
+running, it lists the remembered home set again (one `PROPFIND`). The
 explicit `connections test` and `--trace` always discover from the root.
 
 ## Knowledge export

@@ -182,6 +182,7 @@ func mirror(ctx context.Context, login Login, endpoint, dir string, k Kind, capa
 	if err != nil {
 		return Stats{}, err
 	}
+	syncOutcomes.Delete(client.cache)
 	collections, err := client.Fetch(ctx, k)
 	if result, ok := outcome(capability, err); ok && ctx.Err() == nil {
 		rememberSync(client.cache, result)
@@ -395,7 +396,7 @@ func (s icloudSession) check(ctx context.Context, capability, cache string) conn
 	if err != nil {
 		return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}
 	}
-	client.cache = cache
+	client.cache, client.verify = cache, true
 	collections, err := client.Collections(ctx, kind)
 	if err != nil {
 		result, ok := failure(capability, err)

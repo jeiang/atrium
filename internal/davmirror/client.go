@@ -216,6 +216,7 @@ type Client struct {
 	partition string
 	refused   []*StatusError
 	cache     string
+	verify    bool
 	accepted  bool
 	retries   int
 }
@@ -477,7 +478,7 @@ func (c *Client) Collections(ctx context.Context, k Kind) ([]CollectionRef, erro
 func (c *Client) refs(ctx context.Context, k Kind) ([]CollectionRef, bool, error) {
 	c.reset()
 	if known, ok := c.cached(); ok {
-		if time.Since(known.listedAt) < relistAfter {
+		if !c.verify && time.Since(known.listedAt) < relistAfter {
 			return known.collections, true, nil
 		}
 		home, refs, err := c.list(ctx, k, known.home)
