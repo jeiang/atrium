@@ -173,7 +173,6 @@ func Probe(ctx context.Context, conn Connection) []ProbeResult {
 	if err != nil {
 		return []ProbeResult{{Capability: "discovery", State: "failing", Reason: err.Error()}}
 	}
-	hc.CheckRedirect = noRedirect
 	p, err := discoverDoc(ctx, hc, issuer, time.Now())
 	if err != nil {
 		return []ProbeResult{{Capability: "discovery", State: "failing", Reason: err.Error()}}

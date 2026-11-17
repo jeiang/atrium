@@ -54,8 +54,6 @@ type discoveryDoc struct {
 	ScopesSupported       []string `json:"scopes_supported"`
 }
 
-func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-
 func (s *Service) httpClient(ctx context.Context) (*http.Client, error) {
 	lease, err := s.lease(ctx)
 	if err != nil {
@@ -66,7 +64,6 @@ func (s *Service) httpClient(ctx context.Context) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	hc.CheckRedirect = noRedirect
 	return hc, nil
 }
 
