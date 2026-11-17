@@ -64,8 +64,12 @@ claims about the running application. Operator contracts are in
   communications feed (summaries, recipient envelopes, owner addresses, the
   question test and paid scans), so stored loops and commitments stay
   readable with Mail off, with no message subject or sender. Signals is
-  declared `Core`; `module.Compile` still requires the `core` declaration and
-  lets any core unit own delegated or shared operations. The mail pass, and
+  declared `Core` with no flag; it claims the `internal/signals` packages
+  and its three tables. `module.Compile` still requires the `core`
+  declaration, which alone claims no packages (it owns the unclaimed
+  platform packages), and lets any core unit own delegated or shared
+  operations. The unit-boundary guard rejects a Mail import of signals and
+  a signals import of Mail. The mail pass, and
   the mail-owned `mail.refresh-loops` operation under the mail pass lock,
   call `module.RefreshCommunications` with the paid classifier and
   deferral; the one unit that sets `CommunicationsRefresh` (signals) runs,
