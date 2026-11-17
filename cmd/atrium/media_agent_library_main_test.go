@@ -1,9 +1,9 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,14 +106,14 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 	d := asstDB(t, dir)
 	w := webG3(t, startServeIn(t, dir))
 
-	movie := "/web/v1/media/library/movie/" + url.PathEscape(libraryMovie)
-	show := "/web/v1/media/library/tv/" + url.PathEscape(libraryShow)
+	movie := "/web/v1/media/library/movie/" + base64.RawURLEncoding.EncodeToString([]byte(libraryMovie))
+	show := "/web/v1/media/library/" + library.KindShow + "/" + base64.RawURLEncoding.EncodeToString([]byte(libraryShow))
 	for _, target := range []string{"/web/v1/media/library", movie, show} {
 		if view := dataG3(t, "GET "+target, w.do(http.MethodGet, target, nil)); view["catalogue"].(map[string]any)["stale"] != false {
 			t.Fatalf("GET %s from a current catalogue = %v", target, view)
 		}
 	}
-	expectAPI(t, w.do(http.MethodGet, "/web/v1/media/library/movie/Missing", nil), http.StatusNotFound, "not_found")
+	expectAPI(t, w.do(http.MethodGet, "/web/v1/media/library/movie/"+base64.RawURLEncoding.EncodeToString([]byte("Missing")), nil), http.StatusNotFound, "not_found")
 	found := searchThroughServeG3(t, api, d, w, "lanterns")
 	if found.Catalogue != "current" || len(found.Results) != 1 || found.Results[0].Title != libraryShow || len(found.Results[0].Files) != 1 || found.Results[0].Files[0] != libraryEpisode {
 		t.Fatalf("library search %+v", found)
@@ -164,7 +164,7 @@ func TestLibraryWithoutAnyCatalogueIsUnavailable(t *testing.T) {
 	if got := w.do(http.MethodGet, "/web/v1/media/library", nil); got.status != http.StatusServiceUnavailable {
 		t.Fatalf("library with an unreachable agent = %d, want 503: %.300s", got.status, got.body)
 	}
-	if got := w.do(http.MethodGet, "/web/v1/media/library/movie/"+url.PathEscape(libraryMovie), nil); got.status != http.StatusServiceUnavailable {
+	if got := w.do(http.MethodGet, "/web/v1/media/library/movie/"+base64.RawURLEncoding.EncodeToString([]byte(libraryMovie)), nil); got.status != http.StatusServiceUnavailable {
 		t.Fatalf("movie with an unreachable agent = %d, want 503: %.300s", got.status, got.body)
 	}
 }

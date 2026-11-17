@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -109,28 +109,19 @@ func TestDraftSentFromTheThreadGoesThroughTheSendGate(t *testing.T) {
 	}
 
 	base := startServeIn(t, dir)
-	client := cardClient(t, base, strconv.FormatInt(latestThread(t, dir), 10))
-	code, card := hxFetch(t, client, http.MethodGet, base+"/drafts/"+draftID+"/card", nil)
-	if code != http.StatusOK {
-		t.Fatalf("draft card: %d\n%s", code, card)
-	}
-	m := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(card)
-	if m == nil {
-		t.Fatal("the draft card has no revision")
-	}
+	w := webG3(t, base)
+	okG3(t, "thread", w.do(http.MethodGet, "/web/v1/threads/"+strconv.FormatInt(latestThread(t, dir), 10), nil))
+	draft := dataG3(t, "draft", w.do(http.MethodGet, "/web/v1/drafts/"+draftID, nil))
+	revision := number(t, draft["revision"])
 
-	code, card = hxFetch(t, client, http.MethodPost, base+"/drafts/"+draftID+"/send", url.Values{"revision": {"999"}})
-	if code != http.StatusConflict {
-		t.Fatalf("stale send: %d\n%s", code, card)
+	if got := w.do(http.MethodPost, "/web/v1/drafts/"+draftID+"/send", map[string]any{"revision": 999}); got.status != http.StatusConflict {
+		t.Fatalf("stale send: %d\n%s", got.status, got.body)
 	}
 	if _, data := smtp.seen(); data != "" {
 		t.Fatalf("a refused send reached SMTP:\n%s", data)
 	}
 
-	code, card = hxFetch(t, client, http.MethodPost, base+"/drafts/"+draftID+"/send", url.Values{"revision": {m[1]}})
-	if code != http.StatusOK {
-		t.Fatalf("send: %d\n%s", code, card)
-	}
+	okG3(t, "send", w.do(http.MethodPost, "/web/v1/drafts/"+draftID+"/send", map[string]any{"revision": revision}))
 	if _, data := smtp.seen(); !strings.Contains(data, "Subject: Lease renewal") {
 		t.Fatalf("SMTP did not get the draft:\n%s", data)
 	}
@@ -151,52 +142,30 @@ func TestCalendarCreateAsksInTheThreadAndWritesOnlyOnApproval(t *testing.T) {
 	}
 	thread := strconv.FormatInt(latestThread(t, dir), 10)
 	base := startServeIn(t, dir)
-	card := base + "/proposals/" + id + "/card"
-	client := cardClient(t, base, thread)
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	w := webG3(t, base)
 
-	if code, _, header := fetch(t, client, http.MethodGet, base+"/proposals/"+id, nil); code != http.StatusSeeOther || header.Get("Location") != "/chat/"+thread+"#proposal-"+id {
-		t.Fatalf("GET /proposals/%s = %d %q, want a redirect to the thread card", id, code, header.Get("Location"))
-	}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/proposals", nil); code != http.StatusNotFound {
-		t.Fatalf("GET /proposals = %d, want 404", code)
-	}
-	for _, path := range []string{"/proposals/0", "/proposals/0/card", "/proposals/-1/card"} {
-		if code, body := hxFetch(t, client, http.MethodGet, base+path, nil); code != http.StatusNotFound {
-			t.Fatalf("GET %s = %d, want 404\n%s", path, code, body)
+	for _, path := range []string{"/web/v1/proposals/0", "/web/v1/proposals/-1"} {
+		if got := w.do(http.MethodGet, path, nil); got.status != http.StatusNotFound && got.status != http.StatusUnprocessableEntity {
+			t.Fatalf("GET %s = %d, want a refusal\n%s", path, got.status, got.body)
 		}
 	}
-	if code, body := hxFetch(t, client, http.MethodGet, base+"/review/strip", nil); code != http.StatusOK {
-		t.Fatalf("review strip: %d\n%s", code, body)
-	}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat/"+thread, nil); code != http.StatusOK {
-		t.Fatalf("thread with pending approval: %d", code)
-	}
-	code, body := hxFetch(t, client, http.MethodGet, card, nil)
-	if code != http.StatusOK {
-		t.Fatalf("pending card: %d\n%s", code, body)
-	}
-	if code, body = hxFetch(t, client, http.MethodGet, card+"?poll=1", nil); code != http.StatusNoContent {
-		t.Fatalf("poll of a pending card = %d, want 204\n%s", code, body)
-	}
-	if code, body = hxFetch(t, client, http.MethodGet, card+"?view=row", nil); code != http.StatusOK {
-		t.Fatalf("Needs you row: %d\n%s", code, body)
+	okG3(t, "thread with pending approval", w.do(http.MethodGet, "/web/v1/threads/"+thread, nil))
+	if pending := dataG3(t, "pending proposal", w.do(http.MethodGet, "/web/v1/proposals/"+id, nil)); pending["status"] != "pending" {
+		t.Fatalf("proposal before approval = %v, want pending", pending)
 	}
 
-	code, body = hxFetch(t, client, http.MethodPost, base+"/proposals/"+id+"/approve", url.Values{"all": {"1"}, "view": {"row"}})
-	if code != http.StatusOK {
-		t.Fatalf("approve from the Work panel: %d\n%s", code, body)
+	approved := dataG3(t, "approve", w.do(http.MethodPost, "/web/v1/approvals/"+id+"/approve", map[string]any{}))
+	if approval, _ := approved["approval"].(map[string]any); approval == nil || fmt.Sprint(approval["thread_id"]) != thread {
+		t.Fatalf("approval = %v, want it tied to thread %s", approved, thread)
 	}
 	if len(srv.Puts) != 1 || len(srv.Deleted) != 0 {
 		t.Fatalf("approval wrote %d events and deleted %d, want one PUT", len(srv.Puts), len(srv.Deleted))
 	}
-	if code, body = hxFetch(t, client, http.MethodGet, card+"?poll=1", nil); code != http.StatusOK {
-		t.Fatalf("poll of the applied card: %d\n%s", code, body)
+	if applied := dataG3(t, "applied proposal", w.do(http.MethodGet, "/web/v1/proposals/"+id, nil)); applied["status"] == "pending" {
+		t.Fatalf("proposal after approval = %v, want it decided", applied)
 	}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat/"+thread, nil); code != http.StatusOK {
-		t.Fatalf("thread after approval: %d", code)
-	}
-	if code, body = hxFetch(t, client, http.MethodPost, base+"/proposals/"+id+"/approve", url.Values{"all": {"1"}}); len(srv.Puts) != 1 {
-		t.Fatalf("a second approval wrote again: %d %d puts\n%s", code, len(srv.Puts), body)
+	okG3(t, "thread after approval", w.do(http.MethodGet, "/web/v1/threads/"+thread, nil))
+	if got := w.do(http.MethodPost, "/web/v1/approvals/"+id+"/approve", map[string]any{}); len(srv.Puts) != 1 {
+		t.Fatalf("a second approval wrote again: %d %d puts\n%s", got.status, len(srv.Puts), got.body)
 	}
 }
