@@ -42,8 +42,9 @@ settings the operator edits in the UI or pins from the host.
 - CI runs the tests, lints and static checks as plain GitHub Actions jobs,
   x86_64 only: Go and Node from `actions/setup-go` and `actions/setup-node`
   at the releases in `.ci/pins.json`, SQLCipher built from the pinned source
-  by `.ci/sqlcipher.sh`, the Go tests in shards (`tools/go-test-shard`) with a
-  Go cache saved from `main`, the browser e2e sharded per engine. Nix in CI
+  by `.ci/sqlcipher.sh`, the Go tests in shards (`tools/go-test-shard`,
+  balanced by the times in `.ci/go-test-times.tsv`) with a Go cache saved
+  from `main`, the browser e2e sharded per engine. Nix in CI
   only builds and evaluates: the package and the module checks (the
   `package` group of `.ci/targets.nix`) and every other flake check that
   `.ci/targets.nix` does not list as run outside Nix (the `rest` group), on
