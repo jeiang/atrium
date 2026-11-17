@@ -52,7 +52,7 @@
       await handleUndoEffects(effects);
       toast(`Removed the link to ${name}.`);
     } catch (failure) {
-      toast(failure instanceof Error ? failure.message : 'Undo failed.', { tone: 'error' });
+      toast(failureText(failure), { tone: 'error' });
     } finally {
       await refreshKnowledge(client);
     }
@@ -82,7 +82,7 @@
       });
       await refreshKnowledge(client);
     } catch (failure) {
-      error = failureText(failure, 'Cannot reach atrium. Nothing was linked.');
+      error = failureText(failure);
     } finally {
       pending = false;
     }

@@ -4,7 +4,7 @@ import { API_BASE } from '../contract';
 import { planAttention } from './plan';
 
 export interface InboxScenario {
-  decide?: 'ok' | 'conflict' | 'stale' | 'network';
+  decide?: 'ok' | 'conflict' | 'stale' | 'network' | 'unknown';
   empty?: boolean;
   fail?: boolean;
   mix?: boolean;
@@ -127,12 +127,14 @@ let off = new Set<string>();
 
 function scenario(): InboxScenario {
   try {
-    const raw = localStorage.getItem('atrium.mock') ?? '{}';
-    if (raw !== read) {
-      read = raw;
+    const parsed: { inbox?: InboxScenario; modules?: Record<string, string> } = JSON.parse(
+      localStorage.getItem('atrium.mock') ?? '{}',
+    );
+    const key = JSON.stringify(parsed.inbox ?? {});
+    if (key !== read) {
+      read = key;
       store = seed();
     }
-    const parsed: { inbox?: InboxScenario; modules?: Record<string, string> } = JSON.parse(raw);
     off = new Set(Object.entries(parsed.modules ?? {}).flatMap(([name, state]) => (state === 'off' ? [name] : [])));
     return parsed.inbox ?? {};
   } catch {
@@ -286,9 +288,22 @@ function command(key: string, approve: boolean, request: Request, body: () => Js
   const pending =
     type === 'draft' ? open.drafts.some((item) => item.id === id) : open.proposals.some((item) => item.id === id);
   if (!pending) return refusal(409, 'not_pending', 'It was already decided.');
+  if (mode === 'unknown') return unconfirmed(type, id);
   decide(key, approve);
   if (mode === 'network') return HttpResponse.error();
   return HttpResponse.json(body());
+}
+
+function unconfirmed(type: string | undefined, id: number): Response {
+  const at = Math.floor(Date.now() / 1000);
+  if (type === 'draft') {
+    const draft = store.drafts.find((item) => item.id === id);
+    if (draft) Object.assign(draft, { status: 'unknown', updated_at: at });
+    return refusal(409, 'effect_unknown', 'The mail server did not confirm the send.');
+  }
+  const proposal = store.proposals.find((item) => item.id === id);
+  if (proposal) Object.assign(proposal, { status: 'approved', blocked: true, decided_at: at });
+  return refusal(409, 'effect_unknown', 'The change did not confirm whether it happened.');
 }
 
 function proposal(id: unknown): ProposalDetail | undefined {

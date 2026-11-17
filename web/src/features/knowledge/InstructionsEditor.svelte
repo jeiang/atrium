@@ -148,7 +148,7 @@
         announce('The instructions changed since you opened them. They have been reloaded. Your text is kept.');
         return;
       }
-      error = failureText(failure, 'Cannot reach atrium. Your text is kept; save again when the connection returns.');
+      error = failureText(failure);
     } finally {
       saving = false;
     }

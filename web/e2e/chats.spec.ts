@@ -13,6 +13,7 @@ import {
   goReachable,
   goUnreachable,
   layouts,
+  reconnect,
   setUnreachable,
   storedKeys,
   test,
@@ -217,6 +218,39 @@ test.describe('while atrium is unreachable', () => {
     await expect(page.getByRole('list', { name: 'Chats' })).toBeVisible({ timeout: 10_000 });
     await expect.poll(() => storedKeys(page)).toEqual(expect.arrayContaining(['["threads"]', '["thread",7]']));
     expect((await storedKeys(page)).filter((key) => key.startsWith('["session'))).toEqual([]);
+  });
+
+  test.describe('with an unknown outcome', () => {
+    test.use({ allowStatus: [409] });
+
+    test('a send whose outcome is unknown shows as blocked and is never sent again', async ({ page }) => {
+      test.setTimeout(45_000);
+      const sent = writes(page);
+      await page.setViewportSize({ width: desktop.width, height: desktop.height });
+      await openChat(page, '/chat/8', { approveUnknown: true });
+      const card = transcript(page).locator('[data-approval="501"]');
+      await showRow(card);
+      const send = card.getByRole('button', { name: /send email/i });
+      await expect(send).not.toHaveAttribute('aria-disabled');
+      await send.click();
+      await expect(card.locator('.receipt[data-tone="pending"]')).toBeVisible();
+      await expect(
+        page
+          .getByRole('list', { name: 'Notifications' })
+          .getByText('The outcome is unknown. The mail server did not confirm the send. atrium did not try again.'),
+      ).toBeVisible({ timeout: 15_000 });
+      const blocked = transcript(page).getByRole('heading', { name: 'The outcome is unknown' });
+      await expect(blocked).toBeVisible();
+      await expect(card).toHaveCount(0);
+      expect(sent).toEqual(['POST /web/v1/approvals/501/approve']);
+
+      await reconnect(page, /\/web\/v1\/proposals\/501$/);
+      await expect(blocked).toBeVisible();
+      expect(sent).toEqual(['POST /web/v1/approvals/501/approve']);
+      await expectNoHorizontalScroll(page);
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoSeriousAxeFindings(page);
+    });
   });
 });
 
