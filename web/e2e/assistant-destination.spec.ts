@@ -232,6 +232,7 @@ test.describe('the Assistant destination offline', () => {
 
   test('a cached schedule reads and Run now is refused without sending', async ({ page }) => {
     await openSchedule(page, 1, 'Morning brief');
+    await expect(page.getByRole('list', { name: 'Run history' })).toBeVisible();
     await goUnreachable(page);
     await page.getByRole('button', { name: 'Run now' }).click();
     await expect(page.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
