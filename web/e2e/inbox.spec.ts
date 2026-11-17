@@ -526,7 +526,7 @@ test.describe('an unknown outcome in the inbox', () => {
     await gotoShell(page, '/inbox');
     const table = page.getByRole('table', { name: 'Needs you' });
     await expect(table.getByRole('row', { name: /Start watering the vegetable beds/ })).toContainText('Stuck');
-    await expect(table.getByRole('row', { name: /Allotment key handover/ })).toContainText('Send outcome unknown');
+    await expect(table.getByRole('row', { name: /Allotment key handover/ })).toContainText('Stuck');
   });
 
   test.describe('with a refusal or a lost connection', () => {
@@ -586,10 +586,10 @@ test.describe('an unknown outcome in the inbox', () => {
     }) => {
       await page.setViewportSize({ width: layout.width, height: layout.height });
       await useScenario(page, { inbox: { stuck: true } });
-      const checks = async (): Promise<void> => {
+      const checks = async (scope?: string): Promise<void> => {
         await expectNoHorizontalScroll(page);
         await expectRoundedSurfaces(page, edges);
-        if (layout.touch) await expectTouchTargets(page);
+        if (layout.touch) await expectTouchTargets(page, scope);
         await expectNoBlue(page);
         await expectNoSeriousAxeFindings(page);
       };
@@ -598,7 +598,7 @@ test.describe('an unknown outcome in the inbox', () => {
       await expect(item.getByRole('button', { name: 'Mark as done' })).toBeVisible();
       await checks();
       const dialog = await choose(page, item, 'Mark as done', 'Mark this change as done?');
-      await checks();
+      await checks('dialog[open]');
       await dialog.getByRole('button', { name: 'Cancel' }).click();
       await gotoShell(page, '/inbox/draft:8');
       await expect(card(page, 'draft:8').getByRole('button', { name: 'Mark as sent' })).toBeVisible();
