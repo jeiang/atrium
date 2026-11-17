@@ -59,19 +59,19 @@ func TestCalendarListRowsCarryTheWriteTargetAndRevision(t *testing.T) {
 	rows := map[string][]map[string]any{}
 	for _, raw := range listing["events"].([]any) {
 		row := raw.(map[string]any)
-		if row["calendar"] != "cal0" || row["target"] != "icloud" || row["read_only"] != false {
+		if row["calendar"] != "cal0" || row["target"] != "icloud" || row["read_only"] == true {
 			t.Fatalf("iCloud row without its write target: %v", row)
 		}
 		rows[row["uid"].(string)] = append(rows[row["uid"].(string)], row)
 	}
 	dentist, standup, holiday := rows["dentist"], rows["standup"], rows["holiday"]
-	if len(dentist) != 1 || dentist[0]["notes"] != "Bring the card" || dentist[0]["all_day"] != false || dentist[0]["recurring"] != false || dentist[0]["revision"] != detail("dentist") {
+	if len(dentist) != 1 || dentist[0]["notes"] != "Bring the card" || dentist[0]["all_day"] == true || dentist[0]["recurring"] == true || dentist[0]["revision"] != detail("dentist") {
 		t.Fatalf("dentist row: %v", dentist)
 	}
-	if len(standup) != 2 || standup[0]["recurring"] != true || standup[0]["all_day"] != false || standup[0]["revision"] != detail("standup") || standup[1]["revision"] != standup[0]["revision"] {
+	if len(standup) != 2 || standup[0]["recurring"] != true || standup[0]["all_day"] == true || standup[0]["revision"] != detail("standup") || standup[1]["revision"] != standup[0]["revision"] {
 		t.Fatalf("standup rows: %v", standup)
 	}
-	if len(holiday) != 1 || holiday[0]["all_day"] != true || holiday[0]["start"] != "2026-11-03" || holiday[0]["recurring"] != false || holiday[0]["revision"] != detail("holiday") {
+	if len(holiday) != 1 || holiday[0]["all_day"] != true || holiday[0]["start"] != "2026-11-03" || holiday[0]["recurring"] == true || holiday[0]["revision"] != detail("holiday") {
 		t.Fatalf("holiday row: %v", holiday)
 	}
 

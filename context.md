@@ -1362,7 +1362,8 @@ claims about the running application. Operator contracts are in
   routes and writes take: `icloud`, `google` or `birthdays`; `calendar`
   stays the collection name), `read_only` (Birthdays), `all_day`,
   `recurring`, `notes` and, for writable events, `revision`, the same value
-  the event read returns (an iCloud occurrence carries its series revision).
+  the event read returns (an iCloud occurrence carries its series revision);
+  false and empty values are omitted.
   The listing and `GET /calendar/calendars` (`calendar.calendars`: each
   calendar's id, name, `read_only` and `available`) carry `today` and
   `timezone`, the server's date and zone from `config.Location`. The

@@ -28,15 +28,15 @@ type EventsRequest struct {
 type Event struct {
 	UID       string `json:"uid"`
 	Calendar  string `json:"calendar"`
-	Target    string `json:"target" api:"enum=icloud|google|birthdays"`
-	ReadOnly  bool   `json:"read_only"`
+	Target    string `json:"target,omitempty" api:"enum=icloud|google|birthdays"`
+	ReadOnly  bool   `json:"read_only,omitempty"`
 	Start     string `json:"start"`
 	End       string `json:"end"`
-	AllDay    bool   `json:"all_day"`
+	AllDay    bool   `json:"all_day,omitempty"`
 	Title     string `json:"title"`
 	Location  string `json:"location"`
-	Notes     string `json:"notes"`
-	Recurring bool   `json:"recurring"`
+	Notes     string `json:"notes,omitempty"`
+	Recurring bool   `json:"recurring,omitempty"`
 	Revision  string `json:"revision,omitempty"`
 }
 
@@ -44,8 +44,8 @@ type Events struct {
 	Events    []Event  `json:"events"`
 	Truncated bool     `json:"truncated"`
 	Notes     []string `json:"notes"`
-	Today     string   `json:"today"`
-	Timezone  string   `json:"timezone"`
+	Today     string   `json:"today,omitempty"`
+	Timezone  string   `json:"timezone,omitempty"`
 }
 
 type FreeSlotsRequest struct {

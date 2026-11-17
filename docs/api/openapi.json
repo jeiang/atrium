@@ -4730,15 +4730,10 @@
         "required": [
           "uid",
           "calendar",
-          "target",
-          "read_only",
           "start",
           "end",
-          "all_day",
           "title",
-          "location",
-          "notes",
-          "recurring"
+          "location"
         ],
         "type": "object"
       },
@@ -4825,9 +4820,7 @@
         "required": [
           "events",
           "truncated",
-          "notes",
-          "today",
-          "timezone"
+          "notes"
         ],
         "type": "object"
       },
