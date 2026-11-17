@@ -25,9 +25,20 @@
     oncontrol?: (action: 'pause' | 'resume') => void;
     onremove?: () => void;
     onundo?: () => void;
+    onfiles?: () => void;
   }
 
-  let { torrent, offline = false, pending = false, hold, problem, oncontrol, onremove, onundo }: Props = $props();
+  let {
+    torrent,
+    offline = false,
+    pending = false,
+    hold,
+    problem,
+    oncontrol,
+    onremove,
+    onundo,
+    onfiles,
+  }: Props = $props();
 
   const phase = $derived(phaseOf(torrent));
   const words = $derived(phaseWords[phase]);
@@ -81,6 +92,7 @@
           >Pause</Button
         >
       {/if}
+      <Button variant="quiet" disabled={pending} onclick={onfiles} label="Files in {torrent.name}">Files</Button>
       <Button variant="quiet" disabled={offline || pending} {reason} onclick={onremove} label="Remove {torrent.name}"
         >Remove</Button
       >
