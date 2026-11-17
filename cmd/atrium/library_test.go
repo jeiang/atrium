@@ -94,12 +94,8 @@ func TestLibraryShowsTorrentsOffAndRunsNothing(t *testing.T) {
 	if entry["name"] != "Library" || entry["state"] != "needs-settings" || !strings.Contains(fmt.Sprint(entry["reason"]), "needs torrents") || !strings.Contains(mustJSON(t, entry["unmet"]), `"torrents"`) {
 		t.Fatalf("Library with Torrents off: %v", entry)
 	}
-	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, s.base+"/settings/media", nil)
-	if status != http.StatusOK || !strings.Contains(body, "needs torrents") {
-		t.Fatalf("GET /settings/media with Torrents off = %d, want the reason: %.600s", status, body)
-	}
-	if status, _, _ := fetch(t, http.DefaultClient, http.MethodGet, s.base+"/apps/media/channels", nil); status != http.StatusNotFound {
-		t.Fatalf("GET /apps/media/channels with Torrents off = %d", status)
+	if got := s.do(http.MethodGet, "/api/v1/media/channels", token, nil); got.status != http.StatusNotFound {
+		t.Fatalf("GET /api/v1/media/channels with Torrents off = %d: %s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()

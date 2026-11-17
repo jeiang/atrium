@@ -14,12 +14,9 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -233,19 +230,14 @@ func TestDraftSendOverXOAUTH2RefreshesTheTokenOnlyAtAuth(t *testing.T) {
 	}
 	base := startServeIn(t, dir)
 
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	code, body, _ := fetch(t, client, http.MethodGet, base+"/drafts", nil)
-	if code != http.StatusOK {
-		t.Fatalf("drafts page: %d", code)
+	client := webLocalG2(t, base)
+	draft := "/web/v1/drafts/" + strconv.FormatInt(id, 10)
+	read := client.do(http.MethodGet, draft, nil)
+	if read.status != http.StatusOK || read.json["revision"] == nil {
+		t.Fatalf("draft read: %d %s", read.status, read.body)
 	}
-	m := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(body)
-	if m == nil {
-		t.Fatal("the draft page has no revision")
-	}
-	code, body, _ = fetch(t, client, http.MethodPost, base+"/drafts/"+strconv.FormatInt(id, 10)+"/send", url.Values{"revision": {m[1]}})
-	if code != http.StatusOK {
-		t.Fatalf("send: %d %s", code, body)
+	if sent := client.do(http.MethodPost, draft+"/send", map[string]any{"revision": number(t, read.json["revision"])}); sent.status != http.StatusOK {
+		t.Fatalf("send: %d %s", sent.status, sent.body)
 	}
 	tokens, data := smtp.seen()
 	if len(tokens) != 2 || tokens[0] != "access-1" || tokens[1] != "access-2" {

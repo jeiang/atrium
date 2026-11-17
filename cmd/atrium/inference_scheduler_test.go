@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"math"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -145,13 +145,14 @@ func TestInferenceUsagePageShowsReservationsAndCeilings(t *testing.T) {
 	insert("expired", "expired", 2_000_000_000, 2_000_000_000, now-3600)
 
 	base, logs := startServeLogged(t, dir)
-	status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/usage", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/usage = %d: %.500s\n%s", status, body, logs.String())
+	got := webLocalG2(t, base).do(http.MethodGet, "/web/v1/usage", nil)
+	if got.status != http.StatusOK {
+		t.Fatalf("GET /web/v1/usage = %d: %.500s\n%s", got.status, got.body, logs.String())
 	}
-	for _, want := range []string{"$5.00 reserved", "$3.00 unknown", "$2.00 expired estimate", "Chat pauses at $142.50 (95%)", "scheduled runs at $120.00 (80%)"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the usage page does not show %q", want)
+	budget, _ := apiData(t, got, http.StatusOK)["budget"].(map[string]any)
+	for key, want := range map[string]float64{"reserved_usd": 5, "unknown_usd": 3, "expired_usd": 2, "interactive_ceiling_usd": 142.5, "unattended_ceiling_usd": 120} {
+		if v, _ := budget[key].(float64); math.Abs(v-want) > 0.005 {
+			t.Errorf("usage budget %s = %v, want %v", key, budget[key], want)
 		}
 	}
 }

@@ -218,12 +218,10 @@ func TestTriageSaysSoWhenThereIsNoContactSource(t *testing.T) {
 		t.Run("contacts_"+on, func(t *testing.T) {
 			dir, _, _ := moduleFixture(t, flagsExcept(unit.Contacts, on))
 			base := startServeIn(t, dir)
-			status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/triage", nil)
-			if status != http.StatusOK {
-				t.Fatalf("GET /triage = %d", status)
-			}
-			if shown := strings.Contains(body, "No contact source is configured"); shown != (on == "false") {
-				t.Errorf("contacts %s: explanation shown = %v", on, shown)
+			web := webLocalG2(t, base)
+			got := apiData(t, web.do(http.MethodGet, "/web/v1/mail/triage", nil), http.StatusOK)
+			if shown := got["no_contacts"] == true; shown != (on == "false") {
+				t.Errorf("contacts %s: no_contacts = %v", on, got["no_contacts"])
 			}
 		})
 	}
