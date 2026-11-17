@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -82,9 +83,19 @@ func connViewG3(t *testing.T, base, id string) map[string]any {
 	return nil
 }
 
+var needClientsG3 sync.Map
+
 func needStateG3(t *testing.T, base, module, connection string) string {
 	t.Helper()
-	got := webG3(t, base).do(http.MethodGet, "/web/v1/connections/dependencies", nil)
+	key := struct {
+		t    *testing.T
+		base string
+	}{t, base}
+	client, ok := needClientsG3.Load(key)
+	if !ok {
+		client, _ = needClientsG3.LoadOrStore(key, webG3(t, base))
+	}
+	got := client.(*webClient).do(http.MethodGet, "/web/v1/connections/dependencies", nil)
 	for _, need := range listG3(t, "dependencies", got, "needs") {
 		if need["module"] != module {
 			continue
