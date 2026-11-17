@@ -119,7 +119,20 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 	apiData(t, s.do(http.MethodPatch, rulesPath+"/"+ruleID, token, map[string]any{"rule": rule}), http.StatusOK)
 	apiData(t, s.do(http.MethodGet, rulesPath+"/export", token, nil), http.StatusOK)
 	apiData(t, s.do(http.MethodGet, "/api/v1/mail/triage", token, nil), http.StatusOK)
-	apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages?account=icloud", token, nil), http.StatusOK)
+	var seen, flagged, attached bool
+	if err := d.Read.QueryRow("SELECT seen, flagged, COALESCE(att_types, '[]') != '[]' FROM messages WHERE id = ?", id).Scan(&seen, &flagged, &attached); err != nil {
+		t.Fatal(err)
+	}
+	hits := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages?account=icloud", token, nil), http.StatusOK))
+	var statement map[string]any
+	for _, item := range hits {
+		if hit := item.(map[string]any); fmt.Sprint(hit["message_id"]) == id {
+			statement = hit
+		}
+	}
+	if statement == nil || statement["seen"] != seen || statement["flagged"] != flagged || statement["has_attachment"] != attached {
+		t.Fatalf("search hit flags: %v", statement)
+	}
 	apiData(t, s.do(http.MethodGet, "/api/v1/mail/live/actions", token, nil), http.StatusOK)
 	for i := range 105 {
 		if _, err := d.Write.Exec("INSERT INTO rules (position,id,account,action,dest,conditions) VALUES (?,?,'icloud','file','Bills','[]')", i+100, fmt.Sprintf("api-page-%03d", i)); err != nil {

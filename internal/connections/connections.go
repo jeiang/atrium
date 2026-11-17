@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"sync"
 
@@ -83,6 +84,7 @@ type Definition struct {
 	// Silent replaces Test during a periodic health pass when the explicit
 	// test has a visible side effect, such as a diagnostic push.
 	Silent func(context.Context, *Lease, []Capability) ([]Result, error)
+	Trace  func(ctx context.Context, lease *Lease, capability string, out io.Writer) (Result, error)
 }
 
 type Registry struct {

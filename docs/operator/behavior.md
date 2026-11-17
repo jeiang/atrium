@@ -423,6 +423,16 @@ reauth. `connections test <id>` keeps the explicit test, which may have
 visible side effects such as a diagnostic push. `connections test --all` runs
 the silent check of every configured connection instead, so it sends no push;
 giving both an id and `--all`, or neither, is a usage error.
+`connections test <id> --trace <capability>` runs that capability's check
+without saving anything, which iCloud offers for `caldav` and `carddav`. It
+prints each DAV request and response: the step, method and URL; the request
+header names, `Depth` and `Content-Type`; whether an `Authorization` header was
+attached, never its value; the request body; the status; the response headers
+with `Set-Cookie` values withheld; and the first 800 bytes of the response
+body. The DAV user, the mail login, email addresses, numeric path segments and
+numbers of five or more digits are masked. The last line is
+`result: <capability> <state> <reason>`, and the command exits 1 when that state
+is failing or needs reauth. `--trace` with `--all` or `--json` is a usage error.
 
 Mail and iCloud connections also learn from real use while `serve` runs. An
 IMAP session that cannot connect marks the mail connection's `imap`
@@ -434,8 +444,12 @@ contacts or calendar mirror sync whose first request the server refuses (401
 or 403) marks `carddav` or `caldav` as needing reauth. A refusal after that
 first request accepted the password, a server error, a network error, a TLS
 error, or a discovery step that points at a host the credential may not go to
-marks it failing, and the reason names the step. A later session or sync that
-works marks the capability ok again. These four have no grace window, so the
+marks it failing, and the reason names the step. A refusal or server error
+also names the host class (the configured host, the partition host the root
+named, or a sibling host) without the request address, and a refusal says
+whether it carried a `WWW-Authenticate` challenge and lists the other
+refusals of the same discovery. A later session or sync that works marks the
+capability ok again. These four have no grace window, so the
 first failure notifies at once and the recovery notifies once. Errors about one message,
 such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
 not change the connection. Only a change of state class is written: a repeated
@@ -542,8 +556,30 @@ it through `atrium settings set mail_mode shadow|live`; the change is audited.
 Pause/resume does not change the mode or grant
 go-live eligibility.
 
+The Mail status page (`/live`, tab Status; API `GET /api/v1/mail/status`)
+shows the mode, go-live eligibility with each unmet reason (`already_live`,
+`no_accounts`, `unresolved_writes`), the baseline count and when it was taken,
+automatic action counts, the last replay summary (messages and how many
+differ), pending deletion rule proposals, and the watch-closely window: seven
+days after the last audited `mail_mode` change. Go-live and rebaseline from
+the page or `POST /api/v1/mail/status/confirm` are two steps: the first call
+returns a statement of the effect (accounts, write cap, baseline size, what
+pause does) and a single-use token valid for ten minutes; the second call
+(`POST /mail/status/go-live` or `/mail/status/rebaseline`) needs that token,
+and a token is refused once the accounts, cap or mode changed. Go-live writes
+`mail_mode` through the audited settings path; the baseline is still taken by
+the next pass. Only the operator can do this: tool runs and agent-marked
+bearers or sessions get `agent_caller`, and agent-marked callers cannot set or
+unset `mail_mode` through the settings API either. Pause stays the platform
+pause and appears on the page only as a link. Replay runs as the `mail/replay`
+job (model-free, read-only toward mail servers, runs while paused): `POST
+/api/v1/mail/status/replay` runs it now and returns the run id and counts, and
+the job also runs weekly on Sunday at 04:30, because the scheduler has no
+manual-only declared job. Only the counts are kept; the per-message lines
+stay with `atrium replay` and `POST /mail/replay`.
+
 Mail is one sidebar entry. Its tabs are Decisions (`/triage`, which links each
-message page) and Rules (`/rules`); Mail settings stay at `/settings/mail`.
+message page), Rules (`/rules`) and Status (`/live`); Mail settings stay at `/settings/mail`.
 With the Mail module off, the entry, its tabs and its pages are gone.
 
 Rules and decisions link both ways. A decision made by an operator rule names

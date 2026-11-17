@@ -556,7 +556,10 @@ claims about the running application. Operator contracts are in
   per-message errors and unknown SMTP outcomes record nothing. These kinds
   have no grace window.
   `connections test --all` uses the silent checks; `connections test <id>`
-  keeps the explicit test.
+  keeps the explicit test. `connections test <id> --trace <capability>` runs a
+  kind's `Trace` hook (iCloud `caldav`/`carddav`) on a read-only lease: the
+  same discovery printed request by request with ids, users and addresses
+  masked, and nothing saved.
 - qBittorrent and the embedding endpoint have a 6-hour grace window,
   compiled into their connection kinds. A failure right after an `ok` or
   `expiring` state stores `failing` with the window end in its result;
@@ -900,7 +903,7 @@ claims about the running application. Operator contracts are in
   `ActivityCategory`. With mail off its drafts leave the hub, while its past
   live actions stay in Activity. Each owner declares
   its built-in jobs (assistant six, calendar candidates, media three, mail
-  package tracking, Grafana ops sampler); compiling the catalog checks their
+  package tracking and replay, Grafana ops sampler); compiling the catalog checks their
   owner, keys, names, schedules and policies and derives the schedule
   settings from them. The neutral `internal/scheduler` package owns the
   `jobs`, `job_runs`, `job_run_threads` and `job_resource_leases` tables,
@@ -1457,7 +1460,16 @@ claims about the running application. Operator contracts are in
   go-live eligibility, verification, caps, and the effect ledger. The mode is
   the operator `mail_mode` setting, changed with
   `atrium settings set mail_mode shadow|live` (audited) and shown on the Mail
-  page; it is not a settings-page field.
+  page; it is not a settings-page field. The Mail status page (`/live`,
+  `mail.status`) can also switch to live through a two-step confirm
+  (`mail.status-confirm` returns the effect and a single-use token bound to
+  mode, accounts and cap; `mail.go-live` and `mail.status-rebaseline` need
+  it). These operations, and settings writes of `mail_mode` (a `NoAgent`
+  setting), refuse tool sources and agent-marked principals with
+  `agent_caller`. The watch-closely window is seven days after the last
+  `settings_audit` row that changed `mail_mode`. The `mail/replay` job
+  (weekly, also run now through `mail.replay-run`) keeps only the latest
+  counts in `live_state` key `replay_last`.
 - Automatic mail actions, mail proposal actions and draft sends record an
   effect before the IMAP or SMTP call. An unknown outcome stays blocked until
   the operator resolves it and is never retried automatically; an action the

@@ -36,7 +36,7 @@ func Settings() []settings.Def {
 		return settings.Value(settings.UI, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
 	return []settings.Def{
-		settings.Value(settings.Advanced, settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
+		settings.Value(settings.Advanced, settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck, NoAgent: true}),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyWriteCap, Label: "Automatic write cap", Module: module, Type: settings.Int, Default: "100",
 			Check: settings.Between(1, 1000)}),

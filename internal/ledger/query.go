@@ -373,6 +373,19 @@ func CountEffectiveDone(ctx context.Context, q db.Querier, target string) (int, 
 	return n, err
 }
 
+func CountUnresolved(ctx context.Context, q db.Querier, origins ...string) (int, error) {
+	if len(origins) == 0 {
+		return 0, nil
+	}
+	args := make([]any, len(origins))
+	for i, o := range origins {
+		args[i] = o
+	}
+	var n int
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM effects WHERE origin IN (?"+strings.Repeat(", ?", len(origins)-1)+") AND state IN ('intent', 'unknown', 'partial')", args...).Scan(&n)
+	return n, err
+}
+
 func ThreadsForTargets(ctx context.Context, q db.Querier, targets []string) ([]int64, error) {
 	if len(targets) == 0 {
 		return nil, nil

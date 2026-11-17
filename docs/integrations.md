@@ -142,13 +142,18 @@ Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_
 `default_event_minutes`, `work_hours` and `work_days`.
 
 Discovery asks the DAV root for the current user principal and the home set in
-one request. When the root names only the principal and the principal refuses
-the password, discovery retries from `/.well-known/caldav` or
+one request. iCloud answers the root on the partition that accepted the
+password and names it in the `X-Apple-User-Partition` header. When the
+principal or the home set on another host refuses the password, discovery
+repeats that request once on the named partition host (`pNN-` before the
+configured host name, for example `p7-contacts.icloud.com`). When the
+principal is still refused, discovery retries from `/.well-known/caldav` or
 `/.well-known/carddav` and follows at most 3 redirects. The credential goes only
 to the configured DAV host and, over https on the same port, to a sibling host
 under the same parent domain, such as an iCloud partition host. Atrium refuses
 any other redirect, principal, home set or collection address without sending
-the credential, and logs the step and status of each failed DAV request.
+the credential, and logs the step, status, host class and challenge of each
+failed DAV request.
 
 ## Knowledge export
 

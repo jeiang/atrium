@@ -55,6 +55,7 @@ type Def struct {
 	Generated bool
 	PinOnly   bool
 	Readable  bool
+	NoAgent   bool
 }
 
 type SecretOpts struct {

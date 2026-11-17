@@ -12,7 +12,7 @@ import (
 var builtinJobNames = []string{
 	"nightly", "weekly-review", "daily-nudges", "task-reminders", "memory-work", "knowledge-export",
 	"calendar-candidates", "media-channels", "media-sweep", "package-tracking", "ops-sampler",
-	"caldav", "carddav", "backup", "sync", "scan", "stream-retention",
+	"caldav", "carddav", "backup", "sync", "scan", "stream-retention", "replay",
 }
 
 func schedulerSeededOnce(t *testing.T, d *db.DB) {
