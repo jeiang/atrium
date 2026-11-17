@@ -253,8 +253,6 @@ func Items(messages []journal.Message, calls []journal.ToolCall, rows map[string
 			activity = &item
 			items = append(items, activity)
 		}
-		// The API schema has results as a required array, so a step without
-		// search results sends [] rather than null.
 		if found.Results == nil {
 			found.Results = []SearchResult{}
 		}

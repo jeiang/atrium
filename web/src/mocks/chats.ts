@@ -275,13 +275,6 @@ function blank(kind: string, id: string | null, text: string): Step {
 
 type Block = { kind: 'thinking' | 'text'; text: string } | { kind: 'tool_start'; data: Record<string, unknown> };
 
-// The items the server's service.Items builds from what a run stores. Each
-// model turn is one assistant message with its own seq, and the tool results
-// after it are one user message with the next seq. Thinking, tool calls and
-// text beside a tool call are steps of the run's activity item, which takes
-// the seq of the message that started it. Text in the final turn (no tool
-// call) is the assistant item on that turn's seq, so a final turn that
-// thinks first gives an activity and an assistant item on one seq.
 function runItems(events: RunStreamEvent[], run: number, first: number): TranscriptItem[] {
   const turns: Block[][] = [[]];
   const done: Record<string, unknown>[] = [];
@@ -527,8 +520,6 @@ export const chatHandlers = [
     if (body.effort) value.thread.effort = body.effort;
     return HttpResponse.json({ thread_id: value.thread.id });
   }),
-  // Like the server: the composer options describe a chosen model, so a
-  // request without a known model is refused.
   http.get(`*${API_BASE}/composer-options`, ({ request }) => {
     const query = new URL(request.url).searchParams;
     const model = query.get('model') ?? '';

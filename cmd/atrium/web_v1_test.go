@@ -139,9 +139,6 @@ func (c *webClient) events(threadID, runID int64) string {
 	return all.String()
 }
 
-// TestWebChatPageReads covers the reads the new client's chat page makes:
-// the model options it shows, and a transcript where a reply with thinking and
-// no tool call gives an activity and an assistant item on one seq.
 func TestWebChatPageReads(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	s := startAPISite(t, dir, api)
@@ -155,10 +152,8 @@ func TestWebChatPageReads(t *testing.T) {
 	if cfg.status != http.StatusOK || defaults["model"] == "" || defaults["effort"] == "" || len(models) == 0 || cfg.json["composer"] == nil {
 		t.Fatalf("configuration on /web/v1: %d %s", cfg.status, cfg.body)
 	}
-	// The composer options describe a chosen model, so they need one.
 	expectAPI(t, c.do(http.MethodGet, "/web/v1/composer-options", nil), http.StatusUnprocessableEntity, "invalid")
 
-	// The fixture's first scripted reply is a plain "hi"; the second thinks first.
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Thinking("weighing it", "sig"), anthropictest.Text("thought it through")))
 	if stream := c.events(c.run("plain reply")); !strings.Contains(stream, `"hi"`) {
 		t.Fatalf("plain run stream:\n%s", stream)

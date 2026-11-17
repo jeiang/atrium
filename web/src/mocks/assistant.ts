@@ -473,8 +473,6 @@ function bump(item: ScheduleJob): void {
   item.revision = String(Number(item.revision) + 1);
 }
 
-// What GET /assistant/configuration answers: the models, the stored defaults
-// and the composer for those defaults.
 export function configuration(): ModelConfiguration {
   const defaults = { ...store.defaults, thinking: 'adaptive', web_search: true };
   return {

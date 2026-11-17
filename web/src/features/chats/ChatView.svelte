@@ -79,9 +79,6 @@
       .flatMap((page) => page.items) ?? [],
   );
   const lastSeq = $derived(items.at(-1)?.seq ?? 0);
-  // One stored message can give several items that share its seq (a
-  // thinking-only activity and the reply, or a digest and the user text), so
-  // the list key also counts the items within each seq.
   const keys = $derived.by(() => {
     const seen = new Map<number, number>();
     return new Map(
