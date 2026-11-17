@@ -23,7 +23,7 @@ func Definitions(svc func(*tool.Context) *mailapp.Service) []module.ToolDefiniti
 
 func Tools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	var out []tool.Tool
-	for _, group := range [][]tool.Tool{mailTools(svc), folderTools(svc), draftTools(svc), openLoopTools(svc), watchTools(svc), trackingTools(svc)} {
+	for _, group := range [][]tool.Tool{mailTools(svc), folderTools(svc), draftTools(svc), watchTools(svc), trackingTools(svc)} {
 		out = append(out, group...)
 	}
 	return out
@@ -57,3 +57,5 @@ func localTime(ts float64, loc *time.Location) time.Time {
 	sec, us := timex.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc)
 }
+
+var loopKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}

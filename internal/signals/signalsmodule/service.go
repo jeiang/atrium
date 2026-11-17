@@ -1,19 +1,22 @@
-package application
+package signalsmodule
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
-	"github.com/jeiang/atrium/internal/assistant/classifier"
 	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/openloops"
-	"github.com/jeiang/atrium/internal/mail/watches"
+	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/signals"
 )
+
+var log = logx.Logger("atrium.signals")
 
 const (
 	OpenLoopsName            application.Name = "mail.open-loops"
@@ -23,8 +26,6 @@ const (
 	LoopsDismissMatchingName application.Name = "mail.loops-dismiss-matching"
 	CommitmentDoneName       application.Name = "mail.commitment-done"
 	CommitmentDismissName    application.Name = "mail.commitment-dismiss"
-	RefreshLoopsName         application.Name = "mail.refresh-loops"
-	RefreshWatchesName       application.Name = "mail.refresh-watches"
 )
 
 type OpenLoopsInput struct {
@@ -33,15 +34,15 @@ type OpenLoopsInput struct {
 	Snooze bool
 }
 type OpenLoopsResult struct {
-	Loops         []openloops.Loop `json:"loops"`
-	SnoozeDefault int              `json:"snooze_default"`
+	Loops         []signals.Loop `json:"loops"`
+	SnoozeDefault int            `json:"snooze_default"`
 }
 type CommitmentsInput struct {
 	Status string
 	Limit  int
 }
 type CommitmentsResult struct {
-	Commitments []openloops.Commitment `json:"commitments"`
+	Commitments []signals.Commitment `json:"commitments"`
 }
 type LoopSnoozeInput struct {
 	ID   int64
@@ -52,7 +53,6 @@ type LoopInput struct{ ID int64 }
 type LoopsDismissMatchingInput struct{ State string }
 type LoopsDismissMatchingResult struct{ Count int64 }
 type CommitmentInput struct{ ID int64 }
-type RefreshResult struct{ Result any }
 
 func DescribeOpenLoops() application.Definition {
 	return application.Describe[OpenLoopsInput, OpenLoopsResult](OpenLoopsName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
@@ -75,15 +75,71 @@ func DescribeCommitmentDone() application.Definition {
 func DescribeCommitmentDismiss() application.Definition {
 	return application.Describe[CommitmentInput, struct{}](CommitmentDismissName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
 }
-func DescribeRefreshLoops() application.Definition {
-	return application.Describe[struct{}, RefreshResult](RefreshLoopsName, application.Command, []application.Authority{application.Operator}, application.Conditional, false)
-}
-func DescribeRefreshWatches() application.Definition {
-	return application.Describe[struct{}, RefreshResult](RefreshWatchesName, application.Command, []application.Authority{application.Operator}, application.Conditional, false)
+
+func Describe() []application.Definition {
+	return []application.Definition{DescribeOpenLoops(), DescribeCommitments(), DescribeLoopSnooze(), DescribeLoopDismiss(),
+		DescribeLoopsDismissMatching(), DescribeCommitmentDone(), DescribeCommitmentDismiss()}
 }
 
-func (s *Service) WithClassifier(c *classifier.Service) *Service { s.classifier = c; return s }
-func (s *Service) WithClock(now func() float64) *Service         { s.now = now; return s }
+func WallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+
+type Service struct {
+	db          *db.DB
+	state       *state.Store
+	now         func() float64
+	commitments *commitmentsapp.Service
+}
+
+func New(d *db.DB, now func() float64, commitments *commitmentsapp.Service) *Service {
+	return &Service{db: d, state: state.New(d), now: now, commitments: commitments}
+}
+
+func (s *Service) snapshot(ctx context.Context, name application.Name, input any, fn func(db.Querier) error) (application.Revision, error) {
+	tx, err := s.db.Read.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback() }()
+	counters, err := s.state.Read(ctx, tx, []string{state.Mail, state.Effects, state.Review, state.Settings, state.Calendar, state.Connections})
+	if err != nil {
+		return "", err
+	}
+	if err = fn(tx); err != nil {
+		return "", err
+	}
+	return application.Revision(state.Revision(string(name), counters, input, "operator")), nil
+}
+
+func (s *Service) writeAudit(ctx context.Context, name application.Name, target string, outcome state.Outcome) int64 {
+	id, err := s.state.Audit(context.WithoutCancel(ctx), nil, state.Entry{Operation: string(name), Outcome: outcome, Target: target, DetailsJSON: "{}"})
+	if err != nil {
+		log.Error("operation audit failed", "operation", string(name), logx.Err, err.Error())
+	}
+	return id
+}
+
+func auditOutcome(err error) state.Outcome {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return state.Canceled
+	}
+	var classified *application.Error
+	if !errors.As(err, &classified) {
+		return state.Failed
+	}
+	switch classified.Code {
+	case application.Invalid:
+		return state.Invalid
+	case application.Conflict:
+		return state.Conflict
+	case application.NotFound:
+		return state.NotFound
+	case application.Unknown:
+		return state.Unknown
+	case application.Forbidden, application.Refused, application.NotConfigured:
+		return state.Refused
+	}
+	return state.Failed
+}
 
 func ClampDays(raw string) (int64, bool) {
 	body := strings.TrimSpace(raw)
@@ -129,14 +185,14 @@ func (s *Service) localChange(ctx context.Context, name application.Name, target
 	if err != nil {
 		outcome = auditOutcome(err)
 	}
-	return s.writeAudit(ctx, name, target, outcome, nil), err
+	return s.writeAudit(ctx, name, target, outcome), err
 }
 
 func (s *Service) OpenLoops(ctx context.Context, in OpenLoopsInput) (application.Read[OpenLoopsResult], error) {
 	var data OpenLoopsResult
 	now := s.now()
 	rev, err := s.snapshot(ctx, OpenLoopsName, in, func(q db.Querier) error {
-		loops, err := openloops.ListLoops(ctx, q, now, in.State, in.Limit, false)
+		loops, err := signals.ListLoops(ctx, q, now, in.State, in.Limit, false)
 		if err != nil {
 			return err
 		}
@@ -144,7 +200,7 @@ func (s *Service) OpenLoops(ctx context.Context, in OpenLoopsInput) (application
 		if !in.Snooze {
 			return nil
 		}
-		data.SnoozeDefault, err = openloops.SnoozeDefault(ctx, q)
+		data.SnoozeDefault, err = signals.SnoozeDefault(ctx, q)
 		return err
 	})
 	return application.Read[OpenLoopsResult]{Revision: rev, Data: data}, err
@@ -154,7 +210,7 @@ func (s *Service) Commitments(ctx context.Context, in CommitmentsInput) (applica
 	var data CommitmentsResult
 	rev, err := s.snapshot(ctx, CommitmentsName, in, func(q db.Querier) error {
 		var err error
-		data.Commitments, err = openloops.ListCommitments(ctx, q, in.Status, in.Limit)
+		data.Commitments, err = signals.ListCommitments(ctx, q, in.Status, in.Limit)
 		return err
 	})
 	return application.Read[CommitmentsResult]{Revision: rev, Data: data}, err
@@ -165,7 +221,7 @@ func (s *Service) LoopSnooze(ctx context.Context, in LoopSnoozeInput) (applicati
 	if in.Days != nil {
 		days = max(1, min(*in.Days, 60))
 	} else {
-		snooze, err := openloops.SnoozeDefault(ctx, s.db.Read)
+		snooze, err := signals.SnoozeDefault(ctx, s.db.Read)
 		if err != nil {
 			return application.Change[LoopSnoozeResult]{}, err
 		}
@@ -173,35 +229,30 @@ func (s *Service) LoopSnooze(ctx context.Context, in LoopSnoozeInput) (applicati
 	}
 	now := s.now()
 	auditID, err := s.localChange(ctx, LoopSnoozeName, strconv.FormatInt(in.ID, 10), "loop", func() (bool, error) {
-		return openloops.Snooze(ctx, s.db.Write, in.ID, now+float64(days)*openloops.Day, now)
+		return signals.Snooze(ctx, s.db.Write, in.ID, now+float64(days)*signals.Day, now)
 	})
 	return application.Change[LoopSnoozeResult]{Data: LoopSnoozeResult{Days: days}, AuditID: auditID}, err
 }
 
 func (s *Service) LoopDismiss(ctx context.Context, in LoopInput) (application.Change[struct{}], error) {
 	auditID, err := s.localChange(ctx, LoopDismissName, strconv.FormatInt(in.ID, 10), "loop", func() (bool, error) {
-		return openloops.Dismiss(ctx, s.db.Write, in.ID, s.now())
+		return signals.Dismiss(ctx, s.db.Write, in.ID, s.now())
 	})
 	return application.Change[struct{}]{AuditID: auditID}, err
 }
 
 func (s *Service) LoopsDismissMatching(ctx context.Context, in LoopsDismissMatchingInput) (application.Change[LoopsDismissMatchingResult], error) {
-	if in.State != openloops.OweReply && in.State != openloops.Waiting {
-		s.writeAudit(ctx, LoopsDismissMatchingName, in.State, state.Invalid, nil)
+	if in.State != signals.OweReply && in.State != signals.Waiting {
+		s.writeAudit(ctx, LoopsDismissMatchingName, in.State, state.Invalid)
 		return application.Change[LoopsDismissMatchingResult]{}, &application.Error{Code: application.Invalid, Message: "unknown state"}
 	}
 	var count int64
 	auditID, err := s.localChange(ctx, LoopsDismissMatchingName, in.State, "state", func() (bool, error) {
 		var err error
-		count, err = openloops.DismissAll(ctx, s.db.Write, in.State, s.now())
+		count, err = signals.DismissAll(ctx, s.db.Write, in.State, s.now())
 		return true, err
 	})
 	return application.Change[LoopsDismissMatchingResult]{Data: LoopsDismissMatchingResult{Count: count}, AuditID: auditID}, err
-}
-
-func (s *Service) WithCommitments(c *commitmentsapp.Service) *Service {
-	s.commitmentVerbs = c
-	return s
 }
 
 func commitmentChange(c application.Change[commitmentsapp.Changed], err error) (application.Change[struct{}], error) {
@@ -213,25 +264,9 @@ func commitmentRef(id int64) commitmentsapp.RefInput {
 }
 
 func (s *Service) CommitmentDone(ctx context.Context, in CommitmentInput) (application.Change[struct{}], error) {
-	return commitmentChange(s.commitmentVerbs.DoneAs(ctx, CommitmentDoneName, commitmentRef(in.ID)))
+	return commitmentChange(s.commitments.DoneAs(ctx, CommitmentDoneName, commitmentRef(in.ID)))
 }
 
 func (s *Service) CommitmentDismiss(ctx context.Context, in CommitmentInput) (application.Change[struct{}], error) {
-	return commitmentChange(s.commitmentVerbs.DismissAs(ctx, CommitmentDismissName, commitmentRef(in.ID)))
-}
-
-func (s *Service) RefreshLoops(ctx context.Context, _ struct{}) (application.Change[RefreshResult], error) {
-	out, err := openloops.Refresh(ctx, s.db, s.now(), openloops.Options{Env: s.env, Classifier: s.classifier, Clock: s.now, CacheDir: s.cfg.CacheDir})
-	if err != nil {
-		return application.Change[RefreshResult]{}, err
-	}
-	return application.Change[RefreshResult]{Data: RefreshResult{Result: out}}, nil
-}
-
-func (s *Service) RefreshWatches(ctx context.Context, _ struct{}) (application.Change[RefreshResult], error) {
-	out, err := watches.Refresh(ctx, s.db, s.now(), watches.Options{Classifier: s.classifier, Clock: s.now, Env: s.env})
-	if err != nil {
-		return application.Change[RefreshResult]{}, err
-	}
-	return application.Change[RefreshResult]{Data: RefreshResult{Result: out}}, nil
+	return commitmentChange(s.commitments.DismissAs(ctx, CommitmentDismissName, commitmentRef(in.ID)))
 }
