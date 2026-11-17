@@ -90,6 +90,7 @@
         {/snippet}
       </ListRow>
       <ListRow title="Spaces" meta="Subjects, chats and files by project" href={p('/knowledge/spaces')} />
+      <ListRow title="Files" meta="Every file in chats and spaces" href={p('/knowledge/files')} />
     </List>
   {/if}
   <div class="subjects__region" aria-busy={subjects.isFetching || undefined}>

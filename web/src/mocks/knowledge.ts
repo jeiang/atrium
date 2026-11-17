@@ -9,10 +9,12 @@ import type {
   KnowledgeRecord,
   KnowledgeSubjectPage,
   KnowledgeSubjectRow,
+  LibraryEntry,
   Space,
   SpacePage,
 } from '../contract';
 import { API_BASE } from '../contract';
+import { contentOf, type MockFile, mockFile, pageOf, previewOf, THREAD_TITLES, threadFiles } from './files';
 
 export interface KnowledgeScenario {
   empty?: boolean;
@@ -20,6 +22,7 @@ export interface KnowledgeScenario {
   slow?: boolean;
   failLinks?: boolean;
   loseLinks?: boolean;
+  loseFiles?: boolean;
 }
 
 export interface KnowledgeRequest {
@@ -58,7 +61,7 @@ interface MockSpace {
   space: Space;
   threads: SpacePage['threads'];
   tasks: SpacePage['tasks'];
-  files: SpacePage['files'];
+  files: MockFile[];
 }
 
 const MAP_CAP = 50;
@@ -335,19 +338,40 @@ function seedSpaces(): MockSpace[] {
       ],
       tasks: [{ id: 7, title: 'Order raised bed timber', status: 'open', due: '2026-12-01' }],
       files: [
-        {
-          id: 602,
-          name: 'garden-seeds.csv',
-          bytes: 4096,
-          created_at: secs(10, 9),
-          media_type: 'text/csv',
-          origin: 'upload',
-          path: 'garden-seeds.csv',
-          tokens: 900,
-        },
+        mockFile(
+          {
+            id: 602,
+            name: 'garden-seeds.csv',
+            media_type: 'text/csv',
+            project_id: 5,
+            created_at: secs(10, 9),
+          },
+          { text: 'Seed,Sow by,Bed\nBroad beans,November,North\nGarlic,December,South\nSweet peas,March,East\n' },
+        ),
+        mockFile(
+          {
+            id: 603,
+            name: 'bed-plan.md',
+            media_type: 'text/markdown',
+            project_id: 5,
+            created_at: secs(11, 9),
+          },
+          { text: '# Bed plan\n\nFour beds, each **1.2 m** wide. Paths stay at 45 cm.\n' },
+        ),
       ],
     },
     { space: space({ id: 6, name: 'Studio move', private: true }), threads: [], tasks: [], files: [] },
+    {
+      space: space({ id: 8, name: 'Old allotment', archived: true, last_activity: secs(2, 9) }),
+      threads: [],
+      tasks: [],
+      files: [
+        mockFile(
+          { id: 610, name: 'plot-rules.txt', media_type: 'text/plain', project_id: 8, created_at: secs(2, 9) },
+          { text: 'Keep paths clear. Bonfires only in October.\n' },
+        ),
+      ],
+    },
   ];
 }
 
@@ -357,6 +381,7 @@ let effects: MockEffect[] = [];
 let nextLink = 200;
 let nextEffect = 900;
 let nextSpace = 10;
+let nextFile = 800;
 let seededFor = '';
 
 function scenario(): KnowledgeScenario {
@@ -481,7 +506,7 @@ function spacePage(found: MockSpace): SpacePage {
   return {
     space: found.space,
     sections: [],
-    files: found.files,
+    files: found.files.map((file) => ({ ...file.summary, path: file.summary.name, space_id: found.space.id })),
     threads: found.threads,
     tasks: found.tasks,
     records,
@@ -589,6 +614,17 @@ function detail(item: MockRecord): KnowledgeDetail {
   return { record: plain(item), same_run: [], history: store.history[item.id] ?? [] };
 }
 
+function entryOf(file: MockFile): LibraryEntry {
+  const { id, name, media_type, bytes, created_at } = file.summary;
+  return { id, name, media_type, bytes, created_at };
+}
+
+function spaceFile(params: Record<string, unknown>): MockFile | undefined {
+  return spaces
+    .find((item) => item.space.id === Number(params.space))
+    ?.files.find((file) => file.summary.id === Number(params.file));
+}
+
 log.atriumKnowledge = {
   editElsewhere(id: number): void {
     scenario();
@@ -606,9 +642,95 @@ export const knowledgeHandlers = [
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get('limit') ?? '50');
     const offset = Number(url.searchParams.get('cursor') ?? '0');
-    const all = scenario().empty ? [] : spaces.map((item) => item.space);
+    const archived = url.searchParams.get('archived') === 'true';
+    const all = scenario().empty
+      ? []
+      : spaces.filter((item) => item.space.archived === archived).map((item) => item.space);
     const next = offset + limit < all.length ? String(offset + limit) : null;
     return HttpResponse.json({ items: all.slice(offset, offset + limit), next_cursor: next });
+  }),
+  http.get(`*${API_BASE}/files`, async ({ request }) => {
+    const stop = await gate();
+    if (stop) return stop;
+    const entries: LibraryEntry[] = [
+      ...threadFiles().map(({ thread, file }) => ({
+        ...entryOf(file),
+        thread_id: thread,
+        thread_title: THREAD_TITLES[thread] ?? '',
+      })),
+      ...spaces.flatMap((item) =>
+        item.files.map((file) => ({ ...entryOf(file), project_id: item.space.id, project_name: item.space.name })),
+      ),
+    ].sort((a, b) => b.created_at - a.created_at || b.id - a.id);
+    return HttpResponse.json(pageOf(scenario().empty ? [] : entries, request));
+  }),
+  http.get(`*${API_BASE}/knowledge/spaces/:space/files`, async ({ params, request }) => {
+    const stop = await gate();
+    if (stop) return stop;
+    const found = spaces.find((item) => item.space.id === Number(params.space));
+    if (!found) return refusal(404, 'not_found', 'unknown space');
+    return HttpResponse.json(
+      pageOf(
+        found.files.map((file) => file.summary),
+        request,
+      ),
+    );
+  }),
+  http.post(`*${API_BASE}/knowledge/spaces/:space/files`, async ({ params, request }) => {
+    await remember(request);
+    const found = spaces.find((item) => item.space.id === Number(params.space));
+    if (!found) return refusal(404, 'not_found', 'unknown space');
+    if (found.space.archived) {
+      return refusal(409, 'conflict', `“${found.space.name}” is archived. Restore it to add files.`);
+    }
+    const form = await request.formData();
+    const uploads = form.getAll('upload').filter((value): value is File => value instanceof File);
+    if (uploads.length === 0) return refusal(422, 'invalid', 'Choose at least one file.');
+    const ids: number[] = [];
+    for (const upload of uploads) {
+      const media = upload.type || 'application/octet-stream';
+      const textual = media.startsWith('text/') || media === 'application/json';
+      const id = nextFile++;
+      ids.push(id);
+      found.files.push(
+        mockFile(
+          { id, name: upload.name, media_type: media, project_id: found.space.id, created_at: Date.now() / 1000 },
+          textual ? { text: await upload.text() } : { data: new Uint8Array(await upload.arrayBuffer()) },
+        ),
+      );
+    }
+    if (scenario().loseFiles) return HttpResponse.error();
+    return HttpResponse.json({ project_id: found.space.id, file_ids: ids }, { status: 201 });
+  }),
+  http.delete(`*${API_BASE}/knowledge/spaces/:space/files/:file`, async ({ params, request }) => {
+    await remember(request);
+    const found = spaces.find((item) => item.space.id === Number(params.space));
+    const file = found?.files.find((item) => item.summary.id === Number(params.file));
+    if (!found || !file) return refusal(404, 'not_found', 'unknown file');
+    if (found.space.archived) {
+      return refusal(409, 'conflict', `“${found.space.name}” is archived. Restore it to remove files.`);
+    }
+    found.files = found.files.filter((item) => item !== file);
+    if (scenario().loseFiles) return HttpResponse.error();
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.get(`*${API_BASE}/knowledge/spaces/:space/files/:file`, async ({ params }) => {
+    const stop = await gate();
+    if (stop) return stop;
+    const file = spaceFile(params);
+    return file ? HttpResponse.json(previewOf(file)) : refusal(404, 'not_found', 'unknown file');
+  }),
+  http.get(`*${API_BASE}/knowledge/spaces/:space/files/:file/content`, ({ params }) => {
+    const file = spaceFile(params);
+    return file ? contentOf(file) : refusal(404, 'not_found', 'unknown file');
+  }),
+  http.post(`*${API_BASE}/knowledge/spaces/:space/archive`, async ({ params, request }) => {
+    const body = (await remember(request)) as { archived?: boolean } | null;
+    const found = spaces.find((item) => item.space.id === Number(params.space));
+    if (!found) return refusal(404, 'not_found', 'unknown space');
+    found.space = { ...found.space, archived: body?.archived ?? false, updated_at: Date.now() / 1000 };
+    if (scenario().loseFiles) return HttpResponse.error();
+    return HttpResponse.json({ id: found.space.id });
   }),
   http.post(`*${API_BASE}/knowledge/spaces`, async ({ request }) => {
     const body = (await remember(request)) as { name: string; effort: string; private?: boolean };

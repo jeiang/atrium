@@ -121,6 +121,24 @@
     margin-block-start: var(--s-2);
   }
 
+  .kfiles__staged {
+    display: grid;
+    gap: var(--s-2);
+    margin-block-end: var(--s-4);
+  }
+
+  .kfiles__label {
+    margin: 0;
+    font-size: var(--t-sm);
+    color: var(--ink-2);
+  }
+
+  .kfiles__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+
   .kpage__aliases,
   .kpage__saved,
   .kpage__blank,
