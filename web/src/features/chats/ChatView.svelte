@@ -15,6 +15,7 @@
     assistantMessageSend,
     assistantReplyRegenerate,
     assistantRunAnswer,
+    assistantRunResume,
     assistantRunStop,
     assistantThreadBranch,
     assistantThreadOptions,
@@ -130,9 +131,12 @@
         !queued.some((item) => item.text === entry.text),
     ),
   );
-  const running = $derived(
-    shown.some((stream) => stream.active) || (activeRun !== undefined && activeRun.state !== 'parked'),
+  const running = $derived(shown.some((stream) => stream.active) || activeRun?.state === 'running');
+  const interrupted = $derived(
+    activeRun?.state === 'interrupted' && !streams.get(activeRun.id)?.active ? activeRun : undefined,
   );
+  let resuming = $state(false);
+  let resumeProblem = $state<{ tone: 'warn' | 'error'; title: string; text: string }>();
   const thread = $derived(first?.thread);
   const model = $derived(staged?.model ?? thread?.model ?? options.data?.defaults.model ?? '');
   const effort = $derived(staged?.effort ?? thread?.effort ?? options.data?.defaults.effort ?? '');
@@ -512,6 +516,36 @@
     }
   }
 
+  function resumeRefused(error: unknown): { tone: 'warn' | 'error'; title: string; text: string } {
+    if (refusedOffline(error) && error instanceof Error)
+      return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+    if (error instanceof ApiError)
+      return { tone: 'warn', title: 'atrium refused this', text: `${error.message} Nothing was resumed.` };
+    return {
+      tone: 'error',
+      title: 'The outcome is unknown',
+      text: 'The connection failed before atrium answered, so the run may or may not have resumed. atrium reloaded the chat and did not try again.',
+    };
+  }
+
+  async function onResume(): Promise<void> {
+    const run = interrupted;
+    if (id === undefined || !run || resuming) return;
+    resuming = true;
+    resumeProblem = undefined;
+    try {
+      ok(await assistantRunResume(id, run.id, { headers: { 'Idempotency-Key': crypto.randomUUID() } }));
+      following = true;
+      follow(run.id, true);
+    } catch (error) {
+      resumeProblem = resumeRefused(error);
+    } finally {
+      resuming = false;
+      void queryClient.invalidateQueries({ queryKey: ['thread', id] });
+      void queryClient.invalidateQueries({ queryKey: ['threads'] });
+    }
+  }
+
   function onScope(nextModel: string, nextEffort: string): void {
     const sameAsThread = nextModel === thread?.model && nextEffort === thread?.effort;
     staged = sameAsThread ? undefined : { model: nextModel, effort: nextEffort };
@@ -705,6 +739,22 @@
         <li class="turn turn--question">
           <span class="eyebrow">Question for you</span>
           <Markdown text={question.text} />
+        </li>
+      {/if}
+      {#if interrupted || resumeProblem}
+        <li class="turn turn--resume">
+          {#if interrupted}
+            <Notice tone="warn" variant="inline" title="This run was interrupted">
+              It stopped while a step was in flight. Resuming lets the assistant check what happened before it
+              continues.
+              {#snippet action()}
+                <Button variant="secondary" pending={resuming} onclick={onResume}>Resume run</Button>
+              {/snippet}
+            </Notice>
+          {/if}
+          {#if resumeProblem}
+            <Notice tone={resumeProblem.tone} variant="inline" title={resumeProblem.title}>{resumeProblem.text}</Notice>
+          {/if}
         </li>
       {/if}
       {#each queued as entry (entry.id)}

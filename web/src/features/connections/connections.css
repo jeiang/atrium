@@ -64,6 +64,58 @@
     max-inline-size: 40rem;
   }
 
+  .conn-steps {
+    display: grid;
+    gap: var(--s-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: conn-step;
+  }
+
+  .conn-steps > li {
+    position: relative;
+    padding-inline-start: calc(var(--s-6) + var(--s-2));
+    counter-increment: conn-step;
+    min-inline-size: 0;
+  }
+
+  .conn-steps > li::before {
+    content: counter(conn-step);
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    display: grid;
+    place-items: center;
+    inline-size: var(--s-6);
+    block-size: var(--s-6);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-pill);
+    font-size: var(--t-sm);
+    font-weight: 700;
+    color: var(--moss-ink);
+    background: var(--moss-soft);
+  }
+
+  .conn-steps > li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    inset-block: calc(var(--s-6) + var(--s-1)) calc(-1 * var(--s-4));
+    inset-inline-start: calc(var(--s-6) / 2);
+    border-inline-start: 1px solid var(--line);
+  }
+
+  .conn-step {
+    margin: 0;
+    font-size: var(--t-sm);
+    font-weight: 700;
+  }
+
+  .conn-return {
+    padding-block-end: var(--s-4);
+    border-block-end: 1px solid var(--line);
+  }
+
   .secret {
     display: flex;
     gap: var(--s-2);

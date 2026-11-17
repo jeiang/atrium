@@ -91,9 +91,12 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 	}
 
 	apiData(t, s.do(http.MethodPut, "/api/v1/connections/google/oauth", token, map[string]any{"client_id": "client-id", "client_secret": "client-secret"}), http.StatusOK)
+	if setup := apiData(t, s.do(http.MethodGet, "/api/v1/connections/google/oauth", token, nil), http.StatusOK); setup["redirect_uri"] != base+"/settings/connections/google/callback" || setup["client_secret_set"] != true {
+		t.Fatalf("oauth setup: %v", setup)
+	}
 	started := apiData(t, s.do(http.MethodPost, "/api/v1/connections/google/oauth/start", token, map[string]any{"capability": "calendar"}), http.StatusOK)
 	state, _ := started["state"].(string)
-	if state == "" || !strings.Contains(started["authorize_url"].(string), "code_challenge_method=S256") || !strings.Contains(started["authorize_url"].(string), "redirect_uri="+url.QueryEscape(base+"/settings/connections/google/callback")) {
+	if !strings.HasPrefix(state, "web.") || !strings.Contains(started["authorize_url"].(string), "code_challenge_method=S256") || !strings.Contains(started["authorize_url"].(string), "redirect_uri="+url.QueryEscape(base+"/settings/connections/google/callback")) {
 		t.Fatalf("oauth start: %v", started)
 	}
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/connections/google/oauth/start", token, map[string]any{"capability": "calendar", "redirect_uri": "https://evil.example/cb"}), http.StatusBadRequest, "bad_request")

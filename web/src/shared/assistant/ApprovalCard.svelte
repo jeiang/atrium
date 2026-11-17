@@ -14,7 +14,7 @@
   import { formatClock, formatDayTime } from './format';
   import HoldButton, { type Presentation } from './HoldButton.svelte';
   import ReceiptLine, { UNDO_MS } from './ReceiptLine.svelte';
-  import type { Approval, Blocked, DecidedElsewhere, Decision } from './types';
+  import type { Approval, Blocked, DecidedElsewhere, Decision, Outcome } from './types';
   import './assistant.css';
 
   type Handler = () => void | Promise<void>;
@@ -31,6 +31,7 @@
     onlater?: Handler;
     onedit?: () => void;
     onrepair?: () => void;
+    onresolve?: (outcome: string) => Promise<void>;
     onundo: (decision: Decision) => void | Promise<void>;
     undoable?: readonly Decision[];
   }
@@ -47,6 +48,7 @@
     onlater,
     onedit,
     onrepair,
+    onresolve,
     onundo,
     undoable = ['approve', 'decline', 'later'],
   }: Props = $props();
@@ -65,6 +67,9 @@
   let rowClear = $state(true);
   let arming = $state(false);
   let confirming = $state(false);
+  let asking = $state(false);
+  let outcome = $state<Outcome>();
+  let resolving = $state(false);
   let phase = $state<'open' | 'busy' | 'counting' | 'decided'>('open');
   let busyOn = $state<Decision>();
   let left = $state(0);
@@ -74,7 +79,8 @@
   let confirmedAt = 0;
 
   const mode = $derived<Presentation>(presentation === 'auto' ? (touch ? 'hold' : 'click') : presentation);
-  const away = $derived(!cardSeen || (!rowClear && !confirming));
+  const holding = $derived(confirming || asking);
+  const away = $derived(!cardSeen || (!rowClear && !holding));
   const rowInert = $derived(away || arming || phase !== 'open');
   const heading = $derived(`h${level}`);
   const decidedText = $derived(
@@ -128,7 +134,7 @@
   });
 
   $effect(() => {
-    if (!confirming) confirmedAt = performance.now();
+    if (!holding) confirmedAt = performance.now();
   });
 
   $effect(() => {
@@ -140,7 +146,7 @@
       ...(tracked ? { trackVisibility: true, delay: 100 } : {}),
     };
     const observer = new IntersectionObserver((entries) => {
-      if (confirming || row?.querySelector(':popover-open')) return;
+      if (holding || row?.querySelector(':popover-open')) return;
       for (const entry of entries) {
         if (entry.time < confirmedAt) continue;
         const visible = (entry as IntersectionObserverEntry & { isVisible?: boolean }).isVisible;
@@ -284,6 +290,26 @@
   function onLater(): void {
     if (onlater && !rowInert) void decide('later', onlater);
   }
+
+  function onAsk(choice: Outcome): void {
+    if (rowInert || resolving) return;
+    outcome = choice;
+    asking = true;
+  }
+
+  async function onResolve(): Promise<void> {
+    if (!outcome || !onresolve || resolving) return;
+    resolving = true;
+    try {
+      await onresolve(outcome.value);
+    } catch {
+      return;
+    } finally {
+      resolving = false;
+      asking = false;
+    }
+    announce(outcome.done);
+  }
 </script>
 
 <article
@@ -361,7 +387,11 @@
       data-away={away || undefined}
       data-arming={arming || undefined}
     >
-      {#if blocked}
+      {#if blocked && 'outcomes' in blocked}
+        {#each blocked.outcomes as choice (choice.value)}
+          <Button variant="secondary" onclick={() => onAsk(choice)}>{choice.label}</Button>
+        {/each}
+      {:else if blocked}
         <Button variant="primary" onclick={onrepair}>{blocked.repair}</Button>
       {:else if approval.irreversible}
         <HoldButton
@@ -395,5 +425,13 @@
   {#snippet actions()}
     <Button variant="quiet" data-cancel onclick={() => (confirming = false)}>Cancel</Button>
     <Button variant="primary" onclick={onConfirm}>Send now</Button>
+  {/snippet}
+</Dialog>
+
+<Dialog bind:open={asking} title={outcome?.ask ?? ''} pending={resolving} initialFocus="cancel">
+  <p>{approval.title}. {outcome?.effect}</p>
+  {#snippet actions()}
+    <Button variant="quiet" data-cancel disabled={resolving} onclick={() => (asking = false)}>Cancel</Button>
+    <Button variant="primary" pending={resolving} onclick={onResolve}>{outcome?.label}</Button>
   {/snippet}
 </Dialog>

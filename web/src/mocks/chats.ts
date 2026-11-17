@@ -26,6 +26,7 @@ export interface ChatScenario {
   empty?: boolean;
   listError?: boolean;
   liveStream?: boolean;
+  resumeFault?: boolean;
   approveUnknown?: boolean;
 }
 
@@ -107,6 +108,38 @@ extraRunScripts.push({
   ]),
 });
 
+const ORDER_THREAD = 12;
+const ORDER_RUN = 106;
+const orderEvents = numbered([
+  start(ORDER_THREAD, ORDER_RUN, 'Order the cedar boards'),
+  { event: 'text', data: { run_id: ORDER_RUN, text: 'I will order twelve cedar boards from Hillfield Timber.' } },
+  {
+    event: 'tool_start',
+    data: { run_id: ORDER_RUN, id: 'call-1', name: 'order_supplies', args: JSON.stringify({ boards: 12 }) },
+  },
+  { event: 'tool_done', data: { run_id: ORDER_RUN, id: 'call-1', ok: false, preview: 'The connection dropped' } },
+  {
+    event: 'tool_start',
+    data: { run_id: ORDER_RUN, id: 'call-2', name: 'check_order', args: JSON.stringify({ supplier: 'Hillfield' }) },
+  },
+  { event: 'tool_done', data: { run_id: ORDER_RUN, id: 'call-2', ok: true, preview: 'Order 4471 for 12 boards' } },
+  {
+    event: 'text',
+    data: { run_id: ORDER_RUN, text: 'The order for twelve boards went through, so I did not place it again.' },
+  },
+  { event: 'run_done', data: { run_id: ORDER_RUN, state: 'done', error: null } },
+  { event: 'complete', data: { run_id: ORDER_RUN, state: 'done', thread_id: ORDER_THREAD } },
+]);
+const orderScript: RunScript = {
+  thread: ORDER_THREAD,
+  run: ORDER_RUN,
+  label: 'Interrupted',
+  parked: true,
+  interrupted: true,
+  events: orderEvents.slice(0, 3),
+};
+extraRunScripts.push(orderScript);
+
 function thread(id: number, title: string, minutesAgo: number): Thread {
   const at = BASE - minutesAgo * 60;
   return {
@@ -187,6 +220,13 @@ function seed(): Map<number, MockThread> {
     cost: 0.5,
   });
   add({
+    thread: thread(ORDER_THREAD, 'Order the cedar boards', 100),
+    items: [item(1, 'user', 'Order twelve cedar boards for the shed.', { run_id: ORDER_RUN })],
+    active: runOf(ORDER_RUN, 'interrupted'),
+    queued: [],
+    cost: 0.05,
+  });
+  add({
     thread: thread(11, 'Check the shed roof', 20),
     items: [
       item(1, 'user', 'Does the shed roof need new sheets?', { run_id: 105 }),
@@ -197,7 +237,7 @@ function seed(): Map<number, MockThread> {
     queued: [],
     cost: 0.03,
   });
-  for (let index = 0; index < 34; index++) {
+  for (let index = 0; index < 33; index++) {
     add({
       thread: thread(300 + index, `Notes on the allotment, week ${index + 1}`, 600 + index * 240),
       items: [
@@ -364,7 +404,7 @@ function watch(threadId: number, run: number): TransformStream<Uint8Array, Uint8
       if (match?.[1]) {
         const { state } = JSON.parse(match[1]) as { state: string };
         const value = threads.get(threadId);
-        if (state === 'parked' && value?.active?.id === run) value.active.state = 'parked';
+        if ((state === 'parked' || state === 'interrupted') && value?.active?.id === run) value.active.state = state;
         else finish(threadId, run, state);
         buffer = '';
       } else if (buffer.length > 4096) {
@@ -497,12 +537,49 @@ function startReply(value: MockThread, text: string): number {
   return run;
 }
 
+const resolutions = new Map<number, { outcome: string; effective: string; ts: number }>();
+
+function ledger(proposal: ProposalDetail): object {
+  const resolution = resolutions.get(proposal.id);
+  return {
+    id: 700 + proposal.id,
+    proposal_id: proposal.id,
+    direction: 'forward',
+    state: proposal.blocked ? 'unknown' : (resolution?.effective ?? 'done'),
+    blocked: proposal.blocked,
+    undo_blocked: false,
+    undoable: false,
+    undone_at: null,
+    resolution: resolution && {
+      id: 800 + proposal.id,
+      outcome: resolution.outcome,
+      effective_outcome: resolution.effective,
+      actor: 'operator',
+      source: 'web',
+      prior_state: 'unknown',
+      prior_error: '',
+      ts: resolution.ts,
+    },
+  };
+}
+
+function resolve(id: number, outcome: string | undefined): Response | undefined {
+  const proposal = proposals.get(id);
+  if (!proposal) return undefined;
+  if (!proposal.blocked) return problem(409, 'not_resolved', `proposal ${id} has no blocked write`);
+  const effective = { applied: 'done', 'not-applied': 'failed' }[outcome ?? ''];
+  if (!effective) return problem(422, 'invalid', 'outcome must be applied, not-applied or partial');
+  resolutions.set(id, { outcome: outcome ?? '', effective, ts: Math.floor(Date.now() / 1000) });
+  proposal.blocked = false;
+  return HttpResponse.json({ approval: { id, status: proposal.status } });
+}
+
 function decide(id: number, status: string, reply: string): Response | undefined {
   const proposal = proposals.get(id);
   if (!proposal) return undefined;
   if (proposal.status !== 'pending') return problem(409, 'conflict', 'This ask was already decided.');
   if (status === 'approved' && scenario().approveUnknown) {
-    Object.assign(proposal, { status, blocked: true, decided_at: BASE });
+    Object.assign(proposal, { status: 'failed', blocked: true, decided_at: BASE });
     return problem(409, 'effect_unknown', 'The mail server did not confirm the send.');
   }
   proposal.status = status;
@@ -730,6 +807,21 @@ export const chatHandlers = [
     value.active = null;
     return HttpResponse.json({ run_id: startReply(value, text) }, { status: 202 });
   }),
+  http.post(`*${API_BASE}/threads/:thread/runs/:run/resume`, ({ params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'This chat does not exist.');
+    const active = value.active;
+    if (!active || active.id !== Number(params.run) || (active.state !== 'interrupted' && active.state !== 'parked'))
+      return problem(409, 'conflict', 'The run cannot be resumed.');
+    active.state = 'running';
+    if (active.id === ORDER_RUN) {
+      orderScript.events = orderEvents;
+      orderScript.parked = false;
+      orderScript.interrupted = false;
+    }
+    if (scenario().resumeFault) return HttpResponse.error();
+    return HttpResponse.json({ thread_id: value.thread.id }, { status: 202 });
+  }),
   http.post(`*${API_BASE}/threads/:thread/stop`, ({ params }) => {
     const value = threads.get(Number(params.thread));
     const run = value?.active?.id;
@@ -767,6 +859,14 @@ export const chatHandlers = [
   http.post(`*${API_BASE}/approvals/:id/deny`, ({ params }) =>
     decide(Number(params.id), 'dismissed', 'Understood. The reminder was not sent.'),
   ),
+  http.post(`*${API_BASE}/approvals/:id/resolve`, async ({ params, request }) => {
+    const { outcome } = (await request.clone().json()) as { outcome?: string };
+    return resolve(Number(params.id), outcome);
+  }),
+  http.get(`*${API_BASE}/effects`, ({ request }) => {
+    const proposal = proposals.get(Number(new URL(request.url).searchParams.get('proposal_id')));
+    return proposal ? HttpResponse.json({ items: [ledger(proposal)] }) : undefined;
+  }),
   http.get(`*${API_BASE}/threads/:thread/runs/:run/events`, async ({ request, params }) => {
     const url = new URL(request.url);
     if (url.searchParams.has('speed')) return undefined;

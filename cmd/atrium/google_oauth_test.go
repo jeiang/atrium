@@ -129,6 +129,10 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	if token != "refresh-1" {
 		t.Fatalf("calendar refresh token = %q", token)
 	}
+	code, _, hdr = fetch(t, noRedirect, http.MethodGet, s.base+"/settings/connections/google/callback?state=web.handoff&code=code-9", nil)
+	if code != http.StatusSeeOther || hdr.Get("Location") != "/next/settings/connections/google/default?state=web.handoff&code=code-9" {
+		t.Fatalf("handoff callback: %d %q", code, hdr.Get("Location"))
+	}
 
 	pasteState := start("gmail").Query().Get("state")
 	pasted := s.base + "/settings/connections/google/callback?state=" + url.QueryEscape(pasteState) + "&code=code-2"

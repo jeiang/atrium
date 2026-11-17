@@ -12,6 +12,7 @@ export interface ConnectionsScenario {
   pinned?: boolean;
   sharedSlot?: boolean;
   pinnedRace?: boolean;
+  google?: 'fresh' | 'absent' | 'denied' | 'exchange' | 'lost';
 }
 
 export interface ConnectionRequest {
@@ -25,6 +26,7 @@ export interface ConnectionRequest {
 const log = globalThis as typeof globalThis & { atriumConnectionRequests?: ConnectionRequest[] };
 const EVENTS = 'atrium-mock-events';
 const HOUR = 3600_000;
+const GOOGLE = 'google/default';
 
 function iso(offset: number): string {
   return new Date(Date.now() + offset).toISOString();
@@ -44,6 +46,7 @@ const declaredSlots: Record<string, string[]> = {
   'service/webpush': ['vapid_private_key'],
   'mail/imap': ['password'],
   'media/jellyfin': ['api_key'],
+  google: ['oauth/client_secret', 'oauth/calendar/refresh', 'oauth/gmail/refresh'],
 };
 
 function seed(): ConnectionView[] {
@@ -180,19 +183,32 @@ function seed(): ConnectionView[] {
       results: [],
     },
     {
-      id: 'google/calendar',
-      kind: 'google/calendar',
-      label: 'Family calendar',
+      id: 'google/default',
+      kind: 'google',
+      label: 'Google',
       enabled: true,
       config_source: 'operator',
-      config: {},
-      capabilities: caps('calendar'),
+      config: { client_id: 'fictional-client.apps.example.test' },
+      capabilities: caps('calendar', 'gmail'),
       credentials: [
-        { slot: 'refresh_token', source: 'database', present: true, set_at: iso(-60 * 24 * HOUR), set_by: 'oauth' },
+        {
+          slot: 'oauth/calendar/refresh',
+          source: 'database',
+          present: true,
+          set_at: iso(-60 * 24 * HOUR),
+          set_by: 'oauth',
+        },
+        {
+          slot: 'oauth/client_secret',
+          source: 'database',
+          present: true,
+          set_at: iso(-60 * 24 * HOUR),
+          set_by: 'operator@example.test',
+        },
       ],
       state: 'needs_reauth',
-      reason: 'the refresh token was revoked',
-      results: [{ capability: 'calendar', state: 'needs_reauth', reason: 'the refresh token was revoked' }],
+      reason: 'Google refused the access token',
+      results: [{ capability: 'calendar', state: 'needs_reauth', reason: 'Google refused the access token' }],
       checked_at: iso(-5 * HOUR),
       last_ok_at: iso(-3 * 24 * HOUR),
       reauth_at: iso(-5 * HOUR),
@@ -309,10 +325,60 @@ interface Store {
   settings: Record<string, string>;
   revision: number;
   staleUsed: boolean;
+  consents: Record<string, string>;
 }
 
-let store: Store = { rows: seed(), settings: {}, revision: 7, staleUsed: false };
+interface Kept {
+  scenario: string;
+  google?: ConnectionView;
+  consents: Record<string, string>;
+}
+
+const KEPT = 'atrium-mock-google';
+
+let store: Store = { rows: seed(), settings: {}, revision: 7, staleUsed: false, consents: {} };
 let scenarioText = '';
+
+function fresh(row: ConnectionView): ConnectionView {
+  return {
+    ...row,
+    config: {},
+    credentials: [],
+    state: 'unconfigured',
+    reason: 'the client ID and client secret are not set',
+    results: [],
+    checked_at: undefined,
+    last_ok_at: undefined,
+    reauth_at: undefined,
+  };
+}
+
+function seeded(state: ConnectionsScenario): ConnectionView[] {
+  if (state.empty) return [];
+  const rows = state.sharedSlot ? [...seed(), ...sharedRows()] : seed();
+  if (state.google === 'absent') return rows.filter((row) => row.id !== GOOGLE);
+  if (state.google === 'fresh') return rows.map((row) => (row.id === GOOGLE ? fresh(row) : row));
+  return rows;
+}
+
+function keep(): void {
+  const kept: Kept = { scenario: scenarioText, google: find('google', 'default'), consents: store.consents };
+  sessionStorage.setItem(KEPT, JSON.stringify(kept));
+}
+
+function restore(): void {
+  const raw = sessionStorage.getItem(KEPT);
+  if (!raw) return;
+  const kept = JSON.parse(raw) as Kept;
+  if (kept.scenario !== scenarioText) return;
+  store.consents = kept.consents;
+  if (kept.google) {
+    const google = kept.google;
+    store.rows = store.rows.some((row) => row.id === GOOGLE)
+      ? store.rows.map((row) => (row.id === GOOGLE ? google : row))
+      : [...store.rows, google];
+  }
+}
 
 function scenario(read: () => { connections?: ConnectionsScenario }): ConnectionsScenario {
   const state = read().connections ?? {};
@@ -320,11 +386,13 @@ function scenario(read: () => { connections?: ConnectionsScenario }): Connection
   if (text !== scenarioText) {
     scenarioText = text;
     store = {
-      rows: state.empty ? [] : state.sharedSlot ? [...seed(), ...sharedRows()] : seed(),
+      rows: seeded(state),
       settings: { weather_location_name: 'Hillfield', weather_latitude: '51.48', weather_longitude: '-3.18' },
       revision: 7,
       staleUsed: false,
+      consents: {},
     };
+    restore();
   }
   return state;
 }
@@ -471,8 +539,107 @@ function settingItems(state: ConnectionsScenario): Setting[] {
   });
 }
 
+const grants = [
+  { name: 'calendar', label: 'Calendar', scope: 'calendar.events', slot: 'oauth/calendar/refresh', shared: '' },
+  { name: 'gmail', label: 'Gmail', scope: 'mail', slot: 'oauth/gmail/refresh', shared: '' },
+];
+
+function google(): ConnectionView {
+  const found = find('google', 'default');
+  if (found) return found;
+  const row = fresh(seed().find((item) => item.id === GOOGLE) as ConnectionView);
+  store.rows = [...store.rows, row];
+  return row;
+}
+
+function clientOf(row: ConnectionView): { id: string; secret: boolean } {
+  const id = (row.config as Record<string, unknown>).client_id;
+  return {
+    id: typeof id === 'string' ? id : '',
+    secret: row.credentials.some((credential) => credential.slot === 'oauth/client_secret' && credential.present),
+  };
+}
+
+function storeCredential(row: ConnectionView, slot: string, by: string): void {
+  row.credentials = [
+    ...row.credentials.filter((credential) => credential.slot !== slot),
+    { slot, source: 'database', present: true, set_at: new Date().toISOString(), set_by: by },
+  ].sort((a, b) => a.slot.localeCompare(b.slot));
+}
+
+function googleHandlers(read: () => { connections?: ConnectionsScenario }) {
+  return [
+    http.get(`*${API_BASE}/connections/google/oauth`, ({ request }) => {
+      scenario(read);
+      const row = google();
+      const own = clientOf(row);
+      return HttpResponse.json({
+        revision: '3',
+        data: {
+          client_id: own.id,
+          client_secret_set: own.secret,
+          redirect_uri: `${new URL(request.url).origin}/settings/connections/google/callback`,
+          capabilities: grants,
+          health: row.state,
+          reason: row.reason,
+        },
+      });
+    }),
+    http.put(`*${API_BASE}/connections/google/oauth`, async ({ request }) => {
+      scenario(read);
+      const body = ((await record(request)) ?? {}) as { client_id?: string; client_secret?: string };
+      await delay(300);
+      const row = google();
+      if (body.client_id) row.config = { client_id: body.client_id };
+      if (body.client_secret) storeCredential(row, 'oauth/client_secret', 'operator@example.test');
+      const own = clientOf(row);
+      if (row.state === 'unconfigured' && own.id && own.secret) Object.assign(row, { state: 'untested', reason: '' });
+      keep();
+      publish('connections');
+      return HttpResponse.json({ data: row });
+    }),
+    http.post(`*${API_BASE}/connections/google/oauth/start`, async ({ request }) => {
+      const state = scenario(read);
+      const body = ((await record(request)) ?? {}) as { capability?: string };
+      await delay(300);
+      const row = google();
+      if (!grants.some((grant) => grant.name === body.capability)) {
+        return refusal(422, 'invalid', 'unknown capability');
+      }
+      const own = clientOf(row);
+      if (!own.id || !own.secret) return refusal(422, 'invalid', 'Save the client ID and client secret first.');
+      const consent = `web.${crypto.randomUUID()}`;
+      store.consents = { ...store.consents, [consent]: body.capability as string };
+      keep();
+      const back = new URL(`${import.meta.env.BASE_URL}settings/connections/google/default`, request.url);
+      back.searchParams.set('state', consent);
+      if (state.google === 'denied') back.searchParams.set('error', 'access_denied');
+      else back.searchParams.set('code', `fictional-code-${body.capability}`);
+      return HttpResponse.json({ data: { authorize_url: back.href, state: consent } });
+    }),
+    http.post(`*${API_BASE}/connections/google/oauth/complete`, async ({ request }) => {
+      const state = scenario(read);
+      const body = ((await record(request)) ?? {}) as { state?: string; code?: string };
+      await delay(300);
+      const row = google();
+      const consent = body.state ?? '';
+      const grant = grants.find((item) => item.name === store.consents[consent]);
+      if (!grant) return refusal(422, 'invalid', 'this consent link is unknown or already used; start again');
+      store.consents = Object.fromEntries(Object.entries(store.consents).filter(([key]) => key !== consent));
+      keep();
+      if (state.google === 'exchange') return refusal(422, 'invalid', 'Google token exchange failed; start again');
+      storeCredential(row, grant.slot, 'oauth');
+      keep();
+      publish('connections');
+      if (state.google === 'lost') return HttpResponse.error();
+      return HttpResponse.json({ data: grant });
+    }),
+  ];
+}
+
 export function connectionHandlers(read: () => { connections?: ConnectionsScenario }) {
   return [
+    ...googleHandlers(read),
     http.get(`*${API_BASE}/connections`, () => {
       if (scenario(read).fail) return refusal(500, 'internal', 'The connection store did not answer.');
       return HttpResponse.json({ data: { connections: store.rows }, revision: '3' });
