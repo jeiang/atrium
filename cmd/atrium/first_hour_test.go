@@ -59,16 +59,16 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 	if code, _, _ := wimGet(t, base+"/login"); code != http.StatusOK {
 		t.Fatalf("unconfigured sign-in status = %d, want 200", code)
 	}
-	if code, _, _ := wimGet(t, base+"/chat"); code != http.StatusSeeOther {
-		t.Fatalf("unconfigured public chat status = %d, want 303", code)
+	if code, _, _ := wimGet(t, base+"/web/v1/session", "Atrium-Client", "web"); code != http.StatusUnauthorized {
+		t.Fatalf("unconfigured public session status = %d, want 401", code)
 	}
-	for _, target := range []string{"/chat", "/settings/auth"} {
-		if code, _, _ := wimGet(t, base+target, "Remote-User", "operator", "Remote-Groups", "atrium_access,atrium_admin"); code != http.StatusSeeOther {
-			t.Fatalf("forged proxy headers on %s: status = %d, want 303", target, code)
+	for _, target := range []string{"/web/v1/session", "/web/v1/auth"} {
+		if code, _, _ := wimGet(t, base+target, "Atrium-Client", "web", "Remote-User", "operator", "Remote-Groups", "atrium_access,atrium_admin"); code != http.StatusUnauthorized {
+			t.Fatalf("forged proxy headers on %s: status = %d, want 401", target, code)
 		}
 	}
-	if code, _, _ := wimGet(t, "http://127.0.0.1:"+emergencyPort+"/settings/auth"); code != http.StatusOK {
-		t.Fatalf("emergency settings status = %d, want 200", code)
+	if code, _, _ := wimGet(t, "http://127.0.0.1:"+emergencyPort+"/web/v1/auth", "Atrium-Client", "web"); code != http.StatusOK {
+		t.Fatalf("emergency auth settings status = %d, want 200", code)
 	}
 	if isPlaintextSQLite(t, path) {
 		t.Fatal("first serve created a plaintext database")
@@ -81,8 +81,8 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 		t.Fatalf("public serve stop = %d, want 0", code)
 	}
 	local := start("local", nil, "--auth", "local")
-	if code, _, _ := wimGet(t, "http://"+local.addr+"/settings/auth"); code != http.StatusOK {
-		t.Fatalf("local settings on the same keyed database = %d, want 200", code)
+	if code, _, _ := wimGet(t, "http://"+local.addr+"/web/v1/auth", "Atrium-Client", "web"); code != http.StatusOK {
+		t.Fatalf("local auth settings on the same keyed database = %d, want 200", code)
 	}
 	if code := local.stop(t, syscall.SIGTERM); code != cli.ExitOK {
 		t.Fatalf("local serve stop = %d, want 0", code)

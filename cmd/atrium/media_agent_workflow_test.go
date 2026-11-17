@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -54,12 +53,13 @@ func TestFilingThroughTheAgentTwiceHasOneResult(t *testing.T) {
 	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	form := url.Values{"id": {hash}, "action": {"file"}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {"2026"},
-		"s0": {"1"}, "e0": {"1"}, "s1": {"1"}, "e1": {"2"}}
-	b.want(http.MethodPost, "/apps/media/file", form, http.StatusOK)
-	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
+	c := webG4(t, startServeIn(t, dir))
+	queueG4(c)
+	body := filingG4(c, hash, "tv", "Lanterns", "2026", [2]string{"1", "1"}, [2]string{"1", "2"})
+	if got := refileG4(c, hash, body); got.status != http.StatusOK {
+		t.Fatalf("filing = %d: %s", got.status, got.body)
+	}
+	if got := refileG4(c, hash, body); got.status == http.StatusOK {
 		t.Fatal("the second filing succeeded")
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
@@ -105,9 +105,11 @@ func TestUndoingAFilingAfterTheSweepRemovedItsDownloadKeepsTheLibraryCopy(t *tes
 	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {hash}, "action": {"file"}, "kind": {"movie"}, "title": {"Harbor Lights"}, "year": {"2026"}}, http.StatusOK)
+	c := webG4(t, startServeIn(t, dir))
+	queueG4(c)
+	if got := fileG4(c, hash, "movie", "Harbor Lights", "2026"); got.status != http.StatusOK {
+		t.Fatalf("filing = %d: %s", got.status, got.body)
+	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	id := mediaEffectID(t, d, library.OpFile, hash, "done")
@@ -199,16 +201,15 @@ func TestFilingUnknownBlocksAndIsInspectable(t *testing.T) {
 	qb.put(mnpTorrent{hash: hash, name: "Movie.2020", tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: filepath.Join(root, "downloads", "Movie.2020")})
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	form := url.Values{"id": {hash}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}
-	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
+	c := webG4(t, startServeIn(t, dir))
+	queueG4(c)
+	if got := fileG4(c, hash, "movie", "Movie", "2020"); got.status == http.StatusOK {
 		t.Fatal("a dropped filing reported success")
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	id := mediaEffectID(t, d, library.OpFile, hash, "unknown")
-	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
+	if got := fileG4(c, hash, "movie", "Movie", "2020"); got.status == http.StatusOK {
 		t.Fatal("the repeat of an unknown filing succeeded")
 	}
 	fake.mu.Lock()
@@ -252,10 +253,12 @@ func TestFilingRefusesUntaggedAndOutsidePrefix(t *testing.T) {
 	qb.put(mnpTorrent{hash: plain, name: "Plain.2021", state: contract.StoppedUP, progress: 1, content: inside})
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {outside}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}, http.StatusUnprocessableEntity)
-	if code, _ := b.do(http.MethodPost, "/apps/media/file", url.Values{"id": {plain}, "action": {"file"}, "kind": {"movie"}, "title": {"Plain"}, "year": {"2021"}}); code == http.StatusOK {
+	c := webG4(t, startServeIn(t, dir))
+	queueG4(c)
+	if got := fileG4(c, outside, "movie", "Movie", "2020"); got.status != http.StatusUnprocessableEntity {
+		t.Fatalf("filing outside the prefix = %d: %s", got.status, got.body)
+	}
+	if got := fileG4(c, plain, "movie", "Plain", "2021"); got.status == http.StatusOK {
 		t.Fatal("an untagged torrent was filed")
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
@@ -284,10 +287,13 @@ func TestImportFilingRenamesAndCleansUp(t *testing.T) {
 	mnpWrite(t, filepath.Join(other, "Other.2021.sample.mkv"), []byte("sample"))
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Movie.2020"}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Other.2021"}, "action": {"file"}, "kind": {"movie"}, "title": {"Other"}, "year": {"2021"}}, http.StatusOK)
+	c := webG4(t, startServeIn(t, dir))
+	queueG4(c)
+	for _, item := range [][3]string{{"Movie.2020", "Movie", "2020"}, {"Other.2021", "Other", "2021"}} {
+		if got := fileG4(c, library.Import+"/"+item[0], "movie", item[1], item[2]); got.status != http.StatusOK {
+			t.Fatalf("filing %s = %d: %s", item[0], got.status, got.body)
+		}
+	}
 	placed := filepath.Join(root, "movies", "Movie (2020)", "Movie (2020).mkv")
 	if body, err := os.ReadFile(placed); err != nil || string(body) != "movie bytes" {
 		t.Fatalf("filed movie %q %v", body, err)
@@ -368,11 +374,10 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	mnpWrite(t, blocked, []byte("not a folder"))
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	form := url.Values{"id": {hash}, "action": {"file"}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {"2026"},
-		"s0": {"1"}, "e0": {"1"}, "s1": {"2"}, "e1": {"1"}}
-	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
+	c := webG4(t, startServeIn(t, dir))
+	queueG4(c)
+	body := filingG4(c, hash, "tv", "Lanterns", "2026", [2]string{"1", "1"}, [2]string{"2", "1"})
+	if got := refileG4(c, hash, body); got.status == http.StatusOK {
 		t.Fatal("a plan whose season folder is a file was filed")
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
@@ -394,7 +399,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(blocked, 0o775) })
-	if code, _ := b.do(http.MethodPost, "/apps/media/file", form); code == http.StatusOK {
+	if got := refileG4(c, hash, body); got.status == http.StatusOK {
 		t.Fatal("a filing stopped by a read-only season folder reported success")
 	}
 	id := mediaEffectID(t, d, library.OpFile, hash, "partial")
@@ -437,10 +442,17 @@ func TestImportWithASymlinkShowsTheAgentRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	body := b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	if !strings.Contains(body, "Linked.2022") || !strings.Contains(body, "the media agent refused the source (") {
-		t.Fatalf("the import with a symlink is not shown with its refusal: %s", body)
+	queue := queueG4(webG4(t, startServeIn(t, dir)))
+	items, _ := queue.json["items"].([]any)
+	var refused bool
+	for _, raw := range items {
+		item, _ := raw.(map[string]any)
+		if errText, _ := item["error"].(string); strings.Contains(fmt.Sprint(item["name"]), "Linked.2022") && strings.Contains(errText, "the media agent refused the source (") {
+			refused = true
+		}
+	}
+	if !refused {
+		t.Fatalf("the import with a symlink is not shown with its refusal: %s", queue.body)
 	}
 }
 
@@ -506,12 +518,12 @@ func TestDisabledFileCapabilityStopsFiling(t *testing.T) {
 		t.Fatal(err)
 	}
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	if body := b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK); !strings.Contains(body, "the media library is unavailable") {
-		t.Fatalf("the queue does not show the unavailable agent: %s", body)
+	c := webG4(t, startServeIn(t, dir))
+	if queue := queueG4(c); !strings.Contains(fmt.Sprint(queue.json["error"]), "the media library is unavailable") {
+		t.Fatalf("the queue does not show the unavailable agent: %s", queue.body)
 	}
-	if code, body := b.do(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Movie.2020"}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "the media library is unavailable") {
-		t.Fatalf("filing with file disabled = %d %s", code, body)
+	if got := fileG4(c, library.Import+"/Movie.2020", "movie", "Movie", "2020"); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "the media library is unavailable") {
+		t.Fatalf("filing with file disabled = %d %s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()

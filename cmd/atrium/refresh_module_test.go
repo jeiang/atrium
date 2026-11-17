@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -24,7 +23,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 	message := seedMail(t, dir)
 	d := asstDB(t, dir)
 	base, _, _ := startServeApp(t, f.app, &lockedBuffer{})
-	w := asstBrowse(t, base)
+	c := webG4(t, base)
 
 	arrived := make(chan struct{})
 	release := make(chan struct{})
@@ -36,7 +35,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 		once.Do(func() { close(arrived); <-release })
 	})
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("live-disabled-mail", "mail_read", map[string]any{"message_id": message})), anthropictest.Reply("end_turn", anthropictest.Text("refused")))
-	thread := w.start(map[string]string{"text": "read my mail"})
+	thread, _ := startG4(c, "read my mail")
 	select {
 	case <-arrived:
 	case <-time.After(10 * time.Second):
@@ -69,10 +68,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 		asstSet(t, module.FlagKey(unit.Mail), fmt.Sprint(enabled))
 		start := len(api.Requests())
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-		code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "hello", "edit": ""}, nil, true)
-		if code != http.StatusOK {
-			t.Fatalf("follow-up: %d %s", code, body)
-		}
+		sendG4(c, thread, "hello")
 		if state, detail := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 			t.Fatalf("follow-up: %s %s", state, detail)
 		}
@@ -94,10 +90,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 		}
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("live-enabled-mail", "mail_read", map[string]any{"message_id": message})), anthropictest.Reply("end_turn", anthropictest.Text("read")))
-	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "read my mail", "edit": ""}, nil, true)
-	if code != http.StatusOK {
-		t.Fatalf("enabled follow-up: %d %s", code, body)
-	}
+	sendG4(c, thread, "read my mail")
 	if state, detail := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 		t.Fatalf("enabled run: %s %s", state, detail)
 	}

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -316,13 +315,12 @@ func TestMailReplyForwardAndOperatorDrafts(t *testing.T) {
 	}
 	expectAPI(t, a.post("/drafts", map[string]any{"account": "work", "to": "sam@x.test", "subject": "Empty", "body": ""}), http.StatusUnprocessableEntity, "invalid_draft")
 
-	code, _, _ := mrvDo(t, a.client, http.MethodGet, a.base+"/drafts/"+replyID, nil)
-	if code != http.StatusOK {
-		t.Fatalf("draft page = %d", code)
+	web := webG4(t, a.base)
+	if got := web.do(http.MethodGet, "/web/v1/drafts/"+replyID, nil); got.status != http.StatusOK {
+		t.Fatalf("draft read = %d: %.400s", got.status, got.body)
 	}
-	code, body, _ := mrvDo(t, a.client, http.MethodPost, a.base+"/drafts/"+replyID+"/send", url.Values{"revision": {fmt.Sprint(reply["revision"])}}, "HX-Request", "true")
-	if code != http.StatusOK {
-		t.Fatalf("send reply = %d: %.400s", code, body)
+	if got := web.do(http.MethodPost, "/web/v1/drafts/"+replyID+"/send", map[string]any{"revision": reply["revision"]}); got.status != http.StatusOK {
+		t.Fatalf("send reply = %d: %.400s", got.status, got.body)
 	}
 	sent := smtp.sent()
 	if len(sent) != 1 || !strings.Contains(sent[0], "In-Reply-To: <dinner@x.test>") || !strings.Contains(sent[0], "replies@x.test") {
@@ -337,32 +335,25 @@ func TestMailMessagePageActionsAndLoopsLink(t *testing.T) {
 	uid := inbox.Add(h, x, []string{`\Seen`}, nil)
 	a := actionFixture(t, "live", "icloud", fake)
 	id := a.m.messageID(t, "Dinner")
-	page := fmt.Sprintf("%s/messages/%d", a.base, id)
-	code, body, _ := mrvDo(t, a.client, http.MethodGet, page, nil)
-	for _, want := range []string{"Mark unread", ">Flag<", "Archive", "Reply", "Forward"} {
-		if code != http.StatusOK || !strings.Contains(body, want) {
-			t.Fatalf("message page = %d without %q", code, want)
-		}
+	web := webG4(t, a.base)
+	if got := web.do(http.MethodPost, fmt.Sprintf("/web/v1/mail/messages/%d/flag", id), map[string]any{"flagged": true}); got.status != http.StatusOK || !slices.Contains(flagsOf(fake, "INBOX", uid), `\Flagged`) {
+		t.Fatalf("browser flag = %d %s, flags %v", got.status, got.body, flagsOf(fake, "INBOX", uid))
 	}
-	code, _, header := mrvDo(t, a.client, http.MethodPost, page+"/flag", url.Values{"on": {"1"}})
-	if code != http.StatusSeeOther || header.Get("Location") != fmt.Sprintf("/messages/%d", id) || !slices.Contains(flagsOf(fake, "INBOX", uid), `\Flagged`) {
-		t.Fatalf("page flag = %d %q, flags %v", code, header.Get("Location"), flagsOf(fake, "INBOX", uid))
-	}
-	code, _, header = mrvDo(t, a.client, http.MethodPost, page+"/reply", url.Values{})
-	if code != http.StatusSeeOther || !strings.HasPrefix(header.Get("Location"), "/drafts/") {
-		t.Fatalf("page reply = %d %q", code, header.Get("Location"))
+	if got := web.do(http.MethodPost, fmt.Sprintf("/web/v1/mail/messages/%d/reply", id), nil); got.status != http.StatusOK || got.json["id"] == nil {
+		t.Fatalf("browser reply = %d %s", got.status, got.body)
 	}
 
 	a.m.exec(t, "INSERT INTO open_loops (thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) VALUES ('dinner', 'work', 'owe_reply', ?, 100, 'pat@x.test', 'Dinner', 100)", id)
-	code, body, _ = mrvDo(t, a.client, http.MethodGet, a.base+"/loops", nil)
-	if code != http.StatusOK || !strings.Contains(body, "Dinner") {
-		t.Fatalf("loops page = %d: %.400s", code, body)
+	loops := web.do(http.MethodGet, "/web/v1/mail/loops", nil)
+	items, _ := dataG4(loops)["items"].([]any)
+	var linked bool
+	for _, raw := range items {
+		if loop, _ := raw.(map[string]any); loop["subject"] == "Dinner" && number(t, loop["last_message_id"]) == id {
+			linked = true
+		}
 	}
-	if strings.Contains(body, "Draft reply") || strings.Contains(body, "Draft a reply to mail") {
-		t.Fatalf("loops page still offers a paid draft run")
-	}
-	if !strings.Contains(body, fmt.Sprintf(`href="/messages/%d">`, id)) || !strings.Contains(body, "Open message") {
-		t.Fatalf("loops page has no link to the message")
+	if loops.status != http.StatusOK || !linked {
+		t.Fatalf("loops = %d without the Dinner loop linked to its message: %.400s", loops.status, loops.body)
 	}
 }
 

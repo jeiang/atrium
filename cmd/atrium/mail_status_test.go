@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -133,16 +132,14 @@ func TestMailStatusGoLiveNeedsItsConfirmTokenAndOpensTheWatchWindow(t *testing.T
 	if s.mode(t) != "shadow" {
 		t.Fatalf("mode changed without a token: %s", s.mode(t))
 	}
-	client := mrvClient(t)
-	if code, _, _ := mrvDo(t, client, http.MethodGet, s.s.base+"/live", nil); code != http.StatusOK {
-		t.Fatalf("status page: %d", code)
+	web := webG4(t, s.s.base)
+	confirmed := web.do(http.MethodPost, "/web/v1/mail/status/confirm", map[string]any{"action": "go_live"})
+	if token, _ := dataG4(confirmed)["confirm_token"].(string); confirmed.status != http.StatusOK || token == "" {
+		t.Fatalf("browser confirm: %d %.600s", confirmed.status, confirmed.body)
 	}
-	code, body, _ := mrvDo(t, client, http.MethodPost, s.s.base+"/live/confirm", url.Values{"action": {"go_live"}}, "Origin", s.s.base)
-	if code != http.StatusOK || !strings.Contains(body, `data-testid="confirm-statement"`) || !strings.Contains(body, `href="/live" autofocus>Cancel`) || !strings.Contains(body, `href="#pause-control"`) {
-		t.Fatalf("page confirm: %d %.600s", code, body)
-	}
-	if code, _, _ := mrvDo(t, client, http.MethodPost, s.s.base+"/live/go-live", url.Values{}, "Origin", s.s.base); code != http.StatusConflict || s.mode(t) != "shadow" {
-		t.Fatalf("page go-live without a token: %d, mode %s", code, s.mode(t))
+	expectAPI(t, web.do(http.MethodPost, "/web/v1/mail/status/go-live", map[string]any{"confirm_token": ""}), http.StatusConflict, "confirm_required")
+	if s.mode(t) != "shadow" {
+		t.Fatalf("browser go-live without a token changed the mode: %s", s.mode(t))
 	}
 
 	effect := s.confirm(t, "go_live")
@@ -195,9 +192,6 @@ func TestMailStatusGoLiveNeedsItsConfirmTokenAndOpensTheWatchWindow(t *testing.T
 		t.Fatalf("watch window: %v", watch)
 	}
 
-	if code, body, _ := mrvDo(t, client, http.MethodGet, s.s.base+"/live", nil); code != http.StatusOK || !strings.Contains(body, `data-testid="watch-closely"`) || !strings.Contains(body, `data-testid="mail-mode">live<`) {
-		t.Fatalf("status page after go-live: %d %.600s", code, body)
-	}
 	s.clock.advance(6 * 86400)
 	if watch := s.status(t)["watch_closely"].(map[string]any); watch["active"] != true {
 		t.Fatalf("watch window closed after 6 days: %v", watch)

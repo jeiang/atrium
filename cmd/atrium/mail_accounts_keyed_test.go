@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -72,15 +70,10 @@ func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
 	t.Setenv("ATRIUM_SMTP_CA", ca)
 
-	base := startServeIn(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/mail", nil); code != http.StatusOK {
-		t.Fatalf("mail settings: %d", code)
-	}
-	add := url.Values{"id": {"work"}, "label": {"Work"}, "preset": {"gmail"}, "login": {"me@work.test"}, "password": {"work-pass"}}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts", add); code != http.StatusOK {
-		t.Fatalf("add: %d %.300s", code, body)
+	c := webG4(t, startServeIn(t, dir))
+	add := map[string]any{"id": "work", "label": "Work", "preset": "gmail", "login": "me@work.test", "password": "work-pass"}
+	if got := c.do(http.MethodPost, "/web/v1/mail/accounts", add); got.status != http.StatusCreated {
+		t.Fatalf("add: %d %.300s", got.status, got.body)
 	}
 
 	app := newAppWith(f.lookup, imapclient.Opener, nil, quietLog)

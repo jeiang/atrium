@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,9 +22,9 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 	release := asstHold(t, api)
 	base, _, stop := startServeStoppable(t, dir)
 	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
-	w := asstBrowse(t, base)
+	c := webG4(t, base)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("held", "profile_get", map[string]any{"key": "k"})))
-	thread := w.start(map[string]string{"text": "authoritymarker"})
+	thread, _ := startG4(c, "authoritymarker")
 	asstWaitRequests(t, api, before+1)
 	run := asstLastRun(t, d, thread)
 	owner := liveRun(t, d, run)
@@ -61,9 +60,8 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 	if n := len(api.Requests()) - before; n != 2 {
 		t.Fatalf("%d model requests after the restart tick, want 2", n)
 	}
-	w = asstBrowse(t, startServeIn(t, dir))
-	code, body, _ := w.post(fmt.Sprintf("/chat/%d/runs/%d/resume", thread, run), url.Values{}, true)
-	w.want(code, http.StatusConflict, body, "run is not interrupted")
+	c = webG4(t, startServeIn(t, dir))
+	expectAPI(t, c.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/runs/%d/resume", thread, run), nil), http.StatusConflict, "conflict")
 	tick("settled", cli.ExitTempFail)
 	if n := len(api.Requests()) - before; n != 2 {
 		t.Fatalf("%d model requests after serve restarted and a tick on the settled run, want 2", n)
@@ -105,15 +103,14 @@ func TestAssistantWithoutTheAnthropicKeyRefusesPaidRunsAndKeepsModelFreeWork(t *
 		t.Errorf("%d runs finished without an Anthropic key, want 0", n)
 	}
 
-	w := asstBrowse(t, startServeIn(t, dir))
-	for _, page := range []string{"/scheduled", "/settings/assistant", "/settings/export", "/settings/connections"} {
-		code, body, _ := w.get(page, false)
-		w.want(code, http.StatusOK, body)
+	c := webG4(t, startServeIn(t, dir))
+	for _, read := range []string{"/web/v1/schedules", "/web/v1/assistant/configuration", "/web/v1/maintenance/backups", "/web/v1/connections"} {
+		if got := c.do(http.MethodGet, read, nil); got.status != http.StatusOK {
+			t.Errorf("GET %s without an Anthropic key = %d: %s", read, got.status, got.body)
+		}
 	}
 	threads, runs := asstCount(t, d, "SELECT COUNT(*) FROM threads"), asstCount(t, d, "SELECT COUNT(*) FROM runs")
-	if code, body, _ := w.upload("/chat", map[string]string{"text": "paidmarker"}, nil, true); code != http.StatusUnprocessableEntity {
-		t.Errorf("a chat start without an Anthropic key = %d: %s", code, body)
-	}
+	expectAPI(t, c.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": "paidmarker"}), http.StatusConflict, "not_configured")
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM threads"); n != threads {
 		t.Errorf("a refused chat start left %d threads", n-threads)
 	}
@@ -123,9 +120,9 @@ func TestAssistantWithoutTheAnthropicKeyRefusesPaidRunsAndKeepsModelFreeWork(t *
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused'"); n != 1 {
 		t.Errorf("%d refused start audits, want 1", n)
 	}
-	for _, path := range []string{"/chat/999999/messages", "/chat/999999/regenerate"} {
-		if code, body, _ := w.post(path, url.Values{"text": {"hello"}}, true); code != http.StatusNotFound {
-			t.Errorf("POST %s without an Anthropic key = %d, want 404 before the connection check: %s", path, code, body)
+	for _, path := range []string{"/web/v1/threads/999999/messages", "/web/v1/threads/999999/regenerate"} {
+		if got := c.do(http.MethodPost, path, map[string]any{"text": "hello"}); got.status != http.StatusNotFound {
+			t.Errorf("POST %s without an Anthropic key = %d, want 404 before the connection check: %s", path, got.status, got.body)
 		}
 	}
 	if n := len(api.Requests()); n != 0 {

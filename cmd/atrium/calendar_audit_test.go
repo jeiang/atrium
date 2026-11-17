@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,13 +20,10 @@ func TestCalendarAuditEntryPointsAndPlainApprovalFailures(t *testing.T) {
 					t.Fatalf("CLI approval = %d %q %q", got.code, got.stdout, got.stderr)
 				}
 			case "ui":
-				base := startServeIn(t, dir)
-				jar, _ := cookiejar.New(nil)
-				client := &http.Client{Jar: jar}
-				fetch(t, client, http.MethodGet, base+"/chat", nil)
-				code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+id+"/approve", url.Values{"all": {"1"}})
-				if code != http.StatusOK || strings.Contains(body, `&#34;code&#34;`) {
-					t.Fatalf("UI approval = %d: %s", code, body)
+				c := webG4(t, startServeIn(t, dir))
+				got := c.do(http.MethodPost, "/web/v1/approvals/"+id+"/approve", nil)
+				if got.status != http.StatusOK || got.json["outcome"] != "failed" {
+					t.Fatalf("UI approval = %d: %s", got.status, got.body)
 				}
 			case "api":
 				s := startAPISite(t, dir, nil)
