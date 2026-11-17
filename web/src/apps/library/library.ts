@@ -17,7 +17,7 @@ import {
   mediaQueue,
   ok,
 } from '../../contract';
-import { refusedOffline } from '../../shared/device.svelte';
+import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import { toast } from '../../shared/ui/toast.svelte';
 
 export const LIBRARY_TOPICS = ['effects', 'jobs'] as const;
@@ -142,6 +142,13 @@ export interface Problem {
 export function problemOf(error: unknown): Problem {
   if (refusedOffline(error) && error instanceof Error) {
     return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+  }
+  if (outcomeUnknown(error)) {
+    return {
+      tone: 'error',
+      title: 'The outcome is unknown',
+      text: `${error.message} atrium reloaded the list and did not try again.`,
+    };
   }
   if (error instanceof ApiError && error.status === 404) {
     return { tone: 'warn', title: 'This is gone', text: `${error.message} atrium reloaded the list.` };

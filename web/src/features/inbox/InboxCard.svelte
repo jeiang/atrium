@@ -4,7 +4,7 @@
   import ApprovalCard from '../../shared/assistant/ApprovalCard.svelte';
   import type { InboxId } from '../../shared/assistant/inboxId';
   import type { Blocked, Outcome } from '../../shared/assistant/types';
-  import { refusedOffline, unreachable } from '../../shared/device.svelte';
+  import { outcomeUnknown, refusedOffline, unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
@@ -107,13 +107,7 @@
   const blocked = $derived.by((): Blocked | undefined => {
     if (!shown?.blocked) return undefined;
     if (shown.stuck) return stuck[shown.stuck];
-    return {
-      reason:
-        target.type === 'draft'
-          ? 'The mail account for this draft is not set up, so it cannot be sent from here.'
-          : 'An earlier attempt is stuck and needs a repair before anything else happens.',
-      repair: 'Open in the current interface',
-    };
+    return { reason: shown.blocked, repair: 'Open in the current interface' };
   });
 
   function refused(error: unknown): { tone: 'warn' | 'error'; title: string; text: string } {
@@ -146,6 +140,13 @@
   function describe(error: unknown): { tone: 'warn' | 'error'; title: string; text: string } {
     if (refusedOffline(error) && error instanceof Error) {
       return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+    }
+    if (outcomeUnknown(error)) {
+      return {
+        tone: 'error',
+        title: 'The outcome is unknown',
+        text: `${error.message} atrium reloaded the item from its ledger and did not try again.`,
+      };
     }
     if (error instanceof ApiError && (error.status === 409 || error.status === 412)) {
       return {

@@ -14,6 +14,7 @@ import {
   goReachable,
   goUnreachable,
   layouts,
+  reconnect,
   setUnreachable,
   storedKeys,
   test,
@@ -54,6 +55,17 @@ async function waiting(page: Page, count: number): Promise<void> {
   const nav = page.getByRole('navigation', { name: 'Main' });
   const name = count === 0 ? /^Inbox$/ : new RegExp(`^Inbox\\W+${count} waiting$`);
   await expect(nav.getByRole('link', { name })).toBeVisible();
+}
+
+async function approveUnknown(page: Page): Promise<Locator> {
+  await useScenario(page, { inbox: { decide: 'unknown' } });
+  await gotoShell(page, '/inbox/proposal:14');
+  const item = card(page, 'proposal:14');
+  await expect(item.locator('.approval__row')).not.toHaveAttribute('inert');
+  await item.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByText('The change did not confirm whether it happened.')).toBeVisible();
+  await expect(item).toHaveAttribute('data-state', 'blocked');
+  return item;
 }
 
 test.describe('inbox on a desktop', () => {
@@ -225,6 +237,45 @@ test.describe('inbox on a desktop', () => {
       await expect(page.getByText('The outcome is unknown')).toBeVisible();
       await expect(unknown).toContainText(/Approved and applied at \d\d:\d\d/);
       await page.waitForTimeout(1500);
+      expect(await requests(page)).toHaveLength(1);
+    });
+
+    test('a send whose outcome is unknown shows the draft as blocked and never sends it again', async ({ page }) => {
+      test.setTimeout(60_000);
+      await useScenario(page, { inbox: { decide: 'unknown' } });
+      await gotoShell(page, '/inbox/draft:7');
+      const draft = card(page, 'draft:7');
+      const send = draft.getByRole('button', { name: 'Send email to Ilse' });
+      await expect(draft.locator('.approval__row')).not.toHaveAttribute('inert');
+      await send.press('Enter');
+      await expect(send).not.toHaveAttribute('aria-disabled');
+      await send.click();
+      await expect(draft.locator('.receipt[data-tone="pending"]')).toContainText(/Sending in (10|9) s/);
+      await expect(page.getByText('The mail server did not confirm the send.')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('The outcome is unknown')).toBeVisible();
+      await expect(draft).toHaveAttribute('data-state', 'blocked');
+      await expect(draft).toContainText('atrium could not confirm that this email was sent and did not try again.');
+      await expect(send).toHaveCount(0);
+      await expect(draft.getByRole('button', { name: 'Decline' })).toHaveCount(0);
+      expect((await requests(page)).map((item) => item.path)).toEqual(['/web/v1/drafts/7/send']);
+
+      await reconnect(page, /\/web\/v1\/drafts\/7$/);
+      await expect(draft).toHaveAttribute('data-state', 'blocked');
+      expect(await requests(page)).toHaveLength(1);
+    });
+
+    test('an approval whose outcome is unknown shows as blocked and is never sent again', async ({ page }) => {
+      const item = await approveUnknown(page);
+      await expect(page.getByText('The outcome is unknown')).toBeVisible();
+      await expect(item).toContainText(
+        'atrium could not confirm the outcome of an earlier attempt and did not try again.',
+      );
+      await expect(item.getByRole('button', { name: 'Approve' })).toHaveCount(0);
+      await expect(item.getByRole('button', { name: 'Open in the current interface' })).toBeVisible();
+      expect((await requests(page)).map((entry) => entry.path)).toEqual(['/web/v1/approvals/14/approve']);
+
+      await reconnect(page, /\/web\/v1\/proposals\/14$/);
+      await expect(item).toHaveAttribute('data-state', 'blocked');
       expect(await requests(page)).toHaveLength(1);
     });
   });
@@ -603,6 +654,22 @@ test.describe('an unknown outcome in the inbox', () => {
       await gotoShell(page, '/inbox/draft:8');
       await expect(card(page, 'draft:8').getByRole('button', { name: 'Mark as sent' })).toBeVisible();
       await checks();
+    });
+  }
+});
+
+test.describe('an unconfirmed approval in the inbox', () => {
+  test.use({ allowStatus: [409] });
+
+  for (const layout of layouts) {
+    test(`passes the design checks at ${layout.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await approveUnknown(page);
+      await expectNoHorizontalScroll(page);
+      await expectRoundedSurfaces(page, edges);
+      if (layout.touch) await expectTouchTargets(page);
+      await expectNoBlue(page);
+      await expectNoSeriousAxeFindings(page);
     });
   }
 });

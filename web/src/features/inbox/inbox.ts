@@ -71,7 +71,7 @@ export interface InboxItem {
   approval: Approval;
   revision?: number;
   decided?: DecidedElsewhere;
-  blocked: boolean;
+  blocked?: string;
   stuck?: Stuck;
   undoable: readonly Decision[];
 }
@@ -170,7 +170,6 @@ const draftOutcomes: Record<string, string> = {
   sending: 'Sending started',
   sent: 'Sent',
   discarded: 'Discarded',
-  unknown: 'Sent with an unknown result',
   invalid: 'Refused as invalid',
 };
 
@@ -215,7 +214,9 @@ function proposalItem(key: string, detail: ProposalDetail, effects: readonly Eff
               : (proposalOutcomes[detail.status] ?? `Marked ${detail.status}`),
             at: iso(detail.undone_at ?? decidedAt),
           }),
-    blocked: detail.blocked,
+    blocked: detail.blocked
+      ? 'atrium could not confirm the outcome of an earlier attempt and did not try again. It needs a repair before anything else happens.'
+      : undefined,
     stuck: detail.blocked ? stuckOf(effects) : undefined,
     undoable: detail.undoable ? ['approve'] : [],
   };
@@ -265,7 +266,12 @@ function draftItem(key: string, draft: Draft): InboxItem {
             outcome: draftOutcomes[draft.status] ?? `Marked ${draft.status}`,
             at: iso(draft.sent_at ?? draft.updated_at),
           },
-    blocked: !draft.account_configured || draft.status === 'unknown',
+    blocked:
+      draft.status === 'unknown'
+        ? 'atrium could not confirm that this email was sent and did not try again. Check the sent mail before you do anything else.'
+        : draft.status === 'draft' && !draft.account_configured
+          ? 'The mail account for this draft is not set up, so it cannot be sent from here.'
+          : undefined,
     stuck: draft.status === 'unknown' ? 'send' : undefined,
     undoable: [],
   };

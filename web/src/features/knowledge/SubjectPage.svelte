@@ -151,7 +151,7 @@
   }
 
   function failure(error: unknown): string {
-    return failureText(error, 'Cannot reach atrium. Nothing changed.');
+    return failureText(error);
   }
 
   function onEdit(): void {

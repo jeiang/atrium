@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/classify"
+	"github.com/jeiang/atrium/internal/apps/mail/corrections"
 	"github.com/jeiang/atrium/internal/apps/mail/message"
 	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/mail/classify"
-	"github.com/jeiang/atrium/internal/mail/corrections"
 )
 
 var Stages = [...]string{"correction", "operator", "learned", "knn", "llm", "fallback"}

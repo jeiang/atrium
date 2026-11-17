@@ -19,6 +19,7 @@ export interface KnowledgeScenario {
   fail?: boolean;
   slow?: boolean;
   failLinks?: boolean;
+  loseLinks?: boolean;
 }
 
 export interface KnowledgeRequest {
@@ -787,6 +788,7 @@ export const knowledgeHandlers = [
     const ids = effect(() => {
       link.removed = true;
     });
+    if (scenario().loseLinks) return HttpResponse.error();
     return HttpResponse.json({ data: wire(link), effect_ids: ids }, { status: 201 });
   }),
   http.post(`*${API_BASE}/effects/:id/undo`, async ({ params, request }) => {

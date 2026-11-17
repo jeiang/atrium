@@ -13,7 +13,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/executors"
+	"github.com/jeiang/atrium/internal/apps/mail/features"
 	"github.com/jeiang/atrium/internal/apps/mail/live"
+	"github.com/jeiang/atrium/internal/apps/mail/mailops"
 	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/config"
@@ -21,8 +23,6 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/features"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/safety"

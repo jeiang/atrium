@@ -28,7 +28,7 @@ import {
   reviewUndoEffect,
   searchAll,
 } from '../../contract';
-import { refusedOffline } from '../../shared/device.svelte';
+import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import type { ListOption } from '../../shared/ui/Listbox.svelte';
 
 export const TOPICS = ['knowledge'];
@@ -261,9 +261,12 @@ export async function handleAddToSpace(
   return ok(await knowledgeLink(record, { target_kind: 'space', target_id: String(space), relation }, oneGesture()));
 }
 
-export function failureText(error: unknown, lost: string): string {
+export function failureText(error: unknown): string {
   if (refusedOffline(error) && error instanceof Error) return error.message;
-  if (error instanceof TypeError) return lost;
+  if (error instanceof TypeError) {
+    return 'The outcome is unknown. The connection failed before atrium answered, so this may or may not have happened. atrium did not try again.';
+  }
+  if (outcomeUnknown(error)) return `The outcome is unknown. ${error.message} atrium did not try again.`;
   if (error instanceof ApiError && error.status === 403) return 'You can read this but not change it.';
   return error instanceof Error ? error.message : 'Something went wrong.';
 }

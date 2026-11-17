@@ -59,10 +59,7 @@
       }
       await refreshKnowledge(client);
     } catch (failure) {
-      error = failureText(
-        failure,
-        space ? 'Cannot reach atrium. Nothing was renamed.' : 'Cannot reach atrium. Nothing was made.',
-      );
+      error = failureText(failure);
     } finally {
       pending = false;
     }

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	mailrun "github.com/jeiang/atrium/internal/mail/run"
+	mailrun "github.com/jeiang/atrium/internal/apps/mail/run"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/unit"
 )

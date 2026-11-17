@@ -15,7 +15,7 @@ import {
   reviewQueue,
   reviewUndoEffect,
 } from '../../contract';
-import { refusedOffline } from '../../shared/device.svelte';
+import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 
 const CALENDAR_TOPICS = ['calendar', 'settings'] as const;
 const CANDIDATE_TOPICS = ['review', 'calendar'] as const;
@@ -292,7 +292,7 @@ export function problemOf(error: unknown, nothing: string): Problem {
       text: 'atrium reloaded it and wrote nothing. Make your change again if you still want it.',
     };
   }
-  if (error instanceof ApiError && error.code === 'effect_unknown') {
+  if (outcomeUnknown(error)) {
     return {
       tone: 'error',
       title: 'The outcome is unknown',

@@ -50,6 +50,10 @@ export function refusedOffline(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'offline';
 }
 
+export function outcomeUnknown(error: unknown): error is ApiError {
+  return error instanceof ApiError && (error.code === 'effect_unknown' || error.code === 'effect_partial');
+}
+
 function probe(): void {
   webFetch('/session').catch(() => undefined);
 }
