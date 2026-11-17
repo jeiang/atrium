@@ -12,6 +12,38 @@
     min-inline-size: 0;
   }
 
+  .settings__panel {
+    display: grid;
+    gap: var(--s-6);
+  }
+
+  .tokens__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .tokens__group {
+    margin: var(--s-2) 0 0;
+    font-size: var(--t-md);
+    font-weight: 700;
+  }
+
+  .tokens__form {
+    display: grid;
+    gap: var(--s-4);
+  }
+
+  .tokens__text {
+    margin: 0;
+  }
+
+  .tokens__secret input {
+    font-family: var(--font-mono);
+  }
+
   @media (--desktop) {
     .settings {
       grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
