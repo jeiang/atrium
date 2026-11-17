@@ -93,9 +93,13 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	healthNotice := func(p map[string]any) bool {
-		body := fmt.Sprint(p["body"])
-		return strings.Contains(body, ": failing") || strings.Contains(body, ": needs_reauth")
+	reminder := func(p map[string]any) bool {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects e JOIN notifications n ON n.id = json_extract(e.after_json, '$.notification_id') WHERE e.origin = 'notify' AND e.operation_key LIKE 'task-reminder:%' AND n.title = ?", fmt.Sprint(p["title"])).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n > 0
 	}
 	runOnce := func() map[string]any {
 		t.Helper()
@@ -105,7 +109,7 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 			select {
 			case p := <-push.arrived:
 				payload := browser.decrypt(t, p.body)
-				if healthNotice(payload) {
+				if !reminder(payload) {
 					continue
 				}
 				time.Sleep(300 * time.Millisecond)
@@ -127,7 +131,7 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 		for waiting := true; waiting; {
 			select {
 			case p := <-push.arrived:
-				if payload := browser.decrypt(t, p.body); !healthNotice(payload) {
+				if payload := browser.decrypt(t, p.body); reminder(payload) {
 					cancel()
 					<-done
 					t.Fatalf("unexpected reminder: %v", payload)
