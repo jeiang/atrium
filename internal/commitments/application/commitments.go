@@ -17,9 +17,9 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/signals"
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
@@ -232,7 +232,7 @@ func visible(ctx context.Context) (shown, []string, error) {
 			names = append(names, st.Name)
 		}
 	}
-	return shown{tasks: snap.Visible(unit.Assistant), commitments: snap.Visible(unit.Mail)}, names, nil
+	return shown{tasks: snap.Visible(unit.Assistant), commitments: snap.Visible(unit.Signals)}, names, nil
 }
 
 func fromTask(t tasks.Task, links []tasks.Link) CommitmentItem {
@@ -251,7 +251,7 @@ func fromTask(t tasks.Task, links []tasks.Link) CommitmentItem {
 	return item
 }
 
-func fromCommitment(ctx context.Context, q db.Querier, c openloops.CommitmentRow) (CommitmentItem, error) {
+func fromCommitment(ctx context.Context, q db.Querier, c signals.CommitmentRow) (CommitmentItem, error) {
 	item := CommitmentItem{Ref: SourceCommitment + ":" + strconv.FormatInt(c.ID, 10), Source: SourceCommitment, ID: c.ID, Side: SideTodo, Title: c.Text,
 		Due: c.Due, Status: c.Status, Owner: c.Owner, Counterpart: c.Counterpart, CreatedTS: c.CreatedTS,
 		Links: []tasks.Link{{Kind: tasks.LinkMessage, ID: strconv.FormatInt(c.MessageID, 10), Title: c.Subject}}}
@@ -270,9 +270,9 @@ func fromCommitment(ctx context.Context, q db.Querier, c openloops.CommitmentRow
 		item.Links = append(item.Links, link)
 	}
 	switch c.Status {
-	case openloops.Open:
+	case signals.Open:
 		item.Actions = []string{ActionDone, ActionDismiss, ActionSnooze}
-	case openloops.Done, openloops.Dismissed:
+	case signals.Done, signals.Dismissed:
 		item.Actions = []string{ActionReopen}
 	default:
 		item.Actions = []string{}
@@ -280,7 +280,7 @@ func fromCommitment(ctx context.Context, q db.Querier, c openloops.CommitmentRow
 	return item, nil
 }
 
-func commitmentMatches(c openloops.CommitmentRow, f tasks.Filter) bool {
+func commitmentMatches(c signals.CommitmentRow, f tasks.Filter) bool {
 	due := ""
 	if c.Due != nil && len(*c.Due) >= 10 {
 		due = (*c.Due)[:10]
@@ -323,7 +323,7 @@ func items(ctx context.Context, q db.Querier, show shown, f tasks.Filter, now fl
 		}
 	}
 	if show.commitments {
-		rows, err := openloops.CommitmentRows(ctx, q)
+		rows, err := signals.CommitmentRows(ctx, q)
 		if err != nil {
 			return nil, err
 		}
@@ -468,7 +468,7 @@ func (s *Service) item(ctx context.Context, q db.Querier, source string, id int6
 		}
 		return s.withSnooze(ctx, q, new(fromTask(*t, links)))
 	case source == SourceCommitment && show.commitments:
-		c, err := openloops.GetCommitment(ctx, q, id)
+		c, err := signals.GetCommitment(ctx, q, id)
 		if err != nil || c == nil {
 			return nil, err
 		}
@@ -550,7 +550,7 @@ func (s *Service) Done(ctx context.Context, in RefInput) (application.Change[Cha
 }
 
 func (s *Service) DoneAs(ctx context.Context, name application.Name, in RefInput) (application.Change[Changed], error) {
-	return s.transition(ctx, name, in, ActionDone, "done", openloops.Done, openloops.Open)
+	return s.transition(ctx, name, in, ActionDone, "done", signals.Done, signals.Open)
 }
 
 func (s *Service) Dismiss(ctx context.Context, in RefInput) (application.Change[Changed], error) {
@@ -558,11 +558,11 @@ func (s *Service) Dismiss(ctx context.Context, in RefInput) (application.Change[
 }
 
 func (s *Service) DismissAs(ctx context.Context, name application.Name, in RefInput) (application.Change[Changed], error) {
-	return s.transition(ctx, name, in, ActionDismiss, "dismissed", openloops.Dismissed, openloops.Open)
+	return s.transition(ctx, name, in, ActionDismiss, "dismissed", signals.Dismissed, signals.Open)
 }
 
 func (s *Service) Reopen(ctx context.Context, in RefInput) (application.Change[Changed], error) {
-	return s.transition(ctx, ReopenName, in, ActionReopen, "reopened", openloops.Open, openloops.Done, openloops.Dismissed)
+	return s.transition(ctx, ReopenName, in, ActionReopen, "reopened", signals.Open, signals.Done, signals.Dismissed)
 }
 
 func (s *Service) transition(ctx context.Context, name application.Name, in RefInput, action, verb, to string, from ...string) (application.Change[Changed], error) {
@@ -649,11 +649,11 @@ func (s *Service) refused(ctx context.Context, name application.Name, ref string
 }
 
 func effect(src tasksapp.Source, target string) ledger.New {
-	key := openloops.UndoCommitmentStatus + ":" + ledger.NewKey()
+	key := signals.UndoCommitmentStatus + ":" + ledger.NewKey()
 	if src.ThreadID == 0 {
-		return ledger.New{Origin: "local", Operation: openloops.UndoCommitmentStatus, OperationKey: key, Target: target}
+		return ledger.New{Origin: "local", Operation: signals.UndoCommitmentStatus, OperationKey: key, Target: target}
 	}
-	return ledger.New{Origin: "agent", Operation: openloops.UndoCommitmentStatus, OperationKey: key, Target: target,
+	return ledger.New{Origin: "agent", Operation: signals.UndoCommitmentStatus, OperationKey: key, Target: target,
 		ThreadID: &src.ThreadID, RunID: &src.RunID, ProposalID: src.ProposalID}
 }
 
@@ -669,7 +669,7 @@ func (s *Service) commitmentStatus(ctx context.Context, name application.Name, i
 	var effectID, auditID int64
 	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		effect, err := s.ledger.ApplyLocalTx(ctx, tx, effect(in.Source, in.Ref), func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-			previous, err := openloops.GetCommitment(ctx, tx, id)
+			previous, err := signals.GetCommitment(ctx, tx, id)
 			if err != nil {
 				return ledger.Result{}, err
 			}
@@ -679,11 +679,11 @@ func (s *Service) commitmentStatus(ctx context.Context, name application.Name, i
 			if !slices.Contains(from, previous.Status) {
 				return ledger.Result{}, wrongStatus(previous.Status, "set to "+to)
 			}
-			if _, err := openloops.SetCommitmentStatus(ctx, tx, id, to); err != nil {
+			if _, err := signals.SetCommitmentStatus(ctx, tx, id, to); err != nil {
 				return ledger.Result{}, err
 			}
 			return ledger.Result{State: ledger.Done, Before: encode(map[string]any{"status": previous.Status}), After: encode(map[string]any{"status": to}),
-				Undo: encode(openloops.CommitmentStatusUndo{Op: openloops.UndoCommitmentStatus, ID: id, Status: previous.Status})}, nil
+				Undo: encode(signals.CommitmentStatusUndo{Op: signals.UndoCommitmentStatus, ID: id, Status: previous.Status})}, nil
 		})
 		if err != nil {
 			return err

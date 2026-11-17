@@ -73,7 +73,7 @@ func checkContract(decls []Declaration) error {
 			}
 			packages[p] = d.Name
 		}
-		if d.Core && len(d.Packages) > 0 {
+		if d.Name == Core && len(d.Packages) > 0 {
 			return &InvalidCore{Module: d.Name, Reason: "owns the platform packages and claims none"}
 		}
 	}

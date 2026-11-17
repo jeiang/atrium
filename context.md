@@ -53,10 +53,31 @@ claims about the running application. Operator contracts are in
   lookup report's `mail_message` id is unknown, and queued event candidates
   are not listed. Event candidates read invitations and message bodies from
   the feed; the mail pass still calls them, passing its paid event judge.
-  The drafts, loops, commitments and packages attention sources live in
-  `internal/mail/attentionsources`. `internal/communications` is a platform
-  package, so the unit-boundary guard rejects any import of Mail from core
-  outside its listed exceptions.
+  The drafts and packages attention sources live in
+  `internal/mail/attentionsources`.
+- The core `signals` unit (`internal/signals` for the domain,
+  `internal/signals/signalsmodule` for its service, API routes, Loops page,
+  `open_loops` tool and declaration) owns open loops, commitments and
+  commitment reminders: the `open_loops`, `loop_overrides` and `commitments`
+  tables, their attention sources, the `open_loops` queue, the reminder
+  proposals and their undo. It reads messages only through the
+  communications feed (summaries, recipient envelopes, owner addresses, the
+  question test and paid scans), so stored loops and commitments stay
+  readable with Mail off, with no message subject or sender. Signals is
+  declared `Core` with no flag; it claims the `internal/signals` packages
+  and its three tables. `module.Compile` still requires the `core`
+  declaration, which alone claims no packages (it owns the unclaimed
+  platform packages), and lets any core unit own delegated or shared
+  operations. The unit-boundary guard rejects a Mail import of signals and
+  a signals import of Mail. The mail pass, and
+  the mail-owned `mail.refresh-loops` operation under the mail pass lock,
+  call `module.RefreshCommunications` with the paid classifier and
+  deferral; the one unit that sets `CommunicationsRefresh` (signals) runs,
+  and with no feed provider it skips and keeps stored rows. Operation names,
+  `/api/v1/mail/loops*` and `/api/v1/mail/commitments*` routes, the tool
+  name and the `openloops_*` setting keys are unchanged.
+  `internal/communications` is a platform package, so the unit-boundary
+  guard rejects any import of Mail from core outside its listed exceptions.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.

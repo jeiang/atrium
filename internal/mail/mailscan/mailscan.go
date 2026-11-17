@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
@@ -41,7 +42,7 @@ type Spec struct {
 	WindowDays int
 	FetchLimit int
 	Limit      int
-	Paid       *classify.Deferral
+	Paid       communications.Deferral
 	Eligible   func(Message) (bool, error)
 	Judge      func(ctx context.Context, row Message, body string) (found int, err error)
 }

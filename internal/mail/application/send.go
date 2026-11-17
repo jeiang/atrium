@@ -149,3 +149,19 @@ func (s *Service) DraftResolve(ctx context.Context, in DraftResolveInput) (appli
 	}
 	return application.Change[DraftResolveResult]{Data: DraftResolveResult{Status: verdict}, EffectIDs: effects, AuditID: s.writeAudit(ctx, DraftResolveName, target, state.OK, effects)}, nil
 }
+
+func notFound(what string) error {
+	return &application.Error{Code: application.NotFound, Message: "unknown " + what}
+}
+
+func (s *Service) localChange(ctx context.Context, name application.Name, target string, what string, fn func() (bool, error)) (int64, error) {
+	found, err := fn()
+	if err == nil && !found {
+		err = notFound(what)
+	}
+	outcome := state.OK
+	if err != nil {
+		outcome = auditOutcome(err)
+	}
+	return s.writeAudit(ctx, name, target, outcome, nil), err
+}

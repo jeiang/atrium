@@ -1,4 +1,4 @@
-package openloops
+package signals
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
@@ -79,9 +79,9 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 		return 0, err
 	}
 	set := endpoint.Read(ctx, r.DB.Read)
-	ahead := set.Int(mail.KeyLoopsRemindAheadDays)
-	overdue := mail.TuningOpenloopsRemindOverdueDays
-	hour := set.Int(mail.KeyLoopsRemindHour)
+	ahead := set.Int(config.KeyLoopsRemindAheadDays)
+	overdue := TuningOpenloopsRemindOverdueDays
+	hour := set.Int(config.KeyLoopsRemindHour)
 	if err := set.Err(); err != nil {
 		return 0, err
 	}
@@ -90,7 +90,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	latest := today.AddDate(0, 0, ahead).Format("2006-01-02")
 	earliest := today.AddDate(0, 0, -overdue).Format("2006-01-02")
 	rows, err := r.DB.Read.QueryContext(ctx,
-		"SELECT c.id, c.message_id, c.text, c.owner, c.due, m.subject FROM commitments c LEFT JOIN messages m ON m.id = c.message_id "+
+		"SELECT c.id, c.message_id, c.text, c.owner, c.due FROM commitments c "+
 			"WHERE c.status = 'open' AND c.proposal_id IS NULL AND c.due IS NOT NULL AND c.due <= ? AND c.due >= ? ORDER BY c.due, c.id",
 		latest, earliest)
 	if err != nil {
@@ -103,11 +103,21 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	}
 	commitments, err := db.Collect(rows, func(s *sql.Rows) (dueItem, error) {
 		var c dueItem
-		err := s.Scan(&c.id, &c.messageID, &c.text, &c.owner, &c.due, &c.subject)
+		err := s.Scan(&c.id, &c.messageID, &c.text, &c.owner, &c.due)
 		return c, err
 	})
 	if err != nil {
 		return 0, err
+	}
+	feed := module.Communications(ctx)
+	for i := range commitments {
+		m, err := feed.Message(ctx, r.DB.Read, commitments[i].messageID)
+		if err != nil {
+			return 0, err
+		}
+		if m != nil {
+			commitments[i].subject = &m.Subject
+		}
 	}
 	made := 0
 	for _, c := range commitments {
