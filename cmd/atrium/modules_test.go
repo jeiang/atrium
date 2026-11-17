@@ -58,7 +58,7 @@ var moduleCases = []moduleCase{
 			return code == cli.ExitOK && strings.HasPrefix(stdout, "{")
 		}},
 	{module: unit.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
-	{module: unit.Grafana, tool: "grafana_datasources"},
+	{module: unit.Grafana, table: "ops_samples"},
 	{module: unit.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
 	{module: unit.Weather, tool: "weather"},
 }
@@ -410,7 +410,7 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 }
 
 func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
-	dir, api, _ := moduleFixture(t, allFlagsTrue())
+	dir, _, _ := moduleFixture(t, allFlagsTrue())
 	ca := filepath.Join(dir, "grafana-ca.pem")
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigEdit(t, dir, "host-grafana-ca.toml", map[string]string{
 		`capabilities = ["viewer"]`: `capabilities = ["viewer"]` + "\ntransport = { ca_file = " + strconv.Quote(ca) + " }",
@@ -431,31 +431,16 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 			t.Fatalf("%v with a broken Grafana CA: exit %d stderr %q", args, got.code, got.stderr)
 		}
 	}
-	base := startServeIn(t, dir)
-	w := asstBrowse(t, base)
-	d := asstDB(t, dir)
-	offered := func() bool {
+	available := func() bool {
 		t.Helper()
-		start := len(api.Requests())
-		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-		thread := w.start(map[string]string{"text": "check grafana"})
-		if state, detail := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
-			t.Fatalf("chat run: %s %s", state, detail)
+		got := runAppLogged(t, "settings", "set", "monthly_budget_usd", "150")
+		if got.code != cli.ExitOK {
+			t.Fatalf("unrelated setting: exit %d stderr %q", got.code, got.stderr)
 		}
-		requests := api.Requests()
-		if len(requests) <= start {
-			t.Fatal("chat run made no model request")
-		}
-		tools, _ := requests[len(requests)-1].JSON(t)["tools"].([]any)
-		for _, raw := range tools {
-			if entry, ok := raw.(map[string]any); ok && entry["name"] == "grafana_datasources" {
-				return true
-			}
-		}
-		return false
+		return !strings.Contains(got.stderr, "module is unavailable")
 	}
-	if offered() {
-		t.Fatal("grafana tools are offered while the Grafana connection is broken")
+	if available() {
+		t.Fatal("the grafana module is available while the Grafana connection is broken")
 	}
 	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "false"); got.code != cli.ExitOK {
 		t.Fatalf("disable the broken module: exit %d stderr %q", got.code, got.stderr)
@@ -472,8 +457,8 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "true"); got.code != cli.ExitOK {
 		t.Fatalf("enable the repaired module: exit %d stderr %q", got.code, got.stderr)
 	}
-	if !offered() {
-		t.Fatal("grafana tools are not offered after the repair")
+	if !available() {
+		t.Fatal("the grafana module is not available after the repair")
 	}
 }
 

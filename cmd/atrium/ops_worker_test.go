@@ -10,15 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-
+	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/attention"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/tool"
 )
 
 func fixtureEnv(f *fixture) config.Env {
@@ -70,15 +66,15 @@ func waitForOps(t *testing.T, d *db.DB, what string, ok func() bool) {
 
 func workerFinding(t *testing.T, d *db.DB, fact string) (id int64, resolved bool, found bool) {
 	t.Helper()
-	var resolvedAt *float64
-	err := d.Read.QueryRow("SELECT id, resolved_at FROM ops_findings WHERE fact = ? ORDER BY id DESC LIMIT 1", fact).Scan(&id, &resolvedAt)
+	var expires *float64
+	err := d.Read.QueryRow("SELECT id, expires_at FROM kb_records WHERE origin = ?", "ops:"+fact).Scan(&id, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, false
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	return id, resolvedAt != nil, true
+	return id, expires != nil && *expires <= float64(time.Now().Unix()), true
 }
 
 func TestQuietPassMakesNoModelCall(t *testing.T) {
@@ -96,38 +92,6 @@ func TestQuietPassMakesNoModelCall(t *testing.T) {
 	runOpsSampler(t, f, d, samplesAtLeast(t, d, 12))
 	if len(api.Requests()) != requests {
 		t.Fatalf("a quiet pass made %d model calls", len(api.Requests())-requests)
-	}
-}
-
-func TestWorkerStatusLeavesTheChatUnmarked(t *testing.T) {
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	warm(t, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	defer func() { _ = d.Close() }()
-	now := float64(time.Now().Unix())
-	res, err := d.Write.Exec("INSERT INTO ops_findings (fact, severity, title, body, marks, created_at) "+
-		"VALUES ('node-a:up', 'warning', 'Host node-a is down', 'up is down', 1, ?)", now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, _ := res.LastInsertId()
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "worker_status", map[string]any{})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("status")))
-	if ran := runApp(t, "agent", "run", "--text", "ops status"); ran.code != cli.ExitOK {
-		t.Fatalf("status chat: %d %s", ran.code, ran.stderr)
-	}
-	statusThread := latestThread(t, dir)
-	if marks := threadMarkSet(t, dir, statusThread); marks != 0 {
-		t.Errorf("thread marks after worker_status = %d, want none", marks)
-	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "worker_finding", map[string]any{"id": id})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("finding")))
-	if ran := runApp(t, "agent", "run", "--text", "read the finding"); ran.code != cli.ExitOK {
-		t.Fatalf("worker_finding chat: %d %s", ran.code, ran.stderr)
-	}
-	getThread := latestThread(t, dir)
-	if marks := threadMarkSet(t, dir, getThread); marks&int64(tool.Untrusted) == 0 {
-		t.Errorf("thread marks after worker_finding = %d, want untrusted", marks)
 	}
 }
 

@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/apps/serverops"
 )
 
 type opsGrafanaRequest struct {
@@ -312,7 +312,6 @@ func TestOpsSamplerKeepsHealthyHostsWhenOneHostFails(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	now := float64(time.Now().Unix())
 	asstExec(t, d, "INSERT INTO ops_samples (ts, host, metric, value) VALUES (?, 'node-a', 'cpu_pct', 1)", now-15*24*3600)
-	asstExec(t, d, "INSERT INTO ops_findings (fact, severity, title, body, created_at, resolved_at, resolved_reason) VALUES ('node-a/up', 'info', 'old', 'old', ?, ?, 'cleared')", now-40*24*3600, now-31*24*3600)
 	runOpsSampler(t, f, d, func() bool {
 		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.ended_at IS NOT NULL", serveropsJobName) > 0 &&
 			asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE ts < ?", now-14*24*3600) == 0
@@ -325,9 +324,6 @@ func TestOpsSamplerKeepsHealthyHostsWhenOneHostFails(t *testing.T) {
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_samples WHERE host = 'node-b'"); n != 0 {
 		t.Errorf("node-b samples = %d from a host whose reads fail, want none", n)
-	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM ops_findings WHERE title = 'old'"); n != 0 {
-		t.Errorf("the supervisor did not prune the old resolved finding after a partial pass")
 	}
 	audits := operationAudits(t, d, "ops.sample")
 	if len(audits) == 0 || slices.ContainsFunc(audits, func(a string) bool { return !strings.HasPrefix(a, "partial ops_samples ") }) {

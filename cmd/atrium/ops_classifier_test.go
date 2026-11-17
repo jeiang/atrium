@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/attention/sources"
@@ -19,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
-	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -179,11 +179,11 @@ func TestOpsSamplerClassifiesAChangeInOneFixedHaikuRequest(t *testing.T) {
 		Scan(&runState, &threadKind); err != nil || runState != "done" || threadKind != "classification" {
 		t.Errorf("classification run = %q on a %q thread, %v", runState, threadKind, err)
 	}
-	var severity, title string
+	var pageBody, title string
 	var marks int64
-	if err := d.Read.QueryRow("SELECT severity, title, marks FROM ops_findings WHERE fact = 'node-a:up'").Scan(&severity, &title, &marks); err != nil ||
-		severity != "warning" || title != "Host node-a is down" || marks != 1 {
-		t.Errorf("finding = %q %q %d, %v", severity, title, marks, err)
+	if err := d.Read.QueryRow("SELECT body, title, marks FROM kb_records WHERE origin = 'ops:node-a:up' AND scope = 'ops' AND writer = 'worker'").Scan(&pageBody, &title, &marks); err != nil ||
+		!strings.HasPrefix(pageBody, "warning · node-a:up") || title != "Host node-a is down" || marks != 1 {
+		t.Errorf("finding page = %q %q %d, %v", pageBody, title, marks, err)
 	}
 	if _, _, found := workerFinding(t, d, "node-a:cpu_pct"); found {
 		t.Errorf("a finding outside the change set was written")
@@ -193,8 +193,8 @@ func TestOpsSamplerClassifiesAChangeInOneFixedHaikuRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(opsItems.Items) != 1 || opsItems.Items[0].Kind != "ops_finding" || !strings.Contains(opsItems.Items[0].Title, "node-a") {
-		t.Errorf("ops attention = %+v, want the node-a finding", opsItems.Items)
+	if len(opsItems.Items) != 0 {
+		t.Errorf("ops attention = %+v, want no finding items", opsItems.Items)
 	}
 	var workerRuns int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE kind = 'worker'").Scan(&workerRuns); err != nil || workerRuns != 0 {
