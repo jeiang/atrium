@@ -11,6 +11,7 @@ import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
 import { type MailboxScenario, mailHandlers } from './mail';
+import { type MailManageScenario, mailManageHandlers } from './mailManage';
 import { type MediaScenario, mediaHandlers } from './media';
 import { type NotificationsScenario, notificationHandlers } from './notifications';
 import { type PackagesScenario, packageHandlers } from './packages';
@@ -28,6 +29,7 @@ export interface MockScenario {
   modules?: Record<string, ModuleStateState>;
   mail?: { mode: string; paused: boolean };
   mailbox?: MailboxScenario;
+  mailManage?: MailManageScenario;
   pause?: State;
   apps?: AppsScenario;
   calendar?: CalendarScenario;
@@ -194,6 +196,7 @@ export const handlers = [
     });
   }),
   ...mailHandlers(scenario),
+  ...mailManageHandlers(scenario),
   ...homeHandlers(scenario),
   ...inboxAskHandlers,
   ...planHandlers,
