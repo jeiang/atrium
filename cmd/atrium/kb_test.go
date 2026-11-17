@@ -499,8 +499,8 @@ func TestKnowledgeConfirmMatchingReportsCommittedPrefix(t *testing.T) {
 
 	later := seed("Smoke alarm", "personal", false)
 	selected := w.do(http.MethodPost, "/web/v1/knowledge/confirm", map[string]any{"ids": []int64{outside, retracted, later}})
-	if selected.status != http.StatusConflict {
-		t.Fatalf("confirm-selected past a retracted record = %d, want 409: %.300s", selected.status, selected.body)
+	if selected.status != http.StatusOK || !strings.Contains(selected.body, fmt.Sprintf(`"refused":[{"id":%d,`, retracted)) {
+		t.Fatalf("confirm-selected past a retracted record = %d, want the retracted record refused: %.300s", selected.status, selected.body)
 	}
 	if !confirmed(outside) || confirmed(later) {
 		t.Errorf("confirm-selected: first record confirmed = %v, record after the refusal confirmed = %v", confirmed(outside), confirmed(later))

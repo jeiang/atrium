@@ -241,7 +241,7 @@ func TestHTMLSendRefusesOtherMediaAndOversize(t *testing.T) {
 	}
 	text, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(text), "64 MB") {
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(text), `"too_large"`) {
 		t.Fatalf("declared oversize: %d %s", resp.StatusCode, text)
 	}
 }
