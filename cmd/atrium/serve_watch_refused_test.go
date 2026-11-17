@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,10 +21,8 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 		mailAccount{"home", "icloud", "me@home.test", "home-pass", false}, mailAccount{"work", "icloud", "me@work.test", "work-pass", false}))
 	work := mailtest.NewFakeClient()
 	work.AddBox("INBOX", mailtest.NewBox(1))
-	var homeDials atomic.Int32
 	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec, _ string) (mail.Conn, error) {
 		if a.Name == "home" {
-			homeDials.Add(1)
 			return nil, fmt.Errorf("%w: AUTHENTICATIONFAILED Invalid credentials", mail.ErrLoginRefused)
 		}
 		return work.Conn(), nil
@@ -43,7 +40,8 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 	if work := health["mail-watch/work"]; work.Status != "running" || work.Restarts != 0 {
 		t.Fatalf("work watch beside the refused home login %+v, want running and untouched", work)
 	}
-	dials := homeDials.Load()
+	// Other paths (the connection check, the sync job) may still dial home;
+	// the watch itself must not start again inside its hold.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := work.Wake(ctx); err != nil {
@@ -52,7 +50,10 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 	waitUntil(t, 30*time.Second, "the work watch to finish an IDLE round trip", func() bool {
 		return strings.Count(logs.String(), "work: 0 new, 0 gone, 0 flag changes") >= 2 && work.Idling() == 1
 	})
-	if again := homeDials.Load(); again != dials || serviceStarts(logs, mailrun.WatchServiceName("home")) != 1 {
-		t.Fatalf("the held home watch dialed %d more times and started %d times", again-dials, serviceStarts(logs, mailrun.WatchServiceName("home")))
+	if starts := serviceStarts(logs, mailrun.WatchServiceName("home")); starts != 1 {
+		t.Fatalf("the held home watch started %d times, want 1", starts)
+	}
+	if home := watchHealth(t, opsBase())["mail-watch/home"]; home.Status != "backoff" || home.Restarts != 1 {
+		t.Fatalf("home watch after the work round trip %+v, want still held after one restart", home)
 	}
 }
