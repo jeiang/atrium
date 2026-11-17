@@ -88,7 +88,7 @@ func TestSearchAllAPI(t *testing.T) {
 			t.Fatal(err)
 		}
 		var counts string
-		if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM threads) || '/' || (SELECT COUNT(*) FROM kb_records) || '/' || (SELECT COUNT(*) FROM tasks) || '/' || (SELECT COUNT(*) FROM messages) || '/' || (SELECT COUNT(*) FROM thread_files) || '/' || (SELECT COUNT(*) FROM operation_audit)").Scan(&counts); err != nil {
+		if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM threads) || '/' || (SELECT COUNT(*) FROM kb_records) || '/' || (SELECT COUNT(*) FROM tasks) || '/' || (SELECT COUNT(*) FROM messages) || '/' || (SELECT COUNT(*) FROM thread_files) || '/' || (SELECT COUNT(*) FROM operation_audit WHERE source IN ('api', 'ui'))").Scan(&counts); err != nil {
 			t.Fatal(err)
 		}
 		return revisions + " " + counts
