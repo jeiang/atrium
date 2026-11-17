@@ -180,6 +180,10 @@ capabilities = ["embeddings"]
 		t.Fatalf("%d notices for the first failure of a changed host connection, want 1", n)
 	}
 
+	s.stop()
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 3700 WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
 	checked := checkedAt("service/embedding")
 	s.start()
 	waitFor(t, func() bool { return checkedAt("service/embedding") > checked })
@@ -322,6 +326,9 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 
 	embed.setStatus(0)
 	s.stop()
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 3700 WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
 	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {

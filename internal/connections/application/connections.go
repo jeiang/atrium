@@ -294,11 +294,11 @@ func checkable(v View) bool {
 }
 
 func wanted(v View, in ObserveHealthInput) bool {
-	if v.ID != in.ID {
+	if v.ID != in.ID || backingOff(v, time.Now()) {
 		return false
 	}
 	if in.Recovered {
-		return (v.State == connections.Failing || v.State == connections.NeedsReauth) && olderThan(v, time.Minute)
+		return failed(v) && olderThan(v, time.Minute)
 	}
 	return olderThan(v, 5*time.Minute)
 }
@@ -308,5 +308,40 @@ func olderThan(v View, age time.Duration) bool {
 }
 
 func due(v View, start bool) bool {
-	return olderThan(v, sweepInterval) || v.GraceLapsed() || start && (v.State == connections.Failing || v.State == connections.NeedsReauth)
+	return olderThan(v, sweepInterval) || v.GraceLapsed() || start && failed(v) && !backingOff(v, time.Now())
+}
+
+func failed(v View) bool {
+	return v.State == connections.Failing || v.State == connections.NeedsReauth
+}
+
+// backingOff reports whether an automatic recheck of a failing connection
+// must wait: a sibling capability's success, a runtime failure or a boot
+// does not check it again before its failure backoff ends. Explicit tests,
+// checks and credential changes do not consult it.
+func backingOff(v View, now time.Time) bool {
+	return failed(v) && v.CheckedAt != nil && now.Before(v.CheckedAt.Add(failureBackoff(v)))
+}
+
+// failureBackoff is 1 h, 3 h, 6 h or 12 h by how long the connection had
+// been failing at its last check, measured from its last success, or from
+// the start of its reauthorization need.
+func failureBackoff(v View) time.Duration {
+	since := v.LastOKAt
+	if v.State == connections.NeedsReauth && v.ReauthAt != nil {
+		since = v.ReauthAt
+	}
+	var failing time.Duration
+	if since != nil && v.CheckedAt != nil {
+		failing = v.CheckedAt.Sub(*since)
+	}
+	switch {
+	case failing < time.Hour:
+		return time.Hour
+	case failing < 3*time.Hour:
+		return 3 * time.Hour
+	case failing < 6*time.Hour:
+		return 6 * time.Hour
+	}
+	return 12 * time.Hour
 }

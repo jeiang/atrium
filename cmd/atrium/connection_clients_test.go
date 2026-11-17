@@ -113,3 +113,65 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 		t.Fatalf("observe-health audit after six failed requests and one recheck: %d rows, %d noop, %d not by the health service", rows-baseRows, noop-baseNoop, foreign)
 	}
 }
+
+func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff(t *testing.T) {
+	var status atomic.Int32
+	var calls atomic.Int32
+	tmdb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if code := status.Load(); code != 0 {
+			w.WriteHeader(int(code))
+			return
+		}
+		_, _ = w.Write([]byte(`{"results":[{"id":42,"name":"Lanterns","first_air_date":"2026-01-01","poster_path":"/lanterns.jpg"}]}`))
+	}))
+	t.Cleanup(tmdb.Close)
+	images := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("image"))
+	}))
+	t.Cleanup(images.Close)
+	eztv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"torrents":[]}`))
+	}))
+	t.Cleanup(eztv.Close)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHostConfig(t, dir, "http://qbittorrent.invalid", tmdb.URL+"/3", images.URL, eztv.URL+"/api/get-torrents"))
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	waitFor(t, func() bool { state := connectionState(t, dir, "service/tmdb"); return state != "" && state != "untested" })
+
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	observed := func() int {
+		t.Helper()
+		var rows int
+		if err := d.Read.QueryRow(`SELECT COUNT(*) FROM operation_audit WHERE operation = 'connections.observe-health' AND target LIKE '%service/tmdb%'`).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	before := observed()
+	now := time.Now()
+	if _, err := d.Write.Exec("UPDATE connections SET state = 'failing', reason = 'seeded', checked_at = ?, last_ok_at = ? WHERE id = 'service/tmdb'",
+		float64(now.Add(-2*time.Minute).Unix()), float64(now.Add(-10*time.Minute).Unix())); err != nil {
+		t.Fatal(err)
+	}
+	status.Store(http.StatusForbidden)
+	s.start()
+	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+refused", nil)
+	if calls.Load() == 0 {
+		t.Fatal("the channels search sent nothing to TMDB")
+	}
+
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(now.Add(-2*time.Hour).Unix())); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+after", nil)
+	waitFor(t, func() bool { return observed() > before })
+	if rows := observed() - before; rows != 1 {
+		t.Fatalf("observe-health rows after a boot and a refused request inside the backoff and one request after it: %d, want 1", rows)
+	}
+	var reason string
+	if err := d.Read.QueryRow("SELECT reason FROM connections WHERE id = 'service/tmdb'").Scan(&reason); err != nil || reason == "seeded" {
+		t.Fatalf("the recheck after the backoff did not record: reason %q err %v", reason, err)
+	}
+}
