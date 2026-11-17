@@ -206,7 +206,9 @@ value 1 and labels `integration` (the connection id) and `state` (`unconfigured`
 `disabled`, `untested`, `ok`, `failing`, `expiring`, or `needs_reauth`). The
 alert fires when a connection stays `failing`, `expiring`, or `needs_reauth` for
 15 minutes, or stays `untested` for 1 hour. It does not fire for `disabled`,
-`unconfigured`, or `ok` connections.
+`unconfigured`, or `ok` connections. A connection whose setup was started but
+never finished (for example the Google wizard left before a client ID or a
+consent) is `unconfigured`, not `failing`, until it has worked once.
 
 Backup pruning applies only after successful archive creation to regular
 `atrium-*.backup` files directly in the directory, including old v2 archives and

@@ -228,12 +228,21 @@ func (l *Lease) googleToken(ctx context.Context, capability string) (string, err
 }
 
 func (l *Lease) observeGoogle(ctx context.Context, capability string, err error) {
-	state := Failing
+	_ = l.Observe(ctx, Result{Capability: capability, State: l.googleFailure(err), Reason: err.Error()})
+}
+
+var errGoogleClientID = errors.New("google client ID is not set")
+
+func (l *Lease) googleFailure(err error) State {
 	var rejected *googleRejected
 	if errors.As(err, &rejected) {
-		state = NeedsReauth
+		return NeedsReauth
 	}
-	_ = l.Observe(ctx, Result{Capability: capability, State: state, Reason: err.Error()})
+	var missing MissingCredential
+	if !l.workedBefore && (errors.Is(err, errGoogleClientID) || errors.As(err, &missing)) {
+		return Unconfigured
+	}
+	return Failing
 }
 
 type googleRejected struct{ reason string }
@@ -246,7 +255,7 @@ func (l *Lease) refreshGoogle(ctx context.Context, grant GoogleGrant) (*googleAc
 		return nil, err
 	}
 	if clientID == "" {
-		return nil, errors.New("google client ID is not set")
+		return nil, errGoogleClientID
 	}
 	secret, err := l.Credential("oauth/client_secret")
 	if err != nil {
@@ -332,15 +341,13 @@ func testGoogle(ctx context.Context, lease *Lease, caps []Capability) ([]Result,
 			results = append(results, Result{Capability: cap.Name, State: Failing, Reason: "unknown Google capability"})
 			continue
 		}
+		if _, err := lease.Credential(grant.Slot); err != nil {
+			continue
+		}
 		lease.InvalidateToken(grant.Name)
 		token, err := lease.Token(ctx, grant.Name)
 		if err != nil {
-			state := Failing
-			var rejected *googleRejected
-			if errors.As(err, &rejected) {
-				state = NeedsReauth
-			}
-			results = append(results, Result{Capability: grant.Name, State: state, Reason: err.Error()})
+			results = append(results, Result{Capability: grant.Name, State: lease.googleFailure(err), Reason: err.Error()})
 			continue
 		}
 		switch grant.Name {
@@ -351,7 +358,14 @@ func testGoogle(ctx context.Context, lease *Lease, caps []Capability) ([]Result,
 		}
 	}
 	if len(results) == 0 {
-		return []Result{{Capability: GoogleCalendar, State: Unconfigured, Reason: "no Google capability is enabled"}}, nil
+		reason := "no Google capability is authorized yet"
+		if clientID, _, _, _, err := GoogleConfig(lease); err == nil && clientID == "" {
+			reason = errGoogleClientID.Error()
+		}
+		if lease.workedBefore {
+			return []Result{{Capability: GoogleCalendar, State: Failing, Reason: reason}}, nil
+		}
+		return []Result{{Capability: GoogleCalendar, State: Unconfigured, Reason: reason}}, nil
 	}
 	return results, nil
 }

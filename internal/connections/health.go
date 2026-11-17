@@ -70,6 +70,9 @@ func (s *Store) notice(ctx context.Context, id ID, previous, next State, reason,
 		if view.Label != "" {
 			label = view.Label
 		}
+		if next == Unconfigured && view.LastOKAt == nil {
+			return
+		}
 		if next == NeedsReauth {
 			hint = RepairHint(view)
 		}
