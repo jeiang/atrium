@@ -280,7 +280,7 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 			}
 			kept := http.Header{}
 			for name, values := range headers {
-				if name == "Content-Type" || name == "Location" || strings.HasPrefix(name, "Hx-") {
+				if name == "Content-Type" || name == "Location" {
 					kept[name] = values
 				}
 			}

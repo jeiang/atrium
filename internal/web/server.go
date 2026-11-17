@@ -356,12 +356,6 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func IsPartial(r *http.Request) bool {
-	_, hx := r.Header["Hx-Request"]
-	_, restore := r.Header["Hx-History-Restore-Request"]
-	return hx && !restore
-}
-
 var methods = [...]string{http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodPatch, http.MethodPost, http.MethodPut}
 
 func (s *Server) allowed(path string) []string {
