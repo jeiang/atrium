@@ -51,6 +51,7 @@ func (s *streamSite) restart() {
 		s.t.Fatal(err)
 	}
 	s.base, s.stop = base, stop
+	settleBootChecks(s.t, s.f.dir, keyFor(s.t))
 }
 
 func (s *streamSite) start(text string) (int64, int64) {
