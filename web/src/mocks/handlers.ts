@@ -3,11 +3,13 @@ import type { ModuleStateState, Shell, State, WebSession, WebSignIn } from '../c
 import { API_BASE } from '../contract';
 import { type AppsScenario, appHandlers } from './apps';
 import { type AssistantScenario, assistantHandlers } from './assistant';
+import { type CalendarScenario, calendarHandlers } from './calendar';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type ConnectionsScenario, connectionHandlers } from './connections';
 import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
+import { type MediaScenario, mediaHandlers } from './media';
 import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
 import { type SearchScenario, searchHandlers } from './search';
 import { type SettingsScenario, settingsHandlers } from './settings';
@@ -22,6 +24,8 @@ export interface MockScenario {
   mail?: { mode: string; paused: boolean };
   pause?: State;
   apps?: AppsScenario;
+  calendar?: CalendarScenario;
+  media?: MediaScenario;
   inbox?: InboxScenario;
   chat?: ChatScenario;
   connections?: ConnectionsScenario;
@@ -187,6 +191,8 @@ export const handlers = [
   ...settingsHandlers(scenario),
   ...connectionHandlers(scenario),
   ...appHandlers(scenario),
+  ...calendarHandlers(scenario),
+  ...mediaHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,
   ...knowledgeHandlers,

@@ -479,7 +479,12 @@ claims about the running application. Operator contracts are in
   one per 5 minutes) in every state except disabled; a success while
   failing triggers a recovery check. A first failing result notifies once,
   also after a host change. A host-declared row dropped from the host file
-  is disabled with its credentials kept and announced once; runtime
+  is disabled with its credentials kept. Whichever process opens the
+  database first disables it, but only the health watch's start pass in
+  `serve` announces it, once per removal (the notice's occurrence key is
+  `connection-removed:<id>:<revision>`, so later starts and a CLI command
+  that reconciled first neither repeat nor lose it; a row removed this way
+  before the key existed is announced at the next start). Runtime
   observations do not change a disabled row.
 - In `serve`, IMAP dials (TCP, TLS, greeting, login), SMTP sessions and
   iCloud mirror syncs report their outcome per capability through
@@ -702,6 +707,8 @@ claims about the running application. Operator contracts are in
   (default 0) on `auth_bearers` and `auth_sessions`, with no row rewrite.
   Migration 4 adds the `record_links` table, its indexes and its revision
   triggers on the `knowledge` scope, with no row rewrite.
+  Migration 5 drops the `ops_findings` table with its indexes and
+  triggers; server-ops findings live in `kb_records`.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
@@ -1136,7 +1143,12 @@ claims about the running application. Operator contracts are in
   (`media/media-channels`, `media/media-sweep`), ledger origin and operation
   names (`media_*`), the notification channel key `media` and the
   `atrium-media-agent.service` unit are stored or host-facing and keep their
-  names; the Activity category is `library` (operation prefix `media`) and the
+  names; the Activity category is `library` (operation prefix `media`), except
+  the torrent operations of the Torrents app (`media_add_magnet`,
+  `media_add_file`, `media_file_priority`, `media_tag_add`, `media_tag_remove`,
+  `media_start`, `media_stop`, `media_delete`, undo kind
+  `media_torrent_delete`), which list under its category `downloads` (the
+  longest claimed operation prefix wins), and the
   notification channel shows the title "Library". Tools: `library_search`,
   `library_following`, `library_follow`, `library_unfollow`. The channel poll
   job records `skipped_unconfigured` ("no show is followed") and makes no
@@ -1364,8 +1376,10 @@ claims about the running application. Operator contracts are in
   with undo, restricted to the threads it gathered.
   Research subagents have restricted tools and bounded runs, and their system
   prompt omits the operator profile and project block. The server-ops
-  worker is a separate run kind: it has `ops_samples`, `ops_findings`,
-  `ops_finding`, `atrium_self_diagnose` and the Grafana reads, and
+  worker is a separate run kind of the opt-in Server ops app
+  (`internal/apps/serverops`, flag `grafana_enabled`): it has exactly
+  `ops_samples`, `ops_finding`, `grafana_query`, `grafana_alerts` and
+  `atrium_self_diagnose`, no other run kind has them, and
   its system prompt carries no profile or project block. The built-in `web`
   subagent is retired; `search_web` runs a `search_web` child with the
   server `web_search`, `web_fetch`, `recall` and `report`. The server
@@ -1398,18 +1412,21 @@ claims about the running application. Operator contracts are in
   (default $0.10), the `ops_worker_monthly_usd` source cap (default $5,
   counting reserved, unknown and settled `classifier:ops_condenser` spend)
   and the monthly budget; the thread cost cap does not apply. Validated
-  findings for facts in the change set go to `ops_findings` (marks from the
+  findings for facts in the change set become ops knowledge pages (marks from the
   `Ops` thread); others are dropped. A refusal, provider failure or reply
   that breaks the schema writes no finding and records the change as
   pending; the next pass with no new change retries it once. A monthly
   budget refusal also records a classification deferral and raises the
   core `classification_budget` attention item pointing at
   `/settings/usage`, which clears once the budget has room; a source cap
-  refusal records no deferral. The sampler resolves a finding once its
-  fact is back to normal; resolved findings are pruned after 30 days.
-  Findings of severity warning or critical are attention items, returned by
-  `GET /api/v1/review/items` and the `attention` tool; Needs you shows
-  proposals only. No worker run starts automatically and nothing
+  refusal records no deferral. Each finding is a `kb_records` page with
+  scope `ops`, writer `worker` and origin `ops:<fact>` that expires after
+  30 days; a later finding for the same fact updates that page in place,
+  and the sampler expires the page once its fact is back to normal. A
+  finding on a locked page is dropped. Findings send no push, raise no
+  attention item and are not shown in Needs you; chat finds them through
+  `kb_search`. The only server-ops attention item is the worker budget.
+  No worker run starts automatically and nothing
   restarts or changes a host.
 - Proposals of removed kinds, such as `notion_link` and `notion_edit` from
   v2, stay readable and dismissable. Approvals are only for
@@ -1443,9 +1460,8 @@ claims about the running application. Operator contracts are in
   marks of the records they return; an empty result marks nothing.
   Grafana reads and
   `atrium_self_diagnose` mark `untrusted` only. `ops_samples` marks
-  `untrusted` when it returns alert details; `ops_findings` returns the
-  findings' stored marks, `worker_finding` adds `untrusted`, and
-  `ops_finding` and `worker_status` mark nothing. `web_fetch`, `research`
+  `untrusted` when it returns alert details, and
+  `ops_finding` marks nothing. `web_fetch`, `research`
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,

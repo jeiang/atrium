@@ -49,11 +49,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}}, {Module: func(_ chi.Router, d *web.Deps) { notificationRoutes(d, factory(d)) }}},
 		Tools:       ToolDefinitions(),
 		Connections: notify.Connections(),
-		ConnectionNotice: func(ctx context.Context, d *db.DB, title, body string) error {
+		ConnectionNotice: func(ctx context.Context, d *db.DB, title, body, occurrence string) error {
 			if !audit.HasActor(ctx) {
 				ctx = audit.With(ctx, "service:connection-health", audit.Job)
 			}
-			return notifyapp.ConnectionNotice()(ctx, d, title, body)
+			return notifyapp.ConnectionNotice()(ctx, d, title, body, occurrence)
 		},
 		ProposalCreated: proposalCreated,
 		Services: []runtime.ServiceDefinition{{Name: "notifications-monitor", Run: func(ctx context.Context, _ *runtime.Services) error {

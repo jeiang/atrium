@@ -87,13 +87,6 @@ var Roles = []Role{
 		Effort:      pricing.Medium,
 		Tools:       []string{"contacts_lookup", "mail_read", "mail_search", "recall"},
 	},
-	{
-		Name:        "observability",
-		Description: "Grafana metrics, logs, alerts and dashboards.",
-		Prompt:      "Investigate with the read-only grafana_* tools. Return a summary of query results with dashboard uids or datasource uids.",
-		Effort:      pricing.Medium,
-		Tools:       []string{"grafana_alerts", "grafana_datasources", "grafana_query", "grafana_search_dashboards", "recall"},
-	},
 }
 
 func Lookup(name string) (Role, bool) {

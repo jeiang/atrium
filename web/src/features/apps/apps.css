@@ -59,6 +59,7 @@
 
   .app-link {
     gap: var(--s-1);
+    min-inline-size: var(--target);
   }
 
   .app-link > .icon {

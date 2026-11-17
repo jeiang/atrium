@@ -23,10 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/textx"
 )
 
-const (
-	DraftLimit    = 100
-	findingsLimit = 20
-)
+const DraftLimit = 100
 
 var pendingScopes = []string{state.Review, state.Effects, state.Mail, state.Calendar, state.Tasks, state.Assistant, state.Settings, state.Connections}
 
@@ -63,9 +60,8 @@ type Card struct {
 }
 
 type PendingInput struct {
-	Findings bool
-	Refs     bool
-	Limit    int
+	Refs  bool
+	Limit int
 }
 
 type Pending struct {
@@ -73,16 +69,11 @@ type Pending struct {
 	Blocked    []Card
 	Drafts     []review.Draft
 	Count      int
-	Findings   []review.Finding
 	Configured map[string]bool
 }
 
 func (s *Service) Pending(ctx context.Context, in PendingInput) (application.Read[Pending], error) {
-	scopes := pendingScopes
-	if in.Findings {
-		scopes = append(slices.Clone(scopes), state.Ops)
-	}
-	return read(ctx, s, PendingName, scopes, in, func() (Pending, error) { return s.pending(ctx, in) }, func(p Pending) any { return p.Configured })
+	return read(ctx, s, PendingName, pendingScopes, in, func() (Pending, error) { return s.pending(ctx, in) }, func(p Pending) any { return p.Configured })
 }
 
 func (s *Service) pending(ctx context.Context, in PendingInput) (Pending, error) {
@@ -137,19 +128,6 @@ func (s *Service) pending(ctx context.Context, in PendingInput) (Pending, error)
 			return out, err
 		}
 		out.Count += len(needs)
-	}
-	if in.Findings {
-		out.Findings = []review.Finding{}
-		for _, c := range kinds {
-			if c.Kinds.Findings == nil {
-				continue
-			}
-			found, err := c.Kinds.Findings(ctx, q, findingsLimit)
-			if err != nil {
-				return out, err
-			}
-			out.Findings = append(out.Findings, found...)
-		}
 	}
 	out.Configured = AccountConfigured(ctx)
 	return out, nil

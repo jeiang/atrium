@@ -22,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -38,18 +37,17 @@ func Settings() []settings.Def {
 }
 
 type dreaming struct {
-	run        int64
-	new        int
-	edited     int
-	retracted  int
-	tasks      int
-	lessons    int
-	conflicts  []conflict
-	marked     int
-	skipped    bool
-	failed     bool
-	exportID   int64
-	opsFinding int
+	run       int64
+	new       int
+	edited    int
+	retracted int
+	tasks     int
+	lessons   int
+	conflicts []conflict
+	marked    int
+	skipped   bool
+	failed    bool
+	exportID  int64
 }
 
 type conflict struct {
@@ -226,9 +224,6 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	} else {
 		out.exportID = id
 	}
-	if out.opsFinding, err = serverops.CountUnresolved(ctx, q); err != nil {
-		return out, err
-	}
 	return out, nil
 }
 func markedKind(kind string) bool {
@@ -325,11 +320,6 @@ func lines(result attention.Result, dream dreaming) (today, push []block.DigestL
 	}
 	if dream.exportID != 0 {
 		line := block.DigestLine{Text: fmt.Sprintf("Export blocked by write #%d", dream.exportID)}
-		today = append(today, line)
-		push = append(push, line)
-	}
-	if dream.opsFinding > 0 {
-		line := block.DigestLine{Text: fmt.Sprintf("Ops findings: %d", dream.opsFinding)}
 		today = append(today, line)
 		push = append(push, line)
 	}

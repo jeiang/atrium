@@ -16,6 +16,7 @@ const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgeP
 const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
 
 const settingsPage = () => import('../features/settings/SettingsPage.svelte').catch(unavailable);
+const calendar = () => import('../apps/calendar/CalendarPage.svelte').catch(unavailable);
 export const { p, navigate, isActive, route } = createRouter(
   {
     hooks: { afterLoad: routeLoaded },
@@ -62,6 +63,18 @@ export const { p, navigate, isActive, route } = createRouter(
       '/directory': {
         '/': () => import('../features/apps/DirectoryPage.svelte').catch(unavailable),
         meta: { title: 'All apps' },
+      },
+      '/calendar': { '/': calendar, '/week': calendar, '/candidates': calendar, meta: { title: 'Calendar' } },
+      '/torrents': {
+        '/': () => import('../apps/torrents/DownloadsPage.svelte').catch(unavailable),
+        meta: { title: 'Downloads' },
+      },
+      '/media': {
+        '/': () => import('../apps/library/LibraryPage.svelte').catch(unavailable),
+        '/following': () => import('../apps/library/LibraryPage.svelte').catch(unavailable),
+        '/intake': () => import('../apps/library/LibraryPage.svelte').catch(unavailable),
+        '/item/:kind/:id': () => import('../apps/library/ItemPage.svelte').catch(unavailable),
+        meta: { title: 'Library' },
       },
       '/:app': () => import('../features/apps/AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },

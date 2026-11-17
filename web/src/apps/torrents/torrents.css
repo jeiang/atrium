@@ -1,0 +1,99 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .dl-back {
+    justify-self: start;
+    min-inline-size: var(--target);
+  }
+
+  .dl-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    gap: var(--s-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .dl-list > li {
+    display: grid;
+    min-inline-size: 0;
+    container-type: inline-size;
+  }
+
+  .dl-list__skeleton {
+    min-block-size: 11rem;
+    padding: var(--s-5);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+  }
+
+  .dl-list > li:nth-child(n + 13) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto none auto 12rem;
+  }
+
+  .dl-list .card__title {
+    overflow-wrap: anywhere;
+  }
+
+  .dl-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-1) var(--s-3);
+    align-items: center;
+    margin: 0;
+  }
+
+  .dl-card__progress {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--s-3);
+    align-items: center;
+  }
+
+  .dl-card__bar {
+    inline-size: 100%;
+    block-size: 0.5rem;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--paper-2);
+    accent-color: var(--moss);
+  }
+
+  .dl-card__bar::-webkit-progress-bar {
+    border-radius: var(--r-pill);
+    background: var(--paper-2);
+  }
+
+  .dl-card__bar::-webkit-progress-value {
+    border-radius: var(--r-pill);
+    background: var(--moss);
+  }
+
+  .dl-card__bar::-moz-progress-bar {
+    border-radius: var(--r-pill);
+    background: var(--moss);
+  }
+
+  .dl-card__percent {
+    min-inline-size: 3.5ch;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  @container (width < 22rem) {
+    .dl-list .card__actions > * {
+      flex: 1 1 auto;
+    }
+  }
+
+  @media (--touch) {
+    .dl-back {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: var(--target);
+    }
+  }
+}
