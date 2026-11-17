@@ -74,7 +74,7 @@ func workerFinding(t *testing.T, d *db.DB, fact string) (id int64, resolved bool
 	if err != nil {
 		t.Fatal(err)
 	}
-	return id, expires != nil && *expires <= float64(time.Now().Unix()), true
+	return id, expires != nil && *expires <= float64(time.Now().UnixNano())/1e9, true
 }
 
 func TestQuietPassMakesNoModelCall(t *testing.T) {

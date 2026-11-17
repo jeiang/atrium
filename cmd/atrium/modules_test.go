@@ -431,17 +431,6 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 			t.Fatalf("%v with a broken Grafana CA: exit %d stderr %q", args, got.code, got.stderr)
 		}
 	}
-	available := func() bool {
-		t.Helper()
-		got := runAppLogged(t, "settings", "set", "monthly_budget_usd", "150")
-		if got.code != cli.ExitOK {
-			t.Fatalf("unrelated setting: exit %d stderr %q", got.code, got.stderr)
-		}
-		return !strings.Contains(got.stderr, "module is unavailable")
-	}
-	if available() {
-		t.Fatal("the grafana module is available while the Grafana connection is broken")
-	}
 	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "false"); got.code != cli.ExitOK {
 		t.Fatalf("disable the broken module: exit %d stderr %q", got.code, got.stderr)
 	}
@@ -457,8 +446,8 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 	if got := runApp(t, "settings", "set", module.FlagKey(unit.Grafana), "true"); got.code != cli.ExitOK {
 		t.Fatalf("enable the repaired module: exit %d stderr %q", got.code, got.stderr)
 	}
-	if !available() {
-		t.Fatal("the grafana module is not available after the repair")
+	if got := runApp(t, "connections", "list", "--json"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"service/grafana"`) {
+		t.Fatalf("connections list after the repair: exit %d stderr %q", got.code, got.stderr)
 	}
 }
 

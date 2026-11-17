@@ -201,19 +201,20 @@ func TestServerOpsAppOffLeavesGrafanaIdle(t *testing.T) {
 		t.Fatalf("connections list: %d %s", listed.code, listed.stderr)
 	}
 	var views []struct {
-		ID    string `json:"id"`
-		State string `json:"state"`
+		ID      string `json:"id"`
+		Enabled bool   `json:"enabled"`
+		Idle    string `json:"idle"`
 	}
 	if err := json.Unmarshal([]byte(listed.stdout), &views); err != nil {
 		t.Fatalf("connections list JSON: %v\n%s", err, listed.stdout)
 	}
-	i := slices.IndexFunc(views, func(v struct {
-		ID    string `json:"id"`
-		State string `json:"state"`
-	}) bool {
-		return strings.Contains(v.ID, "grafana")
-	})
-	if i < 0 || views[i].State != "idle" {
-		t.Errorf("Grafana connection with the app off = %+v, want present and idle", views)
+	var idle string
+	for _, v := range views {
+		if v.ID == "service/grafana" {
+			idle = v.Idle
+		}
+	}
+	if idle != "its app is off" {
+		t.Errorf("Grafana connection with the app off = %+v, want present and idle because its app is off", views)
 	}
 }
