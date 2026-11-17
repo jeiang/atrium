@@ -1,6 +1,7 @@
 <script lang="ts" module>
   export const ARM_MS = 900;
   const steps = Array.from({ length: 101 }, (_, index) => index / 100);
+  const float32Slack = 1e-6;
   const touchQuery = '(width < 861px), ((pointer: coarse) and (not (any-pointer: fine)))';
 </script>
 
@@ -92,7 +93,9 @@
   const gated = $derived(approval.irreversible && !endSeen);
   const margin = $derived(`0px 0px ${-chromeEnd}px 0px`);
   const seenAt = $derived(
-    cardHeight > 0 ? Math.min(1, Math.max(0, (0.5 * Math.min(cardHeight, rootHeight) - 1) / cardHeight)) : 0,
+    cardHeight > 0
+      ? Math.min(1, Math.max(0, (0.5 * Math.min(cardHeight, rootHeight) - 1) / cardHeight - float32Slack))
+      : 0,
   );
 
   $effect(() => {
@@ -111,7 +114,7 @@
       frame = requestAnimationFrame(() => {
         rowHeight = target.offsetHeight;
         chromeEnd = Number.parseFloat(getComputedStyle(target).insetBlockEnd) || 0;
-        cardHeight = card.offsetHeight;
+        cardHeight = card.getBoundingClientRect().height;
         rootHeight = document.documentElement.clientHeight - chromeEnd;
         measured = true;
       });
