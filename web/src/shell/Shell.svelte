@@ -161,7 +161,7 @@
                   <a
                     class="rail-link rail-link--sub"
                     href={p('/apps/:app', { params: { app: app.id } })}
-                    aria-current={isActive('/apps/:app', { app: app.id }) ? 'page' : undefined}
+                    aria-current={isActive.startsWith('/apps/:app', { app: app.id }) ? 'page' : undefined}
                   >
                     <span class="rail-link__text">{app.name}</span>
                     {#if app.id === 'mail' && mailMeta}
