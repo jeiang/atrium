@@ -305,7 +305,8 @@ triggers a check within a minute. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
-keeps its row and credentials, and is announced once. Declaring it again
+keeps its row and credentials, and is announced once, at the next start of
+`atrium serve` even when a CLI command opened the database first. Declaring it again
 enables it as `untested` with its earlier results cleared, so the next check
 tests it. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
@@ -818,7 +819,9 @@ are refused inputs.
   `library_follow` and `media_channel_remove` is `library_unfollow`. Their
   `tools.tool_<old name>_enabled` keys are retired. Ledger operations,
   undo kinds, job keys and the notification channel keep their `media`
-  names, so earlier history stays listed (Activity category `library`),
+  names, so earlier history stays listed (Activity category `library`, or
+  `downloads` for the Torrents operations such as `media_add_magnet` and
+  `media_stop`),
   attributed and undoable. A pending proposal made under an old tool name
   before this release has no executor; ask again.
 - The notification channel `media` keeps its key and stored choices and is

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,9 +15,39 @@ import (
 )
 
 // Notifier delivers one operator notification for a health state transition.
-type Notifier func(ctx context.Context, d *db.DB, title, body string) error
+type Notifier func(ctx context.Context, d *db.DB, title, body, occurrence string) error
+
+func (s *Store) AnnounceRemoved(ctx context.Context) error {
+	if s.d == nil {
+		return nil
+	}
+	type removed struct {
+		id       ID
+		revision int64
+	}
+	rows, err := s.d.Read.QueryContext(ctx,
+		"SELECT id, revision FROM connections WHERE config_source = 'host' AND enabled = 0 AND state = 'disabled' AND reason = ? ORDER BY id", reasonRemovedFromHost)
+	if err != nil {
+		return err
+	}
+	all, err := db.Collect(rows, func(r *sql.Rows) (removed, error) {
+		var row removed
+		return row, r.Scan(&row.id, &row.revision)
+	})
+	if err != nil {
+		return err
+	}
+	for _, row := range all {
+		s.notice(ctx, row.id, "", Disabled, reasonRemovedFromHost, fmt.Sprintf("connection-removed:%s:%d", row.id, row.revision))
+	}
+	return nil
+}
 
 func (s *Store) announce(ctx context.Context, id ID, previous, next State, reason string) {
+	s.notice(ctx, id, previous, next, reason, "")
+}
+
+func (s *Store) notice(ctx context.Context, id ID, previous, next State, reason, occurrence string) {
 	var n Notifier
 	if s.reg != nil {
 		n = s.reg.notify
@@ -56,7 +87,7 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 			body += "; affects " + strings.Join(features, ", ")
 		}
 	}
-	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil {
+	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body, occurrence); err != nil {
 		log.Warn("connection notification failed", logx.Integration, string(id), logx.Err, err.Error())
 	}
 }

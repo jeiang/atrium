@@ -233,39 +233,35 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	for _, id := range sortedKeys(s.host.Connections) {
 		declared[id] = true
 	}
-	type dropped struct {
-		id    ID
-		state State
-	}
-	var removed []dropped
+	var removed []ID
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, id := range sortedKeys(s.host.Connections) {
 			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id]); err != nil {
 				return err
 			}
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id, state FROM connections WHERE config_source = 'host' AND enabled = 1")
+		rows, err := tx.QueryContext(ctx, "SELECT id FROM connections WHERE config_source = 'host' AND enabled = 1")
 		if err != nil {
 			return err
 		}
 		removed = nil
 		for rows.Next() {
-			var row dropped
-			if err := rows.Scan(&row.id, &row.state); err != nil {
+			var id ID
+			if err := rows.Scan(&id); err != nil {
 				_ = rows.Close()
 				return err
 			}
-			if !declared[string(row.id)] {
-				removed = append(removed, row)
+			if !declared[string(id)] {
+				removed = append(removed, id)
 			}
 		}
 		if err := rows.Close(); err != nil {
 			return err
 		}
-		for _, row := range removed {
+		for _, id := range removed {
 			if _, err := tx.ExecContext(ctx,
 				"UPDATE connections SET enabled = 0, state = 'disabled', reason = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
-				reasonRemovedFromHost, s.stamp(), row.id); err != nil {
+				reasonRemovedFromHost, s.stamp(), id); err != nil {
 				return err
 			}
 		}
@@ -282,9 +278,8 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, row := range removed {
-		log.Warn("a host-declared connection was removed from the host configuration and is disabled", logx.Integration, string(row.id))
-		s.announce(ctx, row.id, row.state, Disabled, reasonRemovedFromHost)
+	for _, id := range removed {
+		log.Warn("a host-declared connection was removed from the host configuration and is disabled", logx.Integration, string(id))
 	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reload != nil {
 		return s.reg.sync.Reload(ctx, s)
