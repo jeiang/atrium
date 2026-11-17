@@ -13,6 +13,8 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 func preUpgrade(t *testing.T, r *mailClassifierRig, statuses ...string) {
@@ -115,11 +117,13 @@ func TestMailEventProposalApprovalWritesOnlyToCalDAV(t *testing.T) {
 	p := &calendar.Proposals{DB: d, Now: calendar.Now}
 	raw := map[string]any{"title": "Lunch with Sam", "start": "2027-10-14T12:00:00", "end": "2027-10-14T13:00:00", "all_day": false, "calendar": string(calendar.ICloud)}
 	source := map[string]any{"message_id": 41, "subject": "Lunch with Sam on Thursday", "from": "sam@elsewhere.test", "invitation": false}
-	id, created, err := p.Propose(context.Background(), raw, source, "mail:41")
+	ctx, _, _ := bootedState(t, testLookupFor(t))
+	ctx = proposals.WithHooks(audit.With(ctx, "fixture", audit.UI), proposals.Hooks{})
+	id, created, err := p.Propose(ctx, raw, source, "mail:41")
 	if err != nil || !created {
 		t.Fatalf("propose: %v created %v", err, created)
 	}
-	if _, again, err := p.Propose(context.Background(), raw, source, "mail:41"); err != nil || again {
+	if _, again, err := p.Propose(ctx, raw, source, "mail:41"); err != nil || again {
 		t.Fatalf("a second proposal for one message: %v created %v", err, again)
 	}
 	if n := len(srv.Objects()); n != 0 {

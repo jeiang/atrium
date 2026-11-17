@@ -555,14 +555,14 @@ func TestMailPassWaitingEventRetriesDoNotHoldTheWindow(t *testing.T) {
 	t.Parallel()
 	r := newMailClassifierRig(t, nil)
 	const unread = 60
-	if _, err := r.d.Write.Exec("UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL "+
+	if _, err := r.d.Write.Exec("UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL, first_seen = (SELECT applied_at FROM schema_migrations WHERE version = 8) + 1 "+
 		"WHERE id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT ?)", unread); err != nil {
 		t.Fatal(err)
 	}
 	var lateID int64
 	var late string
-	if err := r.d.Read.QueryRow("SELECT id, subject FROM messages WHERE id = (SELECT MAX(id) FROM "+
-		"(SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT ?))", unread).Scan(&lateID, &late); err != nil {
+	if err := r.d.Read.QueryRow("SELECT id, subject FROM messages WHERE id IN "+
+		"(SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT ?) ORDER BY date_ts, id LIMIT 1", unread).Scan(&lateID, &late); err != nil {
 		t.Fatal(err)
 	}
 	r.refuseAllBut(t, "event", late)

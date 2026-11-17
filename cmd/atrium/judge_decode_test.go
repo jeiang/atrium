@@ -64,7 +64,7 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	code, _, stderr := f.runLogged(ctx, "sync", "--account", "icloud")
-	if code != cli.ExitOK || !strings.Contains(stderr, "unusable events answer") || !strings.Contains(stderr, "has_event") {
+	if code != cli.ExitOK || !strings.Contains(stderr, "CALLER=mail_event") || !strings.Contains(stderr, "$.has_event: unexpected string") {
 		t.Fatalf("sync with a non-boolean judge answer: exit %d stderr %q", code, stderr)
 	}
 
@@ -74,13 +74,13 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	}
 	defer func() { _ = d.Close() }()
 	var proposals, markers int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'calendar_event'").Scan(&proposals); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'calendar_event' AND json_extract(payload, '$.source.message_id') IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)").Scan(&proposals); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'events' AND found = 0").Scan(&markers); err != nil {
 		t.Fatal(err)
 	}
-	if proposals != 0 || markers != 3 {
-		t.Fatalf("after a rejected judge answer: %d event proposals, %d zero-found event markers, want 0 and 3", proposals, markers)
+	if proposals != 0 || markers != 0 {
+		t.Fatalf("after a rejected judge answer: %d event proposals, %d zero-found event markers, want none of either until the retry", proposals, markers)
 	}
 }

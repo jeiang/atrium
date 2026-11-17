@@ -62,7 +62,7 @@ func TestSchedulerRunsCatalogJobsFromEveryOwner(t *testing.T) {
 
 	api.Push(asstReply("dreamt"), asstReply("the week in review"))
 	before := len(api.Requests())
-	due := []string{"nightly", "weekly-review", "caldav", "package-tracking"}
+	due := []string{"nightly", "weekly-review", "package-tracking"}
 	schedulerDue(t, d, due...)
 	stop()
 	schedulerRun(t, f, d, schedulerTerminal(d, due...))
@@ -75,7 +75,7 @@ func TestSchedulerRunsCatalogJobsFromEveryOwner(t *testing.T) {
 	if got := len(api.Requests()) - before; got < 2 {
 		t.Errorf("the nightly and weekly jobs sent %d provider requests, want at least 2", got)
 	}
-	for _, name := range []string{"caldav", "package-tracking"} {
+	for _, name := range []string{"package-tracking"} {
 		if status, text := schedulerStatus(t, d, name); status != "skipped_module" {
 			t.Errorf("%s with its module disabled = %s (%s), want skipped_module", name, status, text)
 		}

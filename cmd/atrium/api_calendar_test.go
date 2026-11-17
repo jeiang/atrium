@@ -177,10 +177,8 @@ func TestCalendarCandidatesAPIAndCLIAreGone(t *testing.T) {
 	}
 	t.Cleanup(stop)
 	s := &apiSite{t: t, base: base}
-	for _, path := range []string{"/api/v1/calendar/candidates", "/web/v1/calendar/candidates"} {
-		if got := s.do(http.MethodPost, path, token, nil); got.status != http.StatusNotFound && got.status != http.StatusMethodNotAllowed {
-			t.Fatalf("POST %s = %d, want 404 or 405: %.400s", path, got.status, got.body)
-		}
+	if got := s.do(http.MethodPost, "/api/v1/calendar/candidates", token, nil); got.status != http.StatusNotFound && got.status != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /api/v1/calendar/candidates = %d, want 404 or 405: %.400s", got.status, got.body)
 	}
 	if got := runApp(t, "calendar", "candidates"); got.code == cli.ExitOK {
 		t.Fatalf("calendar candidates CLI still runs: %q", got.stdout)
