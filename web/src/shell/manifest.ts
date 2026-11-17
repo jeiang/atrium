@@ -21,6 +21,17 @@ export function openApps(apps: readonly AppEntry[] | undefined): AppEntry[] {
   return (apps ?? []).filter((app) => app.enabled);
 }
 
+export interface AppsState {
+  data: readonly AppEntry[] | undefined;
+  isFetching: boolean;
+  isFetchedAfterMount: boolean;
+}
+
+export function appGone(apps: AppsState, id: string): boolean {
+  if (!apps.data || (apps.isFetching && !apps.isFetchedAfterMount)) return false;
+  return apps.data.find((item) => item.id === id)?.enabled !== true;
+}
+
 export function refreshApps(client: QueryClient): void {
   void client.invalidateQueries({ queryKey: ['apps'] });
   void client.invalidateQueries({ queryKey: ['shell'] });

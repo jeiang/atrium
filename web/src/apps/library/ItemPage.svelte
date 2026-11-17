@@ -8,7 +8,7 @@
   import Page from '../../shared/ui/Page.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { useApps } from '../../shell/manifest';
+  import { appGone, useApps } from '../../shell/manifest';
   import NotFound from '../../shell/NotFound.svelte';
   import { p, route } from '../../shell/router';
   import LibraryNav from './LibraryNav.svelte';
@@ -57,7 +57,7 @@
   }
 </script>
 
-{#if (apps.data && !app?.enabled) || !target}
+{#if appGone(apps, 'media') || !target}
   <NotFound />
 {:else}
   <Page
