@@ -107,6 +107,7 @@ test.describe('keyboard focus', () => {
     'settings',
     'apps',
     'media',
+    'mail',
     'packages',
   ]) {
     test(`every stop in ${section} shows the focus ring`, async ({ page }) => {

@@ -74,6 +74,11 @@ export const { p, navigate, isActive, route } = createRouter(
         '/': () => import('../apps/packages/PackagesPage.svelte').catch(unavailable),
         meta: { title: 'Packages' },
       },
+      '/mail': {
+        '/': () => import('../apps/mail/MailPage.svelte').catch(unavailable),
+        '/message/:id': () => import('../apps/mail/MessagePage.svelte').catch(unavailable),
+        meta: { title: 'Mail' },
+      },
       '/torrents': {
         '/': () => import('../apps/torrents/DownloadsPage.svelte').catch(unavailable),
         meta: { title: 'Downloads' },
