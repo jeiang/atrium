@@ -396,18 +396,17 @@ func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
 	if state := connectionState(t, dir, "service/webpush"); state != "unconfigured" {
 		t.Fatalf("web push state without a subject = %q, want unconfigured", state)
 	}
-	okG3(t, "turn notifications on", webG3(t, s.base).do(http.MethodPut, "/web/v1/apps/"+string(unit.Notifications)+"/enabled", map[string]any{"enabled": true}))
-	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(time.Second) {
-		if got := runApp(t, "connections", "test", "service/webpush"); got.code == cli.ExitOK {
-			t.Fatalf("web push test without a subject after notifications turned on: exit %d stdout %q", got.code, got.stdout)
+	var webpush map[string]any
+	for _, v := range dataG3(t, "connections", webG3(t, s.base).do(http.MethodGet, "/web/v1/connections", nil))["connections"].([]any) {
+		if c := v.(map[string]any); c["id"] == "service/webpush" {
+			webpush = c
 		}
-		state := needStateG3(t, s.base, "notifications", "service/webpush")
-		if state == "unconfigured" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("notifications need on web push = %q, want unconfigured", state)
-		}
+	}
+	if webpush == nil || webpush["state"] != "unconfigured" {
+		t.Fatalf("web push on the connections surface = %v, want unconfigured", webpush)
+	}
+	if on := runSettings(t, "set", module.FlagKey(unit.Notifications), "true"); on.code != cli.ExitOK {
+		t.Fatalf("an unconfigured connection held notifications: %d %q", on.code, on.stderr)
 	}
 }
 
