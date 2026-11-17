@@ -120,8 +120,14 @@ settings the operator edits in the UI or pins from the host.
 - The database engine is SQLCipher selected by the `libsqlite3` build tag; the dev shell sets it through `GOFLAGS`. A build without that tag fails on purpose, and no second driver exists. Keys travel only in the `key=x'<hex>'` URI parameter built by `internal/db`. With a key configured, never open or create a plaintext database; the guard in `internal/db` refuses a plaintext header, a missing cipher engine and a wrong key.
 - Application calendar boundaries use `config.Location`, not process
   `time.Local`.
-- Stage web assets through the existing build. Do not commit
-  `internal/web/app/dist`.
+- The web client lives in `web/` and talks only to `/web/v1` through the
+  client generated from `docs/api/openapi.json`. The `atrium-web` Nix package
+  builds it and the Go package embeds that build from
+  `internal/web/app/dist`; locally `just web-assets` stages it there and
+  `just web-stub` stages a placeholder. Do not commit `internal/web/app/dist`,
+  `web/dist`, `web/src/contract/gen`, `web/src/tokens/gen` or `node_modules`.
+  No Go package renders HTML pages beyond the sign-in, continue and emergency
+  pages; every other screen belongs to the client.
 - UI: avoid unnecessary secondary labels and descriptions. Let the layout
   do the explaining. No helper text that restates a control, no
   parenthetical notes repeated on every option.
