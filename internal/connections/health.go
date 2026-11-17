@@ -172,7 +172,7 @@ type outcome struct {
 	OK         bool
 	Capability string
 	Held       *Hold
-	Reason     string
+	Refused    Result
 }
 
 type RuntimeReport struct {
@@ -371,7 +371,7 @@ func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	if err == nil && capability != "" {
 		if wait := RetryAfter(resp.Header.Get("Retry-After"), time.Now()); Refuses(resp.StatusCode, wait) {
-			r.lease.refused(req.Context(), capability, resp.StatusCode, wait, fmt.Sprintf("%s answered %d", req.URL.Host, resp.StatusCode))
+			r.lease.refused(req.Context(), resp.StatusCode, wait, Result{Capability: capability, State: Failing, Reason: fmt.Sprintf("%s answered %d", req.URL.Host, resp.StatusCode)})
 		}
 	}
 	return resp, err

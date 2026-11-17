@@ -174,17 +174,18 @@ func (l *Lease) Held(ctx context.Context, capability string) (Hold, bool) {
 	return h, h.Active(time.Now())
 }
 
-func (l *Lease) Refuse(ctx context.Context, capability string, err error) error {
+func (l *Lease) Refuse(ctx context.Context, refused Result, err error) error {
 	r, ok := errors.AsType[*RemoteRefusal](err)
 	if !ok {
 		r = &RemoteRefusal{Err: err}
 	}
 	out := *r
-	out.Until = l.refused(ctx, capability, r.Status, r.RetryAfter, r.Error()).Until
+	out.Until = l.refused(ctx, r.Status, r.RetryAfter, refused).Until
 	return &out
 }
 
-func (l *Lease) refused(ctx context.Context, capability string, status int, retryAfter time.Duration, reason string) Hold {
+func (l *Lease) refused(ctx context.Context, status int, retryAfter time.Duration, refused Result) Hold {
+	capability := refused.Capability
 	now := time.Now()
 	prev, tag := l.hold(ctx, capability)
 	if prev.Active(now) {
@@ -193,7 +194,7 @@ func (l *Lease) refused(ctx context.Context, capability string, status int, retr
 	h := prev.Next(tag, retryAfter, now)
 	holds.Store(l.holdKey(capability), h)
 	log.Warn("requests paused after a refusal", logx.Integration, string(l.id), "capability", capability, "status", status, "refusals", h.Refusals, "until", h.Ends())
-	report(l.store.reg, outcome{ID: l.id, Revision: l.revision, Capability: capability, Held: &h, Reason: reason})
+	report(l.store.reg, outcome{ID: l.id, Revision: l.revision, Capability: capability, Held: &h, Refused: refused})
 	return h
 }
 
@@ -224,7 +225,7 @@ func (s *Store) RecordHold(ctx context.Context, o outcome) error {
 		label = string(v.ID)
 	}
 	held := func(prior []Result) Result {
-		result := Result{Capability: o.Capability, State: Failing, Reason: o.Reason}
+		result := o.Refused
 		for _, r := range prior {
 			if r.Capability == o.Capability && unhealthy(r.State) {
 				result = r
@@ -232,7 +233,19 @@ func (s *Store) RecordHold(ctx context.Context, o outcome) error {
 		}
 		return o.Held.Attach(result, label, time.Now())
 	}
-	if err := s.observe(ctx, o.ID, o.Revision, held, false); err != nil && !errors.As(err, new(*Conflict)) {
+	err = s.observe(ctx, o.ID, o.Revision, held, false)
+	if errors.As(err, new(*Conflict)) {
+		current, openErr := s.Open(ctx, o.ID)
+		if openErr != nil {
+			return openErr
+		}
+		defer current.Close()
+		if current.credentialTag() != o.Held.Credential {
+			return nil
+		}
+		err = s.observe(ctx, o.ID, current.revision, held, false)
+	}
+	if err != nil && !errors.As(err, new(*Conflict)) {
 		return err
 	}
 	return nil

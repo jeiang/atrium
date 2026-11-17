@@ -56,10 +56,11 @@ func Opener(_ config.Config) mail.OpenFunc {
 			return conn, nil
 		})
 		if dialed && ctx.Err() == nil {
+			outcome := mailconn.IMAPOutcome(err)
 			if errors.Is(err, mail.ErrLoginRefused) {
-				err = lease.Refuse(ctx, mailconn.CapabilityIMAP, err)
+				err = lease.Refuse(ctx, outcome, err)
 			}
-			lease.Report(mailconn.IMAPOutcome(err))
+			lease.Report(outcome)
 		}
 		return client, err
 	}
