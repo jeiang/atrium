@@ -63,6 +63,7 @@ var pinnedNames = map[string]string{
 	atrium + "application/commands.Status":             "CommandStatus",
 	atrium + "mail/live.Status":                        "LiveStatus",
 	atrium + "assistant/files.Summary":                 "FileSummary",
+	atrium + "homecard.Weather":                        "HomeWeather",
 }
 
 func componentName(t reflect.Type) string {

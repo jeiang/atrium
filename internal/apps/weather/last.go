@@ -5,21 +5,11 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
-)
-
-type State string
-
-const (
-	StateOff          State = "off"
-	StateUnconfigured State = "unconfigured"
-	StateLoading      State = "loading"
-	StateFailed       State = "failed"
-	StateStale        State = "stale"
-	StateOK           State = "ok"
+	"github.com/jeiang/atrium/internal/homecard"
 )
 
 type Reading struct {
-	State     State
+	State     homecard.State
 	Forecast  *Forecast
 	FetchedAt time.Time
 	Failure   string
@@ -61,13 +51,13 @@ func (l *Last) Read(key string, now time.Time) (Reading, bool) {
 	}
 	switch {
 	case l.forecast == nil && failedSince && !due:
-		out.State = StateFailed
+		out.State = homecard.StateFailed
 	case l.forecast == nil:
-		out.State = StateLoading
+		out.State = homecard.StateLoading
 	case failedSince || now.Sub(l.fetchedAt) >= TuningHomeWeatherStaleMinutes*time.Minute:
-		out.State = StateStale
+		out.State = homecard.StateStale
 	default:
-		out.State = StateOK
+		out.State = homecard.StateOK
 	}
 	return out, due
 }

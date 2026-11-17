@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/weather"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/weather"
 )
 
 const forecastJSON = `{"latitude":10.65,"longitude":-61.5,"timezone":"America/Port_of_Spain",` +

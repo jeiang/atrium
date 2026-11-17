@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/apps/torrents/torrentsmodule"
+	"github.com/jeiang/atrium/internal/apps/weather/weathermodule"
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
@@ -46,6 +47,7 @@ func Builtins(d Dependencies) []module.Builder {
 		assistantmodule.Module{Now: d.Now, Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
 		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},
 		grafanamodule.Module{Jobs: jobs},
+		weathermodule.Module{},
 	}
 }
 

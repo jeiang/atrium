@@ -7,14 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/weather"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/homecard"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/unit"
-	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -165,15 +166,15 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 		t.Fatalf("second library page: %+v", second)
 	}
 
-	awaitWeather(t, s, weather.StateOK)
+	awaitWeather(t, s, homecard.StateOK)
 	home := both("/home")
 	var card struct {
-		Weather asstapp.HomeWeather `json:"weather"`
+		Weather homecard.Weather `json:"weather"`
 	}
 	if err := json.Unmarshal([]byte(home.body), &card); err != nil {
 		t.Fatalf("home has no weather card: %v %.600s", err, home.body)
 	}
-	if w := card.Weather; w.State != weather.StateOK || w.Location == nil || *w.Location != "Lowmarsh" || w.Current == nil || w.Current.Temperature != 31.5 || w.Current.Condition != "Partly cloudy" || w.Today == nil || w.Today.High != 33 || len(w.Hours) != 2 {
+	if w := card.Weather; w.State != homecard.StateOK || w.Location == nil || *w.Location != "Lowmarsh" || w.Current == nil || w.Current.Temperature != 31.5 || w.Current.Condition != "Partly cloudy" || w.Today == nil || w.Today.High != 33 || len(w.Hours) != 2 {
 		t.Fatalf("weather card: %+v", w)
 	}
 

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jeiang/atrium/internal/homecard"
 )
 
 type Error string
@@ -26,44 +28,12 @@ type Location struct {
 	Longitude float64 `json:"longitude"`
 }
 
-type Current struct {
-	Time          string  `json:"time"`
-	Temperature   float64 `json:"temperature_c"`
-	Apparent      float64 `json:"apparent_c"`
-	Humidity      float64 `json:"humidity"`
-	Precipitation float64 `json:"precipitation_mm"`
-	WeatherCode   int     `json:"weather_code"`
-	Condition     string  `json:"condition"`
-	WindSpeed     float64 `json:"wind_kmh"`
-	WindDirection float64 `json:"wind_direction"`
-	IsDay         bool    `json:"is_day"`
-}
-
-type Hour struct {
-	Time          string  `json:"time"`
-	Temperature   float64 `json:"temperature_c"`
-	Precipitation float64 `json:"precipitation_probability"`
-	WeatherCode   int     `json:"weather_code"`
-	Condition     string  `json:"condition"`
-}
-
-type Day struct {
-	Date          string  `json:"date"`
-	High          float64 `json:"high_c"`
-	Low           float64 `json:"low_c"`
-	Precipitation float64 `json:"precipitation_probability"`
-	WeatherCode   int     `json:"weather_code"`
-	Condition     string  `json:"condition"`
-	Sunrise       string  `json:"sunrise,omitempty"`
-	Sunset        string  `json:"sunset,omitempty"`
-}
-
 type Forecast struct {
-	Location Location `json:"location"`
-	Timezone string   `json:"timezone,omitempty"`
-	Current  Current  `json:"current"`
-	Hourly   []Hour   `json:"hourly"`
-	Daily    []Day    `json:"daily"`
+	Location Location         `json:"location"`
+	Timezone string           `json:"timezone,omitempty"`
+	Current  homecard.Current `json:"current"`
+	Hourly   []homecard.Hour  `json:"hourly"`
+	Daily    []homecard.Day   `json:"daily"`
 }
 
 type Provider interface {
@@ -103,7 +73,7 @@ func (o *OpenMeteo) Forecast(ctx context.Context, loc Location, days, hours int)
 	out := Forecast{
 		Location: Location{Name: loc.Name, Latitude: payload.Latitude, Longitude: payload.Longitude},
 		Timezone: payload.Timezone,
-		Current: Current{
+		Current: homecard.Current{
 			Time:          payload.Current.Time,
 			Temperature:   value(payload.Current.Temperature),
 			Apparent:      value(payload.Current.Apparent),
@@ -121,7 +91,7 @@ func (o *OpenMeteo) Forecast(ctx context.Context, loc Location, days, hours int)
 			break
 		}
 		code := at(payload.Hourly.WeatherCode, i)
-		out.Hourly = append(out.Hourly, Hour{
+		out.Hourly = append(out.Hourly, homecard.Hour{
 			Time:          stamp,
 			Temperature:   atFloat(payload.Hourly.Temperature, i),
 			Precipitation: atFloat(payload.Hourly.Precipitation, i),
@@ -134,7 +104,7 @@ func (o *OpenMeteo) Forecast(ctx context.Context, loc Location, days, hours int)
 			break
 		}
 		code := at(payload.Daily.WeatherCode, i)
-		out.Daily = append(out.Daily, Day{
+		out.Daily = append(out.Daily, homecard.Day{
 			Date:          date,
 			High:          atFloat(payload.Daily.High, i),
 			Low:           atFloat(payload.Daily.Low, i),

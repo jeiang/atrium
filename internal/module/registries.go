@@ -72,6 +72,7 @@ type registries struct {
 	origins        map[string]string
 	day            daySources
 	communications communications.Feed
+	weather        weatherCard
 	direct         []string
 	channels       []string
 	refs           map[string]RefKind
@@ -96,6 +97,9 @@ func compileRegistries(decls []Declaration) (registries, error) {
 	r := registries{origins: map[string]string{}, refs: map[string]RefKind{}}
 	var err error
 	if r.day, err = compileDay(decls); err != nil {
+		return registries{}, err
+	}
+	if r.weather, err = compileWeatherCard(decls); err != nil {
 		return registries{}, err
 	}
 	if r.communications, err = compileCommunications(decls); err != nil {

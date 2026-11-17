@@ -7,53 +7,47 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/apps/weather"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
-	"github.com/jeiang/atrium/internal/weather"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/homecard"
 )
 
 const (
-	WeatherUnreachable = "unreachable"
-	WeatherTimeout     = "timeout"
-	WeatherNoMatch     = "no_match"
-	WeatherBadReply    = "bad_reply"
-	WeatherUnavailable = "unavailable"
+	Unreachable = "unreachable"
+	Timeout     = "timeout"
+	NoMatch     = "no_match"
+	BadReply    = "bad_reply"
+	Unavailable = "unavailable"
 )
 
-type HomeWeather struct {
-	State     weather.State    `json:"state" api:"enum=off|unconfigured|loading|failed|stale|ok"`
-	FetchedAt *float64         `json:"fetched_at"`
-	Failure   *string          `json:"failure" api:"enum=unreachable|timeout|no_match|bad_reply|unavailable"`
-	Location  *string          `json:"location"`
-	Timezone  *string          `json:"timezone"`
-	Current   *weather.Current `json:"current"`
-	Today     *weather.Day     `json:"today"`
-	Hours     []weather.Hour   `json:"hours"`
-}
+type Card struct{}
 
-func (s *Service) HomeWeather(ctx context.Context) HomeWeather {
-	found, err := weather.Load(ctx, s.db.Read)
+func (Card) Weather(ctx context.Context, d *db.DB, now func() float64) homecard.Weather {
+	wallClock := func() time.Time { return time.UnixMicro(int64(now() * 1e6)) }
+	found, err := weather.Load(ctx, d.Read)
 	var notConfigured config.NotConfigured
 	var disabled connections.DisabledConnection
 	switch {
 	case errors.As(err, &notConfigured), errors.As(err, &disabled):
-		return HomeWeather{State: weather.StateOff, Hours: []weather.Hour{}}
+		return homecard.Off()
 	case err != nil:
 		log.Warn("home weather settings unreadable", "err", err.Error())
-		failure := WeatherUnavailable
-		return HomeWeather{State: weather.StateFailed, Failure: &failure, Hours: []weather.Hour{}}
+		failure := Unavailable
+		return homecard.Weather{State: homecard.StateFailed, Failure: &failure, Hours: []homecard.Hour{}}
 	case found.ForecastOff:
-		return HomeWeather{State: weather.StateOff, Hours: []weather.Hour{}}
+		return homecard.Off()
 	case !found.HasLocation && found.LocationName == "":
-		return HomeWeather{State: weather.StateUnconfigured, Hours: []weather.Hour{}}
+		return homecard.Weather{State: homecard.StateUnconfigured, Hours: []homecard.Hour{}}
 	}
 	key := fmt.Sprintf("%s|%t|%g|%g|%s|%s", found.LocationName, found.HasLocation, found.Latitude, found.Longitude, found.ForecastURL, found.GeocodingURL)
-	last := weather.LastFor(s.db)
-	reading, due := last.Read(key, s.wallClock())
+	last := weather.LastFor(d)
+	reading, due := last.Read(key, wallClock())
 	if due {
-		go s.refreshHomeWeather(context.WithoutCancel(ctx), last, key, found)
+		go refresh(context.WithoutCancel(ctx), state.New(d), last, key, found, wallClock)
 	}
-	out := HomeWeather{State: reading.State, Hours: []weather.Hour{}}
+	out := homecard.Weather{State: reading.State, Hours: []homecard.Hour{}}
 	if reading.Failure != "" {
 		out.Failure = &reading.Failure
 	}
@@ -68,21 +62,17 @@ func (s *Service) HomeWeather(ctx context.Context) HomeWeather {
 	return out
 }
 
-func (s *Service) wallClock() time.Time {
-	return time.UnixMicro(int64(s.clock()() * 1e6))
-}
-
-func (s *Service) refreshHomeWeather(ctx context.Context, last *weather.Last, key string, found weather.Settings) {
+func refresh(ctx context.Context, events *state.Store, last *weather.Last, key string, found weather.Settings, wallClock func() time.Time) {
 	fetchCtx, cancel := context.WithTimeout(ctx, weather.TuningWeatherTimeoutSeconds*time.Second)
 	defer cancel()
 	forecast, failure := fetchHomeWeather(fetchCtx, found)
 	if failure != "" {
 		log.Warn("home weather refresh failed", "failure", failure)
 	}
-	if !last.Done(key, forecast, failure, s.wallClock()) {
+	if !last.Done(key, forecast, failure, wallClock()) {
 		return
 	}
-	if err := s.state.Touch(ctx, state.Assistant); err != nil {
+	if err := events.Touch(ctx, state.Assistant); err != nil {
 		log.Warn("home weather event not published", "err", err.Error())
 	}
 }
@@ -93,11 +83,11 @@ func fetchHomeWeather(ctx context.Context, found weather.Settings) (*weather.For
 	classify := func(err error) string {
 		switch {
 		case ctx.Err() != nil:
-			return WeatherTimeout
+			return Timeout
 		case errors.Is(err, weather.ErrUnreachable):
-			return WeatherUnreachable
+			return Unreachable
 		default:
-			return WeatherBadReply
+			return BadReply
 		}
 	}
 	if !found.HasLocation {
@@ -106,7 +96,7 @@ func fetchHomeWeather(ctx context.Context, found weather.Settings) (*weather.For
 			return nil, classify(err)
 		}
 		if len(matches) == 0 {
-			return nil, WeatherNoMatch
+			return nil, NoMatch
 		}
 		location = matches[0]
 	}

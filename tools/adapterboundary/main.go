@@ -40,6 +40,7 @@ var adapters = []adapter{
 	{pattern: "internal/proposals/proposalscmd/*"},
 	{pattern: "internal/apps/calendar/calendarcmd/*"},
 	{pattern: "internal/apps/calendar/calendartools/*"},
+	{pattern: "internal/apps/weather/weathertools/*"},
 	{pattern: "internal/contacts/contactsmodule/adapters.go"},
 	{pattern: "internal/media/pages/*"},
 	{pattern: "internal/media/mediacmd/*"},
