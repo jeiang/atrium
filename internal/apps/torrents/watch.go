@@ -45,17 +45,20 @@ func (a *App) Watch(ctx context.Context, d contract.Deps) error {
 	var last [sha256.Size]byte
 	seen := false
 	for {
-		if list, err := in.List(ctx, contract.Filter{}); err == nil {
-			sum := digest(list)
-			if seen && sum != last {
-				touchDownloads(ctx, d.DB)
+		if state.Listening() {
+			if list, err := in.List(ctx, contract.Filter{}); err == nil {
+				sum := digest(list)
+				if seen && sum != last {
+					touchDownloads(ctx, d.DB)
+				}
+				last, seen = sum, true
 			}
-			last, seen = sum, true
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
+		case <-state.Listened():
 		}
 	}
 }

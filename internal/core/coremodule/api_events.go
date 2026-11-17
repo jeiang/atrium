@@ -78,6 +78,7 @@ func serveEvents(d *web.Deps, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
+	defer state.Listen()()
 	wake, unsubscribe := db.Commits()
 	defer unsubscribe()
 	store := state.New(d.DB)

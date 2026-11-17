@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/cli"
 )
 
@@ -44,6 +45,10 @@ func TestTorrentControlUndoAndTheDownloadsTopic(t *testing.T) {
 	const other = "dddddddddddddddddddddddddddddddddddddddd"
 	s, token, qb := gaps4Site(t)
 	qb.put(mnpTorrent{hash: plain, name: "Plain.Thing", state: "downloading"})
+	time.Sleep(2*torrents.WatchInterval + time.Second)
+	if n := qb.listed(); n != 0 {
+		t.Fatalf("qBittorrent was listed %d times with no event subscriber", n)
+	}
 	frames := gaps4Events(t, s, token)
 	synced := syncedRevisions(t, nextAppFrame(t, frames, "sync"))
 	revision, ok := synced["downloads"]
@@ -51,6 +56,11 @@ func TestTorrentControlUndoAndTheDownloadsTopic(t *testing.T) {
 		t.Fatalf("sync has no downloads topic: %v", synced)
 	}
 
+	for deadline := time.Now().Add(10 * time.Second); qb.listed() == 0; time.Sleep(100 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("qBittorrent was not listed after an event subscriber connected")
+		}
+	}
 	qb.put(mnpTorrent{hash: other, name: "Other.Thing", state: "downloading"})
 	revision = waitAppChange(t, frames, "downloads", revision)
 

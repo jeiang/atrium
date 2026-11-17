@@ -23,7 +23,7 @@ A revision is a counter the database advances on every write to a table of that 
 | `calendar` | the calendar module is on |
 | `media` | the media module is on |
 | `notify` | the notifications module is on |
-| `downloads` | the torrents module is on; it also advances when qBittorrent reports a torrent's name, state, tags or whole-percent progress changed (checked every 5 seconds) |
+| `downloads` | the torrents module is on; it also advances when qBittorrent reports a torrent's name, state, tags or whole-percent progress changed (checked every 5 seconds, only while an app event stream is open) |
 
 A topic whose module turns off stops being sent; when the module turns on again, its next check sends a `change` for it. Lease, heartbeat and streamed run event writes do not advance a revision; follow a run with its run stream (`run-stream.md`).
 

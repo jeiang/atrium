@@ -1196,20 +1196,6 @@ claims about the running application. Operator contracts are in
   request while no show is followed. With Torrents off or unavailable,
   Library is held (`needs torrents` or "Torrents is unavailable:") on
   `/api/v1/apps` and `/settings/media`.
-- Torrent and library undo: every operator or agent pause or resume that
-  changes the torrent's state records the opposite action as undo kind
-  `media_torrent_state`, and every operator tag change that changes the tags
-  records `media_torrent_tag`; job writes, removals and no-op changes carry
-  no undo. `POST /media/torrents/{hash}/control`,
-  `POST /media/filings/{hash}` (the `media_file` effect) and
-  `POST /media/filings/{hash}/ignore` (its tag effects) answer `effect_ids`
-  and `undoable`. `media.channel-add` and `media.channel-remove` record
-  `media_channel_add` and `media_channel_remove` effects for the operator as
-  for approved proposals; undoing a removal restores the row with its id.
-- The `downloads` app event topic (Torrents on) advances after every
-  qBittorrent write or undo atrium makes and when the `downloads-watch`
-  service, which lists qBittorrent every 5 seconds while the connection is
-  set up, sees a torrent's name, state, tags or whole-percent progress change.
   The downloads queue maps each tagged
   torrent's qBittorrent content path to the agent `downloads` root by the
   `media_download_path_prefix` string prefix (no main-side stat). Filing
@@ -1223,6 +1209,21 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
+- Torrent and library undo: every operator or agent pause or resume that
+  changes the torrent's state records the opposite action as undo kind
+  `media_torrent_state`, and every operator tag change that changes the tags
+  records `media_torrent_tag`; job writes, removals and no-op changes carry
+  no undo. `POST /media/torrents/{hash}/control`,
+  `POST /media/filings/{hash}` (the `media_file` effect) and
+  `POST /media/filings/{hash}/ignore` (its tag effects) answer `effect_ids`
+  and `undoable`. `media.channel-add` and `media.channel-remove` record
+  `media_channel_add` and `media_channel_remove` effects for the operator as
+  for approved proposals; undoing a removal restores the row with its id.
+- The `downloads` app event topic (Torrents on) advances after every
+  qBittorrent write or undo atrium makes and when the `downloads-watch`
+  service, which lists qBittorrent every 5 seconds (and at once when a
+  stream opens) only while at least one app event stream is open on either
+  prefix, sees a torrent's name, state, tags or whole-percent progress change.
 - Automatic filing: the `media-sweep` job, after selection and removal, files
   a completed, unfiled, unignored media torrent without the operator when it
   is approved and its plan is exact (`located.exact` in
