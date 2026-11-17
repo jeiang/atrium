@@ -51,6 +51,7 @@
   });
 
   function onClose(): void {
+    if (dialog?.open) return;
     open = false;
     drag = undefined;
     if (opener?.isConnected) opener.focus();
@@ -60,6 +61,7 @@
 
   function onCancel(event: Event): void {
     if (pending) event.preventDefault();
+    else open = false;
   }
 
   function onGrabClick(): void {

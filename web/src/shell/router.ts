@@ -63,6 +63,17 @@ export const { p, navigate, isActive, route } = createRouter(
         '/': () => import('../features/apps/DirectoryPage.svelte').catch(unavailable),
         meta: { title: 'All apps' },
       },
+      '/torrents': {
+        '/': () => import('../apps/torrents/DownloadsPage.svelte').catch(unavailable),
+        meta: { title: 'Downloads' },
+      },
+      '/media': {
+        '/': () => import('../apps/library/LibraryPage.svelte').catch(unavailable),
+        '/following': () => import('../apps/library/LibraryPage.svelte').catch(unavailable),
+        '/intake': () => import('../apps/library/LibraryPage.svelte').catch(unavailable),
+        '/item/:kind/:id': () => import('../apps/library/ItemPage.svelte').catch(unavailable),
+        meta: { title: 'Library' },
+      },
       '/:app': () => import('../features/apps/AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },
     },
