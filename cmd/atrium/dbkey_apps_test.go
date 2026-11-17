@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -102,20 +104,9 @@ func (a *keyedApp) roundTrip() error {
 	if stop == nil {
 		return errors.New("serve did not start")
 	}
-	resp, err := http.Get(base + "/activity?category=settings")
-	if err != nil {
+	if err := budgetServedG1(base, a.budget); err != nil {
 		_ = stop()
 		return err
-	}
-	body, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if err != nil {
-		_ = stop()
-		return err
-	}
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), ">"+a.budget+"<") {
-		_ = stop()
-		return errors.New("activity lacks the budget this app wrote: " + resp.Status)
 	}
 	return stop()
 }
@@ -179,5 +170,74 @@ func refusalFor(owner, opener *keyedApp) db.KeyError {
 		return db.ErrKeyMissing
 	default:
 		return db.ErrWrongKey
+	}
+}
+
+func webReadG1(base, path string, out any) error {
+	req, err := http.NewRequest(http.MethodGet, base+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Atrium-Client", "web")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(path + ": " + resp.Status + " " + string(body))
+	}
+	return json.Unmarshal(body, out)
+}
+
+func budgetServedG1(base, budget string) error {
+	var activity struct {
+		Data struct {
+			Items []struct {
+				Operation string `json:"operation"`
+				Target    string `json:"target"`
+			} `json:"items"`
+		} `json:"data"`
+	}
+	if err := webReadG1(base, "/web/v1/activity?category=settings", &activity); err != nil {
+		return err
+	}
+	logged := false
+	for _, item := range activity.Data.Items {
+		logged = logged || (item.Operation == "settings.set" && item.Target == "monthly_budget_usd")
+	}
+	if !logged {
+		return errors.New("activity lacks the budget this app wrote")
+	}
+	cursor := ""
+	for {
+		var read struct {
+			Data struct {
+				Items []struct {
+					Key   string  `json:"key"`
+					Value *string `json:"value"`
+				} `json:"items"`
+				NextCursor *string `json:"next_cursor"`
+			} `json:"data"`
+		}
+		if err := webReadG1(base, "/web/v1/settings?limit=100&cursor="+url.QueryEscape(cursor), &read); err != nil {
+			return err
+		}
+		for _, row := range read.Data.Items {
+			if row.Key == "monthly_budget_usd" {
+				if row.Value == nil || *row.Value != budget {
+					return errors.New("settings serve a budget this app did not write")
+				}
+				return nil
+			}
+		}
+		if read.Data.NextCursor == nil || *read.Data.NextCursor == "" {
+			return errors.New("settings lack the budget this app wrote")
+		}
+		cursor = *read.Data.NextCursor
 	}
 }

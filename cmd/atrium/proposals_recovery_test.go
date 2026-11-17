@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -110,27 +108,21 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 		t.Errorf("approved proposal with no in-flight row inside the unheld bound = %q, want approved", got)
 	}
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	web := localWebG1(t, base)
+	approval := func(id int64, verb string) apiReply {
+		return web.do(http.MethodPost, "/web/v1/approvals/"+strconv.FormatInt(id, 10)+"/"+verb, map[string]any{})
 	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if code, _, _ := fetch(t, client, "GET", base+"/review", nil); code != http.StatusOK {
-		t.Fatalf("GET /review = %d", code)
+	undo := func(id int64) apiReply {
+		return web.do(http.MethodPost, "/web/v1/undo/proposal:"+strconv.FormatInt(id, 10), nil)
 	}
-	route := func(id int64, verb string) string {
-		return base + "/proposals/" + strconv.FormatInt(id, 10) + "/" + verb
-	}
-	code, body, _ := fetch(t, client, "POST", route(stale, "approve"), url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "Not approved") || !strings.Contains(body, "unresolved write") {
-		t.Errorf("approve of the recovered proposal = %d: %.400s", code, body)
+	if got := approval(stale, "approve"); got.status != http.StatusConflict || !strings.Contains(got.body, "not_approved") || !strings.Contains(got.body, "unresolved write") {
+		t.Errorf("approve of the recovered proposal = %d: %.400s", got.status, got.body)
 	}
 	if got := status(stale); got != proposals.Failed {
 		t.Errorf("recovered proposal after the refused approve = %q, want failed", got)
 	}
-	code, body, _ = fetch(t, client, "POST", route(stale, "undo"), url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "Undone") {
-		t.Errorf("undo of the recovered proposal = %d: %.400s", code, body)
+	if got := undo(stale); got.status != http.StatusOK || got.json["undone"] != true {
+		t.Errorf("undo of the recovered proposal = %d: %.400s", got.status, got.body)
 	}
 	if ruleExists("stale") {
 		t.Error("undo did not replay the settled batch of the recovered proposal")
@@ -138,9 +130,8 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 	if !ruleExists("recent") {
 		t.Error("undo touched a proposal that was not recovered")
 	}
-	code, body, _ = fetch(t, client, "POST", route(noRow, "undo"), url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "Undone") {
-		t.Errorf("undo of the proposal recovered with no write in flight = %d: %.400s", code, body)
+	if got := undo(noRow); got.status != http.StatusOK || got.json["undone"] != true {
+		t.Errorf("undo of the proposal recovered with no write in flight = %d: %.400s", got.status, got.body)
 	}
 	if ruleExists("norow") {
 		t.Error("undo did not replay the settled batch of the proposal recovered with no write in flight")
@@ -148,15 +139,16 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 	if !ruleExists("norowrecent") {
 		t.Error("undo touched a proposal that was not recovered")
 	}
-	code, body, _ = fetch(t, client, "POST", route(noLedger, "dismiss"), url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "Dismissed") {
-		t.Errorf("dismiss of the proposal recovered with no ledger rows = %d: %.400s", code, body)
+	if got := approval(noLedger, "deny"); got.status != http.StatusOK || got.json["approval"].(map[string]any)["status"] != "dismissed" {
+		t.Errorf("dismiss of the proposal recovered with no ledger rows = %d: %.400s", got.status, got.body)
 	}
 	if got := status(noLedger); got != proposals.Dismissed {
 		t.Errorf("dismissed no-ledger proposal = %q, want dismissed", got)
 	}
-	code, body, _ = fetch(t, client, "POST", route(recent, "undo"), url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "Not undone") {
-		t.Errorf("undo of a proposal still approved = %d: %.400s", code, body)
+	if got := undo(recent); got.status != http.StatusConflict || !strings.Contains(got.body, "not_undone") {
+		t.Errorf("undo of a proposal still approved = %d: %.400s", got.status, got.body)
+	}
+	if !ruleExists("recent") {
+		t.Error("a refused undo replayed a proposal that is still approved")
 	}
 }
