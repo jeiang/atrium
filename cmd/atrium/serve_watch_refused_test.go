@@ -58,7 +58,7 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 	waitUntil(t, 30*time.Second, "the home refusal hold to be stored", func() bool {
 		var n int
 		if err := d.Read.QueryRow(`SELECT COUNT(*) FROM connections, json_each(results_json)
-			WHERE id = 'mail/home' AND json_extract(value, '$.capability') = 'imap'
+			WHERE connections.id = 'mail/home' AND json_extract(value, '$.capability') = 'imap'
 			AND json_extract(value, '$.data.backoff_until') IS NOT NULL`).Scan(&n); err != nil {
 			t.Fatal(err)
 		}

@@ -40,7 +40,7 @@ func TestARefusedBackgroundRequestHoldsAcrossARestartUntilASuccess(t *testing.T)
 		t.Helper()
 		var n int
 		if err := d.Read.QueryRow(`SELECT COUNT(*) FROM connections, json_each(results_json)
-			WHERE id = 'service/embedding' AND json_extract(value, '$.capability') = 'embeddings'
+			WHERE connections.id = 'service/embedding' AND json_extract(value, '$.capability') = 'embeddings'
 			AND json_extract(value, '$.data.backoff_until') IS NOT NULL`).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
