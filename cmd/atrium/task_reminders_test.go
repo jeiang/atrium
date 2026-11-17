@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -30,19 +28,9 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	}
 	d := mustConnect(t, dir+"/atrium.db", keyFor(t))
 	base, _, stopServe := startServeStoppable(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	for _, step := range []struct {
-		path string
-		form url.Values
-	}{
-		{"/push/subscriptions", browser.form()},
-		{"/channels/assistant/content", url.Values{"content": {"full"}}},
-	} {
-		fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
-		if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications"+step.path, step.form); code != http.StatusOK {
-			t.Fatalf("POST %s = %d %s", step.path, code, body)
-		}
+	subscribeG5(t, base, browser)
+	if got := localWebG5(t, base).do(http.MethodPut, "/web/v1/notifications/channels/assistant", map[string]any{"content": "full"}); got.status != http.StatusNoContent {
+		t.Fatalf("assistant channel content = %d %s", got.status, got.body)
 	}
 	stopServe()
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = unixepoch() WHERE checked_at IS NULL"); err != nil {
