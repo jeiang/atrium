@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/weather"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/weather"
 )
 
 func TestWeatherLocationSettingsSaveAndRefuseOutOfRangeValues(t *testing.T) {

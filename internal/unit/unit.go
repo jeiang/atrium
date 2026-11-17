@@ -10,4 +10,5 @@ const (
 	Grafana       = "grafana"
 	Contacts      = "contacts"
 	Signals       = "signals"
+	Weather       = "weather"
 )

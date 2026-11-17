@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func TestMediaChannelsJobSkipsUntilAShowIsFollowed(t *testing.T) {
@@ -29,7 +29,7 @@ func TestMediaChannelsJobSkipsUntilAShowIsFollowed(t *testing.T) {
 	declareJobsAndParkThem(t, d)
 	tickChannels := func() {
 		t.Helper()
-		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, media.JobChannels)
+		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, library.JobChannels)
 		if ran := runApp(t, "agent", "tick"); ran.code != cli.ExitOK {
 			t.Fatalf("agent tick: exit %d %q", ran.code, ran.stderr)
 		}
@@ -38,10 +38,10 @@ func TestMediaChannelsJobSkipsUntilAShowIsFollowed(t *testing.T) {
 	for range 2 {
 		tickChannels()
 	}
-	if status, text := schedulerStatus(t, d, media.JobChannels); status != "skipped_unconfigured" || !strings.Contains(text, "no show is followed") {
+	if status, text := schedulerStatus(t, d, library.JobChannels); status != "skipped_unconfigured" || !strings.Contains(text, "no show is followed") {
 		t.Fatalf("channels job %s %q with nothing followed, want skipped_unconfigured", status, text)
 	}
-	if n := schedulerRuns(t, d, media.JobChannels); n != 1 {
+	if n := schedulerRuns(t, d, library.JobChannels); n != 1 {
 		t.Fatalf("%d channels job rows after two skipped runs, want one merged row", n)
 	}
 	if n := fetched.Load(); n != 0 || qb.count("add") != 0 {
@@ -61,7 +61,7 @@ func TestMediaChannelsJobSkipsUntilAShowIsFollowed(t *testing.T) {
 	}
 
 	tickChannels()
-	if status, text := schedulerStatus(t, d, media.JobChannels); status != "ok" {
+	if status, text := schedulerStatus(t, d, library.JobChannels); status != "ok" {
 		t.Fatalf("channels job %s %q with a followed show, want ok", status, text)
 	}
 	if n := fetched.Load(); n != 1 {

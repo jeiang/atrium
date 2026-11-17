@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func mediaAudit(t *testing.T, d *db.DB, operation, want string) map[string]int {
@@ -55,7 +55,7 @@ func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	qb.put(mnpTorrent{hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", content: "Dune.2021", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
+	qb.put(mnpTorrent{hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Dune.2021", tags: []string{library.TagMedia}, state: "stoppedDL", content: "Dune.2021", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
@@ -134,8 +134,8 @@ func TestMediaSweepSelectionThenDeleteFailureAuditsPartial(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	qb.put(mnpTorrent{hash: "dddddddddddddddddddddddddddddddddddddddd", name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
-	qb.put(mnpTorrent{hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", name: "Filed", tags: []string{media.TagMedia, media.TagSelected, media.TagFiled}, state: contract.StoppedUP, progress: 1})
+	qb.put(mnpTorrent{hash: "dddddddddddddddddddddddddddddddddddddddd", name: "Dune.2021", tags: []string{library.TagMedia}, state: "stoppedDL", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
+	qb.put(mnpTorrent{hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", name: "Filed", tags: []string{library.TagMedia, library.TagSelected, library.TagFiled}, state: contract.StoppedUP, progress: 1})
 	qb.dropOnce("torrents/delete")
 	if got := runApp(t, "media", "sweep"); got.code != cli.ExitOK {
 		t.Fatalf("sweep: %d %s", got.code, got.stderr)

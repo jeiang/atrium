@@ -46,7 +46,7 @@ var pinnedNames = map[string]string{
 	atrium + "assistant/assistantmodule.apiAbout":      "AboutPage",
 	atrium + "assistant/assistantmodule.apiAgenda":     "AgendaPage",
 	atrium + "assistant/assistantmodule.apiItem":       "TranscriptItem",
-	atrium + "media.Channel":                           "MediaChannel",
+	atrium + "apps/library.Channel":                    "MediaChannel",
 	atrium + "notify.Channel":                          "NotificationChannel",
 	atrium + "notify/application.KindRow":              "NotificationKindRow",
 	atrium + "inference.KindRow":                       "InferenceKindRow",
@@ -63,6 +63,7 @@ var pinnedNames = map[string]string{
 	atrium + "application/commands.Status":             "CommandStatus",
 	atrium + "mail/live.Status":                        "LiveStatus",
 	atrium + "assistant/files.Summary":                 "FileSummary",
+	atrium + "homecard.Weather":                        "HomeWeather",
 }
 
 func componentName(t reflect.Type) string {

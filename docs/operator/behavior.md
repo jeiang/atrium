@@ -416,6 +416,15 @@ up within a few seconds. The settings API keeps refusing flags with 409
 because they are not offered settings. Saving a working connection or
 completing OAuth consent does not turn its module flag on.
 
+Weather is its own app, switched by `weather_enabled`. The first start of a
+version with the Weather app turns it on once when the assistant is on and
+`weather_enabled` has never been set or pinned, so an upgraded system keeps
+its weather; a fresh database leaves it off. With Weather off, the `weather`
+tool is not offered, the Home weather card shows `off`, no forecast is
+fetched, and the built-in weather connection is disabled with the reason "its
+app is off" (the row, its settings and the three location keys stay).
+Turning Weather on again re-enables that connection as untested.
+
 A settings save in the running serve re-checks module requirements after
 commit. That can change route/service availability without a restart if
 requirements changed. Connection saves themselves do not publish a new module
@@ -755,12 +764,13 @@ reserve a 256 MiB free-space floor plus a bounded envelope; insufficient space
 returns 503. Keyed multipart requests fingerprint parsed fields and bytes,
 not the MIME boundary.
 
-## Media and the standalone agent
+## Library and the standalone agent
 
-Media is at `/apps/media`. The application reads the library and files media
-only through `service/media-agent`. With the local NixOS agent, the main
-application and `atrium-run` cannot access the media parent. Only the agent has
-that filesystem access and the library group.
+Library (shown as "Library"; its app id, flag and setting keys stay `media`,
+`media_enabled` and `media_*`) is at `/apps/media`. The application reads the
+library and files media only through `service/media-agent`. With the local
+NixOS agent, the main application and `atrium-run` cannot access the media
+parent. Only the agent has that filesystem access and the library group.
 
 The agent control listener checks bearer and Host. The module binds control to
 loopback. Its optional TLS VPN listener instead checks peer CIDRs at accept
@@ -790,6 +800,20 @@ are refused inputs.
   old `tools.tool_media_downloads_enabled` and
   `tools.tool_media_add_magnet_enabled` keys are retired: an environment pin is
   ignored with a warning, as for any retired key.
+- Library tool renames: `media_library_search` is now `library_search`,
+  `media_channels` is `library_following`, `media_channel_add` is
+  `library_follow` and `media_channel_remove` is `library_unfollow`. Their
+  `tools.tool_<old name>_enabled` keys are retired. Ledger operations,
+  undo kinds, job keys and the notification channel keep their `media`
+  names, so earlier history stays listed (Activity category `library`),
+  attributed and undoable. A pending proposal made under an old tool name
+  before this release has no executor; ask again.
+- The notification channel `media` keeps its key and stored choices and is
+  shown as "Library". The followed-show poll (`media-channels`) records
+  `skipped_unconfigured` with "no show is followed" and calls nothing while
+  no show is followed. With Torrents off, `/api/v1/apps` and
+  `/settings/media` show Library as needing Torrents and its jobs record
+  `skipped_module`; Torrents keeps working with Library off.
 - A successful add on `/apps/media/add` shows the Downloads page with an
   "Added" notice when Library is on, and the add page with the notice when it
   is off.

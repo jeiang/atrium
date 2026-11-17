@@ -20,11 +20,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 type mnpFile struct {
@@ -387,8 +387,8 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, name+".mkv"), make([]byte, 100))
 	mnpWrite(t, filepath.Join(content, name+".en.srt"), make([]byte, 100))
-	qb.put(mnpTorrent{hash: ready, name: name, tags: []string{media.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
-	qb.put(mnpTorrent{hash: busy, name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", content: "Dune.2021",
+	qb.put(mnpTorrent{hash: ready, name: name, tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: busy, name: "Dune.2021", tags: []string{library.TagMedia}, state: "stoppedDL", content: "Dune.2021",
 		files: []mnpFile{{0, "Dune.2021.mkv", 0}, {1, "Dune.2021.nfo", 1}}})
 	qb.put(mnpTorrent{hash: plain, name: "plain.thing", state: "stoppedDL", content: "plain.thing",
 		files: []mnpFile{{0, "c.mkv", 0}, {1, "c.txt", 1}}})
@@ -409,7 +409,7 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 
 	magnet := "magnet:?xt=urn:btih:" + fresh + "&dn=Lanterns.S01E09"
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK)
-	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != "atrium,"+media.TagMedia {
+	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != "atrium,"+library.TagMedia {
 		t.Fatalf("media add sent %v", got)
 	}
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {"magnet:?xt=urn:btih:" + strings.Repeat("e", 40)}, "mode": {"plain"}}, http.StatusOK)
@@ -425,7 +425,7 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "tv", "Lanterns (2026)")); !os.IsNotExist(err) {
 		t.Fatalf("preview touched the library: %v", err)
 	}
-	if tags, _ := qb.state(ready); slices.Contains(tags, media.TagFiled) {
+	if tags, _ := qb.state(ready); slices.Contains(tags, library.TagFiled) {
 		t.Fatal("preview tagged the torrent filed")
 	}
 	b.want(http.MethodPost, "/apps/media/file", form("file"), http.StatusOK)
@@ -437,7 +437,7 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 	if err != nil || !os.SameFile(src, dst) {
 		t.Fatalf("filing did not hardlink the download into the library: %v", err)
 	}
-	if tags, _ := qb.state(ready); !slices.Contains(tags, media.TagFiled) {
+	if tags, _ := qb.state(ready); !slices.Contains(tags, library.TagFiled) {
 		t.Fatalf("filed torrent tags %v", tags)
 	}
 
@@ -497,7 +497,7 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 	}
 
 	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}, http.StatusOK)
-	if len(qb.added) != 1 || qb.added[0].Get("tags") != "atrium,"+media.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
+	if len(qb.added) != 1 || qb.added[0].Get("tags") != "atrium,"+library.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
 		t.Fatalf("backfill adds = %v", qb.added)
 	}
 }
@@ -505,7 +505,7 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 func mnpSign(key, rel string, exp int64) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	_, _ = mac.Write([]byte(rel + "\n" + strconv.FormatInt(exp, 10)))
-	return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, mnpQuote(rel), exp, hex.EncodeToString(mac.Sum(nil)))
+	return fmt.Sprintf("%s%s?exp=%d&sig=%s", library.FilePrefix, mnpQuote(rel), exp, hex.EncodeToString(mac.Sum(nil)))
 }
 
 func mnpQuote(s string) string {
@@ -535,7 +535,7 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	mnpWrite(t, filepath.Join(root, movie), []byte(body))
 	mnpWrite(t, filepath.Join(root, "downloads", "secret.mkv"), []byte("do not serve"))
 	setEnv(t, settingEnv(config.KeyPublicURL), "https://atrium.test")
-	setEnv(t, settingEnv(media.KeyVPNBaseURL), "https://artemis.vpn:8443")
+	setEnv(t, settingEnv(library.KeyVPNBaseURL), "https://artemis.vpn:8443")
 	keyFile := filepath.Join(dir, "link.key")
 	if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -564,7 +564,7 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	}
 
 	page := expect("movie page with the group", "/apps/media/library/movie/Dune%20%282021%29", http.StatusOK, "Remote-Groups", group)
-	i := strings.Index(page, `href="https://atrium.test`+media.FilePrefix)
+	i := strings.Index(page, `href="https://atrium.test`+library.FilePrefix)
 	if i < 0 {
 		t.Fatalf("no signed public link on the movie page: %.600s", page)
 	}
@@ -584,8 +584,8 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	expect("tampered signature with a range", mnpFlipLast(good), http.StatusForbidden, "Range", "bytes=10-19")
 	exp := good[strings.Index(good, "exp=")+4 : strings.Index(good, "&sig=")]
 	expect("tampered expiry", strings.Replace(good, "exp="+exp, "exp="+exp+"0", 1), http.StatusForbidden)
-	expect("unsigned", media.FilePrefix+mnpQuote(movie), http.StatusForbidden)
-	expect("unsigned with the group", media.FilePrefix+mnpQuote(movie), http.StatusForbidden, "Remote-Groups", group)
+	expect("unsigned", library.FilePrefix+mnpQuote(movie), http.StatusForbidden)
+	expect("unsigned with the group", library.FilePrefix+mnpQuote(movie), http.StatusForbidden, "Remote-Groups", group)
 	expect("expired", mnpSign(key, movie, 1_000_000_000), http.StatusForbidden)
 	expect("another key", mnpSign("other", movie, far), http.StatusForbidden)
 	expect("pinned key", mnpSign(key, movie, far), http.StatusOK)

@@ -751,7 +751,7 @@ in {
     };
 
     media = {
-      enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs the media agent connection, from services.atrium.mediaAgent or an explicit services.atrium.connections.\"service/media-agent\"";
+      enable = mkEnableOption "the Library app (unit media): followed shows (EZTV channels), filing and the library; needs the media agent connection, from services.atrium.mediaAgent or an explicit services.atrium.connections.\"service/media-agent\"";
 
       group = mkOption {
         type = types.str;

@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail/tracking"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/ops"
 )
 
@@ -288,11 +288,11 @@ func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *test
 
 	tick := func() (string, string) {
 		t.Helper()
-		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, media.JobChannels)
+		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, library.JobChannels)
 		if ran := runApp(t, "agent", "tick"); ran.code != cli.ExitOK {
 			t.Fatalf("agent tick: exit %d %q", ran.code, ran.stderr)
 		}
-		return schedulerStatus(t, d, media.JobChannels)
+		return schedulerStatus(t, d, library.JobChannels)
 	}
 	if status, text := tick(); status != "ok" {
 		t.Fatalf("priming channels run %s %q, want ok", status, text)
@@ -308,7 +308,7 @@ func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *test
 		!strings.Contains(text, "repair connection:service/eztv:unreachable at /settings/connections") {
 		t.Fatalf("channels run with the feed failing = %s %q, want skipped_dependency naming the EZTV repair", status, text)
 	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.status = 'skipped_dependency'", media.JobChannels); n != 2 {
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = ? AND r.status = 'skipped_dependency'", library.JobChannels); n != 2 {
 		t.Fatalf("%d skipped_dependency channel runs, want 2 unmerged rows", n)
 	}
 }

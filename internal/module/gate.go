@@ -59,11 +59,15 @@ func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (sett
 		view.Error = held.Detail
 	}
 	if snap := s.Current(); snap != nil {
-		if st, _ := snap.Status(name); st.State == Unavailable {
+		st, _ := snap.Status(name)
+		if st.State == Unavailable {
 			view.Error = st.Err
 		}
 		if view.Error == "" {
 			view.Error = s.unavailableDependency(snap, name)
+		}
+		if view.Error == "" && view.Reason == "" && st.State == NeedsSettings {
+			view.Reason = joinReasons(st.Unmet)
 		}
 	}
 	if view.On && view.Error == "" {

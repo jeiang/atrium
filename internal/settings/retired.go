@@ -117,6 +117,10 @@ var Retired = []RetiredKey{
 	{Module: "web", Key: "snooze_choices"},
 	{Module: "tools", Key: "tool_media_downloads_enabled"},
 	{Module: "tools", Key: "tool_media_add_magnet_enabled"},
+	{Module: "tools", Key: "tool_media_library_search_enabled"},
+	{Module: "tools", Key: "tool_media_channels_enabled"},
+	{Module: "tools", Key: "tool_media_channel_add_enabled"},
+	{Module: "tools", Key: "tool_media_channel_remove_enabled"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

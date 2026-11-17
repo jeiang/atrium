@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/weather"
 )
 
 type Querier = db.Querier
@@ -31,11 +30,6 @@ var ErrAllBusy = scheduler.ErrAllBusy
 func (s *Service) RunDict(ctx context.Context, runID int64) (map[string]any, error) {
 	return service.RunDict(ctx, s.db.Read, runID)
 }
-
-const (
-	WeatherForecastDays = weather.TuningWeatherForecastDays
-	WeatherHourlyHours  = weather.TuningWeatherHourlyHours
-)
 
 const LoopResearch = loop.Research
 
