@@ -228,7 +228,7 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 }
 func markedKind(kind string) bool {
 	switch kind {
-	case "event_candidate", "commitment", "draft", "loop", "package":
+	case "commitment", "draft", "loop", "package":
 		return true
 	}
 	return false
@@ -328,8 +328,6 @@ func lines(result attention.Result, dream dreaming) (today, push []block.DigestL
 
 func label(kind string) string {
 	switch kind {
-	case "event_candidate":
-		return "event candidates"
 	case "commitment":
 		return "commitments"
 	case "draft":

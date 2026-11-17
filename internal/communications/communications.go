@@ -65,9 +65,12 @@ type Deferral interface {
 }
 
 type Prefilter struct {
-	Received bool
-	Ordered  bool
-	Subject  []string
+	Received     bool
+	Ordered      bool
+	Subject      []string
+	Inbox        bool
+	Unseen       bool
+	ArrivedSince float64
 }
 
 type Scan struct {

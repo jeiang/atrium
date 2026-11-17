@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,15 +19,14 @@ import (
 	"github.com/jeiang/atrium/internal/unit"
 )
 
-const feedReadersWant = `1|Power bill 1|none|
-2|Power bill 2|none|
-91|Invitation: Dentist appointment|proposed|calendar invitation
+const feedReadersWant = `1|Power bill 1|0
+2|Power bill 2|0
+91|Invitation: Dentist appointment|1
 calendar_event|calendar|pending|Add to calendar: Dentist appointment (2027-10-20 14:00)|{"calendar":"icloud","spec":{"uid":"dentist-20271020@clinic.example","title":"Dentist appointment","start":"2027-10-20T14:00:00+00:00","end":"2027-10-20T15:00:00+00:00","all_day":false,"location":"Clinic Room 2","notes":"Routine check-up"},"source":{"from":"calendar@clinic.example","invitation":true,"message_id":91,"subject":"Invitation: Dentist appointment"}}|{"calendar":"icloud","title":"Dentist appointment","start":"2027-10-20T14:00:00+00:00","end":"2027-10-20T15:00:00+00:00","all_day":false,"location":"Clinic Room 2","notes":"Routine check-up","source":{"from":"calendar@clinic.example","invitation":true,"message_id":91,"subject":"Invitation: Dentist appointment"}}
-calendar candidates: exit 0 candidates 2 proposed 0
-Message ids: <icloud> (calendar=icloud), <gmail> (calendar=google)
+event calls: Power bill 1, Power bill 2
 `
 
-func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
+func TestMailPassProposesEventsThroughTheFeed(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, loadGoldenData(t), nil, "")
 	path := filepath.Join(f.dir, "atrium.db")
@@ -45,11 +43,11 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 	if err := os.WriteFile(invite, []byte(strings.NewReplacer("20261020T", "20271020T", "dentist-20261020@", "dentist-20271020@").Replace(string(raw))), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	targets := "account = 'icloud' AND (subject LIKE 'Invitation:%' OR id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 2))"
 	var before int64
 	for _, q := range []string{
-		"DELETE FROM event_candidates",
 		"UPDATE messages SET seen = 1 WHERE account = 'icloud'",
-		"UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL WHERE account = 'icloud' AND (subject LIKE 'Invitation:%' OR id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 2))",
+		"UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL, first_seen = (SELECT applied_at FROM schema_migrations WHERE version = 8) + 1 WHERE " + targets,
 	} {
 		if _, err := d.Write.Exec(q); err != nil {
 			t.Fatal(err)
@@ -58,6 +56,16 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COALESCE(MAX(id), 0) FROM proposals").Scan(&before); err != nil {
 		t.Fatal(err)
 	}
+	var mu sync.Mutex
+	var events []string
+	f.api.SetOnRequest(func(req anthropictest.Request) {
+		body := req.JSON(t)
+		if callerOf(t, body) == "event" {
+			mu.Lock()
+			events = append(events, subjectIn(body))
+			mu.Unlock()
+		}
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if code, _, stderr := f.Run(ctx, "sync", "--account", "icloud"); code != cli.ExitOK {
@@ -96,38 +104,12 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 			got.WriteString(line + "\n")
 		}
 	}
-	dump("SELECT e.message_id, m.subject, e.status, e.reason FROM event_candidates e JOIN messages m ON m.id = e.message_id ORDER BY e.message_id")
+	dump("SELECT s.message_id, m.subject, s.found FROM mail_scans s JOIN messages m ON m.id = s.message_id WHERE s.kind = 'events' ORDER BY s.message_id")
 	dump("SELECT kind, account, status, title, payload, preview FROM proposals WHERE id > ? ORDER BY id", before)
-
-	var icloud, gmail int64
-	if err := d.Read.QueryRow("SELECT MIN(id) FROM messages WHERE account = 'icloud' AND id NOT IN (SELECT message_id FROM event_candidates)").Scan(&icloud); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.Read.QueryRow("SELECT MIN(id) FROM messages WHERE account = 'gmail'").Scan(&gmail); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("INSERT OR REPLACE INTO event_candidates (message_id, reason, status, ts) VALUES (?, 'test', 'queued', 3), (?, 'test', 'queued', 2), (999999, 'gone', 'queued', 1)",
-		gmail, icloud); err != nil {
-		t.Fatal(err)
-	}
-	f.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	code, stdout, stderr := f.Run(ctx, "calendar", "candidates")
-	var result struct {
-		Candidates int   `json:"candidates"`
-		Proposed   int   `json:"proposed"`
-		RunID      int64 `json:"run_id"`
-	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
-		t.Fatalf("calendar candidates: exit %d %q %q: %v", code, stdout, stderr, err)
-	}
-	fmt.Fprintf(&got, "calendar candidates: exit %d candidates %d proposed %d\n", code, result.Candidates, result.Proposed)
-	var prompt string
-	if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = (SELECT thread_id FROM runs WHERE id = ?) AND role = 'user' ORDER BY seq LIMIT 1",
-		result.RunID).Scan(&prompt); err != nil {
-		t.Fatal(err)
-	}
-	ids := regexp.MustCompile(`Message ids: [^"\\]*`).FindString(prompt)
-	got.WriteString(strings.NewReplacer(strconv.FormatInt(gmail, 10), "<gmail>", strconv.FormatInt(icloud, 10), "<icloud>").Replace(ids) + "\n")
+	mu.Lock()
+	slices.Sort(events)
+	fmt.Fprintf(&got, "event calls: %s\n", strings.Join(events, ", "))
+	mu.Unlock()
 	if got.String() != feedReadersWant {
 		t.Errorf("feed readers output changed:\n%s", got.String())
 	}

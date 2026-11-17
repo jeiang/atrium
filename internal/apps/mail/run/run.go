@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/router"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
-	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
@@ -78,7 +77,6 @@ type Pass struct {
 	Applier    *applier.Applier
 	Classifier *classifier.Service
 	Classify   *classify.Service
-	Events     func(ctx context.Context, account string, paid *classify.Deferral) (invites, candidates int, err error)
 	Extras     []Extra
 	Scans      func(context.Context) []Extra
 	resolve    func(ctx context.Context) (*classifier.Service, error)
@@ -112,12 +110,6 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		Applier:  applier.New(l, open, syncer),
 	}
 	p.use(c)
-	p.Events = func(ctx context.Context, account string, paid *classify.Deferral) (int, int, error) {
-		if !module.IsEnabled(ctx, unit.Calendar) {
-			return 0, 0, nil
-		}
-		return candidates.ScanAccount(ctx, d, account, eventJudge{classify: p.Classify, paid: paid}, env, now)
-	}
 	p.Extras = []Extra{
 		{"open loops", func(ctx context.Context, paid *classify.Deferral) (any, error) {
 			return module.RefreshCommunications(ctx, d, now(), module.Refresh{Env: env, Classifier: p.Classifier, Paid: paid, Clock: now})
@@ -247,15 +239,6 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 			return err
 		}
 		log.Info("account routed", "account", account, "routed", routed, "flagged", flagged)
-		invites, candidates, err := p.Events(ctx, account, paid)
-		switch {
-		case errors.Is(err, httpx.ErrPayload):
-			log.Error("event scan failed", "account", account, logx.Err, err.Error())
-		case err != nil:
-			return err
-		default:
-			log.Info("event scan done", "account", account, "invites", invites, "candidates", candidates)
-		}
 		applied, deleted, err := p.Applier.ApplyAll(ctx, account)
 		switch {
 		case err != nil:

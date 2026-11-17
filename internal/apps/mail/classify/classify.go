@@ -37,14 +37,6 @@ func (s *Service) JudgeFlag(ctx context.Context, item classifier.Item, m Message
 	return flags, err
 }
 
-func (s *Service) JudgeEvent(ctx context.Context, item classifier.Item, m Message, body string) (bool, error) {
-	var answer struct {
-		HasEvent bool `json:"has_event"`
-	}
-	err := s.judge(ctx, classifier.Event, item, eventSystem, messagePrompt(m, body), eventSchema, &answer)
-	return answer.HasEvent, err
-}
-
 func (s *Service) judge(ctx context.Context, caller classifier.Caller, item classifier.Item, system, user string, schema json.RawMessage, v any) error {
 	raw, err := s.c.Classify(ctx, classifier.Request{Caller: caller, Item: item, System: system, User: user, Schema: schema})
 	if err != nil {

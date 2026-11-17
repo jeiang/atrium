@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	mailclassify "github.com/jeiang/atrium/internal/apps/mail/classify"
@@ -130,8 +131,21 @@ func prefilter(p communications.Prefilter) string {
 	if len(alts) > 0 {
 		hint = strings.Join(alts, " OR ")
 	}
+	var must []string
 	if p.Received {
-		return "m.sent = 0 AND (" + hint + ")"
+		must = append(must, "m.sent = 0")
 	}
-	return hint
+	if p.Inbox {
+		must = append(must, "m.in_inbox = 1")
+	}
+	if p.Unseen {
+		must = append(must, "m.seen = 0")
+	}
+	if p.ArrivedSince > 0 {
+		must = append(must, "m.first_seen >= "+strconv.FormatFloat(p.ArrivedSince, 'f', -1, 64))
+	}
+	if len(must) == 0 {
+		return hint
+	}
+	return strings.Join(must, " AND ") + " AND (" + hint + ")"
 }
