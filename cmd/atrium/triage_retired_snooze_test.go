@@ -19,6 +19,7 @@ import (
 )
 
 func TestMailRetiredSnoozeRowsStayReadableAndNeverApply(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	h, x := mailtest.RawWith("Old receipt", "shop@store.test", "retired-1", "Your receipt.")

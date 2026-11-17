@@ -108,6 +108,7 @@ func TestPlatformPauseHonorsTheOldBinaryPauseFileForMailWrites(t *testing.T) {
 }
 
 func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
@@ -221,6 +222,7 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 }
 
 func TestPlatformPauseIsNotAnAgentTool(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	start := len(api.Requests())

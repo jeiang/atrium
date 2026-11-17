@@ -285,6 +285,7 @@ func oidcBrowser(t *testing.T, base string, idp *oidctest.Provider, user string)
 }
 
 func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	owner := s.token("owner")
 
@@ -363,6 +364,7 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 }
 
 func TestThreadTranscriptRevision(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	owner := s.token("owner")
 	made := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "hello there"})
@@ -401,6 +403,7 @@ func TestThreadTranscriptRevision(t *testing.T) {
 }
 
 func TestMeConditionalAndErrorMembers(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	owner := s.token("owner")
 	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
@@ -440,6 +443,7 @@ func TestMeConditionalAndErrorMembers(t *testing.T) {
 }
 
 func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {
+	t.Parallel()
 	moduleFixture(t, flagsExcept("", ""))
 	issued := runApp(t, "auth", "token", "issue", "--name", "phone")
 	if issued.code != cli.ExitOK {
@@ -466,6 +470,7 @@ func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {
 }
 
 func TestAPIChatSendStreamsTheRun(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	owner := s.token("owner")
 
@@ -593,6 +598,7 @@ func (s *apiSite) browser() *http.Client {
 }
 
 func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "1"); ran.code != cli.ExitOK {
@@ -629,6 +635,7 @@ func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
 }
 
 func TestStartRefusedAfterTheThreadRowLeavesNoThread(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := asstDB(t, dir)

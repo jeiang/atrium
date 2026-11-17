@@ -24,6 +24,7 @@ func spaceItem(t *testing.T, items []any, key string, want any) map[string]any {
 }
 
 func TestKnowledgeSpacesKeepProjectContent(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

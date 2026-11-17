@@ -49,10 +49,12 @@ export function navLinks(app: AppEntry): NavLink[] {
     href: `${base}${item.path}`,
     leaves: false,
   }));
-  const legacy = app.nav.map((item) => {
-    const path: string | undefined = screens[item.url];
-    return { label: item.label, href: path ? `${base}${path}` : item.url, leaves: path === undefined };
-  });
+  const legacy = app.nav
+    .map((item) => {
+      const path: string | undefined = screens[item.url];
+      return { label: item.label, href: path ? `${base}${path}` : item.url, leaves: path === undefined };
+    })
+    .filter((item) => !own.some((mine) => mine.href === item.href));
   return [...own, ...legacy];
 }
 

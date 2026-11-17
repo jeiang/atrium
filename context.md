@@ -252,7 +252,15 @@ claims about the running application. Operator contracts are in
   `service/webpush` connection's `credential_files.vapid_private` host file,
   and the subject comes from `webpush_subject`, edited on the Notifications page,
   which the notifications module requires. A push carries the title, a body of at most 240 characters and a
-  URL path to the signed-in page for its subject; it has no action buttons and opening it writes nothing. It is encrypted per
+  path in the new client for its subject; it has no action buttons and opening it writes nothing. The notifier maps the
+  stored link at send time (`urlx.ClientBase`, `/next/` until the client moves to `/`): `/proposals/{id}`, `/drafts/{id}`
+  and `/chat/{id}` keep their path under the base, the Notifications and Connections settings pages map to their
+  new-client pages, `/scheduled` maps to Routines and anything else opens the Inbox. Stored notification rows keep their
+  original link, and a resend maps it again. A click focuses a window already on that address, else navigates the
+  worker's open window there, else opens one; both the new client worker and the classic root worker (which holds
+  older subscriptions) do this. The new client worker also sends an already shown `/proposals/{id}`, `/drafts/{id}` or
+  `/chat/{id}` to its base. A decided or unknown item opens the Inbox saying nothing waits there; signed out, sign-in
+  returns to the card. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
@@ -320,7 +328,7 @@ claims about the running application. Operator contracts are in
   contacts/calendar concern and are not an open-loop source.
 - Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain.
 - A permission proposal sends an assistant notification whose push opens
-  `/proposals/{id}`, where the operator decides it while signed in. The
+  `/next/proposals/{id}`, where the operator decides it while signed in. The
   generated `action_link_key` secret, or the host file's
   `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
   fingerprints; host-file bytes are never copied into the database.
@@ -559,7 +567,15 @@ claims about the running application. Operator contracts are in
   keeps the explicit test. `connections test <id> --trace <capability>` runs a
   kind's `Trace` hook (iCloud `caldav`/`carddav`) on a read-only lease: the
   same discovery printed request by request with ids, users and addresses
-  masked, and nothing saved.
+  masked to keyed six-letter tags, response times, and nothing saved;
+  `--repeat <n>` (at most 5, 3 s apart) resends the last refused request.
+  `internal/davmirror` keeps an in-memory discovery cache per capability,
+  endpoint and credential hash (home set, collections, relisted hourly,
+  dropped on 401/403/404/410), a 20-minute memory of each finished sync's
+  result that the iCloud `Silent` check reuses (otherwise it relists the
+  cached home set), and retries a challenge-less, empty 401
+  after the password was accepted at most twice per run (2 s and 6 s,
+  jittered).
 - qBittorrent and the embedding endpoint have a 6-hour grace window,
   compiled into their connection kinds. A failure right after an `ok` or
   `expiring` state stores `failing` with the window end in its result;
@@ -1005,7 +1021,8 @@ claims about the running application. Operator contracts are in
   declared, and a job whose needed module is off
   records `skipped_module`. Core (settings, secrets, `db`,
   `serve`, the About, review and activity pages) is always on; mail,
-  calendar, contacts, media, assistant, notifications and Grafana each
+  calendar, contacts, media, packages, torrents, weather, assistant,
+  notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
   read-only. A module is on only when its flag is true
@@ -1039,8 +1056,9 @@ claims about the running application. Operator contracts are in
   the flag through the settings write and publishes the new module set, and
   the core `module-flags` service polls the settings revision counter every
   two seconds so a flag written by a separate CLI process reaches a running
-  serve. `apps.list` (`GET /apps`) is the manifest of the four apps (mail,
-  calendar, media, grafana); the assistant, contacts and notifications are
+  serve. `apps.list` (`GET /apps`) is the manifest of the seven apps (mail,
+  calendar, media, packages, torrents, weather, grafana); the assistant,
+  contacts and notifications are
   core units the switch refuses (`core_unit`). The settings API still refuses
   module flags, no assistant tool writes one, and the system prompt lists the
   apps that are off. The assistant tool
@@ -1276,7 +1294,10 @@ claims about the running application. Operator contracts are in
   videos) gets a non-undoable `media_import_cleanup` effect. `atrium media
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
-  agent are refused.
+  agent are refused. The agent refuses (`only_copy`, nothing changed) an
+  inverse that would unlink a placed file with a link count below
+  2, both when it derives the inverse and again before each unlink, so an
+  undo after the sweep deleted the download keeps the library copy.
 - Torrent and library undo: every operator or agent pause or resume that
   changes the torrent's state records the opposite action as undo kind
   `media_torrent_state`, and every operator tag change that changes the tags
@@ -1756,14 +1777,25 @@ claims about the running application. Operator contracts are in
   message carries `id="m<seq>"` and a Reference action that copies
   `@thread/12/m<seq>`.
 - The NixOS public auth default is OIDC; first-hour bootstrap uses the keyed database from its first start and the same-process emergency listener, with host-declared OIDC configuration activated automatically when valid.
+- The OIDC session cookie and the CSRF cookie are `SameSite=Strict`; only the
+  10-minute sign-in binding cookie stays `SameSite=Lax` so the provider's
+  cross-site return to `/auth/callback` carries it. A signed-out page request
+  that the browser marks as a cross-site navigation (`Sec-Fetch-Site:
+  cross-site`, `Sec-Fetch-Mode: navigate`) gets a 200 "Continue to Atrium"
+  page whose meta refresh reloads the same address from atrium, so links from
+  mail or other sites and the return after sign-in land signed in instead of
+  looping through `/login`. Real-browser coverage is
+  `TestGuardBrowserSignInReturnsAcrossSites`, which runs
+  `web/e2e-live` in the engines named by `ATRIUM_E2E_BROWSERS`.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy
   identity headers count only when the socket peer is in the trusted proxy
   list (`--trusted-proxy` or the host's `web.trusted_proxy_cidrs`); from any
   other peer the request carries no identity. A proxy mode with an empty list
   refuses to start (exit 78). Every
-  admitted proxy request or OIDC session is the one operator with full
-  authority; no role distinguishes them. A separate local mode provides
+  admitted proxy, OIDC or local identity is the one operator with full
+  authority; there is no administrator role, no login link and no remote
+  emergency bypass. A separate local mode provides
   loopback access: it binds only a numeric loopback address, refuses any other
   bind at startup, and rejects a request whose socket peer is not loopback
   regardless of forwarded address headers. `serve --emergency-port` runs such a
@@ -1844,7 +1876,10 @@ claims about the running application. Operator contracts are in
   401 there carries `sign_in` (`modes`, `login_url` under OIDC, `csrf_token`);
   sign-in itself stays `/login` and the OIDC callback.
 - Every typed binding is mounted through `internal/api` under both `/api/v1`
-  and `/web/v1` by one loop in `internal/web`.
+  and `/web/v1` by one loop in `internal/web`, so the two route sets differ
+  only by the session routes. The guard picks the authenticator from the path
+  prefix (`/api` or `/web`) before it reads any credential, never from
+  request headers, and no route accepts both.
   `docs/api/openapi.json` and `docs/api/reach.json` are generated from the
   catalog (`atrium catalog openapi --output docs/api`, drift-checked by
   `--check`). Approval-only operations count as reached through
@@ -1894,8 +1929,10 @@ claims about the running application. Operator contracts are in
   location change discards the held reading, so the next `/home` answers
   `loading` and refreshes for the new place.
 - The embedded web client is served at `/next/` on every listener, the
-  emergency listener included, beside the server-rendered UI; nothing links
-  to it yet, and `/next` redirects there. A `/next/...` GET that accepts HTML
+  emergency listener included, beside the server-rendered UI, which does not
+  link to it; push notifications open their card or page there, a Google
+  consent started from the client returns there, and `/next` redirects
+  there. A `/next/...` GET that accepts HTML
   and names no embedded file gets the client's `index.html` (`no-cache`).
   Files under `/next/assets/` are content-hashed and cached for a year as
   immutable; an unknown one is 404, never the document. Precompressed `.br`
@@ -2020,25 +2057,32 @@ claims about the running application. Operator contracts are in
   is not the planned source when it returns.
 - Cost accounting should explain usage by job and run. Recorded runs should
   support evaluating application and model changes.
+- The web UI becomes the separately built static client in `web/`, embedded
+  in the binary, that uses only `/web/v1`. The server-rendered pages, htmx,
+  Basecoat and `app.js` are removed in one cutover, not route by route, after
+  the operator confirms 14 days of daily use of the client. Until then the
+  server-rendered UI is the default and the client stays at `/next/`.
 
 ## Planned capabilities
 
 ### Life-management redesign
 
-- **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
-- **Drafts are written, edited and sent in chat.**
-- **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
-- **Scheduled runs** are managed from chat, with a list in Library. **Projects** became **spaces** in Knowledge. **Mail rules** and **decisions** live under the one Mail entry.
-- **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
-- **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
-- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+Each item says what is implemented on `main` and what is still planned.
+
+- **The day is home.** Implemented in the server-rendered UI: Today (`/chat`) and threads, the Review, Library and Apps hubs (the Media app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
+- **Drafts in chat.** Implemented: the assistant writes and edits mail drafts in chat (`draft_email_create`, `draft_email_update`); sending stays an operator action.
+- **Skills are removed.** Implemented.
+- **Settings is a page per module.** Implemented in the server-rendered UI: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state and shows that module's connection records; the app flags are switched on the client's Apps page (`PUT /apps/{id}/enabled`), the CLI or the host file. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Scheduled runs** are managed from chat, with a list in Library. **Mail rules** and **decisions** live under the one Mail entry. **Projects** become **spaces** in Knowledge: implemented in the `/next/` client; the server-rendered UI still calls them projects.
+- **Look A:** implemented in the server-rendered UI: warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens. The cutover replaces it with the client's design tokens below.
+- **Notifications:** implemented: the in-app inbox is canonical, with Web Push. Planned: APNs with a future iOS app.
+- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`. The server-rendered UI remains the default web UI and does not link to it; push notifications open their card or page in the client, and a Google consent started from the client returns there. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
 - **New web client shell:** `/next/` opens with a frame prerendered in its HTML, then signs in through `GET /web/v1/session` only: a 401 with `login_url` sends the browser there once with a same-origin `next`, a 401 without it shows what to do, and a 503 or a network failure offers a retry. Signed in, it shows Home, Plan, Knowledge, Apps and Assistant in a rail (Inbox with the `needs_you` count, enabled apps under Apps, and Chats, Settings and Sign out behind the avatar), or Home, Decide, Chats and Spaces in a phone tab bar. Modules turned off hide their entries. One tab per browser holds the `/web/v1/events` stream and shares its notices with the others. Pages not yet built link to the same place in the server-rendered UI, which stays the default.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
-- **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
-- **An iOS app** through the `/api/v1` JSON API. Chat with attachments, the run stream, the inbox, approvals, undo entries and drafts are implemented; APNs push registration is deferred.
-- **Birthdays** are the read-only Birthdays calendar of the Calendar app
+- **Integrations:** implemented: weather from Open-Meteo (the Weather app) and package tracking through the Ship24 free tier for flagged packages (the Packages app). Planned: WeatherKit.
+- **An iOS app** through the `/api/v1` JSON API is planned. The API side of chat with attachments, the run stream, the inbox, approvals, undo entries and drafts is implemented; APNs push registration is deferred.
+- **Birthdays** (implemented) are the read-only Birthdays calendar of the Calendar app
   (calendar id `birthdays`), derived at read time from contact dates of kind
   `birthday` in the contacts mirror: an all-day entry titled
   `Birthday: <name>`, with `(turns N)` when the birth year is known, and a
@@ -2048,7 +2092,7 @@ claims about the running application. Operator contracts are in
   `calendar_update`, `calendar_rsvp` and `calendar_delete` refuse its entries
   (change the date on the contact). Anniversaries are not listed. Contacts
   keep their dates with Calendar off.
-- **Open loops** cover only mail addressed to the owner that needs a reply.
+- **Open loops** (implemented) cover only mail addressed to the owner that needs a reply.
 
 ### Other
 
@@ -2062,8 +2106,6 @@ claims about the running application. Operator contracts are in
 - Four lifecycle services use protocol-only `lifecycle` bindings instead of
   application operations: assistant initialization, core embedding index,
   core recovery and media catalogue refresh.
-- Module flags are restart-only. There is no runtime toggle and no
-  cross-process signal from `atrium settings set` to a running serve.
 - A settings save in the running serve re-checks every module's
   requirements after commit and can turn a module on or drain it. Whether
   requirement changes should publish on their own is unresolved.

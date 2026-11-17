@@ -67,6 +67,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 }
 
 func TestInboxPageAndAPIShareBounds(t *testing.T) {
+	t.Parallel()
 	site := newAPISite(t)
 	owner := site.token("owner")
 	d := mustConnect(t, filepath.Join(site.dir, "atrium.db"), keyFor(t))
@@ -140,6 +141,7 @@ func TestInboxPageAndAPIShareBounds(t *testing.T) {
 }
 
 func TestNotificationOperationAuditsTrustedRun(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	result := toolResult(t, "notify", map[string]any{"title": "Audit notification", "body": "private notification body", "thread_id": 999999, "run_id": 999999})
 	if !strings.Contains(result, `"recorded": true`) && !strings.Contains(result, `"recorded":true`) {
@@ -161,6 +163,7 @@ func TestNotificationOperationAuditsTrustedRun(t *testing.T) {
 }
 
 func TestNotificationOperationKeepsRunAndNightlyCaps(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"chat", "nightly"} {
 		t.Run(kind, func(t *testing.T) {
 			dir, _, _ := moduleFixture(t, flagsExcept("", ""))

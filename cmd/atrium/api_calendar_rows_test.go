@@ -15,6 +15,7 @@ const (
 )
 
 func TestCalendarListRowsCarryTheWriteTargetAndRevision(t *testing.T) {
+	t.Parallel()
 	_, srv := davFixture(t)
 	seedSettings(t, map[string]string{"tz": "America/New_York"})
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", strings.Replace(dentistICS, "SUMMARY:Dentist", "SUMMARY:Dentist\r\nDESCRIPTION:Bring the card", 1))

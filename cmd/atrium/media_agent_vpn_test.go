@@ -59,6 +59,7 @@ func vpnRequest(t *testing.T, method, target, host string, header http.Header) (
 }
 
 func TestVPNListenerServesOnlyLibraryFiles(t *testing.T) {
+	t.Parallel()
 	vpn := heldListener(t)
 	addr := vpn.Addr().String()
 	agent := startMediaAgent(t, mediaAgentOpts{vpn: vpn, extra: vpnTable(addr, "127.0.0.1/32")})
@@ -151,6 +152,7 @@ const (
 )
 
 func TestLibraryLinksUseOneVPNBase(t *testing.T) {
+	t.Parallel()
 	movieRel := "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
 	search := func(t *testing.T, base string) (*asstWeb, librarySearch, librarySearch, librarySearch, *mediaAgent, string) {
 		t.Helper()
@@ -237,6 +239,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 }
 
 func TestRemovedMediaRootHostKeyIsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))

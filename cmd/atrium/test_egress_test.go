@@ -87,6 +87,7 @@ func loopbackListener(t *testing.T, network, addr string) string {
 }
 
 func TestEgressRunnerHasOnlyLoopback(t *testing.T) {
+	t.Parallel()
 	c := requireContainment(t)
 	for _, addr := range []string{loopbackListener(t, "tcp4", "127.0.0.1:0"), loopbackListener(t, "tcp6", "[::1]:0")} {
 		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
@@ -118,6 +119,7 @@ func TestEgressRunnerHasOnlyLoopback(t *testing.T) {
 }
 
 func TestEgressDescendantsInheritContainment(t *testing.T) {
+	t.Parallel()
 	if addr := os.Getenv(egressProbeEnv); addr != "" {
 		os.Exit(egressProbe(addr))
 	}
@@ -202,6 +204,7 @@ func builtAtrium(t *testing.T, args ...string) *exec.Cmd {
 }
 
 func TestEgressCLIWorkflowsReachOnlyLoopback(t *testing.T) {
+	t.Parallel()
 	requireContainment(t)
 	var hits atomic.Int32
 	ship24 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -273,6 +276,7 @@ func TestEgressCLIWorkflowsReachOnlyLoopback(t *testing.T) {
 }
 
 func TestEgressBuiltServeListensOnLoopback(t *testing.T) {
+	t.Parallel()
 	requireContainment(t)
 	dir := t.TempDir()
 	addrFile := filepath.Join(dir, "serve-addr")

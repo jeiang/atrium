@@ -15,6 +15,7 @@ import (
 )
 
 func TestWeatherToolReturnsAForecast(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fakeOpenMeteo(t, dir)
 

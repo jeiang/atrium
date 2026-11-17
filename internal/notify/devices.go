@@ -240,7 +240,7 @@ func deliverPush(ctx context.Context, d *db.DB, id int64, m delivery, link strin
 }
 
 func testWakeup() Wakeup {
-	return Wakeup{Channel: System, FullText: true, Title: "atrium test", Body: "Test push notification.", URL: pushInbox}
+	return Wakeup{Channel: System, FullText: true, Title: "atrium test", Body: "Test push notification.", URL: clientURL(pushInbox)}
 }
 
 func PushTest(ctx context.Context, d *db.DB) (int, string, error) {

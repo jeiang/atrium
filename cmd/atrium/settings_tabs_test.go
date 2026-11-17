@@ -7,6 +7,7 @@ import (
 )
 
 func TestSettingsDropsAdvancedPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

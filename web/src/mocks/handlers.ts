@@ -11,6 +11,7 @@ import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
 import { type MailboxScenario, mailHandlers } from './mail';
+import { type MailManageScenario, mailManageHandlers } from './mailManage';
 import { type MediaScenario, mediaHandlers } from './media';
 import { type NotificationsScenario, notificationHandlers } from './notifications';
 import { type PackagesScenario, packageHandlers } from './packages';
@@ -20,6 +21,12 @@ import { type SettingsScenario, settingsHandlers } from './settings';
 import { simulatorHandlers } from './simulator';
 import { type TokensScenario, tokenHandlers } from './tokens';
 
+export interface CommandFault {
+  method: string;
+  path: string;
+  answer: string;
+}
+
 export interface MockScenario {
   session?: 'signed-in' | 'signed-out' | 'signed-out-proxy' | 'unavailable';
   signOut?: boolean;
@@ -28,6 +35,7 @@ export interface MockScenario {
   modules?: Record<string, ModuleStateState>;
   mail?: { mode: string; paused: boolean };
   mailbox?: MailboxScenario;
+  mailManage?: MailManageScenario;
   pause?: State;
   apps?: AppsScenario;
   calendar?: CalendarScenario;
@@ -45,6 +53,7 @@ export interface MockScenario {
   knowledge?: KnowledgeScenario;
   search?: SearchScenario;
   assistant?: AssistantScenario;
+  fault?: CommandFault;
 }
 
 export const SCENARIO_KEY = 'atrium.mock';
@@ -122,7 +131,24 @@ const revisions = new Map(TOPICS.map((topic) => [topic, 1]));
 const counter = globalThis as typeof globalThis & { atriumMockStreams?: number };
 
 export const handlers = [
-  http.all(`*${API_BASE}/*`, () => (scenario().unreachable ? HttpResponse.error() : undefined)),
+  http.all(`*${API_BASE}/*`, ({ request }) => {
+    const state = scenario();
+    if (state.unreachable) return HttpResponse.error();
+    const fault = state.fault;
+    const path = new URL(request.url).pathname.slice(API_BASE.length);
+    if (!fault || request.method !== fault.method || !new RegExp(`^${fault.path}$`).test(path)) return undefined;
+    if (fault.answer === 'lost') return HttpResponse.error();
+    return HttpResponse.json(
+      {
+        error: {
+          code: fault.answer,
+          message: 'atrium did not confirm whether the change happened.',
+          effect_ids: [9001],
+        },
+      },
+      { status: 409 },
+    );
+  }),
   http.get(`*${API_BASE}/session`, () => {
     const state = scenario();
     if (state.session === 'unavailable') {
@@ -194,6 +220,7 @@ export const handlers = [
     });
   }),
   ...mailHandlers(scenario),
+  ...mailManageHandlers(scenario),
   ...homeHandlers(scenario),
   ...inboxAskHandlers,
   ...planHandlers,

@@ -134,7 +134,7 @@ and archives made under it cannot be opened.
 
 | Option | Type | Default | Effect |
 | --- | --- | --- | --- |
-| `media.enable` | boolean | `false` | Enables the Library app (option keys keep the `media` name). Requires a local agent or an explicit `service/media-agent` connection. It is not a filesystem access grant. |
+| `media.enable` | boolean | `false` | Declares that this host runs the Library app (option keys keep the `media` name): evaluation then requires a local agent or an explicit `service/media-agent` connection. It does not set the `media_enabled` flag; the operator switches the app on the Apps page, or the host file pins it with `host.core.media_enabled`. It is not a filesystem access grant. |
 | `media.group` | string | `"media"` | Default library/agent group, not a supplementary application group. |
 | `mediaAgent.enable` | boolean | `false` | Adds the agent unit/user/group and generates `service/media-agent`. |
 | `mediaAgent.package` | package | `services.atrium.package` | Package used for `atrium media-agent`. |

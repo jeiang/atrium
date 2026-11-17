@@ -7,7 +7,7 @@ if [ $# -ne 2 ] || ! [ "$1" -ge 1 ] 2>/dev/null || ! [ "$2" -ge "$1" ] 2>/dev/nu
 fi
 shard=$1 total=$2
 pkg=./cmd/atrium
-flags=(-race ${ATRIUM_GO_TAGS:+-tags "$ATRIUM_GO_TAGS"})
+flags=(-race -parallel 8 ${ATRIUM_GO_TAGS:+-tags "$ATRIUM_GO_TAGS"})
 
 bin=$(mktemp -d)
 trap 'rm -rf "$bin"' EXIT

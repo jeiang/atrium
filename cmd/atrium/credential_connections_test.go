@@ -120,6 +120,7 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 }
 
 func TestGrafanaConnectionNeedsAViewerToken(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, "http://grafana.invalid", "https://api.anthropic.com"))
 	ran := runApp(t, "connections", "test", "service/grafana")

@@ -11,6 +11,7 @@ import (
 )
 
 func TestTranscriptPagesReturnEveryItemOnceInOrder(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	s := startAPISite(t, dir, api)

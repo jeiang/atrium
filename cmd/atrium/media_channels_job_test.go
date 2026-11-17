@@ -15,6 +15,7 @@ import (
 )
 
 func TestMediaChannelsJobSkipsUntilAShowIsFollowed(t *testing.T) {
+	t.Parallel()
 	var fetched atomic.Int64
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fetched.Add(1)

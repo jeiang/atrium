@@ -14,6 +14,7 @@
   import Foundations from './sections/Foundations.svelte';
   import Knowledge from './sections/Knowledge.svelte';
   import Mail from './sections/Mail.svelte';
+  import MailManage from './sections/MailManage.svelte';
   import Media from './sections/Media.svelte';
   import Overlays from './sections/Overlays.svelte';
   import Packages from './sections/Packages.svelte';
@@ -50,6 +51,7 @@
   <Apps />
   <Calendar />
   <Mail />
+  <MailManage />
   <Widgets />
   <Approvals />
   <Tools />

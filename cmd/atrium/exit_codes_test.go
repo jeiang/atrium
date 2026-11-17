@@ -18,6 +18,7 @@ import (
 )
 
 func TestCLIExitProcess(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("ATRIUM_CLI_EXIT_E2E") == "1" {
 		var args []string
 		if err := json.Unmarshal([]byte(os.Getenv("ATRIUM_CLI_EXIT_ARGS")), &args); err != nil {

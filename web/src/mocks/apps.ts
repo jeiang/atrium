@@ -57,6 +57,7 @@ export function seedApps(): MockApp[] {
       nav: [
         { label: 'Mail decisions', url: '/triage', settings: false },
         { label: 'Mail rules', url: '/rules', settings: false },
+        { label: 'Mail status', url: '/live', settings: false },
         { label: 'Mail settings', url: '/settings/mail', settings: true },
       ],
     },

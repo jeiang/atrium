@@ -274,6 +274,7 @@ func TestMailFolderCreateShadowRecordsWithoutWrite(t *testing.T) {
 }
 
 func TestMailMoveRefusesProtectedFolder(t *testing.T) {
+	t.Parallel()
 	fx := newFolderFixture(t, "live")
 	fx.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "mail_move", map[string]any{"account": "icloud", "folder": "Trash", "message_ids": []any{1}})))
 	fx.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
@@ -303,6 +304,7 @@ func TestMailMoveRefusesProtectedFolder(t *testing.T) {
 }
 
 func TestTaskAddAcceptsANumericRemindAt(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

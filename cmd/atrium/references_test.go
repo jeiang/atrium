@@ -69,6 +69,7 @@ func waitIdle(t *testing.T, dir string, thread int64) {
 }
 
 func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	message := seedMail(t, dir)
@@ -179,6 +180,7 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 }
 
 func TestAPISendReferenceStoresTheHTMLContext(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("the code is 4242")))

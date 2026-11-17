@@ -70,6 +70,7 @@ func lookupResult(t *testing.T, r anthropictest.Request, id string) map[string]a
 }
 
 func TestLookupReturnsTypedFieldsWithoutUntrusted(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
 	message := seedLookupMail(t, dir)
@@ -135,6 +136,7 @@ func TestLookupReturnsTypedFieldsWithoutUntrusted(t *testing.T) {
 }
 
 func TestLookupTextFieldKeepsUntrusted(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
 	message := seedLookupMail(t, dir)
@@ -183,6 +185,7 @@ func TestLookupTextFieldKeepsUntrusted(t *testing.T) {
 }
 
 func TestLookupRefusesInvalidReportAndForcesOne(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
 	message := seedLookupMail(t, dir)
@@ -225,8 +228,8 @@ func TestLookupRefusesInvalidReportAndForcesOne(t *testing.T) {
 	if choice["type"] != "tool" || choice["name"] != "report" {
 		t.Errorf("the forced request tool_choice = %v, want report", choice)
 	}
-	if _, ok := forced["thinking"]; ok {
-		t.Error("the forced request still sends thinking")
+	if thinking, _ := forced["thinking"].(map[string]any); len(thinking) != 1 || thinking["type"] != "disabled" {
+		t.Errorf("the forced request thinking = %v, want disabled", forced["thinking"])
 	}
 	result := lookupResult(t, requests[5], "l1")
 	answer, _ := result["answer"].(map[string]any)
@@ -241,6 +244,7 @@ func TestLookupRefusesInvalidReportAndForcesOne(t *testing.T) {
 }
 
 func TestContactNameLookupKeepsTheInternetOpen(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	contactsDir := filepath.Join(dir, "contacts")

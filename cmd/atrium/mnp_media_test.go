@@ -279,8 +279,11 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	case "torrents/delete":
 		for _, h := range strings.Split(form.Get("hashes"), "|") {
-			if _, ok := f.items[h]; ok {
+			if item, ok := f.items[h]; ok {
 				f.deleted = append(f.deleted, h)
+				if form.Get("deleteFiles") == "true" && item.content != "" {
+					_ = os.RemoveAll(item.content)
+				}
 				delete(f.items, h)
 				f.order = slices.DeleteFunc(f.order, func(existing string) bool { return existing == h })
 			}
@@ -605,6 +608,7 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 }
 
 func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
+	t.Parallel()
 	v2only := "magnet:?xt=urn:btmh:1220" + strings.Repeat("a", 64) + "&dn=Lanterns.S01E12"
 
 	dir := t.TempDir()

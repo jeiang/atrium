@@ -16,7 +16,11 @@ const open = async (target) => {
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   const same = windows.find((client) => client.url === target);
   if (same) return same.focus();
-  return self.clients.openWindow(target);
+  const own = await self.clients.matchAll({ type: "window" });
+  const near = own.find((client) => client.focused) || own[0];
+  if (!near) return self.clients.openWindow(target);
+  await near.focus().catch(() => undefined);
+  return near.navigate(target);
 };
 
 self.addEventListener("install", (event) => {

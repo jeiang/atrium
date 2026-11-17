@@ -243,6 +243,7 @@ func TestConnectionsStaleTestCannotOverwriteARotation(t *testing.T) {
 }
 
 func TestConnectionsRefuseToStoreACredentialInAPlaintextDatabase(t *testing.T) {
+	t.Parallel()
 	gate := &qbitGate{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(gate.handler))
 	t.Cleanup(srv.Close)

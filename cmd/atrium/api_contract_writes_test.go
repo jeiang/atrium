@@ -15,6 +15,7 @@ import (
 )
 
 func TestSettingsPatchAppliesAtomicallyWithIfMatch(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, goldenData{}, nil, "")
 	pinned := module.FlagKey(unit.Mail)
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, f.dir, "host.toml", "[core]\n"+pinned+" = false\n"))
@@ -109,6 +110,7 @@ func TestSettingsPatchAppliesAtomicallyWithIfMatch(t *testing.T) {
 }
 
 func TestContractSpecPreviewsAndRuleVocabulary(t *testing.T) {
+	t.Parallel()
 	out := t.TempDir()
 	if code, stderr := runCatalogOpenAPI(t, "--output", out); code != 0 {
 		t.Fatalf("catalog openapi: %d %s", code, stderr)

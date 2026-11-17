@@ -511,7 +511,15 @@
       toast('Stopped. Steps already done stay done.');
       void queryClient.invalidateQueries({ queryKey: ['thread', id] });
     } catch (error) {
-      toast(error instanceof ApiError ? error.message : 'The run could not be stopped.', { tone: 'error' });
+      if (error instanceof ApiError) {
+        toast(error.message, { tone: 'error' });
+      } else {
+        toast(
+          'The outcome is unknown. The connection failed before atrium answered, so the run may or may not have stopped. atrium reloaded the chat and did not try again.',
+          { tone: 'error' },
+        );
+        void queryClient.invalidateQueries({ queryKey: ['thread', id] });
+      }
     } finally {
       stopping = false;
     }

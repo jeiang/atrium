@@ -23,6 +23,7 @@ import (
 )
 
 func TestAppKeyFilesSignLinksAcrossRestarts(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	actionKey := strings.Repeat("ab", 32)
 	linkKey := "app-key-file-link-secret"
@@ -95,6 +96,7 @@ func TestAppKeyFilesSignLinksAcrossRestarts(t *testing.T) {
 }
 
 func TestMediaLinkRefreshKeepsHostKeyPrecedence(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	linkKey := "app-key-file-link-secret"
 	staleKey := "displaced-database-link-key"

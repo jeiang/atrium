@@ -31,6 +31,7 @@ func research(task string) anthropictest.Response {
 }
 
 func TestSubagentRequestOmitsTheOperatorProfile(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	const home = "Maple Street 12"
 	warm(t, api)
@@ -82,6 +83,7 @@ func runError(t *testing.T, dir, where string, args ...any) string {
 }
 
 func TestSubagentSpendCountsTowardTheParentRunCap(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	seedSettings(t, map[string]string{assistant.KeyDefaultModel: pricing.HaikuID, inference.RunCapKey: "0.05"})
 	over := anthropictest.Usage{Input: 1000, Output: 120_000}

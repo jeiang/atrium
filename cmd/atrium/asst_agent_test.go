@@ -435,7 +435,6 @@ func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 }
 
 func TestAsstWebFetchRefusesUntypedAndNonPublicURLs(t *testing.T) {
-	t.Parallel()
 	var hits atomic.Int32
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
@@ -462,6 +461,7 @@ func TestAsstWebFetchRefusesUntypedAndNonPublicURLs(t *testing.T) {
 }
 
 func TestServeSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	notify := sdnotifytest.Listen(t, 2*time.Second)
 	for name, value := range notify.Env() {
@@ -495,6 +495,7 @@ func TestServeSchedulerReportsToSystemdAndExitsZeroOnCancel(t *testing.T) {
 }
 
 func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)

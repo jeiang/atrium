@@ -38,6 +38,7 @@ func commandStatus(t *testing.T, s *apiSite, token, id string) map[string]any {
 }
 
 func TestCommandKeyReplaysAcrossRestartAndBearers(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
@@ -91,6 +92,7 @@ func TestCommandKeyReplaysAcrossRestartAndBearers(t *testing.T) {
 }
 
 func TestUnkeyedCommandStatusShowsAudit(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := asstDB(t, dir)
 	id, _, err := proposals.Create(testProposalContext(), d, "inbox_backlog", nil, "deny me", map[string]any{}, map[string]any{}, "deny me", float64(time.Now().UnixNano())/1e9)
@@ -135,6 +137,7 @@ func TestUnkeyedCommandStatusShowsAudit(t *testing.T) {
 }
 
 func TestInterruptedCommandNeverReruns(t *testing.T) {
+	t.Parallel()
 	const hash = "dddddddddddddddddddddddddddddddddddddddd"
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
@@ -227,6 +230,7 @@ func TestInterruptedCommandNeverReruns(t *testing.T) {
 }
 
 func TestLiveCommandOutlivesARecoveryTick(t *testing.T) {
+	t.Parallel()
 	const hash = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
@@ -364,6 +368,7 @@ func TestLiveCommandOutlivesARecoveryTick(t *testing.T) {
 }
 
 func TestServerFailureFreesTheKey(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := asstDB(t, dir)
 	id, _, err := proposals.Create(testProposalContext(), d, "retired_kind", nil, "retired", map[string]any{}, map[string]any{}, "retired", float64(time.Now().UnixNano())/1e9)
@@ -396,6 +401,7 @@ func TestServerFailureFreesTheKey(t *testing.T) {
 }
 
 func TestKeyedResultsExpireAndCommandsArePruned(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()

@@ -30,11 +30,6 @@
     container-type: inline-size;
   }
 
-  .pk-list > li:nth-child(n + 13) {
-    content-visibility: auto;
-    contain-intrinsic-size: auto none auto 16rem;
-  }
-
   .pk-list__skeleton {
     min-block-size: 15rem;
     padding: var(--s-5);

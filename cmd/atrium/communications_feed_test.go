@@ -134,6 +134,7 @@ func TestMailPassAndCandidateDraftsReadMessagesThroughTheFeed(t *testing.T) {
 }
 
 func TestFeedReadersAreEmptyWithMailOff(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, "false"))
 	d := asstDB(t, dir)
 	asstExec(t, d, "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")

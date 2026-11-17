@@ -9,6 +9,7 @@ import (
 )
 
 func TestDefaultsAndPermissionsHonorIfMatch(t *testing.T) {
+	t.Parallel()
 	s, token, _ := localAPISite(t)
 	browser := newWebClient(t, s.base, nil)
 	browser.session("local")
@@ -80,6 +81,7 @@ func TestDefaultsAndPermissionsHonorIfMatch(t *testing.T) {
 }
 
 func TestSchedulePreviewAndToolCatalog(t *testing.T) {
+	t.Parallel()
 	s, token, _ := localAPISite(t)
 	browser := newWebClient(t, s.base, nil)
 	browser.session("local")

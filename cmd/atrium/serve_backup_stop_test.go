@@ -47,6 +47,7 @@ func stagedSize(dir, prefix string) int64 {
 }
 
 func TestBackupInterruptedMidWriteLeavesNoTempFilesAndTheNextRunSucceeds(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	const bigFiles, bigSize = 8, int64(128 << 20)
 	for i := range bigFiles {

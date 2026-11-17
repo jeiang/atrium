@@ -101,6 +101,7 @@ func folderAnswers(t *testing.T, folders map[string]string) func([]string, strin
 }
 
 func TestMailPassRoutesThroughTheClassifier(t *testing.T) {
+	t.Parallel()
 	r := newRoutingRig(t, "shadow", nil, "Order confirmation 55123")
 	target := r.targets[0]
 	r.run(t, "sync")
@@ -165,6 +166,7 @@ func TestMailPassRoutesThroughTheClassifier(t *testing.T) {
 }
 
 func TestMailPassRefusesAFolderOutsideTheCatalog(t *testing.T) {
+	t.Parallel()
 	const subject = "Order confirmation 55123"
 	r := newRoutingRig(t, "shadow", folderAnswers(t, map[string]string{subject: `{"folder":"Elsewhere","confident":true}`}), subject)
 	target := r.targets[0]
@@ -184,6 +186,7 @@ func TestMailPassRefusesAFolderOutsideTheCatalog(t *testing.T) {
 }
 
 func TestMailPassUncertainFolderKeepsTheFallback(t *testing.T) {
+	t.Parallel()
 	const subject = "Mystery message"
 	r := newRoutingRig(t, "shadow", nil, subject)
 	r.run(t, "sync")
@@ -205,6 +208,7 @@ func receiptsFor(t *testing.T, subjects ...string) func([]string, string) (json.
 }
 
 func TestMailPassFolderBudgetRefusalDefersUntilRaised(t *testing.T) {
+	t.Parallel()
 	answer := receiptsFor(t, "Order confirmation 55124", "Order confirmation 55125")
 	var once sync.Once
 	var r *routingRig
@@ -253,6 +257,7 @@ func TestMailPassFolderBudgetRefusalDefersUntilRaised(t *testing.T) {
 }
 
 func TestMailClassifiedRouteKeepsTheLiveGate(t *testing.T) {
+	t.Parallel()
 	t.Run("paused", func(t *testing.T) {
 		r := newRoutingRig(t, "live", nil, "Order confirmation 55123")
 		r.run(t, "live", "pause")

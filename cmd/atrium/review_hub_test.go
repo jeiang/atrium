@@ -10,6 +10,7 @@ import (
 )
 
 func TestReviewHubServesOtherUnitsWhenMailIsOff(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	exec := func(query string) {
 		t.Helper()

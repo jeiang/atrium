@@ -229,7 +229,7 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 		t.Fatalf("callback location %q", cb.location())
 	}
 	cookie := strings.Join(cb.header.Values("Set-Cookie"), "\n")
-	for _, want := range []string{"atrium_session=", "HttpOnly", "SameSite=Lax", "Path=/"} {
+	for _, want := range []string{"atrium_session=", "HttpOnly", "SameSite=Strict", "Path=/"} {
 		if !strings.Contains(cookie, want) {
 			t.Fatalf("session cookie lacks %q: %s", want, cookie)
 		}
@@ -310,6 +310,7 @@ func connectionResult(t *testing.T, report connectionReport, capability string) 
 }
 
 func TestWimOIDCConnectionTestReportsDiscoveryThenProvesClientAuth(t *testing.T) {
+	t.Parallel()
 	s := wimOIDCSite(t)
 	tested := runApp(t, "connections", "test", "service/oidc", "--json")
 	if tested.code != 0 {

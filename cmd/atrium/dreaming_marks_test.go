@@ -12,6 +12,7 @@ import (
 )
 
 func TestDreamingSplitsMarkedAndUnmarkedThreads(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -108,6 +109,7 @@ func TestDreamingSplitsMarkedAndUnmarkedThreads(t *testing.T) {
 }
 
 func TestDreamingSignalsFollowTheirThreadMarks(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -180,6 +182,7 @@ func TestDreamingSignalsFollowTheirThreadMarks(t *testing.T) {
 }
 
 func TestDreamingSignalsSkipPrivateSpaces(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "public fact"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -249,6 +252,7 @@ func TestDreamingSignalsSkipPrivateSpaces(t *testing.T) {
 }
 
 func TestDreamingRecordIndexFollowsVisibility(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)

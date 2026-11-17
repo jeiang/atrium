@@ -35,6 +35,7 @@ func disabledMailFixture(t *testing.T) (*db.DB, float64) {
 }
 
 func TestProposalDismissalWorksWhileItsOwnerIsDisabled(t *testing.T) {
+	t.Parallel()
 	seed, now := disabledMailFixture(t)
 	id, _, err := proposals.Create(testProposalContext(), seed, "mail_triage", nil, "dismiss me",
 		map[string]any{}, map[string]any{}, "dismiss-me", now)
@@ -54,6 +55,7 @@ func TestProposalDismissalWorksWhileItsOwnerIsDisabled(t *testing.T) {
 }
 
 func TestOperatorResolveOfAMailWriteWaitsForTheOwnerToBeEnabled(t *testing.T) {
+	t.Parallel()
 	seed, now := disabledMailFixture(t)
 	ctx := testProposalContext()
 	id, _, err := proposals.Create(ctx, seed, "mail_triage", nil, "blocked",

@@ -68,6 +68,7 @@ func countOf(msgs []string, want string) int {
 }
 
 func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	notify := sdnotifytest.Listen(t, 200*time.Millisecond)
 	for name, value := range notify.Env() {
@@ -162,6 +163,7 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 }
 
 func TestServeRefusesAnEmergencyListenerOffLoopback(t *testing.T) {
+	t.Parallel()
 	moduleFixture(t, flagsExcept("", ""))
 	for _, host := range []string{"localhost", "0.0.0.0", "::", "192.0.2.10", "::ffff:127.0.0.1", "fe80::1%lo0", "127.0.0.1.example"} {
 		got := runApp(t, "serve", "--port", "0", "--auth", "local", "--emergency-host", host, "--emergency-port", "0")
@@ -172,6 +174,7 @@ func TestServeRefusesAnEmergencyListenerOffLoopback(t *testing.T) {
 }
 
 func TestServeExitsWithTheConfigCodeOnAPermanentRefusal(t *testing.T) {
+	t.Parallel()
 	moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100")
 	got := runApp(t, "serve", "--port", "0", "--auth", "local")
@@ -203,6 +206,7 @@ func TestServeExitsWithTheConfigCodeOnAPermanentRefusal(t *testing.T) {
 }
 
 func TestServeExitsWithTheConfigCodeOnARemovedMediaHostKey(t *testing.T) {
+	t.Parallel()
 	for _, key := range []string{"MOVIES", "TV"} {
 		t.Run(key, func(t *testing.T) {
 			moduleFixture(t, flagsExcept("", ""))
@@ -217,6 +221,7 @@ func TestServeExitsWithTheConfigCodeOnARemovedMediaHostKey(t *testing.T) {
 }
 
 func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
+	t.Parallel()
 	moduleFixture(t, flagsExcept("", ""))
 	for _, tc := range []struct{ name, handed, collides string }{
 		{"public and emergency", "public", "emergency"},
@@ -250,6 +255,7 @@ func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 }
 
 func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)

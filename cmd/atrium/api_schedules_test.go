@@ -22,6 +22,7 @@ func scheduleByID(t *testing.T, items []any, id int64) map[string]any {
 }
 
 func TestSchedulesUsageAPI(t *testing.T) {
+	t.Parallel()
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, model)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))

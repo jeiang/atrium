@@ -265,6 +265,7 @@ func TestScanJobIsPersistentAndMonthly(t *testing.T) {
 }
 
 func TestPostEffectSyncInsideAPassDoesNotDeadlock(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	h, x := mailtest.RawWith("Bank statement", serveMailFrom, "post-effect", "Your statement is ready.")

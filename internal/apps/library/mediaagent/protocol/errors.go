@@ -38,6 +38,7 @@ const (
 	CodeDraining          = "draining"
 	CodeIOError           = "io_error"
 	CodeReceiptInvalid    = "receipt_invalid"
+	CodeOnlyCopy          = "only_copy"
 )
 
 type Problem struct {
