@@ -18,10 +18,11 @@
       "operations": [
         "assistant.configuration",
         "assistant.subagent_roles",
-        "assistant.thread.options"
+        "assistant.thread.options",
+        "assistant.tools"
       ],
-      "required": 3,
-      "bound": 3
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "devices",
@@ -268,12 +269,14 @@
         "assistant.schedule.enabled",
         "assistant.schedule.history",
         "assistant.schedule.list",
+        "assistant.schedule.preview",
+        "assistant.schedule.run-read",
         "assistant.schedule.run_now",
         "assistant.schedule.runs",
         "assistant.schedule.update"
       ],
-      "required": 8,
-      "bound": 8
+      "required": 10,
+      "bound": 10
     },
     {
       "area": "search",
@@ -414,7 +417,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 238,
-  "total_bound": 238,
+  "total_required": 241,
+  "total_bound": 241,
   "total_approval_reached": 11
 }

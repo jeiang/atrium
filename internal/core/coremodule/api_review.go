@@ -294,7 +294,7 @@ func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Bind
 			"GET /permissions", func(ctx context.Context, in reviewapp.PermissionsInput) (application.Read[reviewapp.Permissions], error) {
 				return svc().Permissions(ctx, in)
 			}),
-		api.Command(d, reviewapp.DescribeOne(reviewapp.PermissionsUpdateName), application.APIShape{Area: "permissions", Errors: []application.Code{application.Invalid, application.Refused}},
+		api.Command(d, reviewapp.DescribeOne(reviewapp.PermissionsUpdateName), application.APIShape{Area: "permissions", Errors: []application.Code{application.Invalid, application.Refused, application.Precondition}, Description: "Sets permission rules. If-Match is optional: send the ETag of GET /permissions to refuse the change with 412 when the rules or pending requests changed since it was read; without it the change applies as before."},
 			"PUT /permissions", func(ctx context.Context, in reviewapp.PermissionsUpdateInput) (application.Change[reviewapp.PermissionsUpdated], error) {
 				return svc().UpdatePermissions(ctx, in)
 			}),

@@ -216,19 +216,6 @@ func ScheduleRevision(j scheduler.Job) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-func revisionMatches(ifMatch, revision string) bool {
-	if strings.TrimSpace(ifMatch) == "" {
-		return true
-	}
-	for tag := range strings.SplitSeq(ifMatch, ",") {
-		tag = strings.TrimSpace(tag)
-		if tag == "*" || strings.Trim(strings.TrimPrefix(tag, "W/"), `"`) == revision {
-			return true
-		}
-	}
-	return false
-}
-
 func scheduleInstant(epoch *float64, loc *time.Location) *string {
 	if epoch == nil || *epoch == 0 {
 		return nil
@@ -572,7 +559,7 @@ func (s *Service) ScheduleUpdate(ctx context.Context, in ScheduleUpdateInput) (a
 			if err != nil {
 				return ScheduleChanged{}, ledger.Result{}, err
 			}
-			if !revisionMatches(in.IfMatch, ScheduleRevision(*job)) {
+			if !application.Revision(ScheduleRevision(*job)).Matches(in.IfMatch) {
 				return ScheduleChanged{}, ledger.Result{}, &application.Error{Code: application.Precondition, Message: "The schedule changed since it was read; reload it and try again."}
 			}
 			def, known := scheduler.Declared(s.jobs, *job)
