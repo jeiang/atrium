@@ -138,7 +138,10 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHostConfig(t, dir, "http://qbittorrent.invalid", tmdb.URL+"/3", images.URL, eztv.URL+"/api/get-torrents"))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	waitFor(t, func() bool { state := connectionState(t, dir, "service/tmdb"); return state != "" && state != "untested" })
+	waitFor(t, func() bool {
+		state := connectionState(t, dir, "service/tmdb")
+		return state != "" && state != "untested"
+	})
 
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	observed := func() int {
