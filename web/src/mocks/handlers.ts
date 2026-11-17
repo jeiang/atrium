@@ -8,6 +8,7 @@ import { type ConnectionsScenario, connectionHandlers } from './connections';
 import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
+import { type MediaScenario, mediaHandlers } from './media';
 import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
 import { type SearchScenario, searchHandlers } from './search';
 import { type SettingsScenario, settingsHandlers } from './settings';
@@ -22,6 +23,7 @@ export interface MockScenario {
   mail?: { mode: string; paused: boolean };
   pause?: State;
   apps?: AppsScenario;
+  media?: MediaScenario;
   inbox?: InboxScenario;
   chat?: ChatScenario;
   connections?: ConnectionsScenario;
@@ -187,6 +189,7 @@ export const handlers = [
   ...settingsHandlers(scenario),
   ...connectionHandlers(scenario),
   ...appHandlers(scenario),
+  ...mediaHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,
   ...knowledgeHandlers,
