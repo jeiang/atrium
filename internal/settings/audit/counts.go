@@ -28,3 +28,11 @@ func CountForKey(ctx context.Context, q db.Querier, key string) (int, error) {
 	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM settings_audit WHERE key = ?", key).Scan(&n)
 	return n, err
 }
+
+func LastChange(ctx context.Context, q db.Querier, key string) (ts float64, value sql.NullString, ok bool, err error) {
+	err = q.QueryRowContext(ctx, "SELECT ts, new_value FROM settings_audit WHERE key = ? AND old_value IS NOT new_value ORDER BY ts DESC, id DESC LIMIT 1", key).Scan(&ts, &value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, sql.NullString{}, false, nil
+	}
+	return ts, value, err == nil, err
+}

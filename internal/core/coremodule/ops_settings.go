@@ -166,7 +166,7 @@ func settingsPatch(ctx context.Context, svc *settingsapp.Service, in SettingsPat
 func (m Module) settingsRoutes(d *web.Deps) []application.Binding {
 	svc := func() *settingsapp.Service { return settingsapp.Server(d.DB, d.Settings, m.Guard) }
 	const area = "settings"
-	refusable := []application.Code{application.Invalid, application.Refused}
+	refusable := []application.Code{application.Invalid, application.Refused, application.Forbidden}
 	changed := func(change application.Change[settingsapp.Changed], err error) (application.Change[SettingChange], error) {
 		return application.Change[SettingChange]{Data: SettingChange{Keys: change.Data.Keys}, AuditID: change.AuditID}, err
 	}
@@ -209,7 +209,7 @@ func (m Module) settingsRoutes(d *web.Deps) []application.Binding {
 				}
 				return valueField(changed(svc().Set(ctx, settingsapp.SetInput{Values: []settingsapp.Value{{Key: in.Key, Value: in.Value}}, Validate: section.Validate})))
 			}),
-		api.Command(d, settingsapp.DescribeSet(), application.APIShape{Area: area, ID: "settings.patch", Errors: []application.Code{application.Invalid, application.Refused, application.Precondition}},
+		api.Command(d, settingsapp.DescribeSet(), application.APIShape{Area: area, ID: "settings.patch", Errors: []application.Code{application.Invalid, application.Refused, application.Forbidden, application.Precondition}},
 			"PATCH /settings", func(ctx context.Context, in SettingsPatch) (application.Change[SettingsPatched], error) {
 				return settingsPatch(ctx, svc(), in)
 			}),

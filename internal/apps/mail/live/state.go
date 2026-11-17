@@ -108,13 +108,14 @@ func (l *Live) store() *ledger.Store {
 	return l.Store
 }
 
+const BaselineWhere = "in_inbox = 1 AND seen = 1 AND flagged = 0 AND sent = 0 AND gone_at IS NULL"
+
 func (l *Live) TakeBaseline(ctx context.Context) error {
 	return l.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM live_baseline"); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO live_baseline (message_id) SELECT id FROM messages "+
-			"WHERE in_inbox = 1 AND seen = 1 AND flagged = 0 AND sent = 0 AND gone_at IS NULL"); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO live_baseline (message_id) SELECT id FROM messages WHERE "+BaselineWhere); err != nil {
 			return err
 		}
 		return SetState(ctx, tx, GoliveKey, numx.FloatRepr(l.now()))

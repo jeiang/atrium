@@ -1724,6 +1724,33 @@
         ],
         "type": "object"
       },
+      "ChangeConfirmEffect": {
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConfirmEffect"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
       "ChangeConnectionView": {
         "properties": {
           "audit_id": {
@@ -1841,6 +1868,33 @@
           },
           "data": {
             "$ref": "#/components/schemas/Deleted"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ChangeGoLiveResult": {
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/GoLiveResult"
           },
           "effect_ids": {
             "items": {
@@ -2516,6 +2570,33 @@
           },
           "data": {
             "$ref": "#/components/schemas/PermissionsUpdated"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "undoable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ChangeReplayRun": {
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ReplayRun"
           },
           "effect_ids": {
             "items": {
@@ -3387,6 +3468,75 @@
           "redirect_uri",
           "origins",
           "reason"
+        ],
+        "type": "object"
+      },
+      "ConfirmEffect": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "action": {
+            "type": "string"
+          },
+          "baseline": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "confirm_token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "number"
+          },
+          "pause": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "write_cap": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action",
+          "confirm_token",
+          "expires_at",
+          "accounts",
+          "write_cap",
+          "baseline",
+          "statement",
+          "pause"
+        ],
+        "type": "object"
+      },
+      "ConfirmInput": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "ConfirmedInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirm_token"
         ],
         "type": "object"
       },
@@ -5133,6 +5283,24 @@
         "required": [
           "windows",
           "notes"
+        ],
+        "type": "object"
+      },
+      "GoLiveResult": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "accounts"
         ],
         "type": "object"
       },
@@ -8634,6 +8802,65 @@
         },
         "required": [
           "report"
+        ],
+        "type": "object"
+      },
+      "MailStatus": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/StatusBaseline"
+          },
+          "deletions": {
+            "$ref": "#/components/schemas/StatusDeletions"
+          },
+          "eligible": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "replay": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplayRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shadow": {
+            "$ref": "#/components/schemas/StatusShadow"
+          },
+          "unmet": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "watch_closely": {
+            "$ref": "#/components/schemas/StatusWatch"
+          }
+        },
+        "required": [
+          "mode",
+          "paused",
+          "eligible",
+          "unmet",
+          "accounts",
+          "baseline",
+          "shadow",
+          "deletions",
+          "watch_closely"
         ],
         "type": "object"
       },
@@ -12466,6 +12693,21 @@
         ],
         "type": "object"
       },
+      "ReadMailStatus": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MailStatus"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadMailTriagePage": {
         "properties": {
           "data": {
@@ -12861,6 +13103,33 @@
           "stored_stage",
           "stored_action",
           "vector"
+        ],
+        "type": "object"
+      },
+      "ReplayRun": {
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "differ": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "messages": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "run_id",
+          "at",
+          "messages",
+          "differ"
         ],
         "type": "object"
       },
@@ -15894,6 +16163,101 @@
           "written",
           "removed",
           "kept"
+        ],
+        "type": "object"
+      },
+      "StatusBaseline": {
+        "properties": {
+          "messages": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "taken_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "type": "object"
+      },
+      "StatusDeletions": {
+        "properties": {
+          "pending_proposals": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pending_proposals"
+        ],
+        "type": "object"
+      },
+      "StatusShadow": {
+        "properties": {
+          "actions": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "format": "int64",
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "actions"
+        ],
+        "type": "object"
+      },
+      "StatusWatch": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "active"
         ],
         "type": "object"
       },
@@ -40514,6 +40878,750 @@
               }
             },
             "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail"
+      }
+    },
+    "/mail/status": {
+      "get": {
+        "operationId": "mail.status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadMailStatus"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {}
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail"
+      }
+    },
+    "/mail/status/confirm": {
+      "post": {
+        "operationId": "mail.status-confirm",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeConfirmEffect"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail"
+      }
+    },
+    "/mail/status/go-live": {
+      "post": {
+        "operationId": "mail.go-live",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmedInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeGoLiveResult"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail"
+      }
+    },
+    "/mail/status/rebaseline": {
+      "post": {
+        "operationId": "mail.status-rebaseline",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmedInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeMailRebaselined"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "mail"
+        ],
+        "x-atrium-area": "mail",
+        "x-atrium-module": "mail"
+      }
+    },
+    "/mail/status/replay": {
+      "post": {
+        "operationId": "mail.replay-run",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeReplayRun"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Atrium-Command-Id": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
           },
           "422": {
             "content": {

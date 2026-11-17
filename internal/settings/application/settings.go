@@ -10,9 +10,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
@@ -78,6 +80,18 @@ func DescribeUnset() application.Definition {
 
 func refused(format string, a ...any) error {
 	return &application.Error{Code: application.Refused, Message: fmt.Sprintf(format, a...)}
+}
+
+func agentRefused(ctx context.Context, key string) error {
+	def, ok := settings.From(ctx).Lookup(key)
+	if !ok || !def.NoAgent {
+		return nil
+	}
+	p, marked := authapp.PrincipalOf(ctx)
+	if (marked && p.Agent) || audit.SourceOf(ctx) == audit.Tool {
+		return &application.Error{Code: application.Forbidden, Reason: "agent_caller", Message: key + " cannot be changed by an agent."}
+	}
+	return nil
 }
 
 func operatorKey(ctx context.Context, key string, writing bool) (settings.Def, error) {
@@ -198,6 +212,9 @@ func (s *Service) Set(ctx context.Context, in SetInput) (application.Change[Chan
 					return false, err
 				}
 			}
+			if err := agentRefused(ctx, v.Key); err != nil {
+				return false, err
+			}
 			if v.Unset {
 				if err := reg.Unset(ctx, tx, v.Key); err != nil {
 					return false, err
@@ -286,6 +303,9 @@ func (s *Service) Patch(ctx context.Context, in PatchInput) (application.Change[
 					return false, err
 				}
 			}
+			if err := agentRefused(ctx, v.Key); err != nil {
+				return false, err
+			}
 			if !v.Unset && s.guard != nil {
 				if err := s.guard(ctx, tx, v.Key, v.Value); err != nil {
 					return false, refusedError{err: err}
@@ -348,6 +368,9 @@ func targetOf(keys []string) string {
 func (s *Service) Unset(ctx context.Context, in UnsetInput) (application.Change[Changed], error) {
 	id, err := s.command(ctx, UnsetName, in.Key, []string{in.Key}, func(tx *sql.Tx) (bool, error) {
 		if _, err := operatorKey(ctx, in.Key, true); err != nil {
+			return false, err
+		}
+		if err := agentRefused(ctx, in.Key); err != nil {
 			return false, err
 		}
 		if err := settings.From(ctx).Unset(ctx, tx, in.Key); err != nil {
