@@ -79,6 +79,9 @@ func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target 
 		if err != nil {
 			return nil, nil, err
 		}
+		for i := range rows {
+			rows[i].Target = ICloud
+		}
 		out = append(out, rows...)
 	}
 	return out, notes, nil

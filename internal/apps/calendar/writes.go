@@ -77,6 +77,10 @@ func icloudEvent(cal *ical.Calendar, uid string, tz *time.Location) (Event, erro
 	if err != nil {
 		return Event{}, err
 	}
+	return masterEvent(events, uid, tz)
+}
+
+func masterEvent(events []*icsEvent, uid string, tz *time.Location) (Event, error) {
 	var master *icsEvent
 	for _, ev := range events {
 		if ev.uidKey() == uid && (master == nil || master.recurrenceID != nil && ev.recurrenceID == nil) {

@@ -113,6 +113,31 @@ func TestSchedulesUsageAPI(t *testing.T) {
 	if empty := s.do(http.MethodGet, "/api/v1/schedules/"+strconv.FormatInt(other, 10)+"/runs", token, nil); len(apiReplyItems(t, empty)) != 0 {
 		t.Fatalf("other job has runs: %s", empty.body)
 	}
+	across, path, lastRun := 0, "/api/v1/schedules/runs?limit=60", int64(1<<62)
+	for path != "" {
+		reply := s.do(http.MethodGet, path, token, nil)
+		if reply.status != http.StatusOK {
+			t.Fatalf("GET %s: %d %s", path, reply.status, reply.body)
+		}
+		for _, raw := range apiReplyItems(t, reply) {
+			run := raw.(map[string]any)
+			id := number(t, run["id"])
+			if id >= lastRun || number(t, run["job_id"]) == 0 || run["job_name"] == "" {
+				t.Fatalf("cross-schedule run out of order or without its schedule: %v", run)
+			}
+			lastRun = id
+			if number(t, run["job_id"]) == job {
+				across++
+			}
+		}
+		path = ""
+		if next, _ := reply.json["next_cursor"].(string); next != "" {
+			path = "/api/v1/schedules/runs?limit=60&cursor=" + next
+		}
+	}
+	if across != 105 || number(t, runPage[0].(map[string]any)["job_id"]) != job {
+		t.Fatalf("cross-schedule history lists %d of the job's 105 runs; first job run %v", across, runPage[0])
+	}
 
 	moved := fmt.Sprintf("daily %02d:30", (time.Now().UTC().Hour()+12)%24)
 	if patched := s.do(http.MethodPatch, jobURL, token, map[string]any{"schedule": moved}); patched.status != 200 || patched.json["enabled"] != true {

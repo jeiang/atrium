@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
@@ -236,6 +238,35 @@ func (l Listing) Dict() map[string]any {
 		notes[i] = note
 	}
 	return map[string]any{"events": events, "truncated": l.Truncated, "notes": notes}
+}
+
+func (l Listing) Detail(now time.Time) map[string]any {
+	out := l.Dict()
+	events := out["events"].([]any)
+	for i, row := range l.Events {
+		events[i] = row.Detail(l.tz)
+	}
+	out["today"] = now.In(l.tz).Format(time.DateOnly)
+	out["timezone"] = l.tz.String()
+	return out
+}
+
+type Source struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ReadOnly  bool   `json:"read_only"`
+	Available bool   `json:"available"`
+}
+
+func Sources(ctx context.Context, set Settings) []Source {
+	_, icloudErr := davmirror.ICloudLogin(ctx, set.Login)
+	info, err := os.Stat(set.ContactsDir)
+	contacts := set.ContactsDir != "" && err == nil && info.IsDir()
+	return []Source{
+		{ID: ICloud, Name: "iCloud", Available: icloudErr == nil},
+		{ID: Google, Name: "Google", Available: set.Google != nil},
+		{ID: Birthdays, Name: "Birthdays", ReadOnly: true, Available: contacts},
+	}
 }
 
 func ListEvents(ctx context.Context, env config.Env, set Settings, start, end any, filter Filter) (*Listing, error) {
