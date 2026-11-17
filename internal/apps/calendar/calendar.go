@@ -286,7 +286,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 	if !we.After(ws) {
 		return nil, Error("end must be after start")
 	}
-	events, notes := []Row{}, []string{}
+	events, notes, skipped := []Row{}, []string{}, []string{}
 	reached := 0
 	var googleErr error
 	if filter.Target == "" || filter.Target == ICloud {
@@ -295,7 +295,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 			var missing NotConfigured
 			switch {
 			case errors.As(err, &missing):
-				notes = append(notes, missing.Error())
+				skipped = append(skipped, missing.Error())
 			case err != nil:
 				return nil, err
 			default:
@@ -304,7 +304,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 				reached++
 			}
 		} else {
-			notes = append(notes, "ATRIUM_CALENDAR_CALENDAR_DIR not set: iCloud mirror skipped")
+			skipped = append(skipped, "ATRIUM_CALENDAR_CALENDAR_DIR not set: iCloud mirror skipped")
 		}
 	}
 	if filter.Target == "" || filter.Target == Birthdays {
@@ -312,7 +312,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 			events = append(events, found...)
 			reached++
 		} else if filter.Target == Birthdays {
-			notes = append(notes, "contacts are not synced: Birthdays skipped")
+			skipped = append(skipped, "contacts are not synced: Birthdays skipped")
 		}
 	}
 	if filter.Target == "" || filter.Target == Google {
@@ -320,9 +320,9 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 		var missing NotConfigured
 		switch {
 		case errors.As(err, &missing):
-			notes = append(notes, "google: "+missing.Error())
+			skipped = append(skipped, "google: "+missing.Error())
 		case err != nil:
-			notes = append(notes, "google: "+err.Error())
+			notes = append(notes, "Google: "+err.Error())
 			googleErr = err
 		default:
 			events = append(events, found...)
@@ -333,7 +333,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 		if googleErr != nil {
 			return nil, googleErr
 		}
-		text := strings.Join(notes, "; ")
+		text := strings.Join(append(skipped, notes...), "; ")
 		if text == "" {
 			text = "no calendar source configured"
 		}

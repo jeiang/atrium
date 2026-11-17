@@ -2,6 +2,7 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -40,6 +41,13 @@ func (l leaseToken) Token() (*oauth2.Token, error) {
 func googleService(ctx context.Context, env config.Env, set Settings) (*gcal.Service, error) {
 	if set.Google == nil {
 		return nil, NotConfigured("google/default is not configured")
+	}
+	if _, err := set.Google.Token(ctx, connections.GoogleCalendar); err != nil {
+		var missing connections.MissingCredential
+		if errors.Is(err, connections.ErrGoogleClientID) || errors.As(err, &missing) {
+			return nil, NotConfigured("google/default is not configured")
+		}
+		return nil, remote(err)
 	}
 	base, err := set.Google.Transport()
 	if err != nil {
