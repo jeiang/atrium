@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -17,8 +18,10 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 	"golang.org/x/sys/unix"
@@ -259,7 +262,9 @@ func TestServeStartsWhenTheOpsListenerAddressIsNotAssignedYet(t *testing.T) {
 	setEnv(t, settingEnv(ops.ListenKey), "192.0.2.10:0")
 	opsFile := filepath.Join(t.TempDir(), "ops-addr")
 	setEnv(t, "ATRIUM_OPS_ADDR_FILE", opsFile)
-	base, logs, stop, err := startServeAppArgs(t, freshApp(f), &lockedBuffer{}, "--auth", "local")
+	previous := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	base, logs, stop, err := startServeAppArgs(t, newAppWith(f.lookup, imapclient.Opener, nil, logx.Setup), &lockedBuffer{}, "--auth", "local")
 	if err != nil {
 		t.Fatalf("serve did not start with an unassigned ops address: %v", err)
 	}
