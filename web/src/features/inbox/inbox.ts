@@ -26,6 +26,7 @@ import {
 } from '../../contract';
 import type { InboxId } from '../../shared/assistant/inboxId';
 import { proposalToApproval } from '../../shared/assistant/proposalApproval';
+import { resolutionOf, type Stuck, stuckOf } from '../../shared/assistant/stuck';
 import type { Approval, DecidedElsewhere, Decision } from '../../shared/assistant/types';
 
 const QUEUE_TOPICS = [
@@ -64,8 +65,6 @@ export interface Queue {
   total: number;
   counts: QueueCounts;
 }
-
-export type Stuck = 'send' | 'forward' | 'undo';
 
 export interface InboxItem {
   approval: Approval;
@@ -173,26 +172,9 @@ const draftOutcomes: Record<string, string> = {
   invalid: 'Refused as invalid',
 };
 
-const resolvedOutcomes: Record<string, string> = {
-  applied: 'Marked as done',
-  'not-applied': 'Marked as not done',
-  partial: 'Marked as partly done',
-  undone: 'Undo marked as done',
-  'not-undone': 'Undo marked as not done',
-};
-
-function stuckOf(effects: readonly Effect[]): Stuck {
-  return effects.some((effect) => effect.undo_blocked || (effect.blocked && effect.direction === 'undo'))
-    ? 'undo'
-    : 'forward';
-}
-
 function resolvedOf(effects: readonly Effect[]): DecidedElsewhere | undefined {
-  const last = effects
-    .flatMap((effect) => (effect.resolution ? [effect.resolution] : []))
-    .sort((a, b) => b.ts - a.ts || b.id - a.id)[0];
-  const outcome = last && resolvedOutcomes[last.outcome];
-  return last && outcome ? { outcome, at: iso(last.ts) } : undefined;
+  const last = resolutionOf(effects);
+  return last ? { outcome: last.outcome, at: iso(last.ts) } : undefined;
 }
 
 function proposalItem(key: string, detail: ProposalDetail, effects: readonly Effect[]): InboxItem {

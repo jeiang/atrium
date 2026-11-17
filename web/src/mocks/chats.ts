@@ -438,12 +438,49 @@ function startReply(value: MockThread, text: string): number {
   return run;
 }
 
+const resolutions = new Map<number, { outcome: string; effective: string; ts: number }>();
+
+function ledger(proposal: ProposalDetail): object {
+  const resolution = resolutions.get(proposal.id);
+  return {
+    id: 700 + proposal.id,
+    proposal_id: proposal.id,
+    direction: 'forward',
+    state: proposal.blocked ? 'unknown' : (resolution?.effective ?? 'done'),
+    blocked: proposal.blocked,
+    undo_blocked: false,
+    undoable: false,
+    undone_at: null,
+    resolution: resolution && {
+      id: 800 + proposal.id,
+      outcome: resolution.outcome,
+      effective_outcome: resolution.effective,
+      actor: 'operator',
+      source: 'web',
+      prior_state: 'unknown',
+      prior_error: '',
+      ts: resolution.ts,
+    },
+  };
+}
+
+function resolve(id: number, outcome: string | undefined): Response | undefined {
+  const proposal = proposals.get(id);
+  if (!proposal) return undefined;
+  if (!proposal.blocked) return problem(409, 'not_resolved', `proposal ${id} has no blocked write`);
+  const effective = { applied: 'done', 'not-applied': 'failed' }[outcome ?? ''];
+  if (!effective) return problem(422, 'invalid', 'outcome must be applied, not-applied or partial');
+  resolutions.set(id, { outcome: outcome ?? '', effective, ts: Math.floor(Date.now() / 1000) });
+  proposal.blocked = false;
+  return HttpResponse.json({ approval: { id, status: proposal.status } });
+}
+
 function decide(id: number, status: string, reply: string): Response | undefined {
   const proposal = proposals.get(id);
   if (!proposal) return undefined;
   if (proposal.status !== 'pending') return problem(409, 'conflict', 'This ask was already decided.');
   if (status === 'approved' && scenario().approveUnknown) {
-    Object.assign(proposal, { status, blocked: true, decided_at: BASE });
+    Object.assign(proposal, { status: 'failed', blocked: true, decided_at: BASE });
     return problem(409, 'effect_unknown', 'The mail server did not confirm the send.');
   }
   proposal.status = status;
@@ -602,6 +639,14 @@ export const chatHandlers = [
   http.post(`*${API_BASE}/approvals/:id/deny`, ({ params }) =>
     decide(Number(params.id), 'dismissed', 'Understood. The reminder was not sent.'),
   ),
+  http.post(`*${API_BASE}/approvals/:id/resolve`, async ({ params, request }) => {
+    const { outcome } = (await request.clone().json()) as { outcome?: string };
+    return resolve(Number(params.id), outcome);
+  }),
+  http.get(`*${API_BASE}/effects`, ({ request }) => {
+    const proposal = proposals.get(Number(new URL(request.url).searchParams.get('proposal_id')));
+    return proposal ? HttpResponse.json({ items: [ledger(proposal)] }) : undefined;
+  }),
   http.get(`*${API_BASE}/threads/:thread/runs/:run/events`, async ({ request, params }) => {
     const url = new URL(request.url);
     if (url.searchParams.has('speed')) return undefined;

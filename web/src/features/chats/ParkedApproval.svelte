@@ -6,11 +6,13 @@
     ok,
     reviewApprove,
     reviewDismiss,
+    reviewEffects,
     reviewProposal,
+    reviewResolve,
     reviewUndo,
     reviewUndoable,
   } from '../../contract';
-  import { inboxPath } from '../../shared/assistant/inboxId';
+  import { resolutionOf, stuckChoices, stuckOf } from '../../shared/assistant/stuck';
   import { device, outcomeUnknown, unreachable } from '../../shared/device.svelte';
   import { queryClient } from '../../shared/query';
   import { toast } from '../../shared/ui/toast.svelte';
@@ -69,6 +71,34 @@
       : undefined,
   );
 
+  const settled = $derived(
+    proposal.data !== undefined &&
+      proposal.data.status !== 'pending' &&
+      (proposal.data.blocked || proposal.data.status === 'failed' || proposal.data.status === 'applied'),
+  );
+  const effects = createQuery(() => ({
+    queryKey: ['proposal', id, 'effects'],
+    queryFn: async ({ signal }) => ok(await reviewEffects({ proposal_id: String(id) }, { signal })).items,
+    enabled: settled,
+    meta: { topics: ['review'] },
+  }));
+  const blocked = $derived(
+    settled && proposal.data?.blocked && effects.data ? stuckChoices[stuckOf(effects.data)] : undefined,
+  );
+  const resolved = $derived(effects.data ? resolutionOf(effects.data) : undefined);
+
+  async function onResolve(outcome: string): Promise<void> {
+    try {
+      ok(await reviewResolve(id, { outcome }, { headers: { 'Idempotency-Key': crypto.randomUUID() } }));
+    } catch (error) {
+      toast(failureText(error), { tone: 'error' });
+      throw error;
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      void queryClient.invalidateQueries({ queryKey: ['thread'] });
+    }
+  }
+
   function refuse(error: unknown): never {
     toast(failureText(error), { tone: 'error' });
     throw error;
@@ -113,12 +143,29 @@
     {proposal.error?.message ?? 'Open the Inbox to decide it.'}
   </ViewState>
 {:else if proposal.data.blocked && proposal.data.status !== 'pending'}
-  <ViewState kind="blocked" title="The outcome is unknown" level={4}>
-    {proposal.data.title}. atrium could not confirm the result and did not try again.
-    <a class="link" href={inboxPath('proposal', id)}>Open it in the Inbox</a>
-  </ViewState>
+  {#if blocked}
+    <ApprovalCard
+      {approval}
+      {blocked}
+      level={4}
+      onapprove={onApprove}
+      ondecline={onDecline}
+      onresolve={onResolve}
+      onundo={onUndo}
+    />
+  {:else if effects.isError}
+    <ViewState kind="error" title="The outcome is unknown" level={4}>
+      {proposal.data.title}. {effects.error.message}
+    </ViewState>
+  {:else}
+    <ViewState kind="loading" title="Loading the ask" />
+  {/if}
 {:else if proposal.data.status !== 'pending' && !deferred.has(id)}
-  <ViewState kind="partial" title={proposal.data.status === 'approved' ? 'Approved' : 'Declined'} level={4}>
+  <ViewState
+    kind="partial"
+    title={resolved?.outcome ?? (proposal.data.status === 'approved' ? 'Approved' : 'Declined')}
+    level={4}
+  >
     {proposal.data.title}
   </ViewState>
 {:else}

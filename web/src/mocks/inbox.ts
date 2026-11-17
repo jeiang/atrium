@@ -396,7 +396,7 @@ function unconfirmed(type: string | undefined, id: number): Response {
   }
   const proposal = store.proposals.find((item) => item.id === id);
   if (proposal) {
-    Object.assign(proposal, { status: 'approved', blocked: true, decided_at: at });
+    Object.assign(proposal, { status: 'failed', blocked: true, decided_at: at });
     store.effects.push(effect(500 + store.effects.length, id, { state: 'unknown', blocked: true }));
   }
   return refusal(409, 'effect_unknown', 'The change did not confirm whether it happened.');

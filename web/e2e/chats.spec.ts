@@ -241,7 +241,9 @@ test.describe('while atrium is unreachable', () => {
   test.describe('with an unknown outcome', () => {
     test.use({ allowStatus: [409] });
 
-    test('a send whose outcome is unknown shows as blocked and is never sent again', async ({ page }) => {
+    test('a send whose outcome is unknown is never sent again and is marked once the operator checks', async ({
+      page,
+    }) => {
       test.setTimeout(45_000);
       const sent = writes(page);
       await page.setViewportSize({ width: desktop.width, height: desktop.height });
@@ -257,14 +259,27 @@ test.describe('while atrium is unreachable', () => {
           .getByRole('list', { name: 'Notifications' })
           .getByText('The outcome is unknown. The mail server did not confirm the send. atrium did not try again.'),
       ).toBeVisible({ timeout: 15_000 });
-      const blocked = transcript(page).getByRole('heading', { name: 'The outcome is unknown' });
-      await expect(blocked).toBeVisible();
-      await expect(card).toHaveCount(0);
+      await expect(card).toHaveAttribute('data-state', 'blocked');
+      await expect(card).toContainText('it is unknown whether it happened');
+      await expect(card.getByRole('button', { name: /send email/i })).toHaveCount(0);
+      const done = card.getByRole('button', { name: 'Mark as done' });
+      await expect(done).toBeVisible();
       expect(sent).toEqual(['POST /web/v1/approvals/501/approve']);
 
       await reconnect(page, /\/web\/v1\/proposals\/501$/);
-      await expect(blocked).toBeVisible();
+      await expect(card).toHaveAttribute('data-state', 'blocked');
       expect(sent).toEqual(['POST /web/v1/approvals/501/approve']);
+      await expectNoHorizontalScroll(page);
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoSeriousAxeFindings(page);
+
+      await done.click();
+      const dialog = page.getByRole('dialog', { name: 'Mark this change as done?' });
+      await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+      await dialog.getByRole('button', { name: 'Mark as done' }).click();
+      await expect(transcript(page).getByRole('heading', { name: 'Marked as done' })).toBeVisible();
+      await expect(card).toHaveCount(0);
+      expect(sent).toEqual(['POST /web/v1/approvals/501/approve', 'POST /web/v1/approvals/501/resolve']);
       await expectNoHorizontalScroll(page);
       await expectRoundedSurfaces(page, edgeSurfaces);
       await expectNoSeriousAxeFindings(page);
