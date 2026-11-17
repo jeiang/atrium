@@ -478,7 +478,15 @@ claims about the running application. Operator contracts are in
   needs-reauth rows. Runtime request failures trigger a check (at most
   one per 5 minutes) in every state except disabled; a success while
   failing triggers a recovery check. A first failing result notifies once,
-  also after a host change. A host-declared row dropped from the host file
+  also after a host change. Notices are damped per connection in process
+  (`flapWindow` 6 hours, `lastingAfter` 30 minutes in
+  `internal/connections/health.go`): at most one failing and one recovery
+  notice per 6 hours; a held failure notifies once it lasts 30 minutes; a
+  recovery notifies only after a notified failure. A scheduled run whose
+  connection lease reported a failing or needs-reauth result
+  (`scheduler.CauseReporter`) sends no job-failed notice and no stale
+  notice for that run (that memory is in process, so after a restart the
+  stale check may still notice such a run once). A host-declared row dropped from the host file
   is disabled with its credentials kept. Whichever process opens the
   database first disables it, but only the health watch's start pass in
   `serve` announces it, once per removal (the notice's occurrence key is

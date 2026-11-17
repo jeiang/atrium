@@ -99,6 +99,8 @@ func JobName(ctx context.Context, q db.Querier, id int64) (string, error) {
 
 type LastOutcome struct {
 	Key       string
+	JobID     int64
+	RunID     int64
 	Status    Status
 	EndedAt   float64
 	Error     string
@@ -106,7 +108,7 @@ type LastOutcome struct {
 }
 
 func LastOutcomes(ctx context.Context, q db.Querier) ([]LastOutcome, error) {
-	rows, err := q.QueryContext(ctx, "SELECT j.declaration_key, r.status, r.ended_at, COALESCE(r.error, ''), "+
+	rows, err := q.QueryContext(ctx, "SELECT j.declaration_key, j.id, r.id, r.status, r.ended_at, COALESCE(r.error, ''), "+
 		"(SELECT MAX(s.ended_at) FROM job_runs s WHERE s.job_id = j.id AND s.status = ?) "+
 		"FROM jobs j JOIN job_runs r ON r.id = (SELECT MAX(id) FROM job_runs WHERE job_id = j.id AND status IN (?, ?) AND ended_at IS NOT NULL) "+
 		"WHERE j.declaration_key IS NOT NULL ORDER BY j.declaration_key", StatusOK, StatusOK, StatusError)
@@ -115,6 +117,6 @@ func LastOutcomes(ctx context.Context, q db.Querier) ([]LastOutcome, error) {
 	}
 	return db.Collect(rows, func(r *sql.Rows) (LastOutcome, error) {
 		var o LastOutcome
-		return o, r.Scan(&o.Key, &o.Status, &o.EndedAt, &o.Error, &o.OKEndedAt)
+		return o, r.Scan(&o.Key, &o.JobID, &o.RunID, &o.Status, &o.EndedAt, &o.Error, &o.OKEndedAt)
 	})
 }
