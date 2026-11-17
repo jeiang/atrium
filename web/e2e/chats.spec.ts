@@ -210,6 +210,24 @@ test.describe('while atrium is unreachable', () => {
     await expect(card.getByRole('button', { name: 'Decline' })).toBeVisible();
   });
 
+  test('resuming an interrupted run is refused at once and never sent later', async ({ page }) => {
+    const sent = writes(page);
+    const reads = transcriptReads(page, 12);
+    await openChat(page, '/chat/12');
+    const resume = page.getByRole('button', { name: 'Resume run' });
+    await expect(resume).toBeVisible();
+    await readsSettled(page, reads);
+    await goUnreachable(page);
+    await resume.click();
+    await expect(transcript(page).getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
+    await expect(resume).toBeVisible();
+    expect(sent).toEqual([]);
+    await goReachable(page);
+    await resume.click();
+    await expect(transcript(page).getByText('so I did not place it again', { exact: false })).toBeVisible();
+    expect(sent).toEqual(['POST /web/v1/threads/12/runs/106/resume']);
+  });
+
   test('the chat list and the transcript are kept on the device', async ({ page }) => {
     await openChat(page, '/chat/7');
     await expect(transcript(page).getByText('What do twelve cedar boards cost around Hillfield?')).toBeVisible();
@@ -535,6 +553,59 @@ test.describe('scrolling', () => {
     const after = await anchor.boundingBox();
     expect(Math.abs((after?.y ?? 0) - (before?.y ?? 0))).toBeLessThanOrEqual(2);
   });
+});
+
+test.describe('an interrupted run', () => {
+  const resumed = 'The order for twelve boards went through, so I did not place it again.';
+
+  function resumes(page: Page): (string | undefined)[] {
+    const keys: (string | undefined)[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().endsWith('/threads/12/runs/106/resume'))
+        keys.push(request.headers()['idempotency-key']);
+    });
+    return keys;
+  }
+
+  test('offers Resume instead of Stop and resumes once', async ({ page }) => {
+    const keys = resumes(page);
+    await openChat(page, '/chat/12');
+    const notice = transcript(page).getByText('This run was interrupted');
+    await expect(notice).toBeVisible();
+    await expect(transcript(page).getByText('I will order twelve cedar boards from Hillfield Timber.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Stop run' })).toHaveCount(0);
+    await expect(page.getByText('The run failed')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Resume run' }).click();
+    await expect(transcript(page).getByText(resumed)).toBeVisible({ timeout: 15_000 });
+    await settled(page);
+    await expect(notice).toHaveCount(0);
+    expect(keys).toEqual([expect.stringMatching(/^[0-9a-f-]{36}$/)]);
+  });
+
+  test.describe('with a lost connection', () => {
+    test.use({ allowConsole: unreachableConsole });
+
+    test('a network failure says the outcome is unknown and does not try again', async ({ page }) => {
+      const keys = resumes(page);
+      await openChat(page, '/chat/12', { resumeFault: true });
+      await page.getByRole('button', { name: 'Resume run' }).click();
+      await expect(transcript(page).getByText('The outcome is unknown')).toBeVisible();
+      await expect(transcript(page).getByText(resumed)).toBeVisible({ timeout: 15_000 });
+      expect(keys).toHaveLength(1);
+    });
+  });
+
+  for (const layout of layouts) {
+    test(`${layout.name}: the interrupted run passes the design and axe checks`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await openChat(page, '/chat/12');
+      await expect(page.getByRole('button', { name: 'Resume run' })).toBeVisible();
+      if (layout.touch) await expectTouchTargets(page, 'main');
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoHorizontalScroll(page);
+      await expectNoSeriousAxeFindings(page);
+    });
+  }
 });
 
 test.describe('design checks', () => {

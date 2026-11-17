@@ -439,3 +439,170 @@ test.describe('every queue kind in the inbox', () => {
     });
   }
 });
+
+test.describe('an unknown outcome in the inbox', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  async function choose(page: Page, item: Locator, label: string, ask: string): Promise<Locator> {
+    await item.getByRole('button', { name: label }).click();
+    const dialog = page.getByRole('dialog', { name: ask });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    return dialog;
+  }
+
+  test('a stuck change is marked as done once, after a confirm that starts on Cancel', async ({ page }) => {
+    await useScenario(page, { inbox: { stuck: true } });
+    await gotoShell(page, '/inbox/proposal:15');
+    const item = card(page, 'proposal:15');
+    await expect(item).toContainText('it is unknown whether it happened');
+    await expect(item.getByRole('button', { name: 'Approve' })).toHaveCount(0);
+    await expect(item.getByRole('button', { name: 'Decline' })).toHaveCount(0);
+    await expect(item.getByRole('button', { name: 'Mark as not done' })).toBeVisible();
+
+    let dialog = await choose(page, item, 'Mark as done', 'Mark this change as done?');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    dialog = await choose(page, item, 'Mark as done', 'Mark this change as done?');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    expect(await requests(page)).toEqual([]);
+
+    dialog = await choose(page, item, 'Mark as done', 'Mark this change as done?');
+    await expect(dialog).toContainText('atrium records that the change was made and does not run it again.');
+    await dialog.getByRole('button', { name: 'Mark as done' }).click();
+    await expect(item).toContainText(/Marked as done at \d\d:\d\d/);
+    await expect(item.getByRole('button', { name: 'Mark as done' })).toHaveCount(0);
+    const sent = await requests(page);
+    expect(sent).toEqual([{ method: 'POST', path: '/web/v1/approvals/15/resolve', key: expect.stringMatching(uuid) }]);
+  });
+
+  test('a stuck undo offers the undo outcomes and records the one chosen', async ({ page }) => {
+    await useScenario(page, { inbox: { stuck: true } });
+    await gotoShell(page, '/inbox/proposal:16');
+    const item = card(page, 'proposal:16');
+    await expect(item).toContainText('it is unknown whether the change was reversed');
+    await expect(item.getByRole('button', { name: 'Mark as done' })).toHaveCount(0);
+    const dialog = await choose(page, item, 'Mark undo as not done', 'Mark the undo as not done?');
+    await expect(dialog).toContainText('atrium records that the change is still in place.');
+    await dialog.getByRole('button', { name: 'Mark undo as not done' }).click();
+    await expect(item).toContainText(/Undo marked as not done at \d\d:\d\d/);
+    expect(await requests(page)).toEqual([
+      { method: 'POST', path: '/web/v1/approvals/16/resolve', key: expect.stringMatching(uuid) },
+    ]);
+  });
+
+  test('an email with an unknown send is marked as sent and never sent again', async ({ page }) => {
+    await useScenario(page, { inbox: { stuck: true } });
+    await gotoShell(page, '/inbox/draft:8');
+    const item = card(page, 'draft:8');
+    await expect(item).toContainText('The Sent folder can be empty even when the email was delivered.');
+    await expect(item.getByRole('button', { name: /^Send email/ })).toHaveCount(0);
+    const dialog = await choose(page, item, 'Mark as sent', 'Mark this email as sent?');
+    await expect(dialog).toContainText('atrium records it as sent and does not send it again.');
+    await dialog.getByRole('button', { name: 'Mark as sent' }).click();
+    await expect(item).toContainText(/Sent at \d\d:\d\d/);
+    expect(await requests(page)).toEqual([
+      { method: 'POST', path: '/web/v1/drafts/8/resolve', key: expect.stringMatching(uuid) },
+    ]);
+  });
+
+  test('an email returned to drafts can be sent again', async ({ page }) => {
+    await useScenario(page, { inbox: { stuck: true } });
+    await gotoShell(page, '/inbox/draft:8');
+    const item = card(page, 'draft:8');
+    const dialog = await choose(page, item, 'Return to drafts', 'Return this email to drafts?');
+    await expect(dialog).toContainText('the recipient gets it twice');
+    await dialog.getByRole('button', { name: 'Return to drafts' }).click();
+    await expect(item.getByRole('button', { name: 'Send email to Joris' })).toBeVisible();
+    await expect(item.getByRole('button', { name: 'Return to drafts' })).toHaveCount(0);
+    expect(await requests(page)).toEqual([
+      { method: 'POST', path: '/web/v1/drafts/8/resolve', key: expect.stringMatching(uuid) },
+    ]);
+  });
+
+  test('the stuck items wait in the list as Stuck', async ({ page }) => {
+    await useScenario(page, { inbox: { stuck: true } });
+    await gotoShell(page, '/inbox');
+    const table = page.getByRole('table', { name: 'Needs you' });
+    await expect(table.getByRole('row', { name: /Start watering the vegetable beds/ })).toContainText('Stuck');
+    await expect(table.getByRole('row', { name: /Allotment key handover/ })).toContainText('Send outcome unknown');
+  });
+
+  test.describe('with a refusal or a lost connection', () => {
+    test.use({ allowStatus: [409, 422], allowConsole: unreachableConsole });
+
+    test('marking while atrium is unreachable is refused at once and never sent later', async ({ page }) => {
+      await useScenario(page, { inbox: { stuck: true } });
+      await gotoShell(page, '/inbox/proposal:15');
+      const item = card(page, 'proposal:15');
+      await expect(item.getByRole('button', { name: 'Mark as done' })).toBeVisible();
+      await goUnreachable(page);
+      let dialog = await choose(page, item, 'Mark as done', 'Mark this change as done?');
+      await dialog.getByRole('button', { name: 'Mark as done' }).click();
+      await expect(page.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
+      await expect(dialog).toBeHidden();
+      await expect(item.getByRole('button', { name: 'Mark as done' })).toBeVisible();
+      expect(await requests(page)).toEqual([]);
+      await goReachable(page);
+      dialog = await choose(page, item, 'Mark as not done', 'Mark this change as not done?');
+      await dialog.getByRole('button', { name: 'Mark as not done' }).click();
+      await expect(item).toContainText(/Marked as not done at \d\d:\d\d/);
+      const sent = await requests(page);
+      expect(sent).toEqual([
+        { method: 'POST', path: '/web/v1/approvals/15/resolve', key: expect.stringMatching(uuid) },
+      ]);
+    });
+
+    test('a network failure says the outcome is unknown and records nothing again', async ({ page }) => {
+      await useScenario(page, { inbox: { stuck: true, decide: 'network' } });
+      await gotoShell(page, '/inbox/draft:8');
+      const item = card(page, 'draft:8');
+      const dialog = await choose(page, item, 'Mark as sent', 'Mark this email as sent?');
+      await dialog.getByRole('button', { name: 'Mark as sent' }).click();
+      await expect(page.getByText('The outcome is unknown')).toBeVisible();
+      await expect(item).toContainText(/Sent at \d\d:\d\d/);
+      expect(await requests(page)).toHaveLength(1);
+    });
+
+    test('a refusal says what atrium answered and records nothing', async ({ page }) => {
+      await useScenario(page, { inbox: { stuck: true, decide: 'conflict' } });
+      await gotoShell(page, '/inbox/proposal:15');
+      const item = card(page, 'proposal:15');
+      const dialog = await choose(page, item, 'Mark as done', 'Mark this change as done?');
+      const reload = page.waitForResponse((response) => response.url().endsWith('/web/v1/proposals/15'));
+      await dialog.getByRole('button', { name: 'Mark as done' }).click();
+      await expect(page.getByText('atrium refused this')).toBeVisible();
+      await expect(page.getByText('Nothing was recorded.', { exact: false })).toBeVisible();
+      await reload;
+      await expect(item.getByRole('button', { name: 'Mark as done' })).toBeVisible();
+      expect(await requests(page)).toHaveLength(1);
+    });
+  });
+
+  for (const layout of layouts) {
+    test(`the stuck change, its confirm and the unknown send pass the design checks at ${layout.name}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await useScenario(page, { inbox: { stuck: true } });
+      const checks = async (): Promise<void> => {
+        await expectNoHorizontalScroll(page);
+        await expectRoundedSurfaces(page, edges);
+        if (layout.touch) await expectTouchTargets(page);
+        await expectNoBlue(page);
+        await expectNoSeriousAxeFindings(page);
+      };
+      await gotoShell(page, '/inbox/proposal:15');
+      const item = card(page, 'proposal:15');
+      await expect(item.getByRole('button', { name: 'Mark as done' })).toBeVisible();
+      await checks();
+      const dialog = await choose(page, item, 'Mark as done', 'Mark this change as done?');
+      await checks();
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await gotoShell(page, '/inbox/draft:8');
+      await expect(card(page, 'draft:8').getByRole('button', { name: 'Mark as sent' })).toBeVisible();
+      await checks();
+    });
+  }
+});

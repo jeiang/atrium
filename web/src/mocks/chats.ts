@@ -23,6 +23,7 @@ export interface ChatScenario {
   empty?: boolean;
   listError?: boolean;
   liveStream?: boolean;
+  resumeFault?: boolean;
 }
 
 interface MockThread {
@@ -102,6 +103,38 @@ extraRunScripts.push({
     { event: 'text', data: { run_id: 104, text: 'Two paints suit cedar: sage green and warm cream.' } },
   ]),
 });
+
+const ORDER_THREAD = 12;
+const ORDER_RUN = 106;
+const orderEvents = numbered([
+  start(ORDER_THREAD, ORDER_RUN, 'Order the cedar boards'),
+  { event: 'text', data: { run_id: ORDER_RUN, text: 'I will order twelve cedar boards from Hillfield Timber.' } },
+  {
+    event: 'tool_start',
+    data: { run_id: ORDER_RUN, id: 'call-1', name: 'order_supplies', args: JSON.stringify({ boards: 12 }) },
+  },
+  { event: 'tool_done', data: { run_id: ORDER_RUN, id: 'call-1', ok: false, preview: 'The connection dropped' } },
+  {
+    event: 'tool_start',
+    data: { run_id: ORDER_RUN, id: 'call-2', name: 'check_order', args: JSON.stringify({ supplier: 'Hillfield' }) },
+  },
+  { event: 'tool_done', data: { run_id: ORDER_RUN, id: 'call-2', ok: true, preview: 'Order 4471 for 12 boards' } },
+  {
+    event: 'text',
+    data: { run_id: ORDER_RUN, text: 'The order for twelve boards went through, so I did not place it again.' },
+  },
+  { event: 'run_done', data: { run_id: ORDER_RUN, state: 'done', error: null } },
+  { event: 'complete', data: { run_id: ORDER_RUN, state: 'done', thread_id: ORDER_THREAD } },
+]);
+const orderScript: RunScript = {
+  thread: ORDER_THREAD,
+  run: ORDER_RUN,
+  label: 'Interrupted',
+  parked: true,
+  interrupted: true,
+  events: orderEvents.slice(0, 3),
+};
+extraRunScripts.push(orderScript);
 
 function thread(id: number, title: string, minutesAgo: number): Thread {
   const at = BASE - minutesAgo * 60;
@@ -183,6 +216,13 @@ function seed(): Map<number, MockThread> {
     cost: 0.5,
   });
   add({
+    thread: thread(ORDER_THREAD, 'Order the cedar boards', 100),
+    items: [item(1, 'user', 'Order twelve cedar boards for the shed.', { run_id: ORDER_RUN })],
+    active: runOf(ORDER_RUN, 'interrupted'),
+    queued: [],
+    cost: 0.05,
+  });
+  add({
     thread: thread(11, 'Check the shed roof', 20),
     items: [
       item(1, 'user', 'Does the shed roof need new sheets?', { run_id: 105 }),
@@ -193,7 +233,7 @@ function seed(): Map<number, MockThread> {
     queued: [],
     cost: 0.03,
   });
-  for (let index = 0; index < 34; index++) {
+  for (let index = 0; index < 33; index++) {
     add({
       thread: thread(300 + index, `Notes on the allotment, week ${index + 1}`, 600 + index * 240),
       items: [
@@ -360,7 +400,7 @@ function watch(threadId: number, run: number): TransformStream<Uint8Array, Uint8
       if (match?.[1]) {
         const { state } = JSON.parse(match[1]) as { state: string };
         const value = threads.get(threadId);
-        if (state === 'parked' && value?.active?.id === run) value.active.state = 'parked';
+        if ((state === 'parked' || state === 'interrupted') && value?.active?.id === run) value.active.state = state;
         else finish(threadId, run, state);
         buffer = '';
       } else if (buffer.length > 4096) {
@@ -504,6 +544,21 @@ export const chatHandlers = [
     value.question = null;
     value.active = null;
     return HttpResponse.json({ run_id: startReply(value, text) }, { status: 202 });
+  }),
+  http.post(`*${API_BASE}/threads/:thread/runs/:run/resume`, ({ params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'This chat does not exist.');
+    const active = value.active;
+    if (!active || active.id !== Number(params.run) || (active.state !== 'interrupted' && active.state !== 'parked'))
+      return problem(409, 'conflict', 'The run cannot be resumed.');
+    active.state = 'running';
+    if (active.id === ORDER_RUN) {
+      orderScript.events = orderEvents;
+      orderScript.parked = false;
+      orderScript.interrupted = false;
+    }
+    if (scenario().resumeFault) return HttpResponse.error();
+    return HttpResponse.json({ thread_id: value.thread.id }, { status: 202 });
   }),
   http.post(`*${API_BASE}/threads/:thread/stop`, ({ params }) => {
     const value = threads.get(Number(params.thread));

@@ -3,8 +3,11 @@ import {
   ApiError,
   assistantRunAnswer,
   type Draft,
+  type DraftResolveRequest,
+  type Effect,
   mailDraft,
   mailDraftDiscard,
+  mailDraftResolve,
   mailDraftSend,
   ok,
   type ProposalDetail,
@@ -18,6 +21,7 @@ import {
   reviewProposal,
   reviewQueue,
   reviewQueueItem,
+  reviewResolve,
   reviewUndoEffect,
 } from '../../contract';
 import type { InboxId } from '../../shared/assistant/inboxId';
@@ -61,11 +65,14 @@ export interface Queue {
   counts: QueueCounts;
 }
 
+export type Stuck = 'send' | 'forward' | 'undo';
+
 export interface InboxItem {
   approval: Approval;
   revision?: number;
   decided?: DecidedElsewhere;
   blocked: boolean;
+  stuck?: Stuck;
   undoable: readonly Decision[];
 }
 
@@ -167,7 +174,29 @@ const draftOutcomes: Record<string, string> = {
   invalid: 'Refused as invalid',
 };
 
-function proposalItem(key: string, detail: ProposalDetail): InboxItem {
+const resolvedOutcomes: Record<string, string> = {
+  applied: 'Marked as done',
+  'not-applied': 'Marked as not done',
+  partial: 'Marked as partly done',
+  undone: 'Undo marked as done',
+  'not-undone': 'Undo marked as not done',
+};
+
+function stuckOf(effects: readonly Effect[]): Stuck {
+  return effects.some((effect) => effect.undo_blocked || (effect.blocked && effect.direction === 'undo'))
+    ? 'undo'
+    : 'forward';
+}
+
+function resolvedOf(effects: readonly Effect[]): DecidedElsewhere | undefined {
+  const last = effects
+    .flatMap((effect) => (effect.resolution ? [effect.resolution] : []))
+    .sort((a, b) => b.ts - a.ts || b.id - a.id)[0];
+  const outcome = last && resolvedOutcomes[last.outcome];
+  return last && outcome ? { outcome, at: iso(last.ts) } : undefined;
+}
+
+function proposalItem(key: string, detail: ProposalDetail, effects: readonly Effect[]): InboxItem {
   const action = detail.payload.kind === 'action' ? detail.payload : undefined;
   const decidedAt = detail.decided_at ?? detail.applied_at ?? detail.created_at;
   return {
@@ -178,17 +207,23 @@ function proposalItem(key: string, detail: ProposalDetail): InboxItem {
       inRun: false,
     }),
     decided:
-      detail.status === 'pending'
+      detail.status === 'pending' || detail.blocked
         ? undefined
-        : {
+        : (resolvedOf(effects) ?? {
             outcome: detail.undone_at
               ? 'Approved, then undone'
               : (proposalOutcomes[detail.status] ?? `Marked ${detail.status}`),
             at: iso(detail.undone_at ?? decidedAt),
-          },
+          }),
     blocked: detail.blocked,
+    stuck: detail.blocked ? stuckOf(effects) : undefined,
     undoable: detail.undoable ? ['approve'] : [],
   };
+}
+
+async function proposalEffects(detail: ProposalDetail, signal: AbortSignal): Promise<Effect[]> {
+  if (!detail.blocked && detail.status !== 'failed' && detail.status !== 'applied') return [];
+  return ok(await reviewEffects({ proposal_id: String(detail.id) }, { signal })).items;
 }
 
 function draftItem(key: string, draft: Draft): InboxItem {
@@ -224,13 +259,14 @@ function draftItem(key: string, draft: Draft): InboxItem {
     },
     revision: draft.revision,
     decided:
-      draft.status === 'draft'
+      draft.status === 'draft' || draft.status === 'unknown'
         ? undefined
         : {
             outcome: draftOutcomes[draft.status] ?? `Marked ${draft.status}`,
             at: iso(draft.sent_at ?? draft.updated_at),
           },
-    blocked: !draft.account_configured,
+    blocked: !draft.account_configured || draft.status === 'unknown',
+    stuck: draft.status === 'unknown' ? 'send' : undefined,
     undoable: [],
   };
 }
@@ -244,7 +280,10 @@ export function useInboxItem(item: () => InboxId) {
       queryKey: ['inbox', 'item', key],
       queryFn: async ({ signal }): Promise<InboxItem | null> => {
         try {
-          if (type === 'proposal') return proposalItem(key, ok(await reviewProposal(id, { signal })).data);
+          if (type === 'proposal') {
+            const detail = ok(await reviewProposal(id, { signal })).data;
+            return proposalItem(key, detail, await proposalEffects(detail, signal));
+          }
           if (type === 'draft') return draftItem(key, ok(await mailDraft(id, { signal })));
           return null;
         } catch (error) {
@@ -281,6 +320,13 @@ export async function handleUndo(item: InboxId): Promise<void> {
   if (open.length === 0)
     throw new ApiError(409, { error: { code: 'not_undoable', message: 'Nothing is left to undo.' } });
   for (const effect of open) ok(await reviewUndoEffect(effect.id, oneGesture()));
+}
+
+export async function handleResolve(item: InboxId, outcome: string): Promise<void> {
+  if (item.type === 'draft') {
+    const body: DraftResolveRequest = { outcome: outcome as DraftResolveRequest['outcome'] };
+    ok(await mailDraftResolve(Number(item.id), body, oneGesture()));
+  } else ok(await reviewResolve(Number(item.id), { outcome }, oneGesture()));
 }
 
 export function refreshInbox(client: QueryClient): void {

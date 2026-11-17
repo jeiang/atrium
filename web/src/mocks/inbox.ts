@@ -8,13 +8,30 @@ export interface InboxScenario {
   empty?: boolean;
   fail?: boolean;
   mix?: boolean;
+  stuck?: boolean;
+}
+
+interface MockResolution {
+  id: number;
+  outcome: string;
+  effective_outcome: string;
+  actor: string;
+  source: string;
+  prior_state: string;
+  prior_error: string;
+  ts: number;
 }
 
 interface MockEffect {
   id: number;
   proposal_id: number;
+  direction: 'forward' | 'undo';
+  state: string;
+  blocked: boolean;
+  undo_blocked: boolean;
   undoable: boolean;
   undone_at: number | null;
+  resolution?: MockResolution;
 }
 
 export interface InboxRequest {
@@ -44,7 +61,51 @@ const letter = [
   'Sam',
 ].join('\n');
 
-function seed(): { proposals: ProposalDetail[]; drafts: Draft[]; effects: MockEffect[]; questions: number[] } {
+function effect(id: number, proposal: number, extra: Partial<MockEffect> = {}): MockEffect {
+  return {
+    id,
+    proposal_id: proposal,
+    direction: 'forward',
+    state: 'done',
+    blocked: false,
+    undo_blocked: false,
+    undoable: false,
+    undone_at: null,
+    ...extra,
+  };
+}
+
+function stuckProposal(id: number, status: string, title: string, label: string): ProposalDetail {
+  return {
+    id,
+    kind: 'garden_watering',
+    title,
+    status,
+    actions: [],
+    undoable: false,
+    blocked: true,
+    created_at: NOW - 900 + id,
+    decided_at: NOW - 800 + id,
+    payload: {
+      kind: 'action',
+      label,
+      module: 'garden',
+      proposal_kind: 'garden_watering',
+      args: [{ label: 'Zone', value: 'Vegetable beds' }],
+      preview: null,
+      result: null,
+      change: null,
+    },
+  };
+}
+
+function seed(state: InboxScenario = {}): {
+  proposals: ProposalDetail[];
+  drafts: Draft[];
+  effects: MockEffect[];
+  questions: number[];
+} {
+  const stuck = state.stuck === true;
   return {
     questions: [42],
     proposals: [
@@ -100,6 +161,12 @@ function seed(): { proposals: ProposalDetail[]; drafts: Draft[]; effects: MockEf
           change: null,
         },
       },
+      ...(stuck
+        ? [
+            stuckProposal(15, 'failed', 'Start watering the vegetable beds', 'Start watering'),
+            stuckProposal(16, 'applied', 'Stop the shed heater schedule', 'Stop schedule'),
+          ]
+        : []),
     ],
     drafts: [
       {
@@ -116,8 +183,32 @@ function seed(): { proposals: ProposalDetail[]; drafts: Draft[]; effects: MockEf
         updated_at: NOW - 3600,
         unexpected_recipients: [],
       },
+      ...(stuck
+        ? [
+            {
+              id: 8,
+              account: 'sam@example.test',
+              account_configured: true,
+              to: 'Joris Bakker <joris@example.test>',
+              cc: '',
+              subject: 'Allotment key handover',
+              body: 'Hi Joris,\n\nThe key is under the blue pot.\n\nSam',
+              status: 'unknown',
+              revision: 2,
+              created_at: NOW - 2400,
+              updated_at: NOW - 1200,
+              unexpected_recipients: [],
+            } satisfies Draft,
+          ]
+        : []),
     ],
-    effects: [],
+    effects: stuck
+      ? [
+          effect(601, 15, { state: 'unknown', blocked: true }),
+          effect(602, 16, { undo_blocked: true }),
+          effect(603, 16, { direction: 'undo', state: 'unknown', blocked: true }),
+        ]
+      : [],
   };
 }
 
@@ -128,11 +219,11 @@ let off = new Set<string>();
 function scenario(): InboxScenario {
   try {
     const raw = localStorage.getItem('atrium.mock') ?? '{}';
+    const parsed: { inbox?: InboxScenario; modules?: Record<string, string> } = JSON.parse(raw);
     if (raw !== read) {
       read = raw;
-      store = seed();
+      store = seed(parsed.inbox);
     }
-    const parsed: { inbox?: InboxScenario; modules?: Record<string, string> } = JSON.parse(raw);
     off = new Set(Object.entries(parsed.modules ?? {}).flatMap(([name, state]) => (state === 'off' ? [name] : [])));
     return parsed.inbox ?? {};
   } catch {
@@ -164,8 +255,8 @@ function row(item: ProposalDetail): Approval {
 function waiting(): { proposals: ProposalDetail[]; drafts: Draft[] } {
   if (scenario().empty) return { proposals: [], drafts: [] };
   return {
-    proposals: store.proposals.filter((item) => item.status === 'pending'),
-    drafts: store.drafts.filter((item) => item.status === 'draft'),
+    proposals: store.proposals.filter((item) => item.status === 'pending' || item.blocked),
+    drafts: store.drafts.filter((item) => item.status === 'draft' || item.status === 'unknown'),
   };
 }
 
@@ -210,7 +301,7 @@ export function queue(): QueueItem[] {
         id: `proposal:${item.id}`,
         kind: 'proposal',
         title: item.title,
-        summary: approval.kind_label,
+        summary: item.blocked ? `${approval.kind_label}: Outcome unknown` : approval.kind_label,
         source: { type: 'proposal', id: String(item.id) },
         arrived_at: item.created_at,
         waiting_for: item.blocked ? 'resolve' : 'approval',
@@ -222,10 +313,10 @@ export function queue(): QueueItem[] {
         id: `draft:${item.id}`,
         kind: 'draft',
         title: item.subject || '(no subject)',
-        summary: `To ${item.to}`,
+        summary: item.status === 'unknown' ? `Send outcome unknown. To ${item.to}` : `To ${item.to}`,
         source: { type: 'draft', id: String(item.id) },
         arrived_at: item.created_at,
-        waiting_for: 'send',
+        waiting_for: item.status === 'unknown' ? 'resolve' : 'send',
         module: 'mail',
       }),
     ),
@@ -254,7 +345,7 @@ function decide(key: string, approve: boolean): void {
   if (proposal?.status !== 'pending') return;
   Object.assign(proposal, { status: approve ? 'applied' : 'dismissed', decided_at: at });
   if (approve && proposal.undoable) {
-    store.effects.push({ id: 500 + store.effects.length, proposal_id: id, undoable: true, undone_at: null });
+    store.effects.push(effect(500 + store.effects.length, id, { undoable: true }));
   }
 }
 
@@ -284,7 +375,9 @@ function command(key: string, approve: boolean, request: Request, body: () => Js
   const [type, raw] = key.split(':');
   const id = Number(raw);
   const pending =
-    type === 'draft' ? open.drafts.some((item) => item.id === id) : open.proposals.some((item) => item.id === id);
+    type === 'draft'
+      ? open.drafts.some((item) => item.id === id && item.status === 'draft')
+      : open.proposals.some((item) => item.id === id && item.status === 'pending');
   if (!pending) return refusal(409, 'not_pending', 'It was already decided.');
   decide(key, approve);
   if (mode === 'network') return HttpResponse.error();
@@ -297,6 +390,50 @@ function proposal(id: unknown): ProposalDetail | undefined {
 
 function draft(id: unknown): Draft | undefined {
   return store.drafts.find((item) => item.id === Number(id));
+}
+
+const forwardOutcomes: Record<string, string> = { applied: 'done', 'not-applied': 'failed', partial: 'partial' };
+const undoOutcomes: Record<string, string> = { undone: 'done', 'not-undone': 'failed', partial: 'partial' };
+
+function resolveProposal(item: ProposalDetail, outcome: string): Response | undefined {
+  const blocked = store.effects.filter((entry) => entry.proposal_id === item.id && entry.blocked);
+  if (!item.blocked || blocked.length === 0)
+    return refusal(409, 'not_resolved', `proposal ${item.id} has no write with an unknown outcome`);
+  const misfit = blocked.find((entry) => !(entry.direction === 'undo' ? undoOutcomes : forwardOutcomes)[outcome]);
+  if (misfit) return refusal(422, 'invalid', `outcome ${outcome} does not fit a ${misfit.direction} write`);
+  const at = Math.floor(Date.now() / 1000);
+  for (const entry of blocked) {
+    const effective = (entry.direction === 'undo' ? undoOutcomes : forwardOutcomes)[outcome] ?? outcome;
+    entry.resolution = {
+      id: 900 + entry.id,
+      outcome,
+      effective_outcome: effective,
+      actor: 'operator',
+      source: 'web',
+      prior_state: entry.state,
+      prior_error: '',
+      ts: at,
+    };
+    entry.state = effective;
+    entry.blocked = false;
+    if (entry.direction === 'undo') {
+      for (const forward of store.effects)
+        if (forward.proposal_id === item.id && forward.direction === 'forward') forward.undo_blocked = false;
+      if (effective === 'done') item.undone_at = at;
+    }
+  }
+  item.blocked = false;
+  return undefined;
+}
+
+function resolveCommand(request: Request, apply: () => Response | undefined, body: () => JsonBodyType): Response {
+  const mode = scenario().decide ?? 'ok';
+  record(request);
+  if (mode === 'conflict') return refusal(409, 'conflict', 'The item changed while you were looking at it.');
+  const refused = apply();
+  if (refused) return refused;
+  if (mode === 'network') return HttpResponse.error();
+  return HttpResponse.json(body());
 }
 
 export const inboxHandlers = [
@@ -323,7 +460,12 @@ export const inboxHandlers = [
       approvals: open.proposals.filter((item) => !item.blocked).map(row),
       blocked: open.proposals.filter((item) => item.blocked).map(row),
       drafts: open.drafts,
-      counts: { approvals: open.proposals.length, blocked: 0, drafts: open.drafts.length, unknown: 0 },
+      counts: {
+        approvals: open.proposals.filter((item) => !item.blocked).length,
+        blocked: open.proposals.filter((item) => item.blocked).length,
+        drafts: open.drafts.filter((item) => item.status === 'draft').length,
+        unknown: open.drafts.filter((item) => item.status === 'unknown').length,
+      },
     };
     return HttpResponse.json(body);
   }),
@@ -354,6 +496,38 @@ export const inboxHandlers = [
   http.post(`*${API_BASE}/drafts/:id/discard`, ({ params, request }) =>
     command(`draft:${params.id}`, false, request, () => ({ draft: draft(params.id) })),
   ),
+  http.post(`*${API_BASE}/approvals/:id/resolve`, async ({ params, request }) => {
+    const { outcome } = (await request.clone().json()) as { outcome?: string };
+    const item = proposal(params.id);
+    if (!item) return refusal(404, 'not_found', 'No such proposal.');
+    return resolveCommand(
+      request,
+      () => resolveProposal(item, outcome ?? ''),
+      () => ({ approval: row(item) }),
+    );
+  }),
+  http.post(`*${API_BASE}/drafts/:id/resolve`, async ({ params, request }) => {
+    const { outcome } = (await request.clone().json()) as { outcome?: string };
+    const item = draft(params.id);
+    if (!item) return refusal(404, 'not_found', 'No such draft.');
+    return resolveCommand(
+      request,
+      () => {
+        if (outcome !== 'sent' && outcome !== 'draft')
+          return refusal(422, 'invalid', 'an unknown draft can only be marked sent or returned to draft');
+        if (item.status !== 'unknown') return refusal(409, 'not_resolved', 'draft is not in the unknown state');
+        const at = Math.floor(Date.now() / 1000);
+        Object.assign(item, {
+          status: outcome,
+          sent_at: outcome === 'sent' ? at : item.sent_at,
+          revision: item.revision + 1,
+          updated_at: at,
+        });
+        return undefined;
+      },
+      () => ({ draft: item }),
+    );
+  }),
   http.get(`*${API_BASE}/effects`, ({ request }) => {
     scenario();
     const id = Number(new URL(request.url).searchParams.get('proposal_id'));
