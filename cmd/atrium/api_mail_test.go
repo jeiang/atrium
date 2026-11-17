@@ -32,6 +32,7 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 		}
 		return n
 	}
+	const mailEffects = "SELECT COUNT(*) FROM effects WHERE origin <> 'notify'"
 	var id string
 	if err := d.Read.QueryRow("SELECT CAST(id AS TEXT) FROM messages WHERE subject = 'Statement'").Scan(&id); err != nil {
 		t.Fatal(err)
@@ -45,6 +46,7 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { stop() })
+	settleBootChecks(t, m.dir, keyFor(t))
 	s := &apiSite{t: t, base: base}
 	rulesPath := "/api/v1/mail/rules"
 	expectAPI(t, s.do(http.MethodGet, rulesPath, "", nil, "Remote-User", "owner", "Cookie", "session=forged"), http.StatusUnauthorized, "unauthenticated")
@@ -56,7 +58,7 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 	if len(apiItems(t, changed)) == 0 {
 		t.Fatal("created rule absent")
 	}
-	beforeRules, beforeEffects, beforeAudit, beforeCommands := count("SELECT COUNT(*) FROM rules"), count("SELECT COUNT(*) FROM effects"), count("SELECT COUNT(*) FROM operation_audit"), count("SELECT COUNT(*) FROM commands")
+	beforeRules, beforeEffects, beforeAudit, beforeCommands := count("SELECT COUNT(*) FROM rules"), count(mailEffects), count("SELECT COUNT(*) FROM operation_audit"), count("SELECT COUNT(*) FROM commands")
 	preview := s.do(http.MethodPost, rulesPath+"/preview", token, map[string]any{"rule": rule}, "Idempotency-Key", "preview-only")
 	if got := apiData(t, preview, http.StatusOK); got["count"] != float64(1) {
 		t.Fatalf("preview: %v", got)
@@ -64,7 +66,7 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 	if preview.header.Get("ETag") != "" || preview.header.Get("Atrium-Command-Id") != "" || preview.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("preview headers: %v", preview.header)
 	}
-	if count("SELECT COUNT(*) FROM rules") != beforeRules || count("SELECT COUNT(*) FROM effects") != beforeEffects || count("SELECT COUNT(*) FROM operation_audit") != beforeAudit || count("SELECT COUNT(*) FROM commands") != beforeCommands {
+	if count("SELECT COUNT(*) FROM rules") != beforeRules || count(mailEffects) != beforeEffects || count("SELECT COUNT(*) FROM operation_audit") != beforeAudit || count("SELECT COUNT(*) FROM commands") != beforeCommands {
 		t.Fatal("preview persisted a write")
 	}
 	correctionPath := "/api/v1/mail/messages/" + id + "/correction"
@@ -74,14 +76,14 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 		t.Fatalf("a padded mode recorded a correction: %d", got)
 	}
 	shadow := apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "immediate"}), http.StatusOK)
-	if shadow["outcome"] != "deferred" || len(m.fake.Writes) != 0 || count("SELECT COUNT(*) FROM effects") != beforeEffects {
+	if shadow["outcome"] != "deferred" || len(m.fake.Writes) != 0 || count(mailEffects) != beforeEffects {
 		t.Fatalf("an immediate correction in shadow mode attempted a move: %v %v", shadow, m.fake.Writes)
 	}
 	if got := apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "deferred"}), http.StatusOK); got["outcome"] != "deferred" {
 		t.Fatalf("deferred correction outcome: %v", got)
 	}
 	message := apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages/"+id, token, nil), http.StatusOK)
-	if message["corrected_to"] != "Bills" || count("SELECT COUNT(*) FROM effects") != beforeEffects || len(m.fake.Writes) != 0 {
+	if message["corrected_to"] != "Bills" || count(mailEffects) != beforeEffects || len(m.fake.Writes) != 0 {
 		t.Fatalf("deferred correction wrote mail: %v %v", message, m.fake.Writes)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/mail/messages/999999", token, nil), http.StatusNotFound, "not_found")
@@ -155,14 +157,15 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 	if got := runApp(t, "live", "rebaseline"); got.code != 0 {
 		t.Fatalf("rebaseline: %s", got.stderr)
 	}
-	beforePausedEffects := count("SELECT COUNT(*) FROM effects")
+	beforePausedEffects := count(mailEffects)
 	base, _, stop, err = startServeAppArgs(t, m.app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {
 		t.Fatal(err)
 	}
+	settleBootChecks(t, m.dir, keyFor(t))
 	s.base = base
 	paused := apiData(t, s.do(http.MethodPost, correctionPath, token, map[string]any{"folder": "Bills", "mode": "immediate"}), http.StatusOK)
-	if n := count("SELECT COUNT(*) FROM effects"); paused["outcome"] != "deferred" || len(m.fake.Writes) != 0 || n != beforePausedEffects {
+	if n := count(mailEffects); paused["outcome"] != "deferred" || len(m.fake.Writes) != 0 || n != beforePausedEffects {
 		t.Fatalf("paused live correction: writes %v, effects %d -> %d", m.fake.Writes, beforePausedEffects, n)
 	}
 	apiData(t, s.do(http.MethodPost, livePath+"/resume", token, nil), http.StatusOK)
