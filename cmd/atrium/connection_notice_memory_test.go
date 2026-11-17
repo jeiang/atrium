@@ -45,6 +45,13 @@ func TestAConnectionFlappingAcrossARestartIsNoticedOncePerFlapWindow(t *testing.
 	})
 	label, _, _ := runtimeRow(t, dir, "service/tmdb")
 	before := connectionNotices(t, dir, label)
+	waitFor(t, func() bool {
+		var rows int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'connections.observe-health' AND target LIKE '%service/tmdb%'").Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		return rows > 0
+	})
 	searches := 0
 	search := func() {
 		t.Helper()
