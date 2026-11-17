@@ -124,17 +124,20 @@ func TestMailStatusGoLiveNeedsItsConfirmTokenAndOpensTheWatchWindow(t *testing.T
 		t.Fatalf("accounts: %v", before["accounts"])
 	}
 
-	expectAPI(t, s.post("/mail/status/go-live", s.token, map[string]any{}), http.StatusConflict, "confirm_required")
+	expectAPI(t, s.post("/mail/status/go-live", s.token, map[string]any{"confirm_token": ""}), http.StatusConflict, "confirm_required")
 	expectAPI(t, s.post("/mail/status/go-live", s.token, map[string]any{"confirm_token": "not-a-token"}), http.StatusConflict, "confirm_required")
 	if s.mode(t) != "shadow" {
 		t.Fatalf("mode changed without a token: %s", s.mode(t))
 	}
 	client := mrvClient(t)
-	code, body, _ := mrvDo(t, client, http.MethodPost, s.s.base+"/live/confirm", url.Values{"action": {"go_live"}})
+	if code, _, _ := mrvDo(t, client, http.MethodGet, s.s.base+"/live", nil); code != http.StatusOK {
+		t.Fatalf("status page: %d", code)
+	}
+	code, body, _ := mrvDo(t, client, http.MethodPost, s.s.base+"/live/confirm", url.Values{"action": {"go_live"}}, "Origin", s.s.base)
 	if code != http.StatusOK || !strings.Contains(body, `data-testid="confirm-statement"`) || !strings.Contains(body, `href="/live" autofocus>Cancel`) || !strings.Contains(body, `href="#pause-control"`) {
 		t.Fatalf("page confirm: %d %.600s", code, body)
 	}
-	if code, _, _ := mrvDo(t, client, http.MethodPost, s.s.base+"/live/go-live", url.Values{}); code != http.StatusConflict || s.mode(t) != "shadow" {
+	if code, _, _ := mrvDo(t, client, http.MethodPost, s.s.base+"/live/go-live", url.Values{}, "Origin", s.s.base); code != http.StatusConflict || s.mode(t) != "shadow" {
 		t.Fatalf("page go-live without a token: %d, mode %s", code, s.mode(t))
 	}
 
@@ -204,7 +207,7 @@ func TestMailStatusGoLiveNeedsItsConfirmTokenAndOpensTheWatchWindow(t *testing.T
 func TestMailStatusGoLiveIsRefusedWhileAWriteIsUnresolved(t *testing.T) {
 	s := statusFixture(t, "shadow", seenInbox("Note"))
 	token := s.confirm(t, "go_live")["confirm_token"].(string)
-	s.m.exec(t, "INSERT INTO effects (origin, operation, state, created_ts, target, account) VALUES (?, 'archive', 'unknown', 1, 'INBOX/1', 'work')", "operator_mail")
+	s.m.exec(t, "INSERT INTO effects (created_at, lease_at, settled_at, token, origin, operation, operation_key, direction, target, state, account) VALUES (1, 1, 1, 'status-test', ?, 'archive', 'k', 'forward', 'INBOX/1', 'unknown', 'work')", "operator_mail")
 	data := s.status(t)
 	if data["eligible"] != false || len(data["unmet"].([]any)) != 1 || data["unmet"].([]any)[0] != "unresolved_writes" {
 		t.Fatalf("status with an unknown write: %v", data)
@@ -218,9 +221,10 @@ func TestMailStatusGoLiveIsRefusedWhileAWriteIsUnresolved(t *testing.T) {
 
 func TestMailStatusRebaselineReplayAndDeletions(t *testing.T) {
 	s := statusFixture(t, "live", seenInbox("First", "Second", "Third"))
-	expectAPI(t, s.post("/mail/status/rebaseline", s.token, map[string]any{}), http.StatusConflict, "confirm_required")
-	if n := s.m.scalar(t, "SELECT COUNT(*) FROM live_baseline"); n != "0" {
-		t.Fatalf("baseline taken without a token: %s", n)
+	expectAPI(t, s.post("/mail/status/rebaseline", s.token, map[string]any{"confirm_token": ""}), http.StatusConflict, "confirm_required")
+	golive := s.m.scalar(t, "SELECT value FROM live_state WHERE key = 'golive_ts'")
+	if s.m.scalar(t, "SELECT value FROM live_state WHERE key = 'golive_ts'") != golive {
+		t.Fatal("baseline retaken without a token")
 	}
 	effect := s.confirm(t, "rebaseline")
 	if !strings.Contains(effect["statement"].(string), "baseline") || effect["baseline"].(float64) != 3 {
@@ -231,6 +235,9 @@ func TestMailStatusRebaselineReplayAndDeletions(t *testing.T) {
 		t.Fatalf("rebaseline: %d %.400s", got.status, got.body)
 	}
 	expectAPI(t, s.post("/mail/status/rebaseline", s.token, map[string]any{"confirm_token": effect["confirm_token"]}), http.StatusConflict, "confirm_required")
+	if s.m.scalar(t, "SELECT value FROM live_state WHERE key = 'golive_ts'") == golive {
+		t.Fatal("the confirmed rebaseline did not retake the baseline")
+	}
 	baseline := s.status(t)["baseline"].(map[string]any)
 	if baseline["messages"].(float64) != 3 || baseline["taken_at"] == nil {
 		t.Fatalf("baseline after rebaseline: %v", baseline)
@@ -252,7 +259,7 @@ func TestMailStatusRebaselineReplayAndDeletions(t *testing.T) {
 	if runID <= 0 {
 		t.Fatalf("replay run id: %v", out)
 	}
-	if got := s.m.scalar(t, "SELECT r.status FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE r.id = ? AND j.key = 'mail/replay'", int64(runID)); got != "ok" {
+	if got := s.m.scalar(t, "SELECT r.status FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE r.id = ? AND j.module = 'mail' AND j.name = 'replay'", int64(runID)); got != "ok" {
 		t.Fatalf("job run %v status: %s", runID, got)
 	}
 	summary := s.status(t)["replay"].(map[string]any)

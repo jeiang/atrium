@@ -192,7 +192,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			}},
 			{Module: pages.PauseModule(mailPageService)},
 			{Module: pages.StatusModule(func(d *web.Deps) pages.StatusOps { return newStatusOps(d, m) }), Nav: []web.NavItem{
-				{Section: "mail_app", Label: "Status", URL: "/live", Icon: "activity", Page: "mail_status", Order: 30},
+				{Section: "mail_app", Label: "Status", URL: "/live", Icon: "lock", Page: "mail_status", Order: 30},
 			}},
 			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
