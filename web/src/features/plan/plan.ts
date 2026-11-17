@@ -26,7 +26,7 @@ import {
 } from '../../contract';
 import { formatDay } from '../../shared/assistant/format';
 import { inboxPath } from '../../shared/assistant/inboxId';
-import { refusedOffline } from '../../shared/device.svelte';
+import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import { toast } from '../../shared/ui/toast.svelte';
 import { p } from '../../shell/router';
 
@@ -174,6 +174,13 @@ export function refreshPlan(client: QueryClient): void {
 export function problemOf(error: unknown): Problem {
   if (refusedOffline(error) && error instanceof Error) {
     return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+  }
+  if (outcomeUnknown(error)) {
+    return {
+      tone: 'error',
+      title: 'The outcome is unknown',
+      text: `${error.message} atrium reloaded the list and did not try again.`,
+    };
   }
   if (error instanceof ApiError && error.code === 'read_only') {
     return {

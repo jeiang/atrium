@@ -6,7 +6,7 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks.ts';
-import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expect, goUnreachable, layouts, reconnect, test, unreachableConsole, useScenario } from './fixtures.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 
@@ -16,6 +16,14 @@ function torrent(page: Page, hash: string) {
 
 function toast(page: Page, text: string) {
   return page.locator('.toast', { hasText: text });
+}
+
+function writes(page: Page): string[] {
+  const sent: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() !== 'GET') sent.push(new URL(request.url()).pathname);
+  });
+  return sent;
 }
 
 async function holdDown(page: Page, name: string): Promise<void> {
@@ -141,7 +149,7 @@ test.describe('Downloads', () => {
   });
 
   test.describe('refusals', () => {
-    test.use({ allowStatus: [409] });
+    test.use({ allowStatus: [409], allowConsole: unreachableConsole });
 
     test('a refusal shows the server reason and changes nothing', async ({ page }) => {
       await useScenario(page, {
@@ -156,6 +164,27 @@ test.describe('Downloads', () => {
         torrent(page, 'e5').getByText('qBittorrent is protecting this torrent. Nothing was changed.'),
       ).toBeVisible();
       await expect(torrent(page, 'e5')).toContainText('Seeding');
+    });
+
+    test('an unknown outcome says so and is not sent again after a reconnect', async ({ page }) => {
+      await useScenario(page, {
+        media: { refuse: { code: 'effect_unknown', message: 'qBittorrent did not confirm the change.' } },
+      });
+      const sent = writes(page);
+      await gotoShell(page, '/apps/torrents');
+      await torrent(page, 'e5')
+        .getByRole('button', { name: /^Pause/ })
+        .click();
+      await expect(torrent(page, 'e5').getByText('The outcome is unknown')).toBeVisible();
+      await expect(
+        torrent(page, 'e5').getByText(
+          'qBittorrent did not confirm the change. atrium reloaded the list and did not try again.',
+        ),
+      ).toBeVisible();
+      expect(sent).toEqual(['/web/v1/media/torrents/e5/control']);
+
+      await reconnect(page, /\/web\/v1\/media\/torrents$/);
+      expect(sent).toEqual(['/web/v1/media/torrents/e5/control']);
     });
   });
 
@@ -260,6 +289,29 @@ test.describe('Library', () => {
     await list.getByRole('button', { name: 'Ignore Paper.Boats.Extras' }).click();
     await expect(toast(page, 'Ignored Paper.Boats.Extras.')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Nothing to file' })).toBeVisible();
+  });
+
+  test.describe('with an unknown outcome', () => {
+    test.use({ allowStatus: [409], allowConsole: unreachableConsole });
+
+    test('filing says so and is not sent again after a reconnect', async ({ page }) => {
+      await useScenario(page, {
+        media: { refuse: { code: 'effect_unknown', message: 'The move did not confirm.' } },
+      });
+      const sent = writes(page);
+      await gotoShell(page, '/apps/media/intake');
+      const list = page.getByRole('list', { name: 'Waiting to be filed' });
+      await list.getByRole('button', { name: 'Ignore Paper.Boats.Extras' }).click();
+      const item = list.getByRole('listitem').filter({ hasText: 'Paper.Boats.Extras' }).first();
+      await expect(item.getByText('The outcome is unknown')).toBeVisible();
+      await expect(
+        item.getByText('The move did not confirm. atrium reloaded the list and did not try again.'),
+      ).toBeVisible();
+      expect(sent).toEqual([expect.stringMatching(/^\/web\/v1\/media\/filings\/[^/]+\/ignore$/)]);
+
+      await reconnect(page, /\/web\/v1\/media\/queue$/);
+      expect(sent).toEqual([expect.stringMatching(/^\/web\/v1\/media\/filings\/[^/]+\/ignore$/)]);
+    });
   });
 
   test.describe('with Torrents off', () => {

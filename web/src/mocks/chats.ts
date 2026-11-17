@@ -23,6 +23,7 @@ export interface ChatScenario {
   empty?: boolean;
   listError?: boolean;
   liveStream?: boolean;
+  approveUnknown?: boolean;
 }
 
 interface MockThread {
@@ -401,6 +402,10 @@ function decide(id: number, status: string, reply: string): Response | undefined
   const proposal = proposals.get(id);
   if (!proposal) return undefined;
   if (proposal.status !== 'pending') return problem(409, 'conflict', 'This ask was already decided.');
+  if (status === 'approved' && scenario().approveUnknown) {
+    Object.assign(proposal, { status, blocked: true, decided_at: BASE });
+    return problem(409, 'effect_unknown', 'The mail server did not confirm the send.');
+  }
   proposal.status = status;
   proposal.decided_at = BASE;
   const value = proposal.link_thread_id ? threads.get(proposal.link_thread_id) : undefined;
