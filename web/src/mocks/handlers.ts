@@ -6,6 +6,7 @@ import { type AssistantScenario, assistantHandlers } from './assistant';
 import { type CalendarScenario, calendarHandlers } from './calendar';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type ConnectionsScenario, connectionHandlers } from './connections';
+import { fileHandlers } from './files';
 import { type HomeScenario, homeHandlers } from './home';
 import { decideElsewhere, type InboxScenario, inboxAskHandlers, inboxCount, inboxHandlers } from './inbox';
 import { type KnowledgeScenario, knowledgeHandlers } from './knowledge';
@@ -15,6 +16,7 @@ import { type PlanScenario, planDecideElsewhere, planHandlers } from './plan';
 import { type SearchScenario, searchHandlers } from './search';
 import { type SettingsScenario, settingsHandlers } from './settings';
 import { simulatorHandlers } from './simulator';
+import { type TokensScenario, tokenHandlers } from './tokens';
 
 export interface MockScenario {
   session?: 'signed-in' | 'signed-out' | 'signed-out-proxy' | 'unavailable';
@@ -31,6 +33,7 @@ export interface MockScenario {
   chat?: ChatScenario;
   connections?: ConnectionsScenario;
   settings?: SettingsScenario;
+  tokens?: TokensScenario;
   notifications?: NotificationsScenario;
   home?: HomeScenario;
   unreachable?: boolean;
@@ -191,11 +194,13 @@ export const handlers = [
   ...planHandlers,
   ...assistantHandlers(scenario),
   ...settingsHandlers(scenario),
+  ...tokenHandlers(scenario),
   ...notificationHandlers(scenario),
   ...connectionHandlers(scenario),
   ...appHandlers(scenario),
   ...calendarHandlers(scenario),
   ...mediaHandlers(scenario),
+  ...fileHandlers,
   ...chatHandlers,
   ...simulatorHandlers,
   ...knowledgeHandlers,

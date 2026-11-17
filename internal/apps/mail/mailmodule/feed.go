@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	mailclassify "github.com/jeiang/atrium/internal/apps/mail/classify"
 	"github.com/jeiang/atrium/internal/apps/mail/mailscan"
@@ -73,8 +74,11 @@ func (feed) Scan(ctx context.Context, d *db.DB, now float64, scan communications
 		paid = &mailclassify.Deferral{}
 	}
 	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
-		Kind: scan.Kind, Hint: "1", WindowDays: scan.WindowDays, FetchLimit: scan.FetchLimit, Limit: scan.Limit, Paid: paid,
+		Kind: scan.Kind, Hint: prefilter(scan.Prefilter), WindowDays: scan.WindowDays, FetchLimit: scan.FetchLimit, Limit: scan.Limit, Paid: paid,
 		Eligible: func(m mailscan.Message) (bool, error) {
+			if scan.Eligible == nil {
+				return true, nil
+			}
 			found, err := scanned(m)
 			if err != nil {
 				return false, err
@@ -112,4 +116,22 @@ func recipients(text string) ([]string, error) {
 		return nil, fmt.Errorf("%w: to_addrs is not a list of strings", httpx.ErrShape)
 	}
 	return out, nil
+}
+
+func prefilter(p communications.Prefilter) string {
+	var alts []string
+	if p.Ordered {
+		alts = append(alts, "m.k_order = 1")
+	}
+	for _, w := range p.Subject {
+		alts = append(alts, "lower(m.subject) LIKE '%"+strings.ReplaceAll(strings.ToLower(w), "'", "''")+"%'")
+	}
+	hint := "1"
+	if len(alts) > 0 {
+		hint = strings.Join(alts, " OR ")
+	}
+	if p.Received {
+		return "m.sent = 0 AND (" + hint + ")"
+	}
+	return hint
 }

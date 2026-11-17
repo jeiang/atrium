@@ -12,6 +12,7 @@
   import Backups from './Backups.svelte';
   import Notifications from './Notifications.svelte';
   import { BACKUPS, GROUPS, NOTIFICATIONS } from './placement';
+  import Tokens from './Tokens.svelte';
   import './settings.css';
 
   let phone = $state(false);
@@ -140,6 +141,9 @@
               {/if}
             {/snippet}
           </SettingsForm>
+          {#if open.id === 'settings.sign_in'}
+            <Tokens {locked} {phone} />
+          {/if}
         {/key}
       {/if}
     </div>

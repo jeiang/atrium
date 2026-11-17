@@ -57,9 +57,6 @@ func MailModule(o Options) web.Module {
 		r.Post("/drafts/{draft_id}/discard", s.draftDiscard)
 		r.Post("/drafts/{draft_id}/send", s.draftSend)
 		r.Post("/drafts/{draft_id}/resolve", s.draftResolve)
-
-		r.Get("/watches", s.watchesPage)
-		r.Post("/watches/packages/{package_id}/dismiss", s.packageDismiss)
 	}
 }
 

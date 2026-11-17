@@ -36,11 +36,5 @@ const (
 	TuningRuleMinPurity             = 0.9
 	TuningSentBackfillDays          = 90
 	TuningTriageTopDests            = 15
-	TuningWatchesBodyChars          = 3000
-	TuningWatchesPackageWindowDays  = 60
-	TuningWatchesScanLimit          = 25
-	TuningWatchesStalePackageDays   = 60
 	TuningWriteAttempts             = 3
 )
-
-var TuningWatchesCarrierDomains = []string{"ups.com", "fedex.com", "usps.com", "dhl.com", "usps.gov", "dhl.de"}

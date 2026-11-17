@@ -234,8 +234,9 @@ beyond the coordinates.
 
 ## Ship24
 
-Ship24 supplies live package tracking for packages the operator registers
-with the `track_package` tool. Create an API key in the Ship24 dashboard and
+Ship24 supplies live package tracking for the opt-in Packages app
+(`packages_enabled`), for packages the operator registers with the
+`track_package` tool or `POST /packages/{package_id}/track`. Create an API key in the Ship24 dashboard and
 paste it on the Connections page, or declare `credential_files.api_key` on
 the `service/ship24` connection in the host configuration. The free plan registers 10 shipments a month; the
 compiled quota `tracking.TuningMailShip24MonthlyQuota` (10) refuses further

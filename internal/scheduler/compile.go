@@ -33,7 +33,7 @@ func Compile(defs []Definition) ([]Definition, error) {
 	for _, def := range defs {
 		bad := func(reason string) error { return &InvalidJob{Module: def.Module, Key: def.Key, Reason: reason} }
 		switch {
-		case strings.TrimSpace(def.Module) == "" || def.Key != def.Module+"/"+def.Name:
+		case strings.TrimSpace(def.Module) == "" || def.Key != def.owner()+"/"+def.Name:
 			return nil, bad("must be keyed by its owner and name")
 		case strings.TrimSpace(def.Name) == "" || strings.TrimSpace(def.Name) != def.Name:
 			return nil, bad("has an invalid name")

@@ -61,6 +61,10 @@ var moduleCases = []moduleCase{
 	{module: unit.Grafana, table: "ops_samples"},
 	{module: unit.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
 	{module: unit.Weather, tool: "weather"},
+	{module: unit.Packages, tool: "track_package", table: "packages", method: "GET", path: "/watches", status: http.StatusOK,
+		command: []string{"packages", "poll"}, output: func(_, stderr string, code int) bool {
+			return code != cli.ExitOK && strings.Contains(stderr, "Ship24 connection is not configured")
+		}},
 }
 
 type appRun struct {
@@ -875,7 +879,7 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 			}
 		}
 	}
-	allOn := func(string) string { return "true" }
+	allOn := func(name string) string { return strconv.FormatBool(name != unit.Packages) }
 	coreOnly := func(string) string { return "false" }
 
 	for _, c := range []struct {
@@ -886,11 +890,17 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 		{"only a mail account", []string{account}},
 		{"only an assistant thread", []string{thread}},
 	} {
-		t.Run("a Phase A database with "+c.name+" turns every module on", func(t *testing.T) {
+		t.Run("a Phase A database with "+c.name+" turns every module but opt-in Packages on", func(t *testing.T) {
 			base, _, _ := phaseA(t, c.rows...)
 			wantFlags(t, base, allOn)
 		})
 	}
+
+	t.Run("a Phase A database with stored packages turns Packages on too", func(t *testing.T) {
+		base, _, _ := phaseA(t, account, "INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)")
+		wantFlags(t, base, func(string) string { return "true" })
+	})
 
 	t.Run("an empty database starts core only", func(t *testing.T) {
 		base, _, _ := phaseA(t)
@@ -903,7 +913,7 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 	t.Run("a seeded database keeps its stored flags across a restart", func(t *testing.T) {
 		_, dir, stop := phaseA(t, account)
 		stop()
-		off := map[string]bool{unit.Mail: true, unit.Media: true}
+		off := map[string]bool{unit.Mail: true, unit.Media: true, unit.Packages: true}
 		for name := range off {
 			if got := runSettings(t, "set", module.FlagKey(name), "false"); got.code != cli.ExitOK {
 				t.Fatalf("settings set %s false: exit %d %q", module.FlagKey(name), got.code, got.stderr)

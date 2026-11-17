@@ -1,21 +1,21 @@
-package attentionsources
+package packagesmodule
 
 import (
 	"context"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/db"
 )
 
-type packages struct{}
+type packagesSource struct{}
 
-func Packages() attention.Source { return packages{} }
+func attentionSource() attention.Source { return packagesSource{} }
 
-func (packages) Name() string { return "packages" }
+func (packagesSource) Name() string { return "packages" }
 
-func (packages) Items(ctx context.Context, q db.Querier, _ float64) ([]attention.Item, error) {
+func (packagesSource) Items(ctx context.Context, q db.Querier, _ float64) ([]attention.Item, error) {
 	found, err := tracking.AttentionPackages(ctx, q)
 	if err != nil {
 		return nil, err
