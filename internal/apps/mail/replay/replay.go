@@ -8,12 +8,12 @@ import (
 	"math"
 	"sort"
 
+	"github.com/jeiang/atrium/internal/apps/mail/classify"
 	"github.com/jeiang/atrium/internal/apps/mail/router"
 	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/mail/classify"
 )
 
 const StageNone = "none"
