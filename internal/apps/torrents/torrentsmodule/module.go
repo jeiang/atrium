@@ -58,6 +58,7 @@ func operations() ([]application.Definition, []application.Binding) {
 			{Kind: application.Tool, Target: torrenttools.NameAdd, Uses: []application.Name{torrentsapp.AddName}},
 			{Kind: application.Tool, Target: torrenttools.NameControl, Uses: []application.Name{torrentsapp.ControlName}},
 			{Kind: application.ProtocolOnly, Target: "GET /apps/media/add", Reason: "transport"},
+			{Kind: application.ProtocolOnly, Target: "downloads-watch", Reason: "lifecycle"},
 		}
 }
 
