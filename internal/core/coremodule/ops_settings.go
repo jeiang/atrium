@@ -78,8 +78,6 @@ func (m Module) settingsOperations() ([]application.Definition, []application.Bi
 			{Kind: application.CLI, Target: "secrets set", Uses: uses(settingsapp.SecretSetName)},
 			{Kind: application.CLI, Target: "secrets delete", Uses: uses(settingsapp.SecretDeleteName)},
 			{Kind: application.CLI, Target: "secrets status", Uses: uses(settingsapp.SecretStatusName)},
-			{Kind: application.HTML, Target: "POST /settings/groups/{module}/{name}", Uses: []application.Name{settingsapp.SetName, settingsapp.ReadName}},
-			{Kind: application.HTML, Target: "POST /settings/sections/{name}", Uses: []application.Name{settingsapp.SetName}},
 		}...)
 }
 

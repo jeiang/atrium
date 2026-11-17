@@ -60,8 +60,6 @@ func operations() ([]application.Definition, []application.Binding) {
 			pkgapp.DescribePackages(), pkgapp.DescribeAdd(), pkgapp.DescribePackageDismiss(),
 			pkgapp.DescribeTrack(), pkgapp.DescribeUntrack(), pkgapp.DescribePoll(),
 		}, []application.Binding{
-			{Kind: application.HTML, Target: "GET /watches", Uses: []application.Name{pkgapp.PackagesName}},
-			{Kind: application.HTML, Target: "POST /watches/packages/{package_id}/dismiss", Uses: []application.Name{pkgapp.PackageDismissName, pkgapp.PackagesName}},
 			{Kind: application.Tool, Target: "packages", Uses: []application.Name{pkgapp.PackagesName}},
 			{Kind: application.Tool, Target: "track_package", Uses: []application.Name{pkgapp.TrackName}},
 			{Kind: application.Tool, Target: "untrack_package", Uses: []application.Name{pkgapp.UntrackName}},
@@ -103,13 +101,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Operations:  ops,
 		Bindings:    append(bindings, routes(nil, nil)...),
 		Pages: []web.Page{{
-			Module: func(r chi.Router, d *web.Deps) {
-				s := m.pageService(d)
-				routes(d, s)
-				htmlRoutes(r, d, s)
-			},
-			Templates: templatesFS(),
-			Nav:       []web.NavItem{{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30}},
+			Module: func(_ chi.Router, d *web.Deps) { routes(d, m.pageService(d)) },
+			Nav:    []web.NavItem{{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30}},
 		}},
 	}
 }

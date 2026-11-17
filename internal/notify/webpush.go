@@ -44,10 +44,9 @@ var (
 	pushLog     = logx.Logger("atrium.notify.webpush")
 	pushAllowed atomic.Pointer[func(netip.Addr) bool]
 	clientCard  = regexp.MustCompile(`^/(?:proposals|drafts|chat)/[0-9]+$`)
-	clientPages = map[string]string{
-		pushInbox:          pushInbox,
-		connections.Screen: connections.Screen,
-		"/scheduled":       "/assistant/routines",
+	clientPages = map[string]bool{
+		pushInbox:          true,
+		connections.Screen: true,
 	}
 )
 
@@ -248,19 +247,18 @@ func pushURL(link, click string) string {
 }
 
 func clientURL(stored string) string {
-	if strings.HasPrefix(stored, urlx.ClientBase) {
-		return stored
+	if target, legacy := urlx.StripLegacy(stored); legacy {
+		return target
 	}
 	path, _, _ := strings.Cut(stored, "#")
 	path, _, _ = strings.Cut(path, "?")
-	target, known := clientPages[path]
-	switch {
-	case clientCard.MatchString(path):
-		target = path
-	case !known:
-		target = "/inbox"
+	if clientCard.MatchString(path) || clientPages[path] {
+		return path
 	}
-	return strings.TrimSuffix(urlx.ClientBase, "/") + target
+	if target, _, moved := urlx.Moved(path, ""); moved {
+		return target
+	}
+	return "/inbox"
 }
 
 func pushErrorClass(err error) string {

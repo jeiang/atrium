@@ -86,7 +86,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
 	commitmentOps, commitmentBindings := commitmentOperations()
 	operations, bindings = append(operations, commitmentOps...), append(bindings, commitmentBindings...)
-	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	operations = append(operations, webusage.DescribeRoutes())
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "usage routes", Uses: []application.Name{webusage.RoutesName}})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: proposalsapp.ScanCommand, Composite: true})

@@ -41,7 +41,6 @@ type Page struct {
 	Templates fs.FS
 	Globals   map[string]any
 	Public    func(config.Config, config.Env, *db.DB, *settings.Registry) func(*http.Request) bool
-	Home      string
 	Nav       []tpl.NavItem
 	OIDC      oidc.Source
 	Bindings  map[string][]application.Binding
@@ -188,7 +187,6 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 	globals := map[string]any{}
 	var checks []func(*http.Request) bool
 	var nav []tpl.NavItem
-	home := ""
 	var oidcSource oidc.Source
 	bindings := map[string][]application.Binding{}
 	for _, page := range site.Pages {
@@ -200,9 +198,6 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 		}
 		if page.Templates != nil {
 			templates = append(templates, page.Templates)
-		}
-		if page.Home != "" {
-			home = page.Home
 		}
 		if page.OIDC != nil {
 			oidcSource = page.OIDC
@@ -220,7 +215,7 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 		if site.DB != nil {
 			account = authapp.New(site.DB, sessions, bearer.New(site.DB, sessions))
 		}
-		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Account: account, Home: home, Bindings: bindings, OnReady: start, Drain: site.Drain, Commands: site.Commands})
+		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Account: account, Bindings: bindings, OnReady: start, Drain: site.Drain, Commands: site.Commands})
 		if err != nil {
 			return nil, err
 		}

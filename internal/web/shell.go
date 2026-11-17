@@ -45,15 +45,45 @@ type ShellMail struct {
 	Paused bool   `json:"paused"`
 }
 
+type ShellState struct {
+	Mode          string
+	Paused        bool
+	NeedsYou      int
+	NotifyFailing []string
+}
+
+type ShellFunc func(context.Context, *ShellState) error
+
+func (rd *Renderer) OnShell(fn ShellFunc) {
+	if fn == nil {
+		return
+	}
+	rd.mu.Lock()
+	defer rd.mu.Unlock()
+	rd.shell = append(rd.shell, fn)
+}
+
+func (rd *Renderer) shellState(ctx context.Context) ShellState {
+	rd.mu.Lock()
+	contributions := append([]ShellFunc(nil), rd.shell...)
+	rd.mu.Unlock()
+	var state ShellState
+	for _, fn := range contributions {
+		if err := fn(ctx, &state); err != nil {
+			log.Error("shell contribution failed", "err", err.Error())
+		}
+	}
+	return state
+}
+
 func (rd *Renderer) Shell(ctx context.Context) ShellFrame {
 	nav := rd.navFor("")
-	f := &tpl.Frame{Nav: nav.groups, Settings: nav.settings, SettingsURL: nav.settingsURL, BrandURL: nav.brandURL, Footer: nav.footer, Pages: nav.pages}
-	rd.contribute(ctx, f)
+	state := rd.shellState(ctx)
 	out := ShellFrame{
-		Groups: []ShellGroup{}, Sections: []ShellSection{}, Settings: shellLinks(f.Settings), SettingsURL: f.SettingsURL,
-		Footer: shellLinks(f.Footer), BrandURL: f.BrandURL, NeedsYou: f.PendingCount, NotifyFailing: append([]string{}, f.NotifyFailing...),
+		Groups: []ShellGroup{}, Sections: []ShellSection{}, Settings: shellLinks(nav.settings), SettingsURL: nav.settingsURL,
+		Footer: shellLinks(nav.footer), BrandURL: nav.brandURL, NeedsYou: state.NeedsYou, NotifyFailing: append([]string{}, state.NotifyFailing...),
 	}
-	for _, g := range f.Nav {
+	for _, g := range nav.groups {
 		if g.Label == "" && len(g.Items) > 0 && g.Items[0].Section == "" && nav.isHub(g.Items[0].Page) {
 			continue
 		}
@@ -66,8 +96,8 @@ func (rd *Renderer) Shell(ctx context.Context) ShellFrame {
 		}
 		out.Sections = append(out.Sections, ShellSection{Key: h.Page, Label: h.Label, Icon: h.Icon, URL: tabs[0].URL, Badge: h.Badge, Tabs: shellLinks(tabs)})
 	}
-	if f.Mode != "" {
-		out.Mail = &ShellMail{Mode: f.Mode, Paused: f.Paused}
+	if state.Mode != "" {
+		out.Mail = &ShellMail{Mode: state.Mode, Paused: state.Paused}
 	}
 	return out
 }

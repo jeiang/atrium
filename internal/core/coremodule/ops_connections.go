@@ -29,15 +29,6 @@ func connectionsDeclared() ([]application.Definition, []application.Binding) {
 			{Kind: application.CLI, Target: "connections list", Uses: []application.Name{connectionsapp.ListName}},
 			{Kind: application.CLI, Target: "connections test", Uses: []application.Name{connectionsapp.TestName}},
 			{Kind: application.CLI, Target: "connections check", Uses: []application.Name{connectionsapp.CheckName}},
-			{Kind: application.HTML, Target: "GET /settings/connections", Uses: []application.Name{connectionsapp.ListName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/test", Uses: []application.Name{connectionsapp.TestSaveName, connectionsapp.ListName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/disconnect", Uses: []application.Name{connectionsapp.DisconnectName}},
-			{Kind: application.HTML, Target: "GET /settings/connections/google", Uses: []application.Name{connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google", Uses: []application.Name{connectionsapp.OAuthConfigureName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google/start", Uses: []application.Name{connectionsapp.OAuthStartName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "GET /settings/connections/google/callback", Uses: []application.Name{connectionsapp.OAuthCompleteName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google/paste", Uses: []application.Name{connectionsapp.OAuthCompleteName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google/test", Uses: []application.Name{connectionsapp.TestName, connectionsapp.OAuthSetupName}},
 			{Kind: application.Service, Target: "connection-health", Uses: []application.Name{connectionsapp.ObserveHealthName}},
 		}
 }

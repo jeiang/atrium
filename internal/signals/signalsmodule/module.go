@@ -18,13 +18,7 @@ import (
 type Module struct{}
 
 func Bindings() []application.Binding {
-	loopsPage := []application.Name{OpenLoopsName, CommitmentsName}
 	return append(apiRoutes(nil, nil), []application.Binding{
-		{Kind: application.HTML, Target: "GET /loops", Uses: loopsPage},
-		{Kind: application.HTML, Target: "POST /loops/{loop_id}/snooze", Uses: append([]application.Name{LoopSnoozeName}, loopsPage...)},
-		{Kind: application.HTML, Target: "POST /loops/{loop_id}/dismiss", Uses: append([]application.Name{LoopDismissName}, loopsPage...)},
-		{Kind: application.HTML, Target: "POST /loops/dismiss-all", Uses: append([]application.Name{LoopsDismissMatchingName}, loopsPage...)},
-		{Kind: application.HTML, Target: "POST /loops/commitments/{commitment_id}/{outcome}", Uses: append([]application.Name{CommitmentDoneName, CommitmentDismissName}, loopsPage...)},
 		{Kind: application.Tool, Target: "open_loops", Uses: []application.Name{OpenLoopsName}},
 	}...)
 }
@@ -47,13 +41,8 @@ func (Module) Declare(module.Context) module.Declaration {
 			return module.Effects{Proposals: r.Proposals(unit.Signals), Undo: slices.Concat(signals.Undo(), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoCommitmentSnooze, d.Now)})}
 		},
 		Pages: []web.Page{{
-			Module: func(r chi.Router, d *web.Deps) {
-				svc := newService(d)
-				apiRoutes(d, svc)
-				pageRoutes(r, d, svc)
-			},
-			Templates: Templates(),
-			Nav:       []web.NavItem{{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20}},
+			Module: func(_ chi.Router, d *web.Deps) { apiRoutes(d, newService(d)) },
+			Nav:    []web.NavItem{{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20}},
 		}},
 	}
 }
