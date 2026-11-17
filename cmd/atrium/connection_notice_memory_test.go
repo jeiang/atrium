@@ -49,7 +49,7 @@ func TestAConnectionFlappingAcrossARestartIsNoticedOncePerFlapWindow(t *testing.
 	search := func() {
 		t.Helper()
 		searches++
-		_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+"+strconv.Itoa(searches), nil)
+		webG4(t, s.base).do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+"+strconv.Itoa(searches), nil)
 	}
 	backdate := func() {
 		t.Helper()
