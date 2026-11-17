@@ -52,7 +52,7 @@ func (s *Store) notice(ctx context.Context, id ID, previous, next State, reason,
 	if s.reg != nil {
 		n = s.reg.notify
 	}
-	if n == nil || s.d == nil || previous == next || next == Untested || next == Away {
+	if n == nil || s.d == nil || previous == next && !unhealthy(next) || next == Untested || next == Away {
 		return
 	}
 	if (previous == "" || previous == Untested) && next != Failing && next != NeedsReauth && next != Disabled {
@@ -76,6 +76,9 @@ func (s *Store) notice(ctx context.Context, id ID, previous, next State, reason,
 		if next == NeedsReauth {
 			hint = RepairHint(view)
 		}
+	}
+	if !s.damp(id, previous, next) {
+		return
 	}
 	state := strings.ReplaceAll(string(next), "_", " ")
 	body := label + ": " + state
@@ -132,7 +135,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 		if !errors.As(err, &invalid) {
 			return View{}, err
 		}
-		return s.record(ctx, id, lease.revision, 0, []Result{{State: Failing, Reason: err.Error()}}, commits...)
+		return s.record(ctx, id, lease.revision, 0, nil, []Result{{State: Failing, Reason: err.Error()}}, commits...)
 	}
 	action := def.Test
 	if def.Silent != nil {
@@ -142,7 +145,7 @@ func (s *Store) check(ctx context.Context, id ID, commits ...Commit) (View, erro
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, def.Grace, results, commits...)
+	return s.record(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
 }
 
 type HealthState struct {
@@ -227,12 +230,14 @@ func (l *Lease) Report(r Result) {
 	now := time.Now().UnixNano()
 	if last, seen := observed.Load(key); seen {
 		if prev := last.(observation); prev.state == r.State && now-prev.at < int64(time.Minute) {
+			l.reported(r.State)
 			return
 		}
 	}
 	select {
 	case ch.(chan RuntimeReport) <- RuntimeReport{ID: l.id, revision: l.revision, store: l.store, result: r}:
 		observed.Store(key, observation{state: r.State, at: now})
+		l.reported(r.State)
 	default:
 	}
 }
@@ -297,4 +302,76 @@ func (l *Lease) reporting(client *http.Client) *http.Client {
 	}
 	client.Transport = reporter{id: l.id, revision: l.revision, next: client.Transport}
 	return client
+}
+
+func (l *Lease) reported(state State) {
+	if l.cause != nil && unhealthy(state) {
+		l.cause()
+	}
+}
+
+const (
+	flapWindow   = 6 * time.Hour
+	lastingAfter = 30 * time.Minute
+)
+
+type noticeKey struct {
+	d  *db.DB
+	id ID
+}
+
+type noticeMemory struct {
+	toldAt time.Time
+	open   bool
+	heldAt time.Time
+}
+
+var (
+	noticesMu sync.Mutex
+	notices   = map[noticeKey]noticeMemory{}
+)
+
+func unhealthy(s State) bool { return s == Failing || s == NeedsReauth }
+
+func (s *Store) damp(id ID, previous, next State) bool {
+	key := noticeKey{d: s.d, id: id}
+	noticesMu.Lock()
+	defer noticesMu.Unlock()
+	m, seen := notices[key]
+	if !seen {
+		m = noticeMemory{open: unhealthy(previous)}
+	}
+	send, m := dampNotice(m, previous, next, s.now())
+	if unhealthy(next) || next == OK || next == Expiring {
+		notices[key] = m
+	} else {
+		delete(notices, key)
+	}
+	return send
+}
+
+func dampNotice(m noticeMemory, previous, next State, now time.Time) (bool, noticeMemory) {
+	switch {
+	case unhealthy(next) && previous == next:
+		if m.open || m.heldAt.IsZero() || now.Sub(m.heldAt) < lastingAfter {
+			return false, m
+		}
+		return true, noticeMemory{toldAt: now, open: true}
+	case unhealthy(next):
+		if !m.toldAt.IsZero() && now.Sub(m.toldAt) < flapWindow {
+			if !m.open && m.heldAt.IsZero() {
+				m.heldAt = now
+			}
+			return false, m
+		}
+		return true, noticeMemory{toldAt: now, open: true}
+	case unhealthy(previous) && (next == OK || next == Expiring):
+		m.heldAt = time.Time{}
+		if !m.open {
+			return false, m
+		}
+		m.open = false
+		return true, m
+	}
+	return true, m
 }

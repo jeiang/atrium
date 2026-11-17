@@ -42,8 +42,8 @@ type Failure struct {
 	Error    string
 }
 
-func (s *Scheduler) failed(ctx context.Context, claim Claim, result Result) {
-	if s.deps.Failed == nil {
+func (s *Scheduler) failed(ctx context.Context, claim Claim, result Result, reported bool) {
+	if s.deps.Failed == nil || reported {
 		return
 	}
 	var previous Status

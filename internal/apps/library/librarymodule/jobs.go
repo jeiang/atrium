@@ -57,7 +57,7 @@ func mediaJobs(deps jobworker.Dependencies, torrents contract.Provider) []schedu
 	return []scheduler.Definition{
 		mediaJob(deps, torrents, library.JobChannels, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).",
 			"*/30 * * * *", library.KeyScheduleChannels, 15*time.Minute, "media-control", scheduler.ShutdownDrain, librarycmd.Poll),
-		mediaJob(deps, torrents, library.JobSweep, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).",
+		mediaJob(deps, torrents, library.JobSweep, "Every 10 minutes: select files in new media torrents, remove filed torrents qBittorrent has stopped, and file exact plans for approved requests and followed shows (no model run).",
 			"*/10 * * * *", library.KeyScheduleSweep, 15*time.Minute, "media-control", scheduler.ShutdownDrain, sweepJob),
 	}
 }

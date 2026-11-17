@@ -116,7 +116,7 @@ func (s *Service) add(ctx context.Context, in AddInput) (Added, error) {
 		return out, classifyWrite(err)
 	}
 	if consumer, ok := s.d.App.Consumer(req.Label); ok && consumer.Added != nil {
-		if err := consumer.Added(ctx, s.contractDeps(), intake, req.Scope); err != nil {
+		if err := consumer.Added(ctx, s.contractDeps(), intake, contract.Addition{Hash: out.Hash, Scope: req.Scope}); err != nil {
 			return out, &application.Error{Code: application.Partial, Message: "Torrent added, but file selection failed.", Cause: err}
 		}
 	}

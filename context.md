@@ -484,7 +484,16 @@ claims about the running application. Operator contracts are in
   needs-reauth rows. Runtime request failures trigger a check (at most
   one per 5 minutes) in every state except disabled; a success while
   failing triggers a recovery check. A first failing result notifies once,
-  also after a host change. A host-declared row dropped from the host file
+  also after a host change. Notices are damped per connection in process
+  (`flapWindow` 6 hours, `lastingAfter` 30 minutes in
+  `internal/connections/health.go`): at most one failing and one recovery
+  notice per 6 hours; a held failure notifies once it lasts 30 minutes; a
+  recovery notifies only after a notified failure. A CLI process keeps its
+  own memory, so `connections test` notifies each change. A scheduled run whose
+  connection lease reported a failing or needs-reauth result
+  (`scheduler.CauseReporter`) sends no job-failed notice and no stale
+  notice for that run (that memory is in process, so after a restart the
+  stale check may still notice such a run once). A host-declared row dropped from the host file
   is disabled with its credentials kept. Whichever process opens the
   database first disables it, but only the health watch's start pass in
   `serve` announces it, once per removal (the notice's occurrence key is
@@ -518,6 +527,14 @@ claims about the running application. Operator contracts are in
   notifies once; the hourly watch rechecks such rows. A failure from any
   other state, including a host change, gets no window. Other kinds have
   none.
+- A connection kind lists in `Definition.Interactive` the capabilities only
+  an interactive use can prove (`service/oidc` lists `client_auth`). When a
+  test or health pass reports such a capability `untested`, `Store.record`
+  keeps the stored `ok` or `failing` result that a sign-in observed, at the
+  same revision. A save, a host config change or a credential rotation
+  writes fresh results and drops it. The OIDC flow observes `ok` after a
+  sign-in whose client secret matches the stored one, and `failing` when the
+  token endpoint refuses the client (401 or `invalid_client`).
 - `atrium connections check` runs the silent check of every configured
   connection, and `--changed` only those never checked since they were
   added, declared again, or their host declaration changed (including a
@@ -1187,6 +1204,27 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
+- Automatic filing: the `media-sweep` job, after selection and removal, files
+  a completed, unfiled, unignored media torrent without the operator when it
+  is approved and its plan is exact (`located.exact` in
+  `internal/apps/library/application/filing.go`). Approved means a
+  `library_requests` row (written by the Torrents consumer hook for an
+  operator screen or API add, `approved_by` `operator`, or an approved
+  `download_add` proposal, `approved_by` `proposal`, with its thread) or a
+  done `media_add_*` effect whose operation key is
+  `media:channel:<id>:...` for a channel that still exists. Exact means the
+  Intake default plan has no error, title and year are known, a movie has one
+  video file, every TV video file has an episode, no two files share a
+  destination, and the agent prepares it. Not exact leaves the request
+  `waiting` with the reason. An item with any earlier `media_file` effect is
+  never filed automatically (no retry after failure, no refile after undo).
+  Automatic filings use operation keys `media:auto-file:<hash>:...` (manual:
+  `media:file:`), request `filed_by` `job`, audit `media.file-item` details
+  `automatic: true`, the same receipt and undo, and send one `media`
+  notification per filing (occurrence `media-filed:<effect-id>`, linked to the
+  request thread). Request states are `requested`, `waiting`, `filed` and
+  `failed`; `GET /media/requests` (operation `media.requests`, both
+  prefixes) lists them.
 - The library catalogue, `library_search` and library pages read from
   the agent. The host key
   `media_root` is refused at startup (exit 78) and at Nix evaluation, naming

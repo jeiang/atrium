@@ -88,6 +88,7 @@ var invalidates = map[string]string{
 	"job_runs":                           "jobs",
 	"jobs":                               "jobs",
 	"kb_records":                         "knowledge",
+	"library_requests":                   "media",
 	"live_baseline":                      "mail",
 	"live_state":                         "mail",
 	"loop_overrides":                     "mail",
