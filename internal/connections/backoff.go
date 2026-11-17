@@ -233,7 +233,7 @@ func (s *Store) RecordHold(ctx context.Context, o outcome) error {
 		}
 		return o.Held.Attach(result, label, time.Now())
 	}
-	err = s.observe(ctx, o.ID, o.Revision, held, false)
+	err = s.observe(ctx, o.ID, o.Revision, held, false, time.Time{})
 	if errors.As(err, new(*Conflict)) {
 		current, openErr := s.Open(ctx, o.ID)
 		if openErr != nil {
@@ -243,7 +243,7 @@ func (s *Store) RecordHold(ctx context.Context, o outcome) error {
 		if current.credentialTag() != o.Held.Credential {
 			return nil
 		}
-		err = s.observe(ctx, o.ID, current.revision, held, false)
+		err = s.observe(ctx, o.ID, current.revision, held, false, time.Time{})
 	}
 	if err != nil && !errors.As(err, new(*Conflict)) {
 		return err
