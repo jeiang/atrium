@@ -39,15 +39,19 @@ settings the operator edits in the UI or pins from the host.
   with `nix develop -c` (no `--impure`).
 - Keep the required CI check passing. For an authorized merge, use
   `gh pr merge --auto --merge`.
-- CI on a pull request runs x86_64 only: the Go tests run on the runner in
-  shards (`tools/go-test-shard`, the `ci` dev shell, a Go cache saved from
-  `main`), and the Nix checks build in the groups of `.ci/targets.nix`,
-  the hermetic Go checks except the tests among them (the `go` group).
-  aarch64 and the hermetic Go test shards run on `main`. A new flake check joins
-  the `rest` group unless `.ci/targets.nix` names it; a check that compiles
-  the Go tree belongs in a named group or on the runner. Every CI job has a
-  time limit near 1.5 times its longest normal run: the Nix groups take theirs
-  from `.ci/targets.nix`, and a new group needs one there.
+- CI runs the tests, lints and static checks as plain GitHub Actions jobs,
+  x86_64 only: Go and Node from `actions/setup-go` and `actions/setup-node`
+  at the releases in `.ci/pins.json`, SQLCipher built from the pinned source
+  by `.ci/sqlcipher.sh`, the Go tests in shards (`tools/go-test-shard`) with a
+  Go cache saved from `main`, the browser e2e sharded per engine. Nix in CI
+  only builds and evaluates: the package and the module checks (the
+  `package` group of `.ci/targets.nix`) and every other flake check that
+  `.ci/targets.nix` does not list as run outside Nix (the `rest` group), on
+  x86_64 and, on `main`, aarch64. The `ci-pins` check keeps `.ci/pins.json`
+  equal to what Nix selects. A pull request skips the Go jobs when only `web/`
+  changed and the web jobs when nothing in `web/`, `docs/api/`, the tokens or
+  CI changed. Every CI job has a time limit near 1.5 times its longest normal
+  run: the Nix groups take theirs from `.ci/targets.nix`.
 - Deployment consumes this repository from a separate host configuration.
   A merge here does not deploy it.
 
@@ -60,20 +64,21 @@ settings the operator edits in the UI or pins from the host.
   uses a real temporary database when persistence is involved.
 - External services may use local fakes. Do not replace the internal behavior
   under test with mocks or stubs.
-- `just e2e` and the Linux `go-test` checks run the tests through
-  `tools/e2e-loopback`: a fresh network namespace on Linux, `sandbox-exec`
-  on macOS. Only loopback and local sockets are reachable, so a test that
-  needs any other address fails. A plain `go test` skips the `TestEgress`
-  containment tests.
+- `just e2e`, the Linux `go-test` check and the CI test shards run the tests
+  through `tools/e2e-loopback`: a fresh network namespace on Linux,
+  `sandbox-exec` on macOS. Only loopback and local sockets are reachable, so
+  a test that needs any other address fails. A plain `go test` skips the
+  `TestEgress` containment tests.
 - Direct helper, parser, query, repository, or component tests do not qualify.
   Checking source text or internal call wiring does not qualify.
 - The client in `web/` is tested only by real-browser e2e: Playwright in
   Chromium, Firefox and WebKit against the mock build (`atrium-web-mock`,
   MSW for the API), in `web/e2e`. No Vitest, Jest, component or story tests.
-  `just web-test` runs it; the `web-e2e` check runs it in the Nix sandbox.
+  `just web-test` runs it; the `web-e2e` check runs it in the Nix sandbox and
+  CI runs it in plain jobs with browsers from `npx playwright install`.
   The `@playwright/test`, `playwright` and `playwright-core` pins in
   `web/package-lock.json` must equal nixpkgs `playwright-driver.version`
-  (the `web-playwright-pin` check), because the browsers come from Nix.
+  (the `ci-pins` check), because the local browsers come from Nix.
 - Every screen's browser test calls the layout checks in `web/e2e/checks.ts`
   at the phone, tablet and desktop widths of `layouts`: `expectTouchTargets`
   on touch layouts, `expectRoundedSurfaces`, `expectNoHorizontalScroll` and

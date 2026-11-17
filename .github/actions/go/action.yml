@@ -1,0 +1,72 @@
+name: Go toolchain, SQLCipher and staged assets
+description: Sets up the pinned Go release, the pinned SQLCipher static library, the staged web assets and the Go caches.
+
+outputs:
+  golangci-lint:
+    description: The pinned golangci-lint release
+    value: ${{ steps.pins.outputs.golangciLint }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read the pins
+      id: pins
+      shell: bash
+      run: jq -r 'to_entries[] | "\(.key)=\(.value)"' .ci/pins.json >>"$GITHUB_OUTPUT"
+
+    - name: Set up Go
+      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5
+      with:
+        go-version: ${{ steps.pins.outputs.go }}
+        cache: false
+
+    - name: Check the Go release
+      shell: bash
+      env:
+        WANT: go${{ steps.pins.outputs.go }}
+      run: |
+        have=$(go env GOVERSION)
+        if [ "$have" != "$WANT" ]; then
+          echo "::error::go is $have, .ci/pins.json pins $WANT"
+          exit 1
+        fi
+
+    - name: Restore SQLCipher
+      id: sqlcipher
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ~/.cache/atrium-sqlcipher
+        key: sqlcipher-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.ci/pins.json', '.ci/sqlcipher.sh') }}
+
+    - name: Build SQLCipher
+      if: steps.sqlcipher.outputs.cache-hit != 'true'
+      shell: bash
+      run: bash .ci/sqlcipher.sh "$HOME/.cache/atrium-sqlcipher"
+
+    - name: Point cgo at SQLCipher
+      shell: bash
+      run: |
+        {
+          echo "CGO_ENABLED=1"
+          echo "GOFLAGS=-tags=libsqlite3,sqlite_fts5"
+          echo "CGO_CFLAGS=-I$HOME/.cache/atrium-sqlcipher/include"
+          echo "CGO_LDFLAGS=-L$HOME/.cache/atrium-sqlcipher/lib"
+        } >>"$GITHUB_ENV"
+
+    - name: Download the staged web assets
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      with:
+        name: go-assets
+        path: .
+
+    - name: Restore the Go caches
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/.cache/golangci-lint
+          ~/go/pkg/mod
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', '.ci/pins.json') }}-${{ github.sha }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', '.ci/pins.json') }}-
+          go-${{ runner.os }}-${{ runner.arch }}-
