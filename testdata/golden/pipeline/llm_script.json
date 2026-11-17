@@ -34,7 +34,11 @@
         ]
       },
       "event": {
-        "has_event": true
+        "end": "2027-10-09T21:00:00",
+        "has_event": true,
+        "location": "Harbour Grill",
+        "start": "2027-10-09T19:00:00",
+        "title": "Dinner on Saturday"
       },
       "flag": {
         "deadline_or_payment_due": false,
@@ -164,7 +168,12 @@
       "commitments": []
     },
     "event": {
-      "has_event": false
+      "all_day": false,
+      "end": "",
+      "has_event": false,
+      "location": "",
+      "start": "",
+      "title": ""
     },
     "flag": {
       "deadline_or_payment_due": false,

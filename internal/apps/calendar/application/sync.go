@@ -21,6 +21,13 @@ const SyncName application.Name = "calendar.sync"
 
 type SyncInput struct{}
 
+func DescribePasses() []application.Definition {
+	authorities := []application.Authority{application.Operator, application.System}
+	return []application.Definition{
+		application.Describe[SyncInput, davmirror.Stats](SyncName, application.Command, authorities, application.External, true),
+	}
+}
+
 func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[davmirror.Stats], error) {
 	stats, err := davmirror.Pass(ctx, s.db, func(ctx context.Context, d *db.DB) (func(context.Context) (davmirror.Stats, error), error) {
 		set, err := calendar.LoadSettings(ctx, d.Read)

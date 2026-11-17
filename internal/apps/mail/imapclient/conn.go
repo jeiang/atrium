@@ -18,6 +18,7 @@ import (
 	"github.com/emersion/go-imap/v2/imapclient"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/config"
 )
 
@@ -76,7 +77,7 @@ func NewXOAUTH2(host, user string, token func(context.Context) (string, error), 
 func (c *conn) setBodyCap(n int) { c.bodyCap = n }
 
 func newConn(host, user, password string) *conn {
-	addr, serverName := config.IMAPEndpoint(host)
+	addr, serverName := accounts.IMAPEndpoint(host)
 	tlsConfig := &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12}
 	if path, ok := config.OS("ATRIUM_IMAP_CA"); ok && path != "" {
 		if pem, err := os.ReadFile(path); err == nil {

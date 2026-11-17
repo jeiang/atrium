@@ -2,6 +2,7 @@ import { delay, HttpResponse, http } from 'msw';
 import type { Account, Draft, Loop, MailMessage, MailSearchHit, QueueItem } from '../contract';
 import { API_BASE } from '../contract';
 import type { AppsScenario } from './apps';
+import type { MailManageScenario } from './mailManage';
 
 export interface MailboxScenario {
   messages?: 'empty' | 'error' | 'many';
@@ -17,6 +18,7 @@ interface Row {
   cc?: string;
   inbox: boolean;
   attachments: MailMessage['attachments'];
+  corrected?: string;
 }
 
 interface Effect {
@@ -205,7 +207,7 @@ function message(item: Row): MailMessage {
     in_inbox: item.inbox,
     attachments: item.attachments,
     location: hit.folder,
-    corrected_to: null,
+    corrected_to: item.corrected ?? null,
     decision: null as unknown as MailMessage['decision'],
     flag_decision: null as unknown as MailMessage['flag_decision'],
   };
@@ -222,6 +224,27 @@ declare global {
   var atriumMailRequests: { method: string; path: string; key: string | null }[] | undefined;
 }
 
+const filed: Record<string, Record<string, number>> = {
+  'garden-club': { Bills: 12, Newsletters: 30, Receipts: 8 },
+};
+
+function foldersOf(rows: Row[], account: string): { folder: string; count: number }[] {
+  const counts = new Map(Object.entries(filed[account] ?? {}));
+  for (const { hit } of rows) {
+    if (hit.account === account) counts.set(hit.folder, (counts.get(hit.folder) ?? 0) + 1);
+  }
+  return [...counts].map(([folder, count]) => ({ folder, count })).sort((a, b) => a.folder.localeCompare(b.folder));
+}
+
+export function correctionRefusal(body: { folder?: string; mode?: string }): Response | undefined {
+  if (body.mode !== 'immediate' && body.mode !== 'deferred')
+    return error('invalid', 'mode must be immediate or deferred', 422);
+  const folder = body.folder ?? '';
+  if (folder === '' || folder.includes('|') || folder.length > 255 || folder.toUpperCase() === 'INBOX')
+    return error('invalid', `invalid destination ${JSON.stringify(folder)}`, 422);
+  return undefined;
+}
+
 function record(request: Request): void {
   globalThis.atriumMailRequests ??= [];
   globalThis.atriumMailRequests.push({
@@ -231,7 +254,9 @@ function record(request: Request): void {
   });
 }
 
-export function mailHandlers(read: () => { mailbox?: MailboxScenario; apps?: AppsScenario }) {
+export function mailHandlers(
+  read: () => { mailbox?: MailboxScenario; apps?: AppsScenario; mailManage?: MailManageScenario },
+) {
   let store: Store = { rows: [], drafts: [], effects: [], nextDraft: 500, nextEffect: 5000 };
   let seededFrom: string | undefined;
 
@@ -304,6 +329,8 @@ export function mailHandlers(read: () => { mailbox?: MailboxScenario; apps?: App
       const q = (url.searchParams.get('q') ?? '').toLowerCase();
       const accountId = url.searchParams.get('account');
       const folder = url.searchParams.get('folder');
+      const folders = url.searchParams.get('folders') === 'true';
+      if (folders && !accountId) return error('invalid', 'folders needs an account', 422);
       const limit = Number(url.searchParams.get('limit') ?? '30');
       const start = Number(url.searchParams.get('cursor') ?? '0');
       const matches = current().rows.filter(
@@ -315,15 +342,67 @@ export function mailHandlers(read: () => { mailbox?: MailboxScenario; apps?: App
       const page = matches.slice(start, start + limit);
       const next = start + limit < matches.length ? String(start + limit) : null;
       return HttpResponse.json({
-        data: { items: page.map((item) => item.hit), next_cursor: next, semantic: false },
+        data: {
+          items: page.map((item) => item.hit),
+          next_cursor: next,
+          semantic: false,
+          ...(folders && accountId ? { folders: foldersOf(current().rows, accountId) } : {}),
+        },
         revision: revision(),
       });
     }),
-    http.get(`*${API_BASE}/mail/messages/:id`, async ({ params }) => {
+    http.get(`*${API_BASE}/mail/messages/:id`, async ({ params, request }) => {
       await wait();
       const item = find(params.id);
       if (!item) return error('not_found', 'Unknown message', 404);
-      return HttpResponse.json({ data: message(item), revision: revision() });
+      const folders = new URL(request.url).searchParams.get('folders') === 'true';
+      return HttpResponse.json({
+        data: { ...message(item), ...(folders ? { folders: foldersOf(current().rows, item.hit.account) } : {}) },
+        revision: revision(),
+      });
+    }),
+    http.post(`*${API_BASE}/mail/messages/:id/correction`, async ({ params, request }) => {
+      const item = find(params.id);
+      if (!item) return undefined;
+      record(request);
+      const body = (await request.clone().json()) as { folder?: string; mode?: string };
+      await wait();
+      const refused = correctionRefusal(body);
+      if (scenario().refuse === 'sent_message') return error('invalid', 'cannot correct a sent message', 422);
+      if (refused) return refused;
+      const folder = body.folder as string;
+      const correction = {
+        message_id: item.hit.message_id,
+        account: item.hit.account,
+        folder,
+        ts: Date.now() / 1000,
+        source: 'web',
+      };
+      item.corrected = folder;
+      const status = read().mailManage?.status;
+      if (status !== 'live' && status !== 'watch') {
+        if (scenario().action === 'unknown') return HttpResponse.error();
+        return HttpResponse.json({ data: { correction, note: '', outcome: 'deferred', effect_ids: [] } });
+      }
+      const s = current();
+      const id = s.nextEffect++;
+      const was = { folder: item.hit.folder, inbox: item.inbox };
+      item.hit.folder = folder;
+      item.inbox = false;
+      s.effects.push({
+        id,
+        undo: () => {
+          item.hit.folder = was.folder;
+          item.inbox = was.inbox;
+        },
+        undone: false,
+      });
+      if (scenario().action === 'unknown') return HttpResponse.error();
+      return HttpResponse.json({
+        data: { correction, note: ' The message was moved.', outcome: 'ok', effect_ids: [id] },
+        effect_ids: [id],
+        undoable: true,
+      });
     }),
     http.post(`*${API_BASE}/mail/messages/:id/archive`, async ({ params, request }) => {
       record(request);

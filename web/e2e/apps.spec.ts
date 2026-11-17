@@ -39,7 +39,7 @@ test.describe('the apps hub', () => {
       '/apps/mail/decisions',
     );
     await expect(mail.getByRole('link', { name: /^Mail decisions/ })).toHaveCount(0);
-    await expect(mail.getByRole('link', { name: /^Mail settings.*opens the current interface$/ })).toHaveAttribute(
+    await expect(mail.getByRole('link', { name: 'Mail settings', exact: true })).toHaveAttribute(
       'href',
       '/settings/mail',
     );

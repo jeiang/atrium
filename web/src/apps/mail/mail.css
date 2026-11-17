@@ -345,6 +345,25 @@
     font-size: 1.125rem;
   }
 
+  .mail-rule__head {
+    display: flex;
+    align-items: center;
+    gap: var(--s-2);
+  }
+
+  .mail-rule__position {
+    flex: none;
+    min-inline-size: 2ch;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mail-rule__move,
+  .mail-item__action {
+    position: relative;
+    z-index: 1;
+  }
+
   .mail-rule__checks,
   .mail-reasons {
     margin: 0;

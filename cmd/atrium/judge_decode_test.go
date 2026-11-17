@@ -51,7 +51,7 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, q := range []string{
-		"DELETE FROM event_candidates",
+		"UPDATE messages SET first_seen = (SELECT applied_at FROM schema_migrations WHERE version = 8) + 1 WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
 		"UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
 	} {
 		if _, err := seed.Write.Exec(q); err != nil {
@@ -65,7 +65,7 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	code, _, stderr := f.runLogged(ctx, "sync", "--account", "icloud")
-	if code != cli.ExitOK || !strings.Contains(stderr, "gave no usable answer") || !strings.Contains(stderr, "has_event") {
+	if code != cli.ExitOK || !strings.Contains(stderr, "CALLER=mail_event") || !strings.Contains(stderr, "$.has_event: unexpected string") {
 		t.Fatalf("sync with a non-boolean judge answer: exit %d stderr %q", code, stderr)
 	}
 
@@ -74,11 +74,14 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	var candidates int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM event_candidates").Scan(&candidates); err != nil {
+	var proposals, markers int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'calendar_event' AND json_extract(payload, '$.source.message_id') IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)").Scan(&proposals); err != nil {
 		t.Fatal(err)
 	}
-	if candidates != 0 {
-		t.Fatalf("%d event candidates after a rejected judge answer", candidates)
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'events' AND found = 0").Scan(&markers); err != nil {
+		t.Fatal(err)
+	}
+	if proposals != 0 || markers != 0 {
+		t.Fatalf("after a rejected judge answer: %d event proposals, %d zero-found event markers, want none of either until the retry", proposals, markers)
 	}
 }

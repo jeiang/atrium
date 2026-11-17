@@ -13,6 +13,9 @@ export const screens: Readonly<Record<string, string>> = {
   '/triage': '/apps/mail/decisions',
   '/rules': '/apps/mail/rules',
   '/live': '/apps/mail/mode',
+  '/settings/mail': '/settings/mail',
+  '/review': '/inbox',
+  '/library/knowledge?state=unconfirmed': '/knowledge/review',
 };
 
 export const appScreens: Readonly<Record<string, readonly AppScreen[]>> = {

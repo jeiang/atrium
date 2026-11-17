@@ -50,9 +50,14 @@ claims about the running application. Operator contracts are in
   Mail's write gate. `module.Communications` answers the enabled provider;
   with Mail off every feed call returns nothing and no error, so a task's
   message link has no title, a new message link is refused as missing, a
-  lookup report's `mail_message` id is unknown, and queued event candidates
-  are not listed. Event candidates read invitations and message bodies from
-  the feed; the mail pass still calls them, passing its paid event judge.
+  lookup report's `mail_message` id is unknown, and no event proposals are
+  made. Event proposals are made by the mail pass's `event proposals` scan:
+  for unseen inbox mail first seen after migration 8 was applied, an ICS
+  invitation becomes a `calendar_event` proposal (key `ics:<UID>`) with no
+  model call, and other mail gets one event classifier call, proposed under
+  key `mail:<id>`. Each message is judged once and marked in `mail_scans`;
+  a budget refusal marks it too. Migration 8 drops `event_candidates` and
+  refuses while a candidate is still queued.
   The whole Mail app lives in `internal/apps/mail`, and `internal/mail` no
   longer exists. The root package holds the store (the message client,
   queries, roles, settings and tuning); beside it are the IMAP client,
@@ -265,7 +270,7 @@ claims about the running application. Operator contracts are in
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
 - The attention query covers the enabled queues: proposals, drafts, open
-  loops, commitments, event candidates, thread plans, packages, tasks and
+  loops, commitments, thread plans, packages, tasks and
   unanswered `ask_operator` questions, listed until the operator answers.
   Packages (when the Packages app is on) come from shipping emails; a
   package the operator registers with `track_package` is polled through
@@ -345,8 +350,10 @@ claims about the running application. Operator contracts are in
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
-  id and an iCloud or Gmail preset, declared as `mail/<id>` connections by the
-  host (`services.atrium.mailAccounts`) or added, tested and removed on the
+  id and an iCloud or Gmail preset, owned by the Mail app
+  (`internal/apps/mail/accounts` holds the `mail_accounts` rows), declared as `mail/<id>` connections by the
+  host (`services.atrium.accounts`, with a `capabilities` list; the old
+  name `mailAccounts` warns for one release) or added, tested and removed on the
   Mail settings page (stored in the database, password only on an encrypted
   database). A host account's password comes from its `passwordFile`: both
   UIs show it as set in host configuration with no entry box and refuse a
@@ -894,7 +901,7 @@ claims about the running application. Operator contracts are in
   JSON, withdraws an untaken or refused request, exits 69
   (`cli.ExitUnavailable`) when `db.OtherServe` finds no serve, and a canceled
   wait leaves the run in serve. A request older than a minute is refused.
-  `jobcmd.Delegating` wraps `sync`, `calendar sync`, `calendar candidates`,
+  `jobcmd.Delegating` wraps `sync`, `calendar sync`,
   `contacts sync` and `media poll|sweep`: with serve up they hand their
   declared job to serve (input flags such as `--account` refuse), without it
   they run in process as before.
@@ -936,7 +943,7 @@ claims about the running application. Operator contracts are in
   assistant contributes ops findings, through `ReviewKinds` and
   `ActivityCategory`. With mail off its drafts leave the hub, while its past
   live actions stay in Activity. Each owner declares
-  its built-in jobs (assistant six, calendar candidates, media three, mail
+  its built-in jobs (assistant six, calendar CalDAV, media three, mail
   package tracking and replay, Grafana ops sampler); compiling the catalog checks their
   owner, keys, names, schedules and policies and derives the schedule
   settings from them. The neutral `internal/scheduler` package owns the
@@ -1049,8 +1056,8 @@ claims about the running application. Operator contracts are in
   assistant on `service/anthropic` and notifications on `service/webpush`
   show the connection's state (for example `unconfigured`) on the module's
   settings header while it is not healthy;
-  grafana needs the assistant, calendar candidates need mail
-  for their pipeline stage, and mail uses contacts as an optional source
+  grafana needs the assistant, event proposals need mail
+  for their scan, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
   atrium's own read-only CalDAV/CardDAV sync. The DAV login, discovery and
   mirror sync are platform code (`internal/davmirror`, which imports no unit),

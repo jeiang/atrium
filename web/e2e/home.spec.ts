@@ -154,6 +154,14 @@ test.describe('home on desktop', () => {
     await expect(digest.getByRole('heading', { level: 2, name: "Today's digest" })).toBeVisible();
     await expect(digest.locator('.digest__list > li')).toHaveCount(5);
     await expect(digest.getByRole('link', { name: 'and 2 more' })).toHaveAttribute('href', '/chat');
+    await expect(digest.getByRole('link', { name: 'Ilse replied about the December book club' })).toHaveAttribute(
+      'href',
+      '/inbox',
+    );
+    await expect(digest.getByRole('link', { name: '3 records from marked sources' })).toHaveAttribute(
+      'href',
+      '/knowledge/review',
+    );
   });
 
   test('an empty day says so', async ({ page }) => {

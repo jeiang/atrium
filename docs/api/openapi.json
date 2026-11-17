@@ -1355,35 +1355,6 @@
         ],
         "type": "object"
       },
-      "Candidates": {
-        "properties": {
-          "candidates": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "proposed": {
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "format": "int64",
-                "maximum": 9007199254740991,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "candidates",
-          "proposed"
-        ],
-        "type": "object"
-      },
       "CapabilityView": {
         "properties": {
           "config": {},
@@ -1652,33 +1623,6 @@
           },
           "data": {
             "$ref": "#/components/schemas/CalendarEvent"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "maximum": 9007199254740991,
-              "type": "integer"
-            },
-            "type": "array"
-          },
-          "undoable": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "ChangeCandidates": {
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "maximum": 9007199254740991,
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/Candidates"
           },
           "effect_ids": {
             "items": {
@@ -5265,6 +5209,22 @@
         ],
         "type": "object"
       },
+      "Folder": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "folder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "count"
+        ],
+        "type": "object"
+      },
       "FreeSlots": {
         "properties": {
           "notes": {
@@ -8306,6 +8266,12 @@
           "folder": {
             "type": "string"
           },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/Folder"
+            },
+            "type": "array"
+          },
           "from_addr": {
             "type": "string"
           },
@@ -8780,6 +8746,12 @@
       },
       "MailSearchPage": {
         "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/Folder"
+            },
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/MailSearchHit"
@@ -20801,160 +20773,6 @@
           "home"
         ],
         "x-atrium-area": "home",
-        "x-atrium-module": "calendar"
-      }
-    },
-    "/calendar/candidates": {
-      "post": {
-        "operationId": "calendar.draft-candidates",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "schema": {
-              "maxLength": 255,
-              "minLength": 1,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChangeCandidates"
-                }
-              }
-            },
-            "description": "OK",
-            "headers": {
-              "Atrium-Command-Id": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Forbidden"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "413": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Request Entity Too Large"
-          },
-          "415": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unsupported Media Type"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Too Many Requests",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable",
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "integer"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "integrations"
-        ],
-        "x-atrium-area": "integrations",
         "x-atrium-module": "calendar"
       }
     },
@@ -37499,6 +37317,13 @@
             }
           },
           {
+            "in": "query",
+            "name": "folders",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "If-None-Match",
             "schema": {
@@ -37638,6 +37463,13 @@
               "format": "int64",
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folders",
+            "schema": {
+              "type": "boolean"
             }
           },
           {

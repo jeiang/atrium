@@ -12,7 +12,6 @@ import (
 
 var keyedOneShots = [][]string{
 	{"settings", "list"},
-	{"calendar", "candidates"},
 	{"media", "poll"},
 	{"effects", "list"},
 	{"proposals", "list"},

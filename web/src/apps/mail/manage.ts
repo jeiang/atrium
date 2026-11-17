@@ -14,6 +14,7 @@ import {
   mailRuleDecisions,
   mailRuleDelete,
   mailRulePreview,
+  mailRuleReorder,
   mailRules,
   mailRulesVocabulary,
   mailRuleUpdate,
@@ -148,6 +149,10 @@ export async function handleRuleSave(id: string | undefined, rule: MailRuleInput
 
 export async function handleRuleDelete(id: string): Promise<boolean> {
   return ok(await mailRuleDelete(id)).data.deleted;
+}
+
+export async function handleRuleMove(id: string, direction: 'up' | 'down'): Promise<boolean> {
+  return ok(await mailRuleReorder({ id, direction })).data.moved;
 }
 
 export async function handleRulePreview(rule: MailRuleInput): Promise<Preview> {

@@ -17,7 +17,7 @@ import (
 
 var platformHostOptions = map[string]string{
 	"db.key":                  "services.atrium.database.keyFile",
-	"mail.mail_accounts_file": "services.atrium.mailAccounts",
+	"mail.mail_accounts_file": "services.atrium.accounts",
 }
 
 func derivedHost(host []settings.HostDef) map[string]string {

@@ -11,6 +11,7 @@ import type {
 } from '../contract';
 import { API_BASE } from '../contract';
 import type { AppsScenario } from './apps';
+import { correctionRefusal } from './mail';
 
 export interface MailManageScenario {
   status?: 'shadow' | 'live' | 'ineligible' | 'watch' | 'error';
@@ -406,6 +407,23 @@ export function mailManageHandlers(read: () => { mailManage?: MailManageScenario
       s.rules.push(made);
       return HttpResponse.json({ data: { ...body.rule, id } }, { status: 201 });
     }),
+    http.put(`*${API_BASE}/mail/rules/order`, async ({ request }) => {
+      record(request);
+      await wait();
+      const body = (await request.json()) as { id?: string; direction?: string };
+      if (!body.id || (body.direction !== 'up' && body.direction !== 'down'))
+        return error('invalid', 'id and direction are required', 422);
+      const s = current();
+      const index = s.rules.findIndex((rule) => rule.id === body.id);
+      if (index < 0) return error('not_found', 'unknown rule', 404);
+      const target = body.direction === 'up' ? index - 1 : index + 1;
+      if (target < 0 || target >= s.rules.length) return HttpResponse.json({ data: { moved: false } });
+      const rules = [...s.rules];
+      rules.splice(target, 0, ...rules.splice(index, 1));
+      s.rules = rules;
+      if (scenario().command === 'unknown') return HttpResponse.error();
+      return HttpResponse.json({ data: { moved: true } });
+    }),
     http.patch(`*${API_BASE}/mail/rules/:id`, async ({ params, request }) => {
       record(request);
       await wait();
@@ -475,6 +493,34 @@ export function mailManageHandlers(read: () => { mailManage?: MailManageScenario
       return HttpResponse.json({
         data: { items, check: check.slice(0, 5), total: rows.length, next_cursor: next },
         revision: revision(),
+      });
+    }),
+    http.post(`*${API_BASE}/mail/messages/:id/correction`, async ({ params, request }) => {
+      const body = (await request.clone().json()) as { folder?: string; mode?: string };
+      await wait();
+      const refused = correctionRefusal(body);
+      if (refused) return refused;
+      const s = current();
+      const row = s.decisions.find((item) => item.message_id === Number(params.id));
+      if (!row) return error('invalid', `unknown message ${String(params.id)}`, 422);
+      const folder = body.folder as string;
+      row.corrected_to = folder;
+      if (scenario().command === 'unknown') return HttpResponse.error();
+      const correction = {
+        message_id: row.message_id,
+        account: row.account,
+        folder,
+        ts: Date.now() / 1000,
+        source: 'web',
+      };
+      const live = s.status.mode === 'live';
+      return HttpResponse.json({
+        data: {
+          correction,
+          note: live ? ' The message was moved.' : '',
+          outcome: live ? 'ok' : 'deferred',
+          effect_ids: [],
+        },
       });
     }),
     http.get(`*${API_BASE}/mail/status`, async () => {

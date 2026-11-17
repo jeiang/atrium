@@ -12,7 +12,11 @@ it requires `--port`. Authentication modes are repeatable `--auth proxy` and
 and also starts an emergency listener on `127.0.0.1:8481` in the same process.
 
 All configured public, emergency, and ops sockets must bind before readiness.
-A failed bind closes the sockets already opened. A listener failure while
+A failed bind closes the sockets already opened. On Linux, a listener whose
+configured address the host does not have yet (an interface still coming up at
+boot) binds anyway with `IP_FREEBIND` and starts accepting once the address
+appears; serve logs the warning "<name> listener address <addr> is not
+assigned to this host yet" instead of exiting. A listener failure while
 running stops the other listeners and produces a failed exit. A second serve
 on the same database is refused by its serve lock. `serve` runs scheduled work
 and mail watches, and it is the only process that runs a declared job while it
@@ -42,7 +46,7 @@ A scheduled run that fails after one that did not sends one push on the
 system channel; further failures stay quiet until a run succeeds.
 
 While serve is up, the one-shot commands `sync`, `calendar sync`,
-`calendar candidates`, `contacts sync`, `media poll` and `media sweep` hand
+`contacts sync`, `media poll` and `media sweep` hand
 their declared job to serve the same way and print its run record instead of
 their statistics. `sync --account` and `agent tick` refuse with exit 75 and
 name `atrium job run`. With no serve running they run in the calling process
@@ -600,8 +604,8 @@ next tick (30 seconds). While paused:
 - Scheduled jobs are skipped and recorded as `skipped_pause`, except backups,
   the CalDAV and CardDAV mirrors, and the mail sync and scan passes. Those
   passes still read mail, but make no automatic mailbox writes.
-- A run-now request for any other job (package tracking, the media sweep,
-  calendar candidates) is refused.
+- A run-now request for any other job (package tracking, the media sweep)
+  is refused.
 - Assistant jobs, schedules and the Grafana sampler do not run; chat stays
   available, and the assistant's direct mailbox writes are refused.
 - Operator sends, operator calendar event writes and approved proposals still

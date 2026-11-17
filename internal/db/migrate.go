@@ -24,7 +24,10 @@ var migrations = []migration{
 	{5, dropOpsFindings},
 	{6, addLibraryRequests},
 	{7, narrowConnectionReadTrigger},
+	{EventCandidatesDropped, dropEventCandidates},
 }
+
+const EventCandidatesDropped = 8
 
 const (
 	unreadTablesDDL = `
@@ -68,6 +71,9 @@ CREATE TRIGGER IF NOT EXISTS library_requests_read_delete AFTER DELETE ON librar
 DROP TRIGGER connections_read_update;
 CREATE TRIGGER connections_read_update AFTER UPDATE ON connections WHEN old.id IS NOT new.id OR old.kind IS NOT new.kind OR old.label IS NOT new.label OR old.config_source IS NOT new.config_source OR old.config_json IS NOT new.config_json OR old.transport_json IS NOT new.transport_json OR old.revision IS NOT new.revision OR old.enabled IS NOT new.enabled OR old.state IS NOT new.state OR old.reason IS NOT new.reason OR old.expires_at IS NOT new.expires_at OR old.reauth_at IS NOT new.reauth_at OR old.failed_test_revision IS NOT new.failed_test_revision OR old.results_json IS NOT new.results_json OR old.created_at IS NOT new.created_at BEGIN INSERT INTO read_revisions(scope,value) VALUES('connections',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
 `
+	eventCandidatesDDL = `
+DROP TABLE event_candidates;
+`
 )
 
 func addLibraryRequests(ctx context.Context, tx *sql.Tx) error {
@@ -78,6 +84,24 @@ func addLibraryRequests(ctx context.Context, tx *sql.Tx) error {
 func narrowConnectionReadTrigger(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, connectionReadTriggerDDL)
 	return err
+}
+
+func dropEventCandidates(ctx context.Context, tx *sql.Tx) error {
+	var queued int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_candidates WHERE status = 'queued'").Scan(&queued); err != nil {
+		return err
+	}
+	if queued > 0 {
+		return fmt.Errorf("%d event candidates are still queued for drafting; draft them with the previous atrium before upgrading", queued)
+	}
+	_, err := tx.ExecContext(ctx, eventCandidatesDDL)
+	return err
+}
+
+func AppliedAt(ctx context.Context, q Querier, version int) (float64, error) {
+	var at float64
+	err := q.QueryRowContext(ctx, "SELECT applied_at FROM schema_migrations WHERE version = ?", version).Scan(&at)
+	return at, err
 }
 
 func addUsageCounters(ctx context.Context, tx *sql.Tx) error {

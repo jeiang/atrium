@@ -104,10 +104,6 @@ func openConnection(ctx context.Context, q db.Querier, id connections.ID) *conne
 	return lease
 }
 
-func CandidateLimits(ctx context.Context, q db.Querier) (scan, draft int, err error) {
-	return TuningCandidateScanLimit, TuningCandidateDraftLimit, nil
-}
-
 func missingCredentials(missing []string) error {
 	if len(missing) == 0 {
 		return nil
