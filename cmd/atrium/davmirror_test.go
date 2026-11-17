@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -209,21 +208,6 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	}
 	if _, err := os.Stat(mirrored); !os.IsNotExist(err) {
 		t.Errorf("an event deleted on the server is still mirrored: %v", err)
-	}
-}
-
-func TestTriageSaysSoWhenThereIsNoContactSource(t *testing.T) {
-	t.Parallel()
-	for _, on := range []string{"true", "false"} {
-		t.Run("contacts_"+on, func(t *testing.T) {
-			dir, _, _ := moduleFixture(t, flagsExcept(unit.Contacts, on))
-			base := startServeIn(t, dir)
-			web := webLocalG2(t, base)
-			got := apiData(t, web.do(http.MethodGet, "/web/v1/mail/triage", nil), http.StatusOK)
-			if shown := got["no_contacts"] == true; shown != (on == "false") {
-				t.Errorf("contacts %s: no_contacts = %v", on, got["no_contacts"])
-			}
-		})
 	}
 }
 

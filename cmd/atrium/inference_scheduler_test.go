@@ -149,7 +149,7 @@ func TestInferenceUsagePageShowsReservationsAndCeilings(t *testing.T) {
 	if got.status != http.StatusOK {
 		t.Fatalf("GET /web/v1/usage = %d: %.500s\n%s", got.status, got.body, logs.String())
 	}
-	budget, _ := apiData(t, got, http.StatusOK)["budget"].(map[string]any)
+	budget, _ := got.json["budget"].(map[string]any)
 	for key, want := range map[string]float64{"reserved_usd": 5, "unknown_usd": 3, "expired_usd": 2, "interactive_ceiling_usd": 142.5, "unattended_ceiling_usd": 120} {
 		if v, _ := budget[key].(float64); math.Abs(v-want) > 0.005 {
 			t.Errorf("usage budget %s = %v, want %v", key, budget[key], want)

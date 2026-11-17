@@ -62,8 +62,8 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	qb.dropOnce("torrents/add")
 	seedAllFlagsIn(t, dir)
 	b := webLocalG2(t, startServeIn(t, dir))
-	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status != http.StatusBadGateway {
-		t.Fatalf("dropped add = %d, want 502: %.400s", got.status, got.body)
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status != http.StatusConflict || !strings.Contains(got.body, "effect_unknown") {
+		t.Fatalf("dropped add = %d, want 409 effect_unknown: %.400s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
@@ -71,8 +71,8 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	if adds := qb.count("add"); adds != 1 {
 		t.Fatalf("the dropped add reached qBittorrent %d times, want 1", adds)
 	}
-	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status != http.StatusBadGateway {
-		t.Fatalf("blocked add = %d, want 502: %.400s", got.status, got.body)
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status != http.StatusConflict {
+		t.Fatalf("blocked add = %d, want 409: %.400s", got.status, got.body)
 	}
 	if adds := qb.count("add"); adds != 1 {
 		t.Fatalf("a blocked add reached qBittorrent: %d adds", adds)

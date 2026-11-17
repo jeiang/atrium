@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -67,16 +65,14 @@ func TestMailRetiredSnoozeRowsStayReadableAndNeverApply(t *testing.T) {
 	}
 
 	base := startServeIn(t, m.dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	for _, path := range []string{"/review", "/proposals/900/card", "/activity"} {
-		if code, page, _ := fetch(t, client, http.MethodGet, base+path, nil); code != http.StatusOK {
-			t.Fatalf("%s = %d %.400s", path, code, page)
+	client := webLocalG2(t, base)
+	for _, path := range []string{"/web/v1/activity", "/web/v1/undo"} {
+		if got := client.do(http.MethodGet, path, nil); got.status != http.StatusOK {
+			t.Fatalf("%s = %d %.400s", path, got.status, got.body)
 		}
 	}
-	code, body, _ := fetch(t, client, http.MethodPost, base+"/activity/effect/9202/undo", url.Values{})
-	if code >= http.StatusInternalServerError || !strings.Contains(body, "unknown undo kind") {
-		t.Fatalf("undo of a retired snooze = %d %.400s", code, body)
+	if got := client.do(http.MethodPost, "/web/v1/effects/9202/undo", nil); got.status >= http.StatusInternalServerError || !strings.Contains(got.body, "unknown undo kind") {
+		t.Fatalf("undo of a retired snooze = %d %.400s", got.status, got.body)
 	}
 	if state := m.scalar(t, "SELECT state FROM effects WHERE id = 9202"); state != "done" {
 		t.Fatalf("the retired snooze effect is %s after a refused undo, want done", state)

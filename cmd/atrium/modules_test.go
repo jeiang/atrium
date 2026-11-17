@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -361,17 +362,24 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 				t.Fatalf("GET %s = %d, want %d: %.300s", path, got.status, want, got.body)
 			}
 		}
-		apps := map[string]map[string]any{}
-		for _, entry := range apiData(t, client.do(http.MethodGet, "/web/v1/apps", nil), http.StatusOK)["apps"].([]any) {
-			apps[entry.(map[string]any)["id"].(string)] = entry.(map[string]any)
-		}
-		for _, name := range []string{"mail", "torrents"} {
-			if reason, _ := apps[name]["reason"].(string); apps[name]["state"] != "unavailable" || !strings.Contains(reason, "expires_at") {
-				t.Fatalf("the %s app does not report the unavailable state and its reason: %v", name, apps[name])
+		modules := map[string]map[string]any{}
+		about := client.do(http.MethodGet, "/web/v1/about", nil)
+		list, _ := about.json["modules"].([]any)
+		if list == nil {
+			if data, ok := about.json["data"].(map[string]any); ok {
+				list, _ = data["modules"].([]any)
 			}
 		}
-		if reason, _ := apps["media"]["reason"].(string); apps["media"]["state"] == "enabled" || !strings.Contains(reason, "torrents") {
-			t.Fatalf("the media app does not name the unavailable Torrents dependency: %v", apps["media"])
+		for _, entry := range list {
+			modules[entry.(map[string]any)["name"].(string)] = entry.(map[string]any)
+		}
+		for _, name := range []string{"mail", "torrents"} {
+			if reason, _ := modules[name]["reason"].(string); modules[name]["state"] != "unavailable" || !strings.Contains(reason, "expires_at") {
+				t.Fatalf("the %s module does not report the unavailable state and its reason: %v in %.600s", name, modules[name], about.body)
+			}
+		}
+		if reason, _ := modules["media"]["reason"].(string); modules["media"]["state"] == "enabled" || !strings.Contains(reason, "torrents") {
+			t.Fatalf("the media module does not name the unavailable Torrents dependency: %v", modules["media"])
 		}
 	})
 	t.Run("core", func(t *testing.T) {
@@ -1096,21 +1104,17 @@ func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
 		if n := b.moved(); n != 2 {
 			t.Fatalf("%d of 2 messages moved by the approval", n)
 		}
-		jar, err := cookiejar.New(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		base := startServeIn(t, b.m.dir)
 		waitWatching(t, b.fake)
-		fetch(t, client, http.MethodGet, base+"/about", nil)
-		var status int
-		var body string
+		client := webLocalG2(t, base)
+		var reply apiReply
 		b.disableAfterWrite(t, "undo", func() {
-			status, body = hxFetch(t, client, http.MethodPost, base+"/proposals/"+b.proposal+"/undo", url.Values{})
+			reply = client.do(http.MethodPost, "/web/v1/undo/proposal:"+b.proposal, nil)
 		})
-		if status != http.StatusOK || !strings.Contains(body, "Undo stopped partway") || !strings.Contains(body, "Writes put back before it stopped: 1.") {
-			t.Fatalf("undo disabled mid-batch = %d: %s", status, body)
+		outcomes, _ := reply.json["outcomes"].([]any)
+		problem, _ := reply.json["error"].(map[string]any)
+		if reply.status != http.StatusConflict || problem["code"] != "not_undone" || len(outcomes) != 1 || reply.json["entry"] == nil {
+			t.Fatalf("undo disabled mid-batch = %d: %s", reply.status, reply.body)
 		}
 		if n := b.moved(); n != 1 {
 			t.Fatalf("%d messages still filed after a partial undo, want 1", n)
@@ -1159,15 +1163,15 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	effect := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
 	base := startServeIn(t, m.dir)
 	waitWatching(t, m.fake)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	client := webLocalG2(t, base)
+	activity := func(when string) {
+		t.Helper()
+		got := client.do(http.MethodGet, "/web/v1/activity", nil)
+		if got.status != http.StatusOK || !strings.Contains(got.body, effect) {
+			t.Fatalf("activity %s: %d %s", when, got.status, got.body)
+		}
 	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil)
-	if status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+effect+"/undo") {
-		t.Fatalf("activity before disabling: %d %s", status, body)
-	}
+	activity("before disabling")
 	writes := len(m.fake.Writes)
 	arrived := make(chan struct{})
 	release := make(chan struct{})
@@ -1187,8 +1191,22 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	}
 	result := make(chan response, 1)
 	go func() {
-		status, body, _ := fetch(t, client, http.MethodPost, base+"/activity/mail/"+effect+"/undo", url.Values{})
-		result <- response{status: status, body: body}
+		req, err := http.NewRequest(http.MethodPost, base+"/web/v1/effects/"+effect+"/undo", nil)
+		if err != nil {
+			result <- response{body: err.Error()}
+			return
+		}
+		req.Header.Set("Atrium-Client", "web")
+		req.Header.Set("Origin", base)
+		req.Header.Set("X-CSRF-Token", client.csrf)
+		resp, err := client.http.Do(req)
+		if err != nil {
+			result <- response{body: err.Error()}
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		raw, _ := io.ReadAll(resp.Body)
+		result <- response{status: resp.StatusCode, body: string(raw)}
 	}()
 	select {
 	case <-arrived:
@@ -1202,17 +1220,13 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	if !strings.Contains(refused.body, "the mail module was disabled; start the action again") {
 		t.Fatalf("disabled pending undo response %d: %s", refused.status, refused.body)
 	}
-	status, body, _ = fetch(t, client, http.MethodGet, base+"/activity", nil)
-	if status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+effect+"/undo") {
-		t.Fatalf("activity while disabled: %d %s", status, body)
-	}
+	activity("while disabled")
 	listed := runApp(t, "effects", "list", "--operation", "correct")
 	if listed.code != cli.ExitOK || !strings.Contains(listed.stdout, `"id": `+effect) {
 		t.Fatalf("historical effect missing while disabled: %d %s %s", listed.code, listed.stdout, listed.stderr)
 	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/activity/mail/"+effect+"/undo", url.Values{})
-	if !strings.Contains(body, "the mail module was disabled; start the action again") {
-		t.Fatalf("disabled undo response %d: %s", status, body)
+	if got := client.do(http.MethodPost, "/web/v1/effects/"+effect+"/undo", nil); !strings.Contains(got.body, "the mail module was disabled; start the action again") {
+		t.Fatalf("disabled undo response %d: %s", got.status, got.body)
 	}
 	if len(m.fake.Writes) != writes || m.count(t, "SELECT COUNT(*) FROM effects WHERE undo_of = ?", effect) != 0 {
 		t.Fatal("disabled undo wrote IMAP or recorded an undo intent")
