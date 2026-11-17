@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -51,27 +49,20 @@ func TestTuningKeysAreAbsentFromSettings(t *testing.T) {
 
 	seedAllFlags(t)
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	for _, path := range []string{"/settings/calendar", "/settings/assistant"} {
-		status, body, _ := fetch(t, client, http.MethodGet, base+path, nil)
-		if status != http.StatusOK {
-			t.Fatalf("GET %s = %d", path, status)
+	web := localWebG5(t, base)
+	for _, path := range []string{"/web/v1/settings", "/web/v1/settings/schema"} {
+		got := web.do(http.MethodGet, path, nil)
+		if got.status != http.StatusOK {
+			t.Fatalf("GET %s = %d", path, got.status)
 		}
 		for _, key := range tuningKeys {
-			if strings.Contains(body, `name="`+key+`"`) {
-				t.Errorf("%s renders tuning key %s", path, key)
+			if strings.Contains(got.body, `"`+key+`"`) {
+				t.Errorf("%s exposes tuning key %s", path, key)
 			}
 		}
 	}
-	status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/calendar", url.Values{
-		"max_events": {"1"}, "max_occurrences": {"1"},
-	})
-	if status != http.StatusOK || !strings.Contains(body, "Saved") {
-		t.Fatalf("POST /settings/sections/calendar = %d, want 200 with a saved toast: %.300s", status, body)
+	if got := web.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]string{"max_events": "1", "max_occurrences": "1"}}); got.status < 400 || got.status >= 500 {
+		t.Fatalf("PATCH /web/v1/settings with tuning keys = %d, want a refusal: %.300s", got.status, got.body)
 	}
 	for _, key := range []string{"max_events", "max_occurrences"} {
 		if _, ok := storedSetting(t, filepath.Join(dir, "atrium.db"), key); ok {
@@ -104,40 +95,9 @@ func TestPoisonedTuningRowsCannotChangeHTTPBehavior(t *testing.T) {
 	}
 
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	token := ""
-	for _, c := range jar.Cookies(baseURL) {
-		if c.Name == "atrium_csrf" {
-			token = c.Value
-		}
-	}
-	if token == "" {
-		t.Fatal("no CSRF cookie")
-	}
-	post := func(note string) int {
-		form := url.Values{"csrf_token": {token}, "note": {note}}
-		req, err := http.NewRequest(http.MethodPost, base+"/chat", strings.NewReader(form.Encode()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-		return resp.StatusCode
+	web := localWebG5(t, base)
+	post := func(text string) int {
+		return web.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": text}).status
 	}
 	if status := post(strings.Repeat("a", 4096)); status == http.StatusRequestEntityTooLarge {
 		t.Errorf("POST below the 1 MiB constant body cap = %d, want it past the size check", status)

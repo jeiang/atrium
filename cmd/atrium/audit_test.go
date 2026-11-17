@@ -98,21 +98,28 @@ func TestSettingsAuditRecordsCommandsAndShowsInActivity(t *testing.T) {
 	}
 	out.WriteString(dump.String())
 
-	base := startServeIn(t, dir)
-	status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/activity?category=settings", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /activity?category=settings = %d: %.300s", status, body)
+	c := localWebG5(t, startServeIn(t, dir))
+	filtered := c.do(http.MethodGet, "/web/v1/activity?category=settings&limit=100", nil)
+	if filtered.status != http.StatusOK {
+		t.Fatalf("GET /web/v1/activity?category=settings = %d: %.300s", filtered.status, filtered.body)
 	}
 	for _, want := range []string{"monthly_budget_usd", secrets.ActionLinkKey} {
-		if !strings.Contains(body, want) {
+		if !strings.Contains(filtered.body, want) {
 			t.Errorf("settings activity lacks %q", want)
 		}
 	}
-	status, body, _ = fetch(t, http.DefaultClient, "GET", base+"/activity", nil)
-	if status != http.StatusOK || !strings.Contains(body, "by operator via cli") {
-		t.Errorf("GET /activity = %d without the settings rows", status)
+	all := c.do(http.MethodGet, "/web/v1/activity?limit=100", nil)
+	data, _ := all.json["data"].(map[string]any)
+	items, _ := data["items"].([]any)
+	fromCLI := false
+	for _, raw := range items {
+		item, _ := raw.(map[string]any)
+		fromCLI = fromCLI || item["category"] == "settings" && item["actor"] == "operator" && item["origin"] == "cli"
 	}
-	out.WriteString(body)
+	if all.status != http.StatusOK || !fromCLI {
+		t.Errorf("GET /web/v1/activity = %d without the settings rows by operator via cli: %.600s", all.status, all.body)
+	}
+	out.WriteString(filtered.body + all.body)
 	for _, secret := range []string{first, second} {
 		if strings.Contains(out.String(), secret) {
 			t.Errorf("secret value %q appeared in command output, audit rows or /activity", secret)

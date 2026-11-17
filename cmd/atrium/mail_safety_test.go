@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -508,14 +507,14 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 	}
 
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
-	client := mrvClient(t)
-	if code, _, _ := mrvDo(t, client, "GET", base+"/triage", nil); code != 200 {
-		t.Fatalf("GET /triage = %d", code)
+	client := localWebG5(t, base)
+	if got := client.do("GET", "/web/v1/mail/triage", nil); got.status != 200 {
+		t.Fatalf("GET /web/v1/mail/triage = %d: %.300s", got.status, got.body)
 	}
-	code, body, _ := mrvDo(t, client, "POST", base+"/messages/"+m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE id = ?", id)+"/correct",
-		url.Values{"dest": {"Bills"}, "context": {"row"}}, "HX-Request", "true")
-	if code != 200 {
-		t.Fatalf("the correction pass = %d: %.400s", code, body)
+	corrected := client.do("POST", "/web/v1/mail/messages/"+m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE id = ?", id)+"/correction",
+		map[string]any{"folder": "Bills", "mode": "immediate"})
+	if corrected.status != 200 {
+		t.Fatalf("the correction pass = %d: %.400s", corrected.status, corrected.body)
 	}
 	if got := len(m.fake.Writes); got != attempts {
 		t.Fatalf("the correction pass made %d writes, want the blocked move left alone", got-attempts)

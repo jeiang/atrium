@@ -3,10 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,42 +20,40 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	seedAllFlags(t)
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK {
-		t.Fatalf("empty inbox = %d: %.300s", code, body)
+	client := localWebG5(t, base)
+	if got := client.do(http.MethodGet, "/web/v1/inbox", nil); got.status != http.StatusOK {
+		t.Fatalf("empty inbox = %d: %.300s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO notifications (id, ts, title, body, channel, delivered, error) VALUES (7, 1, 'Parcel arrives today', 'Locker 4', 'assistant', 0, 'no push devices')"); err != nil {
 		t.Fatal(err)
 	}
-	code, inbox, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil)
-	if code != http.StatusOK {
-		t.Fatalf("inbox = %d: %.300s", code, inbox)
+	got := client.do(http.MethodGet, "/web/v1/inbox", nil)
+	if got.status != http.StatusOK {
+		t.Fatalf("inbox = %d: %.300s", got.status, got.body)
 	}
+	inbox := got.body
 	for _, want := range []string{"Parcel arrives today", "Locker 4"} {
 		if !strings.Contains(inbox, want) {
 			t.Errorf("inbox misses %q", want)
 		}
 	}
-	code, settings, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
-	if code != http.StatusOK {
-		t.Fatalf("settings = %d: %.300s", code, settings)
+	got = client.do(http.MethodGet, "/web/v1/notifications", nil)
+	if got.status != http.StatusOK {
+		t.Fatalf("settings = %d: %.300s", got.status, got.body)
 	}
+	settings := got.body
 	for _, unwanted := range []string{"Parcel arrives today"} {
 		if strings.Contains(settings, unwanted) {
 			t.Errorf("settings still lists %q", unwanted)
 		}
 	}
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications/7/resend", url.Values{}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
-		t.Errorf("old resend route = %d", code)
+	if got := client.do(http.MethodPost, "/settings/notifications/7/resend", nil); got.status != http.StatusNotFound && got.status != http.StatusMethodNotAllowed {
+		t.Errorf("old resend route = %d", got.status)
 	}
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/99/resend", url.Values{}); code != http.StatusNotFound {
-		t.Errorf("unknown resend = %d", code)
+	if got := client.do(http.MethodPost, "/web/v1/inbox/99/resend", nil); got.status != http.StatusNotFound {
+		t.Errorf("unknown resend = %d", got.status)
 	}
 	var target, outcome string
 	if err := d.Read.QueryRow("SELECT target,outcome FROM operation_audit WHERE operation = 'notifications.resend' ORDER BY id DESC LIMIT 1").Scan(&target, &outcome); err != nil || target != "notification:99" || outcome != "not_found" {
@@ -118,26 +113,12 @@ func TestInboxPageAndAPIShareBounds(t *testing.T) {
 	items, _ = more.json["items"].([]any)
 	newestBounded("bounded inbox", items, 100)
 	expectAPI(t, site.do(http.MethodGet, "/api/v1/inbox?limit=500", owner, nil), http.StatusUnprocessableEntity, "invalid")
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	req, _ := http.NewRequest(http.MethodGet, site.base+"/inbox", nil)
-	req.Header.Set("Remote-User", "owner")
-	req.Header.Set("Remote-Groups", "atrium_access")
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	web := proxyWebG5(t, site).do(http.MethodGet, "/web/v1/inbox?limit=100", nil)
+	if web.status != http.StatusOK {
+		t.Fatalf("web inbox = %d %s", web.status, web.body)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	html := string(body)
-	shown := strings.Count(html, "Bounded notice ")
-	if resp.StatusCode != http.StatusOK || strings.Count(html, `<tr id="notification-`) != 100 || shown == 0 ||
-		!strings.Contains(html, fmt.Sprintf("Bounded notice %03d", 121-shown)) || strings.Contains(html, fmt.Sprintf("Bounded notice %03d", 120-shown)) {
-		t.Fatalf("HTML bound = %d, rows %d, notices %d", resp.StatusCode, strings.Count(html, `<tr id="notification-`), shown)
-	}
+	items, _ = web.json["items"].([]any)
+	newestBounded("web inbox", items, 100)
 }
 
 func TestNotificationOperationAuditsTrustedRun(t *testing.T) {

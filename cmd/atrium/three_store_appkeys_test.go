@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -144,11 +143,7 @@ func TestMediaLinkRefreshKeepsHostKeyPrecedence(t *testing.T) {
 	}
 
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil); code != http.StatusOK {
-		t.Fatalf("GET notifications = %d", code)
-	}
+	client := localWebG5(t, base).http
 	if code, text, _ := fetch(t, client, http.MethodGet, base+signed, nil); code != http.StatusOK || text != "movie bytes" {
 		t.Fatalf("GET the host-signed link = %d %q, want the signed file", code, text)
 	}
