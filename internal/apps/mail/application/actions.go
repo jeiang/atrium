@@ -103,13 +103,6 @@ func (s *Service) runMessageAction(ctx context.Context, id int64, action string,
 	if s.open == nil || s.effects == nil {
 		return out, nil, &application.Error{Code: application.NotConfigured, Message: "the mail opener is not configured"}
 	}
-	limit, err := writeCap(ctx, s.db.Read)
-	if err != nil {
-		return out, nil, err
-	}
-	if limit < 1 {
-		return out, nil, &application.Error{Code: application.Refused, Reason: "write_cap", Message: "the mail write cap allows no messages"}
-	}
 	snaps, err := mailops.Snapshots(ctx, s.db.Read, []int64{id})
 	if err != nil {
 		return out, nil, err
@@ -118,11 +111,23 @@ func (s *Service) runMessageAction(ctx context.Context, id int64, action string,
 		return out, nil, &application.Error{Code: application.NotFound, Message: "Unknown message"}
 	}
 	account := view.Account
+	resource := ledger.MailResource(account, snaps[0].IMAPName, snaps[0].UIDValidity, snaps[0].UID)
+	blocked, err := s.effects.Blocked(ctx, []string{resource})
+	if err != nil {
+		return out, nil, err
+	}
+	if len(blocked) > 0 {
+		ids := make([]int64, len(blocked))
+		for i, e := range blocked {
+			ids[i] = e.ID
+		}
+		return out, nil, &application.Error{Code: application.Conflict, Reason: "write_blocked", Message: "an earlier write to this message is unresolved; resolve it on the Activity page first", EffectIDs: ids}
+	}
 	effect := func(op, target string) ledger.New {
 		return ledger.New{
 			Origin: OperatorOrigin, Operation: op, OperationKey: op + ":" + ledger.NewKey(),
 			Target: target, MessageID: &id, Account: account,
-			Resources: []ledger.Resource{{Key: ledger.MailResource(account, snaps[0].IMAPName, snaps[0].UIDValidity, snaps[0].UID)}},
+			Resources: []ledger.Resource{{Key: resource}},
 		}
 	}
 	var effects []int64
@@ -176,7 +181,7 @@ func archiveMailbox(ctx context.Context, client mail.Client, account, source str
 		if b.IMAPName == source && role != "inbox" && protectedFolder(b.Name, b.Flags) {
 			return "", "", &application.Error{Code: application.Refused, Reason: "protected_folder", Message: "refusing to archive from protected folder " + strconv.Quote(b.Name)}
 		}
-		if role == "archive" && dest == "" {
+		if (strings.EqualFold(b.Name, "Archive") || slices.ContainsFunc(b.Flags, func(f string) bool { return strings.EqualFold(f, `\Archive`) })) && dest == "" {
 			dest, name = b.IMAPName, b.Name
 		}
 	}

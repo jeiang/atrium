@@ -43,21 +43,29 @@ type DraftResolveRequest struct {
 	Outcome string `json:"outcome" api:"enum=sent|draft"`
 }
 type DraftCreateRequest struct {
-	Account string `json:"account"`
-	To      string `json:"to"`
-	Cc      string `json:"cc"`
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
+	Account string  `json:"account"`
+	To      string  `json:"to"`
+	Cc      *string `json:"cc"`
+	Subject *string `json:"subject"`
+	Body    string  `json:"body"`
 }
 type DraftReplyRequest struct {
-	ID int64  `path:"message_id" json:"-" api:"min=1"`
-	Cc string `json:"cc"`
+	ID int64   `path:"message_id" json:"-" api:"min=1"`
+	Cc *string `json:"cc"`
 }
 type DraftForwardRequest struct {
-	ID int64  `path:"message_id" json:"-" api:"min=1"`
-	To string `json:"to"`
-	Cc string `json:"cc"`
+	ID int64   `path:"message_id" json:"-" api:"min=1"`
+	To string  `json:"to"`
+	Cc *string `json:"cc"`
 }
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 type DraftResponse struct {
 	Draft hub.Draft `json:"draft"`
 }
@@ -250,15 +258,15 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 			return out, nil
 		}),
 		api.Command(d, mailapp.DescribeDraftCreate(), shape(reflect.TypeFor[hub.Draft]()), "POST /drafts", func(ctx context.Context, in DraftCreateRequest) (application.Change[hub.Draft], error) {
-			r, err := s.mail.DraftCreate(ctx, mailapp.DraftCreateInput{Account: in.Account, To: mailapp.Recipients{Text: in.To}, Cc: mailapp.Recipients{Text: in.Cc}, Subject: in.Subject, Body: in.Body})
+			r, err := s.mail.DraftCreate(ctx, mailapp.DraftCreateInput{Account: in.Account, To: mailapp.Recipients{Text: in.To}, Cc: mailapp.Recipients{Text: deref(in.Cc)}, Subject: deref(in.Subject), Body: in.Body})
 			return s.created(ctx, r, err)
 		}),
 		api.Command(d, mailapp.DescribeDraftReply(), application.APIShape{Area: "drafts", Response: reflect.TypeFor[hub.Draft](), OptionalBody: true}, "POST /mail/messages/{message_id}/reply", func(ctx context.Context, in DraftReplyRequest) (application.Change[hub.Draft], error) {
-			r, err := s.mail.DraftReply(ctx, mailapp.DraftReplyInput{MessageID: in.ID, Cc: mailapp.Recipients{Text: in.Cc}})
+			r, err := s.mail.DraftReply(ctx, mailapp.DraftReplyInput{MessageID: in.ID, Cc: mailapp.Recipients{Text: deref(in.Cc)}})
 			return s.created(ctx, r, err)
 		}),
 		api.Command(d, mailapp.DescribeDraftForward(), shape(reflect.TypeFor[hub.Draft]()), "POST /mail/messages/{message_id}/forward", func(ctx context.Context, in DraftForwardRequest) (application.Change[hub.Draft], error) {
-			r, err := s.mail.DraftForward(ctx, mailapp.DraftReplyInput{MessageID: in.ID, To: mailapp.Recipients{Text: in.To}, Cc: mailapp.Recipients{Text: in.Cc}})
+			r, err := s.mail.DraftForward(ctx, mailapp.DraftReplyInput{MessageID: in.ID, To: mailapp.Recipients{Text: in.To}, Cc: mailapp.Recipients{Text: deref(in.Cc)}})
 			return s.created(ctx, r, err)
 		}),
 	}

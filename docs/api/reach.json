@@ -40,14 +40,17 @@
       "area": "drafts",
       "operations": [
         "mail.draft",
+        "mail.draft-create",
         "mail.draft-discard",
+        "mail.draft-forward",
+        "mail.draft-reply",
         "mail.draft-resolve",
         "mail.draft-send",
         "mail.draft-update",
         "mail.drafts"
       ],
-      "required": 6,
-      "bound": 6
+      "required": 9,
+      "bound": 9
     },
     {
       "area": "files",
@@ -169,6 +172,9 @@
         "mail.loop-snooze",
         "mail.loops-dismiss-matching",
         "mail.message",
+        "mail.message-archive",
+        "mail.message-flag",
+        "mail.message-read",
         "mail.open-loops",
         "mail.package-dismiss",
         "mail.packages",
@@ -194,8 +200,8 @@
         "mail.sync",
         "mail.triage"
       ],
-      "required": 41,
-      "bound": 41
+      "required": 44,
+      "bound": 44
     },
     {
       "area": "media",
@@ -418,7 +424,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 242,
-  "total_bound": 242,
+  "total_required": 248,
+  "total_bound": 248,
   "total_approval_reached": 11
 }
