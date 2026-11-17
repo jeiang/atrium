@@ -241,7 +241,7 @@
 
   .kprofile__block > pre {
     margin: 0;
-    background: none;
+    border-radius: var(--r-md);
     padding: var(--s-3);
     max-block-size: 24rem;
     overflow: auto;
