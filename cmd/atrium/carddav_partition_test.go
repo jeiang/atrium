@@ -91,6 +91,7 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 		if partition != "" {
 			w.Header().Set("X-Apple-User-Partition", partition)
 		}
+		w.Header().Set("Set-Cookie", `X-APPLE-WEBAUTH-USER="v=1:s=0:d=1234567890"; Path=/`)
 		prop := `<D:current-user-principal><D:href>/42/principal/</D:href></D:current-user-principal>`
 		if rootHome {
 			prop += `<CR:addressbook-home-set><D:href>/42/carddavhome/</D:href></CR:addressbook-home-set>`
@@ -103,6 +104,7 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Apple-User-Partition", "3")
 		w.Header().Set("WWW-Authenticate", davChallenge)
 		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, "<html><body>account 1234567890 for operator@icloud.invalid</body></html>")
 	case host == partitionHost && partitionRefuses:
 		w.WriteHeader(http.StatusUnauthorized)
 	case r.URL.Path == "/42/principal/":
@@ -178,7 +180,8 @@ func connectProxy(t *testing.T, target string) string {
 	return proxy.URL
 }
 
-func TestCardDAVFindsAPartitionedAddressBookAndNeverSendsTheCredentialToAForeignHost(t *testing.T) {
+func partitionedICloud(t *testing.T) (string, *partitionedDAV) {
+	t.Helper()
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, cal := davFixture(t)
@@ -203,6 +206,11 @@ transport = { ca_file = %q, proxy = %q }
 	setEnv(t, davmirror.CardDAVEnv, front)
 	t.Setenv(davmirror.CardDAVEnv, front)
 	t.Setenv(davmirror.CalDAVEnv, cal.URL+"/")
+	return dir, dav
+}
+
+func TestCardDAVFindsAPartitionedAddressBookAndNeverSendsTheCredentialToAForeignHost(t *testing.T) {
+	dir, dav := partitionedICloud(t)
 
 	carddav := func(view icloudTest) (state, reason string) {
 		for _, r := range view.Results {

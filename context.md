@@ -554,7 +554,10 @@ claims about the running application. Operator contracts are in
   per-message errors and unknown SMTP outcomes record nothing. These kinds
   have no grace window.
   `connections test --all` uses the silent checks; `connections test <id>`
-  keeps the explicit test.
+  keeps the explicit test. `connections test <id> --trace <capability>` runs a
+  kind's `Trace` hook (iCloud `caldav`/`carddav`) on a read-only lease: the
+  same discovery printed request by request with ids, users and addresses
+  masked, and nothing saved.
 - qBittorrent and the embedding endpoint have a 6-hour grace window,
   compiled into their connection kinds. A failure right after an `ok` or
   `expiring` state stores `failing` with the window end in its result;

@@ -111,6 +111,23 @@ func OpenRead(ctx context.Context, q db.Querier, host config.Host, id ID) (*Leas
 	return s.open(ctx, q, id)
 }
 
+func (s *Store) Trace(ctx context.Context, id ID, capability string, out io.Writer) (Result, error) {
+	read := &Store{q: s.q, host: s.host, reg: s.reg, now: time.Now, shared: map[string]*shared{}, digests: map[string]string{}}
+	lease, err := read.open(ctx, read.q, id)
+	if err != nil {
+		return Result{}, err
+	}
+	defer lease.Close()
+	def, ok := s.reg.Lookup(lease.Kind())
+	switch {
+	case !ok || def.Trace == nil:
+		return Result{}, fmt.Errorf("connections: %s connections have no request trace", lease.Kind())
+	case !slices.Contains(def.Offers, capability):
+		return Result{}, fmt.Errorf("connections: %s has no %s capability", id, capability)
+	}
+	return def.Trace(ctx, lease, capability, out)
+}
+
 func (s *Store) Open(ctx context.Context, id ID) (*Lease, error) {
 	return s.open(ctx, s.q, id)
 }
