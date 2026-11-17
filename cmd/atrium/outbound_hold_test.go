@@ -53,7 +53,9 @@ func TestARefusedBackgroundRequestHoldsAcrossARestartUntilASuccess(t *testing.T)
 	_, logs, stop := startServeWith(t, dir, true)
 	t.Cleanup(func() {
 		if t.Failed() {
-			t.Log(logs.String(), embed.authorizations())
+			var results string
+			_ = d.Read.QueryRow("SELECT results_json FROM connections WHERE id = 'service/embedding'").Scan(&results)
+			t.Log(logs.String(), embed.authorizations(), results)
 		}
 	})
 	waitUntil(t, time.Minute, "the refused embedding index to pause and store its hold", func() bool {

@@ -1641,10 +1641,10 @@ func (s *Store) Recover(ctx context.Context, v View, capability string) error {
 }
 
 func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Result) error {
-	return s.observe(ctx, id, revision, result, true)
+	return s.observe(ctx, id, revision, func([]Result) Result { return result }, true)
 }
 
-func (s *Store) observe(ctx context.Context, id ID, revision int64, result Result, checked bool) error {
+func (s *Store) observe(ctx context.Context, id ID, revision int64, derive func(prior []Result) Result, checked bool) error {
 	var (
 		previous State
 		state    State
@@ -1676,6 +1676,7 @@ func (s *Store) observe(ctx context.Context, id ID, revision int64, result Resul
 		if resultsJSON != "" {
 			_ = json.Unmarshal([]byte(resultsJSON), &prior)
 		}
+		result := derive(prior)
 		results := slices.Clone(prior)
 		replaced := false
 		for i := range results {

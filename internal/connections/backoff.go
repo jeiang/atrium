@@ -219,18 +219,20 @@ func (s *Store) RecordHold(ctx context.Context, o outcome) error {
 	if err != nil || v.State == Unconfigured || v.State == Disabled {
 		return err
 	}
-	result := Result{Capability: o.Capability, State: Failing, Reason: o.Reason}
-	for _, r := range v.Results {
-		if r.Capability == o.Capability && unhealthy(r.State) {
-			result = r
-		}
-	}
 	label := v.Label
 	if label == "" {
 		label = string(v.ID)
 	}
-	result = o.Held.Attach(result, label, time.Now())
-	if err := s.observe(ctx, o.ID, o.Revision, result, false); err != nil && !errors.As(err, new(*Conflict)) {
+	held := func(prior []Result) Result {
+		result := Result{Capability: o.Capability, State: Failing, Reason: o.Reason}
+		for _, r := range prior {
+			if r.Capability == o.Capability && unhealthy(r.State) {
+				result = r
+			}
+		}
+		return o.Held.Attach(result, label, time.Now())
+	}
+	if err := s.observe(ctx, o.ID, o.Revision, held, false); err != nil && !errors.As(err, new(*Conflict)) {
 		return err
 	}
 	return nil
