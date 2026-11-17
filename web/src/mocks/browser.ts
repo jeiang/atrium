@@ -14,10 +14,10 @@ function allowWorkerUrl(input: string): string {
   throw new TypeError(`Trusted Types: script URL not allowed: ${input}`);
 }
 
-export async function startMocks(): Promise<void> {
+export async function startMocks(): Promise<ServiceWorkerRegistration | undefined> {
   const factory: TrustedTypePolicyFactory | undefined = Reflect.get(globalThis, 'trustedTypes');
   if (factory && !factory.defaultPolicy) factory.createPolicy('default', { createScriptURL: allowWorkerUrl });
-  await setupWorker(...handlers).start({
+  return setupWorker(...handlers).start({
     serviceWorker: { url: WORKER_PATH },
     onUnhandledFrame: 'bypass',
     quiet: true,

@@ -27,6 +27,7 @@
     type Draft,
     fieldsBody,
     fieldsFor,
+    GOOGLE_ID,
     gesture,
     graceText,
     hostSlot,
@@ -45,6 +46,7 @@
     when,
     words,
   } from './connections';
+  import GoogleSetup from './GoogleSetup.svelte';
   import SecretField from './SecretField.svelte';
   import WeatherLocation from './WeatherLocation.svelte';
   import './connections.css';
@@ -339,6 +341,8 @@
     </ViewState>
   {:else if !list.data}
     <Skeleton lines={6} label="Loading the connection" />
+  {:else if !view && id === GOOGLE_ID}
+    <GoogleSetup view={undefined} />
   {:else if !view}
     <ViewState kind="empty" title="No such connection">
       atrium has no connection named {id}.
@@ -408,10 +412,12 @@
           {#if hint?.owner}
             This connection uses the credential of {hint.owner}.
             {hint.pinned
-              ? 'That credential is changed in host configuration; change it there, then Test now.'
-              : 'Change it on that connection, then Test now.'}
+    ? 'That credential is changed in host configuration; change it there, then Test now.'
+    : 'Change it on that connection, then Test now.'}
           {:else if hint?.pinned}
             The credential is changed in host configuration. Change it there, then Test now.
+          {:else if view.id === GOOGLE_ID}
+            Connect Google again in Google setup below, then Test now.
           {:else}
             Sign in again in the current interface, then come back and Test now.
           {/if}
@@ -422,16 +428,18 @@
                 href={p('/settings/connections/:kind/:name', { params: splitId(hint.owner) })}
                 >Open {hint.owner}</a
               >
-            {:else if !hint?.pinned}
+            {:else if !hint?.pinned && view.id !== GOOGLE_ID}
               <a class="btn btn--secondary" href="/settings/connections">Open Connections in the current interface</a>
             {/if}
           {/snippet}
         </Notice>
       {:else if view.state === 'unconfigured' && view.enabled}
         <Notice tone="warn" variant="inline" title="To repair">
-          {editable
-    ? 'Fill in what is missing below, then choose Test and save.'
-    : 'The host file declares this connection. Add what is missing there, then Test now.'}
+          {view.id === GOOGLE_ID
+    ? 'Follow the steps in Google setup below, then Test now.'
+    : editable
+      ? 'Fill in what is missing below, then choose Test and save.'
+      : 'The host file declares this connection. Add what is missing there, then Test now.'}
         </Notice>
       {:else if view.state === 'failing' || view.state === 'expiring'}
         <Notice tone="warn" variant="inline" title="To repair">
@@ -505,9 +513,7 @@
                   <dd class="stack">
                     <span
                       >Uses the credential of {field.owner}.
-                      {field.pinned
-                        ? 'It is set in host configuration.'
-                        : 'Change it on that connection.'}</span
+                      {field.pinned ? 'It is set in host configuration.' : 'Change it on that connection.'}</span
                     >
                     <a
                       class="btn btn--secondary"
@@ -582,6 +588,10 @@
 
     {#if view.id === WEATHER_ID}
       <WeatherLocation />
+    {/if}
+
+    {#if view.id === GOOGLE_ID}
+      <GoogleSetup {view} />
     {/if}
 
     {#if removable}

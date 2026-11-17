@@ -3,6 +3,8 @@
   import { ApiError } from '../../contract';
   import ApprovalCard from '../../shared/assistant/ApprovalCard.svelte';
   import type { InboxId } from '../../shared/assistant/inboxId';
+  import { stuckChoices } from '../../shared/assistant/stuck';
+  import type { Blocked } from '../../shared/assistant/types';
   import { outcomeUnknown, refusedOffline, unreachable } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
@@ -12,6 +14,7 @@
   import {
     handleApprove,
     handleDecline,
+    handleResolve,
     handleUndo,
     type InboxItem,
     inboxKey,
@@ -38,9 +41,39 @@
   const decided = $derived(
     held || !shown?.decided ? undefined : undoneHere ? { ...shown.decided, where: 'this device' } : shown.decided,
   );
-  const blocked = $derived(
-    shown?.blocked ? { reason: shown.blocked, repair: 'Open in the current interface' } : undefined,
-  );
+
+  const blocked = $derived.by((): Blocked | undefined => {
+    if (!shown?.blocked) return undefined;
+    if (shown.stuck) return stuckChoices[shown.stuck];
+    return { reason: shown.blocked, repair: 'Open in the current interface' };
+  });
+
+  function refused(error: unknown): { tone: 'warn' | 'error'; title: string; text: string } {
+    if (refusedOffline(error) && error instanceof Error) {
+      return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+    }
+    if (error instanceof ApiError) {
+      return { tone: 'warn', title: 'atrium refused this', text: `${error.message} Nothing was recorded.` };
+    }
+    return {
+      tone: 'error',
+      title: 'The outcome is unknown',
+      text: 'The connection failed before atrium answered, so this may or may not have been recorded. atrium reloaded the item and did not try again.',
+    };
+  }
+
+  async function onResolve(outcome: string): Promise<void> {
+    problem = undefined;
+    try {
+      await handleResolve(target, outcome);
+    } catch (error) {
+      problem = refused(error);
+      throw error;
+    } finally {
+      await client.refetchQueries({ queryKey: ['inbox', 'item', key] });
+      refreshInbox(client);
+    }
+  }
 
   function describe(error: unknown): { tone: 'warn' | 'error'; title: string; text: string } {
     if (refusedOffline(error) && error instanceof Error) {
@@ -133,6 +166,7 @@
         onapprove={onApprove}
         ondecline={onDecline}
         onrepair={onRepair}
+        onresolve={onResolve}
         onundo={onUndo}
       />
     {/key}

@@ -4,7 +4,7 @@ import './shell/shell.css';
 import { mount } from 'svelte';
 import { homeQuery, pendingQuery } from './features/home/queries';
 import { queryClient } from './shared/query';
-import { startWorker } from './shared/worker';
+import { startWorker, useWorker } from './shared/worker';
 import App from './shell/App.svelte';
 import { firstView } from './shell/firstView';
 import { shellQuery } from './shell/frame';
@@ -13,7 +13,7 @@ import faces from './tokens/faces.css?url';
 
 if (import.meta.env.MODE === 'mock') {
   const { startMocks } = await import('./mocks/browser');
-  await startMocks();
+  useWorker(await startMocks());
 }
 const started = loadSession();
 void queryClient.prefetchQuery(shellQuery);

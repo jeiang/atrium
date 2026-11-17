@@ -11,6 +11,13 @@ const SCRIPT = `${BASE}sw.js`;
 const ACTIVATION_WAIT_MS = 3_000;
 
 let stale = false;
+const registered = Promise.withResolvers<ServiceWorkerRegistration | undefined>();
+
+export const appWorker = registered.promise;
+
+export function useWorker(registration: ServiceWorkerRegistration | undefined): void {
+  registered.resolve(registration);
+}
 
 function scriptURL(): string {
   const factory: TrustedTypePolicyFactory | undefined = Reflect.get(globalThis, 'trustedTypes');
@@ -70,14 +77,19 @@ function watchNavigation(registration: ServiceWorkerRegistration): void {
 }
 
 export async function startWorker(): Promise<void> {
-  if (!('serviceWorker' in navigator)) return;
+  if (!('serviceWorker' in navigator)) {
+    useWorker(undefined);
+    return;
+  }
   const container = navigator.serviceWorker;
   let registration: ServiceWorkerRegistration;
   try {
     registration = await container.register(scriptURL(), { scope: BASE, updateViaCache: 'none' });
   } catch {
+    useWorker(undefined);
     return;
   }
+  useWorker(registration);
   container.startMessages();
   container.addEventListener('message', (event: MessageEvent<unknown>) => {
     const data = event.data;

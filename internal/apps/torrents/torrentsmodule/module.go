@@ -1,6 +1,7 @@
 package torrentsmodule
 
 import (
+	"context"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -11,13 +12,15 @@ import (
 	"github.com/jeiang/atrium/internal/apps/torrents/torrenttools"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/review"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 type Module struct {
-	App *torrents.App
-	Now func() float64
+	App       *torrents.App
+	Now       func() float64
+	Resources module.Resources
 }
 
 func Requirements() []module.Requirement {
@@ -55,6 +58,7 @@ func operations() ([]application.Definition, []application.Binding) {
 			{Kind: application.Tool, Target: torrenttools.NameAdd, Uses: []application.Name{torrentsapp.AddName}},
 			{Kind: application.Tool, Target: torrenttools.NameControl, Uses: []application.Name{torrentsapp.ControlName}},
 			{Kind: application.ProtocolOnly, Target: "GET /apps/media/add", Reason: "transport"},
+			{Kind: application.ProtocolOnly, Target: "downloads-watch", Reason: "lifecycle"},
 		}
 }
 
@@ -76,11 +80,18 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Connections: torrents.Connections(),
 		EffectCategories: []review.Category{{Name: "downloads", Operations: []string{
 			torrents.OpAddMagnet, torrents.OpAddFile, torrents.OpPriority, torrents.OpTagAdd, torrents.OpTagRemove,
-			torrents.OpStart, torrents.OpStop, torrents.OpDelete, torrents.UndoTorrent,
+			torrents.OpStart, torrents.OpStop, torrents.OpDelete, torrents.UndoTorrent, torrents.UndoTorrentState, torrents.UndoTorrentTag,
 		}}},
 		Effects: func(d module.EffectDeps) module.Effects {
 			return module.Effects{Undo: m.App.Undo(d.Ledger, d.Env)}
 		},
+		Services: []runtime.ServiceDefinition{{Name: "downloads-watch", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return m.App.Watch(ctx, contract.Deps{DB: d, Env: mc.Env})
+		}}},
 		Pages: []web.Page{{
 			Module: pages.Module(pages.Options{
 				Service: m.pageService,

@@ -201,10 +201,15 @@ export interface DecidedElsewhere {
   at: string;
 }
 
-export interface Blocked {
-  reason: string;
-  repair: string;
+export interface Outcome {
+  value: string;
+  label: string;
+  ask: string;
+  effect: string;
+  done: string;
 }
+
+export type Blocked = { reason: string; repair: string } | { reason: string; outcomes: readonly Outcome[] };
 
 export type Decision = 'approve' | 'decline' | 'later';
 

@@ -5,11 +5,30 @@ import (
 	"database/sql"
 	"fmt"
 	"slices"
+	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/application"
 )
 
 const EventsName application.Name = "state.events"
+
+var (
+	listeners atomic.Int64
+	listened  = make(chan struct{}, 1)
+)
+
+func Listen() (release func()) {
+	listeners.Add(1)
+	select {
+	case listened <- struct{}{}:
+	default:
+	}
+	return func() { listeners.Add(-1) }
+}
+
+func Listening() bool { return listeners.Load() > 0 }
+
+func Listened() <-chan struct{} { return listened }
 
 type EventsInput struct{}
 

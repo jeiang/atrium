@@ -14,7 +14,7 @@ function terminalState(script: RunScript): string {
   const last = script.events.at(-1);
   if (last?.event === 'complete') return 'done';
   if (last?.event === 'run_error') return 'failed';
-  return 'parked';
+  return script.interrupted ? 'interrupted' : 'parked';
 }
 
 function parseCursor(value: string | null): number | undefined {
