@@ -20,9 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/scans"
 	"github.com/jeiang/atrium/internal/apps/mail/scanutil"
 	"github.com/jeiang/atrium/internal/apps/mail/search"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
 	"github.com/jeiang/atrium/internal/apps/mail/triage"
-	"github.com/jeiang/atrium/internal/apps/mail/watches"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -38,38 +36,32 @@ import (
 )
 
 type (
-	Skip                   = mailops.Skip
-	TextsFunc              = embed.TextsFunc
-	ServiceUnavailable     = httpx.ServiceUnavailable
-	SearchFilters          = search.Filters
-	NotConfigured          = config.NotConfigured
-	TrackingQuotaError     = tracking.QuotaError
-	TrackingError          = tracking.Error
-	TrackingStatusError    = tracking.StatusError
-	TrackingRateLimitError = tracking.RateLimitError
-	TrackingTransportError = tracking.TransportError
-	BacklogError           = backlog.Error
-	ReplaySummary          = replay.Summary
-	RuleError              = rules.RuleError
-	RuleAction             = rules.Action
-	RulePreviewResult      = ruleedit.Preview
-	ScanResult             = scanutil.Result
-	CorrectionError        = corrections.Error
-	MessageView            = message.View
-	TriageRow              = triage.Row
-	TriageFolder           = triage.Folder
-	TriageFilterError      = triage.FilterError
-	DraftRow               = drafts.Row
-	DraftStatus            = drafts.Status
-	DraftError             = drafts.Error
-	DraftStale             = drafts.Stale
-	DraftSendOutcome       = drafts.Result
-	DraftOutcomeUnknown    = drafts.OutcomeUnknown
-	Package                = watches.Package
-	UnknownAccount         = run.UnknownAccount
-	OpenFunc               = mail.OpenFunc
-	Pass                   = run.Pass
-	Config                 = config.Config
+	Skip                = mailops.Skip
+	TextsFunc           = embed.TextsFunc
+	ServiceUnavailable  = httpx.ServiceUnavailable
+	SearchFilters       = search.Filters
+	NotConfigured       = config.NotConfigured
+	BacklogError        = backlog.Error
+	ReplaySummary       = replay.Summary
+	RuleError           = rules.RuleError
+	RuleAction          = rules.Action
+	RulePreviewResult   = ruleedit.Preview
+	ScanResult          = scanutil.Result
+	CorrectionError     = corrections.Error
+	MessageView         = message.View
+	TriageRow           = triage.Row
+	TriageFolder        = triage.Folder
+	TriageFilterError   = triage.FilterError
+	DraftRow            = drafts.Row
+	DraftStatus         = drafts.Status
+	DraftError          = drafts.Error
+	DraftStale          = drafts.Stale
+	DraftSendOutcome    = drafts.Result
+	DraftOutcomeUnknown = drafts.OutcomeUnknown
+	UnknownAccount      = run.UnknownAccount
+	OpenFunc            = mail.OpenFunc
+	Pass                = run.Pass
+	Config              = config.Config
 )
 
 const (
@@ -80,7 +72,6 @@ const (
 	MailTriage             = executors.MailTriage
 	TriageArchive          = executors.TriageArchive
 	TriageLabel            = executors.TriageLabel
-	UndoUntrack            = tracking.UndoUntrack
 	ReplayStageNone        = replay.StageNone
 	RuleAgeField           = rules.AgeField
 	RuleAgeOp              = rules.AgeOp

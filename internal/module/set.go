@@ -88,7 +88,7 @@ func NewSet(cat *Catalog, reg *settings.Registry, env config.Env, open Opener) (
 			return snap == nil || snap.Enabled(name)
 		}, func(name string) bool {
 			snap := s.Current()
-			return snap == nil || snap.TurnedOn(name)
+			return snap == nil || snap.turnedOnWithDepends(name)
 		})
 	}
 	return s, nil
@@ -361,6 +361,18 @@ func (n *Snapshot) Enabled(name string) bool {
 func (n *Snapshot) TurnedOn(name string) bool {
 	st, ok := n.Status(name)
 	return ok && (st.On || st.State == Unavailable)
+}
+
+func (n *Snapshot) turnedOnWithDepends(name string) bool {
+	if !n.TurnedOn(name) {
+		return false
+	}
+	for _, d := range n.set.decls {
+		if d.Name == name {
+			return !slices.ContainsFunc(d.Depends, func(dep string) bool { return !n.turnedOnWithDepends(dep) })
+		}
+	}
+	return true
 }
 
 func (n *Snapshot) ServicesOf(owner string) []runtime.ServiceDefinition {

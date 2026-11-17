@@ -11,32 +11,14 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail"
 	mailapp "github.com/jeiang/atrium/internal/apps/mail/application"
 	"github.com/jeiang/atrium/internal/apps/mail/run"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
-	"github.com/jeiang/atrium/internal/apps/mail/watches"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/unit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
-type MailPackagesRequest struct {
-	Active bool       `query:"active" json:"-"`
-	Cursor api.Cursor `query:"cursor" json:"-"`
-	Limit  api.Limit  `query:"limit" json:"-"`
-}
-type MailPackagesPage struct {
-	Items      []watches.Package `json:"items"`
-	NextCursor *string           `json:"next_cursor" api:"nullable"`
-}
-type MailPackageRef struct {
-	ID int64 `path:"package_id" json:"-" api:"min=1"`
-}
 type MailRefreshed struct {
 	Result json.RawMessage `json:"result"`
-}
-type MailPoll struct {
-	Poll tracking.PollResult `json:"poll"`
 }
 
 type mailPasses struct {
@@ -177,26 +159,9 @@ func mailRefreshed(change application.Change[mailapp.RefreshResult], err error) 
 }
 
 func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
-	var service *mailapp.Service
-	svc := func() *mailapp.Service { return service }
 	passes := mailPasses{d: d, m: m}
-	if d != nil {
-		service = mailPageService(d)
-	}
 	const area = "mail"
 	return []application.Binding{
-		api.Query(d, mailapp.DescribePackages(), application.APIShape{Area: area}, "GET /mail/packages", func(ctx context.Context, in MailPackagesRequest) (application.Read[MailPackagesPage], error) {
-			r, err := svc().Packages(ctx, mailapp.PackagesInput{ActiveOnly: in.Active})
-			if err != nil {
-				return application.Read[MailPackagesPage]{}, err
-			}
-			items, next, err := mailPage(r.Data.Packages, in.Cursor, in.Limit, nil)
-			page := MailPackagesPage{Items: items, NextCursor: next}
-			return application.Read[MailPackagesPage]{Revision: servedRevision(mailapp.DescribePackages().Name, page), Data: page}, err
-		}),
-		api.Command(d, mailapp.DescribePackageDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/packages/{package_id}/dismiss", func(ctx context.Context, in MailPackageRef) (application.Change[struct{}], error) {
-			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})
-		}),
 		api.Command(d, mailapp.DescribeRefreshLoops(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/loops/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
 			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshLoops(ctx, struct{}{}))
@@ -210,15 +175,6 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 				return err
 			})
 			return out, err
-		}),
-		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable, application.Refused}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
-			var r application.Change[mailapp.PollTrackersResult]
-			_, err := module.Invoke(ctx, d.DB, d.Cfg, unit.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
-				var err error
-				r, err = svc().PollTrackers(ctx, struct{}{})
-				return scheduler.Result{}, err
-			})
-			return application.Change[MailPoll]{Data: MailPoll{Poll: r.Data.Poll}, AuditID: r.AuditID}, busy(err, "A package poll is already running.")
 		}),
 	}
 }

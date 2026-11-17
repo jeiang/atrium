@@ -430,11 +430,13 @@ capability failing, and a login the server refuses marks it as needing reauth,
 as the scheduled check does. An SMTP session that cannot connect or greet marks
 `smtp` failing, and a refused login (codes 530 to 535) marks it as needing
 reauth. A
-contacts or calendar mirror sync that the server refuses (401 or 403) marks
-`carddav` or `caldav` as needing reauth, and a server error, network error or
-TLS error marks it failing. A later session or sync that works marks the
-capability ok again. These four have no grace window, so the first failure
-notifies at once and the recovery notifies once. Errors about one message,
+contacts or calendar mirror sync whose first request the server refuses (401
+or 403) marks `carddav` or `caldav` as needing reauth. A refusal after that
+first request accepted the password, a server error, a network error, a TLS
+error, or a discovery step that points at a host the credential may not go to
+marks it failing, and the reason names the step. A later session or sync that
+works marks the capability ok again. These four have no grace window, so the
+first failure notifies at once and the recovery notifies once. Errors about one message,
 such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
 not change the connection. Only a change of state class is written: a repeated
 failure or a repeated success writes nothing and sends no notice. A one-shot
@@ -478,6 +480,21 @@ tool is not offered, the Home weather card shows `off`, no forecast is
 fetched, and the built-in weather connection is disabled with the reason "its
 app is off" (the row, its settings and the three location keys stay).
 Turning Weather on again re-enables that connection as untested.
+
+Packages is its own app, switched by `packages_enabled`, and needs Mail on.
+It is opt-in: the first start of a version with the Packages app turns it on
+only when the database already holds tracked packages; otherwise it stays
+off, as on a fresh database. With Packages off, the `packages`,
+`track_package` and `untrack_package` tools are not offered, the hourly
+package tracking job does not run, the mail pass does not extract packages
+from shipping mail, `POST /mail/watches/refresh` answers unavailable, and the
+`service/ship24` connection is disabled with the reason "its app is off" (the
+row and its credential stay). With Packages on, `GET /packages` lists the
+packages with `ship24_connected` and the month's Ship24 `quota`;
+`POST /packages` adds one by tracking number;
+`POST /packages/{package_id}/track`, `/untrack` and `/dismiss` act on one;
+`POST /packages/poll` and `atrium packages poll` refresh the trackers now.
+The old `/mail/packages*` routes are gone.
 
 A settings save in the running serve re-checks module requirements after
 commit. That can change route/service availability without a restart if

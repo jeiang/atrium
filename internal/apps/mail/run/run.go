@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/live"
 	"github.com/jeiang/atrium/internal/apps/mail/router"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
-	"github.com/jeiang/atrium/internal/apps/mail/watches"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
@@ -80,6 +80,7 @@ type Pass struct {
 	Classify   *classify.Service
 	Events     func(ctx context.Context, account string, paid *classify.Deferral) (invites, candidates int, err error)
 	Extras     []Extra
+	Scans      func(context.Context) []Extra
 	resolve    func(ctx context.Context) (*classifier.Service, error)
 	resolved   bool
 }
@@ -121,9 +122,15 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		{"open loops", func(ctx context.Context, paid *classify.Deferral) (any, error) {
 			return module.RefreshCommunications(ctx, d, now(), module.Refresh{Env: env, Classifier: p.Classifier, Paid: paid, Clock: now})
 		}},
-		{"watches", func(ctx context.Context, paid *classify.Deferral) (any, error) {
-			return watches.Refresh(ctx, d, now(), watches.Options{Classifier: p.Classifier, Paid: paid, Clock: now, Env: env})
-		}},
+	}
+	p.Scans = func(ctx context.Context) []Extra {
+		var out []Extra
+		for _, s := range module.MessageScans(ctx) {
+			out = append(out, Extra{s.Name, func(ctx context.Context, paid *classify.Deferral) (any, error) {
+				return s.Run(ctx, d, now(), module.Refresh{Env: env, Classifier: p.Classifier, Paid: paid, Clock: now})
+			}})
+		}
+		return out
 	}
 	return p, nil
 }
@@ -260,7 +267,11 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		}
 	}
 	var errs []error
-	for _, extra := range p.Extras {
+	extras := p.Extras
+	if p.Scans != nil {
+		extras = append(slices.Clone(extras), p.Scans(ctx)...)
+	}
+	for _, extra := range extras {
 		if err := ctx.Err(); err != nil {
 			return err
 		}

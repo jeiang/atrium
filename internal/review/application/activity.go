@@ -135,7 +135,7 @@ var receiptVerbs = map[string]string{
 	"media_add_magnet": "Added a download", "download_add": "Added a download", "download_control": "Changed a download",
 	"media_channel_add": "Started watching a show", "media_channel_remove": "Stopped watching a show",
 	"schedule_create": "Created a schedule", "schedule_update": "Changed a schedule", "schedule_cancel": "Cancelled a schedule",
-	"track_package": "Started tracking a package", "ops_finding": "Filed a server finding",
+	"track_package": "Started tracking a package", "untrack_package": "Stopped tracking a package", "ops_finding": "Filed a server finding",
 }
 
 var mailVerbs = map[string]string{"file": "Filed", "flag": "Flagged", "delete": "Deleted", "move": "Moved"}

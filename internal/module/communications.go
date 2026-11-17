@@ -78,3 +78,52 @@ func Communications(ctx context.Context) communications.Feed {
 	}
 	return feed
 }
+
+type MessageScan struct {
+	Name string
+	Run  Refresher
+}
+
+type namedScan struct {
+	unit string
+	scan MessageScan
+}
+
+func compileMessageScans(decls []Declaration) ([]namedScan, error) {
+	owners := claims{}
+	var out []namedScan
+	for _, d := range decls {
+		for _, s := range d.MessageScans {
+			if err := owners.take("message scan", s.Name, d.Name); err != nil {
+				return nil, err
+			}
+			out = append(out, namedScan{unit: d.Name, scan: s})
+		}
+	}
+	return out, nil
+}
+
+func MessageScans(ctx context.Context) []MessageScan {
+	s := SetFrom(ctx)
+	if s == nil {
+		return nil
+	}
+	snap := s.Current()
+	var out []MessageScan
+	for _, n := range s.Catalog().regs.messageScans {
+		if snap != nil && snap.Enabled(n.unit) {
+			out = append(out, n.scan)
+		}
+	}
+	return out
+}
+
+func RunMessageScan(ctx context.Context, name string, d *db.DB, now float64, r Refresh) (any, bool, error) {
+	for _, s := range MessageScans(ctx) {
+		if s.Name == name {
+			out, err := s.Run(ctx, d, now, r)
+			return out, true, err
+		}
+	}
+	return nil, false, nil
+}

@@ -11,4 +11,5 @@ const (
 	Contacts      = "contacts"
 	Signals       = "signals"
 	Weather       = "weather"
+	Packages      = "packages"
 )

@@ -141,6 +141,15 @@ repair. The Calendar section on the
 Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
 `default_event_minutes`, `work_hours` and `work_days`.
 
+Discovery asks the DAV root for the current user principal and the home set in
+one request. When the root names only the principal and the principal refuses
+the password, discovery retries from `/.well-known/caldav` or
+`/.well-known/carddav` and follows at most 3 redirects. The credential goes only
+to the configured DAV host and, over https on the same port, to a sibling host
+under the same parent domain, such as an iCloud partition host. Atrium refuses
+any other redirect, principal, home set or collection address without sending
+the credential, and logs the step and status of each failed DAV request.
+
 ## Knowledge export
 
 The knowledge base is written to one Markdown folder by the daily
@@ -225,8 +234,9 @@ beyond the coordinates.
 
 ## Ship24
 
-Ship24 supplies live package tracking for packages the operator registers
-with the `track_package` tool. Create an API key in the Ship24 dashboard and
+Ship24 supplies live package tracking for the opt-in Packages app
+(`packages_enabled`), for packages the operator registers with the
+`track_package` tool or `POST /packages/{package_id}/track`. Create an API key in the Ship24 dashboard and
 paste it on the Connections page, or declare `credential_files.api_key` on
 the `service/ship24` connection in the host configuration. The free plan registers 10 shipments a month; the
 compiled quota `tracking.TuningMailShip24MonthlyQuota` (10) refuses further

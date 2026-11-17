@@ -44,6 +44,7 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ops_listen` | string | `127.0.0.1:9180` | `ATRIUM_CORE_OPS_LISTEN` |
 | `ops_pprof` | bool | `false` | `ATRIUM_CORE_OPS_PPROF` |
 | `otel_traces_endpoint` | string | none | `ATRIUM_CORE_OTEL_TRACES_ENDPOINT` |
+| `packages_enabled` | bool | `false` | `ATRIUM_CORE_PACKAGES_ENABLED` |
 | `public_url` | string | none | `ATRIUM_CORE_PUBLIC_URL` |
 | `torrents_enabled` | bool | `false` | `ATRIUM_CORE_TORRENTS_ENABLED` |
 | `weather_enabled` | bool | `false` | `ATRIUM_CORE_WEATHER_ENABLED` |
@@ -145,6 +146,7 @@ Operator settings are stored in the database and edited in the application. They
 | `mail_enabled` | bool | `false` | ui |
 | `media_enabled` | bool | `false` | ui |
 | `notifications_enabled` | bool | `false` | ui |
+| `packages_enabled` | bool | `false` | ui |
 | `torrents_enabled` | bool | `false` | ui |
 | `tz` | string | `America/Port_of_Spain` | ui |
 | `weather_enabled` | bool | `false` | ui |
@@ -161,8 +163,6 @@ Operator settings are stored in the database and edited in the application. They
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
 | `mail_mode` | string | `shadow` | advanced |
-| `mail_ship24_destination_country` | string | none | ui |
-| `mail_ship24_destination_postcode` | string | none | ui |
 | `openloops_remind_ahead_days` | int | `1` | ui |
 | `openloops_remind_hour` | int | `9` | ui |
 | `openloops_snooze_default_days` | int | `3` | ui |
@@ -176,6 +176,13 @@ Operator settings are stored in the database and edited in the application. They
 | --- | --- | --- | --- |
 | `link_key` | string | none | secret |
 | `media_link_ttl_seconds` | int | `43200` | ui |
+
+### packages
+
+| Key | Type | Default | Class |
+| --- | --- | --- | --- |
+| `mail_ship24_destination_country` | string | none | ui |
+| `mail_ship24_destination_postcode` | string | none | ui |
 
 ### permissions
 
