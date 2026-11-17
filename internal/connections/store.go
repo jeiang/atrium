@@ -1353,10 +1353,19 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
+	view, updated, err := s.write(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
+	if err == nil && !updated {
+		return View{}, &Conflict{ID: id, Revision: lease.revision}
+	}
+	return view, err
 }
 
 func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, interactive []string, results []Result, commits ...Commit) (View, error) {
+	view, _, err := s.write(ctx, id, revision, grace, interactive, results, commits...)
+	return view, err
+}
+
+func (s *Store) write(ctx context.Context, id ID, revision int64, grace time.Duration, interactive []string, results []Result, commits ...Commit) (View, bool, error) {
 	at := s.now()
 	now := float64(at.UnixNano()) / 1e9
 	var previous, next, state State
@@ -1407,13 +1416,13 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 		updated = n > 0
 		return committed(ctx, tx, updated, commits)
 	}); err != nil {
-		return View{}, err
+		return View{}, false, err
 	}
-	if !updated {
-		return s.afterWrite(ctx, id)
+	if updated {
+		s.announce(ctx, id, previous, next, reason)
 	}
-	s.announce(ctx, id, previous, next, reason)
-	return s.afterWrite(ctx, id)
+	view, err := s.afterWrite(ctx, id)
+	return view, updated, err
 }
 
 func (s *Store) refusePinned(current View, cand Candidate) error {
