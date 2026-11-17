@@ -1,0 +1,8 @@
+{
+  "go": "1.26.11",
+  "node": "24.20.0",
+  "golangciLint": "2.13.2",
+  "biome": "2.5.14",
+  "sqlcipher": "4.19.0",
+  "sqlcipherSha256": "7075f96cbabe45b4ecfc2e6b1745a625f856f695b0827a5506ce9ed85b906aa0"
+}
