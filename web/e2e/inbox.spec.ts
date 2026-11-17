@@ -254,7 +254,9 @@ test.describe('inbox on a desktop', () => {
       await expect(page.getByText('The mail server did not confirm the send.')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('The outcome is unknown')).toBeVisible();
       await expect(draft).toHaveAttribute('data-state', 'blocked');
-      await expect(draft).toContainText('atrium could not confirm that this email was sent and did not try again.');
+      await expect(draft).toContainText('it is unknown whether this email went out');
+      await expect(draft.getByRole('button', { name: 'Mark as sent' })).toBeVisible();
+      await expect(draft.getByRole('button', { name: 'Return to drafts' })).toBeVisible();
       await expect(send).toHaveCount(0);
       await expect(draft.getByRole('button', { name: 'Decline' })).toHaveCount(0);
       expect((await requests(page)).map((item) => item.path)).toEqual(['/web/v1/drafts/7/send']);
