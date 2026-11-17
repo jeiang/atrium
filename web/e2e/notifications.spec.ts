@@ -135,7 +135,11 @@ test.describe('notifications on a desktop', () => {
     expect(registered?.method).toBe('POST');
     expect(registered?.path).toMatch(/\/devices$/);
     expect(registered?.key).toBeTruthy();
-    expect(registered?.body).toMatchObject({ endpoint: ENDPOINT, auth: expect.any(String), p256dh: expect.any(String) });
+    expect(registered?.body).toMatchObject({
+      endpoint: ENDPOINT,
+      auth: expect.any(String),
+      p256dh: expect.any(String),
+    });
 
     await page.getByRole('button', { name: 'Send a test push' }).click();
     await expect(notice(page, /Test sent to 3 devices at/)).toBeVisible();
