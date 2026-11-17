@@ -170,10 +170,7 @@
         "mail.loops-dismiss-matching",
         "mail.message",
         "mail.open-loops",
-        "mail.package-dismiss",
-        "mail.packages",
         "mail.pause",
-        "mail.poll-trackers",
         "mail.rebaseline",
         "mail.refresh-loops",
         "mail.refresh-watches",
@@ -192,10 +189,16 @@
         "mail.search",
         "mail.shadow-report",
         "mail.sync",
-        "mail.triage"
+        "mail.triage",
+        "packages.add",
+        "packages.dismiss",
+        "packages.list",
+        "packages.poll",
+        "packages.track",
+        "packages.untrack"
       ],
-      "required": 41,
-      "bound": 41
+      "required": 44,
+      "bound": 44
     },
     {
       "area": "media",
@@ -410,15 +413,11 @@
       "reached_via": "review.approve"
     },
     {
-      "operation": "mail.propose-tracking",
-      "reached_via": "review.approve"
-    },
-    {
       "operation": "weather.forecast",
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 242,
-  "total_bound": 242,
-  "total_approval_reached": 11
+  "total_required": 244,
+  "total_bound": 244,
+  "total_approval_reached": 10
 }
