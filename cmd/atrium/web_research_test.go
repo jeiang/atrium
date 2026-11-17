@@ -49,9 +49,11 @@ func longPage(link string) string {
 	return b.String()
 }
 
+var allowLoopbackFetch sync.Once
+
 func webPages(t *testing.T) (*httptest.Server, *pageLog) {
 	t.Helper()
-	t.Cleanup(webfetch.UseAddresses(func(a netip.Addr) bool { return a.IsLoopback() }))
+	allowLoopbackFetch.Do(func() { webfetch.UseAddresses(func(a netip.Addr) bool { return a.IsLoopback() }) })
 	log := &pageLog{}
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
