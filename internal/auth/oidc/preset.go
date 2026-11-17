@@ -31,10 +31,14 @@ func presetNamed(name string) (Preset, bool) {
 	return presets[i], true
 }
 
-func unknownPreset(name string) string {
+func PresetNames() []string {
 	names := make([]string, len(presets))
 	for i, p := range presets {
 		names[i] = p.Name
 	}
-	return "unknown preset " + strconv.Quote(name) + "; use " + strings.Join(names, " or ")
+	return names
+}
+
+func unknownPreset(name string) string {
+	return "unknown preset " + strconv.Quote(name) + "; use " + strings.Join(PresetNames(), " or ")
 }

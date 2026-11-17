@@ -192,6 +192,7 @@ jobs:
           go run ./tools/adapterboundary
           go run ./cmd/atrium catalog openapi --check docs/api
           go run ./cmd/atrium catalog operations --require-api >/dev/null
+          go run ./cmd/atrium catalog integrations docs/integrations.md
           out=$(mktemp -d)
           go run ./tools/settingsgen "$out"
           diff -r docs/config "$out"

@@ -1102,7 +1102,11 @@ claims about the running application. Operator contracts are in
   a non-server tool binding that can propose it. An operation without
   `operator` or `operator_send` authority has no API route of its own: the
   catalog refuses such a binding. `GET /api/v1/me` is bound to
-  `auth.identity`.
+  `auth.identity`. `atrium catalog integrations docs/integrations.md` exits 1
+  when that document lacks a support-matrix row for a connection kind, a
+  capabilities row equal to the kind's offers, a heading for the kind's docs
+  anchor or a row for an OIDC preset, or lists a kind or preset atrium does
+  not have; `just verify` and the `docsgen` check run it.
   Routes mount once with their declaration owner and check the current
   snapshot on each request, so a requirement change published by a settings
   save takes effect without remounting; disabled routes keep the rendered

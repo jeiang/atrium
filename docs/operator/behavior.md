@@ -143,8 +143,10 @@ emergency bypass.
 - The new web client is at `/next/` on every listener, beside the
   server-rendered UI, which stays the default: the pages do not link to it.
   A push notification opens its card or page there, and a Google consent
-  started from the client returns to its Google connection page. Its page and
-  files need no sign-in, like `/static/`, because they hold no data;
+  started from the client returns to its Google connection page. A client
+  connection page whose kind has a section in `docs/integrations.md` links to
+  it as **Setup guide** on the public repository, in a new tab. The client's
+  page and files need no sign-in, like `/static/`, because they hold no data;
   everything it shows comes from `/web/v1`, which keeps the rules above. Host
   validation applies.
   Responses under `/next/` carry a stricter CSP with Trusted Types; the

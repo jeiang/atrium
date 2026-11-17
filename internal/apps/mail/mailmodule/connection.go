@@ -18,7 +18,7 @@ import (
 )
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: mailconn.Kind, Offers: []string{mailconn.CapabilityIMAP, mailconn.CapabilitySMTP}, CredentialSlots: []string{"mail/*/password"}, Validate: validateConnection, Test: testConnection}}
+	return []connections.Definition{{Kind: mailconn.Kind, Offers: []string{mailconn.CapabilityIMAP, mailconn.CapabilitySMTP}, CredentialSlots: []string{"mail/*/password"}, Docs: "support-matrix", Validate: validateConnection, Test: testConnection}}
 }
 
 func validateConnection(c connections.Candidate) error {

@@ -23,6 +23,7 @@ func Connections() []connections.Definition {
 		Kind:            KindShip24,
 		Offers:          []string{"api"},
 		CredentialSlots: []string{"api_key"},
+		Docs:            "ship24",
 		Defaults:        map[string]string{"url": DefaultURL},
 		Validate:        validateConnection,
 		Test:            testConnection,

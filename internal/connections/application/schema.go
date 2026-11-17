@@ -23,6 +23,7 @@ type ConnectionsSchema struct {
 
 type ConnectionKindSchema struct {
 	Kind   connections.Kind  `json:"kind"`
+	Docs   string            `json:"docs,omitempty"`
 	Fields []ConnectionField `json:"fields"`
 }
 
@@ -56,7 +57,7 @@ func (s *Service) Schema(ctx context.Context, in ListInput) (application.Read[Co
 			fields = append(fields, ConnectionField{Name: slot, Type: FieldSecret, Secret: true})
 		}
 		slots[def.Kind] = def.CredentialSlots
-		out.Kinds = append(out.Kinds, ConnectionKindSchema{Kind: def.Kind, Fields: fields})
+		out.Kinds = append(out.Kinds, ConnectionKindSchema{Kind: def.Kind, Docs: def.Docs, Fields: fields})
 	}
 	for _, v := range read.Data {
 		host := v.ConfigSource == connections.SourceHost
