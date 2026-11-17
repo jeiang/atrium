@@ -436,13 +436,17 @@ func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
 	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK && code != http.StatusSeeOther {
 		t.Fatalf("grafana test: %d %s", code, body)
 	}
-
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	for i := 0; i < 5; i++ {
 		status.Store(http.StatusOK)
 		if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitOK {
 			t.Fatalf("passing test %d: exit %d stdout %q stderr %q", i, got.code, got.stdout, got.stderr)
 		}
 		before := connectionNotices(t, dir, "Grafana")
+		lapsed := time.Now().Add(-7 * time.Hour).UTC().Format(time.RFC3339)
+		if _, err := d.Write.Exec("UPDATE connections SET notice_json = json_object('told_at', ?, 'open', json('false')) WHERE id = 'service/grafana'", lapsed); err != nil {
+			t.Fatal(err)
+		}
 		status.Store(http.StatusInternalServerError)
 		var wg sync.WaitGroup
 		codes := make([]int, 2)
