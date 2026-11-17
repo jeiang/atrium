@@ -1641,6 +1641,10 @@ func (s *Store) Recover(ctx context.Context, v View, capability string) error {
 }
 
 func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Result) error {
+	return s.observe(ctx, id, revision, result, true)
+}
+
+func (s *Store) observe(ctx context.Context, id ID, revision int64, result Result, checked bool) error {
 	var (
 		previous State
 		state    State
@@ -1705,8 +1709,8 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 			return nil
 		}
 		res, err := tx.ExecContext(ctx,
-			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = CASE WHEN ? = 'ok' THEN ? ELSE last_ok_at END, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
-			stored, reason, now, stored, now, string(raw), now, id, revision)
+			"UPDATE connections SET state = ?, reason = ?, checked_at = CASE WHEN ? THEN ? ELSE checked_at END, last_ok_at = CASE WHEN ? = 'ok' THEN ? ELSE last_ok_at END, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
+			stored, reason, checked, now, stored, now, string(raw), now, id, revision)
 		if err != nil {
 			return err
 		}

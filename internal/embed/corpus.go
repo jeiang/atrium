@@ -207,7 +207,7 @@ func Reembed(ctx context.Context, d *db.DB, corpora []Corpus) (bool, error) {
 	defer e.Close()
 	ctx = endpoint.WithEmbedding(ctx, e)
 	s := endpoint.Settings{EmbedBodyChars: endpoint.TuningMailEmbedBodyChars, Batch: endpoint.TuningMailEmbedBatch}
-	return Rebuild(ctx, d, corpora, e.Base, e.Model, s, func(ctx context.Context, _, _ string) (string, int) {
+	return Rebuild(ctx, d, corpora, e.Base, e.Model, s, func(ctx context.Context, _, _ string) (int, error) {
 		return e.Probe(ctx)
 	})
 }

@@ -51,6 +51,11 @@ func TestARefusedBackgroundRequestHoldsAcrossARestartUntilASuccess(t *testing.T)
 
 	embed.setStatus(http.StatusTooManyRequests)
 	_, logs, stop := startServeWith(t, dir, true)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log(logs.String(), embed.authorizations())
+		}
+	})
 	waitUntil(t, time.Minute, "the refused embedding index to pause and store its hold", func() bool {
 		return strings.Contains(logs.String(), paused) && storedHold()
 	})

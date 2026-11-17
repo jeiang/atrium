@@ -230,7 +230,7 @@ func (s *Store) RecordHold(ctx context.Context, o outcome) error {
 		label = string(v.ID)
 	}
 	result = o.Held.Attach(result, label, time.Now())
-	if err := s.Observe(ctx, o.ID, o.Revision, result); err != nil && !errors.As(err, new(*Conflict)) {
+	if err := s.observe(ctx, o.ID, o.Revision, result, false); err != nil && !errors.As(err, new(*Conflict)) {
 		return err
 	}
 	return nil
