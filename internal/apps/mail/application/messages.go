@@ -56,6 +56,7 @@ type SearchInput struct {
 	Limit   int
 	Offset  int
 	Embed   embed.TextsFunc `json:"-"`
+	Folders bool            `json:"-"`
 }
 type SearchHit struct {
 	ID      int64  `json:"message_id"`
@@ -77,6 +78,7 @@ type SearchResult struct {
 	Results  []SearchHit        `json:"results"`
 	States   map[int64]HitState `json:"-"`
 	Marks    tool.Marks         `json:"-"`
+	Folders  []triage.Folder    `json:"-"`
 }
 
 func DescribeMessage() application.Definition {
@@ -157,8 +159,16 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (application.Read[
 		}
 		results[i] = SearchHit{h.ID, h.Account, h.Folder, iso(h.DateTS), from, recips, h.Subject, tool.Clip(h.Snippet, assistant.TuningAgentMailSnippetChars)}
 	}
-	rev, err := s.snapshot(ctx, SearchName, []any{in.Query, in.Filters, in.Limit, in.Offset}, func(db.Querier) error { return nil })
-	return application.Read[SearchResult]{Revision: rev, Data: SearchResult{found.Semantic, results, states, marks}}, err
+	var folders []triage.Folder
+	rev, err := s.snapshot(ctx, SearchName, []any{in.Query, in.Filters, in.Limit, in.Offset, in.Folders}, func(q db.Querier) error {
+		if !in.Folders || in.Filters.Account == nil {
+			return nil
+		}
+		var err error
+		folders, err = triage.Folders(ctx, q, *in.Filters.Account)
+		return err
+	})
+	return application.Read[SearchResult]{Revision: rev, Data: SearchResult{Semantic: found.Semantic, Results: results, States: states, Marks: marks, Folders: folders}}, err
 }
 
 func (s *Service) Message(ctx context.Context, in MessageInput) (application.Read[MessageResult], error) {
