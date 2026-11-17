@@ -114,7 +114,7 @@ test.describe('Downloads', () => {
     await expect(torrent(page, 'd4')).toHaveCount(0);
   });
 
-  test('keyboard alone pauses and removes', async ({ page }) => {
+  test('keyboard alone pauses and removes', async ({ page, browserName }) => {
     await gotoShell(page, '/apps/torrents');
     await torrent(page, 'a1')
       .getByRole('button', { name: /^Pause/ })
@@ -134,7 +134,7 @@ test.describe('Downloads', () => {
       .focus();
     await page.keyboard.press('Enter');
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
     await expect(dialog.getByRole('button', { name: 'Remove', exact: true })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(torrent(page, 'c3')).toHaveCount(0);
