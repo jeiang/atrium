@@ -9,6 +9,7 @@ let csrfToken: string | undefined;
 let unauthorized: ((signIn: WebSignIn | undefined) => void) | undefined;
 let reached: ((ok: boolean) => void) | undefined;
 let reachable = true;
+let failures = 0;
 
 function reach(ok: boolean): void {
   reachable = ok;
@@ -70,13 +71,17 @@ export async function webFetch(url: string, init: RequestInit = {}): Promise<Res
   let res: Response;
   if (stay) await stay.promise;
   const signal = init.signal ? AbortSignal.any([init.signal, leaving.signal]) : leaving.signal;
+  const failuresBefore = failures;
   try {
     res = await fetch(API_BASE + url, { ...init, signal, headers, credentials: 'same-origin' });
   } catch (error) {
-    if (!signal.aborted) reach(false);
+    if (!signal.aborted) {
+      failures++;
+      reach(false);
+    }
     throw error;
   }
-  reach(true);
+  if (failuresBefore === failures) reach(true);
   if (res.status === 401 && !url.startsWith('/session') && unauthorized) {
     const type = res.headers.get('Content-Type') ?? '';
     const body = type.includes('json')
