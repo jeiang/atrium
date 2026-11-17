@@ -554,7 +554,10 @@ claims about the running application. Operator contracts are in
   per-message errors and unknown SMTP outcomes record nothing. These kinds
   have no grace window.
   `connections test --all` uses the silent checks; `connections test <id>`
-  keeps the explicit test.
+  keeps the explicit test. `connections test <id> --trace <capability>` runs a
+  kind's `Trace` hook (iCloud `caldav`/`carddav`) on a read-only lease: the
+  same discovery printed request by request with ids, users and addresses
+  masked, and nothing saved.
 - qBittorrent and the embedding endpoint have a 6-hour grace window,
   compiled into their connection kinds. A failure right after an `ok` or
   `expiring` state stores `failing` with the window end in its result;
@@ -1751,6 +1754,16 @@ claims about the running application. Operator contracts are in
   message carries `id="m<seq>"` and a Reference action that copies
   `@thread/12/m<seq>`.
 - The NixOS public auth default is OIDC; first-hour bootstrap uses the keyed database from its first start and the same-process emergency listener, with host-declared OIDC configuration activated automatically when valid.
+- The OIDC session cookie and the CSRF cookie are `SameSite=Strict`; only the
+  10-minute sign-in binding cookie stays `SameSite=Lax` so the provider's
+  cross-site return to `/auth/callback` carries it. A signed-out page request
+  that the browser marks as a cross-site navigation (`Sec-Fetch-Site:
+  cross-site`, `Sec-Fetch-Mode: navigate`) gets a 200 "Continue to Atrium"
+  page whose meta refresh reloads the same address from atrium, so links from
+  mail or other sites and the return after sign-in land signed in instead of
+  looping through `/login`. Real-browser coverage is
+  `TestGuardBrowserSignInReturnsAcrossSites`, which runs
+  `web/e2e-live` in the engines named by `ATRIUM_E2E_BROWSERS`.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy
   identity headers count only when the socket peer is in the trusted proxy

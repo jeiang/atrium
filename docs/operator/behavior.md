@@ -95,6 +95,19 @@ administrator role or remote emergency bypass.
   next sign-in. A host that has not signed in since this rule shipped shows
   `untested` until its next sign-in, unless its last recorded event before the
   upgrade was a sign-in.
+- The OIDC session cookie (`atrium_session`) and the CSRF cookie are
+  `SameSite=Strict`, so a request started by another site never carries the
+  session. Only the short sign-in binding cookie (`atrium_oidc_state`, 10
+  minutes) stays `SameSite=Lax`, because the provider's redirect back to
+  `/auth/callback` is a cross-site navigation. When a page link is opened from
+  another site (mail, a chat, the provider's return to the page you asked for)
+  and the browser marks the navigation `Sec-Fetch-Site: cross-site`, atrium
+  answers with a one-step "Continue to Atrium" page that reloads the same
+  address from atrium itself; a signed-in browser then sends its session and
+  lands on the page, and a signed-out one goes to `/login` as before. A
+  browser that sends no fetch metadata goes straight to `/login`. A session
+  cookie issued before this change keeps `SameSite=Lax` until the next sign-in
+  replaces it; nobody is signed out by the upgrade.
 - Local and emergency listeners require a numeric loopback bind address and
   loopback socket peers; a non-loopback peer gets 403. A forwarded header never
   makes a remote peer local. Without an explicit allowed Host, a local listener
@@ -423,6 +436,16 @@ reauth. `connections test <id>` keeps the explicit test, which may have
 visible side effects such as a diagnostic push. `connections test --all` runs
 the silent check of every configured connection instead, so it sends no push;
 giving both an id and `--all`, or neither, is a usage error.
+`connections test <id> --trace <capability>` runs that capability's check
+without saving anything, which iCloud offers for `caldav` and `carddav`. It
+prints each DAV request and response: the step, method and URL; the request
+header names, `Depth` and `Content-Type`; whether an `Authorization` header was
+attached, never its value; the request body; the status; the response headers
+with `Set-Cookie` values withheld; and the first 800 bytes of the response
+body. The DAV user, the mail login, email addresses, numeric path segments and
+numbers of five or more digits are masked. The last line is
+`result: <capability> <state> <reason>`, and the command exits 1 when that state
+is failing or needs reauth. `--trace` with `--all` or `--json` is a usage error.
 
 Mail and iCloud connections also learn from real use while `serve` runs. An
 IMAP session that cannot connect marks the mail connection's `imap`

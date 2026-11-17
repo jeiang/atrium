@@ -290,7 +290,7 @@ func (c *Client) explain(err error) error {
 }
 
 func (c *Client) do(ctx context.Context, step, method string, target *url.URL, depth, body string) ([]response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, target.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>`+body))
+	req, err := http.NewRequestWithContext(context.WithValue(ctx, stepKey{}, step), method, target.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>`+body))
 	if err != nil {
 		return nil, err
 	}

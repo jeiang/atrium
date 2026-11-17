@@ -22,7 +22,9 @@
     "vite.config.ts",
     "orval.config.ts",
     "playwright.config.ts",
-    "e2e/**/*.ts"
+    "playwright.live.config.ts",
+    "e2e/**/*.ts",
+    "e2e-live/**/*.ts"
   ],
   "exclude": ["src/worker"]
 }
