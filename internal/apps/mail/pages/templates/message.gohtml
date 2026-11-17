@@ -6,6 +6,6 @@
   {{if .Data.FromDraft}}<a href="/chat/{{str .Data.FromDraft.ThreadID}}" class="btn" data-size="sm" data-variant="outline">{{icon "messages-square"}}From thread</a>{{end}}
 </div>
 <div class="w-full max-w-3xl">
-  {{template "mail_message" (dict "m" .Data.Message "mode" .Mode "toast" .Toast "correct" (.Data.Correct))}}
+  {{template "mail_message" (dict "m" .Data.Message "mode" .Mode "toast" .Toast "correct" (.Data.Correct) "csrf" .CSRF)}}
 </div>
 {{end}}

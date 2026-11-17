@@ -251,3 +251,81 @@ func messagePage(data messageData) string {
 	}
 	return "chat"
 }
+
+func (s *service) messageAction(w http.ResponseWriter, r *http.Request, run func(ctx context.Context, id int64) (string, error)) {
+	id, bad := pathInt(r, "message_id")
+	if bad != nil {
+		web.Unprocessable(w, bad...)
+		return
+	}
+	target, err := run(r.Context(), id)
+	if err == nil {
+		http.Redirect(w, r, target, http.StatusSeeOther)
+		return
+	}
+	classified := application.Classify(err)
+	if classified.Code == application.Internal {
+		check(err)
+	}
+	status := http.StatusConflict
+	switch classified.Code {
+	case application.Forbidden:
+		status = http.StatusForbidden
+	case application.NotFound:
+		s.fail(w, r, http.StatusNotFound, "unknown message")
+		return
+	case application.Invalid:
+		status = http.StatusUnprocessableEntity
+	}
+	read, rerr := s.reads.Message(r.Context(), mailapp.MessageInput{ID: id})
+	check(rerr)
+	if read.Data.View == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown message")
+		return
+	}
+	data := messageData{Message: read.Data.View, Back: backTo(r)}
+	s.page(w, r, status, messagePage(data), "message.gohtml", data, toast("error", "Not changed", classified.Message))
+}
+
+func messageURL(id int64) string { return "/messages/" + strconv.FormatInt(id, 10) }
+
+func (s *service) messageArchive(w http.ResponseWriter, r *http.Request) {
+	s.messageAction(w, r, func(ctx context.Context, id int64) (string, error) {
+		_, err := s.reads.MessageArchive(ctx, mailapp.MessageActionInput{ID: id})
+		return messageURL(id), err
+	})
+}
+
+func (s *service) messageRead(w http.ResponseWriter, r *http.Request) {
+	s.messageAction(w, r, func(ctx context.Context, id int64) (string, error) {
+		_, err := s.reads.MessageRead(ctx, mailapp.MessageActionInput{ID: id, On: r.PostFormValue("on") == "1"})
+		return messageURL(id), err
+	})
+}
+
+func (s *service) messageFlag(w http.ResponseWriter, r *http.Request) {
+	s.messageAction(w, r, func(ctx context.Context, id int64) (string, error) {
+		_, err := s.reads.MessageFlag(ctx, mailapp.MessageActionInput{ID: id, On: r.PostFormValue("on") == "1"})
+		return messageURL(id), err
+	})
+}
+
+func (s *service) messageReply(w http.ResponseWriter, r *http.Request) {
+	s.messageAction(w, r, func(ctx context.Context, id int64) (string, error) {
+		out, err := s.reads.DraftReply(ctx, mailapp.DraftReplyInput{MessageID: id})
+		if err != nil {
+			return "", err
+		}
+		return "/drafts/" + strconv.FormatInt(out.Data.Row.ID, 10), nil
+	})
+}
+
+func (s *service) messageForward(w http.ResponseWriter, r *http.Request) {
+	s.messageAction(w, r, func(ctx context.Context, id int64) (string, error) {
+		out, err := s.reads.DraftForward(ctx, mailapp.DraftReplyInput{MessageID: id, To: mailapp.Recipients{Text: r.PostFormValue("to")}})
+		if err != nil {
+			return "", err
+		}
+		return "/drafts/" + strconv.FormatInt(out.Data.Row.ID, 10), nil
+	})
+}

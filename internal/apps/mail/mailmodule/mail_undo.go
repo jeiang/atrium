@@ -100,6 +100,16 @@ func mailUndo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 				}
 				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 			}}},
+		ledger.UndoDefinition{Operation: mailapp.UndoFlagRestore, Undoer: ledger.Undoer{
+			Validate: validateOp(mailapp.UndoFlagRestore),
+			Deferred: true,
+			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+				value, err := mailapp.UndoFlag(ctx, open, s.DB, raw)
+				if err != nil {
+					return ledger.Result{}, mailUndoFailure(err)
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+			}}},
 		ledger.UndoDefinition{Operation: tracking.UndoUntrack, Undoer: ledger.Undoer{
 			Validate: validateOp(tracking.UndoUntrack),
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {

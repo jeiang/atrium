@@ -42,6 +42,22 @@ type DraftResolveRequest struct {
 	ID      int64  `path:"draft_id" json:"-"`
 	Outcome string `json:"outcome" api:"enum=sent|draft"`
 }
+type DraftCreateRequest struct {
+	Account string `json:"account"`
+	To      string `json:"to"`
+	Cc      string `json:"cc"`
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
+}
+type DraftReplyRequest struct {
+	ID int64  `path:"message_id" json:"-" api:"min=1"`
+	Cc string `json:"cc"`
+}
+type DraftForwardRequest struct {
+	ID int64  `path:"message_id" json:"-" api:"min=1"`
+	To string `json:"to"`
+	Cc string `json:"cc"`
+}
 type DraftResponse struct {
 	Draft hub.Draft `json:"draft"`
 }
@@ -233,7 +249,32 @@ func mailDraftRoutes(d *web.Deps, m Module) []application.Binding {
 			out.Data.Draft = s.currentDraft(ctx, in.ID)
 			return out, nil
 		}),
+		api.Command(d, mailapp.DescribeDraftCreate(), shape(reflect.TypeFor[hub.Draft]()), "POST /drafts", func(ctx context.Context, in DraftCreateRequest) (application.Change[hub.Draft], error) {
+			r, err := s.mail.DraftCreate(ctx, mailapp.DraftCreateInput{Account: in.Account, To: mailapp.Recipients{Text: in.To}, Cc: mailapp.Recipients{Text: in.Cc}, Subject: in.Subject, Body: in.Body})
+			return s.created(ctx, r, err)
+		}),
+		api.Command(d, mailapp.DescribeDraftReply(), application.APIShape{Area: "drafts", Response: reflect.TypeFor[hub.Draft](), OptionalBody: true}, "POST /mail/messages/{message_id}/reply", func(ctx context.Context, in DraftReplyRequest) (application.Change[hub.Draft], error) {
+			r, err := s.mail.DraftReply(ctx, mailapp.DraftReplyInput{MessageID: in.ID, Cc: mailapp.Recipients{Text: in.Cc}})
+			return s.created(ctx, r, err)
+		}),
+		api.Command(d, mailapp.DescribeDraftForward(), shape(reflect.TypeFor[hub.Draft]()), "POST /mail/messages/{message_id}/forward", func(ctx context.Context, in DraftForwardRequest) (application.Change[hub.Draft], error) {
+			r, err := s.mail.DraftForward(ctx, mailapp.DraftReplyInput{MessageID: in.ID, To: mailapp.Recipients{Text: in.To}, Cc: mailapp.Recipients{Text: in.Cc}})
+			return s.created(ctx, r, err)
+		}),
 	}
+}
+
+func (s *draftAPI) created(ctx context.Context, r application.Change[mailapp.DraftResult], err error) (application.Change[hub.Draft], error) {
+	out := application.Change[hub.Draft]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
+	if err != nil {
+		e := *application.Classify(err)
+		if e.Code == application.Invalid {
+			e.Reason = "invalid_draft"
+		}
+		return out, draftFailure(&e, "", r.EffectIDs)
+	}
+	out.Data = s.currentDraft(ctx, r.Data.Row.ID)
+	return out, nil
 }
 
 func (s *draftAPI) read(ctx context.Context, id int64) (application.Read[hub.Draft], error) {
