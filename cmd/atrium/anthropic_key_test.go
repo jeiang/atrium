@@ -21,6 +21,7 @@ func waitForLog(t *testing.T, logs *lockedBuffer, want string) {
 }
 
 func TestStartupWarnsForACatalogModelTheModelsAPIOmits(t *testing.T) {
+	t.Parallel()
 	srv := anthropictest.New(t)
 	srv.Models = []string{"claude-haiku-5-5", "claude-sonnet-5-5"}
 	dir, _, _ := moduleFixture(t, flagsExcept("assistant", "true"))
@@ -42,6 +43,7 @@ func TestStartupWarnsForACatalogModelTheModelsAPIOmits(t *testing.T) {
 }
 
 func TestStartupWarnsWhenTheModelsAPIFails(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("assistant", "true"))
 	setEnv(t, anthropic.BaseURLEnv, "http://127.0.0.1:9")
 	_, logs := startServeLogged(t, dir)

@@ -94,6 +94,7 @@ func TestWeatherConnectionTestReportsAFailedRequest(t *testing.T) {
 }
 
 func TestWeatherLocationSavesThroughTheSettingsPatchOnBothPrefixes(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, goldenData{}, nil, "")
 	token := localAPIToken(t, "api")
 	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")

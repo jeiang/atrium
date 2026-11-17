@@ -234,6 +234,7 @@ func TestDisabledAnthropicConnectionSkipsJobsAsUnconfigured(t *testing.T) {
 }
 
 func TestConcurrentSettingsCommitsDoNotStallTheDrain(t *testing.T) {
+	t.Parallel()
 	d, api, f, before := startWeeklyReview(t, asstReply("reviewed"))
 	release := asstHold(t, api)
 	_, logs := startServeLogged(t, f.dir)
@@ -277,6 +278,7 @@ func TestConcurrentSettingsCommitsDoNotStallTheDrain(t *testing.T) {
 }
 
 func TestServeStaysUpAndNotReadyUntilSchedulerRecoverySucceeds(t *testing.T) {
+	t.Parallel()
 	d, api, f, before := startWeeklyReview(t, asstReply("abandoned"), asstReply("reviewed"))
 	g, seen := holdJobRequests(t, api, 1)
 	interruptTickDuringWeeklyReview(t, api, g, seen, d)

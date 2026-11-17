@@ -105,6 +105,7 @@ func attrValue(span *tracepb.Span, key string) *commonpb.AnyValue {
 }
 
 func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
+	t.Parallel()
 	const (
 		prompt  = "prompt-zebracorn-4f1c"
 		query   = "zebracorn-query-9a2d"

@@ -69,6 +69,7 @@ func backupJobRow(t *testing.T, d *db.DB) (string, *float64) {
 }
 
 func TestServeBackupJobArchivesAndPrunes(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	dest := t.TempDir()
 	oldArchives(t, dest, "atrium-20200103T030000Z.backup", "atrium-20200102T030000Z.backup", "atrium-20200101T030000Z.backup")
@@ -114,6 +115,7 @@ func TestServeBackupJobArchivesAndPrunes(t *testing.T) {
 }
 
 func TestBackupJobTakesItsScheduleFromTheHost(t *testing.T) {
+	t.Parallel()
 	zone, err := config.Zone(config.Timezone)
 	if err != nil {
 		t.Fatal(err)
@@ -162,6 +164,7 @@ func TestBackupJobTakesItsScheduleFromTheHost(t *testing.T) {
 }
 
 func TestBackupCommandSharesTheJobClaim(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	dest := t.TempDir()
 	setEnv(t, "ATRIUM_HOST_CONFIG", backupHost(t, dir, "backup_directory = \""+dest+"\""))
@@ -209,6 +212,7 @@ func TestBackupCommandSharesTheJobClaim(t *testing.T) {
 }
 
 func TestBackupJobSkipsWithoutADirectoryAndPrunesNothingOnFailure(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", backupHost(t, dir))
 	d := asstDB(t, dir)

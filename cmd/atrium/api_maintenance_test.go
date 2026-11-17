@@ -11,6 +11,7 @@ import (
 )
 
 func TestMaintenanceAPI(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, goldenData{}, nil, "")
 	backups := t.TempDir()
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, f.dir, "host.toml", "[core]\nbackup_directory = \""+backups+"\"\nbackup_keep = 1\nbackup_keep_days = 0\n"))

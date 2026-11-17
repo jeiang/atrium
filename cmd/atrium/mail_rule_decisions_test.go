@@ -10,6 +10,7 @@ import (
 )
 
 func TestMailRulesAndDecisionsLinkBothWays(t *testing.T) {
+	t.Parallel()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mailSafetyFixture(t, "shadow")
 	for i := range 3 {

@@ -11,6 +11,7 @@ import (
 )
 
 func TestResolvedObsidianWriteAdvancesTheMapping(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	obsidianEnable(t, vault)
@@ -59,6 +60,7 @@ func TestResolvedObsidianWriteAdvancesTheMapping(t *testing.T) {
 }
 
 func TestObsidianRepeatedRenameRemovesTheOldPath(t *testing.T) {
+	t.Parallel()
 	_, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	obsidianEnable(t, vault)

@@ -855,6 +855,7 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 }
 
 func TestBranchKeepsRunOptions(t *testing.T) {
+	t.Parallel()
 	_, api, d, w := asstServe(t)
 	api.Push(asstReply("branch source answer"))
 	thread := w.start(map[string]string{"text": "branch options", "web_search": "0", "cost_cap": "2.5"})

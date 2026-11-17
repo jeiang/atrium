@@ -112,6 +112,7 @@ func frameIDs(stream string) []string {
 }
 
 func TestRunEventsPersistAcrossRuns(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first stream")))
 	threadID, runID := s.start("first")
@@ -148,6 +149,7 @@ func TestRunEventsPersistAcrossRuns(t *testing.T) {
 }
 
 func TestStreamResumesWithoutGaps(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Thinking("pondering", "sig"), anthropictest.Text("resumed answer")))
 	threadID, runID := s.start("resume")
@@ -181,6 +183,7 @@ func TestStreamResumesWithoutGaps(t *testing.T) {
 }
 
 func TestStreamRevokedBearerStops(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	free := s.hold()
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("late")))
@@ -209,6 +212,7 @@ func TestStreamRevokedBearerStops(t *testing.T) {
 }
 
 func TestStreamCaps(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	free := s.hold()
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("late")))
@@ -249,6 +253,7 @@ func TestStreamCaps(t *testing.T) {
 }
 
 func TestStreamExpiredIs410(t *testing.T) {
+	t.Parallel()
 	var shift atomic.Int64
 	s := newStreamSiteAt(t, func() float64 {
 		return float64(time.Now().Add(time.Duration(shift.Load())).UnixMicro()) / 1e6

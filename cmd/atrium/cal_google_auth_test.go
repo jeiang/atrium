@@ -107,6 +107,7 @@ func calRunGoogleAuth(t *testing.T, redirect func(consent url.Values) url.Values
 }
 
 func TestCalendarGoogleAuthExchangesTheCodeWithPKCEAndRefusesAForeignState(t *testing.T) {
+	t.Parallel()
 	t.Run("client not set", func(t *testing.T) {
 		dir := t.TempDir()
 		setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))

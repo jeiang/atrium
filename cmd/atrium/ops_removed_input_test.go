@@ -10,6 +10,7 @@ import (
 )
 
 func TestRemovedOpsCondenserInputIsRefusedAtStartup(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"ATRIUM_ASSISTANT_OPS_CONDENSER", "ATRIUM_ASSISTANT_OPS_CONDENSER_MODEL", "ATRIUM_ASSISTANT_OPS_CONDENSER_MAX_TOKENS"} {
 		t.Run(name, func(t *testing.T) {
 			moduleFixture(t, flagsExcept("", ""))

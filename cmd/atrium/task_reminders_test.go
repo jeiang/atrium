@@ -16,6 +16,7 @@ import (
 )
 
 func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	runAppContext := func(ctx context.Context, args ...string) appRun {
 		var out bytes.Buffer

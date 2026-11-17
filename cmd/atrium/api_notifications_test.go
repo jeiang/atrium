@@ -14,6 +14,7 @@ import (
 )
 
 func TestInboxAndDevicesAPI(t *testing.T) {
+	t.Parallel()
 	dir, model, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
@@ -184,6 +185,7 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 }
 
 func TestDevicesCapAndCredentialRevocation(t *testing.T) {
+	t.Parallel()
 	dir, model, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	phone := newSignedInSite(t, dir)

@@ -118,6 +118,7 @@ func hostDownFinding() anthropictest.Response {
 }
 
 func TestOpsSamplerClassifiesAChangeInOneFixedHaikuRequest(t *testing.T) {
+	t.Parallel()
 	dir, fake, api, f, d := opsClassifierFixture(t, map[string]string{inference.ThreadCapKey: "0.000001"})
 	before := len(api.Requests())
 	fake.setUp(0)
@@ -245,6 +246,7 @@ func TestOpsSamplerClassifiesAChangeInOneFixedHaikuRequest(t *testing.T) {
 }
 
 func TestOpsChargedFailureIsRetriedOnceThenHeldUntilTheChangeSetChanges(t *testing.T) {
+	t.Parallel()
 	_, fake, api, f, d := opsClassifierFixture(t, nil)
 	before := len(api.Requests())
 	fake.setUp(0)
@@ -294,6 +296,7 @@ func TestOpsChargedFailureIsRetriedOnceThenHeldUntilTheChangeSetChanges(t *testi
 }
 
 func TestOpsMonthlyBudgetRefusalDefersAndRaisesAttention(t *testing.T) {
+	t.Parallel()
 	dir, fake, api, f, d := opsClassifierFixture(t, map[string]string{inference.BudgetKey: "0.00102"})
 	before := len(api.Requests())
 	fake.setUp(0)
@@ -348,6 +351,7 @@ func TestOpsMonthlyBudgetRefusalDefersAndRaisesAttention(t *testing.T) {
 }
 
 func TestOpsSourceCapRefusesWithoutADeferral(t *testing.T) {
+	t.Parallel()
 	_, fake, api, f, d := opsClassifierFixture(t, map[string]string{serverops.KeyWorkerMonthlyUSD: "0.0001"})
 	before := len(api.Requests())
 	fake.setUp(0)

@@ -31,6 +31,7 @@ func runAppOn(t *testing.T, app *cli.App, args ...string) appRun {
 }
 
 func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 
 	issued := runApp(t, "auth", "token", "issue", "--name", "phone")
@@ -98,6 +99,7 @@ func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
 }
 
 func TestAuthTokenRevocationBeatsAWarmOIDCCache(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	owner := s.token("owner")
 	if me := s.do(http.MethodGet, "/api/v1/me", owner, nil); me.status != http.StatusOK {

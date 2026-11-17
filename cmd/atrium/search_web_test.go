@@ -54,6 +54,7 @@ func reportSchema(t *testing.T, r anthropictest.Request) map[string]any {
 }
 
 func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	const home = "Maple Street 12"
@@ -213,6 +214,7 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 }
 
 func TestSearchWebDropsMarkersWithoutCitations(t *testing.T) {
+	t.Parallel()
 	srv, _ := webPages(t)
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
@@ -250,6 +252,7 @@ func TestSearchWebDropsMarkersWithoutCitations(t *testing.T) {
 }
 
 func TestSearchWebAsksInAMarkedChat(t *testing.T) {
+	t.Parallel()
 	t.Run("refused after mail", func(t *testing.T) {
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 		start := warm(t, api)
@@ -354,6 +357,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 }
 
 func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
+	t.Parallel()
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	requests := api.Requests()
@@ -370,6 +374,7 @@ func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
 }
 
 func TestSearchWebStopsAtItsCostCap(t *testing.T) {
+	t.Parallel()
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	seedSettings(t, map[string]string{asstapp.KeySearchWebMaxCostUSD: "0.0001"})
 	start := warm(t, api)

@@ -13,6 +13,7 @@ import (
 )
 
 func TestWebCorrectionWaitsForTheServeSyncPass(t *testing.T) {
+	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)
@@ -73,6 +74,7 @@ func TestWebCorrectionWaitsForTheServeSyncPass(t *testing.T) {
 }
 
 func TestManualSyncSettlesARunLeftRunningWhileServeWasDown(t *testing.T) {
+	t.Parallel()
 	m := mailSafetyFixture(t, "shadow")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)
@@ -104,6 +106,7 @@ func TestManualSyncSettlesARunLeftRunningWhileServeWasDown(t *testing.T) {
 }
 
 func TestManualSyncLeavesAnotherJobsStaleRunAlone(t *testing.T) {
+	t.Parallel()
 	m := mailSafetyFixture(t, "shadow")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)

@@ -16,6 +16,7 @@ import (
 )
 
 func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -95,6 +96,7 @@ func containsName(names []string, want string) bool {
 }
 
 func TestReminderProposalCreatesATaskAndUndoRemovesIt(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -134,6 +136,7 @@ func TestReminderProposalCreatesATaskAndUndoRemovesIt(t *testing.T) {
 }
 
 func TestTaskUpdateAbsentFieldsKeepValues(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

@@ -310,6 +310,7 @@ func connectionResult(t *testing.T, report connectionReport, capability string) 
 }
 
 func TestWimOIDCConnectionTestReportsDiscoveryThenProvesClientAuth(t *testing.T) {
+	t.Parallel()
 	s := wimOIDCSite(t)
 	tested := runApp(t, "connections", "test", "service/oidc", "--json")
 	if tested.code != 0 {

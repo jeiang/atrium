@@ -43,6 +43,7 @@ func tokenRow(t *testing.T, out, name string) []string {
 }
 
 func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 
 	first := runApp(t, "auth", "token", "issue", "--name", "phone")
@@ -168,6 +169,7 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 }
 
 func TestAuthTokensPersistFarFutureExpiry(t *testing.T) {
+	t.Parallel()
 	moduleFixture(t, flagsExcept("", ""))
 	const expiry = "2300-01-01T00:00:00Z"
 	issued := runApp(t, "auth", "token", "issue", "--name", "long-lived", "--expires-at", expiry)
@@ -191,6 +193,7 @@ func TestAuthTokensPersistFarFutureExpiry(t *testing.T) {
 }
 
 func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	browser := oidcBrowser(t, s.base, s.idp, "owner")
 

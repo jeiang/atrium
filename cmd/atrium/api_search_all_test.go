@@ -49,6 +49,7 @@ func searchGroups(t *testing.T, data map[string]any) map[string][]map[string]any
 }
 
 func TestSearchAllAPI(t *testing.T) {
+	t.Parallel()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mrvMailFixture(t, "shadow")
 	if got := runApp(t, "sync"); got.code != 0 {

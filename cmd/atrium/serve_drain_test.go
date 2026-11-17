@@ -20,6 +20,7 @@ import (
 )
 
 func TestServeDrainSettlesAHeldExternalWriteThenStopsCleanly(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	var posts atomic.Int32
 	arrived := make(chan struct{}, 1)

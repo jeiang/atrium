@@ -78,6 +78,7 @@ func lookup(t *testing.T, query string) string {
 }
 
 func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)
 
@@ -125,6 +126,7 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 }
 
 func TestContactsSyncSkipsOffAndUnconfiguredWithoutAuditing(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, enabled string
 	}{
@@ -156,6 +158,7 @@ func TestContactsSyncSkipsOffAndUnconfiguredWithoutAuditing(t *testing.T) {
 }
 
 func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothing(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
@@ -211,6 +214,7 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 }
 
 func TestTriageSaysSoWhenThereIsNoContactSource(t *testing.T) {
+	t.Parallel()
 	for _, on := range []string{"true", "false"} {
 		t.Run("contacts_"+on, func(t *testing.T) {
 			dir, _, _ := moduleFixture(t, flagsExcept(unit.Contacts, on))
@@ -227,6 +231,7 @@ func TestTriageSaysSoWhenThereIsNoContactSource(t *testing.T) {
 }
 
 func TestContactNameLookupKeepsEgressAndIdentifiersDropIt(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	contactsDir := filepath.Join(dir, "contacts")
 	setEnv(t, settingEnv(contacts.DirKey), contactsDir)

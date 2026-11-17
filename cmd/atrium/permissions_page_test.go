@@ -16,6 +16,7 @@ import (
 )
 
 func TestPermissionsPageSavesWithinBounds(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)

@@ -14,6 +14,7 @@ import (
 )
 
 func TestKnowledgeSelectedRecordsConfirmTogether(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -49,6 +50,7 @@ func TestKnowledgeSelectedRecordsConfirmTogether(t *testing.T) {
 }
 
 func TestAskBarCarriesWhatTheOperatorAskedAbout(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

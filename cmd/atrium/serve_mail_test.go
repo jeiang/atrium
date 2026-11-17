@@ -115,6 +115,7 @@ type filedOutcome struct {
 }
 
 func TestServeSyncJobFilesMailOnce(t *testing.T) {
+	t.Parallel()
 	var baseline, served filedOutcome
 	t.Run("cli", func(t *testing.T) {
 		m := mailSafetyFixture(t, "live")
@@ -163,6 +164,7 @@ func TestServeSyncJobFilesMailOnce(t *testing.T) {
 }
 
 func TestManualSyncWaitsForTheServeSyncPass(t *testing.T) {
+	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)
@@ -236,6 +238,7 @@ func isClosed(c chan struct{}) bool {
 }
 
 func TestScanJobIsPersistentAndMonthly(t *testing.T) {
+	t.Parallel()
 	m := mailSafetyFixture(t, "shadow")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)
@@ -265,6 +268,7 @@ func TestScanJobIsPersistentAndMonthly(t *testing.T) {
 }
 
 func TestPostEffectSyncInsideAPassDoesNotDeadlock(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	h, x := mailtest.RawWith("Bank statement", serveMailFrom, "post-effect", "Your statement is ready.")

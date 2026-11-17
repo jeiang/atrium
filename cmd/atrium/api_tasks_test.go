@@ -17,6 +17,7 @@ func taskTitles(t *testing.T, s *apiSite, token, status string) map[string]map[s
 }
 
 func TestTasksAPI(t *testing.T) {
+	t.Parallel()
 	s, token, d := localAPISite(t)
 	added := apiData(t, s.do(http.MethodPost, "/api/v1/tasks", token, map[string]any{"title": "Call the plumber", "due": "2026-12-01"}), http.StatusCreated)
 	id := number(t, added["task_id"])

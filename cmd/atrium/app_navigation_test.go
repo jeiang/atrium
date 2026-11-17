@@ -15,6 +15,7 @@ import (
 )
 
 func TestAppSubNavigationFollowsTheModuleFlag(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, allFlagsTrue())
 	base := startServeIn(t, dir)
 	issued := runApp(t, "auth", "token", "issue", "--name", "mail-navigation")

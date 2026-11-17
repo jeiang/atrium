@@ -71,6 +71,7 @@ const (
 )
 
 func TestPushOnceForAParkedQuestionAFailedRunAndANewRepair(t *testing.T) {
+	t.Parallel()
 	s := newRunPushSite(t, flagsExcept("", ""))
 
 	repairs := s.waitPushes(repairPush, 1)
@@ -140,6 +141,7 @@ func TestPushOnceForAParkedQuestionAFailedRunAndANewRepair(t *testing.T) {
 }
 
 func TestPushOnAskAndFailureSendsNothingWithNotificationsOff(t *testing.T) {
+	t.Parallel()
 	s := newRunPushSite(t, flagsExcept("notifications", "false"))
 	s.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("ask-1", "ask_operator", map[string]any{"question": "Which calendar?"})))
 	_, asked := s.start("plan")

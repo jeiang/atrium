@@ -13,6 +13,7 @@ import (
 )
 
 func TestMemoryWorkSummarizesTheTree(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -89,6 +90,7 @@ func TestMemoryWorkSummarizesTheTree(t *testing.T) {
 }
 
 func TestMemoryWorkRetriesLongAnswersAndFallsBack(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -126,6 +128,7 @@ func TestMemoryWorkRetriesLongAnswersAndFallsBack(t *testing.T) {
 }
 
 func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -158,6 +161,7 @@ func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
 }
 
 func TestMemoryWorkSummarizesPastTheClipPoint(t *testing.T) {
+	t.Parallel()
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

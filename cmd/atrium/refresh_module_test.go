@@ -18,6 +18,7 @@ import (
 )
 
 func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	message := seedMail(t, dir)
@@ -106,6 +107,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 }
 
 func TestRefreshCommandsExitZeroWhileMailIsOff(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, loadGoldenData(t), map[string]string{flagEnv(unit.Mail): "false"}, "")
 	for _, argv := range [][]string{{"loops", "refresh"}, {"watches", "refresh"}} {
 		code, stdout, stderr := f.Run(context.Background(), argv...)

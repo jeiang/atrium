@@ -27,6 +27,7 @@ func seedSetting(t *testing.T, d *db.DB, key, value string) {
 }
 
 func TestHostRowsCannotChangeBehavior(t *testing.T) {
+	t.Parallel()
 	dir, f, d := obsidianFixture(t)
 	vault := t.TempDir()
 	setEnv(t, settingEnv("public_url"), "")
@@ -58,6 +59,7 @@ func TestHostRowsCannotChangeBehavior(t *testing.T) {
 }
 
 func TestConnectionOwnedURLRowCannotRedirectTheSampler(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
@@ -75,6 +77,7 @@ func TestConnectionOwnedURLRowCannotRedirectTheSampler(t *testing.T) {
 }
 
 func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, "true"))
 	raw, err := os.ReadFile(defaultHostConfig)
 	if err != nil {
@@ -107,6 +110,7 @@ func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
 }
 
 func TestUnpinnedHostWritesAreRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)
@@ -148,6 +152,7 @@ func TestUnpinnedHostWritesAreRefused(t *testing.T) {
 }
 
 func TestHostFileRefusesARemovedLocalChatSecret(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hostPath := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(hostPath, []byte("[mail]\nmail_chat_key = \"raw-secret-sentinel\"\n"), 0o600); err != nil {

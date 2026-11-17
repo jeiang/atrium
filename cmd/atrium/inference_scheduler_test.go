@@ -85,6 +85,7 @@ func schedulerStatus(t *testing.T, d *db.DB, name string) (string, string) {
 }
 
 func TestInferenceSchedulerRunsModelFreeJobsWhenTheBudgetIsExhausted(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
@@ -106,6 +107,7 @@ func TestInferenceSchedulerRunsModelFreeJobsWhenTheBudgetIsExhausted(t *testing.
 }
 
 func TestInferenceSchedulerConditionalJobsRunTheirFreeWork(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
@@ -127,6 +129,7 @@ func TestInferenceSchedulerConditionalJobsRunTheirFreeWork(t *testing.T) {
 }
 
 func TestInferenceUsagePageShowsReservationsAndCeilings(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
@@ -155,6 +158,7 @@ func TestInferenceUsagePageShowsReservationsAndCeilings(t *testing.T) {
 }
 
 func TestInferenceSchedulerDefersConditionalPaidWork(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)

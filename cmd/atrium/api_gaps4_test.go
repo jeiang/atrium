@@ -41,6 +41,7 @@ func gaps4Events(t *testing.T, s *apiSite, token string) <-chan appFrame {
 }
 
 func TestTorrentControlUndoAndTheDownloadsTopic(t *testing.T) {
+	t.Parallel()
 	const plain = "cccccccccccccccccccccccccccccccccccccccc"
 	const other = "dddddddddddddddddddddddddddddddddddddddd"
 	s, token, qb := gaps4Site(t)
@@ -97,6 +98,7 @@ func TestTorrentControlUndoAndTheDownloadsTopic(t *testing.T) {
 }
 
 func TestMediaChannelOperatorUndoKeepsTheChannelID(t *testing.T) {
+	t.Parallel()
 	s, token, _ := gaps4Site(t)
 	add := func(name string) apiReply {
 		return s.do(http.MethodPost, "/api/v1/media/channels", token, map[string]any{"name": name, "imdb": "tt1234567", "pattern": "1080p"})

@@ -13,6 +13,7 @@ import (
 )
 
 func TestSettingsAPI(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, goldenData{}, nil, "")
 	pinned := module.FlagKey(unit.Mail)
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, f.dir, "host.toml", "[core]\n"+pinned+" = false\n"))

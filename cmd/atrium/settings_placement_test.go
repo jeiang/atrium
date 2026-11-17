@@ -29,6 +29,7 @@ var retiredToConstants = []settings.RetiredKey{
 }
 
 func TestRetiredSettingsAreIgnoredAndTheirConstantsHold(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -90,6 +91,7 @@ var offeredHere = []struct{ key, group, place, value, invalid string }{
 }
 
 func TestOfferedSettingsPatchOnBothSurfacesWithIfMatch(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	s := startAPISite(t, dir, api)
 	token := s.token("owner")
@@ -176,6 +178,7 @@ func TestOfferedSettingsPatchOnBothSurfacesWithIfMatch(t *testing.T) {
 }
 
 func TestOfferedSettingsRefuseHostAndEnvPins(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	host, _ := f.lookup("ATRIUM_HOST_CONFIG")
 	for _, tc := range offeredHere {

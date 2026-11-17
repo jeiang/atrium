@@ -38,6 +38,7 @@ func schedulerJob(t *testing.T, d *db.DB, name string) (id int64, schedule, stat
 }
 
 func TestSchedulerRunsCatalogJobsFromEveryOwner(t *testing.T) {
+	t.Parallel()
 	flags := flagsExcept("calendar", "false")
 	flags["mail"] = "false"
 	dir, api, f := moduleFixture(t, flags)

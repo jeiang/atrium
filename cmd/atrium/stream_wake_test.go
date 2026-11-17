@@ -107,6 +107,7 @@ func gate() (chan struct{}, func()) {
 }
 
 func TestStreamShowsAParkedRunPromptly(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	free := s.hold()
 	s.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("ask-1", "ask_operator", map[string]any{"question": "Which account?"})))
@@ -119,6 +120,7 @@ func TestStreamShowsAParkedRunPromptly(t *testing.T) {
 }
 
 func TestStreamFollowsARunOfAnotherProcess(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first")))
 	threadID, firstRun := s.start("first")
@@ -172,6 +174,7 @@ func TestStreamFollowsARunOfAnotherProcess(t *testing.T) {
 }
 
 func TestStreamCopiesDescendantEventsOnce(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	childGate, openChild := gate()
 	grandGate, openGrand := gate()

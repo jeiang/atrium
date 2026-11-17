@@ -181,6 +181,7 @@ credential_files = { "mail/icloud/password" = %q }
 }
 
 func TestConnectionsTestAllChecksSilentlyAndNeedsAnIDOrAll(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "connections", "list"); ran.code != cli.ExitOK {

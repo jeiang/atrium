@@ -34,6 +34,7 @@ func runCatalogOpenAPI(t *testing.T, args ...string) (int, string) {
 }
 
 func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if code, stderr := runCatalogOpenAPI(t, "--output", dir); code != 0 {
 		t.Fatalf("catalog openapi --output exited %d: %s", code, stderr)

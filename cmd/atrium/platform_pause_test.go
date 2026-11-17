@@ -36,6 +36,7 @@ func writeOldPauseFile(t *testing.T, dir string) string {
 }
 
 func TestPlatformPauseHonorsTheOldBinaryPauseFileForMailWrites(t *testing.T) {
+	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	blocked := m.add("INBOX", "Bank statement", "statements@bank.test", "blocked", "Your statement is ready.")
 	held := m.add("INBOX", "Shop receipt", "orders@shop.test", "held", "Thanks for your order.")
@@ -108,6 +109,7 @@ func TestPlatformPauseHonorsTheOldBinaryPauseFileForMailWrites(t *testing.T) {
 }
 
 func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
@@ -221,6 +223,7 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 }
 
 func TestPlatformPauseIsNotAnAgentTool(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	start := len(api.Requests())

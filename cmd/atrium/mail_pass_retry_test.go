@@ -21,6 +21,7 @@ import (
 )
 
 func TestDeletionApprovalRefusedByAHeldPassStaysApprovable(t *testing.T) {
+	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)

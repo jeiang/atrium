@@ -114,6 +114,7 @@ func dueReminder(t *testing.T, d *db.DB, title string, at float64) {
 }
 
 func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	push, browser := notifyPushRig(t, dir)
 	push.answer(http.StatusInternalServerError, false, false)
@@ -192,6 +193,7 @@ func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
 }
 
 func TestNotificationLostPushResponseLeavesTheInboxDone(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	push, browser := notifyPushRig(t, dir)
 	push.answer(http.StatusCreated, true, false)
@@ -223,6 +225,7 @@ func TestNotificationLostPushResponseLeavesTheInboxDone(t *testing.T) {
 }
 
 func TestNotificationCancelledPushKeepsTheInboxEffect(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	push, browser := notifyPushRig(t, dir)
 	push.answer(http.StatusCreated, false, false)
@@ -276,6 +279,7 @@ func TestNotificationCancelledPushKeepsTheInboxEffect(t *testing.T) {
 }
 
 func TestNotificationLocalCommitFailureCreatesNothing(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	push, browser := notifyPushRig(t, dir)
 	push.answer(http.StatusCreated, false, false)

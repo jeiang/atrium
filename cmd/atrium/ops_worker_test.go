@@ -78,6 +78,7 @@ func workerFinding(t *testing.T, d *db.DB, fact string) (id int64, resolved bool
 }
 
 func TestQuietPassMakesNoModelCall(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{up: 1}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
@@ -96,6 +97,7 @@ func TestQuietPassMakesNoModelCall(t *testing.T) {
 }
 
 func TestOpsWorkerStopsAtItsMonthlyBudget(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{up: 1}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)

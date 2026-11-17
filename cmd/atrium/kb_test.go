@@ -70,6 +70,7 @@ func kbResults(t *testing.T, d *db.DB, threadID int64, toolUseID string) []any {
 }
 
 func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -194,6 +195,7 @@ func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
 }
 
 func TestKnowledgeSearchSkipsExpiredRecords(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -223,6 +225,7 @@ func TestKnowledgeSearchSkipsExpiredRecords(t *testing.T) {
 }
 
 func TestPrivateSpaceKnowledgeStaysInItsSpace(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -372,6 +375,7 @@ func TestPrivateSpaceKnowledgeStaysInItsSpace(t *testing.T) {
 }
 
 func TestKnowledgeListRevision(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -408,6 +412,7 @@ func TestKnowledgeListRevision(t *testing.T) {
 }
 
 func TestKnowledgeRevisionCookieReset(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -452,6 +457,7 @@ func knowledgeAudits(t *testing.T, d *db.DB, operation string, id int64, outcome
 }
 
 func TestKnowledgeOperatorLifecycleAudits(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -513,6 +519,7 @@ func TestKnowledgeOperatorLifecycleAudits(t *testing.T) {
 }
 
 func TestKnowledgeConfirmMatchingReportsCommittedPrefix(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

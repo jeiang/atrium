@@ -63,6 +63,7 @@ func connectionField(t *testing.T, schema connectionsapp.ConnectionsSchema, id, 
 }
 
 func TestReadModelsOnBothSurfaces(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	fakeOpenMeteo(t, dir)
 	seedSettings(t, map[string]string{weather.KeyLatitude: "1.25", weather.KeyLongitude: "2.5", weather.KeyLocationName: "Lowmarsh"})
