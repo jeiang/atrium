@@ -22,10 +22,9 @@ import {
   reviewQueue,
   reviewQueueItem,
   reviewResolve,
-  reviewUndoEffect,
 } from '../../contract';
 import type { InboxId } from '../../shared/assistant/inboxId';
-import { proposalToApproval } from '../../shared/assistant/proposalApproval';
+import { handleUndoProposal, proposalOutcome, proposalToApproval } from '../../shared/assistant/proposalApproval';
 import { resolutionOf, type Stuck, stuckOf } from '../../shared/assistant/stuck';
 import type { Approval, DecidedElsewhere, Decision } from '../../shared/assistant/types';
 
@@ -157,25 +156,12 @@ function firstName(to: string): string {
   return (name.includes('@') ? name.split('@')[0] : name.split(' ')[0]) || 'the recipient';
 }
 
-const proposalOutcomes: Record<string, string> = {
-  approved: 'Approved',
-  applied: 'Approved and applied',
-  failed: 'Approved, but it failed',
-  dismissed: 'Declined',
-  suppressed: 'Declined for good',
-};
-
 const draftOutcomes: Record<string, string> = {
   sending: 'Sending started',
   sent: 'Sent',
   discarded: 'Discarded',
   invalid: 'Refused as invalid',
 };
-
-function resolvedOf(effects: readonly Effect[]): DecidedElsewhere | undefined {
-  const last = resolutionOf(effects);
-  return last ? { outcome: last.outcome, at: iso(last.ts) } : undefined;
-}
 
 function proposalItem(key: string, detail: ProposalDetail, effects: readonly Effect[]): InboxItem {
   const action = detail.payload.kind === 'action' ? detail.payload : undefined;
@@ -190,12 +176,10 @@ function proposalItem(key: string, detail: ProposalDetail, effects: readonly Eff
     decided:
       detail.status === 'pending' || detail.blocked
         ? undefined
-        : (resolvedOf(effects) ?? {
-            outcome: detail.undone_at
-              ? 'Approved, then undone'
-              : (proposalOutcomes[detail.status] ?? `Marked ${detail.status}`),
-            at: iso(detail.undone_at ?? decidedAt),
-          }),
+        : {
+            outcome: proposalOutcome(detail, effects),
+            at: iso(resolutionOf(effects)?.ts ?? detail.undone_at ?? decidedAt),
+          },
     blocked: detail.blocked
       ? 'atrium could not confirm the outcome of an earlier attempt and did not try again. It needs a repair before anything else happens.'
       : undefined,
@@ -303,11 +287,7 @@ export async function handleDecline(item: InboxId): Promise<undefined> {
 }
 
 export async function handleUndo(item: InboxId): Promise<void> {
-  const effects = ok(await reviewEffects({ proposal_id: String(item.id) }));
-  const open = effects.items.filter((effect) => effect.undoable && !effect.undone_at);
-  if (open.length === 0)
-    throw new ApiError(409, { error: { code: 'not_undoable', message: 'Nothing is left to undo.' } });
-  for (const effect of open) ok(await reviewUndoEffect(effect.id, oneGesture()));
+  await handleUndoProposal(item.id);
 }
 
 export async function handleResolve(item: InboxId, outcome: string): Promise<void> {

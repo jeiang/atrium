@@ -1,5 +1,42 @@
-import type { ActionPayload, ProposalDetail } from '../../contract';
+import {
+  type ActionPayload,
+  ApiError,
+  type Effect,
+  ok,
+  type ProposalDetail,
+  reviewEffects,
+  reviewUndoEffect,
+} from '../../contract';
+import { resolutionOf } from './stuck';
 import type { Approval, ApprovalChange, Arg } from './types';
+
+const proposalOutcomes: Record<string, string> = {
+  approved: 'Approved',
+  applied: 'Approved and applied',
+  failed: 'Approved, but it failed',
+  dismissed: 'Declined',
+  suppressed: 'Declined for good',
+};
+
+export function proposalOutcome(proposal: ProposalDetail, effects: readonly Effect[] = []): string {
+  const resolved = resolutionOf(effects);
+  if (resolved) return resolved.outcome;
+  if (proposal.undone_at) return 'Approved, then undone';
+  return proposalOutcomes[proposal.status] ?? 'Status unknown';
+}
+
+export function proposalCanUndo(proposal: ProposalDetail): boolean {
+  return proposal.undoable && !proposal.undone_at && proposal.actions.includes('undo');
+}
+
+export async function handleUndoProposal(id: number | string): Promise<void> {
+  const effects = ok(await reviewEffects({ proposal_id: String(id) }));
+  const open = effects.items.filter((effect) => effect.undoable && !effect.undone_at);
+  if (open.length === 0)
+    throw new ApiError(409, { error: { code: 'not_undoable', message: 'Nothing is left to undo.' } });
+  for (const effect of open)
+    ok(await reviewUndoEffect(effect.id, { headers: { 'Idempotency-Key': crypto.randomUUID() } }));
+}
 
 const audienceLabels = ['to', 'recipient', 'recipients', 'attendees', 'with'];
 

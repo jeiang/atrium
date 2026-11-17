@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { extname, join, posix } from 'node:path';
 import { brotliCompressSync, constants } from 'node:zlib';
 
 interface Chunk {
@@ -73,6 +73,22 @@ if (entries.length !== 1) {
 }
 
 const firstLoad = closure(entries);
+
+const routerFile = 'src/shell/router.ts';
+const router = readFileSync(join(import.meta.dirname, '..', routerFile), 'utf8');
+const routeModules = (pattern: RegExp): Set<string> =>
+  new Set([...router.matchAll(pattern)].map((match) => posix.join(posix.dirname(routerFile), match[1] ?? '')));
+const pages = [...routeModules(/import\('(\.[^']+)'\)/g)].filter((key) => manifest[key]).sort();
+const withMarkdown = routeModules(/preloadMarkdown\(import\('(\.[^']+)'\)/g);
+const markdown = Object.keys(manifest).filter((key) => manifest[key]?.src === 'src/shared/markdown/parse.ts');
+if (pages.length === 0 || withMarkdown.size === 0 || markdown.length !== 1) {
+  throw new Error(
+    `${routerFile}: expected lazy pages, pages that preload markdown, and src/shared/markdown/parse.ts in .vite/manifest.json`,
+  );
+}
+for (const key of withMarkdown) {
+  if (!manifest[key]) throw new Error(`${routerFile} preloads markdown for ${key}, which .vite/manifest.json lacks`);
+}
 const jsOf = (chunk: Chunk): string[] => [chunk.file];
 const allJs = files(Object.keys(manifest), jsOf).filter((file) => extname(file) === '.js');
 const allCss = files(Object.keys(manifest), (chunk) => [...(chunk.css ?? []), chunk.file]).filter(
@@ -92,12 +108,23 @@ const row = (name: string, key: string, list: string[], measured = sum(list)): R
 
 const rows: Row[] = [
   row('shell HTML', 'shellHtml', ['index.html']),
-  row('first-load JS', 'firstLoadJs', files(firstLoad, jsOf)),
+  row('first-load JS, entry', 'firstLoadJs', files(firstLoad, jsOf)),
   row(
-    'first-load CSS',
+    'first-load CSS, entry',
     'firstLoadCss',
     files(firstLoad, (chunk) => chunk.css ?? []),
   ),
+  ...pages.flatMap((key) => {
+    const load = new Set([...firstLoad, ...closure([key]), ...(withMarkdown.has(key) ? closure(markdown) : [])]);
+    return [
+      row(`first-load JS ${key}`, 'firstLoadJs', files(load, jsOf)),
+      row(
+        `first-load CSS ${key}`,
+        'firstLoadCss',
+        files(load, (chunk) => chunk.css ?? []),
+      ),
+    ];
+  }),
   ...Object.keys(manifest)
     .filter((key) => manifest[key]?.isDynamicEntry)
     .sort()

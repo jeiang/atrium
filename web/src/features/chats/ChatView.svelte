@@ -20,7 +20,6 @@
     assistantThreadBranch,
     assistantThreadOptions,
     assistantThreadStart,
-    assistantThreadTranscript,
     ok,
     type Step,
     type TranscriptItem,
@@ -43,28 +42,19 @@
   import ChatActions from './ChatActions.svelte';
   import ChatFiles from './ChatFiles.svelte';
   import { failureText } from './manage';
-  import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';
+  import { threadQuery } from './thread';
   import WorkPanel from './WorkPanel.svelte';
   import './chats.css';
 
   let { id }: { id: number | undefined } = $props();
 
-  const PAGE = 50;
   const FOLLOW_SLACK = 80;
   const invalid = $derived(id !== undefined && !(Number.isSafeInteger(id) && id > 0));
   const storageKey = $derived(`atrium.chat.scroll.${id ?? 'new'}`);
 
-  const transcript = createInfiniteQuery(() => ({
-    queryKey: ['thread', id],
-    queryFn: async ({ pageParam, signal }) =>
-      ok(await assistantThreadTranscript(id ?? 0, { limit: PAGE, cursor: pageParam || undefined }, { signal })),
-    initialPageParam: '',
-    getNextPageParam: (last) => last.next_cursor ?? undefined,
-    enabled: id !== undefined && !invalid,
-    meta: { topics: ['assistant'] },
-  }));
+  const transcript = createInfiniteQuery(() => ({ ...threadQuery(id), enabled: id !== undefined && !invalid }));
 
   const options = useConfiguration();
 
@@ -605,6 +595,19 @@
   </li>
 {/snippet}
 
+{#snippet parked(
+    proposal: number,
+    run: number,
+  )}
+  {#await import('./ParkedApproval.svelte')}
+    <ViewState kind="loading" title="Loading the ask" />
+  {:then { default: ParkedApproval }}
+    <ParkedApproval id={proposal} {run} thread={title} ondecided={onDecided} />
+  {:catch}
+    <ViewState kind="error" title="The ask could not be loaded" level={4}>Open the Inbox to decide it.</ViewState>
+  {/await}
+{/snippet}
+
 {#snippet tools(
     calls: ToolCall[],
     run?: number,
@@ -615,7 +618,7 @@
         {#snippet approval()}
           {const ask = $derived(run === undefined ? undefined : proposalFor(run))}
           {#if ask?.proposal_id && run !== undefined && calls.find((entry) => entry.state === 'waiting') === call}
-            <ParkedApproval id={ask.proposal_id} {run} thread={title} ondecided={onDecided} />
+            {@render parked(ask.proposal_id, run)}
           {/if}
         {/snippet}
       </ToolCard>
@@ -706,7 +709,7 @@
           {/if}
         {:else if entry.kind === 'proposal' && entry.proposal_id && entry.run_id != null}
           <li class="turn">
-            <ParkedApproval id={entry.proposal_id} run={entry.run_id} thread={title} ondecided={onDecided} />
+            {@render parked(entry.proposal_id, entry.run_id)}
           </li>
         {:else if entry.kind === 'compaction'}
           <li class="turn turn--divider">Earlier messages were summarized</li>

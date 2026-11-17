@@ -1,4 +1,4 @@
-import { HttpResponse, http, type JsonBodyType } from 'msw';
+import { delay, HttpResponse, http, type JsonBodyType } from 'msw';
 import type { Approval, Draft, PendingBody, ProposalDetail, QueueItem } from '../contract';
 import { API_BASE } from '../contract';
 import { planAttention } from './plan';
@@ -8,6 +8,7 @@ export interface InboxScenario {
   empty?: boolean;
   fail?: boolean;
   mix?: boolean;
+  readDelay?: number;
   stuck?: boolean;
 }
 
@@ -455,8 +456,10 @@ function resolveCommand(request: Request, apply: () => Response | undefined, bod
 }
 
 export const inboxHandlers = [
-  http.get(`*${API_BASE}/queue`, ({ request }) => {
-    if (scenario().fail) return refusal(500, 'internal', 'The review store did not answer.');
+  http.get(`*${API_BASE}/queue`, async ({ request }) => {
+    const state = scenario();
+    if (state.readDelay) await delay(state.readDelay);
+    if (state.fail) return refusal(500, 'internal', 'The review store did not answer.');
     const all = queue();
     const kind = new URL(request.url).searchParams.get('kind');
     const counts = { ask: 0, proposal: 0, draft: 0, attention: 0 };
