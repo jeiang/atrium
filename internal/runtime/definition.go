@@ -77,3 +77,14 @@ func (e *HoldError) Error() string { return e.Err.Error() }
 func (e *HoldError) Unwrap() error { return e.Err }
 
 func Hold(err error, d time.Duration) error { return &HoldError{Err: err, For: d} }
+
+type unattendedKey struct{}
+
+func Unattended(ctx context.Context) context.Context {
+	return context.WithValue(ctx, unattendedKey{}, true)
+}
+
+func IsUnattended(ctx context.Context) bool {
+	marked, _ := ctx.Value(unattendedKey{}).(bool)
+	return marked
+}

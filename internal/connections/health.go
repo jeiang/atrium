@@ -171,6 +171,8 @@ type outcome struct {
 	Revision   int64
 	OK         bool
 	Capability string
+	Held       *Hold
+	Reason     string
 }
 
 type RuntimeReport struct {
@@ -211,18 +213,22 @@ func Outcomes(reg *Registry) (<-chan outcome, func()) {
 }
 
 func report(reg *Registry, o outcome) {
+	if o.OK && o.Capability != "" {
+		succeededHold(reg, o.ID, o.Capability)
+	}
 	ch, registered := outcomes.Load(reg)
 	if !registered {
 		return
 	}
 	key := succeededKey{reg: reg, id: o.ID, capability: o.Capability}
-	if o.OK {
+	switch {
+	case o.OK:
 		now := time.Now().UnixNano()
 		if last, seen := succeeded.Load(key); seen && now-last.(int64) < int64(time.Minute) {
 			return
 		}
 		succeeded.Store(key, now)
-	} else {
+	default:
 		succeeded.Delete(key)
 	}
 	select {
@@ -238,6 +244,11 @@ func Reports(d *db.DB) (<-chan RuntimeReport, func()) {
 }
 
 func (l *Lease) Report(r Result) {
+	if r.State == OK && l.store != nil && r.Capability != "" {
+		if v, ok := holds.Load(l.holdKey(r.Capability)); ok && v.(Hold).Refusals > 0 {
+			report(l.store.reg, outcome{ID: l.id, Revision: l.revision, Capability: r.Capability, OK: true})
+		}
+	}
 	if l.store == nil || l.store.d == nil || r.Capability == "" {
 		return
 	}
@@ -330,6 +341,7 @@ func same(a, b State) bool {
 }
 
 type reporter struct {
+	lease      *Lease
 	reg        *Registry
 	id         ID
 	revision   int64
@@ -338,12 +350,29 @@ type reporter struct {
 }
 
 func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
+	capability := r.capability
+	if named, ok := req.Context().Value(servingKey{}).(string); ok {
+		capability = named
+	}
+	if capability != "" {
+		if err := r.lease.skipUnattended(req.Context(), capability); err != nil {
+			if req.Body != nil {
+				_ = req.Body.Close()
+			}
+			return nil, err
+		}
+	}
 	resp, err := r.next.RoundTrip(req)
 	switch {
 	case err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500):
-		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: r.capability})
+		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: capability})
 	case err == nil && resp.StatusCode < http.StatusBadRequest:
-		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: r.capability, OK: true})
+		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: capability, OK: true})
+	}
+	if err == nil && capability != "" {
+		if wait := RetryAfter(resp.Header.Get("Retry-After"), time.Now()); Refuses(resp.StatusCode, wait) {
+			r.lease.refused(req.Context(), capability, resp.StatusCode, wait, fmt.Sprintf("%s answered %d", req.URL.Host, resp.StatusCode))
+		}
 	}
 	return resp, err
 }
@@ -360,8 +389,14 @@ func (l *Lease) reporting(endpoint string, client *http.Client) *http.Client {
 	if client.Transport == nil || l.store == nil || l.store.reg == nil {
 		return client
 	}
-	client.Transport = reporter{reg: l.store.reg, id: l.id, revision: l.revision, capability: l.serves(endpoint), next: client.Transport}
+	client.Transport = reporter{lease: l, reg: l.store.reg, id: l.id, revision: l.revision, capability: l.serves(endpoint), next: client.Transport}
 	return client
+}
+
+type servingKey struct{}
+
+func Serving(ctx context.Context, capability string) context.Context {
+	return context.WithValue(ctx, servingKey{}, capability)
 }
 
 func (l *Lease) serves(endpoint string) string {

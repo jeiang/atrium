@@ -516,6 +516,20 @@ during a backoff because the operator asked for it; its reason starts with
 UTC>:`, and it ends the backoff when it works or counts as one more refusal
 when it is refused.
 
+Every other connection backs off the same way when a service refuses atrium.
+An answer of 401, 403 or 429, or 503 with `Retry-After`, to any request over a
+connection's client starts a hold on the capability that request used: 1 hour,
+then 3, 6 and 12 hours for later refusals in a row, or the `Retry-After` when
+that is longer. A refused mail login (IMAP) does the same for that account.
+The hold is stored in the capability's result, so a restart keeps it. While it
+lasts, work nobody is waiting on sends nothing for that capability: scheduled
+job runs end as `skipped_dependency`, the mail watch waits (`<account> watch
+paused after refused logins, retrying in <time>`), the embedding index pauses,
+and the media catalogue refresh and qBittorrent poll skip their requests.
+`Run now`, Test, `connections test` and requests a person makes still go out,
+and a refusal during a running hold does not make it longer. The first request
+that works ends the hold, and so does a changed credential.
+
 A later session or sync that works marks the
 capability ok again. These four have no grace window, so the
 first failure notifies at once and the recovery notifies once. Errors about one message,

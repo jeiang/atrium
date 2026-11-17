@@ -154,7 +154,7 @@ func DAVClient(ctx context.Context, login Login, endpoint, capability string) (*
 	if err != nil {
 		return nil, err
 	}
-	client.cache, client.credential = cacheKey(capability, endpoint, creds.AppleID, creds.Password), credentialTag(creds.Password)
+	client.cache, client.credential = cacheKey(capability, endpoint, creds.AppleID, creds.Password), connections.CredentialTag(creds.Password)
 	return client, nil
 }
 
@@ -182,17 +182,17 @@ func mirror(ctx context.Context, login Login, endpoint, dir string, k Kind, capa
 	if err != nil {
 		return Stats{}, err
 	}
-	var prev hold
+	var prev connections.Hold
 	if login.DAV != nil {
 		if stored, ok := login.DAV.Stored(ctx, capability); ok {
-			prev = heldBy(stored, client.credential)
+			prev = connections.HeldBy(stored, client.credential)
 		}
-		if prev.active(time.Now()) {
-			log.Info("dav sync skipped while backing off", "capability", capability, "until", prev.until())
-			return Stats{}, skipped(login.DAV, capability, prev)
+		if prev.Active(time.Now()) {
+			log.Info("dav sync skipped while backing off", "capability", capability, "until", prev.Ends())
+			return Stats{}, prev.Skipped(login.DAV.ID(), capability)
 		}
 	}
-	client.retryCap = prev.retries()
+	client.retryCap = retries(prev)
 	syncOutcomes.Delete(client.cache)
 	syncing.Store(client.cache, true)
 	collections, err := client.Fetch(ctx, k)
@@ -330,14 +330,14 @@ func checkICloud(ctx context.Context, lease *connections.Lease, caps []connectio
 			continue
 		}
 		key := session.key(cap.Name)
-		var prev hold
+		var prev connections.Hold
 		stored, found := lease.Stored(ctx, cap.Name)
 		if found {
-			prev = heldBy(stored, credentialTag(session.password))
+			prev = connections.HeldBy(stored, connections.CredentialTag(session.password))
 		}
 		now := time.Now()
 		_, running := syncing.Load(key)
-		if reuse && found && (prev.active(now) || running) {
+		if reuse && found && (prev.Active(now) || running) {
 			results = append(results, stored)
 			continue
 		}
@@ -348,10 +348,10 @@ func checkICloud(ctx context.Context, lease *connections.Lease, caps []connectio
 		if !reuse {
 			discoveries.Delete(key)
 		}
-		result, err := session.check(ctx, cap.Name, key, prev.retries())
-		result = settle(result, err, prev, credentialTag(session.password), time.Now())
-		if !reuse && prev.active(now) {
-			result.Reason = "tested at the operator's request during a backoff that was to end " + prev.until() + ": " + result.Reason
+		result, err := session.check(ctx, cap.Name, key, retries(prev))
+		result = settle(result, err, prev, connections.CredentialTag(session.password), time.Now())
+		if !reuse && prev.Active(now) {
+			result.Reason = "tested at the operator's request during a backoff that was to end " + prev.Ends() + ": " + result.Reason
 		}
 		results = append(results, result)
 	}

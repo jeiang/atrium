@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/homecard"
 )
 
@@ -137,7 +138,7 @@ func (o *OpenMeteo) Geocode(ctx context.Context, name string) ([]Location, error
 	q.Set("format", "json")
 	u.RawQuery = q.Encode()
 	var payload geocodePayload
-	if err := o.get(ctx, u.String(), &payload); err != nil {
+	if err := o.get(connections.Serving(ctx, "geocoding"), u.String(), &payload); err != nil {
 		return nil, err
 	}
 	out := make([]Location, len(payload.Results))

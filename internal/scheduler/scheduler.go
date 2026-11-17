@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -313,6 +314,9 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 	defer stopWork()
 	work, cancel := context.WithCancelCause(limited)
 	defer cancel(nil)
+	if !claim.manual {
+		work = runtime.Unattended(work)
+	}
 	var lost atomic.Bool
 	lose := func() {
 		lost.Store(true)

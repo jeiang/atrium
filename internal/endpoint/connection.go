@@ -222,6 +222,9 @@ func (e *Embedding) post(ctx context.Context, base string, payload any) (json.Ra
 		if ctx.Err() != nil {
 			return nil, 0, ctx.Err()
 		}
+		if _, held := connections.HeldUntil(err); held {
+			return nil, 0, err
+		}
 		return nil, 0, &httpx.ServiceUnavailable{Msg: fmt.Sprintf("%s: %s", rawURL, httpx.Reason(err))}
 	}
 	defer func() { _ = resp.Body.Close() }()

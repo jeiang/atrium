@@ -24,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -178,6 +179,9 @@ func (s *Service) memoryClient(ctx context.Context) (*anthropic.Client, error) {
 		return nil, err
 	}
 	defer lease.Close()
+	if h, held := lease.Held(ctx, "models"); held && runtime.IsUnattended(ctx) {
+		return nil, h.Skipped(lease.ID(), "models")
+	}
 	key, err := lease.Credential("api_key")
 	if err != nil {
 		return nil, config.NotConfigured("the Anthropic connection has no API key")
@@ -267,6 +271,9 @@ func (s *Service) memoryPass(ctx context.Context, name application.Name, tgt str
 		return pass(client, s.memoryInference(), memory.TuningMemoryModel, memory.TuningMemoryEffort)
 	}()
 	if err != nil {
+		if _, held := connections.HeldUntil(err); held {
+			return application.Change[MemoryWorked]{}, err
+		}
 		var notConfigured config.NotConfigured
 		if errors.As(err, &notConfigured) {
 			err = &application.Error{Code: application.NotConfigured, Message: err.Error(), Cause: err}

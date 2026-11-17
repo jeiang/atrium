@@ -28,7 +28,7 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 		return work.Conn(), nil
 	}))
 	opsBase := opsAddr(t)
-	_, logs, _ := startServeWith(t, dir, true)
+	_, logs, stop := startServeWith(t, dir, true)
 	waitWatching(t, work)
 	waitUntil(t, 30*time.Second, "the home watch to hold after its refused login", func() bool {
 		return strings.Contains(logs.String(), "home login refused, retrying in 1h0m0s")
@@ -53,5 +53,27 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 	}
 	if home := watchHealth(t, opsBase())["mail-watch/home"]; home.Status != "backoff" || home.Restarts != 1 {
 		t.Fatalf("home watch after the work round trip %+v, want still held after one restart", home)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	waitUntil(t, 30*time.Second, "the home refusal hold to be stored", func() bool {
+		var n int
+		if err := d.Read.QueryRow(`SELECT COUNT(*) FROM connections, json_each(results_json)
+			WHERE id = 'mail/home' AND json_extract(value, '$.capability') = 'imap'
+			AND json_extract(value, '$.data.backoff_until') IS NOT NULL`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	})
+	stop()
+
+	_, logs, _ = startServeWith(t, dir, true)
+	waitUntil(t, 30*time.Second, "the restarted home watch to keep the stored hold", func() bool {
+		return strings.Contains(logs.String(), "home watch paused after refused logins, retrying in ")
+	})
+	if strings.Contains(logs.String(), "home login refused") {
+		t.Fatal("the restarted home watch logged in again inside its hold")
+	}
+	if home := watchHealth(t, opsBase())["mail-watch/home"]; home.Status != "backoff" || home.Restarts != 1 {
+		t.Fatalf("home watch after the restart %+v, want one restart held in backoff", home)
 	}
 }

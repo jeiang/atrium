@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/gmailauth"
 	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/runtime"
 )
 
 func Opener(_ config.Config) mail.OpenFunc {
@@ -19,6 +20,9 @@ func Opener(_ config.Config) mail.OpenFunc {
 		lease, err := mailconn.Open(ctx, opts.Q, opts.Account)
 		if err != nil {
 			return nil, err
+		}
+		if h, held := lease.Held(ctx, mailconn.CapabilityIMAP); held && runtime.IsUnattended(ctx) {
+			return nil, h.Skipped(lease.ID(), mailconn.CapabilityIMAP)
 		}
 		host := mailconn.IMAPHost(lease, spec)
 		method, source, err := gmailauth.Resolve(ctx, opts.Q, opts.Account)
@@ -52,6 +56,9 @@ func Opener(_ config.Config) mail.OpenFunc {
 			return conn, nil
 		})
 		if dialed && ctx.Err() == nil {
+			if errors.Is(err, mail.ErrLoginRefused) {
+				err = lease.Refuse(ctx, mailconn.CapabilityIMAP, err)
+			}
 			lease.Report(mailconn.IMAPOutcome(err))
 		}
 		return client, err

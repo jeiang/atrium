@@ -1377,6 +1377,7 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 		}
 		_ = json.Unmarshal([]byte(priorJSON), &priorResult)
 		keepInteractive(results, priorResult, interactive)
+		carryHolds(results, priorResult)
 		state, reason = aggregate(results, nil)
 		var lastOK, reauthAt any
 		if state == OK {
@@ -1691,6 +1692,7 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		at := s.now()
 		priorStored := previous
 		carryGrace(results, prior, previous, grace, at)
+		carryHolds(results, prior)
 		var stored State
 		stored, reason = aggregate(results, nil)
 		previous, state = effective(previous, prior, timeOr(fromUnix(priorAt), at)), effective(stored, results, at)
