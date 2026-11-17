@@ -77,10 +77,24 @@ func rateRetry(t *testing.T, header http.Header) int {
 	return seconds
 }
 
-func rateUntilRefused(t *testing.T, call *rateCall, path, addr, token string, want, max int) (int, http.Header, string) {
+type rateBucket struct {
+	burst     int
+	perSecond float64
+}
+
+var (
+	tokenBucket   = rateBucket{burst: 60, perSecond: 1}
+	addressBucket = rateBucket{burst: 120, perSecond: 2}
+)
+
+func (b rateBucket) most(since time.Time) int {
+	return b.burst + int(math.Ceil(b.perSecond*time.Since(since).Seconds())) + 1
+}
+
+func rateUntilRefused(t *testing.T, call *rateCall, path, addr, token string, want int, bucket rateBucket) (int, http.Header, string) {
 	t.Helper()
-	allowed := 0
-	for range max {
+	started := time.Now()
+	for allowed := 0; ; allowed++ {
 		status, header, body := call.get(path, addr, token)
 		if status == http.StatusTooManyRequests {
 			return allowed, header, body
@@ -88,10 +102,10 @@ func rateUntilRefused(t *testing.T, call *rateCall, path, addr, token string, wa
 		if status != want {
 			t.Fatalf("request %d before the refusal: %d %.200s", allowed, status, body)
 		}
-		allowed++
+		if most := bucket.most(started); allowed >= most {
+			t.Fatalf("no refusal within %d requests, the most a bucket of %d refilling %g a second admits over that time", allowed+1, bucket.burst, bucket.perSecond)
+		}
 	}
-	t.Fatalf("no refusal within %d requests", max)
-	return 0, nil, ""
 }
 
 func rateSite(t *testing.T, trusted bool) (string, string, func()) {
@@ -225,7 +239,7 @@ func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
 	const a, b = "198.51.100.10", "198.51.100.11"
 
 	started := time.Now()
-	firstAllowed, header, body := rateUntilRefused(t, call, "/api/v1/me", a, first, http.StatusOK, 70)
+	firstAllowed, header, body := rateUntilRefused(t, call, "/api/v1/me", a, first, http.StatusOK, tokenBucket)
 	if firstAllowed < 60 {
 		t.Fatalf("the token bucket allowed %d requests, want at least 60", firstAllowed)
 	}
@@ -240,13 +254,13 @@ func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
 		t.Fatalf("the same token from another source: %d %.200s", status, body)
 	}
 
-	secondAllowed, header, body := rateUntilRefused(t, call, "/api/v1/me", a, second, http.StatusOK, 70)
-	refilled := int(math.Ceil(2 * time.Since(started).Seconds()))
+	secondAllowed, header, body := rateUntilRefused(t, call, "/api/v1/me", a, second, http.StatusOK, tokenBucket)
+	most := addressBucket.most(started)
 	if secondAllowed < 55 {
 		t.Fatalf("a second token from the same source allowed %d requests", secondAllowed)
 	}
-	if total := firstAllowed + secondAllowed; total < 118 || total > 121+refilled {
-		t.Fatalf("the address bucket admitted %d requests across two tokens, want 120 plus at most the %d it refilled at 2 a second", total, refilled)
+	if total := firstAllowed + secondAllowed; total < 118 || total > most {
+		t.Fatalf("the address bucket admitted %d requests across two tokens, want 120 plus what it refilled, at most %d", total, most)
 	}
 	if rateCode(t, body) != "rate_limited" {
 		t.Fatalf("address refusal body: %.200s", body)
@@ -273,7 +287,7 @@ func TestAuthRateLimitChargesLongBearerTokens(t *testing.T) {
 	}
 	call := newRateCall(t, s.base)
 	const a, b = "198.51.100.60", "198.51.100.61"
-	allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", a, token, http.StatusOK, 70)
+	allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", a, token, http.StatusOK, tokenBucket)
 	if allowed < 60 {
 		t.Fatalf("the token bucket allowed %d requests, want at least 60: %.200s", allowed, body)
 	}
@@ -286,9 +300,9 @@ func TestAuthRateLimitIgnoresUntrustedForwardedAddresses(t *testing.T) {
 	t.Parallel()
 	_, base, _ := rateSite(t, false)
 	call := newRateCall(t, base)
-	allowed := 0
-	for i := range 125 {
-		status, header, body := call.get("/api/v1/me", fmt.Sprintf("198.51.100.%d", i+1), "")
+	started := time.Now()
+	for allowed := 0; ; allowed++ {
+		status, header, body := call.get("/api/v1/me", fmt.Sprintf("198.51.100.%d", allowed%249+1), "")
 		if status == http.StatusTooManyRequests {
 			if rateCode(t, body) != "rate_limited" {
 				t.Fatalf("refusal body: %.200s", body)
@@ -305,11 +319,12 @@ func TestAuthRateLimitIgnoresUntrustedForwardedAddresses(t *testing.T) {
 			return
 		}
 		if status != http.StatusUnauthorized {
-			t.Fatalf("untrusted forwarded address %d: %d %.200s", i, status, body)
+			t.Fatalf("untrusted forwarded address %d: %d %.200s", allowed, status, body)
 		}
-		allowed++
+		if most := addressBucket.most(started); allowed >= most {
+			t.Fatalf("forged forwarded addresses escaped the socket bucket: %d admitted, at most %d with refill", allowed+1, most)
+		}
 	}
-	t.Fatalf("forged forwarded addresses escaped the socket bucket")
 }
 
 func TestAuthRateLimitValidatesTrustedForwardedAddresses(t *testing.T) {
@@ -346,7 +361,7 @@ func TestAuthRateLimitValidatesTrustedForwardedAddresses(t *testing.T) {
 		t.Fatalf("an invalid forwarded address: %d %.200s", status, body)
 	}
 
-	allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", "198.51.100.40", "", http.StatusUnauthorized, 125)
+	allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", "198.51.100.40", "", http.StatusUnauthorized, addressBucket)
 	if allowed < 120 {
 		t.Fatalf("the trusted forwarded address allowed %d requests, want at least 120", allowed)
 	}
@@ -403,17 +418,27 @@ func TestAuthRateLimitKeepsLastUsedOnRefusal(t *testing.T) {
 	token := rateToken(t, "phone")
 	call := newRateCall(t, base)
 	const addr = "198.51.100.50"
-	if allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", addr, token, http.StatusOK, 65); allowed < 60 {
-		t.Fatalf("the token bucket allowed %d requests, want at least 60: %.200s", allowed, body)
-	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	if _, err := d.Write.Exec("UPDATE auth_bearers SET last_used_at = 1"); err != nil {
-		t.Fatal(err)
+	if allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", addr, token, http.StatusOK, tokenBucket); allowed < 60 {
+		t.Fatalf("the token bucket allowed %d requests, want at least 60: %.200s", allowed, body)
 	}
-	status, _, body := call.get("/api/v1/me", addr, token)
-	if status != http.StatusTooManyRequests || rateCode(t, body) != "rate_limited" {
-		t.Fatalf("the refused request: %d %.200s", status, body)
+	drained := time.Now()
+	for refilled := 0; ; refilled++ {
+		if _, err := d.Write.Exec("UPDATE auth_bearers SET last_used_at = 1"); err != nil {
+			t.Fatal(err)
+		}
+		status, _, body := call.get("/api/v1/me", addr, token)
+		if status == http.StatusOK {
+			if most := (rateBucket{perSecond: tokenBucket.perSecond}).most(drained); refilled >= most {
+				t.Fatalf("%d requests admitted after the bucket was drained, at most %d with refill", refilled+1, most)
+			}
+			continue
+		}
+		if status != http.StatusTooManyRequests || rateCode(t, body) != "rate_limited" {
+			t.Fatalf("the refused request: %d %.200s", status, body)
+		}
+		break
 	}
 	var lastUsed float64
 	if err := d.Read.QueryRow("SELECT last_used_at FROM auth_bearers WHERE name = 'phone'").Scan(&lastUsed); err != nil {
