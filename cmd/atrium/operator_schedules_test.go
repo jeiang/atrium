@@ -144,6 +144,11 @@ func TestOperatorSchedulesRunOnTimeRunNowAndPushOncePerFailure(t *testing.T) {
 	if got := failures()[0]; !strings.Contains(got, "plants refused") || !strings.Contains(got, "url:/chat/") {
 		t.Fatalf("failure push lacks the error or the run link: %s", got)
 	}
+	runRow := s.do(http.MethodGet, fmt.Sprintf("%s/runs/%d", jobURL, first), token, nil)
+	if row := apiBody(t, runRow, http.StatusOK); number(t, row["id"]) != first || number(t, row["job_id"]) != job || row["status"] != "error" || row["thread_id"] == nil {
+		t.Fatalf("run read: %s", runRow.body)
+	}
+	expectAPI(t, s.do(http.MethodGet, fmt.Sprintf("%s/runs/%d", jobURL, first+1000), token, nil), http.StatusNotFound, "not_found")
 
 	api.Push(anthropictest.Failure(400, "invalid_request_error", "plants refused again"))
 	settled(runNow(), "error")

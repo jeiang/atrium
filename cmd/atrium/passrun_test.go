@@ -60,11 +60,11 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 	t.Run("stale after a failure", func(t *testing.T) {
 		opsBase := opsAddr(t)
 		startServeIn(t, dir)
-		_, body, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
+		_, body, _ := fetch(t, http.DefaultClient, "GET", opsBase()+"/metrics", nil)
 		if !strings.Contains(body, `atrium_job_stale{pass="backup"} 1`) {
 			t.Errorf("metrics lack the stale backup gauge:\n%s", body)
 		}
-		if status, state := readiness(t, opsBase); status != http.StatusOK || state != ops.StateDegraded {
+		if status, state := readiness(t, opsBase()); status != http.StatusOK || state != ops.StateDegraded {
 			t.Errorf("readyz = %d %s, want 200 degraded", status, state)
 		}
 		deadline := time.Now().Add(5 * time.Second)
@@ -95,10 +95,10 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 	t.Run("ready after a success", func(t *testing.T) {
 		opsBase := opsAddr(t)
 		startServeIn(t, dir)
-		if status, state := readiness(t, opsBase); status != http.StatusOK || state != ops.StateReady {
+		if status, state := readiness(t, opsBase()); status != http.StatusOK || state != ops.StateReady {
 			t.Errorf("readyz = %d %s after a success, want ready", status, state)
 		}
-		_, body, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
+		_, body, _ := fetch(t, http.DefaultClient, "GET", opsBase()+"/metrics", nil)
 		if !strings.Contains(body, `atrium_job_last_success_timestamp_seconds{pass="backup"}`) {
 			t.Errorf("metrics lack the last-success gauge:\n%s", body)
 		}

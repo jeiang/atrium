@@ -229,7 +229,7 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 		t.Fatalf("grafana test: %d %s", code, body)
 	}
 	scrape := func() string {
-		code, body, _ := fetch(t, http.DefaultClient, http.MethodGet, ops+"/metrics", nil)
+		code, body, _ := fetch(t, http.DefaultClient, http.MethodGet, ops()+"/metrics", nil)
 		if code != http.StatusOK {
 			t.Fatalf("GET /metrics = %d", code)
 		}

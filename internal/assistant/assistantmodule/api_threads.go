@@ -157,7 +157,8 @@ type apiAnswer struct {
 }
 
 type seqCursor struct {
-	Seq int64 `json:"seq"`
+	Seq  int64 `json:"seq"`
+	Keep int   `json:"keep,omitempty"`
 }
 
 func threadOut(t threads.Thread) apiThread {
@@ -353,6 +354,7 @@ type apiDefaultsRequest struct {
 	Model        string `json:"model,omitempty"`
 	Effort       string `json:"effort"`
 	ContextLimit int64  `json:"context_limit"`
+	IfMatch      string `header:"If-Match" json:"-"`
 }
 
 type apiComposerRequest struct {
@@ -604,6 +606,7 @@ func apiBindings(p *apiPages) []application.Binding {
 						return application.Read[apiTranscript]{}, err
 					}
 					req.Before = c.Seq
+					req.Keep = c.Keep
 				}
 				read, err := svc.Transcript(ctx, req)
 				return readAs(read, err, func(v asstapp.Transcript) apiTranscript { return transcriptOut(v, in.Cursor) })
@@ -760,9 +763,21 @@ func apiBindings(p *apiPages) []application.Binding {
 			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.SubagentRoleList], error) {
 				return svc.ListSubagentRoles(ctx)
 			}),
-		apiCommand(p, asstapp.DescribeDefaultsSet(), application.APIShape{Area: "settings", Errors: errs(application.Invalid)}, "PUT /assistant/defaults",
+		apiQuery(p, asstapp.DescribeToolCatalog(), application.APIShape{Area: "composer", Errors: errs(application.Unavailable), Description: "The tools the runtime registry holds for the enabled modules: name, the description the model sees, the permission channel that gates each call (by_arguments when the call decides it), the effect class, and the run kinds that may use it. Read-only; the runtime enforces these, the catalog only reports them."}, "GET /assistant/tools",
+			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.ToolCatalog], error) {
+				set := cmp.Or(module.SetFrom(ctx), module.SetFrom(p.deps.Ctx))
+				if set == nil || set.Current() == nil {
+					return application.Read[asstapp.ToolCatalog]{}, &application.Error{Code: application.Unavailable, Message: "The modules are not evaluated yet; try again."}
+				}
+				reg, err := set.Current().Registry()
+				if err != nil {
+					return application.Read[asstapp.ToolCatalog]{}, err
+				}
+				return svc.ToolCatalog(ctx, reg)
+			}),
+		apiCommand(p, asstapp.DescribeDefaultsSet(), application.APIShape{Area: "settings", Errors: errs(application.Invalid, application.Precondition), Description: "Sets the model, effort and context limit new threads start with. If-Match is optional: send the ETag of GET /assistant/configuration to refuse the change with 412 when the settings changed since it was read; without it the change applies as before."}, "PUT /assistant/defaults",
 			func(ctx context.Context, svc *asstapp.Service, in apiDefaultsRequest) (application.Change[asstapp.DefaultsChanged], error) {
-				return svc.DefaultsSet(ctx, asstapp.DefaultsSetInput{Model: in.Model, Effort: in.Effort, ContextLimit: strconv.FormatInt(in.ContextLimit, 10)})
+				return svc.DefaultsSet(ctx, asstapp.DefaultsSetInput{Model: in.Model, Effort: in.Effort, ContextLimit: strconv.FormatInt(in.ContextLimit, 10), IfMatch: in.IfMatch})
 			}),
 		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", Errors: errs(application.Invalid)}, "GET /home",
 			func(ctx context.Context, svc *asstapp.Service, in apiHomeRequest) (application.Read[apiHome], error) {
@@ -808,7 +823,7 @@ func transcriptOut(v asstapp.Transcript, cursor api.Cursor) apiTranscript {
 		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{},
 	}
 	if v.Earlier != 0 {
-		out.NextCursor = cursor.Next(seqCursor{Seq: v.Earlier})
+		out.NextCursor = cursor.Next(seqCursor{Seq: v.Earlier, Keep: v.EarlierKeep})
 	}
 	for _, item := range v.Items {
 		out.Items = append(out.Items, itemOut(item))

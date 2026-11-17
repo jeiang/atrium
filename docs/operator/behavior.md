@@ -240,7 +240,12 @@ tampering; `POST /maintenance/backups/verify` with a listed name, or
 stored. Without `backup.directory` (host key `core.backup_directory`), the list
 reports that no directory is configured; a configured directory that does not
 exist yet is reported as missing. To write an archive named `list` in the
-current directory, run `atrium backup ./list`.
+current directory, run `atrium backup ./list`. Every archive atrium writes,
+scheduled or named, is read back and checked in full before it is moved into
+place under its final name, so a listed archive atrium wrote has passed that
+check once. An archive copied into the directory by other means has not; the
+list cannot tell the two apart, so verify a copied-in archive before relying
+on it.
 
 Restore replaces database and uploaded state and requires resident users of the
 database to be stopped. `atrium restore --verify ARCHIVE` checks an archive
@@ -730,7 +735,10 @@ profile or retrieval, the assistant cannot change it, and it cannot be purged.
 A custom system prompt stored by an earlier version is carried into the page
 once. Subagent roles are fixed in code and readable at
 `GET /api/v1/assistant/subagent-roles`; the `/subagents` routes and the
-`agent subagents` commands are gone.
+`agent subagents` commands are gone. `GET /api/v1/assistant/tools` lists the
+tools the enabled modules register, each with its permission channel, effect
+and the run kinds that may call it; it reports what the runtime enforces and
+changes nothing.
 
 The knowledge export is one-way and writes one Markdown folder, set by the
 host. It overwrites only the files it tracks and never touches other files;

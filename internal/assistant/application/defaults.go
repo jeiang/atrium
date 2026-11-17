@@ -17,6 +17,7 @@ type DefaultsSetInput struct {
 	Model        string
 	Effort       string
 	ContextLimit string
+	IfMatch      string
 }
 
 type DefaultsChanged struct {
@@ -49,6 +50,15 @@ func (s *Service) DefaultsSet(ctx context.Context, in DefaultsSetInput) (applica
 	}
 	var auditID int64
 	err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		if in.IfMatch != "" {
+			counters, err := s.state.Read(ctx, tx, []string{state.Settings})
+			if err != nil {
+				return err
+			}
+			if !application.Revision(state.Revision(string(ConfigurationName), counters, ConfigurationInput{}, "operator")).Matches(in.IfMatch) {
+				return &application.Error{Code: application.Precondition, Message: "The defaults changed since they were read; reload them and try again."}
+			}
+		}
 		if err := threads.WriteDefaults(ctx, tx, o); err != nil {
 			return err
 		}

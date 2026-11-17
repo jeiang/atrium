@@ -85,17 +85,17 @@ func TestServeDrainSettlesAHeldExternalWriteThenStopsCleanly(t *testing.T) {
 		t.Fatal(err)
 	}
 	notify.Wait("STOPPING=1")
-	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/readyz", nil)
+	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/readyz", nil)
 	if status != http.StatusServiceUnavailable || !strings.Contains(body, "draining") || !strings.Contains(body, `"db":"ok"`) {
 		t.Fatalf("readyz while draining = %d %s, want 503 naming the drain with a working database check", status, body)
 	}
-	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/metrics", nil); status != http.StatusOK || !strings.Contains(body, "# TYPE atrium_scheduler_jobs ") || !strings.Contains(body, `atrium_readiness_check_ok{check="db"} 1`) {
+	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/metrics", nil); status != http.StatusOK || !strings.Contains(body, "# TYPE atrium_scheduler_jobs ") || !strings.Contains(body, `atrium_readiness_check_ok{check="db"} 1`) {
 		t.Fatalf("metrics while draining = %d %s, want collected database metrics", status, body)
 	}
-	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/livez", nil); status != http.StatusOK {
+	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/livez", nil); status != http.StatusOK {
 		t.Fatalf("livez while draining = %d %s, want 200", status, body)
 	}
-	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/healthz", nil); status != http.StatusOK || !strings.Contains(body, `"draining":true`) || !strings.Contains(body, `"name":"scheduler"`) {
+	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/healthz", nil); status != http.StatusOK || !strings.Contains(body, `"draining":true`) || !strings.Contains(body, `"name":"scheduler"`) {
 		t.Fatalf("healthz while draining = %d %s, want draining with the scheduler listed", status, body)
 	}
 	if state, _ := trackingState(t, d, held); state != string(ledger.Intent) {

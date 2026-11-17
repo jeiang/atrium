@@ -136,12 +136,18 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if emergency != nil {
 		sites = append(sites, emergency)
 	}
-	if path, _ := a.env("ATRIUM_SERVE_ADDR_FILE"); path != "" {
-		if err := os.WriteFile(path, []byte(ls.public.net.Addr().String()), 0o600); err != nil {
-			for _, s := range sites {
-				err = errors.Join(err, s.Close())
+	addrFiles := [][2]string{{"ATRIUM_SERVE_ADDR_FILE", ls.public.net.Addr().String()}}
+	if ls.ops != nil {
+		addrFiles = slices.Insert(addrFiles, 0, [2]string{"ATRIUM_OPS_ADDR_FILE", ls.ops.net.Addr().String()})
+	}
+	for _, file := range addrFiles {
+		if path, _ := a.env(file[0]); path != "" {
+			if err := os.WriteFile(path, []byte(file[1]), 0o600); err != nil {
+				for _, s := range sites {
+					err = errors.Join(err, s.Close())
+				}
+				return errors.Join(err, ls.close())
 			}
-			return errors.Join(err, ls.close())
 		}
 	}
 	ls.public.srv = public.HTTP()
