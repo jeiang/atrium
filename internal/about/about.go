@@ -15,9 +15,11 @@ const NoticesPath = "/third-party-notices.txt"
 var thirdPartyNotices string
 
 func Module(_ chi.Router, d *web.Deps) {
-	d.Authenticated(http.MethodGet, NoticesPath, func(w http.ResponseWriter, _ *http.Request) {
+	notices := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		_, _ = w.Write([]byte(thirdPartyNotices))
-	})
+	}
+	d.Authenticated(http.MethodGet, NoticesPath, notices)
+	d.Authenticated(http.MethodHead, NoticesPath, notices)
 }
