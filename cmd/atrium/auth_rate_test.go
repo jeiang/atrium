@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -223,6 +224,7 @@ func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
 	call := newRateCall(t, base)
 	const a, b = "198.51.100.10", "198.51.100.11"
 
+	started := time.Now()
 	firstAllowed, header, body := rateUntilRefused(t, call, "/api/v1/me", a, first, http.StatusOK, 70)
 	if firstAllowed < 60 {
 		t.Fatalf("the token bucket allowed %d requests, want at least 60", firstAllowed)
@@ -239,11 +241,12 @@ func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
 	}
 
 	secondAllowed, header, body := rateUntilRefused(t, call, "/api/v1/me", a, second, http.StatusOK, 70)
+	refilled := int(math.Ceil(2 * time.Since(started).Seconds()))
 	if secondAllowed < 55 {
 		t.Fatalf("a second token from the same source allowed %d requests", secondAllowed)
 	}
-	if total := firstAllowed + secondAllowed; total < 118 || total > 124 {
-		t.Fatalf("the address bucket admitted %d requests across two tokens, want about 120", total)
+	if total := firstAllowed + secondAllowed; total < 118 || total > 121+refilled {
+		t.Fatalf("the address bucket admitted %d requests across two tokens, want 120 plus at most the %d it refilled at 2 a second", total, refilled)
 	}
 	if rateCode(t, body) != "rate_limited" {
 		t.Fatalf("address refusal body: %.200s", body)
