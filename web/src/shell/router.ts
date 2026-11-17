@@ -77,6 +77,13 @@ export const { p, navigate, isActive, route } = createRouter(
       '/mail': {
         '/': () => import('../apps/mail/MailPage.svelte').catch(unavailable),
         '/message/:id': () => import('../apps/mail/MessagePage.svelte').catch(unavailable),
+        '/decisions': () => import('../apps/mail/DecisionsPage.svelte').catch(unavailable),
+        '/rules': {
+          '/': () => import('../apps/mail/RulesPage.svelte').catch(unavailable),
+          '/:id': () => import('../apps/mail/RulePage.svelte').catch(unavailable),
+        },
+        '/mode': () => import('../apps/mail/ModePage.svelte').catch(unavailable),
+        '/accounts': () => import('../apps/mail/AccountsPage.svelte').catch(unavailable),
         meta: { title: 'Mail' },
       },
       '/torrents': {
