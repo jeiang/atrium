@@ -79,7 +79,6 @@ var invalidates = map[string]string{
 	"effect_resolutions":                 "effects",
 	"effect_resources":                   "effects",
 	"effects":                            "effects",
-	"event_candidates":                   "calendar",
 	"events":                             "mail",
 	"export_pages":                       "knowledge",
 	"flag_decisions":                     "mail",

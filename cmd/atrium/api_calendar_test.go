@@ -170,67 +170,24 @@ func TestCalendarContactsSyncAPITakesTheJobLock(t *testing.T) {
 	}
 }
 
-func TestCalendarCandidatesAPIRunsThroughTheJobGates(t *testing.T) {
-	seed := func(dir string) {
-		d := asstDB(t, dir)
-		asstExec(t, d, "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")
-		asstExec(t, d, "INSERT INTO mailboxes (account, name, imap_name, role, uidvalidity, highest_uid) VALUES ('icloud', 'INBOX', 'INBOX', 'inbox', 1, 1)")
-		asstExec(t, d, "INSERT INTO messages (account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, first_seen) VALUES ('icloud', 1, 1, 1, 'event@test', 'event', 'Dinner on Friday', 'friend@example.com', 0)")
-		asstExec(t, d, "INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (1, 'invite', 'queued', 1)")
+func TestCalendarCandidatesAPIAndCLIAreGone(t *testing.T) {
+	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	token := localAPIToken(t, "api")
+	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
 	}
-	serve := func() (*apiSite, string) {
-		token := localAPIToken(t, "api")
-		base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")
-		if err != nil {
-			t.Fatal(err)
+	t.Cleanup(stop)
+	s := &apiSite{t: t, base: base}
+	for _, path := range []string{"/api/v1/calendar/candidates", "/web/v1/calendar/candidates"} {
+		if got := s.do(http.MethodPost, path, token, nil); got.status != http.StatusNotFound && got.status != http.StatusMethodNotAllowed {
+			t.Fatalf("POST %s = %d, want 404 or 405: %.400s", path, got.status, got.body)
 		}
-		t.Cleanup(stop)
-		return &apiSite{t: t, base: base}, token
 	}
-
-	dir, api, _ := moduleFixture(t, flagsExcept(unit.Mail, "false"))
-	seed(dir)
-	s, token := serve()
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/calendar/candidates", token, nil), http.StatusConflict, "refused")
-	if got := runApp(t, "calendar", "candidates"); got.code != cli.ExitOK || got.stdout != "" {
-		t.Fatalf("CLI candidates with mail off: (%d, %q), want the module gate to skip it", got.code, got.stdout)
+	if got := runApp(t, "calendar", "candidates"); got.code == cli.ExitOK {
+		t.Fatalf("calendar candidates CLI still runs: %q", got.stdout)
 	}
 	if got := len(api.Requests()); got != 0 {
-		t.Fatalf("candidates with mail off sent %d model requests", got)
-	}
-
-	dir, api, _ = moduleFixture(t, flagsExcept("", ""))
-	seed(dir)
-	if got := runApp(t, "live", "pause"); got.code != cli.ExitOK {
-		t.Fatalf("live pause: %d %s", got.code, got.stderr)
-	}
-	s, token = serve()
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/calendar/candidates", token, nil), http.StatusConflict, "refused")
-	if got := runApp(t, "calendar", "candidates"); got.code != cli.ExitError || !strings.Contains(got.stderr, "paused") {
-		t.Fatalf("CLI candidates while paused: (%d, %q), want the job's pause refusal", got.code, got.stderr)
-	}
-	if got := len(api.Requests()); got != 0 {
-		t.Fatalf("candidates while paused sent %d model requests", got)
-	}
-	if got := runApp(t, "live", "resume"); got.code != cli.ExitOK {
-		t.Fatalf("live resume: %d %s", got.code, got.stderr)
-	}
-	if got := apiData(t, s.do(http.MethodPost, "/api/v1/calendar/candidates", token, nil), http.StatusOK); number(t, got["candidates"]) != 1 || got["run_id"] == nil {
-		t.Fatalf("candidates after resume: %v", got)
-	}
-	if len(api.Requests()) == 0 {
-		t.Fatal("candidates after resume sent no model request")
-	}
-	requests := len(api.Requests())
-	ran := runApp(t, "calendar", "candidates")
-	if ran.code != cli.ExitOK {
-		t.Fatalf("CLI candidates after the queue drained: (%d, %q)", ran.code, ran.stderr)
-	}
-	var result map[string]any
-	if err := json.Unmarshal([]byte(ran.stdout), &result); err != nil || number(t, result["candidates"]) != 0 {
-		t.Fatalf("empty CLI candidate result %q: %v", ran.stdout, err)
-	}
-	if len(api.Requests()) != requests {
-		t.Fatal("empty CLI candidate pass sent a model request")
+		t.Fatalf("removed candidate routes sent %d model requests", got)
 	}
 }

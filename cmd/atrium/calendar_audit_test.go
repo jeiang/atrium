@@ -5,7 +5,6 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -69,39 +68,5 @@ func TestCalendarToolProposalAuditNamesTheProposal(t *testing.T) {
 	}
 	if actor != "assistant" || source != "tool" || target != "proposal:"+id || proposal != id {
 		t.Fatalf("tool proposal audit = %s/%s %q proposal %q", actor, source, target, proposal)
-	}
-}
-
-func TestCalendarProposalAuditKeepsIDWhenCandidateDraftFails(t *testing.T) {
-	dir, _ := davFixture(t)
-	asstWarm(t)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
-	defer func() { _ = d.Close() }()
-	asstExec(t, d, "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")
-	res, err := d.Write.Exec("INSERT INTO mailboxes (account, name, imap_name, role, uidvalidity, highest_uid) VALUES ('icloud', 'INBOX', 'INBOX', 'inbox', 1, 1)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	mailbox, _ := res.LastInsertId()
-	res, err = d.Write.Exec("INSERT INTO messages (account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, first_seen) VALUES ('icloud', ?, 1, 1, 'event@test', 'event', 'Dinner', 'friend@example.com', 0)", mailbox)
-	if err != nil {
-		t.Fatal(err)
-	}
-	message, _ := res.LastInsertId()
-	asstExec(t, d, "INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (?, 'invite', 'queued', 1)", message)
-	asstExec(t, d, "CREATE TRIGGER refuse_candidate_draft BEFORE UPDATE ON event_candidates BEGIN SELECT RAISE(ABORT, 'candidate storage unavailable'); END")
-	toolResult(t, "event_propose", map[string]any{
-		"calendar": "icloud", "title": "Dinner", "start": "2026-11-10T12:00:00", "source_message_id": message,
-	})
-	var id, audited int64
-	var status, outcome, target string
-	if err := d.Read.QueryRow("SELECT id, status FROM proposals ORDER BY id DESC LIMIT 1").Scan(&id, &status); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.Read.QueryRow("SELECT outcome, target, json_extract(details_json, '$.proposal_id') FROM operation_audit WHERE operation = 'calendar.propose-create' ORDER BY id DESC LIMIT 1").Scan(&outcome, &target, &audited); err != nil {
-		t.Fatal(err)
-	}
-	if status != "pending" || outcome != "failed" || target != "proposal:"+strconv.FormatInt(id, 10) || audited != id {
-		t.Fatalf("proposal %d %s audit = %s %q proposal %d", id, status, outcome, target, audited)
 	}
 }
