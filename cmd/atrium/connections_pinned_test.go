@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/apps/calendar"
 	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
@@ -109,4 +110,45 @@ func TestAPinnedCredentialIsRefusedOnEverySurfaceAndTheSharedSlotNamesItsOwner(t
 	if got := audits(); got != audited {
 		t.Fatalf("a refused save wrote settings audit rows: %s then %s", audited, got)
 	}
+}
+
+func TestSavingAnUnpinnedMailPasswordRechecksTheICloudConnectionThatSharesIt(t *testing.T) {
+	requireCipher(t)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	srv := caldavtest.New(t, "operator@icloud.invalid", davPassword, "Home")
+	setEnv(t, settingEnv(contacts.DirKey), filepath.Join(dir, "contacts"))
+	setEnv(t, settingEnv(calendar.CalendarDirKey), filepath.Join(dir, "calendars"))
+	seedSettings(t, map[string]string{davmirror.AppleIDKey: "operator@icloud.invalid"})
+	host := hostConfigBodyWith("", defaultWebPushConnection, filepath.Join(testRoot, "host", "anthropic.key")) +
+		"\n[connections.\"mail/icloud\"]\nkind = \"mail\"\nlabel = \"icloud\"\nconfig = { preset = \"icloud\", login = \"operator@icloud.invalid\", auth_method = \"password\", enabled = \"true\" }\ncapabilities = [\"imap\", \"smtp\"]\n" +
+		"\n[connections.\"icloud/icloud\"]\nkind = \"icloud\"\nlabel = \"iCloud DAV\"\ncapabilities = [\"caldav\", \"carddav\"]\n"
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host.toml", host))
+	t.Setenv(davmirror.CalDAVEnv, srv.URL+"/")
+	t.Setenv(davmirror.CardDAVEnv, srv.URL+"/")
+	if ran := runApp(t, "connections", "list"); ran.code != 0 {
+		t.Fatalf("connections list: %d %s", ran.code, ran.stderr)
+	}
+	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("INSERT INTO connection_credentials (connection_id, slot, source, value, set_at, set_by) "+
+		"VALUES ('mail/icloud', 'mail/icloud/password', 'database', 'wrong', ?, 'operator')", float64(time.Now().Add(-time.Minute).Unix())); err != nil {
+		t.Fatal(err)
+	}
+	if view := testICloudConnection(t); view.State != "needs_reauth" {
+		t.Fatalf("the iCloud connection with a wrong mail password = %+v, want needs_reauth", view)
+	}
+
+	token := localAPIToken(t, "recheck")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+	s := &apiSite{t: t, base: base}
+	settleBootChecks(t, dir, keyFor(t))
+	if state := connectionState(t, dir, "icloud/icloud"); state != "needs_reauth" {
+		t.Fatalf("icloud/icloud after the start checks = %q, want needs_reauth", state)
+	}
+	apiData(t, s.do(http.MethodPatch, "/api/v1/connections/mail/icloud", token, map[string]any{"credentials": map[string]string{"mail/icloud/password": davPassword}}), http.StatusOK)
+	waitFor(t, func() bool { return connectionState(t, dir, "icloud/icloud") == "ok" })
 }
