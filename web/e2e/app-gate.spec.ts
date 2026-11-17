@@ -14,6 +14,27 @@ function scenario(page: Page, value: object): Promise<void> {
   return page.evaluate((text) => localStorage.setItem('atrium.mock', text), JSON.stringify(value));
 }
 
+function cachedAppsAt(page: Page): Promise<number | undefined> {
+  return page.evaluate(async () => {
+    const opened = Promise.withResolvers<IDBDatabase | undefined>();
+    const request = indexedDB.open('atrium-read-cache');
+    request.onupgradeneeded = () => request.transaction?.abort();
+    request.onsuccess = () => opened.resolve(request.result);
+    request.onerror = () => opened.resolve(undefined);
+    const db = await opened.promise;
+    if (!db) return undefined;
+    try {
+      const read = db.transaction('entries', 'readonly').objectStore('entries').get('["apps"]');
+      const done = Promise.withResolvers<{ updatedAt: number } | undefined>();
+      read.onsuccess = () => done.resolve(read.result);
+      read.onerror = () => done.resolve(undefined);
+      return (await done.promise)?.updatedAt;
+    } finally {
+      db.close();
+    }
+  });
+}
+
 test.describe('an out-of-date cached app list', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -21,10 +42,12 @@ test.describe('an out-of-date cached app list', () => {
     test(`${path} does not show Not found while the fresh list loads`, async ({ page }) => {
       await page.clock.setFixedTime(T0);
       await gotoShell(page, '/');
+      await expect.poll(() => cachedAppsAt(page)).toBe(T0);
       await scenario(page, { apps: { off: [app] } });
       await page.clock.setFixedTime(T0 + 60_000);
       await gotoShell(page, path);
       await expect(page.getByRole('heading', { level: 1, name: 'Not found' })).toBeVisible();
+      await expect.poll(() => cachedAppsAt(page)).toBe(T0 + 60_000);
       await page.waitForTimeout(500);
 
       await scenario(page, { apps: { readDelay: 1_500 } });

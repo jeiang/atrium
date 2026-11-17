@@ -14,9 +14,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
+	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
 	"github.com/jeiang/atrium/internal/config"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
-	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )

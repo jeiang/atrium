@@ -1,6 +1,6 @@
 import { createQuery, type QueryClient } from '@tanstack/svelte-query';
 import { ApiError, type MediaTorrent, mediaDownloads, ok, torrentsControl } from '../../contract';
-import { refusedOffline } from '../../shared/device.svelte';
+import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import type { Tone } from '../../shared/ui/Badge.svelte';
 import { dismissToast, TOAST_MS, toast } from '../../shared/ui/toast.svelte';
 
@@ -125,6 +125,13 @@ export interface Problem {
 export function problemOf(error: unknown): Problem {
   if (refusedOffline(error) && error instanceof Error) {
     return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
+  }
+  if (outcomeUnknown(error)) {
+    return {
+      tone: 'error',
+      title: 'The outcome is unknown',
+      text: `${error.message} atrium reloaded the list and did not try again.`,
+    };
   }
   if (error instanceof ApiError && error.status === 404) {
     return { tone: 'warn', title: 'This torrent is gone', text: `${error.message} atrium reloaded the list.` };

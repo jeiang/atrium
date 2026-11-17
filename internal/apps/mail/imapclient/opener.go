@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/gmailauth"
 	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/mail/gmailauth"
 )
 
 func Opener(_ config.Config) mail.OpenFunc {

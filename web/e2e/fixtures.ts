@@ -60,6 +60,15 @@ export async function goReachable(page: Page): Promise<void> {
   await expect(unreachableNotice(page)).toHaveCount(0, { timeout: 15_000 });
 }
 
+export async function reconnect(page: Page, read: RegExp): Promise<void> {
+  await goUnreachable(page);
+  const reloaded = page.waitForResponse(
+    (response) => response.request().method() === 'GET' && read.test(new URL(response.url()).pathname) && response.ok(),
+  );
+  await goReachable(page);
+  await reloaded;
+}
+
 export async function storedKeys(page: Page): Promise<string[]> {
   return page.evaluate(async () => {
     const opened = Promise.withResolvers<IDBDatabase | undefined>();

@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
-	"github.com/jeiang/atrium/internal/mail/mailtest"
-	mailrun "github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
+	mailrun "github.com/jeiang/atrium/internal/apps/mail/run"
 )
 
 func TestMailRulesCorrectionAccountsAPI(t *testing.T) {

@@ -18,9 +18,11 @@ const (
 	mailUnit     = "mail"
 	mailGate     = "internal/apps/mail"
 	mailGateCall = "WriteGate("
+	mailTools    = "internal/apps/mail/mailtools"
+	oldMailTree  = "internal/mail"
 )
 
-var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live"}
+var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live", "internal/apps/mail/drafts", "internal/apps/mail/smtp"}
 
 func mailWriteEdges() ([]string, error) {
 	set, err := units.Load()
@@ -45,7 +47,11 @@ func mailWriteEdges() ([]string, error) {
 		if from != mailGate && bytes.Contains(src, []byte(mailGateCall)) {
 			edges = append(edges, "mail write gate called outside the Mail client: "+file)
 		}
-		if own, _, ok := set.Of(from); ok && own.Name == mailUnit {
+		if strings.HasPrefix(file, oldMailTree+"/") {
+			edges = append(edges, "mail code outside the Mail app; it belongs in "+mailGate+": "+file)
+		}
+		tools := from == mailTools || strings.HasPrefix(from, mailTools+"/")
+		if own, _, ok := set.Of(from); ok && own.Name == mailUnit && !tools {
 			return nil
 		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
@@ -63,7 +69,11 @@ func mailWriteEdges() ([]string, error) {
 			}
 			for _, dir := range mailWritePath {
 				if rel == dir || strings.HasPrefix(rel, dir+"/") {
-					edges = append(edges, "package outside Mail imports the mail write path: "+file+"\t"+imp)
+					if tools {
+						edges = append(edges, "mail tools import the mail write path: "+file+"\t"+imp)
+					} else {
+						edges = append(edges, "package outside Mail imports the mail write path: "+file+"\t"+imp)
+					}
 				}
 			}
 		}

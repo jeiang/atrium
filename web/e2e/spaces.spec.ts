@@ -8,7 +8,7 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks';
-import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures';
+import { expect, goUnreachable, layouts, reconnect, test, unreachableConsole, useScenario } from './fixtures';
 
 interface Sent {
   method: string;
@@ -246,6 +246,25 @@ test.describe('knowledge spaces', () => {
       await expect(page.locator('.toast__text', { hasText: 'Cannot reach atrium. Nothing was sent.' })).toBeVisible();
       await expect(page.getByRole('list', { name: 'Subjects in this space' }).getByRole('listitem')).toHaveCount(1);
       expect(await sent(page)).toEqual([]);
+    });
+
+    test('a write whose answer is lost says the outcome is unknown and is not sent again', async ({ page }) => {
+      await useScenario(page, { knowledge: { loseLinks: true } });
+      await openGarden(page);
+      await page.getByRole('button', { name: 'Add a subject' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Add a subject to Shared garden' });
+      await dialog.getByRole('combobox', { name: 'Subject' }).fill('weather');
+      await dialog.getByRole('option', { name: /Garden weather station/ }).click();
+      await dialog.getByRole('button', { name: 'Add to the space' }).click();
+      await expect(
+        dialog.getByText(
+          'The outcome is unknown. The connection failed before atrium answered, so this may or may not have happened. atrium did not try again.',
+        ),
+      ).toBeVisible();
+      expect((await sent(page)).map((item) => item.path)).toEqual(['/web/v1/knowledge/23/links']);
+
+      await reconnect(page, /\/web\/v1\/knowledge\/spaces\/5$/);
+      expect((await sent(page)).map((item) => item.path)).toEqual(['/web/v1/knowledge/23/links']);
     });
   });
 });
