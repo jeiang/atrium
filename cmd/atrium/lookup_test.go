@@ -225,8 +225,8 @@ func TestLookupRefusesInvalidReportAndForcesOne(t *testing.T) {
 	if choice["type"] != "tool" || choice["name"] != "report" {
 		t.Errorf("the forced request tool_choice = %v, want report", choice)
 	}
-	if _, ok := forced["thinking"]; ok {
-		t.Error("the forced request still sends thinking")
+	if thinking, _ := forced["thinking"].(map[string]any); len(thinking) != 1 || thinking["type"] != "disabled" {
+		t.Errorf("the forced request thinking = %v, want disabled", forced["thinking"])
 	}
 	result := lookupResult(t, requests[5], "l1")
 	answer, _ := result["answer"].(map[string]any)
