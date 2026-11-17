@@ -33,6 +33,11 @@
     tool: 'M14.5 5.5a4 4 0 0 0-5 5L4.5 15.5a2 2 0 0 0 3 3l5-5a4 4 0 0 0 5-5l-2.5 2.5-2.5-.5-.5-2.5z',
     arrow: 'M5 12h14M13 6l6 6-6 6',
     search: 'M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M15.5 15.5L20 20',
+    flag: 'M6 20V4.5M6 5h11l-2.5 4 2.5 4H6',
+    attachment: 'M16.5 8.5l-6.8 6.8a2 2 0 0 1-2.8-2.8l7.4-7.4a3.5 3.5 0 0 1 5 5l-7.6 7.6a5 5 0 0 1-7.1-7.1L11 4.2',
+    reply: 'M10 7L5 12l5 5M5 12h9a5 5 0 0 1 5 5v1',
+    forward: 'M14 7l5 5-5 5M19 12h-9a5 5 0 0 0-5 5v1',
+    archive: 'M4.5 5h15v4h-15zM6 9v9.5h12V9M10 13h4',
   } as const;
 
   export type IconName = keyof typeof paths;
