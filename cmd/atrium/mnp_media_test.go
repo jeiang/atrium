@@ -279,8 +279,11 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	case "torrents/delete":
 		for _, h := range strings.Split(form.Get("hashes"), "|") {
-			if _, ok := f.items[h]; ok {
+			if item, ok := f.items[h]; ok {
 				f.deleted = append(f.deleted, h)
+				if form.Get("deleteFiles") == "true" && item.content != "" {
+					_ = os.RemoveAll(item.content)
+				}
 				delete(f.items, h)
 				f.order = slices.DeleteFunc(f.order, func(existing string) bool { return existing == h })
 			}
