@@ -419,17 +419,6 @@
     padding: 0 var(--s-3) var(--s-1);
   }
 
-  .placeholder {
-    display: grid;
-    gap: var(--s-3);
-    justify-items: start;
-  }
-
-  .placeholder__text {
-    margin: 0;
-    color: var(--ink-2);
-  }
-
   .tiles {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));

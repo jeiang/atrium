@@ -346,10 +346,10 @@ export const previews: readonly { label: string; change: ApprovalChange | null; 
 ];
 
 export const digestLines: DigestLine[] = [
-  { text: 'Ilse replied about the December book club', url: '/inbox' },
+  { text: 'Ilse replied about the December book club', url: '/review' },
   { text: 'Dentist visit moved to Friday 09:30', url: '/calendar' },
   { text: 'Cedar & Pine shipped order 4471' },
-  { text: 'Library books are due on 2 December' },
+  { text: '3 records from marked sources', url: '/library/knowledge?state=unconfirmed' },
   { text: 'Allotment work day is on 5 December', url: 'https://allotment.example/workday' },
   { text: 'Two new receipts filed under Receipts' },
   { text: 'Water bill is ready' },

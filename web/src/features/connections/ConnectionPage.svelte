@@ -419,7 +419,7 @@
           {:else if view.id === GOOGLE_ID}
             Connect Google again in Google setup below, then Test now.
           {:else}
-            Sign in again in the current interface, then come back and Test now.
+            Enter the credential again below, then choose Test and save.
           {/if}
           {#snippet action()}
             {#if hint?.owner}
@@ -428,8 +428,6 @@
                 href={p('/settings/connections/:kind/:name', { params: splitId(hint.owner) })}
                 >Open {hint.owner}</a
               >
-            {:else if !hint?.pinned && view.id !== GOOGLE_ID}
-              <a class="btn btn--secondary" href="/settings/connections">Open Connections in the current interface</a>
             {/if}
           {/snippet}
         </Notice>

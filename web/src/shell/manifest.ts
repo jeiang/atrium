@@ -43,6 +43,12 @@ export interface NavLink {
   leaves: boolean;
 }
 
+/** The new place for a server page path, or undefined when the new client has none. */
+export function newPlace(url: string): string | undefined {
+  const path = screens[url];
+  return path === undefined ? undefined : `${base}${path}`;
+}
+
 export function navLinks(app: AppEntry): NavLink[] {
   const own = (appScreens[app.id] ?? []).map((item) => ({
     label: item.label,
@@ -51,8 +57,8 @@ export function navLinks(app: AppEntry): NavLink[] {
   }));
   const legacy = app.nav
     .map((item) => {
-      const path: string | undefined = screens[item.url];
-      return { label: item.label, href: path ? `${base}${path}` : item.url, leaves: path === undefined };
+      const href = newPlace(item.url);
+      return { label: item.label, href: href ?? item.url, leaves: href === undefined };
     })
     .filter((item) => !own.some((mine) => mine.href === item.href));
   return [...own, ...legacy];
