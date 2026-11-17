@@ -85,15 +85,6 @@
     min-inline-size: 0;
   }
 
-  .mail-item-wrap:nth-child(n + 13) {
-    content-visibility: auto;
-    contain-intrinsic-size: auto none auto 8rem;
-  }
-
-  .mail-list--paged > .mail-item-wrap {
-    content-visibility: visible;
-  }
-
   .mail-item {
     position: relative;
     display: grid;

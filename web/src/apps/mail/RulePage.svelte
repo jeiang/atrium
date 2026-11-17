@@ -244,7 +244,7 @@
           <p class="meta">No decisions yet.</p>
         {:else}
           <p class="meta">{plural(first?.total ?? items.length, 'decision')}, newest first</p>
-          <ul class="mail-list mail-list--cards mail-list--paged" aria-label="Decisions it made">
+          <ul class="mail-list mail-list--cards" aria-label="Decisions it made">
             {#each items as decision (decision.decision_id)}
               <DecisionCard {decision} />
             {/each}

@@ -28,11 +28,6 @@
     border-radius: var(--r-md);
   }
 
-  .dl-list > li:nth-child(n + 13) {
-    content-visibility: auto;
-    contain-intrinsic-size: auto none auto 12rem;
-  }
-
   .dl-list .card__title {
     overflow-wrap: anywhere;
   }
