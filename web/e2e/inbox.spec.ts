@@ -267,11 +267,10 @@ test.describe('inbox on a desktop', () => {
     test('an approval whose outcome is unknown shows as blocked and is never sent again', async ({ page }) => {
       const item = await approveUnknown(page);
       await expect(page.getByText('The outcome is unknown')).toBeVisible();
-      await expect(item).toContainText(
-        'atrium could not confirm the outcome of an earlier attempt and did not try again.',
-      );
+      await expect(item).toContainText('it is unknown whether it happened');
       await expect(item.getByRole('button', { name: 'Approve' })).toHaveCount(0);
-      await expect(item.getByRole('button', { name: 'Open in the current interface' })).toBeVisible();
+      await expect(item.getByRole('button', { name: 'Mark as done' })).toBeVisible();
+      await expect(item.getByRole('button', { name: 'Mark as not done' })).toBeVisible();
       expect((await requests(page)).map((entry) => entry.path)).toEqual(['/web/v1/approvals/14/approve']);
 
       await reconnect(page, /\/web\/v1\/proposals\/14$/);
