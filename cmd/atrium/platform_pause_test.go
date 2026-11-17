@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/core/coremodule"
@@ -131,7 +131,7 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	if shell := strictJSON[coremodule.Shell](t, "/shell", s.do(http.MethodGet, "/api/v1/shell", token, nil)); !shell.Pause.Paused || shell.Pause.Since == nil {
 		t.Fatalf("shell pause field: %+v", shell.Pause)
 	}
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/packages/poll", token, nil), http.StatusConflict, "refused")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/packages/poll", token, nil), http.StatusConflict, "refused")
 
 	tick := time.Duration(scheduler.TuningAgentSchedulerTickSeconds) * time.Second
 	due := func() {
@@ -155,7 +155,7 @@ func TestPlatformPauseFromAnotherProcessStopsTheRunningServe(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("a separate pause wrote no file: %v", err)
 	}
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/packages/poll", token, nil), http.StatusConflict, "refused")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/packages/poll", token, nil), http.StatusConflict, "refused")
 	due()
 	waitUntil(t, tick+15*time.Second, "the running serve to skip the due jobs", schedulerTerminal(d, tracking.JobPackageTracking, assistant.NightlyName))
 	for _, name := range []string{tracking.JobPackageTracking, assistant.NightlyName} {

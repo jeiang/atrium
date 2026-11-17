@@ -27,7 +27,7 @@ import (
 
 var log = logx.Logger("atrium.tracking")
 
-const Module = "mail"
+const Module = "packages"
 
 const (
 	KeyDestinationCountry  = "mail_ship24_destination_country"
@@ -843,4 +843,50 @@ func Events(ctx context.Context, q db.Querier, packageID int64) ([]Event, error)
 		}
 		return e, err
 	})
+}
+
+type QuotaStatus struct {
+	Used      int `json:"used"`
+	Limit     int `json:"limit"`
+	Remaining int `json:"remaining"`
+}
+
+func Quota(ctx context.Context, q db.Querier, env config.Env, now float64) (QuotaStatus, error) {
+	start, err := monthStart(ctx, q, env, now)
+	if err != nil {
+		return QuotaStatus{}, err
+	}
+	used, err := ledger.CountSince(ctx, q, "track_package", start)
+	if err != nil {
+		return QuotaStatus{}, err
+	}
+	return QuotaStatus{Used: used, Limit: TuningMailShip24MonthlyQuota, Remaining: max(0, TuningMailShip24MonthlyQuota-used)}, nil
+}
+
+func Connected(ctx context.Context, q db.Querier) (bool, error) {
+	s, err := Load(ctx, q)
+	if err != nil {
+		var missing config.NotConfigured
+		if errors.As(err, &missing) {
+			return false, nil
+		}
+		return false, err
+	}
+	defer s.Close()
+	return s.Key != "", nil
+}
+
+func Tracked(ctx context.Context, q db.Querier, id int64) (Target, error) {
+	var t Target
+	err := q.QueryRowContext(ctx,
+		"SELECT id, tracking_number, carrier, status, status_text, aggregator, tracker_id, last_event, last_event_hash, "+
+			"notified_status, last_event_ts, last_sync_ts, tracker_registered_ts FROM packages WHERE id = ?", id).
+		Scan(&t.ID, &t.TrackingNumber, &t.Carrier, &t.Status, &t.StatusText, &t.Aggregator, &t.TrackerID, &t.LastEvent,
+			&t.LastEventHash, &t.NotifiedStatus, &t.LastEventTS, &t.LastSyncTS, &t.TrackerRegisteredTS)
+	return t, err
+}
+
+func Untrack(ctx context.Context, q db.Querier, id int64) error {
+	_, err := q.ExecContext(ctx, "UPDATE packages SET aggregator = '', tracker_id = '', tracker_registered_ts = 0 WHERE id = ?", id)
+	return err
 }

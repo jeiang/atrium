@@ -64,8 +64,15 @@ type Deferral interface {
 	Note(err error) bool
 }
 
+type Prefilter struct {
+	Received bool
+	Ordered  bool
+	Subject  []string
+}
+
 type Scan struct {
 	Kind       string
+	Prefilter  Prefilter
 	WindowDays int
 	FetchLimit int
 	Limit      int
