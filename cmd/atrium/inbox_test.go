@@ -60,9 +60,9 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/99/resend", url.Values{}); code != http.StatusNotFound {
 		t.Errorf("unknown resend = %d", code)
 	}
-	var operation, outcome string
-	if err := d.Read.QueryRow("SELECT operation,outcome FROM operation_audit ORDER BY id DESC LIMIT 1").Scan(&operation, &outcome); err != nil || operation != "notifications.resend" || outcome != "not_found" {
-		t.Fatalf("resend audit = %s %s, %v", operation, outcome, err)
+	var target, outcome string
+	if err := d.Read.QueryRow("SELECT target,outcome FROM operation_audit WHERE operation = 'notifications.resend' ORDER BY id DESC LIMIT 1").Scan(&target, &outcome); err != nil || target != "notification:99" || outcome != "not_found" {
+		t.Fatalf("resend audit = %s %s, %v", target, outcome, err)
 	}
 }
 
@@ -72,21 +72,50 @@ func TestInboxPageAndAPIShareBounds(t *testing.T) {
 	d := mustConnect(t, filepath.Join(site.dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	clearBootNotices(t, d)
+	tx, err := d.Write.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 1; i <= 120; i++ {
-		if _, err := d.Write.Exec("INSERT INTO notifications (ts,title,body,channel,delivered) VALUES (?,?,?,'assistant',0)", i, fmt.Sprintf("Bounded notice %03d", i), "bounded body"); err != nil {
+		if _, err := tx.Exec("INSERT INTO notifications (ts,title,body,channel,delivered) VALUES (?,?,?,'assistant',0)", i, fmt.Sprintf("Bounded notice %03d", i), "bounded body"); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	newestBounded := func(what string, items []any, want int) {
+		t.Helper()
+		next := 120
+		for _, item := range items {
+			title, _ := item.(map[string]any)["title"].(string)
+			if !strings.HasPrefix(title, "Bounded notice ") {
+				if next != 120 {
+					t.Fatalf("%s: %q among the bounded notices", what, title)
+				}
+				continue
+			}
+			if title != fmt.Sprintf("Bounded notice %03d", next) {
+				t.Fatalf("%s: %q, want Bounded notice %03d", what, title, next)
+			}
+			next--
+		}
+		if len(items) != want {
+			t.Fatalf("%s: %d items, want %d", what, len(items), want)
+		}
+	}
 	page := site.do(http.MethodGet, "/api/v1/inbox", owner, nil)
-	items, _ := page.json["items"].([]any)
-	if page.status != http.StatusOK || len(items) != 50 || number(t, items[0].(map[string]any)["id"]) != 120 {
+	if page.status != http.StatusOK {
 		t.Fatalf("default inbox = %d %s", page.status, page.body)
 	}
+	items, _ := page.json["items"].([]any)
+	newestBounded("default inbox", items, 50)
 	more := site.do(http.MethodGet, "/api/v1/inbox?limit=100", owner, nil)
-	items, _ = more.json["items"].([]any)
-	if more.status != http.StatusOK || len(items) != 100 {
+	if more.status != http.StatusOK {
 		t.Fatalf("bounded inbox = %d %s", more.status, more.body)
 	}
+	items, _ = more.json["items"].([]any)
+	newestBounded("bounded inbox", items, 100)
 	expectAPI(t, site.do(http.MethodGet, "/api/v1/inbox?limit=500", owner, nil), http.StatusUnprocessableEntity, "invalid")
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
@@ -102,8 +131,11 @@ func TestInboxPageAndAPIShareBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusOK || strings.Count(string(body), "Bounded notice ") != 100 || strings.Contains(string(body), "Bounded notice 020") || !strings.Contains(string(body), "Bounded notice 021") {
-		t.Fatalf("HTML bound = %d, notices %d", resp.StatusCode, strings.Count(string(body), "Bounded notice "))
+	html := string(body)
+	shown := strings.Count(html, "Bounded notice ")
+	if resp.StatusCode != http.StatusOK || strings.Count(html, `<tr id="notification-`) != 100 || shown == 0 ||
+		!strings.Contains(html, fmt.Sprintf("Bounded notice %03d", 121-shown)) || strings.Contains(html, fmt.Sprintf("Bounded notice %03d", 120-shown)) {
+		t.Fatalf("HTML bound = %d, rows %d, notices %d", resp.StatusCode, strings.Count(html, `<tr id="notification-`), shown)
 	}
 }
 
@@ -116,11 +148,11 @@ func TestNotificationOperationAuditsTrustedRun(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	var source, outcome, details, target string
-	var thread, run, nthread, nrun int64
-	if err := d.Read.QueryRow("SELECT source,outcome,thread_id,run_id,details_json,target FROM operation_audit WHERE operation='notifications.send'").Scan(&source, &outcome, &thread, &run, &details, &target); err != nil {
+	var id, thread, run, nthread, nrun int64
+	if err := d.Read.QueryRow("SELECT id,thread_id,run_id FROM notifications WHERE title='Audit notification'").Scan(&id, &nthread, &nrun); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT thread_id,run_id FROM notifications WHERE title='Audit notification'").Scan(&nthread, &nrun); err != nil {
+	if err := d.Read.QueryRow("SELECT source,outcome,thread_id,run_id,details_json,target FROM operation_audit WHERE operation='notifications.send' AND target=?", fmt.Sprintf("notification:%d", id)).Scan(&source, &outcome, &thread, &run, &details, &target); err != nil {
 		t.Fatal(err)
 	}
 	if source != "tool" || outcome != "failed" || thread == 0 || run == 0 || thread != nthread || run != nrun || thread == 999999 || run == 999999 || strings.Contains(details, "private notification body") || !strings.HasPrefix(target, "notification:") {

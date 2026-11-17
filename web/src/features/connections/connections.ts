@@ -5,6 +5,7 @@ import {
   type ConnectionSchema,
   type ConnectionView,
   connectionsList,
+  connectionsOauthSetup,
   connectionsSchema,
   ok,
   type Setting,
@@ -16,6 +17,7 @@ const CONNECTION_TOPICS = ['connections'] as const;
 const SETTINGS_TOPICS = ['settings'] as const;
 
 export const WEATHER_ID = 'service/weather';
+export const GOOGLE_ID = 'google/default';
 export const WEATHER_KEYS = {
   name: 'weather_location_name',
   latitude: 'weather_latitude',
@@ -125,6 +127,14 @@ export function useSchema() {
   return createQuery(() => ({
     queryKey: ['connections', 'schema'],
     queryFn: async ({ signal }) => ok(await connectionsSchema({ signal })),
+    meta: { topics: CONNECTION_TOPICS },
+  }));
+}
+
+export function useGoogleSetup() {
+  return createQuery(() => ({
+    queryKey: ['connections', 'google'],
+    queryFn: async ({ signal }) => ok(await connectionsOauthSetup({ signal })).data,
     meta: { topics: CONNECTION_TOPICS },
   }));
 }

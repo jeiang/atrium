@@ -231,7 +231,7 @@ func (l *Lease) observeGoogle(ctx context.Context, capability string, err error)
 	_ = l.Observe(ctx, Result{Capability: capability, State: l.googleFailure(err), Reason: err.Error()})
 }
 
-var errGoogleClientID = errors.New("google client ID is not set")
+var ErrGoogleClientID = errors.New("google client ID is not set")
 
 func (l *Lease) googleFailure(err error) State {
 	var rejected *googleRejected
@@ -239,7 +239,7 @@ func (l *Lease) googleFailure(err error) State {
 		return NeedsReauth
 	}
 	var missing MissingCredential
-	if !l.workedBefore && (errors.Is(err, errGoogleClientID) || errors.As(err, &missing)) {
+	if !l.workedBefore && (errors.Is(err, ErrGoogleClientID) || errors.As(err, &missing)) {
 		return Unconfigured
 	}
 	return Failing
@@ -255,7 +255,7 @@ func (l *Lease) refreshGoogle(ctx context.Context, grant GoogleGrant) (*googleAc
 		return nil, err
 	}
 	if clientID == "" {
-		return nil, errGoogleClientID
+		return nil, ErrGoogleClientID
 	}
 	secret, err := l.Credential("oauth/client_secret")
 	if err != nil {
@@ -360,7 +360,7 @@ func testGoogle(ctx context.Context, lease *Lease, caps []Capability) ([]Result,
 	if len(results) == 0 {
 		reason := "no Google capability is authorized yet"
 		if clientID, _, _, _, err := GoogleConfig(lease); err == nil && clientID == "" {
-			reason = errGoogleClientID.Error()
+			reason = ErrGoogleClientID.Error()
 		}
 		if lease.workedBefore {
 			return []Result{{Capability: GoogleCalendar, State: Failing, Reason: reason}}, nil

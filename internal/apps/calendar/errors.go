@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -56,6 +57,10 @@ func OutcomeUnknown(err error) bool {
 }
 
 func remote(err error) error {
+	var request *url.Error
+	if errors.As(err, &request) {
+		err = request.Err
+	}
 	var api *googleapi.Error
 	var refused *oauth2.RetrieveError
 	switch {

@@ -198,7 +198,8 @@ func TestDevicesCapAndCredentialRevocation(t *testing.T) {
 	s := &apiSite{t: t, base: phone.base, dir: dir, api: model}
 	form := browser.form()
 	for i := 1; i <= notify.DeviceLimit; i++ {
-		got := s.do(http.MethodPost, "/api/v1/devices", token, map[string]any{"endpoint": fmt.Sprintf("%s/push/%d", push.URL, i), "p256dh": form.Get("p256dh"), "auth": form.Get("auth")})
+		got := s.do(http.MethodPost, "/api/v1/devices", token, map[string]any{"endpoint": fmt.Sprintf("%s/push/%d", push.URL, i), "p256dh": form.Get("p256dh"), "auth": form.Get("auth")},
+			"User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0")
 		if i < notify.DeviceLimit {
 			if got.status != http.StatusCreated {
 				t.Fatalf("register %d: %d %s", i, got.status, got.body)
@@ -209,6 +210,10 @@ func TestDevicesCapAndCredentialRevocation(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
+	var label string
+	if err := d.Read.QueryRow("SELECT label FROM notification_devices ORDER BY id DESC LIMIT 1").Scan(&label); err != nil || label != "Firefox on Linux" {
+		t.Fatalf("label from the user agent = %q: %v", label, err)
+	}
 	var id int64
 	if err := d.Read.QueryRow("SELECT id FROM auth_bearers WHERE name = 'devices'").Scan(&id); err != nil {
 		t.Fatal(err)

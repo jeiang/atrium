@@ -48,6 +48,7 @@ type DeviceRegistration struct {
 	P256DH    string `json:"p256dh"`
 	Auth      string `json:"auth"`
 	Label     string `json:"label,omitempty"`
+	UserAgent string `header:"User-Agent" json:"-"`
 }
 
 type RegisteredDevice struct {
@@ -137,7 +138,11 @@ func notificationRoutes(d *web.Deps, svc *notifyapp.Service) []application.Bindi
 			}),
 		api.Command(d, defs[notifyapp.SubscribeName], shape("devices", RegisteredDevice{}, http.StatusCreated, application.Invalid, application.Refused), "POST /devices",
 			func(ctx context.Context, in DeviceRegistration) (application.Change[RegisteredDevice], error) {
-				change, err := svc.Subscribe(ctx, notifyapp.SubscribeInput{Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: in.Label})
+				label := in.Label
+				if label == "" {
+					label = notify.PushLabel(in.UserAgent)
+				}
+				change, err := svc.Subscribe(ctx, notifyapp.SubscribeInput{Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: label})
 				return application.Change[RegisteredDevice]{Data: RegisteredDevice{ID: change.Data.ID}, AuditID: change.AuditID}, err
 			}),
 		api.Command(d, defs[notifyapp.UnsubscribeName], bodiless(shape("devices", nil, http.StatusNoContent)), "DELETE /devices/{device_id}",

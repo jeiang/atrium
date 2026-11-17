@@ -89,7 +89,7 @@ type QueueItemRequest struct {
 	ItemID string `path:"item_id" json:"-"`
 }
 
-const queueTopics = "Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due."
+const queueTopics = "Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision covers the result, so it also moves when an item becomes due or a snooze ends without an event."
 
 const queueDescription = "The one inbox: everything that waits for the operator, in one order with one count. " +
 	"`total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `module`, `cursor` and `limit` are. " +

@@ -356,18 +356,27 @@ func (t Tuning) Edited(item Item, shows []string, form map[string]string) View {
 	return view
 }
 
-func Ignore(ctx context.Context, set Settings, item Item) error {
+func Ignore(ctx context.Context, set Settings, item Item) ([]int64, error) {
 	if !item.Torrent {
-		return PlanError("Only torrents can be ignored; delete the import entry instead.")
+		return nil, PlanError("Only torrents can be ignored; delete the import entry instead.")
 	}
 	scope := contract.Scope{Actor: contract.Operator}
-	if err := set.Intake.Mark(ctx, scope, item.ID, TagMedia, TagFiled, false); err != nil {
-		return err
+	var effects []int64
+	unfiled, err := set.Intake.Mark(ctx, scope, item.ID, TagMedia, TagFiled, false)
+	if unfiled != 0 {
+		effects = append(effects, unfiled)
 	}
-	if err := set.Intake.Mark(ctx, scope, item.ID, TagMedia, TagIgnored, true); err != nil {
-		return &PartialError{Cause: err}
+	if err != nil {
+		return effects, err
 	}
-	return nil
+	ignored, err := set.Intake.Mark(ctx, scope, item.ID, TagMedia, TagIgnored, true)
+	if ignored != 0 {
+		effects = append(effects, ignored)
+	}
+	if err != nil {
+		return effects, &PartialError{Cause: err}
+	}
+	return effects, nil
 }
 
 type SweepResult struct {
@@ -398,7 +407,7 @@ func Sweep(ctx context.Context, set Settings) (SweepResult, error) {
 		if !t.HasTag(TagMedia) || !t.HasTag(TagFiled) || t.State != contract.StoppedUP {
 			continue
 		}
-		if err := set.Intake.Control(ctx, contract.Control{Scope: contract.Scope{Actor: contract.Job}, Hash: t.Hash, Label: TagMedia, Action: contract.Remove, DeleteFiles: true}); err != nil {
+		if _, err := set.Intake.Control(ctx, contract.Control{Scope: contract.Scope{Actor: contract.Job}, Hash: t.Hash, Label: TagMedia, Action: contract.Remove, DeleteFiles: true}); err != nil {
 			if !soft(err) {
 				return out, err
 			}
@@ -478,11 +487,11 @@ func (t Tuning) selectOne(ctx context.Context, set Settings, scope contract.Scop
 			}
 		}
 	}
-	if err := set.Intake.Mark(ctx, scope, torrent.Hash, TagMedia, TagSelected, true); err != nil {
+	if _, err := set.Intake.Mark(ctx, scope, torrent.Hash, TagMedia, TagSelected, true); err != nil {
 		return false, err
 	}
 	if torrent.State == contract.StoppedDL || torrent.State == "pausedDL" {
-		if err := set.Intake.Control(ctx, contract.Control{Scope: scope, Hash: torrent.Hash, Label: TagMedia, Action: contract.Resume}); err != nil {
+		if _, err := set.Intake.Control(ctx, contract.Control{Scope: scope, Hash: torrent.Hash, Label: TagMedia, Action: contract.Resume}); err != nil {
 			return false, err
 		}
 	}

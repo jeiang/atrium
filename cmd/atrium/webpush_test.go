@@ -661,11 +661,19 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	}
 	payload := func(n int) map[string]any {
 		t.Helper()
-		p := browser.decrypt(t, push.wait(t, n).body)
-		if len(p) != 3 || p["title"] != "atrium: permission proposal" || p["body"] == "" || p["actions"] != nil {
-			t.Fatalf("push payload %d = %v; want only title, body and url", n, p)
+		for i := 1; ; i++ {
+			p := browser.decrypt(t, push.wait(t, i).body)
+			if p["title"] != "atrium: permission proposal" {
+				continue
+			}
+			if n--; n > 0 {
+				continue
+			}
+			if len(p) != 3 || p["body"] == "" || p["actions"] != nil {
+				t.Fatalf("permission push payload = %v; want only title, body and url", p)
+			}
+			return p
 		}
-		return p
 	}
 
 	push.answer(http.StatusInternalServerError)
@@ -684,7 +692,7 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	var id int64
 	var delivered bool
 	var failure string
-	if err := d.Read.QueryRow("SELECT id, delivered, COALESCE(error, '') FROM notifications").Scan(&id, &delivered, &failure); err != nil {
+	if err := d.Read.QueryRow("SELECT id, delivered, COALESCE(error, '') FROM notifications WHERE title = 'atrium: permission proposal'").Scan(&id, &delivered, &failure); err != nil {
 		t.Fatal(err)
 	}
 	if delivered || !strings.Contains(failure, "web push 500") {
@@ -711,7 +719,7 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	if p := payload(2); p["url"] != card {
 		t.Fatalf("resent push url = %v, want %s", p["url"], card)
 	}
-	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", id).Scan(&delivered); err != nil || !delivered || rows("SELECT COUNT(*) FROM notifications") != 1 {
+	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", id).Scan(&delivered); err != nil || !delivered || rows("SELECT COUNT(*) FROM notifications WHERE title = 'atrium: permission proposal'") != 1 {
 		t.Fatalf("after resend delivered=%v, %v", delivered, err)
 	}
 

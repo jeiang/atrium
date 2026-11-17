@@ -20,6 +20,8 @@ export const GROUPS: readonly SettingsGroup[] = [
 
 export const BACKUPS: SettingsGroup = { id: 'backups', slug: 'backups', title: 'Backups' };
 
+export const NOTIFICATIONS: SettingsGroup = { id: 'notifications', slug: 'notifications', title: 'Notifications' };
+
 export function home(group: string): Home | undefined {
   if (GROUPS.some((item) => item.id === group)) return 'settings';
   if (group === 'assistant' || group.startsWith('assistant.')) return 'assistant';

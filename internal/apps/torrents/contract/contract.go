@@ -210,8 +210,8 @@ type Intake interface {
 	Files(ctx context.Context, hash string) ([]TorrentFile, error)
 	Add(ctx context.Context, req AddRequest) (string, error)
 	SetWanted(ctx context.Context, scope Scope, hash, label string, ids []int, wanted bool) error
-	Mark(ctx context.Context, scope Scope, hash, label, mark string, on bool) error
-	Control(ctx context.Context, c Control) error
+	Mark(ctx context.Context, scope Scope, hash, label, mark string, on bool) (int64, error)
+	Control(ctx context.Context, c Control) (int64, error)
 }
 
 type Deps struct {

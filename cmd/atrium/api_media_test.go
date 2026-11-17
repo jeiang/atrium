@@ -340,7 +340,7 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	filed := fileIt(plan, "Idempotency-Key", "file-arrival")
 	expectAPI(t, filed, 200, "")
 	private(filed)
-	if filed.json["placed"] != float64(1) {
+	if effects, _ := filed.json["effect_ids"].([]any); filed.json["placed"] != float64(1) || len(effects) != 1 || number(t, effects[0]) != mediaEffectID(t, d, library.OpFile, hash, "done") || filed.json["undoable"] != true {
 		t.Fatalf("filed: %s", filed.body)
 	}
 	replayed := fileIt(plan, "Idempotency-Key", "file-arrival")
@@ -359,6 +359,8 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 
 	post := func(path string) apiReply { return s.do(http.MethodPost, "/api/v1"+path, token, nil) }
 	expectAPI(t, post("/media/filings/"+untagged+"/ignore"), 404, "not_found")
+	undoableWrite(t, s, token, post("/media/filings/"+skipped+"/ignore"), 200)
+	expectAPI(t, get("/media/filings/"+skipped+"?kind=movie&title=Heat&year=1995"), 200, "")
 	expectAPI(t, post("/media/filings/"+skipped+"/ignore"), 200, "")
 	expectAPI(t, get("/media/filings/"+skipped+"?kind=movie&title=Heat&year=1995"), 404, "not_found")
 	expectAPI(t, post("/media/filings/"+skipped+"/ignore"), 404, "not_found")

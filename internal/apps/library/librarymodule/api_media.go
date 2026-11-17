@@ -43,9 +43,16 @@ type MediaChannelID struct {
 	ID int64 `path:"channel_id" json:"-" api:"min=1"`
 }
 type MediaChannelResult struct {
-	Channel library.Channel `json:"channel"`
-	Polled  bool            `json:"polled"`
+	Channel   library.Channel `json:"channel"`
+	Polled    bool            `json:"polled"`
+	EffectIDs []int64         `json:"effect_ids,omitempty"`
+	Undoable  *bool           `json:"undoable,omitempty"`
 }
+
+func (m *MediaChannelResult) ReportEffects(ids []int64, undoable *bool) {
+	m.EffectIDs, m.Undoable = ids, undoable
+}
+
 type MediaPollResult struct {
 	Added  int `json:"added"`
 	Errors int `json:"errors"`

@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 
@@ -162,41 +161,15 @@ func classifyWrite(err error) error {
 	return classify(err)
 }
 
-func (s *Service) local(ctx context.Context, name application.Name, details map[string]any, fn func(*sql.Tx) (string, error)) (int64, error) {
-	if details == nil {
-		details = map[string]any{}
-	}
-	raw, err := json.Marshal(details)
-	if err != nil {
-		return 0, err
-	}
-	var id int64
-	target := ""
-	err = s.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		var err error
-		if target, err = fn(tx); err != nil {
-			return err
-		}
-		entry := state.Entry{Operation: string(name), Outcome: state.OK, Target: target, DetailsJSON: string(raw)}
-		id, err = s.state.Audit(ctx, tx, entry)
-		return err
-	})
-	if err != nil {
-		_, err = s.record(ctx, name, target, details, err)
-		return 0, err
-	}
-	return id, nil
-}
-
-func (s *Service) threadID(ctx context.Context) *int64 {
-	if inv, ok := application.InvocationOf(ctx); ok {
+func (s *Service) threadID(ctx context.Context, proposal *int64) *int64 {
+	if inv, ok := application.InvocationOf(ctx); ok && proposal != nil {
 		return &inv.ThreadID
 	}
 	return nil
 }
 
-func (s *Service) runID(ctx context.Context) *int64 {
-	if inv, ok := application.InvocationOf(ctx); ok {
+func (s *Service) runID(ctx context.Context, proposal *int64) *int64 {
+	if inv, ok := application.InvocationOf(ctx); ok && proposal != nil {
 		return &inv.RunID
 	}
 	return nil
