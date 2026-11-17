@@ -9,6 +9,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -284,6 +285,32 @@ test.describe('offline', () => {
     await status.getByRole('button', { name: 'Test now' }).click();
     await expect(status.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
     expect((await requests(page)).filter((item) => item.path.endsWith('/test'))).toHaveLength(0);
+  });
+});
+
+test.describe('lost answers', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('a credential save whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PATCH',
+      path: '/connections/service/ship24',
+      open: '/settings/connections/service/ship24',
+      press: async (page) => {
+        const fields = page.locator('#connection-fields');
+        await fields.getByLabel('API key', { exact: true }).fill(secret);
+        await fields.getByRole('button', { name: 'Save without testing' }).click();
+      },
+    });
+  });
+
+  test('a test whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/connections/media/jellyfin/test',
+      open: '/settings/connections/media/jellyfin',
+      press: (page) => page.locator('#connection-status').getByRole('button', { name: 'Test now' }).click(),
+    });
   });
 });
 

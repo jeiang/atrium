@@ -56,7 +56,7 @@
   let channelResult = $state<Result>();
   let removing = $state<PushDevice>();
   let confirming = $state(false);
-  let removeFailed = $state<string>();
+  let removeFailed = $state<Result>();
   let choices = $state<Record<string, string>>({});
 
   const mine = $derived(
@@ -189,11 +189,8 @@
   async function onRemove(): Promise<void> {
     const item = removing;
     if (!item || busy || locked) return;
-    const refused = unreachableNow();
-    if (refused) {
-      removeFailed = refused.text;
-      return;
-    }
+    removeFailed = unreachableNow();
+    if (removeFailed) return;
     busy = 'remove';
     try {
       ok(await notificationsUnsubscribe(item.id, { headers: { 'Idempotency-Key': crypto.randomUUID() } }));
@@ -201,8 +198,7 @@
       confirming = false;
       announce(`${item.label || 'The device'} removed`);
     } catch (error) {
-      const result = failure(error, 'Removing the device');
-      removeFailed = result.text ?? result.title;
+      removeFailed = failure(error, 'Removing the device');
     } finally {
       busy = undefined;
       here = await readDevice();
@@ -366,7 +362,7 @@
 >
   <p>It stops getting push. Turning push on from that device adds it again.</p>
   {#if removeFailed}
-    <Notice tone="error" variant="inline">{removeFailed}</Notice>
+    <Notice tone={removeFailed.tone} variant="inline" title={removeFailed.title}>{removeFailed.text ?? ''}</Notice>
   {/if}
   {#snippet actions()}
     <Button data-cancel disabled={busy === 'remove'} onclick={() => (confirming = false)}>Cancel</Button>

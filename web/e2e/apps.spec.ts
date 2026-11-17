@@ -7,6 +7,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 
@@ -187,6 +188,30 @@ test.describe('the automation pause', () => {
     await section.getByRole('button', { name: 'Resume automation' }).click();
     await expect(section.getByText('Running')).toBeVisible();
     await expect(page.locator('.pause-slot')).toHaveCount(0);
+  });
+});
+
+test.describe('the automation pause with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('a resume from the shell whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/automation/resume',
+      open: '/',
+      scenario: { pause: { paused: true } },
+      press: (page) => page.locator('.pause-slot').getByRole('button', { name: 'Resume' }).click(),
+    });
+  });
+
+  test('a resume from Authority whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/automation/resume',
+      open: '/assistant/authority',
+      scenario: { pause: { paused: true } },
+      press: (page) => page.locator('#automation').getByRole('button', { name: 'Resume automation' }).click(),
+    });
   });
 });
 
