@@ -292,7 +292,8 @@ triggers a check within a minute. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
-keeps its row and credentials, and is announced once. Declaring it again
+keeps its row and credentials, and is announced once, at the next start of
+`atrium serve` even when a CLI command opened the database first. Declaring it again
 enables it as `untested` with its earlier results cleared, so the next check
 tests it. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or

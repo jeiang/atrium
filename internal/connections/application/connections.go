@@ -187,6 +187,11 @@ func (s *Service) Test(ctx context.Context, in TestInput) (application.Change[[]
 }
 
 func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (application.Change[struct{}], error) {
+	if in.Start {
+		if err := s.store.AnnounceRemoved(ctx); err != nil {
+			return application.Change[struct{}]{}, err
+		}
+	}
 	views, err := s.store.List(ctx)
 	if err != nil {
 		return application.Change[struct{}]{}, err
