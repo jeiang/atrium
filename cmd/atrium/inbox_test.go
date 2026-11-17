@@ -72,21 +72,50 @@ func TestInboxPageAndAPIShareBounds(t *testing.T) {
 	d := mustConnect(t, filepath.Join(site.dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	clearBootNotices(t, d)
+	tx, err := d.Write.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 1; i <= 120; i++ {
-		if _, err := d.Write.Exec("INSERT INTO notifications (ts,title,body,channel,delivered) VALUES (?,?,?,'assistant',0)", i, fmt.Sprintf("Bounded notice %03d", i), "bounded body"); err != nil {
+		if _, err := tx.Exec("INSERT INTO notifications (ts,title,body,channel,delivered) VALUES (?,?,?,'assistant',0)", i, fmt.Sprintf("Bounded notice %03d", i), "bounded body"); err != nil {
 			t.Fatal(err)
 		}
 	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	newestBounded := func(what string, items []any, want int) {
+		t.Helper()
+		next := 120
+		for _, item := range items {
+			title, _ := item.(map[string]any)["title"].(string)
+			if !strings.HasPrefix(title, "Bounded notice ") {
+				if next != 120 {
+					t.Fatalf("%s: %q among the bounded notices", what, title)
+				}
+				continue
+			}
+			if title != fmt.Sprintf("Bounded notice %03d", next) {
+				t.Fatalf("%s: %q, want Bounded notice %03d", what, title, next)
+			}
+			next--
+		}
+		if len(items) != want {
+			t.Fatalf("%s: %d items, want %d", what, len(items), want)
+		}
+	}
 	page := site.do(http.MethodGet, "/api/v1/inbox", owner, nil)
-	items, _ := page.json["items"].([]any)
-	if page.status != http.StatusOK || len(items) != 50 || number(t, items[0].(map[string]any)["id"]) != 120 {
+	if page.status != http.StatusOK {
 		t.Fatalf("default inbox = %d %s", page.status, page.body)
 	}
+	items, _ := page.json["items"].([]any)
+	newestBounded("default inbox", items, 50)
 	more := site.do(http.MethodGet, "/api/v1/inbox?limit=100", owner, nil)
-	items, _ = more.json["items"].([]any)
-	if more.status != http.StatusOK || len(items) != 100 {
+	if more.status != http.StatusOK {
 		t.Fatalf("bounded inbox = %d %s", more.status, more.body)
 	}
+	items, _ = more.json["items"].([]any)
+	newestBounded("bounded inbox", items, 100)
 	expectAPI(t, site.do(http.MethodGet, "/api/v1/inbox?limit=500", owner, nil), http.StatusUnprocessableEntity, "invalid")
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
@@ -102,8 +131,11 @@ func TestInboxPageAndAPIShareBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusOK || strings.Count(string(body), "Bounded notice ") != 100 || strings.Contains(string(body), "Bounded notice 020") || !strings.Contains(string(body), "Bounded notice 021") {
-		t.Fatalf("HTML bound = %d, notices %d", resp.StatusCode, strings.Count(string(body), "Bounded notice "))
+	html := string(body)
+	shown := strings.Count(html, "Bounded notice ")
+	if resp.StatusCode != http.StatusOK || strings.Count(html, `<tr id="notification-`) != 100 || shown == 0 ||
+		!strings.Contains(html, fmt.Sprintf("Bounded notice %03d", 121-shown)) || strings.Contains(html, fmt.Sprintf("Bounded notice %03d", 120-shown)) {
+		t.Fatalf("HTML bound = %d, rows %d, notices %d", resp.StatusCode, strings.Count(html, `<tr id="notification-`), shown)
 	}
 }
 
