@@ -1,0 +1,5 @@
+{{define "mail_rule_ref"}}<span class="flex min-w-0 flex-wrap items-center gap-1.5 text-xs" data-rule-ref="{{.ID}}" data-rule-state="{{.State}}">
+  {{if eq .State "removed"}}<code class="truncate font-mono text-muted-foreground">{{.ID}}</code>
+  {{else}}<a class="truncate font-mono underline underline-offset-4" href="/rules/{{urlencode .ID}}/edit" title="{{str .Title}}">{{.ID}}</a>{{end}}
+  {{if eq .State "removed"}}<span class="badge" data-variant="secondary">Rule removed</span>{{else if eq .State "changed"}}<span class="badge" data-variant="secondary">Rule changed</span>{{end}}
+</span>{{end}}

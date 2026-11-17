@@ -37,11 +37,12 @@ type ConditionView struct {
 }
 
 type RuleView struct {
-	ID      string          `json:"id"`
-	Account *string         `json:"account"`
-	Action  string          `json:"action"`
-	Dest    *string         `json:"dest"`
-	When    []ConditionView `json:"when"`
+	ID            string          `json:"id"`
+	Account       *string         `json:"account"`
+	Action        string          `json:"action"`
+	Dest          *string         `json:"dest"`
+	When          []ConditionView `json:"when"`
+	DecisionCount int             `json:"decision_count"`
 }
 
 type LearnedView struct {
@@ -73,6 +74,7 @@ type RuleEdit struct {
 	Suggestions   []ConditionView            `json:"suggestions"`
 	SourceMessage *SourceMessage             `json:"source_message"`
 	Errors        []string                   `json:"errors"`
+	Decisions     *RuleDecisionsResult       `json:"decisions,omitempty"`
 }
 
 type ConditionResult struct {
@@ -120,10 +122,14 @@ func (s *Service) Rules(ctx context.Context, in RulesInput) (application.Read[Ru
 		if err != nil {
 			return err
 		}
+		counts, err := triage.RuleDecisionCounts(ctx, q)
+		if err != nil {
+			return err
+		}
 		out.List.Account = in.Account
 		out.List.Rules = make([]RuleView, len(listed))
 		for i, r := range listed {
-			out.List.Rules[i] = RuleView{ID: r.ID, Account: r.Account, Action: r.Action, Dest: r.Dest, When: ConditionViews(r.When)}
+			out.List.Rules[i] = RuleView{ID: r.ID, Account: r.Account, Action: r.Action, Dest: r.Dest, When: ConditionViews(r.When), DecisionCount: counts[r.ID]}
 		}
 		if in.Learned {
 			names := []string{in.Account}
