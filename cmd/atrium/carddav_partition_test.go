@@ -40,6 +40,8 @@ type partitionedDAV struct {
 	partition        string
 	rootHome         bool
 	partitionRefuses bool
+	refuseTimes      int
+	requests         []string
 	seen             map[string]int
 	authorized       map[string]int
 }
@@ -76,10 +78,15 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 	good := ok && user == "operator@icloud.invalid" && pass == davPassword
 	p.mu.Lock()
 	p.seen[host]++
+	p.requests = append(p.requests, r.Method+" "+host+" "+r.URL.Path)
 	if good {
 		p.authorized[host]++
 	}
 	redirect, partition, rootHome, partitionRefuses := p.redirectTo, p.partition, p.rootHome, p.partitionRefuses
+	if good && host == partitionHost && p.refuseTimes > 0 {
+		p.refuseTimes--
+		partitionRefuses = true
+	}
 	p.mu.Unlock()
 	if !good {
 		w.Header().Set("WWW-Authenticate", davChallenge)

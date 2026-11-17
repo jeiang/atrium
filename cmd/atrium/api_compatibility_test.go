@@ -14,6 +14,7 @@ import (
 )
 
 func TestAPILegacyCompatibility(t *testing.T) {
+	t.Parallel()
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, model)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -115,6 +116,7 @@ func TestAPILegacyCompatibility(t *testing.T) {
 }
 
 func TestAPIDisabledAssistantBeforeBody(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("assistant", "false"))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()

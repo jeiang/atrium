@@ -8,7 +8,7 @@
   import Notice from '../../shared/ui/Notice.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import { p } from '../../shell/router';
-  import { type Problem, problemOf } from './mail';
+  import { type Problem, problemOf, unknownOutcome } from './mail';
   import {
     type Command,
     type ConfirmEffect,
@@ -83,7 +83,7 @@
       open = false;
       ondone(command, run);
     } catch (error) {
-      if (error instanceof ApiError || refusedOffline(error)) {
+      if ((error instanceof ApiError && !unknownOutcome(error)) || refusedOffline(error)) {
         problem = problemFor(error);
         stale = error instanceof ApiError && (error.code === 'confirm_stale' || error.code === 'confirm_required');
         offer = undefined;

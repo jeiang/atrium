@@ -61,6 +61,7 @@ func usageRoutes(t *testing.T) map[string]webusage.Route {
 }
 
 func TestRouteUsageCountersSurviveARestartAndSplitAgentTraffic(t *testing.T) {
+	t.Parallel()
 	moduleFixture(t, flagsExcept("", ""))
 	issue := func(args ...string) string {
 		got := runApp(t, append([]string{"auth", "token", "issue"}, args...)...)
@@ -152,6 +153,7 @@ func TestRouteUsageCountersSurviveARestartAndSplitAgentTraffic(t *testing.T) {
 }
 
 func TestAgentMarkStaysWithTheSignInSession(t *testing.T) {
+	t.Parallel()
 	s := newAPISite(t)
 	browser := oidcBrowser(t, s.base, s.idp, "owner")
 	session := func(headers ...string) string {
@@ -207,6 +209,7 @@ func scrape(t *testing.T, base string) string {
 }
 
 func TestSchedulerJobRunCounterSurvivesARestart(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	dest := t.TempDir()
 	setEnv(t, "ATRIUM_HOST_CONFIG", backupHost(t, dir, "backup_directory = \""+dest+"\""))

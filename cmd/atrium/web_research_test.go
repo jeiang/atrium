@@ -95,6 +95,7 @@ func parentOf(t *testing.T, dir string, child int64) int64 {
 }
 
 func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)

@@ -50,6 +50,7 @@ func (m *mailSafety) effectIDs(t *testing.T, query string, args ...any) []string
 }
 
 func TestMailBacklogApprovalHonoursTheGroupSelection(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	fake.AddBox("Bills", mailtest.NewBox(3))
@@ -94,6 +95,7 @@ func TestMailBacklogApprovalHonoursTheGroupSelection(t *testing.T) {
 }
 
 func TestMailProposalMoveWithUnknownCopyBlocksReapprovalUntilResolved(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	fake.AddBox("Bills", mailtest.NewBox(3))
@@ -148,6 +150,7 @@ func TestMailProposalMoveWithUnknownCopyBlocksReapprovalUntilResolved(t *testing
 }
 
 func TestMailGmailRelabelInterruptedRemoveKeepsTheCompletedAdd(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	fake.Gmail = true
 	all := fake.AddBox("[Gmail]/All Mail", mailtest.NewBox(9), `\All`)
@@ -180,6 +183,7 @@ func TestMailGmailRelabelInterruptedRemoveKeepsTheCompletedAdd(t *testing.T) {
 }
 
 func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	fake.AddBox("Bills", mailtest.NewBox(3))
@@ -236,6 +240,7 @@ func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
 }
 
 func TestMailProposalMoveCreatesAMissingFolderAsItsOwnEffect(t *testing.T) {
+	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	h, x := mailtest.RawWith("Bank statement", "statements@bank.test", "create-folder", "Your statement is ready.")

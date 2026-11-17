@@ -118,6 +118,7 @@ func rateToken(t *testing.T, name string) string {
 }
 
 func TestAuthRateLimitsSignInAndCallbacks(t *testing.T) {
+	t.Parallel()
 	s := wimOIDCSite(t)
 	const addr = "203.0.113.10"
 	jar, err := cookiejar.New(nil)
@@ -216,6 +217,7 @@ func TestAuthRateLimitsSignInAndCallbacks(t *testing.T) {
 }
 
 func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
+	t.Parallel()
 	_, base, _ := rateSite(t, true)
 	first, second := rateToken(t, "first"), rateToken(t, "second")
 	call := newRateCall(t, base)
@@ -257,6 +259,7 @@ func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
 }
 
 func TestAuthRateLimitChargesLongBearerTokens(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	s := startAPISite(t, dir, api)
 	token := s.token("owner", oidctest.AccessOptions{Mutate: func(claims map[string]any) {
@@ -277,6 +280,7 @@ func TestAuthRateLimitChargesLongBearerTokens(t *testing.T) {
 }
 
 func TestAuthRateLimitIgnoresUntrustedForwardedAddresses(t *testing.T) {
+	t.Parallel()
 	_, base, _ := rateSite(t, false)
 	call := newRateCall(t, base)
 	allowed := 0
@@ -306,6 +310,7 @@ func TestAuthRateLimitIgnoresUntrustedForwardedAddresses(t *testing.T) {
 }
 
 func TestAuthRateLimitValidatesTrustedForwardedAddresses(t *testing.T) {
+	t.Parallel()
 	_, base, _ := rateSite(t, true)
 	call := newRateCall(t, base)
 	post := func(header http.Header) (int, string) {
@@ -353,6 +358,7 @@ func TestAuthRateLimitValidatesTrustedForwardedAddresses(t *testing.T) {
 }
 
 func TestTrustedProxiesFromTheEnvironmentAreHonored(t *testing.T) {
+	t.Parallel()
 	moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_WEB_TRUSTED_PROXY_CIDRS", "127.0.0.1/32")
 	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")
@@ -367,6 +373,7 @@ func TestTrustedProxiesFromTheEnvironmentAreHonored(t *testing.T) {
 }
 
 func TestAuthRateLimitRefusesNewKeysWhenFull(t *testing.T) {
+	t.Parallel()
 	_, base, _ := rateSite(t, true)
 	call := newRateCall(t, base)
 	addr := func(i int) string { return fmt.Sprintf("10.%d.%d.%d", (i>>16)&0xff, (i>>8)&0xff, i&0xff) }
@@ -388,6 +395,7 @@ func TestAuthRateLimitRefusesNewKeysWhenFull(t *testing.T) {
 }
 
 func TestAuthRateLimitKeepsLastUsedOnRefusal(t *testing.T) {
+	t.Parallel()
 	dir, base, _ := rateSite(t, true)
 	token := rateToken(t, "phone")
 	call := newRateCall(t, base)

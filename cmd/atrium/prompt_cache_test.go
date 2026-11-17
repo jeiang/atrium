@@ -71,6 +71,7 @@ func cachedPrefix(t *testing.T, body map[string]any, through int) string {
 }
 
 func TestChatStepsReadTheCachedPrefixAndSeeTheTailVerbatim(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm := "warm the thread " + strings.Repeat("note ", memory.TuningMemoryVerbatimTokens)
 	if ran := runApp(t, "agent", "run", "--text", warm); ran.code != cli.ExitOK {

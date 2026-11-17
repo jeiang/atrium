@@ -21,6 +21,7 @@ func runAppContext(t *testing.T, f *fixture, ctx context.Context, args ...string
 }
 
 func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {

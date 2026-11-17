@@ -12,6 +12,7 @@ import (
 )
 
 func TestEmbeddingConnectionFormKeepsTheStoredModel(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	embed := newFakeOpenAI(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embed.URL+"/v1", "custom-model", ""))

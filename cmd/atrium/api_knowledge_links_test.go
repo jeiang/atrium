@@ -36,6 +36,7 @@ func linkRelated(t *testing.T, page map[string]any, kind, id string) map[string]
 }
 
 func TestKnowledgeTypedLinks(t *testing.T) {
+	t.Parallel()
 	s, token, d, contactsDir := linksSite(t)
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM schema_migrations WHERE version = 4"); n != 1 {
 		t.Fatalf("migration 4 recorded %d times", n)

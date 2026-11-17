@@ -74,6 +74,7 @@ func setFlag(t *testing.T, site *connectionSite, s *apiSite, name, value string)
 }
 
 func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	flags := flagsExcept("media", "false")
 	flags["mail"] = "false"
@@ -152,6 +153,7 @@ func TestBuiltinConnectionsFollowTheirAppsWhileOperatorRowsOnlyRest(t *testing.T
 }
 
 func TestOperatorTurnsConnectionsOnAndOffOnBothSurfaces(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("media", "false"))
 	site := &connectionSite{t: t, dir: dir}
@@ -188,6 +190,7 @@ func TestOperatorTurnsConnectionsOnAndOffOnBothSurfaces(t *testing.T) {
 }
 
 func TestDependencyToolsReportNeedsAndRecheckWithinLimits(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	ship24, ship24Hits := countingServer(t, `{"data":{"trackers":[]}}`)

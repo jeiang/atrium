@@ -21,6 +21,7 @@ type reachApprovalRow struct {
 }
 
 func TestEveryAreaReachableFromSchema(t *testing.T) {
+	t.Parallel()
 	dir, _ := davFixture(t)
 	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("sync reach fixture calendar: %d %s", got.code, got.stderr)
@@ -135,6 +136,7 @@ func TestEveryAreaReachableFromSchema(t *testing.T) {
 }
 
 func TestApprovalOnlyOperationRunsOnceThroughTheApprovalRoute(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	created := proposalID(t, toolResult(t, "calendar_create", map[string]any{
 		"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00",

@@ -18,6 +18,7 @@ import (
 )
 
 func TestCalendarContactsAPI(t *testing.T) {
+	t.Parallel()
 	_, srv := davFixture(t)
 	target, err := url.Parse(srv.URL)
 	if err != nil {
@@ -129,6 +130,7 @@ func (h *davHold) block() {
 }
 
 func TestCalendarContactsSyncAPITakesTheJobLock(t *testing.T) {
+	t.Parallel()
 	_, srv := davFixture(t)
 	target, err := url.Parse(srv.URL)
 	if err != nil {
@@ -171,6 +173,7 @@ func TestCalendarContactsSyncAPITakesTheJobLock(t *testing.T) {
 }
 
 func TestCalendarCandidatesAPIRunsThroughTheJobGates(t *testing.T) {
+	t.Parallel()
 	seed := func(dir string) {
 		d := asstDB(t, dir)
 		asstExec(t, d, "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")

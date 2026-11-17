@@ -10,6 +10,7 @@ import (
 )
 
 func TestV1LenientRequestsStayAccepted(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	_, _, f := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)

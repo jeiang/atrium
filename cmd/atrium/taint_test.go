@@ -108,6 +108,7 @@ func warm(t *testing.T, api *modelLog) int {
 }
 
 func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
 	message := seedMail(t, dir)
@@ -164,6 +165,7 @@ func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 }
 
 func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fakeOpenMeteo(t, dir)
 	start := warm(t, api)
@@ -253,6 +255,7 @@ func replayedSignatures(t *testing.T, r anthropictest.Request) []string {
 }
 
 func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fakeOpenMeteo(t, dir)
 	start := warm(t, api)
@@ -297,6 +300,7 @@ func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
 }
 
 func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	message := seedMail(t, dir)
@@ -348,6 +352,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 }
 
 func TestEmptyMailSearchLeavesTheThreadUnmarked(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	path := filepath.Join(dir, "atrium.db")
 	d := mustConnect(t, path, db.Key{})

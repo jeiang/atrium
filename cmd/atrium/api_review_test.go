@@ -388,6 +388,7 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 }
 
 func TestReviewZeroTargetsKeepTheirNamespace(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	base := startServeIn(t, dir)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -428,6 +429,7 @@ func TestReviewZeroTargetsKeepTheirNamespace(t *testing.T) {
 }
 
 func TestProposalsAPIReadAndDecide(t *testing.T) {
+	t.Parallel()
 	dir, dav := davFixture(t)
 	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
 	var ids []string
@@ -694,6 +696,7 @@ func anyNumbers(t *testing.T, v any) []int64 {
 }
 
 func TestDraftDiscardMissingIsHandled(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)

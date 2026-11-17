@@ -21,16 +21,12 @@ type icloudCalendar struct {
 }
 
 func icloudCalendars(ctx context.Context, env config.Env, set Settings) (*davmirror.Client, []davmirror.CollectionRef, error) {
-	httpClient, err := davmirror.HTTPClient(ctx, set.Login)
+	client, err := davmirror.DAVClient(ctx, set.Login, davmirror.EndpointsFrom(env).CalDAV, davmirror.CapabilityCalDAV)
 	if missing, ok := errors.AsType[config.NotConfigured](err); ok {
 		return nil, nil, NotConfigured(missing)
 	}
 	if err != nil {
 		return nil, nil, err
-	}
-	client, err := davmirror.New(httpClient, davmirror.EndpointsFrom(env).CalDAV)
-	if err != nil {
-		return nil, nil, remote(err)
 	}
 	collections, err := client.Collections(ctx, davmirror.Calendars)
 	if err != nil {

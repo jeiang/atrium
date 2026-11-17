@@ -77,6 +77,7 @@ func setDAVDue(t *testing.T, d *db.DB, due float64) {
 }
 
 func TestServeMirrorsCalDAVAndCardDAVOnSchedule(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)
@@ -159,6 +160,7 @@ func TestServeMirrorsCalDAVAndCardDAVOnSchedule(t *testing.T) {
 }
 
 func TestFailedDAVRunRetriesAfterItsBackoff(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
@@ -208,6 +210,7 @@ func TestFailedDAVRunRetriesAfterItsBackoff(t *testing.T) {
 }
 
 func TestDAVJobsWithoutAnICloudLoginRecordNoPass(t *testing.T) {
+	t.Parallel()
 	dir, _ := davFixture(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir))
 	d := asstDB(t, dir)

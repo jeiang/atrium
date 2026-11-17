@@ -97,6 +97,7 @@ func requestText(t *testing.T, r anthropictest.Request) string {
 }
 
 func TestDreamingWritesFromACleanThreadUnmarked(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -147,6 +148,7 @@ func TestDreamingWritesFromACleanThreadUnmarked(t *testing.T) {
 }
 
 func TestDreamingMailFactsWaitForConfirm(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "the plumber is coming on Friday"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -176,6 +178,7 @@ func TestDreamingMailFactsWaitForConfirm(t *testing.T) {
 }
 
 func TestDreamingRefusesUnreadSourcesAndConfirmedEdits(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -224,6 +227,7 @@ func TestDreamingRefusesUnreadSourcesAndConfirmedEdits(t *testing.T) {
 }
 
 func TestDreamingStopsAtItsCaps(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -268,6 +272,7 @@ func TestDreamingStopsAtItsCaps(t *testing.T) {
 }
 
 func TestDreamingSkipsPrivateSpaceThreads(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "public fact"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -304,6 +309,7 @@ func TestDreamingSkipsPrivateSpaceThreads(t *testing.T) {
 }
 
 func TestDreamingMonthlyCapRaisesAttention(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "hi"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
@@ -332,6 +338,7 @@ func TestDreamingMonthlyCapRaisesAttention(t *testing.T) {
 }
 
 func TestUndoneWriteBecomesALesson(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "add a task"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)

@@ -146,8 +146,8 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 		return request{}, err
 	}
 	thinking := &anthropic.Thinking{Type: "adaptive", Display: "summarized"}
-	if thread.Thinking == "disabled" {
-		thinking = nil
+	if thread.Thinking == anthropic.ThinkingDisabled {
+		thinking = &anthropic.Thinking{Type: anthropic.ThinkingDisabled}
 	}
 	return request{
 		params: anthropic.Params{

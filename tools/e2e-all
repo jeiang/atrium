@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+if [ $# -gt 3 ] || ! [ "${1:-4}" -ge 1 ] 2>/dev/null || ! [ "${2:-16}" -ge 1 ] 2>/dev/null; then
+  echo "usage: tools/e2e-all [PROCESSES] [PARALLEL] [PATTERN]" >&2
+  exit 2
+fi
+total=${1:-4} parallel=${2:-16} pattern=${3:-.}
+root=$(pwd)
+pkg=github.com/jeiang/atrium/cmd/atrium
+
+bin=$(mktemp -d)
+trap 'rm -rf "$bin"' EXIT
+go build -o "$bin/atrium" ./cmd/atrium || exit 1
+go test -c -o "$bin/atrium.test" ./cmd/atrium || exit 1
+
+"$bin/atrium.test" -test.list "$pattern" | grep -E '^(Test|Example|Fuzz)' |
+  awk -v times=.ci/go-test-times.tsv 'BEGIN { FS = "\t"; while ((getline line < times) > 0) { split(line, f, "\t"); w[f[1]] = f[2] } } { print (($0 in w) ? w[$0] : 2) "\t" $0 }' |
+  LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2 |
+  awk -F '\t' -v n="$total" '{ m = 1; for (i = 2; i <= n; i++) if (load[i] < load[m]) m = i; load[m] += $1; print m "\t" $2 }' >"$bin/shards"
+if ! [ -s "$bin/shards" ]; then
+  echo "e2e-all: no tests match $pattern" >&2
+  exit 1
+fi
+
+pids=()
+for k in $(seq 1 "$total"); do
+  run=$(awk -F '\t' -v k="$k" '$1 == k { print $2 }' "$bin/shards" | paste -sd '|' -)
+  [ -n "$run" ] || continue
+  (
+    cd cmd/atrium &&
+      ATRIUM_E2E_BINARY="$bin/atrium" bash "$root/tools/e2e-loopback" "$bin/atrium.test" -test.v=test2json -test.count=1 -test.timeout=30m \
+        -test.parallel="$parallel" -test.run="^($run)\$" 2>&1 | go tool test2json -t -p "$pkg" >"$bin/$k.json"
+    exit "${PIPESTATUS[0]}"
+  ) &
+  pids+=("$!")
+done
+
+status=0
+for pid in "${pids[@]}"; do
+  wait "$pid" || status=1
+done
+
+cat "$bin"/*.json | jq -rj 'select(.Action == "output" and .Test == null) | .Output'
+failed=$(cat "$bin"/*.json | jq -r 'select(.Action == "fail" and .Test != null) | .Test' | LC_ALL=C sort -u)
+if [ -n "$failed" ]; then
+  status=1
+  for test in $failed; do
+    cat "$bin"/*.json | jq -rj --arg t "$test" 'select(.Action == "output" and .Test == $t) | .Output'
+  done
+  echo "e2e-all: failed tests:"
+  echo "$failed"
+fi
+if [ "$status" -ne 0 ]; then
+  echo "e2e-all: FAIL" >&2
+else
+  echo "e2e-all: ok, $(wc -l <"$bin/shards") tests in $total processes" >&2
+fi
+exit "$status"

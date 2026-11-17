@@ -608,6 +608,7 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 }
 
 func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
+	t.Parallel()
 	v2only := "magnet:?xt=urn:btmh:1220" + strings.Repeat("a", 64) + "&dn=Lanterns.S01E12"
 
 	dir := t.TempDir()

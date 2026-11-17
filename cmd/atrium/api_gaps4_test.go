@@ -97,6 +97,7 @@ func TestTorrentControlUndoAndTheDownloadsTopic(t *testing.T) {
 }
 
 func TestMediaChannelOperatorUndoKeepsTheChannelID(t *testing.T) {
+	t.Parallel()
 	s, token, _ := gaps4Site(t)
 	add := func(name string) apiReply {
 		return s.do(http.MethodPost, "/api/v1/media/channels", token, map[string]any{"name": name, "imdb": "tt1234567", "pattern": "1080p"})

@@ -36,6 +36,7 @@ func effectiveProposal(t *testing.T, d *db.DB, name string, now float64) int64 {
 }
 
 func TestResolvedAppliedProposalWorkBlocksReapproval(t *testing.T) {
+	t.Parallel()
 	_, d := effectiveFixture(t)
 	now := float64(time.Now().Unix())
 	id := effectiveProposal(t, d, "effective-reapproval", now)
@@ -65,6 +66,7 @@ func TestResolvedAppliedProposalWorkBlocksReapproval(t *testing.T) {
 }
 
 func TestProposalUndoIncludesResolvedAppliedAndStopsOnAFailedUndo(t *testing.T) {
+	t.Parallel()
 	_, d := effectiveFixture(t)
 	now := float64(time.Now().Unix())
 	id := effectiveProposal(t, d, "effective-undo", now)
@@ -122,6 +124,7 @@ func TestProposalUndoIncludesResolvedAppliedAndStopsOnAFailedUndo(t *testing.T) 
 }
 
 func TestProposalUndoReadsEveryEffect(t *testing.T) {
+	t.Parallel()
 	_, d := effectiveFixture(t)
 	now := float64(time.Now().Unix())
 	id := effectiveProposal(t, d, "effective-pagination", now)

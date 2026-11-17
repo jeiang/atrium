@@ -185,6 +185,7 @@ func TestMediaSweepDeleteDropDoesNotRepeat(t *testing.T) {
 }
 
 func TestApprovedMediaAddIsUndoneWithItsProposal(t *testing.T) {
+	t.Parallel()
 	const hash = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
@@ -226,6 +227,7 @@ func TestApprovedMediaAddIsUndoneWithItsProposal(t *testing.T) {
 }
 
 func TestRecoveredProposalWithRecordedWorkCannotBeApprovedAgain(t *testing.T) {
+	t.Parallel()
 	const hash = "ffffffffffffffffffffffffffffffffffffffff"
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
@@ -256,6 +258,7 @@ func TestRecoveredProposalWithRecordedWorkCannotBeApprovedAgain(t *testing.T) {
 }
 
 func TestApprovedMediaChannelAddAndRemoveUndo(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	_, qbURL := mnpNewQbit(t)
@@ -322,6 +325,7 @@ func TestApprovedMediaChannelAddAndRemoveUndo(t *testing.T) {
 }
 
 func TestApprovedMediaChannelFailureAuditsNewTarget(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	_, qbURL := mnpNewQbit(t)

@@ -107,9 +107,25 @@ func settleBootChecks(t *testing.T, dir string, key db.Key) {
 	}
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline) && count("SELECT COUNT(*) FROM connections WHERE enabled = 1 AND checked_at IS NULL") > 0; time.Sleep(50 * time.Millisecond) {
 	}
-	revision := "SELECT COALESCE(MAX(value), 0) FROM read_revisions WHERE scope = 'connections'"
-	for last, still := count(revision), 0; still < 5; time.Sleep(200 * time.Millisecond) {
-		if now := count(revision); now == last {
+	settleReadRevisions(t, d, "connections")
+}
+
+func settleReadRevisions(t *testing.T, d *db.DB, scopes ...string) {
+	t.Helper()
+	query, args := "SELECT COALESCE(SUM(value), 0) FROM read_revisions WHERE scope IN (?", []any{scopes[0]}
+	for _, scope := range scopes[1:] {
+		query, args = query+", ?", append(args, scope)
+	}
+	query += ")"
+	count := func() int64 {
+		var n int64
+		if err := d.Read.QueryRow(query, args...).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	for last, still := count(), 0; still < 5; time.Sleep(200 * time.Millisecond) {
+		if now := count(); now == last {
 			still++
 		} else {
 			last, still = now, 0

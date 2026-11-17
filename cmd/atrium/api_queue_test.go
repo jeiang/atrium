@@ -19,6 +19,7 @@ import (
 )
 
 func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	s.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("ask-1", "ask_operator", map[string]any{"question": "Which calendar should I use?"})))
 	if ran := runApp(t, "agent", "run", "--text", "plan the week"); ran.code != cli.ExitOK {

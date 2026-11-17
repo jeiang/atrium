@@ -82,6 +82,7 @@ func recoveryStatus(t *testing.T, d *db.DB, at float64, loc *time.Location) infe
 }
 
 func TestInferenceUnknownReservationSurvivesRestartAndExpiresToItsEstimate(t *testing.T) {
+	t.Parallel()
 	loc, err := time.LoadLocation("America/Port_of_Spain")
 	if err != nil {
 		t.Fatal(err)
@@ -140,6 +141,7 @@ func TestInferenceUnknownReservationSurvivesRestartAndExpiresToItsEstimate(t *te
 }
 
 func TestInferenceReservationAtTheMonthBoundaryCarriesIntoTheNextMonth(t *testing.T) {
+	t.Parallel()
 	loc, err := time.LoadLocation("America/Port_of_Spain")
 	if err != nil {
 		t.Fatal(err)
@@ -202,6 +204,7 @@ func TestInferenceReservationAtTheMonthBoundaryCarriesIntoTheNextMonth(t *testin
 }
 
 func TestInferenceStatusReportsEffectiveExpiryWithoutWriting(t *testing.T) {
+	t.Parallel()
 	loc, err := time.LoadLocation("America/Port_of_Spain")
 	if err != nil {
 		t.Fatal(err)

@@ -15,6 +15,7 @@ import (
 )
 
 func TestServeBackupJobArchiveIsSealedAndRestoresWithoutItsClaim(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	key := keyFor(t)

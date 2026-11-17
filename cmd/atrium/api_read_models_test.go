@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/apps/weather"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
@@ -63,6 +66,7 @@ func connectionField(t *testing.T, schema connectionsapp.ConnectionsSchema, id, 
 }
 
 func TestReadModelsOnBothSurfaces(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	fakeOpenMeteo(t, dir)
 	seedSettings(t, map[string]string{weather.KeyLatitude: "1.25", weather.KeyLongitude: "2.5", weather.KeyLocationName: "Lowmarsh"})
@@ -167,6 +171,13 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 	}
 
 	awaitWeather(t, s, homecard.StateOK)
+	settled := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	settleReadRevisions(t, settled, state.Assistant, state.Settings, state.Calendar, state.Tasks, state.Attention, state.Mail, state.Knowledge,
+		state.Review, state.Effects, state.Connections, state.Ops)
+	_ = settled.Close()
+	if now := time.Now(); now.Second() >= 30 {
+		time.Sleep(now.Truncate(time.Minute).Add(time.Minute).Sub(now))
+	}
 	home := both("/home")
 	var card struct {
 		Weather homecard.Weather `json:"weather"`
