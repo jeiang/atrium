@@ -139,7 +139,7 @@ func ICloudLogin(ctx context.Context, login Login) (config.CalDAVLogin, error) {
 	return config.CalDAVLogin{AppleID: apple, Password: password}, nil
 }
 
-func HTTPClient(ctx context.Context, login Login) (*http.Client, error) {
+func DAVClient(ctx context.Context, login Login, endpoint, capability string) (*Client, error) {
 	creds, err := ICloudLogin(ctx, login)
 	if err != nil {
 		return nil, err
@@ -150,7 +150,12 @@ func HTTPClient(ctx context.Context, login Login) (*http.Client, error) {
 			base = client
 		}
 	}
-	return BasicClient(base, creds.AppleID, creds.Password), nil
+	client, err := New(BasicClient(base, creds.AppleID, creds.Password), endpoint)
+	if err != nil {
+		return nil, err
+	}
+	client.cache = cacheKey(capability, endpoint, creds.AppleID, creds.Password)
+	return client, nil
 }
 
 func Configured(ctx context.Context, login Login, dir string) error {
@@ -173,13 +178,16 @@ func mirror(ctx context.Context, login Login, endpoint, dir string, k Kind, capa
 	if dir == "" {
 		return Stats{}, errors.New("the mirror directory is not set")
 	}
-	client, err := HTTPClient(ctx, login)
+	client, err := DAVClient(ctx, login, endpoint, capability)
 	if err != nil {
 		return Stats{}, err
 	}
-	collections, err := Fetch(ctx, client, endpoint, k)
-	if result, ok := outcome(capability, err); ok && login.DAV != nil && ctx.Err() == nil {
-		login.DAV.Report(result)
+	collections, err := client.Fetch(ctx, k)
+	if result, ok := outcome(capability, err); ok && ctx.Err() == nil {
+		rememberSync(client.cache, result)
+		if login.DAV != nil {
+			login.DAV.Report(result)
+		}
 	}
 	if err != nil {
 		return Stats{}, err
@@ -226,7 +234,7 @@ func failure(capability string, err error) (connections.Result, bool) {
 }
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Shares: sharedPassword, Validate: validateICloud, Test: testICloud, Trace: traceICloud}}
+	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Shares: sharedPassword, Validate: validateICloud, Test: testICloud, Silent: silentICloud, Trace: traceICloud}}
 }
 
 func sharedPassword(id connections.ID) (connections.ID, string) {
@@ -285,15 +293,32 @@ func rawICloudPassword(ctx context.Context, lease *connections.Lease, account st
 }
 
 func testICloud(ctx context.Context, lease *connections.Lease, caps []connections.Capability) ([]connections.Result, error) {
+	return checkICloud(ctx, lease, caps, false)
+}
+
+func silentICloud(ctx context.Context, lease *connections.Lease, caps []connections.Capability) ([]connections.Result, error) {
+	return checkICloud(ctx, lease, caps, true)
+}
+
+func checkICloud(ctx context.Context, lease *connections.Lease, caps []connections.Capability, reuse bool) ([]connections.Result, error) {
 	session, early, err := openICloud(ctx, lease, nil)
 	if err != nil || early != nil {
 		return resultList(early), err
 	}
 	results := make([]connections.Result, 0, len(caps))
 	for _, cap := range caps {
-		if cap.Enabled {
-			results = append(results, session.check(ctx, cap.Name))
+		if !cap.Enabled {
+			continue
 		}
+		key := session.key(cap.Name)
+		if synced, fresh := recentSync(key); reuse && fresh {
+			results = append(results, synced)
+			continue
+		}
+		if !reuse {
+			discoveries.Delete(key)
+		}
+		results = append(results, session.check(ctx, cap.Name, key))
 	}
 	if len(results) == 0 {
 		return []connections.Result{{Capability: CapabilityCalDAV, State: connections.Unconfigured, Reason: "no iCloud capability is enabled"}}, nil
@@ -346,6 +371,11 @@ func openICloud(ctx context.Context, lease *connections.Lease, wrap func(http.Ro
 	return s, nil, nil
 }
 
+func (s icloudSession) key(capability string) string {
+	_, endpoint, _ := s.kind(capability)
+	return cacheKey(capability, endpoint, s.user, s.password)
+}
+
 func (s icloudSession) kind(capability string) (Kind, string, bool) {
 	switch capability {
 	case CapabilityCalDAV:
@@ -356,7 +386,7 @@ func (s icloudSession) kind(capability string) (Kind, string, bool) {
 	return Kind{}, "", false
 }
 
-func (s icloudSession) check(ctx context.Context, capability string) connections.Result {
+func (s icloudSession) check(ctx context.Context, capability, cache string) connections.Result {
 	kind, endpoint, ok := s.kind(capability)
 	if !ok {
 		return connections.Result{Capability: capability, State: connections.Failing, Reason: "unknown iCloud capability"}
@@ -365,6 +395,7 @@ func (s icloudSession) check(ctx context.Context, capability string) connections
 	if err != nil {
 		return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}
 	}
+	client.cache = cache
 	collections, err := client.Collections(ctx, kind)
 	if err != nil {
 		result, ok := failure(capability, err)

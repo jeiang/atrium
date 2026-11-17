@@ -427,12 +427,18 @@ giving both an id and `--all`, or neither, is a usage error.
 without saving anything, which iCloud offers for `caldav` and `carddav`. It
 prints each DAV request and response: the step, method and URL; the request
 header names, `Depth` and `Content-Type`; whether an `Authorization` header was
-attached, never its value; the request body; the status; the response headers
-with `Set-Cookie` values withheld; and the first 800 bytes of the response
-body. The DAV user, the mail login, email addresses, numeric path segments and
-numbers of five or more digits are masked. The last line is
+attached, never its value; the request body; the status; the response time;
+the response headers with `Set-Cookie` values withheld; and the first 800 bytes
+of the response body. The DAV user, the mail login, email addresses, numeric
+path segments and numbers of five or more digits are masked as `<user:…>`,
+`<address:…>` and `<n:…>` with a six-letter tag that is the same for the same
+value under the same app password, so two masked ids can be compared across
+traces; the app password itself shows as `<password>`. `--repeat <n>` (1 to 5)
+then sends the last refused request again `n` times, 3 seconds apart, and ends
+with `repeat: the <step> request failed <k> of <n> times`. The last line is
 `result: <capability> <state> <reason>`, and the command exits 1 when that state
-is failing or needs reauth. `--trace` with `--all` or `--json` is a usage error.
+is failing or needs reauth. `--trace` with `--all` or `--json`, and `--repeat`
+without `--trace` or outside 1 to 5, are usage errors.
 
 Mail and iCloud connections also learn from real use while `serve` runs. An
 IMAP session that cannot connect marks the mail connection's `imap`
@@ -448,7 +454,13 @@ marks it failing, and the reason names the step. A refusal or server error
 also names the host class (the configured host, the partition host the root
 named, or a sibling host) without the request address, and a refusal says
 whether it carried a `WWW-Authenticate` challenge and lists the other
-refusals of the same discovery. A later session or sync that works marks the
+refusals of the same discovery. A 401 with no challenge and an empty body,
+after an earlier request of the same sync or check accepted the password, is
+treated as transient: that request is sent again after about 2 seconds and
+then about 6 seconds (each jittered by a quarter), at most twice per sync or
+check, and each retry is logged; if it is still refused the capability is
+failing, never needing reauth. Error texts show numeric path segments of DAV
+addresses as `<id>`. A later session or sync that works marks the
 capability ok again. These four have no grace window, so the
 first failure notifies at once and the recovery notifies once. Errors about one message,
 such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do

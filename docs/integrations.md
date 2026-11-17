@@ -155,6 +155,17 @@ any other redirect, principal, home set or collection address without sending
 the credential, and logs the step, status, host class and challenge of each
 failed DAV request.
 
+A sync remembers, in memory, the home set and the collections it found for
+each capability, DAV address and credential, and goes straight to the
+collections on the next run, listing the home set again at most once an hour.
+It discovers again from the root only when a remembered address answers 401,
+403, 404 or 410, or when the credential or address changes; a restart forgets
+everything. A contacts sync is therefore one `REPORT` per address book, with
+one extra `PROPFIND` an hour. The silent health check of the iCloud
+connection reuses the result of a sync of the same capability from the last 20
+minutes and sends nothing; without one it checks through the same memory. The
+explicit `connections test` and `--trace` always discover from the root.
+
 ## Knowledge export
 
 The knowledge base is written to one Markdown folder by the daily
