@@ -31,7 +31,6 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 	exec("INSERT INTO open_loops (thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) VALUES ('k2', 'a', 'waiting_on_them', 2, 120, 'sam', 'Contract', 120)")
 	exec("INSERT INTO commitments (id, message_id, text, owner, due, status, created_ts) VALUES (1, 1, 'Send invoice', 'me', ?, 'open', 300)", today.AddDate(0, 0, 2).Format("2006-01-02"))
 	exec("INSERT INTO commitments (id, message_id, text, owner, due, status, created_ts) VALUES (2, 1, 'Book the room', 'me', ?, 'open', 301)", today.AddDate(0, 0, -3).Format("2006-01-02"))
-	exec("INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (2, 'invite', 'pending', 250)")
 	exec("INSERT INTO thread_plans (thread_id, items_json, updated_at) VALUES (1, '[]', 400)")
 	exec("INSERT INTO packages (id, merchant, status, status_text, tracking_number, source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'Bookshop', 'transit', 'In transit', 'TRACK', 1, 1, 500, 500)")
 

@@ -40,7 +40,7 @@ type definition struct {
 var definitions = map[Caller]definition{
 	Folder:      {maxTokens: 80, keys: []string{"confident", "folder"}},
 	Flag:        {maxTokens: 80, keys: []string{"deadline_or_payment_due", "flag", "person_asking", "security_event"}},
-	Event:       {maxTokens: 80, keys: []string{"has_event"}},
+	Event:       {maxTokens: 300, keys: []string{"all_day", "end", "has_event", "location", "start", "title"}},
 	Commitments: {maxTokens: 500, keys: []string{"commitments"}},
 	Package:     {maxTokens: 200, keys: []string{"carrier", "is_order", "merchant", "order_ref", "status", "status_text", "tracking_number"}},
 	Ops:         {maxTokens: 2000, keys: []string{"findings"}, ops: true},

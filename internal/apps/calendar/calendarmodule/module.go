@@ -12,9 +12,8 @@ import (
 	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
 	"github.com/jeiang/atrium/internal/apps/calendar/calendarcmd"
 	calendartools "github.com/jeiang/atrium/internal/apps/calendar/calendartools"
+	"github.com/jeiang/atrium/internal/apps/calendar/eventscan"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	"github.com/jeiang/atrium/internal/attention"
-	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
@@ -32,10 +31,6 @@ type Module struct {
 	Jobs jobworker.Dependencies
 }
 
-func AttentionSources() []attention.Source {
-	return []attention.Source{attentionsources.Candidates()}
-}
-
 func Requirements() []module.Requirement {
 	return []module.Requirement{{Name: "calendar credentials", Check: credentials}}
 }
@@ -45,7 +40,7 @@ func ToolDefinitions() []module.ToolDefinition {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
-	command := jobcmd.DelegatingSubs(calendarcmd.Command(m.calendarCLI(mc.Env, mc.Tools), connectionsapp.CLI(mc.Env)), map[string]string{"sync": unit.Calendar + "/" + passrun.CalDAV, "candidates": unit.Calendar + "/" + calendar.JobCandidates})
+	command := jobcmd.DelegatingSubs(calendarcmd.Command(calendarCLI(mc.Env), connectionsapp.CLI(mc.Env)), map[string]string{"sync": unit.Calendar + "/" + passrun.CalDAV})
 	operations, bindings := m.calendarOperations()
 	return module.Declaration{
 		Name:  unit.Calendar,
@@ -55,20 +50,19 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Kind: davmirror.KindICloud, Soft: true, Capability: davmirror.CapabilityCalDAV, Features: []string{"iCloud calendar sync"}},
 			{Kind: connections.KindGoogle, Soft: true, Capability: connections.GoogleCalendar, Features: []string{"Google calendar sync"}},
 		},
-		Packages:      []string{"internal/apps/calendar", "internal/calendar/candidates"},
-		Tables:        []string{"agent_events", "event_candidates"},
+		Packages:      []string{"internal/apps/calendar"},
+		Tables:        []string{"agent_events"},
 		EffectOrigins: []module.EffectOrigin{{Name: "calendar", Direct: true}},
 		Refs:          []module.RefKind{eventRef(mc.Env)},
 		Day:           dayProvider{env: mc.Env},
 		Settings:      slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
 		Host:          calendar.HostSettings(),
 		Sections:      calendar.Sections(),
-		Attention:     AttentionSources(),
-		Jobs:          []scheduler.Definition{CandidatesJob(m.Jobs), CalDAVJob(m.Jobs)},
+		Jobs:          []scheduler.Definition{CalDAVJob(m.Jobs)},
+		MessageScans:  []module.MessageScan{{Name: eventscan.Name, Run: eventscan.Refresh}},
 		Requires:      Requirements(),
 		Commands:      []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
-			"calendar candidates":  {Needs: []string{unit.Mail}},
 			"calendar google-auth": {Always: true},
 		},
 		Tools: ToolDefinitions(),

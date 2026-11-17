@@ -73,7 +73,7 @@ func traceICloud(ctx context.Context, lease *connections.Lease, req connections.
 	}
 	_, _ = fmt.Fprintf(t.out, "capability: %s\nendpoint: %s\nuser: %s, from %s; the same as the mail login: %s\n",
 		req.Capability, t.maskURL(endpoint), t.mask(session.user), session.source, same)
-	result := session.check(ctx, req.Capability, "")
+	result, _ := session.check(ctx, req.Capability, "", 1)
 	t.repeat(ctx, min(req.Repeat, traceRepeatMost))
 	return result, nil
 }

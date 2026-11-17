@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -240,6 +241,45 @@ func (l *Lease) Report(r Result) {
 		l.reported(r.State)
 	default:
 	}
+}
+
+func (l *Lease) Stored(ctx context.Context, capability string) (Result, bool) {
+	if l.store == nil || l.store.q == nil {
+		return Result{}, false
+	}
+	var raw string
+	if err := l.store.q.QueryRowContext(ctx, "SELECT results_json FROM connections WHERE id = ?", l.id).Scan(&raw); err != nil {
+		return Result{}, false
+	}
+	var results []Result
+	if err := json.Unmarshal([]byte(raw), &results); err != nil {
+		return Result{}, false
+	}
+	for _, r := range results {
+		if r.Capability == capability {
+			return r, true
+		}
+	}
+	return Result{}, false
+}
+
+func (l *Lease) Settle(ctx context.Context, r Result) error {
+	if l.store == nil || l.store.d == nil || r.Capability == "" {
+		return nil
+	}
+	if _, ok := reporters.Load(l.store.d); !ok {
+		return nil
+	}
+	current, err := l.store.Get(ctx, l.id)
+	if err != nil || current.State == Unconfigured || current.State == Disabled {
+		return err
+	}
+	if err := l.store.Observe(ctx, l.id, l.revision, r); err != nil && !errors.As(err, new(*Conflict)) {
+		return err
+	}
+	observed.Store(observedKey{store: l.store, id: l.id, capability: r.Capability}, observation{state: r.State, at: time.Now().UnixNano()})
+	l.reported(r.State)
+	return nil
 }
 
 func (r RuntimeReport) Record(ctx context.Context) error {

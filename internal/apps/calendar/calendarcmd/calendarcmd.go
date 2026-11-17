@@ -13,7 +13,7 @@ import (
 type Open func(context.Context) (*calapp.Service, calapp.Config, func(), error)
 
 func Command(open Open, google connectionsapp.Open) *cli.Command {
-	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(open), googleAuthCommand(google), syncCommand(open)}}
+	return &cli.Command{Name: "calendar", Commands: []*cli.Command{googleAuthCommand(google), syncCommand(open)}}
 }
 
 func syncCommand(open Open) *cli.Command {

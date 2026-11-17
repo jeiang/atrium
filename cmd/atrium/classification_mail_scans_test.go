@@ -41,7 +41,7 @@ func newMailClassifierRig(t *testing.T, answer func(required []string, user stri
 	for _, q := range []string{
 		"UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
 		"DELETE FROM flag_decisions WHERE message_id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
-		"DELETE FROM event_candidates",
+		"UPDATE messages SET first_seen = (SELECT applied_at FROM schema_migrations WHERE version = 8) + 1 WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
 	} {
 		if _, err := r.d.Write.Exec(q); err != nil {
 			t.Fatal(err)
@@ -108,7 +108,7 @@ func callerOf(t *testing.T, body map[string]any) string {
 	switch strings.Join(keys, ",") {
 	case "deadline_or_payment_due,flag,person_asking,security_event":
 		return "flag"
-	case "has_event":
+	case "all_day,end,has_event,location,start,title":
 		return "event"
 	}
 	return strings.Join(keys, ",")
@@ -177,15 +177,20 @@ func (r *mailClassifierRig) flag(t *testing.T, id int64) flagRow {
 
 func (r *mailClassifierRig) event(t *testing.T, id int64) string {
 	t.Helper()
-	var status string
-	err := r.d.Read.QueryRow("SELECT status FROM event_candidates WHERE message_id = ?", id).Scan(&status)
-	if err == sql.ErrNoRows {
-		return ""
-	}
-	if err != nil {
+	var proposals, scans int
+	if err := r.d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'calendar_event' AND json_extract(payload, '$.source.message_id') = ?", id).Scan(&proposals); err != nil {
 		t.Fatal(err)
 	}
-	return status
+	if err := r.d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'events' AND message_id = ?", id).Scan(&scans); err != nil {
+		t.Fatal(err)
+	}
+	switch {
+	case proposals > 0:
+		return "proposed"
+	case scans > 0:
+		return "none"
+	}
+	return ""
 }
 
 func (r *mailClassifierRig) noMailWrites(t *testing.T) {
@@ -210,8 +215,10 @@ func scriptedAnswers(t *testing.T, script *mailscript.Script, flags map[string]s
 }
 
 const (
-	flagYes = `{"person_asking":true,"deadline_or_payment_due":false,"security_event":false,"flag":true}`
-	flagNo  = `{"person_asking":false,"deadline_or_payment_due":false,"security_event":false,"flag":false}`
+	flagYes  = `{"person_asking":true,"deadline_or_payment_due":false,"security_event":false,"flag":true}`
+	flagNo   = `{"person_asking":false,"deadline_or_payment_due":false,"security_event":false,"flag":false}`
+	eventYes = `{"has_event":true,"title":"Team dinner","start":"2027-10-09T19:00:00","end":"2027-10-09T21:00:00","all_day":false,"location":"Harbour Grill"}`
+	eventNo  = `{"has_event":false,"title":"","start":"","end":"","all_day":false,"location":""}`
 )
 
 func TestMailPassFlagsAndEventsThroughTheClassifier(t *testing.T) {
@@ -221,7 +228,7 @@ func TestMailPassFlagsAndEventsThroughTheClassifier(t *testing.T) {
 	r := newMailClassifierRig(t, scriptedAnswers(t, script, flags, events))
 	a, b, c := r.targets[0], r.targets[1], r.targets[2]
 	flags[a.subject], flags[b.subject], flags[c.subject] = flagYes, flagNo, flagNo
-	events[a.subject], events[b.subject], events[c.subject] = `{"has_event":true}`, `{"has_event":false}`, `{"has_event":false}`
+	events[a.subject], events[b.subject], events[c.subject] = eventYes, eventNo, eventNo
 
 	if code, stderr := r.sync(t); code != cli.ExitOK {
 		t.Fatalf("sync: exit %d stderr %q", code, stderr)
@@ -234,8 +241,8 @@ func TestMailPassFlagsAndEventsThroughTheClassifier(t *testing.T) {
 			t.Errorf("negative flag judgment for %q is not a stored false: %+v", m.subject, got)
 		}
 	}
-	if got := r.event(t, a.id); got != "queued" {
-		t.Errorf("event candidate for %q: %q", a.subject, got)
+	if got := r.event(t, a.id); got != "proposed" {
+		t.Errorf("event proposal for %q: %q", a.subject, got)
 	}
 	for _, m := range []classifiedMail{b, c} {
 		if got := r.event(t, m.id); got != "none" {
@@ -251,7 +258,8 @@ func TestMailPassFlagsAndEventsThroughTheClassifier(t *testing.T) {
 			continue
 		}
 		body := req.body
-		if body["model"] != pricing.HaikuID || body["max_tokens"] != float64(80) {
+		tokens := map[string]float64{"flag": 80, "event": 300}[req.caller]
+		if body["model"] != pricing.HaikuID || body["max_tokens"] != tokens {
 			t.Errorf("%s request model/max_tokens: %v %v", req.caller, body["model"], body["max_tokens"])
 		}
 		for _, key := range []string{"tools", "tool_choice"} {
@@ -339,9 +347,12 @@ func TestMailPassBudgetRefusalDefersPaidStagesUntilRaised(t *testing.T) {
 		}
 	}
 	for _, m := range r.targets {
-		if got := r.event(t, m.id); got != "" {
-			t.Errorf("deferred message %q has an event status %q", m.subject, got)
+		if got := r.event(t, m.id); got != "none" {
+			t.Errorf("budget-refused message %q is not marked as skipped for events: %q", m.subject, got)
 		}
+	}
+	if n := scans("kind = 'events' AND found = 0"); n != len(r.targets) {
+		t.Errorf("budget-skipped event markers = %d, want %d", n, len(r.targets))
 	}
 	var caller, item string
 	if err := r.d.Read.QueryRow("SELECT last_caller, last_item_key FROM inference_classification_deferrals").Scan(&caller, &item); err != nil ||
@@ -377,7 +388,7 @@ func TestMailPassBudgetRefusalDefersPaidStagesUntilRaised(t *testing.T) {
 	slices.Sort(calls["flag"])
 	want := []string{b.subject, c.subject}
 	slices.Sort(want)
-	if !slices.Equal(calls["flag"], want) || len(calls["event"]) != 3 {
+	if !slices.Equal(calls["flag"], want) || len(calls["event"]) != 0 {
 		t.Fatalf("retry after raising the budget: %v", calls)
 	}
 	for _, m := range []classifiedMail{b, c} {
@@ -386,8 +397,8 @@ func TestMailPassBudgetRefusalDefersPaidStagesUntilRaised(t *testing.T) {
 		}
 	}
 	for _, m := range r.targets {
-		if got := r.event(t, m.id); got == "" {
-			t.Errorf("deferred message %q has no event judgment after the retry", m.subject)
+		if got := r.event(t, m.id); got != "none" {
+			t.Errorf("a budget-skipped message %q was judged for events after the retry: %q", m.subject, got)
 		}
 	}
 	seen := map[string]map[string]bool{"commitments": {}, "packages": {}}

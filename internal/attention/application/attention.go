@@ -18,7 +18,6 @@ var ErrNoModuleSet = errors.New("attention: no module set")
 
 var sourceScopes = map[string]string{
 	"proposals":             state.Review,
-	"candidates":            state.Calendar,
 	"drafts":                state.Mail,
 	"loops":                 state.Mail,
 	"commitments":           state.Mail,

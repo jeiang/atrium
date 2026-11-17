@@ -94,7 +94,6 @@
     {
       "area": "integrations",
       "operations": [
-        "calendar.draft-candidates",
         "calendar.sync",
         "connections.dependencies",
         "connections.disable",
@@ -111,8 +110,8 @@
         "contacts.lookup",
         "contacts.sync"
       ],
-      "required": 16,
-      "bound": 16
+      "required": 15,
+      "bound": 15
     },
     {
       "area": "knowledge",
@@ -428,7 +427,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 255,
-  "total_bound": 255,
+  "total_required": 254,
+  "total_bound": 254,
   "total_approval_reached": 10
 }

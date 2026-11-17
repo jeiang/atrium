@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/apps/calendar"
-	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/ledger"
 )
@@ -106,9 +105,6 @@ func (s *Service) ProposeCreate(ctx context.Context, in EventInput) (application
 		source["message_id"] = *in.SourceMessageID
 	}
 	id, created, err := s.proposals().Propose(ctx, raw, source, "")
-	if err == nil && created && in.SourceMessageID != nil {
-		_, err = candidates.Drafted(ctx, s.db, *in.SourceMessageID, s.now())
-	}
 	return s.proposed(ctx, ProposeCreateName, id, created, err)
 }
 

@@ -67,7 +67,7 @@ func TestOwnerScheduleEditOnTheScheduledPageWritesOnlyTheJobRow(t *testing.T) {
 
 	w := asstBrowse(t, startServeIn(t, dir))
 	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "package-tracking", "0 * * * *", "calendar-candidates", "ops-sampler")
+	w.want(code, http.StatusOK, page, "package-tracking", "0 * * * *", "ops-sampler")
 
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var id, n int64

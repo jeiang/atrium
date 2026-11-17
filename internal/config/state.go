@@ -18,6 +18,7 @@ type State struct {
 	reconcile    func(context.Context, *db.DB, Host) error
 	credential   AccountCredentialFunc
 	hostAccounts HostAccountsFunc
+	accountRows  AccountRowsFunc
 	dbKey        db.Key
 	dbPath       string
 	hooks        map[*func()]struct{}
@@ -31,7 +32,7 @@ func (s *State) Detached() *State {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return &State{core: s.core, accounts: s.accounts, passwords: s.passwords, settings: s.settings, host: s.host, reconcile: s.reconcile,
-		credential: s.credential, hostAccounts: s.hostAccounts, dbKey: s.dbKey, dbPath: s.dbPath}
+		credential: s.credential, hostAccounts: s.hostAccounts, accountRows: s.accountRows, dbKey: s.dbKey, dbPath: s.dbPath}
 }
 
 func (s *State) SetDBKey(k db.Key) {
@@ -173,19 +174,13 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	var (
-		files         []AccountSpec
-		filePasswords map[string]string
-	)
+	var filePasswords map[string]string
 	if hostAccounts != nil {
-		if files, filePasswords, err = hostAccounts(host); err != nil {
+		if _, filePasswords, err = hostAccounts(host); err != nil {
 			return err
 		}
 	}
-	if err := reconcileAccounts(ctx, d, files); err != nil {
-		return err
-	}
-	accounts, passwords, err := s.loadAccountsFromDB(ctx, d.Read, filePasswords)
+	accounts, passwords, err := s.loadAccountRows(ctx, d.Read, filePasswords)
 	if err != nil {
 		return err
 	}

@@ -31,9 +31,10 @@ const (
 )
 
 var (
-	discoveries    sync.Map
-	syncOutcomes   sync.Map
-	transientWaits = []time.Duration{2 * time.Second, 6 * time.Second}
+	discoveries   sync.Map
+	syncOutcomes  sync.Map
+	syncing       sync.Map
+	transientWait = 2 * time.Second
 )
 
 func cacheKey(capability, endpoint, user, password string) string {
