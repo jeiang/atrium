@@ -50,10 +50,7 @@ test.describe('Downloads', () => {
     await gotoShell(page, '/apps');
     const library = page.locator('[data-app="media"]');
     await expect(library.getByRole('link', { name: /^Downloads/ })).toHaveAttribute('href', '/apps/torrents');
-    await expect(library.getByRole('link', { name: /^Channels/ })).toHaveAttribute(
-      'href',
-      '/apps/media/following',
-    );
+    await expect(library.getByRole('link', { name: /^Channels/ })).toHaveAttribute('href', '/apps/media/following');
     await expect(library.getByRole('link', { name: /^Library/ })).toHaveAttribute('href', '/apps/media');
   });
 
