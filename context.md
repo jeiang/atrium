@@ -54,7 +54,12 @@ claims about the running application. Operator contracts are in
   are not listed. Event candidates read invitations and message bodies from
   the feed; the mail pass still calls them, passing its paid event judge.
   The drafts and packages attention sources live in
-  `internal/mail/attentionsources`.
+  `internal/mail/attentionsources`. The Mail app's store (the message
+  client, the write gate, queries, roles, settings and tuning), IMAP client,
+  connection opener, message and MIME parsers, search, sync, rules and router
+  live in `internal/apps/mail`; the rest of Mail stays in `internal/mail`
+  until the later P13 slices move it, and the Mail declaration claims both
+  trees as the one `mail` unit.
 - The core `signals` unit (`internal/signals` for the domain,
   `internal/signals/signalsmodule` for its service, API routes, Loops page,
   `open_loops` tool and declaration) owns open loops, commitments and

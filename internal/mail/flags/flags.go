@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail/message"
 	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/classify"
-	"github.com/jeiang/atrium/internal/mail/message"
 )
 
 type row struct {

@@ -7,6 +7,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
+	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
+	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -19,7 +23,6 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
@@ -27,13 +30,10 @@ import (
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/executors"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/mailconn"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/mail/run"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -153,7 +153,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilitySMTP, Features: []string{"mail sending"}},
 			{Kind: tracking.KindShip24, Soft: true, Capability: "api", Features: []string{"package tracking"}},
 		},
-		Packages: []string{"internal/assistant/tools/mail", "internal/mail"},
+		Packages: []string{"internal/apps/mail", "internal/assistant/tools/mail", "internal/mail"},
 		Tables: []string{"accounts", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state",
 			"mail_scans", "mailboxes", "message_fts", "messages", "package_events", "packages", "rules", "watch_dismissed"},
 		Operations:      operations,

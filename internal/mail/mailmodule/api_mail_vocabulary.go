@@ -3,7 +3,7 @@ package mailmodule
 import (
 	"slices"
 
-	"github.com/jeiang/atrium/internal/mail/rules"
+	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 

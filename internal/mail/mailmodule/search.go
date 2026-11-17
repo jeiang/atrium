@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	mailsearch "github.com/jeiang/atrium/internal/mail/search"
+	mailsearch "github.com/jeiang/atrium/internal/apps/mail/search"
 	"github.com/jeiang/atrium/internal/search"
 )
 

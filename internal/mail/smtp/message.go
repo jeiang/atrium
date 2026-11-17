@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/apps/mail/mime"
 )
 
 const maxLineLength = 78

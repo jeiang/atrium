@@ -6,9 +6,9 @@ import (
 
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/scans"
 	"github.com/jeiang/atrium/internal/mail/tracking"

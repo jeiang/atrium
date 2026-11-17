@@ -41,7 +41,7 @@ var pinnedNames = map[string]string{
 	atrium + "apps/calendar.Event":                     "CalendarEvent",
 	atrium + "apps/calendar.Source":                    "CalendarSource",
 	atrium + "assistant/assistantmodule.apiAttachment": "ThreadAttachment",
-	atrium + "mail/message.Attachment":                 "MailAttachment",
+	atrium + "apps/mail/message.Attachment":            "MailAttachment",
 	atrium + "mail/live.Action":                        "LiveAction",
 	atrium + "attention.Action":                        "AttentionAction",
 	atrium + "assistant/assistantmodule.apiAbout":      "AboutPage",

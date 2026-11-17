@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/router"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/report"
-	"github.com/jeiang/atrium/internal/mail/router"
 )
 
 var Agreements = [...]string{"agree", "disagree", "pending", "gone"}

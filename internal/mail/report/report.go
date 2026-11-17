@@ -14,12 +14,12 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/router"
+	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
 	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
-	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/ordmap"
 	"github.com/jeiang/atrium/internal/timex"
 )

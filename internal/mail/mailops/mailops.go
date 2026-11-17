@@ -9,11 +9,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/mime"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
-	"github.com/jeiang/atrium/internal/mail/mime"
 	"golang.org/x/text/cases"
 )
 

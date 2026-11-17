@@ -8,9 +8,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
-	"github.com/jeiang/atrium/internal/mail/rules"
 )
 
 const (

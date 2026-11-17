@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	mailrun "github.com/jeiang/atrium/internal/mail/run"
 )

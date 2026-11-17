@@ -6,10 +6,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/backlog"
 	"github.com/jeiang/atrium/internal/mail/live"
-	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 )
 
 const (
