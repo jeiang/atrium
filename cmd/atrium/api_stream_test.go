@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
@@ -320,4 +322,31 @@ func TestStreamExpiredIs410(t *testing.T) {
 		t.Fatalf("active stream after pruning: %d", resp.StatusCode)
 	}
 	free()
+}
+
+func TestAThreadWithThinkingDisabledSendsThinkingDisabled(t *testing.T) {
+	s := newStreamSite(t)
+	for _, tc := range []struct {
+		thinking string
+		want     map[string]any
+	}{
+		{"disabled", map[string]any{"type": "disabled"}},
+		{"adaptive", map[string]any{"type": "adaptive", "display": "summarized"}},
+	} {
+		before := len(s.api.Requests())
+		s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("ok")))
+		made := s.do(http.MethodPost, "/api/v1/threads", s.token, map[string]any{"text": "hello", "model": pricing.HaikuID, "effort": "low", "thinking": tc.thinking})
+		if made.status != http.StatusCreated {
+			t.Fatalf("create %s: %d %s", tc.thinking, made.status, made.body)
+		}
+		waitRunState(t, s.d, number(t, made.json["thread"].(map[string]any)["id"]), "done")
+		sent := s.api.Requests()[before:]
+		if len(sent) != 1 {
+			t.Fatalf("%s: %d model requests, want 1", tc.thinking, len(sent))
+		}
+		body := sent[0].JSON(t)
+		if body["model"] != pricing.HaikuID || !reflect.DeepEqual(body["thinking"], tc.want) {
+			t.Fatalf("%s thread sent model %v thinking %v, want %v", tc.thinking, body["model"], body["thinking"], tc.want)
+		}
+	}
 }
