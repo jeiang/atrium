@@ -54,6 +54,12 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 			}
 			return set.Evaluate(ctx, q)
 		},
+		Follow: func(ctx context.Context, q db.Querier) (bool, error) {
+			if set == nil {
+				return false, module.ErrNotEvaluated
+			}
+			return set.Follow(ctx, q)
+		},
 		Catalog: func() *module.Catalog { return cat },
 		Env:     env,
 	}

@@ -14,13 +14,14 @@ import (
 type apiSpaceFields struct {
 	Name         string `json:"name"`
 	Instructions string `json:"instructions,omitempty"`
-	Effort       string `json:"effort"`
-	ContextLimit *int64 `json:"context_limit"`
+	Effort       string `json:"effort,omitempty"`
+	ContextLimit *int64 `json:"context_limit,omitempty"`
 	Private      bool   `json:"private,omitempty"`
 }
 
 type apiSpacePatch struct {
 	SpaceID      int64   `path:"space_id" api:"min=1" json:"-"`
+	IfMatch      string  `header:"If-Match" json:"-"`
 	Name         *string `json:"name"`
 	Instructions *string `json:"instructions"`
 	Effort       *string `json:"effort"`
@@ -122,6 +123,14 @@ func spaceAPIBindings(p *apiPages) []application.Binding {
 				return application.Change[apiSpaceChanged]{}, err
 			}
 			current := read.Data.Space
+			var ifMatch *float64
+			if tag := strings.Trim(strings.TrimPrefix(in.IfMatch, "W/"), "\""); tag != "" && application.Revision(tag) != read.Revision {
+				at, err := strconv.ParseFloat(tag, 64)
+				if err != nil {
+					return application.Change[apiSpaceChanged]{}, &application.Error{Code: application.Conflict, Reason: "stale", Message: "The space changed since it was read."}
+				}
+				ifMatch = &at
+			}
 			fields := asstapp.SpaceFields{Name: current.Name, Instructions: current.Instructions, Effort: current.Effort, ContextLimit: strconv.FormatInt(current.ContextLimit, 10), Private: current.Private}
 			if in.Name != nil {
 				fields.Name = *in.Name
@@ -141,7 +150,7 @@ func spaceAPIBindings(p *apiPages) []application.Binding {
 			if strings.TrimSpace(fields.Name) == "" {
 				return application.Change[apiSpaceChanged]{}, invalidField("name", "Give the space a name.")
 			}
-			result, err := svc.SpaceEdit(ctx, asstapp.SpaceEditInput{ID: in.SpaceID, SpaceFields: fields})
+			result, err := svc.SpaceEdit(ctx, asstapp.SpaceEditInput{ID: in.SpaceID, IfMatch: ifMatch, SpaceFields: fields})
 			return changeAs(result, err, changed)
 		}),
 		apiCommand(p, asstapp.DescribeSpaceArchive(), shape(), "POST /knowledge/spaces/{space_id}/archive", func(ctx context.Context, svc *asstapp.Service, in apiSpaceArchive) (application.Change[apiSpaceChanged], error) {

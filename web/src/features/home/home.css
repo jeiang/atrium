@@ -1,0 +1,133 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .home {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "composer"
+      "needs"
+      "weather"
+      "digest";
+    gap: var(--s-6);
+    max-inline-size: 72rem;
+    margin-inline: auto;
+  }
+
+  .home__composer,
+  .home__off {
+    grid-area: composer;
+  }
+
+  .home__needs {
+    grid-area: needs;
+  }
+
+  .home__weather {
+    grid-area: weather;
+  }
+
+  .home__digest {
+    grid-area: digest;
+  }
+
+  .home__composer {
+    inline-size: 100%;
+    max-inline-size: var(--read-w);
+    padding-block-start: clamp(var(--s-2), 4vh, var(--s-7));
+  }
+
+  .home__all {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--target);
+    font-size: var(--t-sm);
+    font-weight: 700;
+  }
+
+  .home__stale {
+    font-size: var(--t-sm);
+    color: var(--ink-3);
+  }
+
+  .home__weather > .card,
+  .home__weather > .statebox {
+    min-block-size: 13rem;
+  }
+
+  .home__skel-title {
+    grid-column: 2;
+    inline-size: 60%;
+  }
+
+  .home__skel-meta {
+    grid-column: 2;
+    inline-size: 35%;
+    font-size: var(--t-xs);
+  }
+
+  .home__skel-head {
+    inline-size: 40%;
+    font-size: var(--t-lg);
+  }
+
+  .home__skel-figure {
+    inline-size: 5rem;
+    block-size: var(--t-figure);
+  }
+
+  .home__skel-facts {
+    block-size: calc(2lh + var(--s-1));
+  }
+
+  .home__skeleton .digest__list > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home__skeleton .digest__list > li::before {
+    content: none;
+  }
+
+  @media (--wide) {
+    .home {
+      grid-template-columns: minmax(0, 1fr) 20rem;
+      grid-template-areas:
+        "composer composer"
+        "needs weather"
+        "digest weather";
+      align-items: start;
+    }
+
+    .home__weather {
+      position: sticky;
+      inset-block-start: var(--s-6);
+    }
+  }
+
+  @media (--phone) {
+    .home {
+      grid-template-areas:
+        "weather"
+        "needs"
+        "composer";
+      gap: var(--s-5);
+    }
+
+    .home__digest {
+      display: none;
+    }
+
+    .home__composer {
+      position: sticky;
+      inset-block-end: var(--chrome-end, 0px);
+      z-index: 20;
+      max-inline-size: none;
+      padding-block: var(--s-2);
+      background: var(--paper);
+    }
+
+    .home__off {
+      grid-area: weather;
+    }
+  }
+}

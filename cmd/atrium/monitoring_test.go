@@ -16,7 +16,7 @@ func TestMonitoringPackReferencesOnlyServedMetrics(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	opsBase := opsAddr(t)
 	startServeIn(t, dir)
-	_, scrape, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)
+	_, scrape, _ := fetch(t, http.DefaultClient, "GET", opsBase()+"/metrics", nil)
 
 	for _, path := range []string{"../../nix/monitoring/atrium.rules.yml", "../../nix/monitoring/atrium-dashboard.json"} {
 		raw, err := os.ReadFile(path)

@@ -60,8 +60,8 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 		body = application.BodyNone
 	}
 	shape = defaults[I](shape, reflect.TypeFor[application.Change[O]](), body)
-	if shape.Unowned && target != unownedTarget {
-		panic("api: only " + unownedTarget + " may skip the owner binding, not " + target)
+	if shape.Unowned && target != unownedPause && target != unownedResume {
+		panic("api: only " + unownedPause + " and " + unownedResume + " may skip the owner binding, not " + target)
 	}
 	if d != nil {
 		owner := d.Owner()
@@ -102,7 +102,8 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 }
 
 const (
-	unownedTarget   = "POST /mail/live/pause"
+	unownedPause    = "POST /mail/live/pause"
+	unownedResume   = "POST /mail/live/resume"
 	ownerRetryAfter = 5 * time.Second
 )
 

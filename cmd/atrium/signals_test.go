@@ -63,7 +63,7 @@ func signalsJSON(t *testing.T, raw []byte) string {
 func TestSignalsRefreshAndReadsMatchTheStoredLoopsCommitmentsAndReminders(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	script := mailscript.Load(t)
-	due := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
+	due := time.Now().UTC().Format("2006-01-02")
 	api.AnswerJSON(func(required []string, user string) (json.RawMessage, error) {
 		if slices.Equal(required, []string{"commitments"}) {
 			if strings.Contains(user, "Subject: Dinner?") {

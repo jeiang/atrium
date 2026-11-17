@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024", "webworker"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": false,
+    "moduleDetection": "legacy",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": []
+  },
+  "files": ["sw.ts"]
+}

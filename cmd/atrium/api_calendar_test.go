@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/calendar/caldavtest"
+	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/unit"
 )
 
@@ -33,7 +33,7 @@ func TestCalendarContactsAPI(t *testing.T) {
 		proxy.ServeHTTP(w, r)
 	}))
 	t.Cleanup(cards.Close)
-	setEnv(t, calendar.CardDAVEnv, cards.URL+"/")
+	setEnv(t, davmirror.CardDAVEnv, cards.URL+"/")
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", strings.Replace(aliceCard, "END:VCARD", "TEL:+15550100\r\nEND:VCARD", 1))
 	token := localAPIToken(t, "api")
@@ -141,8 +141,8 @@ func TestCalendarContactsSyncAPITakesTheJobLock(t *testing.T) {
 		proxy.ServeHTTP(w, r)
 	}))
 	t.Cleanup(dav.Close)
-	setEnv(t, calendar.CalDAVEnv, dav.URL+"/")
-	setEnv(t, calendar.CardDAVEnv, dav.URL+"/")
+	setEnv(t, davmirror.CalDAVEnv, dav.URL+"/")
+	setEnv(t, davmirror.CardDAVEnv, dav.URL+"/")
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)
 	token := localAPIToken(t, "api")

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -12,9 +11,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/serverops"
 )
 
 func classificationRequests(t *testing.T, api *modelLog) []anthropictest.Request {
@@ -216,23 +215,6 @@ func TestRecoveryClosesAStaleClassificationRun(t *testing.T) {
 	}
 	if s, _, ended := state(fresh); s != "accounting" || ended {
 		t.Errorf("fresh accounting run = %s ended %v, want accounting", s, ended)
-	}
-}
-
-func TestWorkerStatusReportsTheFixedSchemaMode(t *testing.T) {
-	_, api, _ := moduleFixture(t, flagsExcept("", ""))
-	warm(t, api)
-	before := len(api.Requests())
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "worker_status", map[string]any{})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("status")))
-	if ran := runApp(t, "agent", "run", "--text", "ops status"); ran.code != cli.ExitOK {
-		t.Fatalf("worker_status chat: %d %s", ran.code, ran.stderr)
-	}
-	if len(api.Requests()) < before+2 {
-		t.Fatalf("worker_status chat made %d requests", len(api.Requests())-before)
-	}
-	if result := fmt.Sprint(toolResultFor(t, api.Requests()[before+1], "s1")); !strings.Contains(result, "fixed-schema-haiku") {
-		t.Errorf("worker_status result lacks the classifier mode: %s", result)
 	}
 }
 

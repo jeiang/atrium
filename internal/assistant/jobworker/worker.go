@@ -14,7 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/unit"
 )
@@ -127,7 +127,7 @@ func owned(own Own, owner string, run func(context.Context, scheduler.Run) (sche
 }
 
 func gate(ctx context.Context, svc *service.Service, now float64) (scheduler.Gate, error) {
-	g := scheduler.Gate{Paused: safety.IsPaused(svc.Cfg.PausePath())}
+	g := scheduler.Gate{Paused: pause.Paused(svc.Cfg.PausePath())}
 	loc, err := config.From(ctx).Location(svc.Env)
 	if err != nil {
 		return g, err

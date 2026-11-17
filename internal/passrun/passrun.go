@@ -39,6 +39,8 @@ func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 type Last struct {
 	Job     string
+	JobID   int64
+	RunID   int64
 	Failed  bool
 	Message string
 	Success *float64
@@ -56,7 +58,7 @@ func Latest(ctx context.Context, q db.Querier) ([]Last, error) {
 		if !ok {
 			continue
 		}
-		out = append(out, Last{Job: p.name, Failed: r.Status == scheduler.StatusError, Message: logx.Scrub(r.Error), Success: r.OKEndedAt, maxAge: p.maxAge})
+		out = append(out, Last{Job: p.name, JobID: r.JobID, RunID: r.RunID, Failed: r.Status == scheduler.StatusError, Message: logx.Scrub(r.Error), Success: r.OKEndedAt, maxAge: p.maxAge})
 	}
 	slices.SortFunc(out, func(a, b Last) int { return cmp.Compare(a.Job, b.Job) })
 	return out, nil

@@ -1,11 +1,20 @@
-import { app as calendar } from './calendar/app';
-import { app as library } from './library/app';
-import { app as mail } from './mail/app';
-import { app as packages } from './packages/app';
-import { app as serverOps } from './server-ops/app';
-import { app as torrents } from './torrents/app';
-import type { AppDefinition } from './types';
+export interface AppScreen {
+  key: string;
+  label: string;
+  path: string;
+  wide?: boolean;
+}
 
-export type { AppDefinition } from './types';
+export const screens: Readonly<Record<string, string>> = {
+  '/apps/media/downloads': '/apps/torrents',
+  '/apps/media/library': '/apps/media',
+  '/apps/media/channels': '/apps/media/following',
+};
 
-export const apps: readonly AppDefinition[] = [mail, calendar, packages, torrents, library, serverOps];
+export const appScreens: Readonly<Record<string, readonly AppScreen[]>> = {
+  calendar: [
+    { key: 'agenda', label: 'Agenda', path: '/apps/calendar' },
+    { key: 'week', label: 'Week', path: '/apps/calendar/week', wide: true },
+    { key: 'candidates', label: 'Candidates', path: '/apps/calendar/candidates' },
+  ],
+};

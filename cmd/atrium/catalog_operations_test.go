@@ -157,8 +157,8 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 	}
 	approvalOnly := []string{
 		"assistant.lookup", "assistant.memory.search", "assistant.memory.zoom", "assistant.research",
-		"assistant.result.recall", "assistant.schedule.create", "assistant.search-web", "assistant.weather",
-		"assistant.web-fetch", "calendar.request-delete", "mail.propose-tracking",
+		"assistant.result.recall", "assistant.schedule.create", "assistant.search-web",
+		"assistant.web-fetch", "calendar.request-delete", "mail.propose-tracking", "weather.forecast",
 	}
 	for _, row := range all.Operations {
 		want := ""

@@ -23,6 +23,7 @@ type connectionConfig struct {
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:            Kind,
+		Offers:          []string{"models"},
 		CredentialSlots: []string{"api_key"},
 		Validate:        validate,
 		Test:            test,

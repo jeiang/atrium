@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 const (
@@ -80,7 +80,7 @@ func lastToolResult(t *testing.T, d *db.DB, thread int64) librarySearch {
 
 func searchThroughServe(t *testing.T, api *modelLog, d *db.DB, w *asstWeb, query string) librarySearch {
 	t.Helper()
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("lib", "media_library_search", map[string]any{"query": query})), asstReply("done"))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("lib", "library_search", map[string]any{"query": query})), asstReply("done"))
 	thread := w.start(map[string]string{"text": "find " + query})
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("library search run %s", state)
@@ -109,7 +109,7 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 		t.Fatalf("library search %+v", found)
 	}
 	found = searchThroughServe(t, api, d, w, "dune")
-	if len(found.Results) != 1 || found.Results[0].Kind != media.KindMovie || len(found.Results[0].Files) != 1 || found.Results[0].Files[0] != "movies/"+libraryMovie+"/"+libraryMovie+".mkv" {
+	if len(found.Results) != 1 || found.Results[0].Kind != library.KindMovie || len(found.Results[0].Files) != 1 || found.Results[0].Files[0] != "movies/"+libraryMovie+"/"+libraryMovie+".mkv" {
 		t.Fatalf("movie search %+v", found)
 	}
 
@@ -137,7 +137,7 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 		}
 	}
 
-	if out := unescape(toolResult(t, "media_library_search", map[string]any{"query": "dune"})); !strings.Contains(out, `"code":"unavailable"`) {
+	if out := unescape(toolResult(t, "library_search", map[string]any{"query": "dune"})); !strings.Contains(out, `"code":"unavailable"`) {
 		t.Fatalf("a process without a catalogue = %s, want unavailable", out)
 	}
 

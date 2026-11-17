@@ -88,7 +88,7 @@ func TestCommitmentResourceJoinsTasksAndMail(t *testing.T) {
 	sketch := get("commitment:1")
 	links, _ := sketch["links"].([]any)
 	if sketch["side"] != "todo" || sketch["owner"] != "me" || sketch["counterpart"] != "pat@example.com" || sketch["source"] != "commitment" ||
-		fmt.Sprint(sketch["actions"]) != "[done dismiss]" || len(links) != 2 {
+		fmt.Sprint(sketch["actions"]) != "[done dismiss snooze]" || len(links) != 2 {
 		t.Fatalf("commitment = %v", sketch)
 	}
 	if l := links[0].(map[string]any); l["kind"] != "message" || l["id"] != "1" || l["title"] != "Garden plans" {

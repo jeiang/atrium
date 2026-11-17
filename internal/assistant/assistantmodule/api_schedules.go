@@ -32,6 +32,15 @@ type apiScheduleRuns struct {
 	Cursor api.Cursor `query:"cursor" json:"-"`
 }
 
+type apiScheduleRun struct {
+	JobID int64 `path:"job_id" api:"min=1" json:"-"`
+	RunID int64 `path:"run_id" api:"min=1" json:"-"`
+}
+
+type apiSchedulePreview struct {
+	Schedule string `query:"schedule" json:"-"`
+}
+
 type apiSchedulePatch struct {
 	JobID    int64   `path:"job_id" api:"min=1" json:"-"`
 	Schedule *string `json:"schedule,omitempty"`
@@ -100,7 +109,11 @@ func scheduleAPIBindings(p *apiPages) []application.Binding {
 	runNow := shape(application.NotFound, application.Conflict, application.Unavailable)
 	runNow.Success = 202
 	runNow.Body = application.BodyNone
-	runNow.Description = "Asks the running serve to run the schedule now, through the same pause, module and budget checks as a scheduled run, and answers at once with the requested run."
+	runNow.Description = "Asks the running serve to run the schedule now, through the same pause, module and budget checks as a scheduled run, and answers at once with the requested run: run is its id. Its thread_id is set once serve starts it; read it from GET /schedules/{job_id}/runs/{run_id}."
+	preview := shape(application.Invalid)
+	preview.Description = "The next 5 times a cadence would run in the server zone, parsed and stepped by the scheduler's own code. A cadence it cannot parse is 422 invalid with the reason on the schedule field, as when creating a schedule."
+	runRead := shape(application.NotFound)
+	runRead.Description = "One run of a schedule, the same row as in GET /schedules/{job_id}/runs. thread_id stays null until serve starts the run."
 	return []application.Binding{
 		apiQuery(p, asstapp.DescribeScheduleList(), shape(application.Invalid), "GET /schedules",
 			func(ctx context.Context, svc *asstapp.Service, in apiScheduleList) (application.Read[apiSchedules], error) {
@@ -114,27 +127,21 @@ func scheduleAPIBindings(p *apiPages) []application.Binding {
 				}
 				return application.Read[apiSchedules]{Revision: read.Revision, Data: apiSchedules{Items: page.Items, NextCursor: page.NextCursor, TZ: read.Data.TZ}}, nil
 			}),
+		apiQuery(p, asstapp.DescribeScheduleRuns(), shape(application.Invalid), "GET /schedules/runs",
+			func(ctx context.Context, svc *asstapp.Service, in apiScheduleList) (application.Read[web.List[asstapp.ScheduleRun]], error) {
+				return scheduleRuns(ctx, svc, 0, in.Limit, in.Cursor)
+			}),
+		apiQuery(p, asstapp.DescribeSchedulePreview(), preview, "GET /schedules/preview",
+			func(ctx context.Context, svc *asstapp.Service, in apiSchedulePreview) (application.Read[asstapp.SchedulePreview], error) {
+				return svc.SchedulePreview(ctx, asstapp.SchedulePreviewInput{Schedule: in.Schedule})
+			}),
+		apiQuery(p, asstapp.DescribeScheduleRunRead(), runRead, "GET /schedules/{job_id}/runs/{run_id}",
+			func(ctx context.Context, svc *asstapp.Service, in apiScheduleRun) (application.Read[asstapp.ScheduleRun], error) {
+				return svc.ScheduleRunRead(ctx, asstapp.ScheduleRunReadInput{JobID: in.JobID, RunID: in.RunID})
+			}),
 		apiQuery(p, asstapp.DescribeScheduleHistory(), shape(application.Invalid, application.NotFound), "GET /schedules/{job_id}/runs",
 			func(ctx context.Context, svc *asstapp.Service, in apiScheduleRuns) (application.Read[web.List[asstapp.ScheduleRun]], error) {
-				var before int64
-				if in.Cursor.Set() {
-					if err := in.Cursor.Last(&before); err != nil {
-						return application.Read[web.List[asstapp.ScheduleRun]]{}, err
-					}
-					if before <= 0 {
-						return application.Read[web.List[asstapp.ScheduleRun]]{}, api.ErrBadCursor
-					}
-				}
-				read, err := svc.ScheduleHistory(ctx, asstapp.ScheduleHistoryInput{JobID: in.JobID, Before: before, Limit: int(in.Limit) + 1})
-				if err != nil {
-					return application.Read[web.List[asstapp.ScheduleRun]]{}, err
-				}
-				out := web.List[asstapp.ScheduleRun]{Items: read.Data}
-				if len(out.Items) > int(in.Limit) {
-					out.Items = out.Items[:int(in.Limit)]
-					out.NextCursor = in.Cursor.Next(out.Items[len(out.Items)-1].ID)
-				}
-				return application.Read[web.List[asstapp.ScheduleRun]]{Revision: read.Revision, Data: out}, nil
+				return scheduleRuns(ctx, svc, in.JobID, in.Limit, in.Cursor)
 			}),
 		apiCommand(p, asstapp.DescribeScheduleAdd(), created, "POST /schedules",
 			func(ctx context.Context, svc *asstapp.Service, in apiScheduleCreate) (application.Change[apiScheduleChanged], error) {
@@ -170,4 +177,26 @@ func scheduleAPIBindings(p *apiPages) []application.Binding {
 				return changeAs(result, err, scheduleChanged)
 			}),
 	}
+}
+
+func scheduleRuns(ctx context.Context, svc *asstapp.Service, jobID int64, limit api.Limit, cursor api.Cursor) (application.Read[web.List[asstapp.ScheduleRun]], error) {
+	var before int64
+	if cursor.Set() {
+		if err := cursor.Last(&before); err != nil {
+			return application.Read[web.List[asstapp.ScheduleRun]]{}, err
+		}
+		if before <= 0 {
+			return application.Read[web.List[asstapp.ScheduleRun]]{}, api.ErrBadCursor
+		}
+	}
+	read, err := svc.ScheduleHistory(ctx, asstapp.ScheduleHistoryInput{JobID: jobID, Before: before, Limit: int(limit) + 1})
+	if err != nil {
+		return application.Read[web.List[asstapp.ScheduleRun]]{}, err
+	}
+	out := web.List[asstapp.ScheduleRun]{Items: read.Data}
+	if len(out.Items) > int(limit) {
+		out.Items = out.Items[:int(limit)]
+		out.NextCursor = cursor.Next(out.Items[len(out.Items)-1].ID)
+	}
+	return application.Read[web.List[asstapp.ScheduleRun]]{Revision: read.Revision, Data: out}, nil
 }

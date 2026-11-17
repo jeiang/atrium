@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -68,7 +68,7 @@ func TestAppKeyFilesSignLinksAcrossRestarts(t *testing.T) {
 	ctx := settings.With(context.Background(), f.settings)
 	ctx = config.With(ctx, f.state)
 	now := float64(time.Now().Unix())
-	signed, err := media.NewLinks(f.settings, d, filepath.Join(dir, "retired.key")).PublicURL(ctx, "", rel, now, 3600)
+	signed, err := library.NewLinks(f.settings, d, filepath.Join(dir, "retired.key")).PublicURL(ctx, "", rel, now, 3600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestMediaLinkRefreshKeepsHostKeyPrecedence(t *testing.T) {
 	now := float64(time.Now().Unix())
 	ctx := settings.With(context.Background(), f.settings)
 	ctx = config.With(ctx, f.state)
-	signed, err := media.NewLinks(f.settings, d, filepath.Join(dir, "retired.key")).PublicURL(ctx, "", rel, now, 3600)
+	signed, err := library.NewLinks(f.settings, d, filepath.Join(dir, "retired.key")).PublicURL(ctx, "", rel, now, 3600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestMediaLinkRefreshKeepsHostKeyPrecedence(t *testing.T) {
 	exp := int64(now + 3600)
 	mac := hmac.New(sha256.New, []byte(staleKey))
 	mac.Write([]byte(rel + "\n" + strconv.FormatInt(exp, 10)))
-	stale := base + (&url.URL{Path: media.FilePrefix + rel}).EscapedPath() + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + hex.EncodeToString(mac.Sum(nil))
+	stale := base + (&url.URL{Path: library.FilePrefix + rel}).EscapedPath() + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + hex.EncodeToString(mac.Sum(nil))
 	if code, text, _ := fetch(t, client, http.MethodGet, stale, nil); code != http.StatusForbidden {
 		t.Errorf("GET the database-key link = %d %q, want a refusal", code, text)
 	}

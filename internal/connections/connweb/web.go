@@ -35,13 +35,18 @@ const googlePath = path + "/google"
 type pageData struct {
 	Connections []connectionsapp.View `json:"connections"`
 	Error       string                `json:"error"`
+	unset       func(connectionsapp.View) []string
 }
+
+func (p pageData) Unset(v connectionsapp.View) []string { return p.unset(v) }
 
 func (p pageData) URL(v connectionsapp.View) string {
 	var m map[string]string
 	_ = json.Unmarshal(v.Config, &m)
 	return m["url"]
 }
+
+func (p pageData) Hint(v connectionsapp.View) string { return connectionsapp.Hint(v) }
 
 func Page(service func(*web.Deps) (*connectionsapp.Service, error)) web.Page {
 	return web.Page{
@@ -87,6 +92,7 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, dat
 	} else {
 		data.Connections = views
 	}
+	data.unset = h.svc().UnsetSlots
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)

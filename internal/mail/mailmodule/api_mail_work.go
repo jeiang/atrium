@@ -9,10 +9,8 @@ import (
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/apps/mail"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/mail/watches"
@@ -30,12 +28,6 @@ type MailPackagesRequest struct {
 type MailPackagesPage struct {
 	Items      []watches.Package `json:"items"`
 	NextCursor *string           `json:"next_cursor" api:"nullable"`
-}
-type MailBirthdaysRequest struct {
-	Days *int64 `query:"days" json:"-" api:"min=0"`
-}
-type MailBirthdays struct {
-	Upcoming []birthdays.Item `json:"upcoming"`
 }
 type MailPackageRef struct {
 	ID int64 `path:"package_id" json:"-" api:"min=1"`
@@ -202,16 +194,6 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			page := MailPackagesPage{Items: items, NextCursor: next}
 			return application.Read[MailPackagesPage]{Revision: servedRevision(mailapp.DescribePackages().Name, page), Data: page}, err
 		}),
-		api.Query(d, mailapp.DescribeUpcomingBirthdays(), application.APIShape{Area: area, Errors: []application.Code{application.NotConfigured}}, "GET /mail/birthdays", func(ctx context.Context, in MailBirthdaysRequest) (application.Read[MailBirthdays], error) {
-			loc, err := config.From(ctx).Location(d.Env)
-			if err != nil {
-				return application.Read[MailBirthdays]{}, err
-			}
-			now := time.Now().In(loc)
-			r, err := svc().UpcomingBirthdays(ctx, mailapp.UpcomingBirthdaysInput{Today: birthdays.Date(now.Year(), now.Month(), now.Day()), Days: in.Days})
-			out := MailBirthdays{Upcoming: r.Data.Upcoming}
-			return application.Read[MailBirthdays]{Revision: servedRevision(mailapp.DescribeUpcomingBirthdays().Name, out), Data: out}, err
-		}),
 		api.Command(d, mailapp.DescribePackageDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/packages/{package_id}/dismiss", func(ctx context.Context, in MailPackageRef) (application.Change[struct{}], error) {
 			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})
 		}),
@@ -229,7 +211,7 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 			})
 			return out, err
 		}),
-		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
+		api.Command(d, mailapp.DescribePollTrackers(), application.APIShape{Area: area, Errors: []application.Code{application.Unavailable, application.Refused}}, "POST /mail/packages/poll", func(ctx context.Context, _ struct{}) (application.Change[MailPoll], error) {
 			var r application.Change[mailapp.PollTrackersResult]
 			_, err := module.Invoke(ctx, d.DB, d.Cfg, unit.Mail+"/"+tracking.JobPackageTracking, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
 				var err error

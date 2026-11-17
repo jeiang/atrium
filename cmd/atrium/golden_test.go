@@ -18,11 +18,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	caldav "github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/apps/mail"
-	"github.com/jeiang/atrium/internal/calendar"
-	caldav "github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -173,7 +173,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
 	vars[anthropic.BaseURLEnv] = api.URL
-	vars[calendar.CalDAVEnv] = caldavURL
+	vars[davmirror.CalDAVEnv] = caldavURL
 	vars[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
 	for k, v := range extraEnv {
 		vars[k] = v

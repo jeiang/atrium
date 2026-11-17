@@ -11,7 +11,7 @@ import {
 } from './checks.ts';
 import { expect, galleryLayouts, layouts, test } from './fixtures.ts';
 
-const edgeSurfaces = ['header.bar', 'dialog.sheet'];
+const edgeSurfaces = ['.rail', '.tabbar', 'dialog.sheet'];
 const sections = ['menus', 'comboboxes', 'tabs', 'listboxes'] as const;
 const phone = layouts[0] ?? { name: 'phone', width: 390, height: 844, touch: true };
 const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
