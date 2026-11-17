@@ -33,6 +33,10 @@ settings the operator edits in the UI or pins from the host.
   do not add a go.mod toolchain directive.
 - Fast loop: `just verify` (vet + build) after each edit, `just e2e <pattern>`
   for the targeted CLI/HTTP test, `just changed` for the Go packages touched.
+  The whole e2e suite: `just e2e-all` (several test processes at once, split
+  by `.ci/go-test-times.tsv`). A new e2e test calls `t.Parallel()` unless it
+  uses `t.Setenv`, the process streams, a package-level client, the serve log
+  or the shared watch rig.
 - Before hand-off: `just check-quick` (statix, treefmt, gofmt, module
   assertions), `just check-eval` after Nix changes, `just check` for everything;
   Linux-only checks use `just linux <check>`. Recipes re-enter the dev shell
