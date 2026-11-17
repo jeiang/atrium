@@ -87,7 +87,10 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	}
 	// Let the start check settle and age it past the 5 minute limit, so the
 	// failed request below is the one that triggers the check.
-	waitFor(t, func() bool { state := connectionState(t, dir, "service/tmdb"); return state != "" && state != "untested" })
+	waitFor(t, func() bool {
+		state := connectionState(t, dir, "service/tmdb")
+		return state != "" && state != "untested"
+	})
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
 		t.Fatal(err)
