@@ -49,11 +49,32 @@ func longPage(link string) string {
 	return b.String()
 }
 
-var allowLoopbackFetch sync.Once
+var loopbackFetch struct {
+	mu      sync.Mutex
+	users   int
+	restore func()
+}
+
+func allowLoopbackFetch(t *testing.T) {
+	t.Helper()
+	loopbackFetch.mu.Lock()
+	if loopbackFetch.users == 0 {
+		loopbackFetch.restore = webfetch.UseAddresses(func(a netip.Addr) bool { return a.IsLoopback() })
+	}
+	loopbackFetch.users++
+	loopbackFetch.mu.Unlock()
+	t.Cleanup(func() {
+		loopbackFetch.mu.Lock()
+		defer loopbackFetch.mu.Unlock()
+		if loopbackFetch.users--; loopbackFetch.users == 0 {
+			loopbackFetch.restore()
+		}
+	})
+}
 
 func webPages(t *testing.T) (*httptest.Server, *pageLog) {
 	t.Helper()
-	allowLoopbackFetch.Do(func() { webfetch.UseAddresses(func(a netip.Addr) bool { return a.IsLoopback() }) })
+	allowLoopbackFetch(t)
 	log := &pageLog{}
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
