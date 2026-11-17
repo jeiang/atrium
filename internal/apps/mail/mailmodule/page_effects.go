@@ -27,5 +27,5 @@ func (m Module) pageEffects(d *web.Deps) (*mailapp.Service, *reviewapp.Service) 
 		panic(err)
 	}
 	l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: store, Open: open, Registry: registry, Now: mail.WallClock}
-	return mailPageService(d).WithApplier(applier.New(l, open, syncer)), reviewapp.New(reviewapp.Deps{DB: d.DB, Kinds: []review.Contribution{{Module: unit.Mail, Category: unit.Mail, Kinds: review.Kinds{Actions: l.ReviewActions()}}}})
+	return mailPageService(d).WithApplier(applier.New(l, open, syncer)).WithOpen(open).WithEffects(store), reviewapp.New(reviewapp.Deps{DB: d.DB, Kinds: []review.Contribution{{Module: unit.Mail, Category: unit.Mail, Kinds: review.Kinds{Actions: l.ReviewActions()}}}})
 }

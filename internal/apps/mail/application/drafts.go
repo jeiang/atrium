@@ -1,6 +1,7 @@
 package application
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -8,10 +9,13 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/drafts"
+	"github.com/jeiang/atrium/internal/apps/mail/message"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -25,6 +29,8 @@ const (
 	DraftCreateName  application.Name = "mail.draft-create"
 	DraftUpdateName  application.Name = "mail.draft-update"
 	DraftDiscardName application.Name = "mail.draft-discard"
+	DraftReplyName   application.Name = "mail.draft-reply"
+	DraftForwardName application.Name = "mail.draft-forward"
 	DraftLimit                        = 100
 )
 
@@ -66,6 +72,10 @@ type DraftCreateInput struct {
 	Body             string
 	ReplyID          *int64
 }
+type DraftReplyInput struct {
+	MessageID int64
+	To, Cc    Recipients
+}
 type DraftUpdateInput struct {
 	ProposalID *int64
 	ID         int64
@@ -81,7 +91,13 @@ func DescribeDraft() application.Definition {
 	return application.Describe[DraftInput, DraftCard](DraftName, application.Query, []application.Authority{application.Operator}, application.NoEffect, false)
 }
 func DescribeDraftCreate() application.Definition {
-	return application.Describe[DraftCreateInput, DraftResult](DraftCreateName, application.Command, []application.Authority{application.Agent}, application.LocalUndoable, true)
+	return application.Describe[DraftCreateInput, DraftResult](DraftCreateName, application.Command, []application.Authority{application.Operator, application.Agent}, application.LocalUndoable, true)
+}
+func DescribeDraftReply() application.Definition {
+	return application.Describe[DraftReplyInput, DraftResult](DraftReplyName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
+}
+func DescribeDraftForward() application.Definition {
+	return application.Describe[DraftReplyInput, DraftResult](DraftForwardName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
 }
 func DescribeDraftUpdate() application.Definition {
 	return application.Describe[DraftUpdateInput, DraftResult](DraftUpdateName, application.Command, []application.Authority{application.Operator, application.Agent}, application.Conditional, true)
@@ -251,7 +267,15 @@ func draftAgent(ctx context.Context) bool { return audit.SourceOf(ctx) == audit.
 func (s *Service) DraftCreate(ctx context.Context, in DraftCreateInput) (application.Change[DraftResult], error) {
 	return s.draftCommand(ctx, DraftCreateName, 0, func(tx *sql.Tx) (*drafts.Row, []int64, error) {
 		if !draftAgent(ctx) {
-			return nil, nil, &application.Error{Code: application.Forbidden, Message: "draft creation requires an agent invocation"}
+			if !operatorSource(ctx) {
+				return nil, nil, &application.Error{Code: application.Forbidden, Message: "draft creation requires operator or agent authority"}
+			}
+			id, err := s.draftStore(tx).Create(ctx, nil, in.Account, in.To.value(), in.Cc.value(), in.Subject, in.Body, nil)
+			if err != nil {
+				return nil, nil, err
+			}
+			row, err := s.draftStore(tx).Get(ctx, id)
+			return row, nil, err
 		}
 		inv, ok := application.InvocationOf(ctx)
 		if !ok || inv.ThreadID == 0 || inv.RunID == 0 {
@@ -336,6 +360,77 @@ func (s *Service) DraftDiscard(ctx context.Context, in DraftInput) (application.
 			return nil, nil, err
 		}
 		row, err = st.Get(ctx, in.ID)
+		return row, nil, err
+	})
+}
+func (s *Service) DraftReply(ctx context.Context, in DraftReplyInput) (application.Change[DraftResult], error) {
+	return s.draftFromMessage(ctx, DraftReplyName, in, func(view *message.View) (to any, subject, body string) {
+		to = view.FromAddr
+		if replyTo := strings.TrimSpace(view.Headers["Reply-To"]); replyTo != "" {
+			to = replyTo
+		}
+		from := view.Headers["From"]
+		if from == "" {
+			from = view.FromAddr
+		}
+		when := view.Headers["Date"]
+		if when == "" {
+			when = iso(view.DateTS)
+		}
+		return to, prefixed("Re:", view.Subject), "\n\nOn " + when + ", " + from + " wrote:\n" + quoteLines(view.Body)
+	})
+}
+func (s *Service) DraftForward(ctx context.Context, in DraftReplyInput) (application.Change[DraftResult], error) {
+	return s.draftFromMessage(ctx, DraftForwardName, in, func(view *message.View) (to any, subject, body string) {
+		var b strings.Builder
+		b.WriteString("\n\n---------- Forwarded message ---------\n")
+		for _, name := range []string{"From", "Date", "Subject", "To", "Cc"} {
+			if v := view.Headers[name]; v != "" {
+				b.WriteString(name + ": " + v + "\n")
+			}
+		}
+		if len(view.Attachments) > 0 {
+			names := make([]string, len(view.Attachments))
+			for i, a := range view.Attachments {
+				names[i] = cmp.Or(a.Filename, a.ContentType)
+			}
+			b.WriteString("Attachments not included: " + strings.Join(names, ", ") + "\n")
+		}
+		b.WriteString("\n" + view.Body)
+		return in.To.value(), prefixed("Fwd:", view.Subject), b.String()
+	})
+}
+func prefixed(prefix, subject string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(subject)), strings.ToLower(prefix)) {
+		return subject
+	}
+	return strings.TrimSpace(prefix + " " + subject)
+}
+func (s *Service) draftFromMessage(ctx context.Context, name application.Name, in DraftReplyInput, fill func(*message.View) (any, string, string)) (application.Change[DraftResult], error) {
+	return s.draftCommand(ctx, name, in.MessageID, func(tx *sql.Tx) (*drafts.Row, []int64, error) {
+		if !operatorSource(ctx) {
+			return nil, nil, &application.Error{Code: application.Forbidden, Reason: "operator_only", Message: "only the operator can draft from a message"}
+		}
+		view, err := message.Get(ctx, tx, s.cfg.CacheDir, in.MessageID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if view == nil {
+			return nil, nil, &application.Error{Code: application.NotFound, Message: "Unknown message"}
+		}
+		to, subject, body := fill(view)
+		var reply any
+		if name == DraftReplyName {
+			reply = in.MessageID
+		}
+		body = clip(body, mail.TuningDraftsMaxBody)
+		subject = clip(subject, mail.TuningDraftsMaxSubject)
+		st := s.draftStore(tx)
+		id, err := st.Create(ctx, nil, view.Account, to, in.Cc.value(), subject, body, reply)
+		if err != nil {
+			return nil, nil, err
+		}
+		row, err := st.Get(ctx, id)
 		return row, nil, err
 	})
 }

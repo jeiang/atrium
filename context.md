@@ -1444,6 +1444,28 @@ claims about the running application. Operator contracts are in
   without a mailbox write, pause and the write cap apply, protected folders
   are refused, and undo moves messages back or deletes a folder only while it
   is empty.
+- The operator archives, marks read or unread, and flags or unflags a message
+  through `POST /mail/messages/{message_id}/archive|read|flag` on both
+  prefixes and the matching message-page forms (`mail.message-archive`,
+  `mail.message-read`, `mail.message-flag`). These have operator authority
+  only and no tool binding; a tool-source caller is refused. Each write
+  verifies the message on the server, then records an `operator_mail` effect
+  that claims the message before the IMAP call, and reaches the gate through
+  the existing mail client. Shadow mode refuses them (`shadow_mode`); pause
+  does not. Archive moves to the folder named `Archive` or flagged `\Archive`
+  with COPY, STORE Deleted and UID EXPUNGE (undo `mail_move_back`), or on
+  Gmail removes `\Inbox` (undo `gmail_labels`); it refuses a missing archive
+  folder (`no_archive_folder`) and a protected source (`protected_folder`).
+  Read and flag undo with `mail_flag_restore` and update the cached row. An
+  unknown outcome returns `write_outcome_unknown` and keeps the claim, so a
+  later write to the message returns `write_blocked`.
+- `POST /mail/messages/{message_id}/reply` and `/forward` (`mail.draft-reply`,
+  `mail.draft-forward`) and `POST /drafts` (`mail.draft-create`, now operator
+  or agent) create local drafts with no thread and no effect. A reply
+  addresses Reply-To or the sender, quotes the body and keeps
+  `in_reply_to`/`refs`; a forward needs `to` and lists attachment names
+  instead of carrying attachments, because drafts store no attachments. The
+  Loops page links to the message instead of starting a draft-reply run.
 - Calendar writes record an effect in the ledger before the external call. A
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium effects
