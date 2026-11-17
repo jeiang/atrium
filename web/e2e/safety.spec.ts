@@ -349,6 +349,65 @@ const commands: Command[] = [
       await toast(page, 'Stopped tracking').getByRole('button', { name: 'Undo' }).click();
     },
   },
+  {
+    name: 'mail rule delete',
+    method: 'DELETE',
+    path: '/mail/rules/newsletters',
+    open: '/apps/mail/rules/newsletters',
+    press: async (page) => {
+      await page.getByRole('button', { name: 'Delete rule' }).click();
+      await dialog(page).getByRole('button', { name: 'Delete rule' }).click();
+    },
+  },
+  {
+    name: 'automation pause',
+    method: 'POST',
+    path: '/automation/pause',
+    open: '/assistant/authority',
+    press: (page) => page.getByRole('button', { name: 'Pause automation' }).click(),
+  },
+  {
+    name: 'authority save',
+    method: 'PUT',
+    path: '/permissions',
+    open: '/assistant/authority',
+    press: async (page) => {
+      await page.locator('[data-key="permission_internet_clean"]').getByRole('combobox').selectOption('deny');
+      await page.getByRole('button', { name: 'Save authority' }).click();
+    },
+  },
+  {
+    name: 'assistant defaults save',
+    method: 'PUT',
+    path: '/assistant/defaults',
+    open: '/assistant/behavior',
+    press: async (page) => {
+      const form = page.locator('[data-settings="defaults"]');
+      await form.getByLabel('Effort').selectOption('max');
+      await form.getByRole('button', { name: 'Save defaults' }).click();
+    },
+  },
+  {
+    name: 'routine run now',
+    method: 'POST',
+    path: '/schedules/1/run',
+    open: '/assistant/routines/1',
+    press: (page) => page.getByRole('button', { name: 'Run now' }).click(),
+  },
+  {
+    name: 'app switch',
+    method: 'PUT',
+    path: '/apps/[^/]+/enabled',
+    open: '/apps/directory',
+    press: (page) => page.getByRole('switch', { name: /^Grafana(\s|$)/ }).click(),
+  },
+  {
+    name: 'backup now',
+    method: 'POST',
+    path: '/maintenance/backups',
+    open: '/settings/backups',
+    press: (page) => page.getByRole('button', { name: 'Back up now' }).click(),
+  },
 ];
 
 function record(page: Page, command: Command): string[] {
@@ -388,9 +447,12 @@ test.describe('Unsafe commands', () => {
   test.use({ viewport: { width: 1440, height: 900 }, allowStatus: [409], allowConsole: unreachableConsole });
 
   for (const command of commands) {
-    test(`${command.name}: a lost answer is sent once and never again, even after a reload`, async ({ page }) => {
+    test(`${command.name}: a lost answer reads as unknown, is sent once and never again, even after a reload`, async ({
+      page,
+    }) => {
       const sent = await start(page, command, 'lost');
       expect(sent[0]).toMatch(/^[0-9a-f-]{36}$/);
+      await expect(page.getByText(/unknown/i).first()).toBeVisible();
       await neverAgain(page, sent);
     });
 
