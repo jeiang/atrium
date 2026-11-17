@@ -45,7 +45,9 @@ settings the operator edits in the UI or pins from the host.
   the hermetic Go checks except the tests among them (the `go` group).
   aarch64 and the hermetic Go test shards run on `main`. A new flake check joins
   the `rest` group unless `.ci/targets.nix` names it; a check that compiles
-  the Go tree belongs in a named group or on the runner.
+  the Go tree belongs in a named group or on the runner. Every CI job has a
+  time limit near 1.5 times its longest normal run: the Nix groups take theirs
+  from `.ci/targets.nix`, and a new group needs one there.
 - Deployment consumes this repository from a separate host configuration.
   A merge here does not deploy it.
 
