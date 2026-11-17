@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -59,15 +58,19 @@ func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	qb.put(mnpTorrent{hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Dune.2021", tags: []string{library.TagMedia}, state: "stoppedDL", content: "Dune.2021", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
+	b := localWebG5(t, startServeIn(t, dir))
+	if got := b.do(http.MethodGet, "/web/v1/media/torrents", nil); got.status != http.StatusOK {
+		t.Fatalf("GET /web/v1/media/torrents = %d: %.300s", got.status, got.body)
+	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("CREATE TRIGGER refuse_priority BEFORE INSERT ON effects WHEN NEW.operation = 'media_file_priority' BEGIN SELECT RAISE(FAIL, 'unavailable'); END"); err != nil {
 		t.Fatal(err)
 	}
 	const hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(hash, "Lanterns")}, "mode": {"media"}}, http.StatusBadGateway)
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": mediaMagnet(hash, "Lanterns")}); got.status != http.StatusBadGateway {
+		t.Fatalf("add with a failing selection = %d: %.300s", got.status, got.body)
+	}
 	mediaEffectID(t, d, contract.OpAddMagnet, hash, "done")
 	var outcome string
 	if err := d.Read.QueryRow("SELECT outcome FROM operation_audit WHERE operation = 'media.add' ORDER BY id DESC LIMIT 1").Scan(&outcome); err != nil {
@@ -90,14 +93,18 @@ func TestMediaSavedChannelAndFailedPollKeepCommittedAdds(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, feed.URL+"/api/get-torrents", "", ""))
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK)
+	b := localWebG5(t, startServeIn(t, dir))
+	if got := b.do(http.MethodGet, "/web/v1/media/channels", nil); got.status != http.StatusOK {
+		t.Fatalf("GET /web/v1/media/channels = %d: %.300s", got.status, got.body)
+	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("CREATE TRIGGER refuse_prime BEFORE UPDATE ON media_channels BEGIN SELECT RAISE(FAIL, 'unavailable'); END"); err != nil {
 		t.Fatal(err)
 	}
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}, "backfill": {"1"}}, http.StatusOK)
+	if got := b.do(http.MethodPost, "/web/v1/media/channels", map[string]any{"name": "Lanterns", "imdb": "tt1234567", "pattern": "1080p", "backfill": true}); got.status != http.StatusOK {
+		t.Fatalf("save channel = %d: %.300s", got.status, got.body)
+	}
 	var channels int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM media_channels WHERE name = 'Lanterns'").Scan(&channels); err != nil {
 		t.Fatal(err)

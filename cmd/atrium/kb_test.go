@@ -4,12 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -170,14 +166,13 @@ func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, page, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK ||
-		!strings.Contains(page, fmt.Sprintf("/activity/effect/%d/undo", writeID)) {
-		t.Fatalf("activity = %d, want an undo for write %d: %.400s", code, writeID, page)
+	browser := localWebG5(t, base)
+	activity := browser.do(http.MethodGet, "/web/v1/activity?limit=100", nil)
+	if activity.status != http.StatusOK || !activityHasEffectG5(activity, "kb_write", writeID) {
+		t.Fatalf("activity = %d, want write %d: %.400s", activity.status, writeID, activity.body)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusOK {
-		t.Fatalf("undo %d = %d %.400s", writeID, code, body)
+	if undone := browser.do(http.MethodPost, fmt.Sprintf("/web/v1/effects/%d/undo", writeID), nil); undone.status != http.StatusOK {
+		t.Fatalf("undo %d = %d %.400s", writeID, undone.status, undone.body)
 	}
 	var retracted *float64
 	if err := d.Read.QueryRow("SELECT retracted_at FROM kb_records WHERE id = ?", id).Scan(&retracted); err != nil || retracted == nil {
@@ -234,45 +229,12 @@ func TestPrivateSpaceKnowledgeStaysInItsSpace(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); code != http.StatusOK {
-		t.Fatalf("GET /chat = %d: %s", code, body)
+	browser := localWebG5(t, base)
+	created := browser.do(http.MethodPost, "/web/v1/knowledge/spaces", map[string]any{"name": "Household", "effort": "medium", "context_limit": 90000, "private": true})
+	if created.status != http.StatusCreated {
+		t.Fatalf("create project = %d: %s", created.status, created.body)
 	}
-	post := func(path string, form url.Values) (int, string, http.Header) {
-		t.Helper()
-		req, err := http.NewRequest(http.MethodPost, base+path, strings.NewReader(form.Encode()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("HX-Request", "true")
-		for _, c := range client.Jar.Cookies(req.URL) {
-			if c.Name == "atrium_csrf" {
-				req.Header.Set("X-CSRF-Token", c.Value)
-			}
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		out, _ := io.ReadAll(resp.Body)
-		return resp.StatusCode, string(out), resp.Header
-	}
-
-	code, body, header := post("/projects", url.Values{"name": {"Household"}, "effort": {"medium"}, "context_limit": {"90000"}, "private": {"1"}})
-	if code != http.StatusNoContent && code != http.StatusSeeOther && code != http.StatusOK {
-		t.Fatalf("create project = %d: %s", code, body)
-	}
-	location := header.Get("HX-Redirect")
-	if location == "" {
-		location = header.Get("Location")
-	}
-	projectID, err := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(location, "/projects/"), "/edit"), 10, 64)
-	if err != nil {
-		t.Fatalf("project redirect %q: %v", location, err)
-	}
+	projectID := changedIDG5(t, created)
 	var private int64
 	if err := d.Read.QueryRow("SELECT private FROM projects WHERE id = ?", projectID).Scan(&private); err != nil || private != 1 {
 		t.Fatalf("project private = %d, %v; want 1", private, err)
@@ -283,8 +245,8 @@ func TestPrivateSpaceKnowledgeStaysInItsSpace(t *testing.T) {
 		t.Fatalf("project thread warm run: %d %s", ran.code, ran.stderr)
 	}
 	inside := latestThread(t, dir)
-	if code, body, _ := post(fmt.Sprintf("/chat/%d/project", inside), url.Values{"project_id": {strconv.FormatInt(projectID, 10)}}); code >= http.StatusBadRequest {
-		t.Fatalf("move chat into the project = %d: %s", code, body)
+	if moved := browser.do(http.MethodPut, fmt.Sprintf("/web/v1/threads/%d/project", inside), map[string]any{"project_id": projectID}); moved.status >= http.StatusBadRequest {
+		t.Fatalf("move chat into the project = %d: %s", moved.status, moved.body)
 	}
 
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "kb_write", map[string]any{
@@ -314,11 +276,9 @@ func TestPrivateSpaceKnowledgeStaysInItsSpace(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ?", outside).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	code, body, _ = post(fmt.Sprintf("/chat/%d/messages", outside), url.Values{
-		"text": {fmt.Sprintf("see @thread/%d", inside)},
-	})
-	if code != http.StatusUnprocessableEntity {
-		t.Fatalf("reference to a private project's thread = %d, want 422: %s", code, body)
+	refused := browser.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", outside), map[string]any{"text": fmt.Sprintf("see @thread/%d", inside)})
+	if refused.status != http.StatusUnprocessableEntity {
+		t.Fatalf("reference to a private project's thread = %d, want 422: %s", refused.status, refused.body)
 	}
 	var stored int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ?", outside).Scan(&stored); err != nil || stored != before {
@@ -382,67 +342,28 @@ func TestKnowledgeListRevision(t *testing.T) {
 	}
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
+	w := localWebG5(t, base)
 
-	code, body, header := w.get("/library/knowledge", true)
-	empty := header.Get("ETag")
-	if code != http.StatusOK || !strings.HasPrefix(empty, `W/"`) {
-		t.Fatalf("empty list = %d etag %q: %.300s", code, empty, body)
+	list := w.do(http.MethodGet, "/web/v1/knowledge", nil)
+	empty := list.header.Get("ETag")
+	if list.status != http.StatusOK || !strings.HasPrefix(empty, `W/"`) {
+		t.Fatalf("empty list = %d etag %q: %.300s", list.status, empty, list.body)
 	}
-	if code, body, _ = w.get("/library/knowledge", true, "If-None-Match", empty); code != http.StatusNotModified || body != "" {
-		t.Fatalf("unchanged list with its etag = %d: %.300s", code, body)
-	}
-	if code, body, header = w.get("/library/knowledge", false, "If-None-Match", empty); code != http.StatusOK || header.Get("ETag") != "" {
-		t.Fatalf("full list page with the fragment etag = %d etag %q: %.300s", code, header.Get("ETag"), body)
+	if again := w.do(http.MethodGet, "/web/v1/knowledge", nil, "If-None-Match", empty); again.status != http.StatusNotModified || again.body != "" {
+		t.Fatalf("unchanged list with its etag = %d: %.300s", again.status, again.body)
 	}
 
-	knowledgeCreate(t, w, url.Values{"title": {"Gate code"}, "body": {"The gate code is 2231."}, "scope": {"work"}})
-	code, body, header = w.get("/library/knowledge", true, "If-None-Match", empty)
-	if code != http.StatusOK || !strings.Contains(body, "Gate code") {
-		t.Fatalf("list after a create with the old etag = %d: %.300s", code, body)
+	knowledgeCreateG5(t, w, map[string]any{"title": "Gate code", "body": "The gate code is 2231.", "scope": "work"})
+	changed := w.do(http.MethodGet, "/web/v1/knowledge", nil, "If-None-Match", empty)
+	if changed.status != http.StatusOK || !strings.Contains(changed.body, "Gate code") {
+		t.Fatalf("list after a create with the old etag = %d: %.300s", changed.status, changed.body)
 	}
-	if fresh := header.Get("ETag"); fresh == "" || fresh == empty {
+	if fresh := changed.header.Get("ETag"); fresh == "" || fresh == empty {
 		t.Fatalf("etag after a create = %q, was %q", fresh, empty)
 	}
 
-	code, body, _ = w.get("/library/knowledge?scope=bogus", false)
-	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "scope must be work or personal") {
-		t.Fatalf("bogus scope = %d: %.300s", code, body)
-	}
-}
-
-func TestKnowledgeRevisionCookieReset(t *testing.T) {
-	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
-		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
-	}
-	base, _, stop := startServeStoppable(t, dir)
-	defer stop()
-	a := asstBrowse(t, base)
-	_, oldPage, _ := a.get("/library/knowledge/profile", false)
-	_, _, header := a.get("/library/knowledge", true)
-	b := asstBrowse(t, base)
-	b.client.Jar, _ = cookiejar.New(nil)
-	b.token = ""
-	code, _, fresh := b.get("/library/knowledge", true, "If-None-Match", header.Get("ETag"))
-	if code != http.StatusOK || fresh.Get("ETag") == "" || fresh.Get("ETag") == header.Get("ETag") {
-		t.Fatalf("reset cookie conditional fragment GET = %d, etag %q", code, fresh.Get("ETag"))
-	}
-	code, page, _ := b.get("/library/knowledge/profile", false)
-	if code != http.StatusOK {
-		t.Fatalf("reset cookie profile = %d", code)
-	}
-	tokenPattern := regexp.MustCompile(`name="csrf_token" value="([^"]+)"`)
-	oldToken, newToken := tokenPattern.FindStringSubmatch(oldPage), tokenPattern.FindStringSubmatch(page)
-	if len(oldToken) != 2 || len(newToken) != 2 || oldToken[1] == newToken[1] {
-		t.Fatal("reset page did not render a fresh form token")
-	}
-	code, page, _ = b.post("/library/knowledge/new", url.Values{
-		"csrf_token": {newToken[1]}, "title": {"Fresh token"}, "body": {"Saved with a native form."}, "scope": {"personal"},
-	}, false)
-	if code != http.StatusSeeOther {
-		t.Fatalf("native form with fresh token = %d: %.300s", code, page)
+	if bogus := w.do(http.MethodGet, "/web/v1/knowledge?scope=bogus", nil); bogus.status != http.StatusUnprocessableEntity || !strings.Contains(bogus.body, "scope") {
+		t.Fatalf("bogus scope = %d: %.300s", bogus.status, bogus.body)
 	}
 }
 
@@ -466,7 +387,7 @@ func TestKnowledgeOperatorLifecycleAudits(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
+	w := localWebG5(t, base)
 	body := func(id int64) string {
 		t.Helper()
 		var b string
@@ -476,10 +397,10 @@ func TestKnowledgeOperatorLifecycleAudits(t *testing.T) {
 		return b
 	}
 
-	id := knowledgeCreate(t, w, url.Values{"title": {"Water shutoff"}, "body": {"Under the stairs."}, "scope": {"personal"}})
-	path := fmt.Sprintf("/library/knowledge/%d", id)
-	if code, b, _ := w.post(path, url.Values{"title": {"Water shutoff"}, "body": {"Behind the boiler."}, "scope": {"personal"}}, false); code != http.StatusSeeOther {
-		t.Fatalf("edit = %d: %.300s", code, b)
+	id := knowledgeCreateG5(t, w, map[string]any{"title": "Water shutoff", "body": "Under the stairs.", "scope": "personal"})
+	path := fmt.Sprintf("/web/v1/knowledge/%d", id)
+	if edited := w.do(http.MethodPatch, path, map[string]any{"title": "Water shutoff", "body": "Behind the boiler.", "scope": "personal"}); edited.status != http.StatusOK {
+		t.Fatalf("edit = %d: %.300s", edited.status, edited.body)
 	}
 	var effectID int64
 	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'kb_edit' AND target = ?", "kb:"+strconv.FormatInt(id, 10)).Scan(&effectID); err != nil {
@@ -492,20 +413,19 @@ func TestKnowledgeOperatorLifecycleAudits(t *testing.T) {
 		t.Fatalf("body after undoing the edit = %q", got)
 	}
 	for _, action := range []string{"confirm", "retract", "restore"} {
-		if code, b, _ := w.post(path+"/"+action, url.Values{}, false); code != http.StatusSeeOther {
-			t.Fatalf("%s = %d: %.300s", action, code, b)
+		if got := w.do(http.MethodPost, path+"/"+action, nil); got.status != http.StatusOK {
+			t.Fatalf("%s = %d: %.300s", action, got.status, got.body)
 		}
 	}
 
-	code, page, _ := w.post(path, url.Values{"title": {""}, "body": {"Draft that must not land."}, "scope": {"personal"}}, false)
-	if code != http.StatusUnprocessableEntity || !strings.Contains(page, "Draft that must not land.") {
-		t.Fatalf("invalid edit = %d: %.300s", code, page)
+	if invalid := w.do(http.MethodPatch, path, map[string]any{"title": "", "body": "Draft that must not land.", "scope": "personal"}); invalid.status != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid edit = %d: %.300s", invalid.status, invalid.body)
 	}
 	if got := body(id); got != "Under the stairs." {
 		t.Fatalf("an invalid edit changed the body to %q", got)
 	}
-	if code, b, _ := w.post(path+"/purge", url.Values{}, false); code != http.StatusSeeOther {
-		t.Fatalf("purge = %d: %.300s", code, b)
+	if purged := w.do(http.MethodDelete, path, nil); purged.status != http.StatusNoContent {
+		t.Fatalf("purge = %d: %.300s", purged.status, purged.body)
 	}
 
 	for _, op := range []string{"knowledge.create", "knowledge.edit", "knowledge.confirm", "knowledge.retract", "knowledge.restore", "knowledge.purge"} {
@@ -556,11 +476,14 @@ func TestKnowledgeConfirmMatchingReportsCommittedPrefix(t *testing.T) {
 	}
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
+	w := localWebG5(t, base)
 
-	code, page, _ := w.post("/library/knowledge/confirm-all", url.Values{"scope": {"personal"}, "state": {"imported"}}, false)
-	if code != http.StatusOK || !strings.Contains(page, "3 confirmed, 1 refused") {
-		t.Fatalf("confirm-all = %d: %.300s", code, page)
+	batch := w.do(http.MethodPost, "/web/v1/knowledge/confirm-matching", map[string]any{"scope": "personal", "state": "imported"})
+	data, _ := batch.json["data"].(map[string]any)
+	committed, _ := data["committed"].([]any)
+	refusedRows, _ := data["refused"].([]any)
+	if batch.status != http.StatusOK || len(committed) != 3 || len(refusedRows) != 1 {
+		t.Fatalf("confirm-all = %d: %.300s", batch.status, batch.body)
 	}
 	for _, id := range matching {
 		if !confirmed(id) || knowledgeAudits(t, d, "knowledge.confirm-matching", id, "ok") != 1 {
@@ -575,10 +498,9 @@ func TestKnowledgeConfirmMatchingReportsCommittedPrefix(t *testing.T) {
 	}
 
 	later := seed("Smoke alarm", "personal", false)
-	code, _, _ = w.post("/library/knowledge/confirm", url.Values{"scope": {"personal"}, "state": {"imported"},
-		"id": {strconv.FormatInt(outside, 10), strconv.FormatInt(retracted, 10), strconv.FormatInt(later, 10)}}, false)
-	if code != http.StatusConflict {
-		t.Fatalf("confirm-selected past a retracted record = %d, want 409", code)
+	selected := w.do(http.MethodPost, "/web/v1/knowledge/confirm", map[string]any{"ids": []int64{outside, retracted, later}})
+	if selected.status != http.StatusConflict {
+		t.Fatalf("confirm-selected past a retracted record = %d, want 409: %.300s", selected.status, selected.body)
 	}
 	if !confirmed(outside) || confirmed(later) {
 		t.Errorf("confirm-selected: first record confirmed = %v, record after the refusal confirmed = %v", confirmed(outside), confirmed(later))

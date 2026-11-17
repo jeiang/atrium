@@ -200,17 +200,13 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 	t.Parallel()
 	s := wimOIDCSite(t)
 	anon := s.browser()
-	redirect := anon.get("/settings/auth")
-	wimExpect(t, redirect, http.StatusSeeOther)
-	if redirect.location() != "/login?next=%2Fsettings%2Fauth" {
-		t.Fatalf("anonymous redirect %q", redirect.location())
-	}
-	hx := anon.get("/settings/auth", "HX-Request", "true")
-	if hx.status != http.StatusUnauthorized || hx.header.Get("HX-Redirect") != "/login" {
-		t.Fatalf("anonymous htmx request: %d %q", hx.status, hx.header.Get("HX-Redirect"))
+	if got := wimSignInURLG5(t, anon.meG5()); got != "/login" {
+		t.Fatalf("anonymous sign-in url %q", got)
 	}
 	forged := []string{"Remote-Groups", "atrium_access,atrium_admin", "Remote-User", "root"}
-	wimExpect(t, anon.get("/settings/auth", forged...), http.StatusSeeOther)
+	if got := wimSignInURLG5(t, anon.meG5(forged...)); got != "/login" {
+		t.Fatalf("forged proxy headers sign-in url %q", got)
+	}
 	login := anon.get("/login")
 	wimExpect(t, login, http.StatusOK)
 	if csp := login.header.Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'self' "+strings.TrimSuffix(s.idp.Issuer(), "/")) {
@@ -234,7 +230,9 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 			t.Fatalf("session cookie lacks %q: %s", want, cookie)
 		}
 	}
-	wimExpect(t, admin.get("/settings/auth"), http.StatusOK, "Sign-in")
+	if email := wimEmailG5(t, admin.meG5()); email != "boss@example.com" {
+		t.Fatalf("admin session is %q", email)
+	}
 	wimExpect(t, admin.get("/login"), http.StatusSeeOther)
 	for _, a := range s.idp.Authorizations() {
 		if a.Get("code_challenge_method") != "S256" || a.Get("code_challenge") == "" || a.Get("state") == "" || a.Get("nonce") == "" || a.Get("redirect_uri") != s.base+"/auth/callback" {
@@ -244,12 +242,16 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 
 	member := s.browser()
 	member.mustSignIn("member")
-	wimExpect(t, member.get("/settings/auth"), http.StatusOK, "Sign-in", `action="/logout"`)
-	wimExpect(t, member.get("/settings/auth", forged...), http.StatusOK, "Sign-in")
+	if email := wimEmailG5(t, member.meG5()); email != "friend@example.com" {
+		t.Fatalf("member session is %q", email)
+	}
+	if email := wimEmailG5(t, member.meG5(forged...)); email != "friend@example.com" {
+		t.Fatalf("forged proxy headers changed the member session to %q", email)
+	}
 
 	outsider := s.browser()
 	wimExpect(t, outsider.signIn("outsider"), http.StatusForbidden, "This account does not have access.")
-	wimExpect(t, outsider.get("/settings/auth"), http.StatusSeeOther)
+	wimExpect(t, outsider.meG5(), http.StatusUnauthorized)
 	if n := s.count("SELECT COUNT(*) FROM auth_sessions"); n != 2 {
 		t.Fatalf("%d sessions", n)
 	}
@@ -383,7 +385,7 @@ func TestWimOIDCRefusesReplayedForgedAndTamperedSignIns(t *testing.T) {
 		if got.status != http.StatusBadRequest || !strings.Contains(got.body, "The provider rejected the sign-in.") {
 			t.Errorf("%s: %d %.200q", name, got.status, got.body)
 		}
-		if r := victim.get("/settings/auth"); r.status != http.StatusSeeOther {
+		if r := victim.meG5(); r.status != http.StatusUnauthorized {
 			t.Errorf("%s: a tampered sign-in opened a session: %d", name, r.status)
 		}
 	}
@@ -402,22 +404,21 @@ func TestWimOIDCSessionsEndOnRevocationExpiryAndSignOut(t *testing.T) {
 	b := s.browser()
 	b.mustSignIn("admin")
 	s.exec(stale, "sub-admin")
-	wimExpect(t, b.get("/settings/auth"), http.StatusOK)
+	wimEmailG5(t, b.meG5())
 	if s.idp.Refreshes() != 1 {
 		t.Fatalf("%d refresh calls", s.idp.Refreshes())
 	}
-	wimExpect(t, b.get("/settings/auth"), http.StatusOK)
+	wimEmailG5(t, b.meG5())
 	if s.idp.Refreshes() != 1 {
 		t.Fatalf("re-checked again within the hour: %d", s.idp.Refreshes())
 	}
 	s.idp.SetGroups("admin", "atrium_access")
 	s.exec(stale, "sub-admin")
-	wimExpect(t, b.get("/settings/auth"), http.StatusOK)
+	wimEmailG5(t, b.meG5())
 	s.idp.SetGroups("admin", "other")
 	s.exec(stale, "sub-admin")
-	gone := b.get("/settings/auth")
-	if gone.status != http.StatusSeeOther || !strings.Contains(gone.location(), "reason=revoked") {
-		t.Fatalf("revoked session: %d %q", gone.status, gone.location())
+	if gone := wimSignInURLG5(t, b.meG5()); gone != "/login?reason=revoked" {
+		t.Fatalf("revoked session: %q", gone)
 	}
 	wimExpect(t, b.get("/login?reason=revoked"), http.StatusOK, "Your access was removed.")
 
@@ -425,7 +426,7 @@ func TestWimOIDCSessionsEndOnRevocationExpiryAndSignOut(t *testing.T) {
 	refused.mustSignIn("member")
 	s.idp.RevokeAll = true
 	s.exec(stale, "sub-member")
-	wimExpect(t, refused.get("/settings/auth"), http.StatusSeeOther)
+	wimExpect(t, refused.meG5(), http.StatusUnauthorized)
 	s.idp.RevokeAll = false
 	if n := s.count("SELECT COUNT(*) FROM auth_sessions"); n != 0 {
 		t.Fatalf("%d sessions after revocation", n)
@@ -435,13 +436,13 @@ func TestWimOIDCSessionsEndOnRevocationExpiryAndSignOut(t *testing.T) {
 		e := s.browser()
 		e.mustSignIn("member")
 		s.exec("UPDATE auth_sessions SET " + column + " = 1")
-		out := e.get("/settings/auth")
+		out := e.meG5()
 		cleared := false
 		for _, c := range out.header.Values("Set-Cookie") {
 			cleared = cleared || (strings.HasPrefix(c, "atrium_session=;") && strings.Contains(c, "Max-Age=0"))
 		}
-		if out.status != http.StatusSeeOther || !strings.Contains(out.location(), "reason=expired") || !cleared {
-			t.Fatalf("%s expiry: %d %q %v", column, out.status, out.location(), out.header.Values("Set-Cookie"))
+		if reason := wimSignInURLG5(t, out); reason != "/login?reason=expired" || !cleared {
+			t.Fatalf("%s expiry: %d %q %v", column, out.status, reason, out.header.Values("Set-Cookie"))
 		}
 	}
 
@@ -454,8 +455,8 @@ func TestWimOIDCSessionsEndOnRevocationExpiryAndSignOut(t *testing.T) {
 	if out.status != http.StatusSeeOther || out.location() != "/login?reason=signed_out" {
 		t.Fatalf("logout: %d %q", out.status, out.location())
 	}
-	wimExpect(t, o.get("/settings/auth"), http.StatusSeeOther)
-	wimExpect(t, s.browser().get("/settings/auth", "Cookie", "atrium_session="+session), http.StatusSeeOther)
+	wimExpect(t, o.meG5(), http.StatusUnauthorized)
+	wimExpect(t, s.browser().meG5("Cookie", "atrium_session="+session), http.StatusUnauthorized)
 	wimExpect(t, o.get(out.location()), http.StatusOK, "You are signed out.")
 	if n := s.count("SELECT COUNT(*) FROM auth_sessions"); n != 0 {
 		t.Fatalf("%d sessions after sign-out", n)

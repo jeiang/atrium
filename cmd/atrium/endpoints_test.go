@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -186,16 +185,15 @@ func TestConnectionsTestUsesTheEmbedCA(t *testing.T) {
 		t.Fatalf("enabling mail with a failing probe: %d %q", on.code, on.stderr)
 	}
 
-	s := &connectionSite{t: t, dir: dir}
-	s.start()
-	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "no embedding") {
-		t.Fatalf("Test of an embedder that returns no vector: %d %s", code, body)
+	c := localWebG5(t, startServeIn(t, dir))
+	if got := c.do(http.MethodPut, "/web/v1/connections/service/embedding", map[string]any{}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "no embedding") {
+		t.Fatalf("Test of an embedder that returns no vector: %d %s", got.status, got.body)
 	}
 	embed.mu.Lock()
 	embed.dim = config.EmbedDim
 	embed.mu.Unlock()
-	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusOK || connectionState(t, dir, "service/embedding") != "ok" {
-		t.Fatalf("Test of the stored embed endpoint: %d %s", code, body)
+	if got := c.do(http.MethodPut, "/web/v1/connections/service/embedding", map[string]any{}); got.status != http.StatusOK || connectionState(t, dir, "service/embedding") != "ok" {
+		t.Fatalf("Test of the stored embed endpoint: %d %s", got.status, got.body)
 	}
 }
 
@@ -205,14 +203,13 @@ func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *tes
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Mail, ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embed.URL+"/v1", "embeddinggemma", ""))
-	s := &connectionSite{t: t, dir: dir}
-	s.start()
-	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}, "credential.bearer": {"sk-embed-stored"}}); code != http.StatusOK {
-		t.Fatalf("storing the embedding bearer: %d %.300s", code, body)
+	c := localWebG5(t, startServeIn(t, dir))
+	if got := c.do(http.MethodPut, "/web/v1/connections/service/embedding", map[string]any{"credentials": map[string]string{"bearer": "sk-embed-stored"}}); got.status != http.StatusOK {
+		t.Fatalf("storing the embedding bearer: %d %.300s", got.status, got.body)
 	}
 	before := len(embed.seen("/v1/models"))
-	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusOK {
-		t.Fatalf("re-testing with a blank bearer: %d %.300s", code, body)
+	if got := c.do(http.MethodPut, "/web/v1/connections/service/embedding", map[string]any{}); got.status != http.StatusOK {
+		t.Fatalf("re-testing with a blank bearer: %d %.300s", got.status, got.body)
 	}
 	seen := embed.seen("/v1/models")
 	if len(seen) <= before {

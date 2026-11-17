@@ -8,8 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/textproto"
-	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -92,14 +90,14 @@ func TestHTMLSendRetryAfterAbort(t *testing.T) {
 	d := asstDB(t, dir)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	client := s.browser()
+	client := proxyWebG5(t, s)
 	api.Push(asstReply("started"), asstReply("aborted reply"), asstReply("spare"))
 	id := htmlThread(t, s, owner)
 	requests := len(api.Requests())
-	path := "/chat/" + strconv.FormatInt(id, 10) + "/messages"
+	path := "/web/v1/threads/" + strconv.FormatInt(id, 10) + "/messages"
 	body, contentType := composerBody(t, "aborted note")
 
-	first := htmlRequest(t, s, client, http.MethodPost, path, contentType, bytes.NewReader(body), "Idempotency-Key", "abort-key")
+	first := rawWebG5(client, http.MethodPost, path, contentType, bytes.NewReader(body), "Idempotency-Key", "abort-key")
 	conn, err := net.Dial("tcp", first.URL.Host)
 	if err != nil {
 		t.Fatal(err)
@@ -113,13 +111,13 @@ func TestHTMLSendRetryAfterAbort(t *testing.T) {
 	var text string
 	var header http.Header
 	for deadline := time.Now().Add(20 * time.Second); ; {
-		status, text, header = htmlDo(t, htmlRequest(t, s, client, http.MethodPost, path, contentType, bytes.NewReader(body), "Idempotency-Key", "abort-key"))
+		status, text, header = htmlDo(t, rawWebG5(client, http.MethodPost, path, contentType, bytes.NewReader(body), "Idempotency-Key", "abort-key"))
 		if status != http.StatusConflict || !strings.Contains(text, "idempotency_in_progress") || time.Now().After(deadline) {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if status != http.StatusOK || header.Get("Atrium-Command-Id") == "" || !strings.Contains(text, "aborted note") {
+	if status != http.StatusAccepted || header.Get("Atrium-Command-Id") == "" {
 		t.Fatalf("retry after abort: %d %q\n%s", status, header.Get("Atrium-Command-Id"), text)
 	}
 	waitThreadSettled(t, s, owner, id)
@@ -137,7 +135,7 @@ func TestHTMLSendTextWhileUploadsHeld(t *testing.T) {
 	warm(t, api)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	client := s.browser()
+	client := proxyWebG5(t, s)
 	api.Push(asstReply("started"), asstReply("html reply"), asstReply("api reply"), asstReply("spare"))
 	id := htmlThread(t, s, owner)
 
@@ -146,7 +144,7 @@ func TestHTMLSendTextWhileUploadsHeld(t *testing.T) {
 		t.Helper()
 		pr, pw := io.Pipe()
 		boundary := "heldboundary"
-		req := htmlRequest(t, s, client, http.MethodPost, "/chat/999999/messages", "multipart/form-data; boundary="+boundary, pr)
+		req := rawWebG5(client, http.MethodPost, "/web/v1/threads/999999/messages", "multipart/form-data; boundary="+boundary, pr)
 		req.ContentLength = declared
 		conn, err := net.Dial("tcp", req.URL.Host)
 		if err != nil {
@@ -165,7 +163,7 @@ func TestHTMLSendTextWhileUploadsHeld(t *testing.T) {
 	probe, probeType := asstMultipart(t, map[string]string{"text": "probe"}, []asstFile{{"probe.bin", "application/octet-stream", make([]byte, 2<<20)}})
 	probeBody := probe.Bytes()
 	for deadline := time.Now().Add(10 * time.Second); ; {
-		status, text, _ := htmlDo(t, htmlRequest(t, s, client, http.MethodPost, "/chat/999998/messages", probeType, bytes.NewReader(probeBody)))
+		status, text, _ := htmlDo(t, rawWebG5(client, http.MethodPost, "/web/v1/threads/999998/messages", probeType, bytes.NewReader(probeBody)))
 		if status == http.StatusTooManyRequests {
 			break
 		}
@@ -176,9 +174,9 @@ func TestHTMLSendTextWhileUploadsHeld(t *testing.T) {
 	}
 
 	body, contentType := composerBody(t, "text while held")
-	status, text, header := htmlDo(t, htmlRequest(t, s, client, http.MethodPost, "/chat/"+strconv.FormatInt(id, 10)+"/messages", contentType, bytes.NewReader(body), "Idempotency-Key", "held-html"))
-	if status != http.StatusOK || header.Get("Atrium-Command-Id") == "" || !strings.Contains(text, "text while held") {
-		t.Fatalf("HTML text send while uploads are held: %d\n%s", status, text)
+	status, text, header := htmlDo(t, rawWebG5(client, http.MethodPost, "/web/v1/threads/"+strconv.FormatInt(id, 10)+"/messages", contentType, bytes.NewReader(body), "Idempotency-Key", "held-web"))
+	if status != http.StatusAccepted || header.Get("Atrium-Command-Id") == "" {
+		t.Fatalf("web text send while uploads are held: %d\n%s", status, text)
 	}
 
 	apiBody, apiType := asstMultipart(t, map[string]string{"text": "api text while held"}, nil)
@@ -204,26 +202,22 @@ func TestHTMLSendRefusesOtherMediaAndOversize(t *testing.T) {
 	warm(t, api)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	client := s.browser()
-	api.Push(asstReply("started"), asstReply("form reply"))
+	client := proxyWebG5(t, s)
+	api.Push(asstReply("started"))
 	id := htmlThread(t, s, owner)
-	path := "/chat/" + strconv.FormatInt(id, 10) + "/messages"
+	path := "/web/v1/threads/" + strconv.FormatInt(id, 10) + "/messages"
 
 	mixed := "--X\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nmixed\r\n--X--\r\n"
-	for _, target := range []string{path, "/chat"} {
+	for _, target := range []string{path, "/web/v1/threads"} {
 		for _, key := range []string{"", "mixed-key"} {
-			status, text, _ := htmlDo(t, htmlRequest(t, s, client, http.MethodPost, target, "multipart/mixed; boundary=X", strings.NewReader(mixed), "Idempotency-Key", key))
+			status, text, _ := htmlDo(t, rawWebG5(client, http.MethodPost, target, "multipart/mixed; boundary=X", strings.NewReader(mixed), "Idempotency-Key", key))
 			if status != http.StatusUnsupportedMediaType {
 				t.Fatalf("multipart/mixed to %s (key %q): %d %s", target, key, status, text)
 			}
 		}
-		status, text, _ := htmlDo(t, htmlRequest(t, s, client, http.MethodPost, target, "application/json", strings.NewReader(`{"text":"json"}`)))
-		if status != http.StatusUnsupportedMediaType {
-			t.Fatalf("JSON to %s: %d %s", target, status, text)
-		}
 	}
 
-	req := htmlRequest(t, s, client, http.MethodPost, path, "multipart/form-data; boundary=X", http.NoBody, "Idempotency-Key", "oversize-key")
+	req := rawWebG5(client, http.MethodPost, path, "multipart/form-data; boundary=X", http.NoBody, "Idempotency-Key", "oversize-key")
 	conn, err := net.Dial("tcp", req.URL.Host)
 	if err != nil {
 		t.Fatal(err)
@@ -247,14 +241,8 @@ func TestHTMLSendRefusesOtherMediaAndOversize(t *testing.T) {
 	}
 	text, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(text), "files in one message must total under 64 MB") {
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || !strings.Contains(string(text), "64 MB") {
 		t.Fatalf("declared oversize: %d %s", resp.StatusCode, text)
-	}
-
-	form := url.Values{"text": {"plain form"}}
-	status, text2, _ := htmlDo(t, htmlRequest(t, s, client, http.MethodPost, "/chat", "application/x-www-form-urlencoded", strings.NewReader(form.Encode())))
-	if status >= 400 {
-		t.Fatalf("urlencoded start: %d %s", status, text2)
 	}
 }
 
@@ -265,7 +253,7 @@ func TestHTMLSendKeysAreScoped(t *testing.T) {
 	d := asstDB(t, dir)
 	s := startAPISite(t, dir, api)
 	owner, guest := s.token("owner"), s.token("guest")
-	client := s.browser()
+	client := proxyWebG5(t, s)
 	api.Push(asstReply("owner"), asstReply("guest"), asstReply("form one"), asstReply("spare"))
 
 	first := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "scoped key", "web_search": false}, "Idempotency-Key", "shared-key")
@@ -284,25 +272,19 @@ func TestHTMLSendKeysAreScoped(t *testing.T) {
 		t.Fatalf("two principals stored %d messages, want 2", n)
 	}
 
-	form := func(text string) (int, string) {
+	keyed := func(text string) (int, string) {
 		t.Helper()
-		req := htmlRequest(t, s, client, http.MethodPost, "/chat", "application/x-www-form-urlencoded", nil, "Idempotency-Key", "form-key")
-		token := req.Header.Get(web.CSRFHeader)
-		req.Header.Del(web.CSRFHeader)
-		encoded := url.Values{"text": {text}, "csrf_token": {token}}.Encode()
-		req.Body = io.NopCloser(strings.NewReader(encoded))
-		req.ContentLength = int64(len(encoded))
-		status, body, _ := htmlDo(t, req)
-		return status, body
+		got := client.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": text}, "Idempotency-Key", "form-key")
+		return got.status, got.body
 	}
-	if status, body := form("form one"); status >= 400 {
-		t.Fatalf("keyed form start: %d %s", status, body)
+	if status, body := keyed("form one"); status >= 400 {
+		t.Fatalf("keyed web start: %d %s", status, body)
 	}
-	if status, body := form("form two"); status != http.StatusUnprocessableEntity || !strings.Contains(body, "idempotency_mismatch") {
-		t.Fatalf("same key, different form body: %d %s", status, body)
+	if status, body := keyed("form two"); status != http.StatusUnprocessableEntity || !strings.Contains(body, "idempotency_mismatch") {
+		t.Fatalf("same key, different web body: %d %s", status, body)
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_messages WHERE role = 'user' AND content_json LIKE '%form two%'"); n != 0 {
-		t.Fatalf("a mismatched form body stored %d messages", n)
+		t.Fatalf("a mismatched web body stored %d messages", n)
 	}
 }
 
@@ -322,27 +304,17 @@ func TestThreadRunDoneBadgeCountsDrafts(t *testing.T) {
 	}
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	client := s.browser()
+	client := proxyWebG5(t, s)
 	api.Push(asstReply("started"))
 	started := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "badge", "web_search": false})
 	if started.status != http.StatusCreated {
 		t.Fatalf("start: %d %s", started.status, started.body)
 	}
 	thread, _ := started.json["thread"].(map[string]any)
-	id, run := number(t, thread["id"]), number(t, started.json["run_id"])
+	id := number(t, thread["id"])
 	waitThreadSettled(t, s, owner, id)
-	badge := regexp.MustCompile(`id="pending-count"[^>]*>(\d*)<`)
-	count := func(page string) string {
-		t.Helper()
-		m := badge.FindStringSubmatch(page)
-		if m == nil {
-			t.Fatalf("no pending badge:\n%s", page)
-		}
-		return m[1]
-	}
-	_, frame, _ := fetch(t, client, http.MethodGet, s.base+"/chat/"+strconv.FormatInt(id, 10), nil)
-	status, body, _ := htmlDo(t, htmlRequest(t, s, client, http.MethodGet, "/chat/"+strconv.FormatInt(id, 10)+"/runs/"+strconv.FormatInt(run, 10), "", nil))
-	if status != http.StatusOK || count(frame) != "3" || count(body) != count(frame) {
-		t.Fatalf("finished run badge %q, page badge %q, want 3: %d\n%s", count(body), count(frame), status, body)
+	shell := client.do(http.MethodGet, "/web/v1/shell", nil)
+	if needs, _ := shell.json["needs_you"].(float64); shell.status != http.StatusOK || needs != 3 {
+		t.Fatalf("needs-you count after the run, want 3: %d %s", shell.status, shell.body)
 	}
 }

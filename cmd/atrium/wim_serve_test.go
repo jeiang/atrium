@@ -6,8 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -88,49 +86,24 @@ func TestWimLocalAuthServesLoopbackIPv4AndIPv6(t *testing.T) {
 	t.Parallel()
 	for _, host := range []string{"127.0.0.1", "::1"} {
 		base, _ := wimServeIn(t, t.TempDir(), "--host", host, "--auth", "local")
-		status, _, _ := wimGet(t, base+"/settings/mail")
+		status, body, _ := wimMeG5(t, base)
 		if status != http.StatusOK {
-			t.Fatalf("%s local mode: %d", host, status)
+			t.Fatalf("%s local mode: %d %.200q", host, status, body)
 		}
-		if status, _, _ := wimGet(t, base+"/settings/mail", "Host", "evil.example"); status != http.StatusBadRequest {
+		if status, _, _ := wimMeG5(t, base, "Host", "evil.example"); status != http.StatusBadRequest {
 			t.Fatalf("%s local mode accepted a foreign Host: %d", host, status)
 		}
-		status, _, _ = wimGet(t, base+"/settings/mail", "X-Forwarded-For", "203.0.113.9", "X-Real-IP", "203.0.113.9", "CF-Connecting-IP", "203.0.113.9")
+		status, _, _ = wimMeG5(t, base, "X-Forwarded-For", "203.0.113.9", "X-Real-IP", "203.0.113.9", "CF-Connecting-IP", "203.0.113.9")
 		if status != http.StatusOK {
 			t.Fatalf("%s local mode with forwarded addresses: %d", host, status)
 		}
 
-		jar, _ := cookiejar.New(nil)
-		client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-		req, _ := http.NewRequest(http.MethodGet, base+"/settings/mail", nil)
-		if resp, err := client.Do(req); err != nil {
-			t.Fatal(err)
-		} else {
-			_ = resp.Body.Close()
-		}
-		u, _ := url.Parse(base)
-		post := func(token string) int {
-			t.Helper()
-			req, _ := http.NewRequest(http.MethodPost, base+"/settings/mail/accounts/nosuch/test", strings.NewReader(url.Values{"csrf_token": {token}}.Encode()))
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.Header.Set("Origin", base)
-			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_ = resp.Body.Close()
-			return resp.StatusCode
-		}
-		if code := post(""); code != http.StatusForbidden {
+		c := newWebClient(t, base, nil)
+		c.session("local")
+		if code := c.do(http.MethodPost, "/web/v1/mail/accounts/nosuch/test", nil, "X-CSRF-Token", "").status; code != http.StatusForbidden {
 			t.Errorf("%s local mode without a CSRF token: %d", host, code)
 		}
-		token := ""
-		for _, c := range jar.Cookies(u) {
-			if c.Name == "atrium_csrf" {
-				token = c.Value
-			}
-		}
-		if code := post(token); code != http.StatusNotFound {
+		if code := c.do(http.MethodPost, "/web/v1/mail/accounts/nosuch/test", nil).status; code != http.StatusNotFound {
 			t.Errorf("%s local mode with a CSRF token: %d", host, code)
 		}
 	}
@@ -183,9 +156,9 @@ func nonLoopbackIPv4s() []net.IP {
 func TestWimOIDCModeIgnoresLoopbackProxyHeaders(t *testing.T) {
 	t.Parallel()
 	base, _ := wimServeIn(t, t.TempDir(), "--auth", "oidc", "--allowed-host", "127.0.0.1")
-	status, _, header := wimGet(t, base+"/settings/mail", "Remote-Groups", "atrium_access", "Remote-User", "root", "X-Forwarded-For", "127.0.0.1")
-	if status != http.StatusSeeOther || !strings.HasPrefix(header.Get("Location"), "/login") {
-		t.Fatalf("oidc mode admitted a loopback proxy request: %d %q", status, header.Get("Location"))
+	status, body, _ := wimMeG5(t, base, "Remote-Groups", "atrium_access", "Remote-User", "root", "X-Forwarded-For", "127.0.0.1")
+	if status != http.StatusUnauthorized || !strings.HasPrefix(wimLoginURLG5(t, body), "/login") {
+		t.Fatalf("oidc mode admitted a loopback proxy request: %d %.200q", status, body)
 	}
 }
 
@@ -196,63 +169,42 @@ func TestWimProxyAuthGatesPagesByForwardedGroups(t *testing.T) {
 	for _, c := range []struct {
 		groups string
 		status int
-		want   string
 	}{
-		{"", http.StatusForbidden, ""},
-		{"other", http.StatusForbidden, ""},
-		{"atrium_admin", http.StatusForbidden, ""},
-		{access, http.StatusOK, "Mail"},
-		{admin, http.StatusOK, "Mail"},
+		{"", http.StatusUnauthorized},
+		{"other", http.StatusUnauthorized},
+		{"atrium_admin", http.StatusUnauthorized},
+		{access, http.StatusOK},
+		{admin, http.StatusOK},
 	} {
-		status, body, _ := wimGet(t, base+"/settings/mail", "Remote-Groups", c.groups)
-		if status != c.status || !strings.Contains(body, c.want) {
+		if status, body, _ := wimMeG5(t, base, "Remote-Groups", c.groups); status != c.status {
 			t.Errorf("groups %q: %d %.200q", c.groups, status, body)
 		}
-	}
-	if status, _, header := wimGet(t, base+"/", "Remote-Groups", access); status != http.StatusSeeOther || header.Get("Location") == "" {
-		t.Errorf("root for a member: %d %q", status, header.Get("Location"))
 	}
 	if status, _, _ := wimGet(t, base+"/login", "Remote-Groups", access); status != http.StatusNotFound {
 		t.Errorf("proxy mode serves the oidc login page: %d", status)
 	}
-	if status, _, _ := wimGet(t, base+"/settings/mail", "Remote-Groups", admin, "Host", "evil.example"); status != http.StatusBadRequest {
+	if status, _, _ := wimMeG5(t, base, "Remote-Groups", admin, "Host", "evil.example"); status != http.StatusBadRequest {
 		t.Errorf("foreign Host: %d", status)
 	}
 
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	c := newWebClient(t, base, nil)
+	sess := c.do(http.MethodGet, "/web/v1/session", nil, "Remote-Groups", admin)
+	c.csrf, _ = sess.json["csrf_token"].(string)
+	if sess.status != http.StatusOK || sess.json["auth_mode"] != "proxy" || c.csrf == "" {
+		t.Fatalf("proxy session: %d %s", sess.status, sess.body)
+	}
 	post := func(groups, origin string) int {
 		t.Helper()
-		u, _ := url.Parse(base)
-		token := ""
-		for _, c := range jar.Cookies(u) {
-			if c.Name == "atrium_csrf" {
-				token = c.Value
-			}
-		}
-		req, _ := http.NewRequest(http.MethodPost, base+"/settings/mail/accounts/nosuch/test", strings.NewReader(url.Values{"csrf_token": {token}}.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("Origin", origin)
-		req.Header.Set("Remote-Groups", groups)
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-		return resp.StatusCode
-	}
-	req, _ := http.NewRequest(http.MethodGet, base+"/settings/mail", nil)
-	req.Header.Set("Remote-Groups", admin)
-	if resp, err := client.Do(req); err != nil {
-		t.Fatal(err)
-	} else {
-		_ = resp.Body.Close()
+		return c.do(http.MethodPost, "/web/v1/mail/accounts/nosuch/test", nil, "Remote-Groups", groups, "Origin", origin).status
 	}
 	if code := post(access, base); code != http.StatusNotFound {
 		t.Errorf("member POST for an unknown account: %d", code)
 	}
 	if code := post(admin, "https://evil.example"); code != http.StatusForbidden {
 		t.Errorf("cross-origin admin POST: %d", code)
+	}
+	if code := post("other", base); code != http.StatusUnauthorized {
+		t.Errorf("POST without the access group: %d", code)
 	}
 	if code := post(admin, base); code != http.StatusNotFound {
 		t.Errorf("admin POST for an unknown account: %d", code)
@@ -263,18 +215,18 @@ func TestWimProxyIdentityCountsOnlyFromTrustedPeers(t *testing.T) {
 	t.Parallel()
 	forged := []string{"Remote-Groups", "atrium_access, atrium_admin", "Remote-User", "root"}
 	untrusted, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "192.0.2.0/24")
-	if status, body, _ := wimGet(t, untrusted+"/settings/mail", forged...); status != http.StatusForbidden || strings.Contains(body, "Mail") {
+	if status, body, _ := wimMeG5(t, untrusted, forged...); status != http.StatusUnauthorized {
 		t.Errorf("proxy mode admitted identity headers from an untrusted peer: %d %.200q", status, body)
 	}
 	combined, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "192.0.2.0/24")
-	if status, _, header := wimGet(t, combined+"/settings/mail", forged...); status != http.StatusSeeOther || !strings.HasPrefix(header.Get("Location"), "/login") {
-		t.Errorf("proxy+oidc mode admitted identity headers from an untrusted peer: %d %q", status, header.Get("Location"))
+	if status, body, _ := wimMeG5(t, combined, forged...); status != http.StatusUnauthorized || !strings.HasPrefix(wimLoginURLG5(t, body), "/login") {
+		t.Errorf("proxy+oidc mode admitted identity headers from an untrusted peer: %d %.200q", status, body)
 	}
 	trusted, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "192.0.2.0/24", "--trusted-proxy", "127.0.0.1/32")
-	if status, body, _ := wimGet(t, trusted+"/settings/mail", forged...); status != http.StatusOK || !strings.Contains(body, "Mail") {
+	if status, body, _ := wimMeG5(t, trusted, forged...); status != http.StatusOK {
 		t.Errorf("proxy mode refused identity headers from a trusted peer: %d %.200q", status, body)
 	}
-	if status, _, _ := wimGet(t, trusted+"/settings/mail"); status != http.StatusForbidden {
+	if status, _, _ := wimMeG5(t, trusted); status != http.StatusUnauthorized {
 		t.Errorf("proxy mode admitted a trusted peer without identity headers: %d", status)
 	}
 }
@@ -295,7 +247,7 @@ func TestWimProxyModeRefusesToStartWithoutATrustedProxy(t *testing.T) {
 	}
 	setEnv(t, "ATRIUM_WEB_TRUSTED_PROXY_CIDRS", "127.0.0.1/32")
 	base, _ := wimServeIn(t, dir, "--auth", "proxy", "--allowed-host", "127.0.0.1")
-	if status, body, _ := wimGet(t, base+"/settings/mail", "Remote-Groups", "atrium_access"); status != http.StatusOK || !strings.Contains(body, "Mail") {
+	if status, body, _ := wimMeG5(t, base, "Remote-Groups", "atrium_access"); status != http.StatusOK {
 		t.Errorf("proxy mode refused identity headers from the host's trusted proxy: %d %.200q", status, body)
 	}
 }

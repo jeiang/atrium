@@ -53,6 +53,7 @@ func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.Header.Set("Remote-Groups", "atrium_access")
+		req.Header.Set("Atrium-Client", "web")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return 0, "", err
@@ -68,12 +69,12 @@ func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
 			t.Errorf("%s answered %d while the agent was paused", target, code)
 		}
 	}
-	cancelled("/apps/media/library")
+	cancelled("/web/v1/media/library")
 	resume()
 
 	var index string
 	for deadline := time.Now().Add(15 * time.Second); ; {
-		code, body, err := request(context.Background(), "/apps/media/library")
+		code, body, err := request(context.Background(), "/web/v1/media/library")
 		if err == nil && code == http.StatusOK && strings.Contains(body, libraryShow) {
 			index = body
 			break
@@ -83,11 +84,11 @@ func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if strings.Contains(index, "Showing the library as of") {
+	if strings.Contains(index, `"stale":true`) {
 		t.Fatalf("a cancelled first load marked the catalogue stale: %s", index)
 	}
-	if code, show, err := request(context.Background(), "/apps/media/library/tv/"+libraryShow); err != nil || code != http.StatusOK || strings.Contains(show, "/apps/media/thumb/") {
-		t.Fatalf("show page = %d %v %.300s", code, err, show)
+	if code, show, err := request(context.Background(), "/web/v1/media/library/show/"+mediaAPIID(libraryShow)); err != nil || code != http.StatusOK {
+		t.Fatalf("show = %d %v %.300s", code, err, show)
 	}
 	if state := agentConnectionState(t, dir); state != "ok" {
 		t.Fatalf("cancelled requests left the agent connection %q", state)
