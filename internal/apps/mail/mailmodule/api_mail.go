@@ -49,6 +49,10 @@ type MailTriagePage struct {
 type MailMessageRef struct {
 	ID int64 `path:"message_id" json:"-" api:"min=1"`
 }
+type MailMessageRequest struct {
+	ID      int64 `path:"message_id" json:"-" api:"min=1"`
+	Folders bool  `query:"folders" json:"-"`
+}
 type MailMessage struct {
 	ID           int64                      `json:"id"`
 	Account      string                     `json:"account"`
@@ -68,6 +72,7 @@ type MailMessage struct {
 	Flagged      bool                       `json:"flagged"`
 	Decision     map[string]json.RawMessage `json:"decision"`
 	FlagDecision map[string]json.RawMessage `json:"flag_decision"`
+	Folders      []triage.Folder            `json:"folders,omitzero"`
 }
 type MailSearchRequest struct {
 	Q             string     `query:"q" json:"-"`
@@ -81,6 +86,7 @@ type MailSearchRequest struct {
 	DateTo        *float64   `query:"date_to" json:"-"`
 	Cursor        api.Cursor `query:"cursor" json:"-"`
 	Limit         api.Limit  `query:"limit" json:"-"`
+	Folders       bool       `query:"folders" json:"-"`
 }
 type MailSearchHit struct {
 	ID            int64           `json:"message_id"`
@@ -99,6 +105,7 @@ type MailSearchPage struct {
 	Items      []MailSearchHit `json:"items"`
 	Semantic   bool            `json:"semantic"`
 	NextCursor *string         `json:"next_cursor" api:"nullable"`
+	Folders    []triage.Folder `json:"folders,omitzero"`
 }
 type MailCondition struct {
 	Field string          `json:"field"`
@@ -319,8 +326,8 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 			}
 			return application.Read[MailTriagePage]{Revision: r.Revision, Data: page}, err
 		}),
-		api.Query(d, mailapp.DescribeMessage(), application.APIShape{Area: area, Errors: refusable}, "GET /mail/messages/{message_id}", func(ctx context.Context, in MailMessageRef) (application.Read[MailMessage], error) {
-			r, err := svc().Message(ctx, mailapp.MessageInput{ID: in.ID})
+		api.Query(d, mailapp.DescribeMessage(), application.APIShape{Area: area, Errors: refusable}, "GET /mail/messages/{message_id}", func(ctx context.Context, in MailMessageRequest) (application.Read[MailMessage], error) {
+			r, err := svc().Message(ctx, mailapp.MessageInput{ID: in.ID, Folders: in.Folders})
 			if err == nil && r.Data.View == nil {
 				err = &application.Error{Code: application.NotFound, Message: "Unknown message"}
 			}
@@ -328,10 +335,14 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 				return application.Read[MailMessage]{}, err
 			}
 			out, err := mailWire[MailMessage](r.Data.View)
+			out.Folders = r.Data.Folders
 			return application.Read[MailMessage]{Revision: servedRevision(mailapp.MessageName, out), Data: out}, err
 		}),
 		api.Query(d, mailapp.DescribeSearch(), application.APIShape{Area: area}, "GET /mail/messages", func(ctx context.Context, in MailSearchRequest) (application.Read[MailSearchPage], error) {
 			offset, err := mailOffset(in.Cursor)
+			if err == nil && in.Folders && in.Account == "" {
+				err = &application.Error{Code: application.Invalid, Message: "folders needs an account"}
+			}
 			if err != nil {
 				return application.Read[MailSearchPage]{}, err
 			}
@@ -341,11 +352,11 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 					disabled = append(disabled, a.Name)
 				}
 			}
-			r, err := svc().Search(ctx, mailapp.SearchInput{Query: in.Q, Limit: int(in.Limit) + 1, Offset: offset, Filters: search.Filters{Account: search.Text(in.Account), Folder: search.Text(in.Folder), From: search.Text(in.From), Unread: in.Unread, Flagged: in.Flagged, HasAttachment: in.HasAttachment, DateFrom: in.DateFrom, DateTo: in.DateTo, Disabled: disabled}})
+			r, err := svc().Search(ctx, mailapp.SearchInput{Query: in.Q, Limit: int(in.Limit) + 1, Offset: offset, Folders: in.Folders, Filters: search.Filters{Account: search.Text(in.Account), Folder: search.Text(in.Folder), From: search.Text(in.From), Unread: in.Unread, Flagged: in.Flagged, HasAttachment: in.HasAttachment, DateFrom: in.DateFrom, DateTo: in.DateTo, Disabled: disabled}})
 			if err != nil {
 				return application.Read[MailSearchPage]{}, err
 			}
-			page := MailSearchPage{Semantic: r.Data.Semantic}
+			page := MailSearchPage{Semantic: r.Data.Semantic, Folders: r.Data.Folders}
 			if len(r.Data.Results) > int(in.Limit) {
 				page.NextCursor = in.Cursor.Next(offset + int(in.Limit))
 				r.Data.Results = r.Data.Results[:in.Limit]

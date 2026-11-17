@@ -86,6 +86,22 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 	if message["corrected_to"] != "Bills" || count(mailEffects) != beforeEffects || len(m.fake.Writes) != 0 {
 		t.Fatalf("deferred correction wrote mail: %v %v", message, m.fake.Writes)
 	}
+	if _, given := message["folders"]; given {
+		t.Fatalf("message read listed folders without being asked: %v", message["folders"])
+	}
+	filed := fmt.Sprint(count("SELECT COUNT(DISTINCT folder) FROM filed_messages WHERE account = 'icloud'"))
+	if filed == "0" {
+		t.Fatal("fixture has no filed folders to list")
+	}
+	withFolders := apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages/"+id+"?folders=true", token, nil), http.StatusOK)
+	if folders, ok := withFolders["folders"].([]any); !ok || fmt.Sprint(len(folders)) != filed || folders[0].(map[string]any)["count"] == nil {
+		t.Fatalf("message folders: %v, want %s", withFolders["folders"], filed)
+	}
+	searched := apiData(t, s.do(http.MethodGet, "/api/v1/mail/messages?account=icloud&folders=true&limit=1", token, nil), http.StatusOK)
+	if folders, ok := searched["folders"].([]any); !ok || fmt.Sprint(len(folders)) != filed {
+		t.Fatalf("search folders: %v, want %s", searched["folders"], filed)
+	}
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/mail/messages?folders=true", token, nil), http.StatusUnprocessableEntity, "invalid")
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/mail/messages/999999", token, nil), http.StatusNotFound, "not_found")
 	accounts := "/api/v1/mail/accounts"
 	apiData(t, s.do(http.MethodGet, accounts, token, nil), http.StatusOK)
