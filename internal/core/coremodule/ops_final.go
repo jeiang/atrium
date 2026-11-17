@@ -1,6 +1,9 @@
 package coremodule
 
-import "github.com/jeiang/atrium/internal/application"
+import (
+	"github.com/jeiang/atrium/internal/about"
+	"github.com/jeiang/atrium/internal/application"
+)
 
 func finalBindings() []application.Binding {
 	out := []application.Binding{
@@ -11,6 +14,7 @@ func finalBindings() []application.Binding {
 		{Kind: application.ProtocolOnly, Target: "recovery", Reason: "lifecycle"},
 		{Kind: application.ProtocolOnly, Target: "embedding-index", Reason: "lifecycle"},
 		{Kind: application.ProtocolOnly, Target: "module-flags", Reason: "lifecycle"},
+		{Kind: application.ProtocolOnly, Target: "GET " + about.NoticesPath, Reason: "static"},
 	}
 	return out
 }

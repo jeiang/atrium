@@ -59,17 +59,8 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request, reason, next 
 		w.Header().Set("Content-Security-Policy", strings.Replace(csp, "form-action 'self'", "form-action 'self' "+strings.Join(cfg.Data.Origins, " "), 1))
 	}
 	view := loginView{Next: urlx.SafeReturn(next), Button: button, Reason: reason, Tone: state.tone, Message: state.message, Start: state.start}
-	if s.render == nil {
-		deny(w, state.status, state.message)
-		return
-	}
-	f, err := s.render.Frame(r, "login", view)
-	if err == nil {
-		err = s.render.Page(w, r, state.status, "auth_login.gohtml", f)
-	}
-	if err != nil {
+	if err := writeLogin(w, r, state.status, view); err != nil {
 		log.Error("render login failed", logx.Err, err.Error())
-		deny(w, http.StatusInternalServerError, "Internal Server Error")
 	}
 }
 

@@ -7,11 +7,7 @@ import (
 
 func BuiltinBindings(oidc bool) []application.Binding {
 	out := []application.Binding{
-		{Kind: application.ProtocolOnly, Target: "GET /", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "GET /healthz", Reason: "transport"},
-		{Kind: application.ProtocolOnly, Target: "* /static/*", Reason: "static"},
-		{Kind: application.ProtocolOnly, Target: "GET /next", Reason: "redirect"},
-		{Kind: application.ProtocolOnly, Target: "* /next/*", Reason: "static"},
 		{Kind: application.HTML, Target: "GET " + WebSessionPath, Uses: []application.Name{authapp.IdentityName}},
 	}
 	if oidc {

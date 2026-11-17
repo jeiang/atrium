@@ -10,12 +10,14 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
-	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
+	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web"
 )
+
+func googleRedirect(origin string) string { return origin + urlx.GoogleCallback }
 
 func connectionsOperations() ([]application.Definition, []application.Binding) {
 	defs, bindings := connectionsDeclared()
@@ -206,7 +208,7 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 					return application.Read[connectionsapp.OAuthSetup]{}, err
 				}
 				read, err := s.OAuthSetup(ctx, connectionsapp.OAuthSetupInput{})
-				read.Data.RedirectURI = connweb.GoogleRedirect(web.RequestOrigin(ctx))
+				read.Data.RedirectURI = googleRedirect(web.RequestOrigin(ctx))
 				return read, err
 			}),
 		api.Command(d, connectionsapp.DescribeOAuthConfigure(), application.APIShape{Area: area, Errors: refusable},
@@ -223,7 +225,7 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}
-				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: connweb.GoogleRedirect(web.RequestOrigin(ctx)), Handoff: true})
+				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: googleRedirect(web.RequestOrigin(ctx)), Handoff: true})
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}

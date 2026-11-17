@@ -30,7 +30,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web/app"
 	"github.com/jeiang/atrium/internal/web/tpl"
 	"github.com/jeiang/atrium/internal/webusage"
@@ -86,7 +85,6 @@ type Deps struct {
 	operations    *[]operation
 	owner         string
 	registrations *registrations
-	coreRoutes    func(*Deps)
 	drain         func(func(context.Context) error)
 }
 

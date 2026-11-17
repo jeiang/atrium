@@ -219,5 +219,3 @@ func Owned(owner string, mount Module, middleware func(*Deps, http.Handler) http
 		mount(registrar, d)
 	}
 }
-
-func CoreModule(_ chi.Router, d *Deps) { d.coreRoutes(d) }

@@ -197,7 +197,16 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 					return fn(ctx, f)
 				})
 			}
-			defer func() { d.OnFrame = onFrame }()
+			onShell := d.OnShell
+			d.OnShell = func(fn web.ShellFunc) {
+				onShell(func(ctx context.Context, state *web.ShellState) error {
+					if !s.enabled(owner) {
+						return nil
+					}
+					return fn(ctx, state)
+				})
+			}
+			defer func() { d.OnFrame, d.OnShell = onFrame, onShell }()
 			mount(r, d)
 		}, func(d *web.Deps, next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

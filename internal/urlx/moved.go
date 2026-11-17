@@ -27,6 +27,7 @@ var moves = compileMoves([][2]string{
 	{"/watches", "/apps/packages"},
 	{"/loops", "/plan/waiting"},
 	{"/today", "/"},
+	{"/about", "/settings/general"},
 	{"/chat/{id}/work", "/chat/{id}"},
 	{"/chat/{id}/history", "/chat/{id}"},
 	{"/chat/{id}/runs/{run}", "/chat/{id}"},

@@ -6,8 +6,7 @@ import (
 )
 
 func queueOperations() ([]application.Definition, []application.Binding) {
-	return []application.Definition{mediaapp.DescribeQueue()}, []application.Binding{
-	}
+	return []application.Definition{mediaapp.DescribeQueue()}, []application.Binding{}
 }
 
 func channelOperations() ([]application.Definition, []application.Binding) {

@@ -307,7 +307,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Errorf("push headers %v", sent.header)
 	}
 	checkVAPID(t, sent.header, publicKey, push.URL)
-	if payload["title"] != "atrium: automation paused" || payload["body"] != "Changed by the operator." || payload["url"] != "/next/settings/notifications" || len(payload) != 3 {
+	if payload["title"] != "atrium: automation paused" || payload["body"] != "Changed by the operator." || payload["url"] != "/settings/notifications" || len(payload) != 3 {
 		t.Errorf("payload %v", payload)
 	}
 	var delivered bool
@@ -688,7 +688,7 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	}
 	proposal := waitParkedPermission(t, d, thread)
 	stored := fmt.Sprintf("/proposals/%d", proposal)
-	card := "/next" + stored
+	card := stored
 	if p := payload(1); p["url"] != card {
 		t.Fatalf("push url = %v, want the proposal card %s", p["url"], card)
 	}

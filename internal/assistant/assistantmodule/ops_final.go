@@ -1,10 +1,6 @@
 package assistantmodule
 
-import (
-	"github.com/jeiang/atrium/internal/application"
-	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	settingsapp "github.com/jeiang/atrium/internal/settings/application"
-)
+import "github.com/jeiang/atrium/internal/application"
 
 func finalBindings() []application.Binding {
 	return []application.Binding{
