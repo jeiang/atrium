@@ -10,6 +10,8 @@ export interface ConnectionsScenario {
   conflict?: boolean;
   settingsStale?: boolean;
   pinned?: boolean;
+  sharedSlot?: boolean;
+  pinnedRace?: boolean;
 }
 
 export interface ConnectionRequest {
@@ -257,6 +259,51 @@ function seed(): ConnectionView[] {
   return rows.map((row) => ({ ...row, dependents: [] }));
 }
 
+function sharedRows(): ConnectionView[] {
+  const reason = 'the server refused the app password';
+  const rows: Omit<ConnectionView, 'dependents'>[] = [
+    {
+      id: 'mail/harbor',
+      kind: 'mail/imap',
+      label: 'Harbor mail',
+      enabled: true,
+      config_source: 'host',
+      config: { url: 'imaps://mail.example.test:993' },
+      capabilities: caps('read'),
+      credentials: [
+        {
+          slot: 'mail/harbor/password',
+          source: 'host_file',
+          present: true,
+          pinned: true,
+          file_ref: '/run/secrets/harbor-mail',
+        },
+      ],
+      state: 'needs_reauth',
+      reason,
+      results: [{ capability: 'read', state: 'needs_reauth', reason }],
+      checked_at: iso(-HOUR),
+    },
+    {
+      id: 'icloud/harbor',
+      kind: 'icloud',
+      label: 'Harbor calendar',
+      enabled: true,
+      config_source: 'operator',
+      config: { apple_id: 'harbor@example.test' },
+      capabilities: caps('caldav'),
+      credentials: [
+        { slot: 'mail/harbor/password', source: 'host_file', present: true, pinned: true, owner: 'mail/harbor' },
+      ],
+      state: 'needs_reauth',
+      reason,
+      results: [{ capability: 'caldav', state: 'needs_reauth', reason }],
+      checked_at: iso(-HOUR),
+    },
+  ];
+  return rows.map((row) => ({ ...row, dependents: [] }));
+}
+
 interface Store {
   rows: ConnectionView[];
   settings: Record<string, string>;
@@ -273,7 +320,7 @@ function scenario(read: () => { connections?: ConnectionsScenario }): Connection
   if (text !== scenarioText) {
     scenarioText = text;
     store = {
-      rows: state.empty ? [] : seed(),
+      rows: state.empty ? [] : state.sharedSlot ? [...seed(), ...sharedRows()] : seed(),
       settings: { weather_location_name: 'Hillfield', weather_latitude: '51.48', weather_longitude: '-3.18' },
       revision: 7,
       staleUsed: false,
@@ -335,12 +382,14 @@ function fields(row: ConnectionView): ConnectionField[] {
       name: credential.slot,
       type: 'secret',
       secret: true,
-      host_owned: credential.source.startsWith('host'),
+      host_owned: credential.pinned === true || credential.source.startsWith('host'),
       present: credential.present,
+      ...(credential.pinned ? { pinned: true } : {}),
+      ...(credential.owner ? { owner: credential.owner } : {}),
     });
   }
   for (const slot of declaredSlots[row.kind] ?? []) {
-    if (!row.credentials.some((credential) => credential.slot === slot)) {
+    if (!row.credentials.some((credential) => credential.slot === slot || credential.slot.endsWith(`/${slot}`))) {
       out.push({ name: slot, type: 'secret', secret: true, host_owned: false, present: false });
     }
   }
@@ -387,7 +436,7 @@ function fail(row: ConnectionView, reason: string): void {
   });
 }
 
-function editable(row: ConnectionView, body: FieldsBody): Response | undefined {
+function editable(row: ConnectionView, body: FieldsBody, state: ConnectionsScenario): Response | undefined {
   if (row.config_source === 'host' && (body.label !== undefined || body.url !== undefined)) {
     return refusal(
       422,
@@ -397,6 +446,12 @@ function editable(row: ConnectionView, body: FieldsBody): Response | undefined {
   }
   for (const slot of Object.keys(body.credentials ?? {})) {
     const held = row.credentials.find((credential) => credential.slot === slot);
+    if (state.pinnedRace || held?.pinned)
+      return refusal(
+        409,
+        'refused',
+        `connections: ${held?.owner ?? row.id} credential ${slot} is pinned by host configuration; change it there`,
+      );
     if (held?.source.startsWith('host'))
       return refusal(422, 'invalid', `connections: ${row.id} ${slot} is provided by the host`);
   }
@@ -456,7 +511,7 @@ export function connectionHandlers(read: () => { connections?: ConnectionsScenar
       if (!row) return refusal(404, 'not_found', 'No such connection.');
       if (state.conflict)
         return refusal(409, 'conflict', `connections: ${row.id} changed since revision 3; reload and try again`);
-      const refused = editable(row, body);
+      const refused = editable(row, body, state);
       if (refused) return refused;
       if (state.saveTest === 'fail') {
         return refusal(422, 'invalid', 'test failed (failing): HTTP 401 from /v1/trackers');
@@ -473,7 +528,7 @@ export function connectionHandlers(read: () => { connections?: ConnectionsScenar
       if (!row) return refusal(404, 'not_found', 'No such connection.');
       if (state.conflict)
         return refusal(409, 'conflict', `connections: ${row.id} changed since revision 3; reload and try again`);
-      const refused = editable(row, body);
+      const refused = editable(row, body, state);
       if (refused) return refused;
       apply(row, body);
       Object.assign(row, { state: 'untested', reason: '', results: [], grace_until: undefined });

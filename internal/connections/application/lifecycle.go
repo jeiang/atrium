@@ -50,6 +50,15 @@ func (s *Service) SyncUnits(ctx context.Context) error { return s.store.SyncUnit
 
 func (s *Service) UnitsChanged() <-chan struct{} { return s.store.UnitsChanged() }
 
+func (s *Service) Rechecks() <-chan ID { return s.store.Rechecks() }
+
+func Hint(v View) string {
+	if v.State != connections.NeedsReauth {
+		return ""
+	}
+	return connections.RepairHint(v)
+}
+
 type recheckKey struct {
 	d  *db.DB
 	id ID

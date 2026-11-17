@@ -310,8 +310,10 @@ claims about the running application. Operator contracts are in
   id and an iCloud or Gmail preset, declared as `mail/<id>` connections by the
   host (`services.atrium.mailAccounts`) or added, tested and removed on the
   Mail settings page (stored in the database, password only on an encrypted
-  database). A host account's password comes from its `passwordFile`, which
-  replaces a value entered in the UI at every process start; without a
+  database). A host account's password comes from its `passwordFile`: both
+  UIs show it as set in host configuration with no entry box and refuse a
+  new value (409 `refused`), and the iCloud connection that uses the same
+  password links to the mail account; without a
   `passwordFile` the operator enters it in the UI and it stays in the
   database. A Gmail account can use an app password or XOAUTH2; XOAUTH2 uses
   the Google OAuth wizard's Gmail refresh token, refreshes the access token

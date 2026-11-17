@@ -101,7 +101,11 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	_, icloudErr := davmirror.ICloudLogin(ctx, davmirror.Login{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
+	login := davmirror.Login{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)}
+	if loaded, err := davmirror.LoadLogin(ctx, p.Q); err == nil {
+		login.DAV = loaded.DAV
+	}
+	_, icloudErr := davmirror.ICloudLogin(ctx, login)
 	if icloudErr == nil {
 		return "", nil
 	}

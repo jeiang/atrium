@@ -3242,6 +3242,12 @@
           "name": {
             "type": "string"
           },
+          "owner": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
+          },
           "present": {
             "type": "boolean"
           },
@@ -3648,6 +3654,12 @@
           },
           "file_ref": {
             "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "pinned": {
+            "type": "boolean"
           },
           "present": {
             "type": "boolean"
@@ -12205,6 +12217,9 @@
             "type": "array"
           },
           "fix": {
+            "type": "string"
+          },
+          "hint": {
             "type": "string"
           },
           "id": {

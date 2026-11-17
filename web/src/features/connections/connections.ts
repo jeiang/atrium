@@ -177,6 +177,17 @@ export function stale(error: unknown): boolean {
   return error instanceof ApiError && (error.status === 409 || error.status === 412) && error.code !== 'refused';
 }
 
+export interface RepairHint {
+  owner?: string;
+  pinned: boolean;
+}
+
+export function repairHint(view: ConnectionView | undefined): RepairHint | undefined {
+  const credential = view?.credentials.find((item) => item.owner || item.pinned);
+  if (!credential) return undefined;
+  return { owner: credential.owner, pinned: credential.pinned ?? false };
+}
+
 export function remember(client: QueryClient, view: ConnectionView): void {
   client.setQueryData<ConnectionView[]>(['connections', 'list'], (rows) =>
     rows?.map((row) => (row.id === view.id ? view : row)),
