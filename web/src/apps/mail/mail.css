@@ -358,7 +358,8 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .mail-rule__move {
+  .mail-rule__move,
+  .mail-item__action {
     position: relative;
     z-index: 1;
   }
