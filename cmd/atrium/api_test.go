@@ -60,7 +60,6 @@ func startAPISite(t *testing.T, dir string, api *modelLog, extra ...string) *api
 	idp.AddUser(oidctest.User{Name: "guest", Email: "guest@example.com", Groups: []string{"atrium_access"}})
 	idp.AddUser(oidctest.User{Name: "stranger", Email: "stranger@example.com"})
 	fd, port := handOver(t)
-	setEnv(t, "ATRIUM_SERVE_LISTEN_FD", fd)
 	base := "http://127.0.0.1:" + port
 	setEnv(t, settingEnv(config.KeyPublicURL), base)
 	setEnv(t, "ATRIUM_HOST_CONFIG", oidcHostConfig(t, dir, oidcHost{
@@ -70,7 +69,7 @@ func startAPISite(t *testing.T, dir string, api *modelLog, extra ...string) *api
 		Secret:      "s3cret-for-the-test",
 		GroupsClaim: "groups",
 	}))
-	args := []string{"--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32"}
+	args := []string{"--listen-fd", fd, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32"}
 	args = append(args, extra...)
 	served, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, args...)
 	if err != nil {

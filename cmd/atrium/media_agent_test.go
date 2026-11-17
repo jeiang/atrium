@@ -148,7 +148,7 @@ func startMediaAgent(t *testing.T, opts mediaAgentOpts) *mediaAgent {
 	for _, l := range []struct {
 		key string
 		ln  net.Listener
-	}{{"ATRIUM_MEDIA_AGENT_LISTEN_FD", opts.listener}, {"ATRIUM_MEDIA_AGENT_VPN_FD", opts.vpn}} {
+	}{{"--listen-fd", opts.listener}, {"--vpn-listen-fd", opts.vpn}} {
 		if l.ln == nil {
 			continue
 		}
@@ -157,7 +157,7 @@ func startMediaAgent(t *testing.T, opts mediaAgentOpts) *mediaAgent {
 			t.Fatal(err)
 		}
 		a.cmd.ExtraFiles = append(a.cmd.ExtraFiles, f)
-		a.cmd.Env = append(a.cmd.Env, l.key+"="+strconv.Itoa(2+len(a.cmd.ExtraFiles)))
+		a.cmd.Args = append(a.cmd.Args, l.key, strconv.Itoa(2+len(a.cmd.ExtraFiles)))
 	}
 	a.cmd.Stderr = a.logs
 	out, err := a.cmd.StdoutPipe()

@@ -120,9 +120,7 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 		return err
 	}
 	a.work, a.stopWork = context.WithCancelCause(context.WithoutCancel(ctx))
-	publicFD, _ := a.env("ATRIUM_SERVE_LISTEN_FD")
-	emergencyFD, _ := a.env("ATRIUM_EMERGENCY_LISTEN_FD")
-	ls, err := bind(o.Plan, ops.Address(ctx), publicFD, emergencyFD)
+	ls, err := bind(o.Plan, ops.Address(ctx))
 	if err != nil {
 		return err
 	}

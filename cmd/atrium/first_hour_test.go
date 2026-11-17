@@ -48,7 +48,7 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 			}
 			defer func() { _ = f.Close() }()
 			cmd.ExtraFiles = []*os.File{f}
-			cmd.Env = append(cmd.Env, "ATRIUM_EMERGENCY_LISTEN_FD=3")
+			cmd.Args = append(cmd.Args, "--emergency-listen-fd", "3")
 		}
 		return startServeProcess(t, cmd, addrFile)
 	}

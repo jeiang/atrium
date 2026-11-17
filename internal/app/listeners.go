@@ -24,14 +24,14 @@ type listeners struct {
 	public, emergency, ops *listener
 }
 
-func bind(plan web.Plan, opsAddr, publicFD, emergencyFD string) (*listeners, error) {
+func bind(plan web.Plan, opsAddr string) (*listeners, error) {
 	ls := &listeners{}
 	var err error
-	if ls.public, err = listen("public", publicFD, plan.Public.Addr); err != nil {
+	if ls.public, err = listen("public", plan.Public.FD, plan.Public.Addr); err != nil {
 		return nil, err
 	}
 	if plan.Emergency != nil {
-		if ls.emergency, err = listen("emergency", emergencyFD, plan.Emergency.Addr); err != nil {
+		if ls.emergency, err = listen("emergency", plan.Emergency.FD, plan.Emergency.Addr); err != nil {
 			return nil, errors.Join(err, ls.close())
 		}
 	}

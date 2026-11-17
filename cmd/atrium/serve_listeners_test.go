@@ -42,11 +42,10 @@ func handOver(t *testing.T) (string, string) {
 	return strconv.Itoa(fd), port
 }
 
-func handOverEmergency(t *testing.T) string {
+func handOverEmergency(t *testing.T) (string, []string) {
 	t.Helper()
 	fd, port := handOver(t)
-	setEnv(t, "ATRIUM_EMERGENCY_LISTEN_FD", fd)
-	return port
+	return port, []string{"--emergency-port", port, "--emergency-listen-fd", fd}
 }
 
 func jarClient(t *testing.T) *http.Client {
@@ -75,8 +74,8 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 		setEnv(t, name, value)
 	}
 	opsBase := opsAddr(t)
-	port := handOverEmergency(t)
-	s := startAPISite(t, dir, api, "--emergency-port", port)
+	port, flags := handOverEmergency(t)
+	s := startAPISite(t, dir, api, flags...)
 	emergency := &apiSite{t: t, base: "http://127.0.0.1:" + port}
 	notify.Wait("READY=1")
 	notify.Wait("WATCHDOG=1")
@@ -226,7 +225,6 @@ func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fd, port := handOver(t)
-			setEnv(t, map[string]string{"public": "ATRIUM_SERVE_LISTEN_FD", "emergency": "ATRIUM_EMERGENCY_LISTEN_FD"}[tc.handed], fd)
 			ports := map[string]string{"public": "0", "emergency": "0", "ops": "0"}
 			ports[tc.handed], ports[tc.collides] = port, port
 			notify := sdnotifytest.Listen(t, 200*time.Millisecond)
@@ -234,7 +232,7 @@ func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 				setEnv(t, name, value)
 			}
 			setEnv(t, settingEnv(ops.ListenKey), "127.0.0.1:"+ports["ops"])
-			got := runApp(t, "serve", "--host", "127.0.0.1", "--port", ports["public"], "--auth", "local", "--emergency-port", ports["emergency"])
+			got := runApp(t, "serve", "--host", "127.0.0.1", "--port", ports["public"], "--auth", "local", "--emergency-port", ports["emergency"], map[string]string{"public": "--listen-fd", "emergency": "--emergency-listen-fd"}[tc.handed], fd)
 			if got.code != cli.ExitError {
 				t.Fatalf("serve with a port collision exited %d, want %d (transient, restarted by systemd)", got.code, cli.ExitError)
 			}
@@ -256,8 +254,8 @@ func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	port := handOverEmergency(t)
-	base, _, stop, err := startServeAppArgs(t, freshApp(f), &lockedBuffer{}, "--auth", "local", "--emergency-port", port)
+	port, flags := handOverEmergency(t)
+	base, _, stop, err := startServeAppArgs(t, freshApp(f), &lockedBuffer{}, append([]string{"--auth", "local"}, flags...)...)
 	if err != nil {
 		t.Fatalf("serve did not start: %v", err)
 	}
