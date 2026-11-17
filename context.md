@@ -802,7 +802,9 @@ claims about the running application. Operator contracts are in
   scheduled run and records a skip status when the gate refuses. A run that
   ends `error` after a run that did not sends one System push
   (`job-failed:<run id>`, linking its thread or `/scheduled?run=<id>`);
-  repeated failures push nothing until a success.
+  repeated failures push nothing until a success. `GET /schedules/runs`
+  (`assistant.schedule.runs`) pages every schedule's runs newest first, the
+  same rows as `GET /schedules/{job_id}/runs`; run rows carry `job_id`.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
