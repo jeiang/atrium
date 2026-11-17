@@ -8,7 +8,8 @@ import {
   expectTouchTargets,
   gotoShell,
 } from './checks.ts';
-import { expect, galleryLayouts, test, useScenario } from './fixtures.ts';
+import { expect, galleryLayouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet'];
 
@@ -146,6 +147,54 @@ test.describe('plan on a desktop', () => {
     await expect(detail.getByRole('link', { name: 'Chat: Weekend errands' })).toHaveAttribute('href', /\/chat\/4$/);
     await expect(detail.getByRole('link', { name: 'Edit in Tasks' })).toHaveAttribute('href', /\/plan\/tasks\/31$/);
   });
+});
+
+test.describe('plan with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  const detail = (page: Page) => page.getByRole('article');
+  const commands = [
+    {
+      name: 'a done',
+      method: 'POST',
+      path: '/commitments/task:31/done',
+      open: '/plan',
+      press: (page: Page) => page.getByRole('button', { name: 'Done: Renew the library card' }).click(),
+    },
+    {
+      name: 'a dismiss',
+      method: 'POST',
+      path: '/commitments/task:32/dismiss',
+      open: '/plan/item/task:32',
+      press: (page: Page) => detail(page).getByRole('button', { name: 'Dismiss' }).click(),
+    },
+    {
+      name: 'a reopen',
+      method: 'POST',
+      path: '/commitments/task:32/reopen',
+      open: '/plan/item/task:32',
+      press: async (page: Page) => {
+        await detail(page).getByRole('button', { name: 'Dismiss' }).click();
+        await detail(page).getByRole('button', { name: 'Reopen' }).click();
+      },
+    },
+    {
+      name: 'an undo',
+      method: 'POST',
+      path: '/undo/[^/]+',
+      open: '/plan',
+      press: async (page: Page) => {
+        await page.getByRole('button', { name: 'Done: Renew the library card' }).click();
+        await toasts(page).getByRole('button', { name: 'Undo' }).click();
+      },
+    },
+  ];
+
+  for (const { name, ...command } of commands) {
+    test(`${name} whose answer is lost reads as unknown and is never sent again`, async ({ page }) => {
+      await expectLostAnswer(page, command);
+    });
+  }
 });
 
 test.describe('plan on a phone', () => {

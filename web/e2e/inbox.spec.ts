@@ -21,6 +21,7 @@ import {
   unreachableConsole,
   useScenario,
 } from './fixtures.ts';
+import { expectNeverAgain, pressWithFault } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -657,6 +658,32 @@ test.describe('an unknown outcome in the inbox', () => {
       await checks();
     });
   }
+});
+
+test.describe('a stuck change with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('marking a change as done whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    const sent = await pressWithFault(
+      page,
+      {
+        method: 'POST',
+        path: '/approvals/15/resolve',
+        open: '/inbox/proposal:15',
+        scenario: { inbox: { stuck: true } },
+        press: async (page) => {
+          await card(page, 'proposal:15').getByRole('button', { name: 'Mark as done' }).click();
+          await page
+            .getByRole('dialog', { name: 'Mark this change as done?' })
+            .getByRole('button', { name: 'Mark as done' })
+            .click();
+        },
+      },
+      'lost',
+    );
+    await expect(page.getByText('The outcome is unknown')).toBeVisible();
+    await expectNeverAgain(page, sent);
+  });
 });
 
 test.describe('an unconfirmed approval in the inbox', () => {
