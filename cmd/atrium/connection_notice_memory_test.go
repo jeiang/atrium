@@ -35,6 +35,14 @@ func TestAConnectionFlappingAcrossARestartIsNoticedOncePerFlapWindow(t *testing.
 	waitFor(t, func() bool { return connectionState(t, dir, "service/tmdb") == "ok" })
 
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() {
+		if t.Failed() {
+			var state, reason, results, notice string
+			var checked float64
+			_ = d.Read.QueryRow("SELECT state, reason, results_json, notice_json, COALESCE(checked_at,0) FROM connections WHERE id = 'service/tmdb'").Scan(&state, &reason, &results, &notice, &checked)
+			t.Logf("connection row at failure: %s %s %s %s %.0f now %d", state, reason, results, notice, checked, time.Now().Unix())
+		}
+	})
 	label, _, _ := runtimeRow(t, dir, "service/tmdb")
 	before := connectionNotices(t, dir, label)
 	searches := 0
