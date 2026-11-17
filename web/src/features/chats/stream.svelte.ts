@@ -24,6 +24,7 @@ export type StreamStatus =
   | 'retrying'
   | 'busy'
   | 'parked'
+  | 'interrupted'
   | 'done'
   | 'failed'
   | 'stopped'
@@ -63,7 +64,7 @@ export class RunStream {
   }
 
   get resumable(): boolean {
-    return this.#ended && this.status === 'parked';
+    return this.#ended && (this.status === 'parked' || this.status === 'interrupted');
   }
 
   start(): void {
@@ -192,7 +193,7 @@ export class RunStream {
         }
         case 'done': {
           const { state } = (event as RunStreamEventDone).data;
-          ended = state === 'parked' ? 'parked' : state === 'done' ? 'done' : 'failed';
+          ended = state === 'parked' || state === 'interrupted' || state === 'done' ? state : 'failed';
           break;
         }
       }

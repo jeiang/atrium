@@ -6,6 +6,7 @@ export interface RunScript {
   label: string;
   events: RunStreamEvent[];
   parked: boolean;
+  interrupted?: boolean;
 }
 
 type Draft = RunStreamEvent extends infer E ? (E extends unknown ? Omit<E, 'id'> : never) : never;
