@@ -46,6 +46,7 @@ func transcriptItems(view apiReply) []map[string]any {
 }
 
 func TestThreadsAPIActions(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := asstDB(t, dir)
@@ -248,6 +249,7 @@ func TestThreadsAPIActions(t *testing.T) {
 }
 
 func TestHTMLSendReplaysByKey(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := asstDB(t, dir)

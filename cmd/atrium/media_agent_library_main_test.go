@@ -89,6 +89,7 @@ func searchThroughServe(t *testing.T, api *modelLog, d *db.DB, w *asstWeb, query
 }
 
 func TestLibraryReadsComeFromTheAgent(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	agent := libraryAgent(t, dir)
 	asstWarm(t)
@@ -150,6 +151,7 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 }
 
 func TestLibraryWithoutAnyCatalogueIsUnavailable(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	agent := libraryAgent(t, dir)
 	agent.terminate(t)

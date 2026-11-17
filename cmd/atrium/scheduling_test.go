@@ -232,6 +232,7 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 }
 
 func TestCalendarListFiltersByTargetAndCollection(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mirror := filepath.Join(dir, "calendars")
 	setEnv(t, settingEnv(calendar.CalendarDirKey), mirror)
@@ -257,6 +258,7 @@ func TestCalendarListFiltersByTargetAndCollection(t *testing.T) {
 }
 
 func TestCalendarUnknownWriteStaysBlocked(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	path := caldavtest.CalendarPath(0) + "lunch.ics"
 	srv.SetObject(path, invite)
@@ -288,6 +290,7 @@ func TestCalendarUnknownWriteStaysBlocked(t *testing.T) {
 }
 
 func TestCalendarCreateUnknownWriteBlocksUntilResolved(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	srv.FailPuts = 1
 	srv.PutStatus = http.StatusInternalServerError

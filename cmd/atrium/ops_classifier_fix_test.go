@@ -64,6 +64,7 @@ func awaitSamplerRun(t *testing.T, d *db.DB, after int) {
 }
 
 func TestOpsClassifierUsesTheCurrentAnthropicKeyInALongLivedScheduler(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{up: 1}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
@@ -139,6 +140,7 @@ func TestOpsClassifierUsesTheCurrentAnthropicKeyInALongLivedScheduler(t *testing
 }
 
 func TestDreamingLeavesARefusedClassificationOutOfItsSignals(t *testing.T) {
+	t.Parallel()
 	_, fake, api, f, d := opsClassifierFixture(t, map[string]string{serverops.KeyWorkerMonthlyUSD: "0.0001"})
 	fake.setUp(0)
 	tickOpsSampler(t, f, d)
@@ -171,6 +173,7 @@ func TestDreamingLeavesARefusedClassificationOutOfItsSignals(t *testing.T) {
 }
 
 func TestRecoveryClosesAStaleClassificationRun(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -219,6 +222,7 @@ func TestRecoveryClosesAStaleClassificationRun(t *testing.T) {
 }
 
 func TestWorkerFindingRefusesAnUnchangedFact(t *testing.T) {
+	t.Parallel()
 	_, fake, api, f, d := opsClassifierFixture(t, nil)
 	warm(t, api)
 	fake.setUp(0)
@@ -256,6 +260,7 @@ func TestWorkerFindingRefusesAnUnchangedFact(t *testing.T) {
 }
 
 func TestOpsSamplerNamesWhyTheAnthropicTransportCannotBeBuilt(t *testing.T) {
+	t.Parallel()
 	dir, fake, api, f, d := opsClassifierFixture(t, nil)
 	hostPath, _ := f.lookup("ATRIUM_HOST_CONFIG")
 	raw, err := os.ReadFile(hostPath)

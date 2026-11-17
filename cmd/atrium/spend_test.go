@@ -163,6 +163,7 @@ func spendCap(t *testing.T, body map[string]any, key string) map[string]any {
 }
 
 func TestSpendModelSumsUsageInTheConfiguredZoneAndShowsExhaustion(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstSet(t, "tz", "Asia/Tokyo")
 	asstWarm(t)

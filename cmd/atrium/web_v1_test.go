@@ -140,6 +140,7 @@ func (c *webClient) events(threadID, runID int64) string {
 }
 
 func TestWebChatPageReads(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	s := startAPISite(t, dir, api)
 	c := newWebClient(t, s.base, nil)
@@ -182,6 +183,7 @@ func TestWebChatPageReads(t *testing.T) {
 }
 
 func TestWebSurfaceAdmitsOnlyTheWebSession(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	port, flags := handOverEmergency(t)
 	s := startAPISite(t, dir, api, flags...)

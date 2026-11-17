@@ -102,6 +102,9 @@ func (a *Agent) inverse(key string) (protocol.FilingPlan, error) {
 		id := *res.After
 		switch s.Kind {
 		case protocol.StepLink:
+			if st, err := a.roots.stat(s.Destination); err == nil && identity(st) == id && st.Nlink < 2 {
+				return protocol.FilingPlan{}, refusal(protocol.CodeOnlyCopy)
+			}
 			s = protocol.Step{Kind: protocol.StepUnlink, Destination: s.Destination, Expect: &id, Source: s.Source}
 		case protocol.StepRename:
 			back := s.Source.Path
@@ -250,6 +253,9 @@ func (a *Agent) executeStep(dir string, s protocol.Step, undo bool) (protocol.St
 		}
 		if s.Kind == protocol.StepUnlink && existing.Mode&unix.S_IFMT != unix.S_IFREG || s.Kind == protocol.StepRmdir && existing.Mode&unix.S_IFMT != unix.S_IFDIR {
 			return result, false, ErrNotRegular
+		}
+		if undo && s.Kind == protocol.StepUnlink && existing.Nlink < 2 {
+			return result, false, refusal(protocol.CodeOnlyCopy)
 		}
 		result.Before = &id
 	}

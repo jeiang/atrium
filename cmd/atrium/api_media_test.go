@@ -24,6 +24,7 @@ import (
 )
 
 func TestMediaDownloadsAPI(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
@@ -151,6 +152,7 @@ func mediaAPIToken(t *testing.T) string {
 func mediaAPIID(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
 
 func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
+	t.Parallel()
 	const hash = "dddddddddddddddddddddddddddddddddddddddd"
 	const untagged = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 	const skipped = "ffffffffffffffffffffffffffffffffffffffff"
@@ -420,6 +422,7 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 }
 
 func TestMediaLibraryAPIWithoutCatalogueIsUnavailable(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_, qbURL := mnpNewQbit(t)
 	agent, _ := agentLibrary(t, dir, qbURL)

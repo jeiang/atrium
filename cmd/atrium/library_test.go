@@ -30,6 +30,7 @@ func librarySite(t *testing.T, flags map[string]string) (*apiSite, string, strin
 }
 
 func TestLibraryKeepsMediaHistoryListedAndUndoable(t *testing.T) {
+	t.Parallel()
 	s, token, dir := librarySite(t, flagsExcept("", ""))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
@@ -87,6 +88,7 @@ func TestLibraryKeepsMediaHistoryListedAndUndoable(t *testing.T) {
 }
 
 func TestLibraryShowsTorrentsOffAndRunsNothing(t *testing.T) {
+	t.Parallel()
 	s, token, dir := librarySite(t, flagsExcept(unit.Torrents, "false"))
 	entry := appEntryOf(t, apiData(t, s.do(http.MethodGet, "/api/v1/apps", token, nil), http.StatusOK), unit.Media)
 	if entry["name"] != "Library" || entry["state"] != "needs-settings" || !strings.Contains(fmt.Sprint(entry["reason"]), "needs torrents") || !strings.Contains(mustJSON(t, entry["unmet"]), `"torrents"`) {

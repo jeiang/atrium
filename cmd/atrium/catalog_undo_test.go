@@ -21,6 +21,7 @@ import (
 )
 
 func TestCatalogMailExecutorUndoCLIWebParity(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, mode string
 		paused     bool
@@ -92,6 +93,7 @@ func TestCatalogMailExecutorUndoCLIWebParity(t *testing.T) {
 }
 
 func TestCatalogMediaUndoThroughCLI(t *testing.T) {
+	t.Parallel()
 	const hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
@@ -117,6 +119,7 @@ func TestCatalogMediaUndoThroughCLI(t *testing.T) {
 }
 
 func TestCatalogProposeHidesDisabledMailTriage(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("mail", "false"))
 	start := warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "propose", map[string]any{"kind": "mail_triage", "payload": map[string]any{"items": []any{}}})))
@@ -162,6 +165,7 @@ func TestCatalogProposeHidesDisabledMailTriage(t *testing.T) {
 }
 
 func TestCatalogProposeKindsAreSorted(t *testing.T) {
+	t.Parallel()
 	_, api, _ := moduleFixture(t, allFlagsTrue())
 	start := warm(t, api)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))

@@ -48,6 +48,7 @@ func allFrames(t *testing.T, stream string) []streamFrame {
 }
 
 func TestStreamCarriesToolProgressAndSources(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	const a, b = "https://library.example/hours", "https://library.example/visit"
 	s.api.Push(

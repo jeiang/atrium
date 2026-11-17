@@ -18,6 +18,7 @@ import (
 )
 
 func TestCommitmentResourceJoinsTasksAndMail(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	frames := appFrames(t, s.openApp())
 	synced := syncedRevisions(t, nextAppFrame(t, frames, "sync"))
@@ -258,6 +259,7 @@ func TestCommitmentResourceJoinsTasksAndMail(t *testing.T) {
 }
 
 func TestCommitmentToolsMergeTaskAndMailLists(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := mustConnect(t, dir+"/atrium.db", keyFor(t))

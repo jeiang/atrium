@@ -37,7 +37,13 @@ const ME = 'Wren Halloway <wren@garden-club.example>';
 const DAY = 86_400_000;
 const NOW = Date.parse('2026-11-10T09:30:00Z');
 
-export const mailAccountsSeed: Account[] = [account('garden-club', 'Garden club'), account('home', 'Home')];
+export const mailAccountsSeed: Account[] = [
+  account('garden-club', 'Garden club'),
+  account('home', 'Home'),
+  { ...account('allotment', 'Allotment society'), pinned: true },
+  { ...account('old-club', 'Old club'), enabled: false, state: 'disabled' },
+  { ...account('shop', 'Seed shop'), state: 'failing', reason: 'The server refused the password.' },
+];
 
 const loops: Loop[] = [
   {

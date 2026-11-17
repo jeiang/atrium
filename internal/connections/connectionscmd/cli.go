@@ -50,6 +50,7 @@ func (s *service) test(a *cli.Args) cli.Handler {
 	id := a.OptionalArg("id", cli.Opt{Help: "connection id"})
 	all := a.Bool("all", cli.Opt{Help: "check every configured connection without test side effects instead of testing one"})
 	trace := a.String("trace", "", cli.Opt{Help: "print every request and response of one capability's check, with ids, user names and addresses masked, and save nothing"})
+	repeat := a.Int("repeat", 0, cli.Opt{Help: "with --trace: repeat the last refused request up to 5 times, 3 seconds apart"})
 	jsonOut := a.Bool("json", cli.Opt{Help: "print JSON"})
 	return func(e *cli.Env) int {
 		if (*id == "") == !*all {
@@ -58,13 +59,16 @@ func (s *service) test(a *cli.Args) cli.Handler {
 		if *trace != "" && (*all || *jsonOut) {
 			return e.UsageError("--trace takes one connection id and prints text")
 		}
+		if *repeat != 0 && (*trace == "" || *repeat < 0 || *repeat > 5) {
+			return e.UsageError("--repeat takes 1 to 5 and needs --trace")
+		}
 		svc, closeDB, err := s.open(e.Ctx)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
 		defer closeDB()
 		if *trace != "" {
-			result, err := svc.Trace(e.Ctx, connectionsapp.TraceInput{ID: connectionsapp.ID(*id), Capability: *trace, Out: e.Stdout})
+			result, err := svc.Trace(e.Ctx, connectionsapp.TraceInput{ID: connectionsapp.ID(*id), Capability: *trace, Repeat: *repeat, Out: e.Stdout})
 			if err != nil {
 				return cli.Fail(e, err)
 			}

@@ -61,6 +61,7 @@ func signalsJSON(t *testing.T, raw []byte) string {
 }
 
 func TestSignalsRefreshAndReadsMatchTheStoredLoopsCommitmentsAndReminders(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	script := mailscript.Load(t)
 	due := time.Now().UTC().Format("2006-01-02")

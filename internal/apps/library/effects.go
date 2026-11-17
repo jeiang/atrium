@@ -114,6 +114,9 @@ func undoAgent(store *ledger.Store, env config.Env) ledger.Undoer {
 			if errors.As(err, &e) && e.Mutation == protocol.MutationNone && e.Code == protocol.CodeBusy {
 				return ledger.Result{}, ledger.Refused("the media agent has no confirmed result for this filing because it was resolved by hand; undo it by hand")
 			}
+			if errors.As(err, &e) && e.Mutation == protocol.MutationNone && e.Code == protocol.CodeOnlyCopy {
+				return ledger.Result{}, ledger.Refused("undoing this filing would delete the only copy of the file because its download is gone; the library copy is kept")
+			}
 			if errors.As(err, &e) && e.Mutation == protocol.MutationNone && e.Status != 503 {
 				return ledger.Result{}, ledger.Refused("the media agent cannot undo this filing (" + e.Code + ")")
 			}

@@ -296,6 +296,7 @@ func TestMailRefusedFlagDoesNotStopOtherMessagesOrAccounts(t *testing.T) {
 }
 
 func TestMailFolderStopReasonsFallBackAfterTwoCharges(t *testing.T) {
+	t.Parallel()
 	const bad, good = "Order confirmation 55123", "Order confirmation 55124"
 	for _, stop := range stopReplies {
 		t.Run(stop.name, func(t *testing.T) {
@@ -432,6 +433,7 @@ func TestMailPassAccountingErrorIsNotADeferral(t *testing.T) {
 }
 
 func TestMailPassIgnoresARealFolderNamedUncertain(t *testing.T) {
+	t.Parallel()
 	const subject = "Order confirmation 55123"
 	r := newRoutingRig(t, "shadow", receiptsFor(t, subject), subject)
 	r.fake.AddBox("uncertain", mailtest.NewBox(11))
@@ -656,6 +658,7 @@ func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T
 }
 
 func TestMailPassWithAnUnbuildableAnthropicTransportRunsFreeStages(t *testing.T) {
+	t.Parallel()
 	r := newMailClassifierRig(t, nil)
 	hostPath, _ := r.f.lookup("ATRIUM_HOST_CONFIG")
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, hostPath, r.f.dir, "host-broken-ca.toml", map[string]string{

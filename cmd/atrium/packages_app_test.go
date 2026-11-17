@@ -16,6 +16,7 @@ import (
 )
 
 func TestPackagesAPIAddsTracksPollsUntracksAndDismisses(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -69,6 +70,7 @@ func TestPackagesAPIAddsTracksPollsUntracksAndDismisses(t *testing.T) {
 }
 
 func TestTurningPackagesOffHidesItsToolsAndKeepsTheShip24Row(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))

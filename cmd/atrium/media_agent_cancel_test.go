@@ -24,6 +24,7 @@ func agentConnectionState(t *testing.T, dir string) string {
 }
 
 func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	agent := libraryAgent(t, dir)
 	if ran := runApp(t, "connections", "test", "service/media-agent", "--json"); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, `"state": "ok"`) {

@@ -169,6 +169,7 @@ func samplesExist(t *testing.T, d *db.DB) func() bool {
 const serveropsJobName = "ops-sampler"
 
 func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{alerts: []map[string]any{
 		{"state": "firing", "labels": map[string]any{"alertname": "HighCPU", "instance": "node-a:9100"}},
 		{"state": "inactive", "labels": map[string]any{"alertname": "Ignored", "instance": "node-a:9100"}},
@@ -245,6 +246,7 @@ func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 }
 
 func TestOpsQuerySettingsRefuseNonQueryValues(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
 		t.Fatalf("settings list: exit %d %s", code, stderr)
@@ -279,6 +281,7 @@ func TestOpsQuerySettingsRefuseNonQueryValues(t *testing.T) {
 }
 
 func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
@@ -301,6 +304,7 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 }
 
 func TestOpsSamplerKeepsHealthyHostsWhenOneHostFails(t *testing.T) {
+	t.Parallel()
 	fake := &fakeOpsGrafana{up: 1, failHost: "node-b"}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)

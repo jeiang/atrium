@@ -118,6 +118,7 @@ func (s *streamSite) openApp() *http.Response {
 }
 
 func TestAppEventStreamSignalsChangesWithinItsOwnLimit(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	first := appFrames(t, s.openApp())
 	synced := syncedRevisions(t, nextAppFrame(t, first, "sync"))
@@ -176,6 +177,7 @@ func TestAppEventStreamSignalsChangesWithinItsOwnLimit(t *testing.T) {
 }
 
 func TestFreshDatabaseSendsEmptyCollectionsAsArrays(t *testing.T) {
+	t.Parallel()
 	s := newStreamSite(t)
 	array := func(what string, v any) []any {
 		t.Helper()

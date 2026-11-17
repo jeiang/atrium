@@ -75,6 +75,7 @@ func hasOperation(rows []catalogOperationRow, name string) (catalogOperationRow,
 }
 
 func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
+	t.Parallel()
 	all, code := runCatalogOperations(t, "--json")
 	if code != 0 {
 		t.Fatalf("catalog operations --json exited %d", code)

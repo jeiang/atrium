@@ -86,6 +86,7 @@ func htmlThread(t *testing.T, s *apiSite, owner string) int64 {
 }
 
 func TestHTMLSendRetryAfterAbort(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := asstDB(t, dir)
@@ -131,6 +132,7 @@ func TestHTMLSendRetryAfterAbort(t *testing.T) {
 }
 
 func TestHTMLSendTextWhileUploadsHeld(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	s := startAPISite(t, dir, api)
@@ -197,6 +199,7 @@ func TestHTMLSendTextWhileUploadsHeld(t *testing.T) {
 }
 
 func TestHTMLSendRefusesOtherMediaAndOversize(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	s := startAPISite(t, dir, api)
@@ -256,6 +259,7 @@ func TestHTMLSendRefusesOtherMediaAndOversize(t *testing.T) {
 }
 
 func TestHTMLSendKeysAreScoped(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := asstDB(t, dir)
@@ -303,6 +307,7 @@ func TestHTMLSendKeysAreScoped(t *testing.T) {
 }
 
 func TestThreadRunDoneBadgeCountsDrafts(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	d := asstDB(t, dir)

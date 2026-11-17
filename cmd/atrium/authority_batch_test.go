@@ -61,6 +61,7 @@ func findToolResult(t *testing.T, requests []anthropictest.Request, id string) m
 }
 
 func TestAuthorityBatchRefusesTheInternetAfterAMailRead(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
@@ -97,6 +98,7 @@ func TestAuthorityBatchRefusesTheInternetAfterAMailRead(t *testing.T) {
 }
 
 func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -202,6 +204,7 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 }
 
 func TestServerWebSearchResultMarksBeforeTheSameResponseClientTool(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
@@ -234,6 +237,7 @@ func TestServerWebSearchResultMarksBeforeTheSameResponseClientTool(t *testing.T)
 }
 
 func TestLookupMarksApplyToTheNextInternetCall(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
@@ -273,6 +277,7 @@ func TestLookupMarksApplyToTheNextInternetCall(t *testing.T) {
 }
 
 func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -327,6 +332,7 @@ func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
 }
 
 func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -376,6 +382,7 @@ func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
 }
 
 func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
+	t.Parallel()
 	t.Run("cron", func(t *testing.T) {
 		srv, pages := webPages(t)
 		dir, api, f := moduleFixture(t, flagsExcept("", ""))
@@ -501,6 +508,7 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 }
 
 func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
+	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -558,6 +566,7 @@ func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
 }
 
 func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
+	t.Parallel()
 	qb, qbURL := mnpNewQbit(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)

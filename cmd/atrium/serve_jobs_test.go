@@ -81,6 +81,7 @@ func declareJobsAndParkThem(t *testing.T, d *db.DB) {
 }
 
 func TestServeRunsModelFreeJobsWithAssistantDisabled(t *testing.T) {
+	t.Parallel()
 	qbit := newHeldQBittorrent(t, false)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbit.URL, "", "", ""))
@@ -107,6 +108,7 @@ func TestServeRunsModelFreeJobsWithAssistantDisabled(t *testing.T) {
 }
 
 func TestManualInvocationAndTickNeverOverlap(t *testing.T) {
+	t.Parallel()
 	qbit := newHeldQBittorrent(t, true)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbit.URL, "", "", ""))
@@ -166,6 +168,7 @@ func TestManualInvocationAndTickNeverOverlap(t *testing.T) {
 }
 
 func TestInterruptedManualRunReleasesItsClaim(t *testing.T) {
+	t.Parallel()
 	qbit := newHeldQBittorrent(t, true)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbit.URL, "", "", ""))
@@ -203,6 +206,7 @@ func TestInterruptedManualRunReleasesItsClaim(t *testing.T) {
 }
 
 func TestManualRunReportsALostClaim(t *testing.T) {
+	t.Parallel()
 	qbit := newHeldQBittorrent(t, true)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbit.URL, "", "", ""))

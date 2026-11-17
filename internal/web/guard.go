@@ -18,6 +18,7 @@ import (
 	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -32,7 +33,7 @@ const (
 
 	staticPrefix = "/static/"
 	healthPath   = "/healthz"
-	nextPrefix   = "/next/"
+	nextPrefix   = urlx.ClientBase
 	nextAssets   = "assets/"
 
 	csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'; worker-src 'self'"

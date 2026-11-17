@@ -32,6 +32,7 @@ func mediaAudit(t *testing.T, d *db.DB, operation, want string) map[string]int {
 }
 
 func TestMediaEmptyPollSkipsAndEmptySweepAuditsNoop(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	_, qbURL := mnpNewQbit(t)
@@ -51,6 +52,7 @@ func TestMediaEmptyPollSkipsAndEmptySweepAuditsNoop(t *testing.T) {
 }
 
 func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
@@ -77,6 +79,7 @@ func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
 }
 
 func TestMediaSavedChannelAndFailedPollKeepCommittedAdds(t *testing.T) {
+	t.Parallel()
 	const hash = "cccccccccccccccccccccccccccccccccccccccc"
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"torrents": []map[string]any{{"hash": hash, "title": "Lanterns S01E01 1080p", "magnet_url": mediaMagnet(hash, "Lanterns"), "size_bytes": "1000", "season": "1", "episode": "1"}}})
@@ -130,6 +133,7 @@ func TestMediaSavedChannelAndFailedPollKeepCommittedAdds(t *testing.T) {
 }
 
 func TestMediaSweepSelectionThenDeleteFailureAuditsPartial(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)

@@ -40,6 +40,7 @@ func countRows(t *testing.T, d *db.DB, query string, args ...any) int {
 }
 
 func TestStandingInstructionsPage(t *testing.T) {
+	t.Parallel()
 	const carried = "Answer in metric units. Keep replies under five sentences."
 	const edited = "Answer in metric units. Name the source of every figure."
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
@@ -139,6 +140,7 @@ func TestStandingInstructionsPage(t *testing.T) {
 }
 
 func TestRoleCRUDIsGone(t *testing.T) {
+	t.Parallel()
 	s, token, _ := localAPISite(t)
 	if got := s.do(http.MethodGet, "/api/v1/subagents", token, nil); got.status != http.StatusNotFound {
 		t.Fatalf("GET /api/v1/subagents = %d %s, want 404", got.status, got.body)

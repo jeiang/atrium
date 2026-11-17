@@ -39,6 +39,7 @@ func knowledgeMarks(t *testing.T, d *db.DB, id int64) (marks int64, confirmed, r
 }
 
 func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -111,6 +112,7 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 }
 
 func TestKnowledgePurgeRunsForTheOperator(t *testing.T) {
+	t.Parallel()
 	s := wimOIDCSite(t)
 	s.exec("INSERT INTO kb_records (title, body, scope, writer, created_at, updated_at) VALUES ('Old note', 'secret text', 'personal', 'operator', 1, 1)")
 	var id int64
@@ -148,6 +150,7 @@ func TestKnowledgePurgeRunsForTheOperator(t *testing.T) {
 }
 
 func TestPinnedConfirmedFactReachesThePrompt(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

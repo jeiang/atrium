@@ -135,6 +135,7 @@ credential_files = { viewer_token = %q }
 }
 
 func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	first, firstStatus := grafanaHealthServer(t)
 	second, secondStatus := grafanaHealthServer(t)
@@ -240,6 +241,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 }
 
 func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *testing.T) {
+	t.Parallel()
 	var mode atomic.Int32
 	release := func(letter, title string) map[string]any {
 		hash := strings.Repeat(letter, 40)
@@ -315,6 +317,7 @@ func TestMediaChannelsJobSkipsOnAnUnavailableConnectionAndNamesTheRepair(t *test
 }
 
 func TestPackageTrackingJobSkipsWithoutShip24WhilePackagesWait(t *testing.T) {
+	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
@@ -351,6 +354,7 @@ func TestPackageTrackingJobSkipsWithoutShip24WhilePackagesWait(t *testing.T) {
 }
 
 func TestHostOwnedConnectionsStayReadOnlyAndTheOwnersCheckFlagsADrift(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	srv, _ := grafanaHealthServer(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))

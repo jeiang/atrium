@@ -83,6 +83,7 @@ func rawFileRequest(t *testing.T, s *apiSite, token, method, path, contentType s
 }
 
 func TestDeclaredMultipartAndBinaryAPI(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
@@ -207,6 +208,7 @@ func malformedLast(t *testing.T, cursor string) string {
 }
 
 func TestFilesAndSpacesAPI(t *testing.T) {
+	t.Parallel()
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, model)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -508,6 +510,7 @@ func createHTMLProject(t *testing.T, base, name string) {
 }
 
 func TestMultipartUploadAdmission(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	token := localAPIToken(t, "upload-admission")
 	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
@@ -631,6 +634,7 @@ func TestMultipartUploadAdmission(t *testing.T) {
 }
 
 func TestMultipartThreadTextRequired(t *testing.T) {
+	t.Parallel()
 	dir, model, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, model)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))

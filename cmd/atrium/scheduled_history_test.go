@@ -36,6 +36,7 @@ func scheduledOnce(t *testing.T, f *fixture, d *db.DB, name string) {
 }
 
 func TestScheduledHistoryKeepsRunThreadsAndTheDigestReportsTheNightlyOutcome(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)

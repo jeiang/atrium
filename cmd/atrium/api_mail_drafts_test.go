@@ -305,6 +305,7 @@ func TestDraftSendRaceSentCopyAndResolveSent(t *testing.T) {
 }
 
 func TestAPIOwnerBindingRefusesAModuleOffAtBoot(t *testing.T) {
+	t.Parallel()
 	dir, _, f := moduleFixture(t, flagsExcept("mail", "false"))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })

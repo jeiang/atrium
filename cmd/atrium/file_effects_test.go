@@ -13,6 +13,7 @@ import (
 )
 
 func TestFileWriteUndoRemovesOnlyTheParentsItCreated(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	keep := filepath.Join(dir, "files", "keep")
 	if err := os.MkdirAll(keep, 0o755); err != nil {

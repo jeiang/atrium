@@ -150,6 +150,7 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 }
 
 func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
@@ -310,6 +311,7 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 }
 
 func TestConnectionOIDCIssuerAndPresetCannotMoveARetainedClientSecret(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
@@ -349,6 +351,7 @@ func TestConnectionOIDCIssuerAndPresetCannotMoveARetainedClientSecret(t *testing
 }
 
 func TestConnectionHostEndpointRefusalStopsServeAsAConfigurationError(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
@@ -396,6 +399,7 @@ func TestConnectionHostEndpointRefusalStopsServeAsAConfigurationError(t *testing
 }
 
 func TestConnectionHealthWatchSendsNothingForAStoredUserinfoEndpoint(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))

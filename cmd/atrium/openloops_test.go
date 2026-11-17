@@ -55,6 +55,7 @@ func seedLoopMail(t *testing.T, d *db.DB, cacheDir string, m seededLoopMail) {
 }
 
 func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	var mu sync.Mutex
 	var bodies []string

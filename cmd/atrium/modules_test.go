@@ -1272,6 +1272,7 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 }
 
 func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	message := seedMail(t, dir)

@@ -21,6 +21,13 @@ e2e pattern pkg="./cmd/atrium":
   go test -count=1 -exec true {{pkg}} >/dev/null
   ATRIUM_E2E_BINARY="$bin/atrium" bash tools/e2e-loopback go test -count=1 -timeout 30m -run "{{pattern}}" {{pkg}}
 
+# Run the e2e tests as several go test processes at once, balanced by .ci/go-test-times.tsv, with only loopback reachable
+e2e-all processes="4" parallel="16" pattern=".":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{reexec}}
+  bash tools/e2e-all {{processes}} {{parallel}} "{{pattern}}"
+
 test-pkg pkg run=".":
   {{dev}} go test -count=1 -run "{{run}}" {{pkg}}
 

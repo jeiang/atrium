@@ -84,11 +84,6 @@
     container-type: inline-size;
   }
 
-  .lib-tile:nth-child(n + 25) {
-    content-visibility: auto;
-    contain-intrinsic-size: auto none auto 9rem;
-  }
-
   .lib-tile:has(.lib-tile__link:hover) {
     border-color: var(--line-strong);
   }
@@ -265,11 +260,6 @@
   .lib-follows__name,
   .lib-files__name {
     font-weight: 600;
-  }
-
-  .lib-files__row:nth-child(n + 21) {
-    content-visibility: auto;
-    contain-intrinsic-size: auto none auto 4.5rem;
   }
 
   .lib-preview {

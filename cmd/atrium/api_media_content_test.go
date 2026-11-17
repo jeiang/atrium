@@ -17,6 +17,7 @@ import (
 )
 
 func TestMediaLibraryAPIRange(t *testing.T) {
+	t.Parallel()
 	const rel = "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
 	dir := t.TempDir()
 	qb, qbURL := mnpNewQbit(t)
@@ -177,6 +178,7 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 }
 
 func TestMediaRelayRefusesWhenMediaIsOffAtBoot(t *testing.T) {
+	t.Parallel()
 	const rel = "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
 	flags := flagsExcept("media", "false")
 	flags["torrents"] = "false"

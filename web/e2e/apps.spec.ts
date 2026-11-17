@@ -33,8 +33,16 @@ test.describe('the apps hub', () => {
       'Orchard',
     ]);
     await expect(card(page, 'grafana')).toHaveCount(0);
-    const decisions = card(page, 'mail').getByRole('link', { name: /^Mail decisions.*opens the current interface$/ });
-    await expect(decisions).toHaveAttribute('href', '/triage');
+    const mail = card(page, 'mail');
+    await expect(mail.getByRole('link', { name: 'Decisions', exact: true })).toHaveAttribute(
+      'href',
+      '/apps/mail/decisions',
+    );
+    await expect(mail.getByRole('link', { name: /^Mail decisions/ })).toHaveCount(0);
+    await expect(mail.getByRole('link', { name: /^Mail settings.*opens the current interface$/ })).toHaveAttribute(
+      'href',
+      '/settings/mail',
+    );
     await expect(card(page, 'orchard').getByRole('link', { name: /^Trees/ })).toHaveAttribute(
       'href',
       '/apps/orchard/trees',

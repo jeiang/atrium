@@ -12,6 +12,7 @@ import (
 )
 
 func TestSettingsSchemaDocumentMatchesTheServer(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	s := startAPISite(t, dir, api)
 	schema := strictJSON[coremodule.SettingsSchema](t, "/settings/schema", s.do(http.MethodGet, "/api/v1/settings/schema", s.token("owner"), nil))

@@ -31,6 +31,7 @@ func ledgerRow(t *testing.T, dir string, query string, args ...any) (state strin
 }
 
 func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
@@ -88,6 +89,7 @@ func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
 }
 
 func TestInferenceInterruptedStreamSettlesPartial(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	api.Push(anthropictest.Response{StartUsage: anthropictest.Usage{Input: 500, Output: 20}.JSON(), InterruptAfterStart: true})
@@ -103,6 +105,7 @@ func TestInferenceInterruptedStreamSettlesPartial(t *testing.T) {
 }
 
 func TestInferenceUnknownOutcomeStaysReserved(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	api.Disconnect.Store(true)
 	ran, _ := asstRun(t, "--text", "go")
@@ -133,6 +136,7 @@ func TestInferenceUnknownOutcomeStaysReserved(t *testing.T) {
 }
 
 func TestInferenceRejectedCallReleasesItsReservation(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	api.Push(anthropictest.Failure(400, "invalid_request_error", "bad request"))
@@ -148,6 +152,7 @@ func TestInferenceRejectedCallReleasesItsReservation(t *testing.T) {
 }
 
 func TestInferenceMemoryCallsAreAdmittedAndBilled(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -208,6 +213,7 @@ func TestInferenceMemoryCallsAreAdmittedAndBilled(t *testing.T) {
 }
 
 func TestInferenceMonthSpendSurvivesATimezoneChange(t *testing.T) {
+	t.Parallel()
 	now := float64(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir, api, f := moduleFixtureAt(t, flagsExcept("", ""), func() float64 { return now })
 	asstWarm(t)
@@ -228,6 +234,7 @@ func TestInferenceMonthSpendSurvivesATimezoneChange(t *testing.T) {
 }
 
 func TestInferenceInterruptedStreamChargesTheOutputItReceived(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
@@ -273,6 +280,7 @@ func TestInferenceInterruptedStreamChargesTheOutputItReceived(t *testing.T) {
 }
 
 func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
+	t.Parallel()
 	_, api, d, w := asstServe(t)
 
 	pdf := make([]byte, 0, 6<<20)
@@ -308,6 +316,7 @@ func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
 }
 
 func TestInferenceMemoryMonthlyRefusalResumesNextMonth(t *testing.T) {
+	t.Parallel()
 	now := float64(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir, api, _ := moduleFixtureAt(t, flagsExcept("", ""), func() float64 { return now })
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
@@ -376,6 +385,7 @@ func TestInferenceMemoryMonthlyRefusalResumesNextMonth(t *testing.T) {
 }
 
 func TestInferenceReservationAndSettlementBumpTheUsageRevision(t *testing.T) {
+	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)

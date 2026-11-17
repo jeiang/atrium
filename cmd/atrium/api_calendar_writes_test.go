@@ -59,6 +59,7 @@ func icloudObjectWith(srv *caldavtest.Server, fragment string) (string, bool) {
 }
 
 func TestCalendarOperatorEventWritesICloud(t *testing.T) {
+	t.Parallel()
 	_, srv := davFixture(t)
 	seedSettings(t, map[string]string{"tz": "America/New_York"})
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)

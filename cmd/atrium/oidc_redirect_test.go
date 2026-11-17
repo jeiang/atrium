@@ -9,6 +9,7 @@ import (
 )
 
 func TestWimOIDCSignInAndProbeDoNotFollowAProviderRedirectToAnotherHost(t *testing.T) {
+	t.Parallel()
 	s := wimOIDCSite(t)
 	var elsewhere atomic.Int32
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

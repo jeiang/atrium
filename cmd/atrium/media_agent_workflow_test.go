@@ -93,6 +93,48 @@ func TestFilingThroughTheAgentTwiceHasOneResult(t *testing.T) {
 	}
 }
 
+func TestUndoingAFilingAfterTheSweepRemovedItsDownloadKeepsTheLibraryCopy(t *testing.T) {
+	t.Parallel()
+	const hash = "dddddddddddddddddddddddddddddddddddddddd"
+	name := "Harbor.Lights.2026.1080p.WEB"
+	dir := t.TempDir()
+	qb, qbURL := mnpNewQbit(t)
+	_, root := agentLibrary(t, dir, qbURL)
+	content := filepath.Join(root, "downloads", name)
+	mnpWrite(t, filepath.Join(content, "Harbor.Lights.2026.mkv"), []byte("only"))
+	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
+
+	seedAllFlagsIn(t, dir)
+	b := mnpNewBrowser(t, startServeIn(t, dir))
+	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {hash}, "action": {"file"}, "kind": {"movie"}, "title": {"Harbor Lights"}, "year": {"2026"}}, http.StatusOK)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	id := mediaEffectID(t, d, library.OpFile, hash, "done")
+	placed := filepath.Join(root, "movies", "Harbor Lights (2026)", "Harbor Lights (2026).mkv")
+	if _, err := os.Stat(placed); err != nil {
+		t.Fatalf("the filing did not place the movie: %v", err)
+	}
+
+	if ran := runApp(t, "media", "sweep"); ran.code != cli.ExitOK {
+		t.Fatalf("media sweep: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	if _, err := os.Stat(content); !os.IsNotExist(err) {
+		t.Fatalf("the sweep kept the download of the filed torrent: %v", err)
+	}
+
+	ran := runApp(t, "effects", "undo", fmt.Sprint(id))
+	if ran.code == cli.ExitOK || !strings.Contains(ran.stderr, "only copy") {
+		t.Fatalf("undo after the sweep removed the download: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	if got, err := os.ReadFile(placed); err != nil || string(got) != "only" {
+		t.Fatalf("the library copy after a refused undo: %q %v", got, err)
+	}
+	if again := mediaEffectID(t, d, library.OpFile, hash, "done"); again != id {
+		t.Fatalf("the filing effect after a refused undo: done effect %d, want %d", again, id)
+	}
+}
+
 type droppingAgent struct {
 	mu      sync.Mutex
 	puts    []string

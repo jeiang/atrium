@@ -49,6 +49,7 @@ func lastTools(t *testing.T, api *modelLog, ran appRun) []any {
 }
 
 func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
+	t.Parallel()
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	ran := runApp(t, "agent", "run", "--text", "hi", "--kind", "nightly")
 	names := offeredTools(t, api, ran)
@@ -63,6 +64,7 @@ func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
 }
 
 func TestWebSearchAllowedCallers(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	script := func() {
 		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_web", map[string]any{"query": "atrium"})))
@@ -142,6 +144,7 @@ func assertServerCallers(t *testing.T, r anthropictest.Request, want string) {
 }
 
 func TestFileToolsReadSearchAndTraversal(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -181,6 +184,7 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 }
 
 func TestMemorySpendCountsTowardTheMonthlyBudget(t *testing.T) {
+	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

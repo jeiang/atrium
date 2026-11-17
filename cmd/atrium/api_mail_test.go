@@ -397,6 +397,7 @@ func TestMailApplyDeletionsAPIRefusedInShadow(t *testing.T) {
 	waitUntil(t, 60*time.Second, "mail-pass to be free", func() bool {
 		return s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{}).status == http.StatusOK
 	})
+	waitUntil(t, 60*time.Second, "the icloud watch to finish its first pass and idle", func() bool { return m.fake.Idling() == 1 })
 	syncRun := func() string {
 		t.Helper()
 		var out string

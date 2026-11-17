@@ -18,6 +18,7 @@ import (
 )
 
 func TestLivePauseKeepsMirrorsAndBackupsRunning(t *testing.T) {
+	t.Parallel()
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)

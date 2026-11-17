@@ -4,6 +4,7 @@ declare const VERSION: string;
 const worker = self as unknown as ServiceWorkerGlobalScope;
 const BASE = new URL(worker.registration.scope).pathname;
 const SHELL = PRECACHE[0] ?? BASE;
+const CARD = /^\/(?:proposals|drafts|chat)\/\d+$/;
 const PREFIX = 'next-shell-';
 const CACHE = `${PREFIX}${VERSION}`;
 const NAVIGATION_TIMEOUT_MS = 3_000;
@@ -112,14 +113,25 @@ worker.addEventListener('push', (event) => {
   );
 });
 
+function clientTarget(value: unknown): string {
+  const url = new URL(sameOrigin(value));
+  if (url.pathname.startsWith(BASE) || !CARD.test(url.pathname)) return url.href;
+  return new URL(`${BASE}${url.pathname.slice(1)}${url.search}${url.hash}`, url.origin).href;
+}
+
+async function openTarget(target: string): Promise<unknown> {
+  const windows = await worker.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const exact = windows.find((client) => client.url === target);
+  if (exact) return exact.focus();
+  const own = await worker.clients.matchAll({ type: 'window' });
+  const near = own.find((client) => client.focused) ?? own[0];
+  if (!near) return worker.clients.openWindow(target);
+  await near.focus().catch(() => undefined);
+  return near.navigate(target);
+}
+
 worker.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data: unknown = event.notification.data;
-  const target = sameOrigin(data && typeof data === 'object' && 'url' in data ? data.url : undefined);
-  event.waitUntil(
-    worker.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      const open = windows.find((client) => client.url === target);
-      return open ? open.focus() : worker.clients.openWindow(target);
-    }),
-  );
+  event.waitUntil(openTarget(clientTarget(data && typeof data === 'object' && 'url' in data ? data.url : undefined)));
 });
