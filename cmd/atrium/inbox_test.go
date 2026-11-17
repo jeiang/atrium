@@ -60,9 +60,9 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/99/resend", url.Values{}); code != http.StatusNotFound {
 		t.Errorf("unknown resend = %d", code)
 	}
-	var operation, outcome string
-	if err := d.Read.QueryRow("SELECT operation,outcome FROM operation_audit ORDER BY id DESC LIMIT 1").Scan(&operation, &outcome); err != nil || operation != "notifications.resend" || outcome != "not_found" {
-		t.Fatalf("resend audit = %s %s, %v", operation, outcome, err)
+	var target, outcome string
+	if err := d.Read.QueryRow("SELECT target,outcome FROM operation_audit WHERE operation = 'notifications.resend' ORDER BY id DESC LIMIT 1").Scan(&target, &outcome); err != nil || target != "notification:99" || outcome != "not_found" {
+		t.Fatalf("resend audit = %s %s, %v", target, outcome, err)
 	}
 }
 
@@ -116,11 +116,11 @@ func TestNotificationOperationAuditsTrustedRun(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	var source, outcome, details, target string
-	var thread, run, nthread, nrun int64
-	if err := d.Read.QueryRow("SELECT source,outcome,thread_id,run_id,details_json,target FROM operation_audit WHERE operation='notifications.send'").Scan(&source, &outcome, &thread, &run, &details, &target); err != nil {
+	var id, thread, run, nthread, nrun int64
+	if err := d.Read.QueryRow("SELECT id,thread_id,run_id FROM notifications WHERE title='Audit notification'").Scan(&id, &nthread, &nrun); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT thread_id,run_id FROM notifications WHERE title='Audit notification'").Scan(&nthread, &nrun); err != nil {
+	if err := d.Read.QueryRow("SELECT source,outcome,thread_id,run_id,details_json,target FROM operation_audit WHERE operation='notifications.send' AND target=?", fmt.Sprintf("notification:%d", id)).Scan(&source, &outcome, &thread, &run, &details, &target); err != nil {
 		t.Fatal(err)
 	}
 	if source != "tool" || outcome != "failed" || thread == 0 || run == 0 || thread != nthread || run != nrun || thread == 999999 || run == 999999 || strings.Contains(details, "private notification body") || !strings.HasPrefix(target, "notification:") {
