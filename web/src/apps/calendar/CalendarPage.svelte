@@ -7,7 +7,7 @@
   import Page from '../../shared/ui/Page.svelte';
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { repairHref, stateOf, unmetNeeds, useApps } from '../../shell/manifest';
+  import { appGone, repairHref, stateOf, unmetNeeds, useApps } from '../../shell/manifest';
   import NotFound from '../../shell/NotFound.svelte';
   import { isActive } from '../../shell/router';
   import Agenda from './Agenda.svelte';
@@ -18,8 +18,7 @@
   import './calendar.css';
 
   const apps = useApps();
-  const settled = $derived(apps.isFetchedAfterMount || !apps.isFetching);
-  const app = $derived(settled ? apps.data?.find((item) => item.id === 'calendar') : undefined);
+  const app = $derived(apps.data?.find((item) => item.id === 'calendar'));
   const current = $derived(
     isActive('/apps/calendar/week') ? 'week' : isActive('/apps/calendar/candidates') ? 'candidates' : 'agenda',
   );
@@ -64,7 +63,7 @@
   }
 </script>
 
-{#if settled && apps.data && !app?.enabled}
+{#if appGone(apps, 'calendar')}
   <NotFound />
 {:else}
   <Page title="Calendar" eyebrow="Apps">
