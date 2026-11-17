@@ -291,8 +291,8 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	if got := mrvScalar(t, dbPath, "SELECT outcome || ' ' || details_json FROM operation_audit WHERE operation = 'mail.correct' ORDER BY id DESC LIMIT 1"); got != `ok {"effect_ids":[`+action+`]}` {
 		t.Fatalf("the live correction audit = %s, want ok with effect %s", got, action)
 	}
-	if undone := dataG3(t, "undo", client.do(http.MethodPost, "/web/v1/effects/"+action+"/undo", nil)); undone["undone"] != true {
-		t.Fatalf("undo = %v", undone)
+	if got := runAppOn(t, m.app, "live", "undo", action); got.code != cli.ExitOK {
+		t.Fatalf("live undo: %d %s %s", got.code, got.stdout, got.stderr)
 	}
 	if again := client.do(http.MethodPost, "/web/v1/effects/"+action+"/undo", nil); again.status == http.StatusOK {
 		if second := dataG3(t, "second undo", again); second["undone"] != false {
