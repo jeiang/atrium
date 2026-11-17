@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -122,6 +123,14 @@ func condense(ctx context.Context, e jobworker.Env, threadID int64, now float64,
 	dropped := 0
 	for _, f := range reply.Findings {
 		if err := CheckFinding(f.Fact, f.Severity, f.Title, f.Body, deltaFacts); err != nil {
+			dropped++
+			continue
+		}
+		locked, err := kb.OpsPageLocked(ctx, d.Read, f.Fact)
+		if err != nil {
+			return err
+		}
+		if locked {
 			dropped++
 			continue
 		}

@@ -19,7 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
-	"github.com/jeiang/atrium/internal/serverops"
+	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 )
 

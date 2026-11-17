@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
@@ -26,19 +25,17 @@ type Limits struct {
 	MetricRows int
 	LogRows    int
 	Alerts     int
-	Dashboards int
 	CellChars  int
 }
 
 func ReadLimits(_ context.Context, _ db.Querier) (Limits, error) {
 	return Limits{
-		Timeout:    time.Duration(assistant.TuningAgentGrafanaTimeoutSeconds) * time.Second,
-		Series:     assistant.TuningAgentGrafanaMaxSeries,
-		MetricRows: assistant.TuningAgentGrafanaMaxMetricRows,
-		LogRows:    assistant.TuningAgentGrafanaMaxLogRows,
-		Alerts:     assistant.TuningAgentGrafanaMaxAlerts,
-		Dashboards: assistant.TuningAgentGrafanaMaxDashboards,
-		CellChars:  assistant.TuningAgentGrafanaCellChars,
+		Timeout:    time.Duration(TuningAgentGrafanaTimeoutSeconds) * time.Second,
+		Series:     TuningAgentGrafanaMaxSeries,
+		MetricRows: TuningAgentGrafanaMaxMetricRows,
+		LogRows:    TuningAgentGrafanaMaxLogRows,
+		Alerts:     TuningAgentGrafanaMaxAlerts,
+		CellChars:  TuningAgentGrafanaCellChars,
 	}, nil
 }
 

@@ -4,18 +4,15 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
+	grafanatools "github.com/jeiang/atrium/internal/apps/serverops/grafana"
 	"github.com/jeiang/atrium/internal/config"
-	grafanatools "github.com/jeiang/atrium/internal/grafana"
 	"github.com/jeiang/atrium/internal/tool"
 )
-
-type DatasourcesInput struct{}
 
 type QueryInput struct {
 	DatasourceUID string
@@ -29,18 +26,9 @@ type QueryInput struct {
 
 type AlertsInput struct{}
 
-type DashboardSearchInput struct {
-	Query string
-}
-
 type SelfDiagnoseInput struct {
 	Scope   string
 	Minutes int64
-}
-
-func (s *Service) Datasources(ctx context.Context, _ DatasourcesInput) (application.Read[map[string]any], error) {
-	out, err := s.datasources(ctx)
-	return application.Read[map[string]any]{Data: out}, err
 }
 
 func (s *Service) Query(ctx context.Context, in QueryInput) (application.Read[any], error) {
@@ -50,11 +38,6 @@ func (s *Service) Query(ctx context.Context, in QueryInput) (application.Read[an
 
 func (s *Service) Alerts(ctx context.Context, _ AlertsInput) (application.Read[map[string]any], error) {
 	out, err := s.alerts(ctx)
-	return application.Read[map[string]any]{Data: out}, err
-}
-
-func (s *Service) DashboardSearch(ctx context.Context, in DashboardSearchInput) (application.Read[map[string]any], error) {
-	out, err := s.searchDashboards(ctx, in.Query)
 	return application.Read[map[string]any]{Data: out}, err
 }
 
@@ -75,30 +58,6 @@ var selfMetrics = []struct{ ref, expr string }{
 	{"lock_timeouts_1h", `increase(atrium_db_exclusive_timeouts_total[1h])`},
 }
 
-func (s *Service) datasources(ctx context.Context) (map[string]any, error) {
-	lim, err := grafanatools.ReadLimits(ctx, s.db.Read)
-	if err != nil {
-		return nil, err
-	}
-	found, err := grafanatools.Query(ctx, s.db.Read, lim, http.MethodGet, "/api/datasources", "", nil)
-	if err != nil {
-		return nil, err
-	}
-	list, err := items(found)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]any, 0, len(list))
-	for _, v := range list {
-		d, err := attr(v)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{"uid": get(d, "uid"), "name": get(d, "name"), "type": get(d, "type")})
-	}
-	return map[string]any{"datasources": out}, nil
-}
-
 func (s *Service) query(ctx context.Context, in QueryInput) (any, error) {
 	uid, expr, kind := in.DatasourceUID, in.Expr, in.Kind
 	if kind == "" {
@@ -110,6 +69,11 @@ func (s *Service) query(ctx context.Context, in QueryInput) (any, error) {
 	lim, err := grafanatools.ReadLimits(ctx, s.db.Read)
 	if err != nil {
 		return nil, err
+	}
+	if uid == "" {
+		if uid, err = s.defaultDatasource(ctx, kind); err != nil {
+			return nil, err
+		}
 	}
 	limit := in.Limit
 	q := map[string]any{"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "maxDataPoints": int64(lim.MetricRows)}
@@ -198,36 +162,6 @@ func (s *Service) alerts(ctx context.Context) (map[string]any, error) {
 	return map[string]any{"total_firing": int64(len(firing)), "alerts": out}, nil
 }
 
-func (s *Service) searchDashboards(ctx context.Context, text string) (map[string]any, error) {
-	lim, err := grafanatools.ReadLimits(ctx, s.db.Read)
-	if err != nil {
-		return nil, err
-	}
-	rawQuery := "query=" + url.QueryEscape(text) + "&type=dash-db&limit=" + strconv.Itoa(lim.Dashboards)
-	found, err := grafanatools.Query(ctx, s.db.Read, lim, http.MethodGet, "/api/search", rawQuery, nil)
-	if err != nil {
-		return nil, err
-	}
-	list, err := items(found)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]any, 0, min(len(list), lim.Dashboards))
-	for _, v := range list[:min(len(list), lim.Dashboards)] {
-		d, err := attr(v)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{
-			"title":  get(d, "title"),
-			"uid":    get(d, "uid"),
-			"url":    get(d, "url"),
-			"folder": get(d, "folderTitle"),
-			"tags":   orDefault(d, "tags", []any{}),
-		})
-	}
-	return map[string]any{"dashboards": out}, nil
-}
 func (s *Service) selfDiagnose(ctx context.Context, in SelfDiagnoseInput) (map[string]any, error) {
 	scope, minutes := in.Scope, in.Minutes
 	if scope == "" {
@@ -292,4 +226,25 @@ func (s *Service) selfDiagnose(ctx context.Context, in SelfDiagnoseInput) (map[s
 		out["logs"] = logs
 	}
 	return out, nil
+}
+
+func (s *Service) defaultDatasource(ctx context.Context, kind string) (string, error) {
+	access, err := grafanatools.Load(ctx, s.db.Read)
+	if err != nil {
+		var missing config.NotConfigured
+		if errors.As(err, &missing) {
+			return "", tool.NotConfigured(err.Error())
+		}
+		return "", err
+	}
+	if kind == "logs" {
+		if access.LogsUID == "" {
+			return "", tool.NotConfigured(grafanatools.KeyLogsUID + " is not set")
+		}
+		return access.LogsUID, nil
+	}
+	if access.MetricsUID == "" {
+		return "", tool.NotConfigured(grafanatools.KeyMetricsUID + " is not set")
+	}
+	return access.MetricsUID, nil
 }

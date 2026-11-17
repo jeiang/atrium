@@ -117,6 +117,11 @@ var Retired = []RetiredKey{
 	{Module: "web", Key: "snooze_choices"},
 	{Module: "tools", Key: "tool_media_downloads_enabled"},
 	{Module: "tools", Key: "tool_media_add_magnet_enabled"},
+	{Module: "tools", Key: "tool_grafana_datasources_enabled"},
+	{Module: "tools", Key: "tool_grafana_search_dashboards_enabled"},
+	{Module: "tools", Key: "tool_ops_findings_enabled"},
+	{Module: "tools", Key: "tool_worker_status_enabled"},
+	{Module: "tools", Key: "tool_worker_finding_enabled"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

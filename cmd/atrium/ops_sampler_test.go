@@ -18,7 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/serverops"
+	"github.com/jeiang/atrium/internal/apps/serverops"
 )
 
 type opsGrafanaRequest struct {

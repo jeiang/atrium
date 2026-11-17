@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
 	"github.com/jeiang/atrium/internal/assistant/approval"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
@@ -35,7 +36,6 @@ import (
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
 	kbtools "github.com/jeiang/atrium/internal/assistant/tools/kb"
 	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
-	opstools "github.com/jeiang/atrium/internal/assistant/tools/ops"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
@@ -64,7 +64,6 @@ import (
 	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/tasks"
@@ -93,7 +92,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	researchOps, researchBindings := researchOperations()
 	agentOps, agentBindings := agentOperations()
 	attentionOps, attentionBindings := attentionOperations()
-	opsOps, opsBindings := opsOperations()
+	dependencyOps, dependencyBindings := dependencyOperations()
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
 		Name:  unit.Assistant,
@@ -114,8 +113,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Refs:             asstapp.Refs(),
 		HasOperatorData:  threads.HasRows,
 		Requires:         []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
-		Operations:       slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
-		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
+		Operations:       slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, dependencyOps, jobOps),
+		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, dependencyBindings, jobBindings, finalBindings()),
 		Settings: slices.Concat(assistant.Settings(), digest.Settings(),
 			registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs(), scheduler.Settings(unit.Assistant)),
@@ -129,10 +128,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Metrics:   opsmetrics.Metrics(),
 		Queues:    []ops.Queue{{Name: "thread_queue", Count: journal.QueueDepth}},
 		Corpora:   []embed.Corpus{kbembedding.Corpus},
-		ReviewKinds: func(module.ReviewDeps) review.Kinds {
-			return review.Kinds{Findings: serverops.ReviewKindFindings}
-		},
-		Jobs: Jobs(m.Jobs),
+		Jobs:      Jobs(m.Jobs),
 		Services: []runtime.ServiceDefinition{{Name: "assistant", Run: func(ctx context.Context, _ *runtime.Services) error {
 			if err := m.Start(ctx); err != nil {
 				return err
@@ -171,7 +167,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
 				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
-				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoTaskSnooze, d.Now)}),
+				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), export.Undo(d.Ledger), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoTaskSnooze, d.Now)}),
 				Resolve:   export.Resolve(d.Ledger),
 			}
 		},
@@ -195,13 +191,13 @@ func pageAssistant(runs func(context.Context) (*service.Service, error)) func(*w
 func AttentionSources(env config.Env) []attention.Source {
 	return []attention.Source{
 		attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(),
-		serverops.AttentionSource(env), dreaming.Attention(env),
+		dreaming.Attention(env),
 	}
 }
 
 func SettingGroups() []settings.Group {
 	return append([]settings.Group{
-		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD}},
+		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, classifier.OpsRunCapKey, classifier.OpsMonthlyCapKey}},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 		}},
@@ -215,7 +211,7 @@ func ToolDefinitions() []module.ToolDefinition {
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService, commitmentToolService),
-		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(opsToolService),
+		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService),
 		dependencytools.Tools(dependencyToolService),
 	} {
 		for _, t := range tools {

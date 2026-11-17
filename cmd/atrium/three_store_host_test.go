@@ -11,11 +11,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	grafanatools "github.com/jeiang/atrium/internal/grafana"
+	grafanatools "github.com/jeiang/atrium/internal/apps/serverops/grafana"
 	kbexport "github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/serverops"
+	"github.com/jeiang/atrium/internal/apps/serverops"
 	"github.com/jeiang/atrium/internal/unit"
 )
 

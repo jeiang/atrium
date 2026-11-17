@@ -57,7 +57,7 @@ var adapters = []adapter{
 	{pattern: "internal/db/dbcmd/*"},
 	{pattern: "internal/backup/*", marker: "cli.Command{"},
 	{pattern: "internal/ledger/ledgercmd/*"},
-	{pattern: "internal/serverops/*", marker: "scheduler.Definition"},
+	{pattern: "internal/apps/serverops/*", marker: "scheduler.Definition"},
 }
 
 var roots = map[string]string{

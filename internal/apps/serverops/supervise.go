@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -67,10 +68,7 @@ func Supervise(ctx context.Context, e jobworker.Env) error {
 	if err != nil {
 		return err
 	}
-	if err := resolveFindings(ctx, d, now); err != nil {
-		return err
-	}
-	if err := pruneFindings(ctx, d, now); err != nil {
+	if err := expireFindings(ctx, d, now); err != nil {
 		return err
 	}
 	retrying := false
@@ -326,48 +324,24 @@ func lastDelta(ctx context.Context, q db.Querier, threadID int64) (*delta, error
 	return nil, nil
 }
 
-func resolveFindings(ctx context.Context, d *db.DB, now float64) error {
-	rows, err := d.Read.QueryContext(ctx, "SELECT id, fact FROM ops_findings WHERE resolved_at IS NULL")
+func expireFindings(ctx context.Context, d *db.DB, now float64) error {
+	facts, err := kb.LiveOpsFacts(ctx, d.Read, now)
 	if err != nil {
 		return err
 	}
-	type finding struct {
-		id   int64
-		fact string
-	}
-	var findings []finding
-	for rows.Next() {
-		var f finding
-		if err := rows.Scan(&f.id, &f.fact); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		findings = append(findings, f)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return err
-	}
-	_ = rows.Close()
-	for _, f := range findings {
-		normal, err := normalFact(ctx, d.Read, f.fact)
+	for _, fact := range facts {
+		normal, err := normalFact(ctx, d.Read, fact)
 		if err != nil {
 			return err
 		}
 		if !normal {
 			continue
 		}
-		if _, err := d.Write.ExecContext(ctx,
-			"UPDATE ops_findings SET resolved_at = ?, resolved_reason = 'normal' WHERE id = ? AND resolved_at IS NULL", now, f.id); err != nil {
+		if err := kb.ExpireOpsPage(ctx, d.Write, fact, now); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func pruneFindings(ctx context.Context, d *db.DB, now float64) error {
-	_, err := d.Write.ExecContext(ctx, "DELETE FROM ops_findings WHERE resolved_at IS NOT NULL AND resolved_at < ?", now-30*24*3600)
-	return err
 }
 
 func normalFact(ctx context.Context, q db.Querier, fact string) (bool, error) {

@@ -12,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	grafanatools "github.com/jeiang/atrium/internal/grafana"
+	grafanatools "github.com/jeiang/atrium/internal/apps/serverops/grafana"
 )
 
 type dsQuery struct {
