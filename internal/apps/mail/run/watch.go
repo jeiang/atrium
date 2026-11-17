@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,8 +34,53 @@ const (
 )
 
 var watchBackoff = runtime.Backoff{
-	Initial: mail.TuningMailBackoffStartSeconds * time.Second,
-	Maximum: mail.TuningMailBackoffMaxSeconds * time.Second,
+	Initial:    mail.TuningMailBackoffStartSeconds * time.Second,
+	Maximum:    mail.TuningMailBackoffMaxSeconds * time.Second,
+	ResetAfter: 10 * time.Minute,
+}
+
+// refusedLogins counts consecutive refused logins per account and
+// credential revision; a new credential starts the count again.
+var refusedLogins = struct {
+	sync.Mutex
+	byAccount map[string]refusal
+}{byAccount: map[string]refusal{}}
+
+type refusal struct {
+	revision string
+	count    int
+}
+
+func loginRefused(account, revision string) int {
+	refusedLogins.Lock()
+	defer refusedLogins.Unlock()
+	r := refusedLogins.byAccount[account]
+	if r.revision != revision {
+		r = refusal{revision: revision}
+	}
+	r.count++
+	refusedLogins.byAccount[account] = r
+	return r.count
+}
+
+func loginAccepted(account string) {
+	refusedLogins.Lock()
+	defer refusedLogins.Unlock()
+	delete(refusedLogins.byAccount, account)
+}
+
+// refusedHold is how long the watch waits after its nth consecutive refused
+// login: 1 h, 3 h, 6 h, then 12 h.
+func refusedHold(n int) time.Duration {
+	switch {
+	case n <= 1:
+		return time.Hour
+	case n == 2:
+		return 3 * time.Hour
+	case n == 3:
+		return 6 * time.Hour
+	}
+	return 12 * time.Hour
 }
 
 func ConnectionLost(err error) bool {
@@ -88,6 +134,11 @@ func (w *Watcher) AccountService(account string) runtime.ServiceDefinition {
 			err := w.run(ctx, s, account)
 			if err == nil || ctx.Err() != nil {
 				return err
+			}
+			if errors.Is(err, mail.ErrLoginRefused) {
+				hold := refusedHold(loginRefused(account, AccountRevision(ctx, account)))
+				watchLog.Error(fmt.Sprintf("%s login refused, retrying in %s", account, hold), logx.Err, err.Error())
+				return runtime.Hold(err, hold)
 			}
 			if ConnectionLost(err) {
 				watchLog.Warn(fmt.Sprintf("%s connection lost (%s), reconnecting", account, err))
@@ -165,7 +216,8 @@ func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) 
 		return err
 	}
 	return mailops.ReadSession(ctx, pass.Open, pass.DB.Read, account, func(client mail.Client) error {
-		s.Healthy()
+		loginAccepted(account)
+		healthy := false
 		for ctx.Err() == nil {
 			beat()
 			var changed bool
@@ -176,6 +228,12 @@ func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) 
 			}
 			if err != nil {
 				return err
+			}
+			if !healthy {
+				// Only a completed IDLE or NOOP round trip resets the
+				// restart backoff; a session that drops at once does not.
+				s.Healthy()
+				healthy = true
 			}
 			if changed {
 				settle, err := settleFor(ctx, pass.DB.Read)

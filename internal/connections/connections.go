@@ -80,8 +80,12 @@ type Definition struct {
 	Defaults        map[string]string
 	Validate        func(Candidate) error
 	Grace           time.Duration
-	Interactive     []string
-	Test            func(context.Context, *Lease, []Capability) ([]Result, error)
+	// Serves maps an endpoint name to the capability its requests use, so a
+	// request that works on that endpoint recovers that capability without a
+	// check request. A kind that offers one capability needs no map.
+	Serves      map[string]string
+	Interactive []string
+	Test        func(context.Context, *Lease, []Capability) ([]Result, error)
 	// Silent replaces Test during a periodic health pass when the explicit
 	// test has a visible side effect, such as a diagnostic push.
 	Silent func(context.Context, *Lease, []Capability) ([]Result, error)

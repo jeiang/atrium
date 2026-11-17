@@ -170,6 +170,9 @@ type outcome struct {
 	ID       ID
 	Revision int64
 	OK       bool
+	// Capability is the capability the request used, when the kind says
+	// which one its endpoint serves.
+	Capability string
 }
 
 type RuntimeReport struct {
@@ -190,25 +193,46 @@ type observation struct {
 	at    int64
 }
 
+type succeededKey struct {
+	reg        *Registry
+	id         ID
+	capability string
+}
+
 var (
-	outcomes  = make(chan outcome, 64)
+	outcomes  sync.Map
 	succeeded sync.Map
 	observed  sync.Map
 	reporters sync.Map
 )
 
-func Outcomes() <-chan outcome { return outcomes }
+// Outcomes receives the request outcomes of leases opened under reg, the
+// connection registry of one running app. Each serving app registers its own
+// channel, so outcomes never cross to another app in the same process.
+func Outcomes(reg *Registry) (<-chan outcome, func()) {
+	ch := make(chan outcome, 64)
+	outcomes.Store(reg, ch)
+	return ch, func() { outcomes.CompareAndDelete(reg, ch) }
+}
 
-func report(id ID, revision int64, ok bool) {
-	if ok {
+func report(reg *Registry, o outcome) {
+	ch, registered := outcomes.Load(reg)
+	if !registered {
+		return
+	}
+	key := succeededKey{reg: reg, id: o.ID, capability: o.Capability}
+	if o.OK {
 		now := time.Now().UnixNano()
-		if last, seen := succeeded.Load(id); seen && now-last.(int64) < int64(time.Minute) {
+		if last, seen := succeeded.Load(key); seen && now-last.(int64) < int64(time.Minute) {
 			return
 		}
-		succeeded.Store(id, now)
+		succeeded.Store(key, now)
+	} else {
+		// The first success after a failure is the one that recovers.
+		succeeded.Delete(key)
 	}
 	select {
-	case outcomes <- outcome{ID: id, Revision: revision, OK: ok}:
+	case ch.(chan outcome) <- o:
 	default:
 	}
 }
@@ -312,18 +336,20 @@ func same(a, b State) bool {
 }
 
 type reporter struct {
-	id       ID
-	revision int64
-	next     http.RoundTripper
+	reg        *Registry
+	id         ID
+	revision   int64
+	capability string
+	next       http.RoundTripper
 }
 
 func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := r.next.RoundTrip(req)
 	switch {
 	case err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500):
-		report(r.id, r.revision, false)
+		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: r.capability})
 	case err == nil && resp.StatusCode < http.StatusBadRequest:
-		report(r.id, r.revision, true)
+		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: r.capability, OK: true})
 	}
 	return resp, err
 }
@@ -336,12 +362,27 @@ func (r reporter) CloseIdleConnections() {
 	}
 }
 
-func (l *Lease) reporting(client *http.Client) *http.Client {
-	if client.Transport == nil {
+func (l *Lease) reporting(endpoint string, client *http.Client) *http.Client {
+	if client.Transport == nil || l.store == nil || l.store.reg == nil {
 		return client
 	}
-	client.Transport = reporter{id: l.id, revision: l.revision, next: client.Transport}
+	client.Transport = reporter{reg: l.store.reg, id: l.id, revision: l.revision, capability: l.serves(endpoint), next: client.Transport}
 	return client
+}
+
+// serves names the capability that requests to endpoint use, or "" when the
+// kind does not say and offers more than one.
+func (l *Lease) serves(endpoint string) string {
+	def, ok := l.store.reg.Lookup(l.kind)
+	switch {
+	case !ok:
+		return ""
+	case def.Serves != nil:
+		return def.Serves[endpoint]
+	case len(def.Offers) == 1:
+		return def.Offers[0]
+	}
+	return ""
 }
 
 func (l *Lease) reported(state State) {
