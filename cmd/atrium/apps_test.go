@@ -92,8 +92,8 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	before := audits()
 
 	listed := apiData(t, api.do(http.MethodGet, "/api/v1/apps", token, nil), http.StatusOK)
-	if ids := appIDs(listed); !slices.Equal(ids, []string{"calendar", "grafana", "mail", "media", "torrents", "weather"}) {
-		t.Fatalf("manifest apps = %v, want only the six apps", ids)
+	if ids := appIDs(listed); !slices.Equal(ids, []string{"calendar", "grafana", "mail", "media", "packages", "torrents", "weather"}) {
+		t.Fatalf("manifest apps = %v, want only the seven apps", ids)
 	}
 	if web := apiData(t, browser.do(http.MethodGet, "/web/v1/apps", nil), http.StatusOK); !slices.Equal(appIDs(web), appIDs(listed)) {
 		t.Fatalf("the web manifest differs: %v", appIDs(web))

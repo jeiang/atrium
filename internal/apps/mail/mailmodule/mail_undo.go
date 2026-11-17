@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/drafts"
 	"github.com/jeiang/atrium/internal/apps/mail/live"
 	"github.com/jeiang/atrium/internal/apps/mail/mailops"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/safety"
@@ -110,25 +109,6 @@ func mailUndo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 				}
 				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 			}}},
-		ledger.UndoDefinition{Operation: tracking.UndoUntrack, Undoer: ledger.Undoer{
-			Validate: validateOp(tracking.UndoUntrack),
-			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-				value, err := undoPackageUntrack(ctx, s, raw)
-				if err != nil {
-					return ledger.Result{}, mailUndoFailure(err)
-				}
-				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
-			},
-			Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
-				if result.State != ledger.Done {
-					return nil
-				}
-				var u tracking.Undo
-				if err := json.Unmarshal(raw, &u); err != nil {
-					return ledger.Refused("package undo payload is invalid")
-				}
-				return tracking.Restore(ctx, tx, u)
-			}}},
 	)
 }
 
@@ -224,24 +204,4 @@ func undoMailMoveBack(ctx context.Context, open mail.OpenFunc, store *ledger.Sto
 		return nil, mailapp.NotConfigured("the mail opener is not configured")
 	}
 	return live.UndoMoveBack(ctx, open, store.DB.Write, plan)
-}
-
-func undoPackageUntrack(ctx context.Context, store *ledger.Store, raw json.RawMessage) (any, error) {
-	var u tracking.Undo
-	if err := json.Unmarshal(raw, &u); err != nil || u.Op != tracking.UndoUntrack || u.PackageID == 0 {
-		return nil, ledger.Refused("package undo payload is invalid")
-	}
-	result, err := tracking.Unsubscribe(ctx, store.DB.Write, u)
-	if err != nil {
-		var missing mailapp.NotConfigured
-		if errors.As(err, &missing) {
-			return nil, ledger.Refused(missing.Error())
-		}
-		var failure tracking.Error
-		if errors.As(err, &failure) {
-			return nil, ledger.Refused(failure.Error())
-		}
-		return nil, err
-	}
-	return result, nil
 }

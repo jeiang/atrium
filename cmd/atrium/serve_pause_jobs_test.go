@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
-	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/apps/packages/tracking"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"

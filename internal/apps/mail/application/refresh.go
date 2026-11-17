@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/apps/mail/watches"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -35,9 +34,12 @@ func (s *Service) RefreshLoops(ctx context.Context, _ struct{}) (application.Cha
 }
 
 func (s *Service) RefreshWatches(ctx context.Context, _ struct{}) (application.Change[RefreshResult], error) {
-	out, err := watches.Refresh(ctx, s.db, s.now(), watches.Options{Classifier: s.classifier, Clock: s.now, Env: s.env})
+	out, found, err := module.RunMessageScan(ctx, "watches", s.db, s.now(), module.Refresh{Env: s.env, Classifier: s.classifier, Clock: s.now})
 	if err != nil {
 		return application.Change[RefreshResult]{}, err
+	}
+	if !found {
+		return application.Change[RefreshResult]{}, &application.Error{Code: application.Unavailable, Message: "The Packages app is off."}
 	}
 	return application.Change[RefreshResult]{Data: RefreshResult{Result: out}}, nil
 }
