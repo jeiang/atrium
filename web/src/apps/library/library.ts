@@ -1,10 +1,14 @@
-import { createInfiniteQuery, createQuery, type QueryClient } from '@tanstack/svelte-query';
+import { createInfiniteQuery, createQuery, keepPreviousData, type QueryClient } from '@tanstack/svelte-query';
 import {
+  API_BASE,
   ApiError,
   type AppEntry,
   type MediaChannel,
   type MediaChannelInput,
   type MediaFilingPreview,
+  type MediaPollResult,
+  type MediaShow,
+  mediaArt,
   mediaChannelAdd,
   mediaChannelRemove,
   mediaChannels,
@@ -14,7 +18,11 @@ import {
   mediaIgnore,
   mediaLibrary,
   mediaLibraryDetail,
+  mediaPoll,
   mediaQueue,
+  mediaReleasePreview,
+  mediaShowLookup,
+  mediaShowSearch,
   ok,
 } from '../../contract';
 import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
@@ -221,4 +229,80 @@ export function sizeText(size: number): string {
 export function episodeText(season?: number | string, episode?: number | string): string | undefined {
   if (season === undefined || season === '' || episode === undefined || episode === '') return undefined;
   return `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
+}
+
+export const IMDB = /^(tt)?\d{1,10}$/;
+
+export async function findShows(q: string, signal: AbortSignal): Promise<MediaShow[]> {
+  return ok(await mediaShowSearch({ q, limit: 20 }, { signal })).items;
+}
+
+export async function lookupShow(id: number): Promise<string | undefined> {
+  const found = ok(await mediaShowLookup(id));
+  return found.found ? found.imdb : undefined;
+}
+
+export interface PreviewInput {
+  imdb: string;
+  pattern: string;
+  caseSensitive: boolean;
+}
+
+export function useReleasePreview(input: () => PreviewInput | undefined) {
+  return createQuery(() => {
+    const value = input();
+    return {
+      queryKey: ['library', 'releases', value?.imdb, value?.pattern, value?.caseSensitive],
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
+        if (!value) throw new Error('No show');
+        return ok(
+          await mediaReleasePreview(
+            {
+              imdb: value.imdb,
+              ...(value.pattern ? { pattern: value.pattern } : {}),
+              ...(value.caseSensitive ? { case_sensitive: true } : {}),
+              limit: 20,
+            },
+            { signal },
+          ),
+        );
+      },
+      enabled: value !== undefined,
+      placeholderData: keepPreviousData,
+      retry: false,
+      meta: { topics: [], persist: false },
+    };
+  });
+}
+
+export async function handlePoll(): Promise<MediaPollResult> {
+  return ok(await mediaPoll());
+}
+
+export function pollProblem(error: unknown): Problem {
+  if (error instanceof ApiError && error.code === 'effect_partial') {
+    return {
+      tone: 'warn',
+      title: 'The check stopped part way',
+      text: `${error.message} Some new episodes were sent to Downloads. atrium did not try again.`,
+    };
+  }
+  if (error instanceof ApiError && (error.code === 'unavailable' || error.code === 'not_configured')) {
+    return { tone: 'warn', title: 'The check did not run', text: `${error.message} Nothing was sent to Downloads.` };
+  }
+  return problemOf(error);
+}
+
+export type ArtKind = 'movie' | 'show';
+
+export function artUrl(kind: ArtKind, id: string): string {
+  return `${API_BASE}/media/art/${kind}/${encodeURIComponent(id)}`;
+}
+
+export async function artMissing(kind: ArtKind, id: string): Promise<boolean> {
+  try {
+    return (await mediaArt(kind, id)).status === 404;
+  } catch {
+    return false;
+  }
 }
