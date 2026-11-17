@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
@@ -20,7 +21,25 @@ const (
 	PermissionsUpdateName application.Name = "review.permissions-update"
 )
 
+var permissionScopes = []string{state.Settings, state.Review}
+
 type PermissionsInput struct{}
+
+func (s *Service) permissionsCurrent(ifMatch string) func(context.Context, db.Querier) error {
+	if strings.TrimSpace(ifMatch) == "" {
+		return nil
+	}
+	return func(ctx context.Context, q db.Querier) error {
+		counters, err := s.state.Read(ctx, q, permissionScopes)
+		if err != nil {
+			return err
+		}
+		if !readRevision(PermissionsName, counters, PermissionsInput{}, nil).Matches(ifMatch) {
+			return &application.Error{Code: application.Precondition, Message: "The permissions changed since they were read; reload them and try again."}
+		}
+		return nil
+	}
+}
 
 type PermissionRule struct {
 	Key       string   `json:"key"`
@@ -45,6 +64,7 @@ type PermissionChange struct {
 
 type PermissionsUpdateInput struct {
 	Changes []PermissionChange `json:"changes"`
+	IfMatch string             `header:"If-Match" json:"-"`
 }
 
 type PermissionsUpdated struct {
@@ -71,7 +91,7 @@ func permissionKeys() []string {
 }
 
 func (s *Service) Permissions(ctx context.Context, in PermissionsInput) (application.Read[Permissions], error) {
-	return read(ctx, s, PermissionsName, []string{state.Settings, state.Review}, in, func() (Permissions, error) {
+	return read(ctx, s, PermissionsName, permissionScopes, in, func() (Permissions, error) {
 		reg := settings.From(ctx)
 		channels, situations := registry.PermissionAxes()
 		out := Permissions{Rules: make([]PermissionRule, 0, len(channels)*len(situations))}
@@ -113,7 +133,7 @@ func (s *Service) UpdatePermissions(ctx context.Context, in PermissionsUpdateInp
 		value := strings.TrimSpace(c.Value)
 		values = append(values, settingsapp.Value{Key: c.Key, Value: value, Unset: value == ""})
 	}
-	done, err := settingsapp.Web(s.db).Set(ctx, settingsapp.SetInput{Values: values})
+	done, err := settingsapp.Web(s.db).Set(ctx, settingsapp.SetInput{Values: values, Current: s.permissionsCurrent(in.IfMatch)})
 	if e, ok := errors.AsType[*application.Error](err); ok && e.Code == application.Invalid && len(e.Fields) == 0 {
 		return application.Change[PermissionsUpdated]{}, &application.Error{Code: e.Code, Message: e.Message, Fields: []application.Field{{Name: "changes", Code: string(application.Invalid), Message: e.Message}}, Cause: err}
 	}

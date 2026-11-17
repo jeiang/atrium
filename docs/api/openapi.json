@@ -13926,6 +13926,28 @@
         },
         "type": "object"
       },
+      "SchedulePreview": {
+        "properties": {
+          "runs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "tz": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "schedule",
+          "tz",
+          "runs"
+        ],
+        "type": "object"
+      },
       "ScheduleRun": {
         "properties": {
           "cost": {
@@ -16274,6 +16296,64 @@
         ],
         "type": "object"
       },
+      "ToolCatalog": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCatalogEntry"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ToolCatalogEntry": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "effect": {
+            "enum": [
+              "read",
+              "write_undo",
+              "propose",
+              "notify"
+            ],
+            "type": "string"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permission": {
+            "enum": [
+              "none",
+              "own",
+              "notify",
+              "people",
+              "internet",
+              "by_arguments"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "permission",
+          "effect",
+          "kinds"
+        ],
+        "type": "object"
+      },
       "TorrentControlInput": {
         "additionalProperties": false,
         "properties": {
@@ -18162,8 +18242,16 @@
     },
     "/assistant/defaults": {
       "put": {
+        "description": "Sets the model, effort and context limit new threads start with. If-Match is optional: send the ETag of GET /assistant/configuration to refuse the change with 412 when the settings changed since it was read; without it the change applies as before.",
         "operationId": "assistant.defaults-set",
         "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "in": "header",
             "name": "Idempotency-Key",
@@ -18251,6 +18339,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Precondition Failed"
           },
           "413": {
             "content": {
@@ -18343,6 +18441,129 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SubagentRoleList"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "composer"
+        ],
+        "x-atrium-area": "composer",
+        "x-atrium-module": "assistant"
+      }
+    },
+    "/assistant/tools": {
+      "get": {
+        "description": "The tools the runtime registry holds for the enabled modules: name, the description the model sees, the permission channel that gates each call (by_arguments when the call decides it), the effect class, and the run kinds that may use it. Read-only; the runtime enforces these, the catalog only reports them.",
+        "operationId": "assistant.tools",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolCatalog"
                 }
               }
             },
@@ -45568,8 +45789,16 @@
         "x-atrium-module": "core"
       },
       "put": {
+        "description": "Sets permission rules. If-Match is optional: send the ETag of GET /permissions to refuse the change with 412 when the rules or pending requests changed since it was read; without it the change applies as before.",
         "operationId": "review.permissions-update",
         "parameters": [
+          {
+            "in": "header",
+            "name": "If-Match",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "in": "header",
             "name": "Idempotency-Key",
@@ -45657,6 +45886,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Precondition Failed"
           },
           "413": {
             "content": {
@@ -46761,6 +47000,146 @@
         "x-atrium-module": "assistant"
       }
     },
+    "/schedules/preview": {
+      "get": {
+        "description": "The next 5 times a cadence would run in the server zone, parsed and stepped by the scheduler's own code. A cadence it cannot parse is 422 invalid with the reason on the schedule field, as when creating a schedule.",
+        "operationId": "assistant.schedule.preview",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "schedule",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePreview"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "schedules"
+        ],
+        "x-atrium-area": "schedules",
+        "x-atrium-module": "assistant"
+      }
+    },
     "/schedules/runs": {
       "get": {
         "operationId": "assistant.schedule.runs",
@@ -47436,7 +47815,7 @@
     },
     "/schedules/{job_id}/run": {
       "post": {
-        "description": "Asks the running serve to run the schedule now, through the same pause, module and budget checks as a scheduled run, and answers at once with the requested run.",
+        "description": "Asks the running serve to run the schedule now, through the same pause, module and budget checks as a scheduled run, and answers at once with the requested run: run is its id. Its thread_id is set once serve starts it; read it from GET /schedules/{job_id}/runs/{run_id}.",
         "operationId": "assistant.schedule.run_now",
         "parameters": [
           {
@@ -47716,6 +48095,149 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "schedules"
+        ],
+        "x-atrium-area": "schedules",
+        "x-atrium-module": "assistant"
+      }
+    },
+    "/schedules/{job_id}/runs/{run_id}": {
+      "get": {
+        "description": "One run of a schedule, the same row as in GET /schedules/{job_id}/runs. thread_id stays null until serve starts the run.",
+        "operationId": "assistant.schedule.run-read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleRun"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
           },
           "429": {
             "content": {

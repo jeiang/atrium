@@ -53,6 +53,7 @@ type Value struct {
 type SetInput struct {
 	Values   []Value
 	Validate func(ctx context.Context, q db.Querier, values map[string]string) error
+	Current  func(ctx context.Context, q db.Querier) error
 }
 
 type UnsetInput struct {
@@ -185,6 +186,11 @@ func (s *Service) Set(ctx context.Context, in SetInput) (application.Change[Chan
 		keys = append(keys, v.Key)
 	}
 	id, err := s.command(ctx, SetName, targetOf(keys), keys, func(tx *sql.Tx) (bool, error) {
+		if in.Current != nil {
+			if err := in.Current(ctx, tx); err != nil {
+				return false, err
+			}
+		}
 		reg := settings.From(ctx)
 		for _, v := range values {
 			if s.operatorKeys {
@@ -242,11 +248,8 @@ func (s *Service) current(ctx context.Context, q db.Querier, ifMatch string) err
 	if err != nil {
 		return err
 	}
-	for tag := range strings.SplitSeq(ifMatch, ",") {
-		tag = strings.TrimSpace(tag)
-		if tag == "*" || strings.Trim(strings.TrimPrefix(tag, "W/"), `"`) == string(revision) {
-			return nil
-		}
+	if revision.Matches(ifMatch) {
+		return nil
 	}
 	return &application.Error{Code: application.Precondition, Message: "The settings changed since they were read; reload them and try again."}
 }
