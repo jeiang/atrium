@@ -265,9 +265,8 @@ func TestStreamCopiesDescendantEventsOnce(t *testing.T) {
 	}
 
 	expectAPI(t, s.do(http.MethodGet, fmt.Sprintf("/api/v1/threads/%d/runs/%d/events", otherThread, rootRun), s.token, nil), http.StatusNotFound, "not_found")
-	browser := asstBrowse(t, s.base)
-	if code, body, _ := browser.get(fmt.Sprintf("/chat/%d/events?run=%d", otherThread, rootRun), false); code != http.StatusNotFound {
-		t.Fatalf("browser stream under another thread: %d %s", code, body)
+	if got := webLocalG2(t, s.base).do(http.MethodGet, fmt.Sprintf("/web/v1/threads/%d/runs/%d/events", otherThread, rootRun), nil); got.status != http.StatusNotFound {
+		t.Fatalf("web stream under another thread: %d %s", got.status, got.body)
 	}
 }
 

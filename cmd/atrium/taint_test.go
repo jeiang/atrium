@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -140,19 +138,10 @@ func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 	assertOwn(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), true)
 
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	client := webLocalG2(t, base)
 	before := len(api.Requests())
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("served")))
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"once more"}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", thread), map[string]any{"text": "once more"}))
 	for deadline := time.Now().Add(20 * time.Second); len(api.Requests()) == before; {
 		if time.Now().After(deadline) {
 			t.Fatal("serve sent no model request")
@@ -315,28 +304,18 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 	}
 
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	client := webLocalG2(t, base)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var seq int64
 	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
 		t.Fatalf("first message of thread %d: %v", thread, err)
 	}
 	_ = d.Close()
-	status, body, h := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/branch", base, thread), url.Values{"seq": {fmt.Sprint(seq)}})
-	if status != http.StatusSeeOther {
-		t.Fatalf("branch = %d: %s", status, body)
+	branched := client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/branch", thread), map[string]any{"seq": seq})
+	if branched.status != http.StatusCreated {
+		t.Fatalf("branch = %d: %s", branched.status, branched.body)
 	}
-	child, err := strconv.ParseInt(strings.TrimPrefix(h.Get("Location"), "/chat/"), 10, 64)
-	if err != nil {
-		t.Fatalf("branch location %q: %v", h.Get("Location"), err)
-	}
+	child := int64(fieldG2(branched, "thread_id").(float64))
 
 	start := len(api.Requests())
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("branched")))

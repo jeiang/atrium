@@ -149,23 +149,25 @@ func TestServeStopsClaimingAtSIGTERMWhileShutdownWaits(t *testing.T) {
 	s := serveCLIProcess(t, f.dir)
 	waitUntil(t, 30*time.Second, "the scheduler service", func() bool { return strings.Contains(s.stderr.String(), "service scheduler started") })
 	started := time.Now()
-	w := asstBrowse(t, "http://"+s.addr)
+	w := webLocalG2(t, "http://"+s.addr)
 	body, upload := io.Pipe()
 	t.Cleanup(func() { _ = upload.Close() })
-	req, err := http.NewRequest(http.MethodPost, w.base+"/chat", body)
+	req, err := http.NewRequest(http.MethodPost, w.base+"/web/v1/threads", body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Content-Type", "multipart/form-data; boundary=held")
-	req.Header.Set(web.CSRFHeader, w.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Atrium-Client", "web")
+	req.Header.Set("Origin", w.base)
+	req.Header.Set(web.CSRFHeader, w.csrf)
 	uploaded := make(chan struct{})
 	go func() {
 		defer close(uploaded)
-		if resp, err := w.client.Do(req); err == nil {
+		if resp, err := w.http.Do(req); err == nil {
 			_ = resp.Body.Close()
 		}
 	}()
-	if _, err := upload.Write([]byte("--held\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nslow")); err != nil {
+	if _, err := upload.Write([]byte(`{"text":"slow`)); err != nil {
 		t.Fatal(err)
 	}
 

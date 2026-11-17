@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/url"
 	"strconv"
 	"testing"
 
@@ -52,10 +51,9 @@ func TestSchedulerRunsCatalogJobsFromEveryOwner(t *testing.T) {
 	}
 
 	base, _, stop := startServeStoppable(t, dir)
-	w := asstBrowse(t, base)
+	w := webLocalG2(t, base)
 	reminders, _, _ := schedulerJob(t, d, "task-reminders")
-	code, body, _ := w.post("/scheduled/"+strconv.FormatInt(reminders, 10)+"/toggle", url.Values{}, true)
-	w.want(code, http.StatusOK, body, "Paused")
+	webOKG2(t, w.do(http.MethodPatch, "/web/v1/schedules/"+strconv.FormatInt(reminders, 10), map[string]any{"enabled": false}))
 	_, _, disabled := schedulerJob(t, d, "task-reminders")
 	if disabled == "active" {
 		t.Fatal("the toggle left task-reminders active")

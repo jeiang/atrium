@@ -27,6 +27,16 @@ func webOKG2(t *testing.T, got apiReply) apiReply {
 	return got
 }
 
+func fieldG2(got apiReply, key string) any {
+	if v, ok := got.json[key]; ok {
+		return v
+	}
+	if data, ok := got.json["data"].(map[string]any); ok {
+		return data[key]
+	}
+	return nil
+}
+
 type headersG2 map[string]string
 
 func (h headersG2) RoundTrip(r *http.Request) (*http.Response, error) {

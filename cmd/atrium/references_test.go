@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -101,21 +99,11 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	}
 
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	client := webLocalG2(t, base)
 
 	before := len(api.Requests())
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
-	status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, reader), url.Values{"text": {fmt.Sprintf("see @thread/%d", source)}})
-	if status >= http.StatusBadRequest {
-		t.Fatalf("POST reference = %d: %s", status, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", reader), map[string]any{"text": fmt.Sprintf("see @thread/%d", source)}))
 	for deadline := time.Now().Add(20 * time.Second); len(api.Requests()) == before; {
 		if time.Now().After(deadline) {
 			t.Fatal("the reference run sent no model request")
@@ -142,9 +130,7 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 
 	before = len(api.Requests())
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, reader), url.Values{"text": {"and again"}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST follow-up = %d: %s", status, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", reader), map[string]any{"text": "and again"}))
 	for deadline := time.Now().Add(20 * time.Second); len(api.Requests()) == before; {
 		if time.Now().After(deadline) {
 			t.Fatal("the follow-up run sent no model request")
@@ -158,9 +144,8 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	waitIdle(t, dir, reader)
 	count := threadMessages(t, dir, reader)
 	tooMany := fmt.Sprintf("@thread/%d @thread/%d @thread/%d @thread/%d", source, others[0], others[1], others[2])
-	status, body, _ = fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, reader), url.Values{"text": {tooMany}})
-	if status != http.StatusUnprocessableEntity {
-		t.Fatalf("POST four references = %d, want 422: %s", status, body)
+	if refused := client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", reader), map[string]any{"text": tooMany}); refused.status != http.StatusUnprocessableEntity {
+		t.Fatalf("POST four references = %d, want 422: %s", refused.status, refused.body)
 	}
 	if after := threadMessages(t, dir, reader); after != count {
 		t.Errorf("a refused message stored %d messages, want %d", after-count, 0)
@@ -199,9 +184,7 @@ func TestAPISendReferenceStoresTheHTMLContext(t *testing.T) {
 	s := startAPISite(t, dir, api)
 	text := fmt.Sprintf("see @thread/%d", source)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
-	if status, body, _ := fetch(t, s.browser(), "POST", fmt.Sprintf("%s/chat/%d/messages", s.base, readers[0]), url.Values{"text": {text}}); status >= http.StatusBadRequest {
-		t.Fatalf("HTML send = %d: %s", status, body)
-	}
+	webOKG2(t, webLocalG2(t, s.base).do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", readers[0]), map[string]any{"text": text}))
 	waitIdle(t, dir, readers[0])
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
 	if sent := s.do(http.MethodPost, fmt.Sprintf("/api/v1/threads/%d/messages", readers[1]), s.token("owner"), map[string]any{"text": text}); sent.status != http.StatusAccepted {

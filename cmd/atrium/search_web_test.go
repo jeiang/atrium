@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -199,16 +197,8 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 		t.Errorf("the dropped citation URL reached the parent allowlist: %v", allowed)
 	}
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
-	if status, _, _ := fetch(t, client, "GET", fmt.Sprintf("%s/chat/%d", base, parent), nil); status != http.StatusOK {
-		t.Fatalf("GET the parent thread = %d", status)
+	if got := webLocalG2(t, base).do(http.MethodGet, fmt.Sprintf("/web/v1/threads/%d", parent), nil); got.status != http.StatusOK {
+		t.Fatalf("GET the parent thread = %d: %.400s", got.status, got.body)
 	}
 }
 
@@ -314,14 +304,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		warm(t, api)
 		thread := latestThread(t, dir)
 		base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-		jar, err := cookiejar.New(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-		if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-			t.Fatalf("GET /chat = %d", status)
-		}
+		client := webLocalG2(t, base)
 		start := len(api.Requests())
 		api.Push(
 			anthropictest.Reply("tool_use", anthropictest.ToolUse("t1", "search_threads", map[string]any{"query": "warm"})),
@@ -331,19 +314,15 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 			anthropictest.Reply("end_turn", anthropictest.Text("done")),
 			anthropictest.Reply("end_turn", anthropictest.Text("ok")),
 		)
-		if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"search the web for the warm thread"}}); status >= http.StatusBadRequest {
-			t.Fatalf("POST message = %d: %s", status, body)
-		}
+		webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", thread), map[string]any{"text": "search the web for the warm thread"}))
 		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		defer func() { _ = d.Close() }()
 		proposal := waitParkedPermission(t, d, thread)
-		code, card := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
-		if code != http.StatusOK || !strings.Contains(card, "the warm thread") || !strings.Contains(card, "what did it say?") {
-			t.Fatalf("GET the card does not disclose the outgoing query and question = %d\n%s", code, card)
+		card := client.do(http.MethodGet, fmt.Sprintf("/web/v1/proposals/%d", proposal), nil)
+		if card.status != http.StatusOK || !strings.Contains(card.body, "the warm thread") || !strings.Contains(card.body, "what did it say?") {
+			t.Fatalf("the proposal does not disclose the outgoing query and question = %d\n%s", card.status, card.body)
 		}
-		if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
-			t.Fatalf("approve = %d\n%s", code, body)
-		}
+		webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/approvals/%d/approve", proposal), nil))
 		waitRunState(t, d, thread, "done")
 		requests := api.Requests()[start:]
 		if len(requests) != 6 {
