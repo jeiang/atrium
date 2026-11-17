@@ -343,7 +343,7 @@ jobs:
           ENGINE: ${{ matrix.engine }}
           SHARD: ${{ matrix.shard }}/${{ matrix.total }}
           PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ runner.temp }}/playwright.json
-        run: npx playwright test --project="$ENGINE" --shard="$SHARD" --workers=4 --reporter=line,json
+        run: npx playwright test --project="$ENGINE" --shard="$SHARD" --reporter=line,json
 
       - name: Upload the timings
         if: always()
