@@ -234,6 +234,7 @@ async function click(worker: Worker, url: string): Promise<void> {
 
 test.describe('the move to the root address', () => {
   test('the classic and /next/ workers give way to one root worker', async ({ page, site }) => {
+    await page.context().addInitScript(fakePush, pushStore);
     site.moved = false;
     await page.goto(`${site.url}/old`);
     await expect.poll(() => registrations(page)).toEqual([{ scope: '/', script: '/static/sw.js' }]);
@@ -251,7 +252,7 @@ test.describe('the move to the root address', () => {
     expect(unsafe(site.api)).toEqual([]);
   });
 
-  test('an installed /next/ app updates, hands its push subscription to root and opens at root', async ({
+  test('a /next/ registration updates, re-subscribes push at root without asking and unregisters', async ({
     page,
     site,
   }) => {
@@ -308,7 +309,32 @@ test.describe('the move to the root address', () => {
     expect(unsafe(site.api)).toEqual(['POST /devices', 'DELETE /devices/41']);
   });
 
+  test('a classic worker at / keeps its push subscription when /sw.js replaces it', async ({ page, site }) => {
+    await page.context().addInitScript(fakePush, pushStore);
+    site.moved = false;
+    await page.goto(`${site.url}/old`);
+    await expect.poll(() => registrations(page)).toEqual([{ scope: '/', script: '/static/sw.js' }]);
+    const before = await page.evaluate(
+      async ({ key, store }) => {
+        const classic = await navigator.serviceWorker.getRegistration('/');
+        const bytes = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+        await classic?.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+        return localStorage.getItem(store);
+      },
+      { key: pushKey, store: pushStore },
+    );
+    site.devices = [{ id: 40, endpoint: 'https://push.example.test/device' }];
+    site.moved = true;
+    await page.goto(`${site.url}/`);
+    await expect(page.getByRole('button', { name: 'Account: Ada Operator' })).toBeVisible();
+    await expect.poll(() => registrations(page), { timeout: 15_000 }).toEqual([{ scope: '/', script: '/sw.js' }]);
+    expect(await page.evaluate((store) => localStorage.getItem(store), pushStore)).toBe(before);
+    expect(site.devices).toEqual([{ id: 40, endpoint: 'https://push.example.test/device' }]);
+    expect(unsafe(site.api)).toEqual([]);
+  });
+
   test('an open /next/ window moves to the same page at root when its worker updates', async ({ page, site }) => {
+    await page.context().addInitScript(fakePush, pushStore);
     site.moved = false;
     await page.goto(`${site.url}/next/inbox/draft:7`);
     await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
@@ -363,18 +389,24 @@ test.describe('a push notification click', () => {
     expect(unsafe(site.api)).toEqual([]);
   });
 
-  test('a notification from a /next/ worker not yet retired opens the card at root', async ({
+  test('a notification from a /next/ worker not yet retired focuses the card already open at root', async ({
     page,
     context,
     site,
   }) => {
-    await controlled(page, `${site.url}/`);
-    await registerNext(page, site);
-    const opened = context.waitForEvent('page');
-    await click(await workerAt(context, '/next/sw.js'), '/next/drafts/7');
-    const fresh = await opened;
-    await expect(fresh).toHaveURL(atRoot(site, cardAddress));
-    await expect(card(fresh)).toContainText('Shared garden plans');
+    await page.goto(`${site.url}/drafts/7`);
+    await expect(page).toHaveURL(atRoot(site, cardAddress));
+    await expect(card(page)).toContainText('Shared garden plans');
+    await expect.poll(() => registrations(page)).toEqual([{ scope: '/', script: '/sw.js' }]);
+    const helper = await context.newPage();
+    await registerNext(helper, site);
+    await helper.close();
+    const loads: string[] = [];
+    page.on('framenavigated', (frame) => loads.push(frame.url()));
+    await click(await workerAt(context, '/next/sw.js'), `/next${new URL(page.url()).pathname}`);
+    await expect(card(page)).toContainText('Shared garden plans');
+    expect(loads).toEqual([]);
+    expect(context.pages()).toHaveLength(1);
     expect(unsafe(site.api)).toEqual([]);
   });
 

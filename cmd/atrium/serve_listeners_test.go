@@ -138,7 +138,7 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 	}
 
 	limited := rateToken(t, "limited")
-	allowed, _, body := rateUntilRefused(t, newRateCall(t, emergency.base), "/api/v1/me", "", limited, http.StatusOK, 130)
+	allowed, _, body := rateUntilRefused(t, newRateCall(t, emergency.base), "/api/v1/me", "", limited, http.StatusOK, tokenBucket)
 	if allowed < 55 || rateCode(t, body) != "rate_limited" {
 		t.Fatalf("the emergency listener allowed %d before refusing: %.200s", allowed, body)
 	}
