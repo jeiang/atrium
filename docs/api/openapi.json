@@ -4762,6 +4762,9 @@
               }
             ]
           },
+          "sync_error": {
+            "type": "string"
+          },
           "undo": {
             "anyOf": [
               {
@@ -17562,6 +17565,9 @@
             ]
           },
           "error": {
+            "type": "string"
+          },
+          "sync_error": {
             "type": "string"
           },
           "undone": {

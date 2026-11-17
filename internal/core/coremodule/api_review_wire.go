@@ -58,9 +58,10 @@ type Decided struct {
 }
 
 type Undone struct {
-	Entry  *reviewapp.UndoEntry `json:"entry"`
-	Error  *string              `json:"error,omitempty"`
-	Undone bool                 `json:"undone"`
+	Entry     *reviewapp.UndoEntry `json:"entry"`
+	Error     *string              `json:"error,omitempty"`
+	SyncError *string              `json:"sync_error,omitempty"`
+	Undone    bool                 `json:"undone"`
 }
 
 type EffectResolved struct {
@@ -68,9 +69,10 @@ type EffectResolved struct {
 }
 
 type EffectUndone struct {
-	Effect *reviewapp.Effect `json:"effect"`
-	Undo   *reviewapp.Effect `json:"undo"`
-	Undone bool              `json:"undone"`
+	Effect    *reviewapp.Effect `json:"effect"`
+	Undo      *reviewapp.Effect `json:"undo"`
+	SyncError *string           `json:"sync_error,omitempty"`
+	Undone    bool              `json:"undone"`
 }
 
 func refusal(err error, code, missing string, extra map[string]any) error {
@@ -189,7 +191,7 @@ func reviewWireRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.
 						return application.Change[Undone]{}, refusal(err, "not_undone", missingEntry, nil)
 					}
 					entry, err := undoEffectEntry(ctx, s, id)
-					return application.Change[Undone]{Data: Undone{Entry: entry, Undone: true}, AuditID: done.AuditID}, err
+					return application.Change[Undone]{Data: Undone{Entry: entry, SyncError: done.Data.SyncError, Undone: true}, AuditID: done.AuditID}, err
 				case "proposal":
 					done, err := s.Undo(ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: id}})
 					outcome := done.Data.Outcome
@@ -202,7 +204,7 @@ func reviewWireRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.
 						return application.Change[Undone]{}, refusal(err, "not_undone", missingEntry, extra)
 					}
 					entry := reviewapp.UndoProposalEntry(done.Data.Proposal)
-					out := Undone{Entry: &entry, Undone: outcome.Undone}
+					out := Undone{Entry: &entry, SyncError: outcome.SyncError, Undone: outcome.Undone}
 					if !outcome.Undone {
 						for _, o := range outcome.Outcomes {
 							if o["ok"] != true {
@@ -234,7 +236,7 @@ func reviewWireRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.
 				if err != nil {
 					return application.Change[EffectUndone]{}, refusal(err, "not_undone", missingEffect, nil)
 				}
-				return application.Change[EffectUndone]{Data: EffectUndone{Effect: done.Data.Effect, Undo: done.Data.Undo, Undone: true}, AuditID: done.AuditID}, nil
+				return application.Change[EffectUndone]{Data: EffectUndone{Effect: done.Data.Effect, Undo: done.Data.Undo, SyncError: done.Data.SyncError, Undone: true}, AuditID: done.AuditID}, nil
 			}),
 	}
 }

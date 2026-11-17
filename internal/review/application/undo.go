@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/review"
@@ -30,11 +32,12 @@ type Target struct {
 type UndoInput struct{ Target Target }
 
 type UndoResult struct {
-	Proposal *proposals.Proposal
-	Outcome  proposals.UndoResult
-	Effect   *ledger.Effect
-	Undo     *ledger.Effect
-	Action   *review.Undone
+	Proposal  *proposals.Proposal
+	Outcome   proposals.UndoResult
+	Effect    *ledger.Effect
+	Undo      *ledger.Effect
+	Action    *review.Undone
+	SyncError *string
 }
 
 type ResolveInput struct {
@@ -152,9 +155,13 @@ func (s *Service) undoEffect(ctx context.Context, id int64, who proposals.Resolv
 		return application.Change[UndoResult]{}, s.refusal(ctx, UndoName, target, err, []int64{id})
 	}
 	effects := []int64{id, undo.ID}
-	return application.Change[UndoResult]{
-		Data: UndoResult{Effect: &forward, Undo: &undo}, EffectIDs: effects, AuditID: s.audit(ctx, UndoName, target, state.OK, effects),
-	}, nil
+	out := UndoResult{Effect: &forward, Undo: &undo}
+	if err := s.registry.Refresh(ctx, forward.Account); err != nil {
+		log.Error(fmt.Sprintf("post-undo sync failed for effect %d", id), logx.Err, err.Error())
+		text := err.Error()
+		out.SyncError = &text
+	}
+	return application.Change[UndoResult]{Data: out, EffectIDs: effects, AuditID: s.audit(ctx, UndoName, target, state.OK, effects)}, nil
 }
 
 func (s *Service) Resolve(ctx context.Context, in ResolveInput) (application.Change[ResolveResult], error) {
