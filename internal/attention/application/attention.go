@@ -79,8 +79,8 @@ func (s *Service) Read(ctx context.Context, _ ReadInput) (application.Read[atten
 		return application.Read[attention.Result]{}, err
 	}
 	rev := state.Revision(string(ReadName), counters, struct {
-		Sources []string `json:"sources"`
-		Minute  int64    `json:"minute"`
-	}{names, int64(now) / 60}, "operator")
+		Sources []string         `json:"sources"`
+		Result  attention.Result `json:"result"`
+	}{names, result}, "operator")
 	return application.Read[attention.Result]{Revision: application.Revision(rev), Data: result}, nil
 }

@@ -46306,7 +46306,7 @@
     },
     "/queue": {
       "get": {
-        "description": "The one inbox: everything that waits for the operator, in one order with one count. `total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `module`, `cursor` and `limit` are. Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. `module` keeps only the items of that module. Proposal items carry the proposal's `proposal_kind`. Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
+        "description": "The one inbox: everything that waits for the operator, in one order with one count. `total` equals `needs_you` from `GET /shell`, and `total` and `counts` cover the whole queue whatever `kind`, `module`, `cursor` and `limit` are. Order: asks that block the assistant (parked questions, permission requests) first, oldest first; then items with a due time, earliest due first; then everything else, oldest arrival first; ties break on `id`. `module` keeps only the items of that module. Proposal items carry the proposal's `proposal_kind`. Items of a module that is off are left out. An item's `id` is `<source.type>:<source.id>`. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision covers the result, so it also moves when an item becomes due or a snooze ends without an event.",
         "operationId": "review.queue",
         "parameters": [
           {
@@ -46477,7 +46477,7 @@
     },
     "/queue/{item_id}": {
       "get": {
-        "description": "One queue item by `id`. `proposal:<proposal_id>` and `draft:<draft_id>` are the items behind `/proposals/{proposal_id}` and `/drafts/{draft_id}`. Not found means the item no longer waits for the operator; read the proposal or draft for its outcome. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision also moves each minute, when an item can become due.",
+        "description": "One queue item by `id`. `proposal:<proposal_id>` and `draft:<draft_id>` are the items behind `/proposals/{proposal_id}` and `/drafts/{draft_id}`. Not found means the item no longer waits for the operator; read the proposal or draft for its outcome. Refetch on an app event `change` for any of the topics review, effects, mail, attention, assistant, tasks, calendar, ops, settings and connections; the revision covers the result, so it also moves when an item becomes due or a snooze ends without an event.",
         "operationId": "review.queue.item",
         "parameters": [
           {
