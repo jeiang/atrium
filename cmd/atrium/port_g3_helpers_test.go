@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -117,4 +119,30 @@ func hasG3(body string, parts ...string) bool {
 		}
 	}
 	return true
+}
+
+func knowledgeCreateG3(t *testing.T, c *webClient, title, body, scope string, marks ...string) int64 {
+	t.Helper()
+	if marks == nil {
+		marks = []string{}
+	}
+	data := dataG3(t, "create knowledge record", c.do(http.MethodPost, "/web/v1/knowledge", map[string]any{"title": title, "body": body, "scope": scope, "marks": marks}))
+	return number(t, data["id"])
+}
+
+func knowledgeEditG3(t *testing.T, c *webClient, id int64, title, body, scope string) {
+	t.Helper()
+	okG3(t, "edit knowledge record", c.do(http.MethodPatch, fmt.Sprintf("/web/v1/knowledge/%d", id), map[string]any{"title": title, "body": body, "scope": scope}))
+}
+
+var threadKeysG3 atomic.Int64
+
+func startThreadG3(t *testing.T, c *webClient, text string) int64 {
+	t.Helper()
+	made := c.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": text}, "Idempotency-Key", fmt.Sprintf("g3-%d", threadKeysG3.Add(1)))
+	if made.status != http.StatusCreated {
+		t.Fatalf("start thread %q: %d %s", text, made.status, made.body)
+	}
+	thread, _ := made.json["thread"].(map[string]any)
+	return number(t, thread["id"])
 }

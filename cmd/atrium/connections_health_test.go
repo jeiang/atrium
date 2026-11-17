@@ -399,7 +399,11 @@ func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
 	if on := runSettings(t, "set", module.FlagKey(unit.Notifications), "true"); on.code != cli.ExitOK {
 		t.Fatalf("an unconfigured connection held notifications: %d %q", on.code, on.stderr)
 	}
-	waitFor(t, func() bool { return needStateG3(t, s.base, "notifications", "service/webpush") == "unconfigured" })
+	for deadline := time.Now().Add(30 * time.Second); needStateG3(t, s.base, "notifications", "service/webpush") != "unconfigured"; time.Sleep(time.Second) {
+		if time.Now().After(deadline) {
+			t.Fatal("notifications need never showed web push as unconfigured")
+		}
+	}
 }
 
 func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
