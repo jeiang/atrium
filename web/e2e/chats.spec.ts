@@ -137,10 +137,26 @@ test.describe('while atrium is unreachable', () => {
     return seen;
   }
 
+  function transcriptReads(page: Page, thread: number): () => number {
+    let count = 0;
+    page.on('requestfinished', (request) => {
+      if (new URL(request.url()).pathname.endsWith(`/threads/${thread}`)) count++;
+    });
+    return () => count;
+  }
+
+  async function readsSettled(page: Page, reads?: () => number): Promise<void> {
+    await expect(page.getByRole('button', { name: 'Sonnet 5.5 · high' })).toBeVisible();
+    if (!reads) return;
+    await expect(page.getByRole('button', { name: 'Stop run' })).toHaveCount(0);
+    await expect.poll(reads).toBe(2);
+  }
+
   test('a message is refused at once, kept in the composer and never sent later', async ({ page }) => {
     const sent = writes(page);
     await openChat(page, '/chat/9');
     await expect(transcript(page).getByText('Answer 40:', { exact: false })).toBeVisible();
+    await readsSettled(page);
     await goUnreachable(page);
     await composer(page).fill('Book the fitting for Saturday');
     await page.getByRole('button', { name: 'Send' }).click();
@@ -155,8 +171,10 @@ test.describe('while atrium is unreachable', () => {
 
   test('an answer is refused at once and never sent later', async ({ page }) => {
     const sent = writes(page);
+    const reads = transcriptReads(page, 10);
     await openChat(page, '/chat/10');
     await expect(transcript(page).getByText('Question for you')).toBeVisible();
+    await readsSettled(page, reads);
     await goUnreachable(page);
     const box = page.getByRole('textbox', { name: 'Answer' });
     await box.fill('Sage green, please');
@@ -171,11 +189,13 @@ test.describe('while atrium is unreachable', () => {
   test('approving or declining an ask is refused at once and never sent later', async ({ page }) => {
     test.setTimeout(45_000);
     const sent = writes(page);
+    const reads = transcriptReads(page, 8);
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
     await openChat(page, '/chat/8');
     const card = transcript(page).locator('[data-approval="501"]');
     await showRow(card);
     await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
+    await readsSettled(page, reads);
     await goUnreachable(page);
     await card.getByRole('button', { name: 'Decline' }).click();
     await expect(page.getByText('Cannot reach atrium. Nothing was sent.').first()).toBeVisible();

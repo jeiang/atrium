@@ -3,7 +3,7 @@
   import Notice from '../../shared/ui/Notice.svelte';
   import Page from '../../shared/ui/Page.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { useApps } from '../../shell/manifest';
+  import { appGone, useApps } from '../../shell/manifest';
   import NotFound from '../../shell/NotFound.svelte';
   import { isActive, p } from '../../shell/router';
   import Catalogue from './Catalogue.svelte';
@@ -28,7 +28,7 @@
   };
 </script>
 
-{#if apps.data && !app?.enabled}
+{#if appGone(apps, 'media')}
   <NotFound />
 {:else}
   <Page title={titles[view]} eyebrow={view === 'catalogue' ? undefined : 'Library'} lede={ledes[view]}>
