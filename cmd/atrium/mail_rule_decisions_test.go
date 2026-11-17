@@ -13,9 +13,9 @@ func TestMailRulesAndDecisionsLinkBothWays(t *testing.T) {
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mailSafetyFixture(t, "shadow")
 	for i := range 3 {
-		m.add("INBOX", fmt.Sprintf("Bill %d", i), "billing@shop.test", fmt.Sprintf("bill-%d", i), "Your bill is ready.")
+		m.add("INBOX", fmt.Sprintf("Bill %d", i), "billing@shop.test", fmt.Sprintf("bill-%d", i), "Your bill is ready.", `\Seen`)
 	}
-	m.add("INBOX", "Big sale", "deals@promo.test", "promo-1", "Everything must go.")
+	m.add("INBOX", "Big sale", "deals@promo.test", "promo-1", "Everything must go.", `\Seen`)
 	rulesFile := filepath.Join(m.dir, "rules.json")
 	if err := os.WriteFile(rulesFile, []byte(`{"rules":[`+
 		`{"id":"bills","account":"icloud","action":"file","dest":"Bills","when":[{"field":"from_addr","op":"eq","value":"billing@shop.test"}]},`+
