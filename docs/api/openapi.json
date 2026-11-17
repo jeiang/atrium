@@ -8634,7 +8634,18 @@
           "channel": {
             "$ref": "#/components/schemas/MediaChannel"
           },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
           "polled": {
+            "type": "boolean"
+          },
+          "undoable": {
             "type": "boolean"
           }
         },
@@ -8686,12 +8697,23 @@
       },
       "MediaFiled": {
         "properties": {
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
           "id": {
             "type": "string"
           },
           "placed": {
             "maximum": 9007199254740991,
             "type": "integer"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -16374,8 +16396,19 @@
           "action": {
             "type": "string"
           },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "maximum": 9007199254740991,
+              "type": "integer"
+            },
+            "type": "array"
+          },
           "hash": {
             "type": "string"
+          },
+          "undoable": {
+            "type": "boolean"
           }
         },
         "required": [

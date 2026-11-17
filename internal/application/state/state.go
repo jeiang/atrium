@@ -36,9 +36,10 @@ const (
 	Ops         = "ops"
 	Auth        = "auth"
 	Automation  = "automation"
+	Downloads   = "downloads"
 )
 
-var scopes = []string{Knowledge, Tasks, Review, Effects, Calendar, Assistant, Jobs, Media, Mail, Settings, Connections, Notify, Attention, Ops, Auth, Automation}
+var scopes = []string{Knowledge, Tasks, Review, Effects, Calendar, Assistant, Jobs, Media, Mail, Settings, Connections, Notify, Attention, Ops, Auth, Automation, Downloads}
 
 type Outcome string
 

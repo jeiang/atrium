@@ -141,8 +141,10 @@ administrator role or remote emergency bypass.
   first and says whether its files are deleted. Removing it with its files
   needs a press and hold on a phone or touch screen; on a desktop the request
   is sent only after 10 seconds, and Undo in that time sends nothing. Undo
-  after a pause, resume, follow or unfollow sends the opposite request, because
-  atrium keeps no undo record for these operator changes. While Torrents is
+  after a pause, resume, follow or unfollow sends the opposite request, even
+  though the server now answers these changes with undoable `effect_ids`
+  (pause and resume through `media_torrent_state`, follow and unfollow
+  through `media_channel_delete` and `media_channel_restore`). While Torrents is
   off, Library shows that it is unavailable and links to the apps directory.
 
 Public requests are limited in process by token buckets owned by each listener:

@@ -44,7 +44,7 @@ func Builtins(d Dependencies) []module.Builder {
 		contactsmodule.Module{Jobs: jobs},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
 		calendarmodule.Module{Jobs: jobs},
-		torrentsmodule.Module{App: app, Now: d.Now},
+		torrentsmodule.Module{App: app, Now: d.Now, Resources: d.Bindings.Resources},
 		librarymodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources, Torrents: app},
 		assistantmodule.Module{Now: d.Now, Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
 		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},

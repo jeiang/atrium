@@ -133,24 +133,32 @@ func DescribeControl() application.Definition {
 }
 
 func (s *Service) Control(ctx context.Context, in ControlInput) (application.Change[Controlled], error) {
-	err := s.control(ctx, in)
-	id, err := s.record(ctx, ControlName, in.Hash, map[string]any{"action": in.Action, "delete_files": in.DeleteFiles, "actor": s.d.Actor, "proposal_id": in.ProposalID}, err)
+	effect, err := s.control(ctx, in)
+	var effects []int64
+	if effect != 0 {
+		effects = []int64{effect}
+	}
+	id, err := s.record(ctx, ControlName, in.Hash, map[string]any{"action": in.Action, "delete_files": in.DeleteFiles, "actor": s.d.Actor, "proposal_id": in.ProposalID, "effect_ids": effects}, err)
 	if err != nil {
 		return application.Change[Controlled]{}, err
 	}
-	return application.Change[Controlled]{Data: Controlled{Hash: in.Hash, Action: in.Action}, AuditID: id}, nil
+	return application.Change[Controlled]{Data: Controlled{Hash: in.Hash, Action: in.Action}, EffectIDs: effects, AuditID: id}, nil
 }
 
-func (s *Service) control(ctx context.Context, in ControlInput) error {
+func (s *Service) control(ctx context.Context, in ControlInput) (int64, error) {
 	if in.Hash == "" {
-		return invalid("hash", "Field required")
+		return 0, invalid("hash", "Field required")
 	}
 	switch in.Action {
 	case contract.Pause, contract.Resume, contract.Remove:
 	default:
-		return invalid("action", "Use pause, resume or remove.")
+		return 0, invalid("action", "Use pause, resume or remove.")
 	}
-	return classifyWrite(s.intake().Control(ctx, contract.Control{
+	effect, err := s.intake().Control(ctx, contract.Control{
 		Scope: s.scope(ctx, in.ProposalID), Hash: in.Hash, Action: in.Action, DeleteFiles: in.DeleteFiles,
-	}))
+	})
+	if err != nil {
+		return 0, classifyWrite(err)
+	}
+	return effect, nil
 }

@@ -256,43 +256,30 @@ func (s *Service) ChannelAdd(ctx context.Context, in ChannelAddInput) (applicati
 	}
 	var out ChannelAdded
 	var effects []int64
-	var id int64
-	if in.ProposalID != nil {
-		var effect ledger.Effect
-		effect, err = s.d.Ledger.ApplyLocal(ctx, ledger.New{
-			Origin: "media", Operation: "media_channel_add", OperationKey: "media_channel_add:" + ledger.NewKey(),
-			Target: "channel:new", ProposalID: in.ProposalID, ThreadID: s.threadID(ctx), RunID: s.runID(ctx),
-		}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-			row, err := set.AddChannel(ctx, tx, in.Name, in.IMDB, in.Pattern, in.CaseSensitive, in.TMDBID)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			out.Channel = *row
-			return ledger.Result{
-				State:  ledger.Done,
-				Target: fmt.Sprintf("channel:%d", row.ID),
-				After:  rawJSON(row),
-				Undo:   rawJSON(ChannelDeleteUndo{Op: UndoChannelDelete, ID: row.ID}),
-			}, nil
-		})
-		if err == nil {
-			effects = []int64{effect.ID}
+	effect, err := s.d.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "media", Operation: "media_channel_add", OperationKey: "media_channel_add:" + ledger.NewKey(),
+		Target: "channel:new", ProposalID: in.ProposalID, ThreadID: s.threadID(ctx, in.ProposalID), RunID: s.runID(ctx, in.ProposalID),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+		row, err := set.AddChannel(ctx, tx, in.Name, in.IMDB, in.Pattern, in.CaseSensitive, in.TMDBID)
+		if err != nil {
+			return ledger.Result{}, err
 		}
-		target := "channel:new"
-		if err == nil {
-			target = fmt.Sprintf("channel:%d", out.Channel.ID)
-		}
-		id, err = s.record(ctx, ChannelAddName, target, map[string]any{"effect_ids": effects}, classifyChannel(err, true))
-	} else {
-		id, err = s.local(ctx, ChannelAddName, nil, func(tx *sql.Tx) (string, error) {
-			row, err := set.AddChannel(ctx, tx, in.Name, in.IMDB, in.Pattern, in.CaseSensitive, in.TMDBID)
-			if err != nil {
-				return "channel:new", classifyChannel(err, true)
-			}
-			out.Channel = *row
-			return fmt.Sprintf("channel:%d", row.ID), nil
-		})
+		out.Channel = *row
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("channel:%d", row.ID),
+			After:  rawJSON(row),
+			Undo:   rawJSON(ChannelDeleteUndo{Op: UndoChannelDelete, ID: row.ID}),
+		}, nil
+	})
+	if err == nil {
+		effects = []int64{effect.ID}
 	}
+	target := "channel:new"
+	if err == nil {
+		target = fmt.Sprintf("channel:%d", out.Channel.ID)
+	}
+	id, err := s.record(ctx, ChannelAddName, target, map[string]any{"effect_ids": effects}, classifyChannel(err, true))
 	if err != nil {
 		return application.Change[ChannelAdded]{}, err
 	}
@@ -370,40 +357,26 @@ func (s *Service) ChannelRemove(ctx context.Context, in ChannelRemoveInput) (app
 	target := fmt.Sprintf("channel:%d", in.ID)
 	var out ChannelRemoved
 	var effects []int64
-	var id int64
-	var err error
-	if in.ProposalID != nil {
-		var effect ledger.Effect
-		effect, err = s.d.Ledger.ApplyLocal(ctx, ledger.New{
-			Origin: "media", Operation: "media_channel_remove", OperationKey: "media_channel_remove:" + ledger.NewKey(),
-			Target: target, ProposalID: in.ProposalID, ThreadID: s.threadID(ctx), RunID: s.runID(ctx),
-		}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-			row, err := library.DeleteChannel(ctx, tx, in.ID)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			out.Channel = row
-			return ledger.Result{
-				State:  ledger.Done,
-				Target: target,
-				Before: rawJSON(row),
-				Undo:   rawJSON(ChannelRestoreUndo{Op: UndoChannelRestore, Row: ChannelUndoOf(row)}),
-			}, nil
-		})
-		if err == nil {
-			effects = []int64{effect.ID}
+	effect, err := s.d.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "media", Operation: "media_channel_remove", OperationKey: "media_channel_remove:" + ledger.NewKey(),
+		Target: target, ProposalID: in.ProposalID, ThreadID: s.threadID(ctx, in.ProposalID), RunID: s.runID(ctx, in.ProposalID),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+		row, err := library.DeleteChannel(ctx, tx, in.ID)
+		if err != nil {
+			return ledger.Result{}, err
 		}
-		id, err = s.record(ctx, ChannelRemoveName, target, map[string]any{"effect_ids": effects}, classifyChannel(err, false))
-	} else {
-		id, err = s.local(ctx, ChannelRemoveName, nil, func(tx *sql.Tx) (string, error) {
-			row, err := library.DeleteChannel(ctx, tx, in.ID)
-			if err != nil {
-				return target, classifyChannel(err, false)
-			}
-			out.Channel = row
-			return target, nil
-		})
+		out.Channel = row
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: target,
+			Before: rawJSON(row),
+			Undo:   rawJSON(ChannelRestoreUndo{Op: UndoChannelRestore, Row: ChannelUndoOf(row)}),
+		}, nil
+	})
+	if err == nil {
+		effects = []int64{effect.ID}
 	}
+	id, err := s.record(ctx, ChannelRemoveName, target, map[string]any{"effect_ids": effects}, classifyChannel(err, false))
 	if err != nil {
 		return application.Change[ChannelRemoved]{}, err
 	}

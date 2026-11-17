@@ -33,6 +33,7 @@ var topicModules = map[string]string{
 	state.Calendar:  unit.Calendar,
 	state.Media:     unit.Media,
 	state.Notify:    unit.Notifications,
+	state.Downloads: unit.Torrents,
 }
 
 func eventOperations() ([]application.Definition, []application.Binding) {

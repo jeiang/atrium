@@ -66,13 +66,13 @@ func Tools(app *torrents.App) []tool.Tool {
 		}),
 		asstapp.ApprovalGate(tool.Tool{
 			Name:        NameControl,
-			Description: "Ask the operator to approve pausing, resuming or removing a torrent by hash (see downloads); nothing changes until they approve the card. Only torrents tagged atrium (or the older media tag) can be changed. remove keeps the downloaded data unless delete_files is true. There is no undo.",
+			Description: "Ask the operator to approve pausing, resuming or removing a torrent by hash (see downloads); nothing changes until they approve the card. Only torrents tagged atrium (or the older media tag) can be changed. remove keeps the downloaded data unless delete_files is true. Undo reverses a pause or resume; a removal cannot be undone.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"hash": {"type": "string"}, "action": {"type": "string", "enum": ["pause", "resume", "remove"]}, "delete_files": {"type": "boolean"}}, "required": ["hash", "action"], "additionalProperties": false}`),
-			Effect:      tool.Propose,
-			Annotated:   true,
-			Channel:     tool.ChannelOwn,
-			Contexts:    writeKinds,
-			Approval:    &tool.Approval{Apply: h.control, Check: h.checkControl, Label: "Change download", Icon: "download", Module: unit.Torrents, Detail: "action"},
+			Effect:      tool.Propose, Undo: torrents.UndoTorrentState,
+			Annotated: true,
+			Channel:   tool.ChannelOwn,
+			Contexts:  writeKinds,
+			Approval:  &tool.Approval{Apply: h.control, Check: h.checkControl, Label: "Change download", Icon: "download", Module: unit.Torrents, Detail: "action"},
 		}),
 	}
 }
