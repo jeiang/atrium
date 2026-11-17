@@ -525,8 +525,30 @@ it through `atrium settings set mail_mode shadow|live`; the change is audited.
 Pause/resume does not change the mode or grant
 go-live eligibility.
 
+The Mail status page (`/live`, tab Status; API `GET /api/v1/mail/status`)
+shows the mode, go-live eligibility with each unmet reason (`already_live`,
+`no_accounts`, `unresolved_writes`), the baseline count and when it was taken,
+automatic action counts, the last replay summary (messages and how many
+differ), pending deletion rule proposals, and the watch-closely window: seven
+days after the last audited `mail_mode` change. Go-live and rebaseline from
+the page or `POST /api/v1/mail/status/confirm` are two steps: the first call
+returns a statement of the effect (accounts, write cap, baseline size, what
+pause does) and a single-use token valid for ten minutes; the second call
+(`POST /mail/status/go-live` or `/mail/status/rebaseline`) needs that token,
+and a token is refused once the accounts, cap or mode changed. Go-live writes
+`mail_mode` through the audited settings path; the baseline is still taken by
+the next pass. Only the operator can do this: tool runs and agent-marked
+bearers or sessions get `agent_caller`, and agent-marked callers cannot set or
+unset `mail_mode` through the settings API either. Pause stays the platform
+pause and appears on the page only as a link. Replay runs as the `mail/replay`
+job (model-free, read-only toward mail servers, runs while paused): `POST
+/api/v1/mail/status/replay` runs it now and returns the run id and counts, and
+the job also runs weekly on Sunday at 04:30, because the scheduler has no
+manual-only declared job. Only the counts are kept; the per-message lines
+stay with `atrium replay` and `POST /mail/replay`.
+
 Mail is one sidebar entry. Its tabs are Decisions (`/triage`, which links each
-message page) and Rules (`/rules`); Mail settings stay at `/settings/mail`.
+message page), Rules (`/rules`) and Status (`/live`); Mail settings stay at `/settings/mail`.
 With the Mail module off, the entry, its tabs and its pages are gone.
 
 - Shadow records what automatic actions would do and makes no automatic

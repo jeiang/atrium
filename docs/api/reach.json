@@ -166,6 +166,7 @@
         "mail.commitment-done",
         "mail.commitments",
         "mail.correct",
+        "mail.go-live",
         "mail.live-actions",
         "mail.live-status",
         "mail.loop-dismiss",
@@ -185,6 +186,7 @@
         "mail.refresh-watches",
         "mail.reindex",
         "mail.replay",
+        "mail.replay-run",
         "mail.resume",
         "mail.rule-create",
         "mail.rule-delete",
@@ -197,11 +199,14 @@
         "mail.scan-deletions",
         "mail.search",
         "mail.shadow-report",
+        "mail.status",
+        "mail.status-confirm",
+        "mail.status-rebaseline",
         "mail.sync",
         "mail.triage"
       ],
-      "required": 44,
-      "bound": 44
+      "required": 49,
+      "bound": 49
     },
     {
       "area": "media",
@@ -424,7 +429,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 248,
-  "total_bound": 248,
+  "total_required": 253,
+  "total_bound": 253,
   "total_approval_reached": 11
 }

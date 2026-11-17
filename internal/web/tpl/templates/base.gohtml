@@ -19,7 +19,7 @@
         {{block "header_actions" .}}{{end}}
         {{template "mode_badge" (dict "mode" .Mode "paused" .Paused)}}
         {{if eq .Mode "live"}}
-        <form method="post" action="/live/{{if .Paused}}resume{{else}}pause{{end}}">
+        <form id="pause-control" method="post" action="/live/{{if .Paused}}resume{{else}}pause{{end}}">
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">
           <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon (ternary .Paused "zap" "lock")}}{{if .Paused}}Resume{{else}}Pause{{end}}</button>
         </form>
