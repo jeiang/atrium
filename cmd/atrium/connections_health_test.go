@@ -396,7 +396,7 @@ func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
 	if state := connectionState(t, dir, "service/webpush"); state != "unconfigured" {
 		t.Fatalf("web push state without a subject = %q, want unconfigured", state)
 	}
-	okG3(t, "turn notifications on", webG3(t, s.base).do(http.MethodPut, "/web/v1/settings/"+module.FlagKey(unit.Notifications), map[string]any{"value": "true"}))
+	okG3(t, "turn notifications on", webG3(t, s.base).do(http.MethodPut, "/web/v1/apps/"+string(unit.Notifications)+"/enabled", map[string]any{"enabled": true}))
 	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(time.Second) {
 		if got := runApp(t, "connections", "test", "service/webpush"); got.code == cli.ExitOK {
 			t.Fatalf("web push test without a subject after notifications turned on: exit %d stdout %q", got.code, got.stdout)
