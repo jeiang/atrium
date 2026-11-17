@@ -8496,16 +8496,25 @@
           "date": {
             "type": "string"
           },
+          "flagged": {
+            "type": "boolean"
+          },
           "folder": {
             "type": "string"
           },
           "from": {
             "type": "string"
           },
+          "has_attachment": {
+            "type": "boolean"
+          },
           "message_id": {
             "format": "int64",
             "maximum": 9007199254740991,
             "type": "integer"
+          },
+          "seen": {
+            "type": "boolean"
           },
           "snippet": {
             "type": "string"
@@ -8523,7 +8532,10 @@
           "from",
           "to",
           "subject",
-          "snippet"
+          "snippet",
+          "seen",
+          "flagged",
+          "has_attachment"
         ],
         "type": "object"
       },

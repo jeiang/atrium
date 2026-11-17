@@ -28,7 +28,14 @@ func MessageCount(ctx context.Context, q db.Querier, id int64) (int, error) {
 	return n, err
 }
 
-func Recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]string, error) {
+type HitDetail struct {
+	To       string
+	Seen     bool
+	Flagged  bool
+	Attached bool
+}
+
+func HitDetails(ctx context.Context, q db.Querier, ids []int64) (map[int64]HitDetail, error) {
 	list := make([]any, len(ids))
 	for i, id := range ids {
 		list[i] = id
@@ -37,19 +44,21 @@ func Recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]strin
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id, to_addrs FROM messages WHERE id IN (SELECT value FROM json_each(?))", encoded)
+	rows, err := q.QueryContext(ctx, "SELECT id, to_addrs, seen, flagged, COALESCE(att_types, '[]') != '[]' FROM messages WHERE id IN (SELECT value FROM json_each(?))", encoded)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[int64]string, len(ids))
+	out := make(map[int64]HitDetail, len(ids))
 	for rows.Next() {
 		var id int64
 		var to sql.NullString
-		if err := rows.Scan(&id, &to); err != nil {
+		var d HitDetail
+		if err := rows.Scan(&id, &to, &d.Seen, &d.Flagged, &d.Attached); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
-		out[id] = to.String
+		d.To = to.String
+		out[id] = d
 	}
 	return out, rows.Err()
 }
