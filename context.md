@@ -255,16 +255,15 @@ claims about the running application. Operator contracts are in
 - Web Push devices subscribe from the Notifications settings page. The VAPID
   key is a generated secret (`webpush_vapid_private_key`) or the
   `service/webpush` connection's `credential_files.vapid_private` host file,
-  and the subject comes from `webpush_subject`, edited on the Notifications page,
+  and the subject comes from `webpush_subject`, edited in Settings > Notifications,
   which the notifications module requires. A push carries the title, a body of at most 240 characters and a
-  path in the new client for its subject; it has no action buttons and opening it writes nothing. The notifier maps the
-  stored link at send time (`urlx.ClientBase`, `/next/` until the client moves to `/`): `/proposals/{id}`, `/drafts/{id}`
-  and `/chat/{id}` keep their path under the base, the Notifications and Connections settings pages map to their
-  new-client pages, `/scheduled` maps to Routines and anything else opens the Inbox. Stored notification rows keep their
+  client path for its subject; it has no action buttons and opening it writes nothing. The notifier maps the
+  stored link at send time: `/proposals/{id}`, `/drafts/{id}`, `/chat/{id}`, the Inbox and the Connections page keep
+  their path, a link under the old `/next` prefix drops it, an old server page path follows the moved table in
+  `internal/urlx/moved.go` (`/scheduled` opens Routines), and anything else opens the Inbox. Stored notification rows keep their
   original link, and a resend maps it again. A click focuses a window already on that address, else navigates the
-  worker's open window there, else opens one; both the new client worker and the classic root worker (which holds
-  older subscriptions) do this. The new client worker also sends an already shown `/proposals/{id}`, `/drafts/{id}` or
-  `/chat/{id}` to its base. A decided or unknown item opens the Inbox saying nothing waits there; signed out, sign-in
+  worker's open window there, else opens one; the worker also moves a target under `/next` to the same root path.
+  A decided or unknown item opens the Inbox saying nothing waits there; signed out, sign-in
   returns to the card. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
@@ -333,7 +332,7 @@ claims about the running application. Operator contracts are in
   contacts/calendar concern and are not an open-loop source.
 - Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain.
 - A permission proposal sends an assistant notification whose push opens
-  `/next/proposals/{id}`, where the operator decides it while signed in. The
+  `/proposals/{id}`, where the operator decides it while signed in. The
   generated `action_link_key` secret, or the host file's
   `app_keys.action_link_key_file`, keys the `/api/v1` idempotency request
   fingerprints; host-file bytes are never copied into the database.
@@ -630,13 +629,16 @@ claims about the running application. Operator contracts are in
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
   `weather_longitude` and `weather_location_name`), validated in range,
-  offered in the Weather app's settings group and on the `/next/`
-  weather connection, and read-only when the host file declares them. Without a location name or
+  offered on the weather connection page, and read-only when the host file
+  declares them. Without a location name or
   both coordinates, the weather connection checks as `unconfigured` and
-  probes nothing. The Integrations page also has a Google OAuth wizard:
-  the Cloud console steps, a Web-application client ID and secret, consent
-  per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
-  a Testing-mode warning about 7-day refresh tokens. The state and verifier
+  probes nothing. The client's Google connection page
+  (`/settings/connections/google/default`) is a setup wizard: the Cloud
+  console steps, a Web-application client ID and secret, and consent per
+  capability (Calendar or Gmail) with PKCE and a paste-back fallback. Google
+  returns to `/settings/connections/google/callback`, which answers 303 to
+  the wizard page with the same query, and the client finishes through
+  `POST /web/v1/connections/google/oauth/complete`. The state and verifier
   live in `oauth_states` for ten minutes (expired rows are deleted when a new
   consent starts); the refresh token is stored as a
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
@@ -1957,37 +1959,46 @@ claims about the running application. Operator contracts are in
   refresh bumps the `assistant` app-event topic so the client refetches. A
   location change discards the held reading, so the next `/home` answers
   `loading` and refreshes for the new place.
-- The embedded web client is served at `/next/` on every listener, the
-  emergency listener included, beside the server-rendered UI, which does not
-  link to it; push notifications open their card or page there, a Google
-  consent started from the client returns there, and `/next` redirects
-  there. A `/next/...` GET that accepts HTML
-  and names no embedded file gets the client's `index.html` (`no-cache`).
-  Files under `/next/assets/` are content-hashed and cached for a year as
-  immutable; an unknown one is 404, never the document. Precompressed `.br`
-  and `.gz` variants are chosen by `Accept-Encoding` with the negotiation and
-  content-hash ETags of `/static/`. The document and its files are public,
-  like `/static/`, because they hold no data; data comes only from
-  `/web/v1`, which keeps its sign-in rules, and Host validation still
-  applies. Responses under `/next/` carry their own CSP: `default-src
-  'none'`, `'self'` sources only, no inline script or style, and
-  `require-trusted-types-for 'script'; trusted-types atrium-md atrium-sw
-  svelte-trusted-html`. Every other path keeps the server-rendered UI's
-  policy unchanged. A service worker served from `/next/` gets no
-  `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
-  and it never controls the old UI's pages, while it does see every request
-  a `/next/` page makes, `/web/v1` writes included.
-- The `/next/` client registers `/next/sw.js` (scope `/next/`, production
-  build only, through the `atrium-sw` Trusted Types policy). The worker
-  precaches the shell and every hashed asset, lazy route chunks included,
-  answers `/next/assets/` cache-first and `/next/` navigations network-first
-  with a 3 s timeout and the cached shell as fallback, and passes everything
-  else through untouched, so `/web/v1`, `/api/v1`, streams, `/login` and
-  `/auth/` never reach its cache. Caches are named `next-shell-<build>`, not
-  `atrium-`, because the old UI worker deletes `atrium-*` caches. A new
-  worker waits; it activates at once only when the open page's own scripts
-  are in its precache list, otherwise on the next in-app navigation, which
-  becomes a full load. Activation deletes older `next-shell-*` caches.
+- The embedded web client is served at `/` on every listener, the
+  emergency listener included. A GET or HEAD that no route matches and that
+  accepts HTML gets the client's `index.html` (`no-cache`). Files under
+  `/assets/` are content-hashed and cached for a year as immutable; an
+  unknown one is 404, never the document. Other client files carry
+  content-hash ETags, and precompressed `.br` and `.gz` variants are chosen
+  by `Accept-Encoding`. The document and its files are public because they
+  hold no data; data comes only from `/web/v1`, which keeps its sign-in
+  rules, and Host validation still applies. Client responses carry their
+  own CSP: `default-src 'none'`, `'self'` sources only, no inline script or
+  style, no eval, nonce or remote source, and `require-trusted-types-for
+  'script'; trusted-types atrium-md atrium-sw svelte-trusted-html`. Server
+  responses (`/healthz`, sign-in, the APIs) keep the server CSP.
+- Old addresses: `/next/sw.js` serves the client worker, and every other
+  `/next/...` path answers 301 to the same path at root. `/static/*` answers
+  404. Old server page paths answer 301 through the moved table in
+  `internal/urlx/moved.go` (`/about` to `/settings/general`,
+  `/library/knowledge?state=unconfirmed` to `/knowledge/review`, and so on).
+  OIDC `/login`, `/auth/callback` and `/logout`, `/apps/media/file/*`, the
+  legacy `/media/*` redirects and `/healthz` stay server routes. About
+  (version and build) is a block in Settings > General that reads
+  `/web/v1/about`, and third-party notices are plain text at
+  `/third-party-notices.txt` for a signed-in operator.
+- The client registers `/sw.js` at scope `/` (production build only,
+  through the `atrium-sw` Trusted Types policy). The worker precaches the
+  shell and every hashed asset, lazy route chunks included, answers
+  `/assets/` cache-first and client navigations network-first with a 3 s
+  timeout and the cached shell as fallback, and passes server routes through
+  untouched, so `/web/v1`, `/api/v1`, streams, `/login` and `/auth/` never
+  reach its cache. Caches are named `shell-<build>`. A new worker waits; it
+  activates at once only when the open page's own scripts are in its
+  precache list, otherwise on the next in-app navigation, which becomes a
+  full load. Activation deletes older `shell-*`, `next-shell-*` and
+  `atrium-*` caches. A registration at scope `/next/` gets the same worker
+  bytes from `/next/sw.js`; once the operator is signed in, the client moves
+  its push subscription to the root registration with the same key (the new
+  device is registered with the server and the old one deleted), and the
+  old worker unregisters itself and moves its windows to root, with no
+  prompt. A registration of `/static/sw.js` at scope `/` is updated in
+  place to `/sw.js` and keeps its subscription.
 - Read models from queries that declare `meta.topics` or `meta.persist: true`
   are kept for 7 days in the IndexedDB database `atrium-read-cache`, keyed to
   the signed-in subject, with the session's identity but never its CSRF
@@ -2086,11 +2097,8 @@ claims about the running application. Operator contracts are in
   is not the planned source when it returns.
 - Cost accounting should explain usage by job and run. Recorded runs should
   support evaluating application and model changes.
-- The web UI becomes the separately built static client in `web/`, embedded
-  in the binary, that uses only `/web/v1`. The server-rendered pages, htmx,
-  Basecoat and `app.js` are removed in one cutover, not route by route, after
-  the operator confirms 14 days of daily use of the client. Until then the
-  server-rendered UI is the default and the client stays at `/next/`.
+- The web UI is the separately built static client in `web/`, embedded in
+  the binary, that uses only `/web/v1`.
 
 ## Planned capabilities
 
@@ -2098,15 +2106,14 @@ claims about the running application. Operator contracts are in
 
 Each item says what is implemented on `main` and what is still planned.
 
-- **The day is home.** Implemented in the server-rendered UI: Today (`/chat`) and threads, the Review, Library and Apps hubs (the Media app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
+- **The day is home.** Implemented: Home, Plan, Knowledge, Apps and Assistant, with chats and threads, the Inbox and the Media app at `/apps/media`. The home brief lists the morning digest lines and names the next event.
 - **Drafts in chat.** Implemented: the assistant writes and edits mail drafts in chat (`draft_email_create`, `draft_email_update`); sending stays an operator action.
 - **Skills are removed.** Implemented.
-- **Settings is a page per module.** Implemented in the server-rendered UI: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state and shows that module's connection records; the app flags are switched on the client's Apps page (`PUT /apps/{id}/enabled`), the CLI or the host file. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
-- **Scheduled runs** are managed from chat, with a list in Library. **Mail rules** and **decisions** live under the one Mail entry. **Projects** become **spaces** in Knowledge: implemented in the `/next/` client; the server-rendered UI still calls them projects.
-- **Look A:** implemented in the server-rendered UI: warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens. The cutover replaces it with the client's design tokens below.
+- **Settings is grouped by area.** Implemented: Settings has General, Sign-in, Connection details, Apps, Mail, Calendar, Library, Plan, Knowledge export, Backups and Notifications; assistant settings live under Assistant and the weather location on the weather connection. Setting groups are declared by each module in its `module.Declaration` and render and save through one shared path. The app flags are switched on the client's Apps page (`PUT /apps/{id}/enabled`), the CLI or the host file. A refused connection test or value answers on the page it was sent from. Advanced settings stay with Nix, the CLI, or the agent.
+- **Scheduled runs** are managed from chat, with a list under Assistant > Routines. **Mail rules** and **decisions** live under the Mail app. **Projects** are **spaces** in Knowledge.
 - **Notifications:** implemented: the in-app inbox is canonical, with Web Push. Planned: APNs with a future iOS app.
-- **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`. The server-rendered UI remains the default web UI and does not link to it; push notifications open their card or page in the client, and a Google consent started from the client returns there. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
-- **New web client shell:** `/next/` opens with a frame prerendered in its HTML, then signs in through `GET /web/v1/session` only: a 401 with `login_url` sends the browser there once with a same-origin `next`, a 401 without it shows what to do, and a 503 or a network failure offers a retry. Signed in, it shows Home, Plan, Knowledge, Apps and Assistant in a rail (Inbox with the `needs_you` count, enabled apps under Apps, and Chats, Settings and Sign out behind the avatar), or Home, Decide, Chats and Spaces in a phone tab bar. Modules turned off hide their entries. One tab per browser holds the `/web/v1/events` stream and shares its notices with the others. Pages not yet built link to the same place in the server-rendered UI, which stays the default.
+- **Web client:** a plain Svelte 5 client under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/`. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+- **Web client shell:** the client opens with a frame prerendered in its HTML, then signs in through `GET /web/v1/session` only: a 401 with `login_url` sends the browser there once with a same-origin `next`, a 401 without it shows what to do, and a 503 or a network failure offers a retry. Signed in, it shows Home, Plan, Knowledge, Apps and Assistant in a rail (Inbox with the `needs_you` count, enabled apps under Apps, and Chats, Settings and Sign out behind the avatar), or Home, Decide, Chats and Spaces in a phone tab bar. Modules turned off hide their entries. One tab per browser holds the `/web/v1/events` stream and shares its notices with the others.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** implemented: weather from Open-Meteo (the Weather app) and package tracking through the Ship24 free tier for flagged packages (the Packages app). Planned: WeatherKit.

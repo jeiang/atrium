@@ -368,6 +368,15 @@ agent no longer runs ffmpeg.
 There is no `settings`, `mediaRoot`, or `web.local.port` input in this option
 reference. Legacy service credential keys are not accepted app signing files.
 
+The flake no longer has an `atrium-static` package; the web client is embedded
+in the application binary and served at `/`. A consuming flake that references
+`packages.<system>.atrium-static` must drop it. No module option changed. The
+dev shell no longer sets `ATRIUM_STATIC_ASSETS` or `ATRIUM_BASECOAT` or ships
+tailwind, and `just assets` only stages the client. Rolling back to the
+previous generation loses no data, but a browser whose push subscription moved
+off `/next/` may need notifications turned on again in Settings >
+Notifications.
+
 An existing v2 database is not opened or upgraded in place; this release
 refuses it before any write. v2 data reaches v3 only through release
 `v3.0.0`, the last release that carries the v2 importer: import the v2

@@ -1,10 +1,9 @@
 # Integrations
 
 Every connection is configured and tested on the Connections page
-(`/settings/connections`, or `/next/settings/connections` in the new client)
-or declared under `connections` in the host configuration. In the new
-client, a connection page links to the part of this document that covers its
-kind as **Setup guide**. A provider
+(`/settings/connections`) or declared under `connections` in the host
+configuration. A connection page links to the part of this document that
+covers its kind as **Setup guide**. A provider
 credential is stored write-only in an encrypted database or supplied by the
 connection's `credential_files` entry in the host configuration; there is no
 environment pin for a secret. The only environment secret inputs left are the
@@ -113,8 +112,8 @@ atrium builds the redirect URI from the address the browser uses to reach it,
 and the Google setup page shows the result. If Google rejects it, open atrium
 through an address Google accepts and register that one. A consent link
 expires after 10 minutes. When the browser cannot load the redirect, paste the
-full URL from its address bar into the paste-back box on the classic Google
-page (`/settings/connections/google`); the new client has no paste-back box.
+full URL from its address bar into the box under **If Google cannot send you
+back** on the Google setup page.
 `atrium calendar google-auth --port <port>` runs the Calendar consent on the
 host with the redirect URI `http://127.0.0.1:<port>`, which must also be
 registered on the client.
@@ -260,8 +259,8 @@ media agent's `[vpn]` listener; the retired `media_movies_url` and
 
 Weather forecasts and place lookup need no credential. The location is the
 operator settings `weather_latitude`, `weather_longitude` and optionally
-`weather_location_name`, in the Weather group of the Assistant settings, the
-weather connection in `/next/` Settings › Connections, `atrium settings set`
+`weather_location_name`, on the weather connection in Settings › Connections,
+`atrium settings set`
 or the host file. The `weather` tool reads them, or
 geocodes a place named in the call. Latitude must be between -90 and 90 and
 longitude between -180 and 180. The tool fetches only
