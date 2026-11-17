@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -25,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/netguard"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -41,6 +43,12 @@ const (
 var (
 	pushLog     = logx.Logger("atrium.notify.webpush")
 	pushAllowed atomic.Pointer[func(netip.Addr) bool]
+	clientCard  = regexp.MustCompile(`^/(?:proposals|drafts|chat)/[0-9]+$`)
+	clientPages = map[string]string{
+		pushInbox:          pushInbox,
+		connections.Screen: connections.Screen,
+		"/scheduled":       "/assistant/routines",
+	}
 )
 
 type PushError string
@@ -233,10 +241,26 @@ func urgency(priority int) webpush.Urgency {
 func pushURL(link, click string) string {
 	for _, candidate := range []string{link, click} {
 		if strings.HasPrefix(candidate, "/") && !strings.HasPrefix(candidate, "//") {
-			return candidate
+			return clientURL(candidate)
 		}
 	}
-	return pushInbox
+	return clientURL(pushInbox)
+}
+
+func clientURL(stored string) string {
+	if strings.HasPrefix(stored, urlx.ClientBase) {
+		return stored
+	}
+	path, _, _ := strings.Cut(stored, "#")
+	path, _, _ = strings.Cut(path, "?")
+	target, known := clientPages[path]
+	switch {
+	case clientCard.MatchString(path):
+		target = path
+	case !known:
+		target = "/inbox"
+	}
+	return strings.TrimSuffix(urlx.ClientBase, "/") + target
 }
 
 func pushErrorClass(err error) string {

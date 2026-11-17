@@ -307,7 +307,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Errorf("push headers %v", sent.header)
 	}
 	checkVAPID(t, sent.header, publicKey, push.URL)
-	if payload["title"] != "atrium: automation paused" || payload["body"] != "Changed by the operator." || payload["url"] != "/settings/notifications" || len(payload) != 3 {
+	if payload["title"] != "atrium: automation paused" || payload["body"] != "Changed by the operator." || payload["url"] != "/next/settings/notifications" || len(payload) != 3 {
 		t.Errorf("payload %v", payload)
 	}
 	var delivered bool
@@ -685,21 +685,26 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 		t.Fatalf("POST message = %d: %s", code, body)
 	}
 	proposal := waitParkedPermission(t, d, thread)
-	card := fmt.Sprintf("/proposals/%d", proposal)
+	stored := fmt.Sprintf("/proposals/%d", proposal)
+	card := "/next" + stored
 	if p := payload(1); p["url"] != card {
 		t.Fatalf("push url = %v, want the proposal card %s", p["url"], card)
 	}
 	var id int64
 	var delivered bool
 	var failure string
-	if err := d.Read.QueryRow("SELECT id, delivered, COALESCE(error, '') FROM notifications WHERE title = 'atrium: permission proposal'").Scan(&id, &delivered, &failure); err != nil {
+	var click string
+	if err := d.Read.QueryRow("SELECT id, delivered, COALESCE(error, ''), COALESCE(click, '') FROM notifications WHERE title = 'atrium: permission proposal'").Scan(&id, &delivered, &failure, &click); err != nil {
 		t.Fatal(err)
+	}
+	if click != stored {
+		t.Fatalf("stored click = %q, want the unchanged %s", click, stored)
 	}
 	if delivered || !strings.Contains(failure, "web push 500") {
 		t.Fatalf("failed push recorded delivered=%v error=%q", delivered, failure)
 	}
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+card, nil); code != http.StatusOK {
-		t.Fatalf("the pushed card = %d, want the signed-in proposal page", code)
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+stored, nil); code != http.StatusOK {
+		t.Fatalf("the stored card = %d, want the signed-in proposal page", code)
 	}
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		if code, _, _ := fetch(t, s.client, method, s.base+"/actions/any-token", url.Values{}); code != http.StatusNotFound {
@@ -719,8 +724,8 @@ func TestPermissionPushOpensItsCardWithoutActionsAcrossRestartAndResend(t *testi
 	if p := payload(2); p["url"] != card {
 		t.Fatalf("resent push url = %v, want %s", p["url"], card)
 	}
-	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", id).Scan(&delivered); err != nil || !delivered || rows("SELECT COUNT(*) FROM notifications WHERE title = 'atrium: permission proposal'") != 1 {
-		t.Fatalf("after resend delivered=%v, %v", delivered, err)
+	if err := d.Read.QueryRow("SELECT delivered, COALESCE(click, '') FROM notifications WHERE id = ?", id).Scan(&delivered, &click); err != nil || !delivered || click != stored || rows("SELECT COUNT(*) FROM notifications WHERE title = 'atrium: permission proposal'") != 1 {
+		t.Fatalf("after resend delivered=%v click=%q, %v", delivered, click, err)
 	}
 
 	push.answer(http.StatusGone)
