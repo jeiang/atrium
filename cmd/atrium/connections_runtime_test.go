@@ -175,6 +175,8 @@ credential_files = { "mail/icloud/password" = %q }
 		}
 	}
 	waitUntil(t, 10*time.Second, "working syncs to restore the connection", func() bool { return connectionState(t, dir, id) == "ok" })
+	waitUntil(t, 10*time.Second, "the recovery notice", func() bool { return connectionNotices(t, dir, label)-notices >= 2 })
+	time.Sleep(500 * time.Millisecond)
 	if n := connectionNotices(t, dir, label) - notices; n != 2 {
 		t.Fatalf("%d notices after the recovery, want 2", n)
 	}

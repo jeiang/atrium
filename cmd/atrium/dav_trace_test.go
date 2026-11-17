@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -44,6 +45,15 @@ func traceContains(t *testing.T, capability, out string, wants ...string) {
 	}
 }
 
+func traceMatch(t *testing.T, capability, out, pattern string) []string {
+	t.Helper()
+	found := regexp.MustCompile(pattern).FindStringSubmatch(out)
+	if found == nil {
+		t.Errorf("the %s trace does not match %q:\n%s", capability, pattern, out)
+	}
+	return found
+}
+
 func TestConnectionTraceShowsEachDAVExchangeWithoutSecretsOrSaving(t *testing.T) {
 	dir, dav := partitionedICloud(t)
 	if got := runApp(t, "connections", "list"); got.code != cli.ExitOK {
@@ -58,32 +68,48 @@ func TestConnectionTraceShowsEachDAVExchangeWithoutSecretsOrSaving(t *testing.T)
 	traceSecretFree(t, "carddav", card.stdout)
 	traceContains(t, "carddav", card.stdout,
 		"capability: carddav\n",
-		"user: <user>, from the mail account login; the same as the mail login: yes\n",
 		"#1 root step\n> PROPFIND https://"+frontHost+":"+dav.port+"/\n",
 		"> header names: Authorization, Content-Type, Depth\n> authorization attached: yes\n> depth: 0\n> content-type: application/xml; charset=utf-8\n",
 		"> user-agent: not set, Go sends its default\n",
 		"<C:addressbook-home-set/>",
-		"< HTTP/1.1 207 Multi-Status\n",
+		"< HTTP/1.1 207 Multi-Status\n< time: ",
 		"< Set-Cookie: <value withheld>\n",
 		"< X-Apple-User-Partition: 7\n",
-		"#2 home set step\n> PROPFIND https://"+frontHost+":"+dav.port+"/<n>/carddavhome/\n",
 		"< HTTP/1.1 401 Unauthorized\n",
 		"< Www-Authenticate: X-MobileMe-AuthToken realm=\"Newcastle\", Basic realm=\"Newcastle\"\n",
-		"account <n> for <user>",
-		"#3 home set step\n> PROPFIND https://"+partitionHost+":"+dav.port+"/<n>/carddavhome/\n> header names: Authorization, Content-Type, Depth\n> authorization attached: yes\n> depth: 1\n",
 		"result: carddav ok 1 collection\n",
 	)
+	traceMatch(t, "carddav", card.stdout, `user: <user:[a-p]{6}>, from the mail account login; the same as the mail login: yes\n`)
+	traceMatch(t, "carddav", card.stdout, `< time: [0-9]+ ms\n`)
+	traceMatch(t, "carddav", card.stdout, `account <n:[a-p]{6}> for <user:[a-p]{6}>`)
+	principal := traceMatch(t, "carddav", card.stdout, `<D:href>/<n:([a-p]{6})>/principal/</D:href>`)
+	home := traceMatch(t, "carddav", card.stdout, `#2 home set step\n> PROPFIND https://`+regexp.QuoteMeta(frontHost+":"+dav.port)+`/<n:([a-p]{6})>/carddavhome/\n`)
+	partitioned := traceMatch(t, "carddav", card.stdout, `#3 home set step\n> PROPFIND https://`+regexp.QuoteMeta(partitionHost+":"+dav.port)+`/<n:([a-p]{6})>/carddavhome/\n> header names: Authorization, Content-Type, Depth\n> authorization attached: yes\n> depth: 1\n`)
+	if principal != nil && home != nil && partitioned != nil && (principal[1] != home[1] || home[1] != partitioned[1]) {
+		t.Errorf("one account id masked to different hashes: %s, %s, %s", principal[1], home[1], partitioned[1])
+	}
 	if strings.Contains(card.stdout, "#4 ") {
 		t.Errorf("the carddav trace made more requests than discovery:\n%s", card.stdout)
 	}
 
 	dav.set(func(p *partitionedDAV) { p.partitionRefuses = true })
-	refused := runApp(t, "connections", "test", "icloud/icloud", "--trace", "carddav")
+	refused := runApp(t, "connections", "test", "icloud/icloud", "--trace", "carddav", "--repeat", "2")
 	if refused.code == cli.ExitOK {
 		t.Errorf("a refused carddav trace exited 0: %q", refused.stdout)
 	}
 	traceSecretFree(t, "refused carddav", refused.stdout)
-	traceContains(t, "refused carddav", refused.stdout, "result: carddav failing iCloud accepted the app password but refused the home set request on the partition host")
+	traceContains(t, "refused carddav", refused.stdout,
+		"result: carddav failing iCloud accepted the app password but refused the home set request on the partition host",
+		" repeat 1 of 2 of the home set step\n> PROPFIND https://"+partitionHost+":"+dav.port+"/<n:",
+		" repeat 2 of 2 of the home set step\n",
+		"\nrepeat: the home set request failed 2 of 2 times\n",
+	)
+	if n := strings.Count(refused.stdout, "home set step\n> PROPFIND https://"+partitionHost); n != 5 {
+		t.Errorf("the refused trace sent %d partition home set requests, want the first, 2 retries and 2 repeats:\n%s", n, refused.stdout)
+	}
+	if got := runApp(t, "connections", "test", "icloud/icloud", "--trace", "carddav", "--repeat", "6"); got.code == cli.ExitOK {
+		t.Errorf("--repeat 6 was accepted: %q", got.stdout)
+	}
 
 	if after := connectionSnapshot(t, dir); after != before {
 		t.Errorf("tracing changed the database: %q, then %q", before, after)

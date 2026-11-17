@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -127,6 +128,7 @@ type StatusError struct {
 	Challenge   bool
 	Also        []*StatusError
 	location    *url.URL
+	empty       bool
 }
 
 func (e *StatusError) Error() string {
@@ -135,6 +137,10 @@ func (e *StatusError) Error() string {
 
 func (e *StatusError) Refused() bool {
 	return e.Status == http.StatusUnauthorized || e.Status == http.StatusForbidden
+}
+
+func (e *StatusError) transient() bool {
+	return e.Status == http.StatusUnauthorized && !e.Challenge && e.empty
 }
 
 func (e *StatusError) Refusal() string {
@@ -209,6 +215,14 @@ type Client struct {
 	base      *url.URL
 	partition string
 	refused   []*StatusError
+	cache     string
+	verify    bool
+	accepted  bool
+	retries   int
+}
+
+func (c *Client) reset() {
+	c.partition, c.refused, c.accepted, c.retries = "", nil, false, 0
 }
 
 func New(httpClient *http.Client, endpoint string) (*Client, error) {
@@ -290,6 +304,27 @@ func (c *Client) explain(err error) error {
 }
 
 func (c *Client) do(ctx context.Context, step, method string, target *url.URL, depth, body string) ([]response, error) {
+	for {
+		found, err := c.send(ctx, step, method, target, depth, body)
+		status, ok := errors.AsType[*StatusError](err)
+		if !ok || !status.transient() || !c.accepted || c.retries >= len(transientWaits) {
+			return found, err
+		}
+		wait := jittered(transientWaits[c.retries])
+		c.retries++
+		log.Warn("dav request refused without a challenge after the password was accepted; retrying", "step", step, "method", method, "host", status.Host, "attempt", c.retries, "wait", wait.Round(time.Millisecond).String())
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, err
+		case <-timer.C:
+		}
+		c.refused = c.refused[:len(c.refused)-1]
+	}
+}
+
+func (c *Client) send(ctx context.Context, step, method string, target *url.URL, depth, body string) ([]response, error) {
 	req, err := http.NewRequestWithContext(context.WithValue(ctx, stepKey{}, step), method, target.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>`+body))
 	if err != nil {
 		return nil, err
@@ -311,8 +346,8 @@ func (c *Client) do(ctx context.Context, step, method string, target *url.URL, d
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusMultiStatus {
-		status := &StatusError{Method: method, URL: target.Redacted(), Status: resp.StatusCode, Step: step,
-			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != ""}
+		status := &StatusError{Method: method, URL: maskedURL(target), Status: resp.StatusCode, Step: step,
+			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != "", empty: len(bytes.TrimSpace(raw)) == 0}
 		log.Warn("dav request failed", "step", step, "method", method, "status", resp.StatusCode, "host", status.Host, "challenge", status.Challenge)
 		if location := resp.Header.Get("Location"); location != "" {
 			status.location, _ = resolve(target, location)
@@ -322,6 +357,7 @@ func (c *Client) do(ctx context.Context, step, method string, target *url.URL, d
 		}
 		return nil, status
 	}
+	c.accepted = true
 	if partition := strings.TrimSpace(resp.Header.Get(partitionHeader)); (step == StepRoot || step == StepWellKnown) && digits(partition) {
 		c.partition = partition
 	}
@@ -435,16 +471,40 @@ func (c *Client) home(ctx context.Context, k Kind) (*url.URL, error) {
 }
 
 func (c *Client) Collections(ctx context.Context, k Kind) ([]CollectionRef, error) {
-	c.partition, c.refused = "", nil
-	refs, err := c.collections(ctx, k)
-	return refs, c.explain(err)
+	refs, _, err := c.refs(ctx, k)
+	return refs, err
 }
 
-func (c *Client) collections(ctx context.Context, k Kind) ([]CollectionRef, error) {
-	home, err := c.home(ctx, k)
-	if err != nil {
-		return nil, err
+func (c *Client) refs(ctx context.Context, k Kind) ([]CollectionRef, bool, error) {
+	c.reset()
+	if known, ok := c.cached(); ok {
+		if !c.verify && time.Since(known.listedAt) < relistAfter {
+			return known.collections, true, nil
+		}
+		home, refs, err := c.list(ctx, k, known.home)
+		if err == nil {
+			c.keep(home, refs)
+			return refs, true, nil
+		}
+		if !stale(err) {
+			return nil, true, err
+		}
+		c.forget(err)
+		c.reset()
 	}
+	home, err := c.home(ctx, k)
+	var refs []CollectionRef
+	if err == nil {
+		home, refs, err = c.list(ctx, k, home)
+	}
+	if err != nil {
+		return nil, false, c.explain(err)
+	}
+	c.keep(home, refs)
+	return refs, false, nil
+}
+
+func (c *Client) list(ctx context.Context, k Kind, home *url.URL) (*url.URL, []CollectionRef, error) {
 	body := `<D:propfind ` + k.namespaces + `><D:prop><D:resourcetype/><D:displayname/>` + k.collect + `</D:prop></D:propfind>`
 	found, err := c.do(ctx, StepCollections, "PROPFIND", home, "1", body)
 	if moved := c.onPartition(err, home); moved != nil {
@@ -452,7 +512,7 @@ func (c *Client) collections(ctx context.Context, k Kind) ([]CollectionRef, erro
 		found, err = c.do(ctx, StepCollections, "PROPFIND", home, "1", body)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []CollectionRef
 	for _, r := range found {
@@ -462,7 +522,7 @@ func (c *Client) collections(ctx context.Context, k Kind) ([]CollectionRef, erro
 		}
 		collection, err := resolve(home, r.Href)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		name := strings.TrimSpace(p.DisplayName)
 		pathName := path.Base(strings.TrimRight(collection.Path, "/"))
@@ -475,19 +535,28 @@ func (c *Client) collections(ctx context.Context, k Kind) ([]CollectionRef, erro
 		}
 		out = append(out, ref)
 	}
-	return out, nil
+	return home, out, nil
 }
 
 func (c *Client) Fetch(ctx context.Context, k Kind) ([]Collection, error) {
-	refs, err := c.Collections(ctx, k)
+	out, cached, err := c.fetch(ctx, k)
+	if cached && stale(err) {
+		c.forget(err)
+		out, _, err = c.fetch(ctx, k)
+	}
+	return out, err
+}
+
+func (c *Client) fetch(ctx context.Context, k Kind) ([]Collection, bool, error) {
+	refs, cached, err := c.refs(ctx, k)
 	if err != nil {
-		return nil, err
+		return nil, cached, err
 	}
 	var out []Collection
 	for _, ref := range refs {
 		objects, err := c.do(ctx, StepObjects, "REPORT", ref.URL, "1", k.report)
 		if err != nil {
-			return nil, err
+			return nil, cached, err
 		}
 		coll := Collection{Name: ref.PathName}
 		for _, o := range objects {
@@ -497,7 +566,7 @@ func (c *Client) Fetch(ctx context.Context, k Kind) ([]Collection, error) {
 		}
 		out = append(out, coll)
 	}
-	return out, nil
+	return out, cached, nil
 }
 
 func (c *Client) Query(ctx context.Context, collection *url.URL, k Kind, uid string) ([]ObjectRef, error) {
@@ -553,18 +622,14 @@ func (c *Client) expect(req *http.Request, method string, target *url.URL) error
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode/100 != 2 {
-		return &StatusError{Method: method, URL: target.Redacted(), Status: resp.StatusCode, Step: strings.ToLower(method), Host: c.hostClass(target),
+		err := &StatusError{Method: method, URL: maskedURL(target), Status: resp.StatusCode, Step: strings.ToLower(method), Host: c.hostClass(target),
 			Challenge: resp.Header.Get("WWW-Authenticate") != ""}
+		if stale(err) {
+			c.forget(err)
+		}
+		return err
 	}
 	return nil
-}
-
-func Fetch(ctx context.Context, client *http.Client, endpoint string, k Kind) ([]Collection, error) {
-	c, err := New(client, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	return c.Fetch(ctx, k)
 }
 
 type basicAuth struct {

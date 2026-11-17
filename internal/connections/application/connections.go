@@ -50,6 +50,7 @@ type TestInput struct {
 type TraceInput struct {
 	ID         ID
 	Capability string
+	Repeat     int
 	Out        io.Writer
 }
 type ObserveHealthInput struct {
@@ -193,7 +194,7 @@ func (s *Service) Test(ctx context.Context, in TestInput) (application.Change[[]
 }
 
 func (s *Service) Trace(ctx context.Context, in TraceInput) (connections.Result, error) {
-	return s.store.Trace(ctx, in.ID, in.Capability, in.Out)
+	return s.store.Trace(ctx, in.ID, connections.TraceRequest{Capability: in.Capability, Repeat: in.Repeat, Out: in.Out})
 }
 
 func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (application.Change[struct{}], error) {
