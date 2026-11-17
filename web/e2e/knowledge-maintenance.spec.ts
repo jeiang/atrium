@@ -40,7 +40,7 @@ async function retractIlse(page: Page): Promise<void> {
 async function checkLayout(page: Page, touch: boolean): Promise<void> {
   await expectNoHorizontalScroll(page);
   await expectRoundedSurfaces(page, ['.rail', '.tabbar', 'dialog.sheet']);
-  if (touch) await expectTouchTargets(page);
+  if (touch) await expectTouchTargets(page, (await page.locator('dialog[open]').count()) > 0 ? 'dialog[open]' : 'body');
   await expectNoBlue(page);
   await expectNoSeriousAxeFindings(page);
 }

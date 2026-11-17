@@ -118,7 +118,7 @@ test.describe('knowledge', () => {
     test('a stale save reloads, says so and keeps the draft', async ({ page }) => {
       await openIlse(page);
       await page.getByRole('button', { name: 'Edit' }).click();
-      const text = page.getByLabel('Text');
+      const text = page.getByRole('textbox', { name: 'Text' });
       await text.fill('Ilse runs the garden.');
       await page.evaluate(() =>
         (
