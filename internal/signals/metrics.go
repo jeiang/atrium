@@ -1,4 +1,4 @@
-package openloops
+package signals
 
 import (
 	"context"

@@ -1,29 +1,22 @@
-package openloops
+package signals
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
 	"math"
-	netmail "net/mail"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/communications"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/flags"
-	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/mail/mime"
 	"golang.org/x/text/cases"
 )
 
@@ -71,22 +64,6 @@ func NormSubject(subject string) (string, error) {
 	return strings.TrimSpace(text), nil
 }
 
-func IsDraft(labels, flagList string) (bool, error) {
-	for _, value := range [...]string{labels, flagList} {
-		if !strings.Contains(value, "Draft") {
-			continue
-		}
-		var list []string
-		if err := json.Unmarshal([]byte(value), &list); err != nil {
-			return false, err
-		}
-		if slices.Contains(list, `\Draft`) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 type Message struct {
 	ID         int64
 	Account    string
@@ -96,32 +73,30 @@ type Message struct {
 	Refs       string
 	DateTS     float64
 	Sent       bool
+	Draft      bool
 	Subject    string
 	FromName   string
 	FromAddr   string
 	FromDomain string
-	ToAddrs    string
+	To         []string
 	ListID     string
 	Precedence string
 	Category   string
 	ESP        string
 	ReplyTo    string
-	RawPath    string
-	Labels     string
-	Flags      string
 	Owners     []string
 }
 
+func messageOf(m communications.Message) Message {
+	return Message{ID: m.ID, Account: m.Account, MsgID: m.Thread.MessageID, GmThrID: m.Thread.GmailThread,
+		InReplyTo: m.Thread.InReplyTo, Refs: m.Thread.References, DateTS: m.Date, Sent: m.Flags.Sent, Draft: m.Flags.Draft,
+		Subject: m.Subject, FromName: m.From.Name, FromAddr: m.From.Addr, FromDomain: m.Mailing.Domain, To: m.To,
+		ListID: m.Mailing.ListID, Precedence: m.Mailing.Precedence, Category: m.Mailing.Category, ESP: m.Mailing.ESP,
+		ReplyTo: m.Mailing.ReplyTo}
+}
+
 func (m *Message) Recipients() ([]string, error) {
-	text := m.ToAddrs
-	if text == "" {
-		text = "[]"
-	}
-	var out []string
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return nil, fmt.Errorf("%w: to_addrs is not a list of strings", httpx.ErrShape)
-	}
-	return out, nil
+	return m.To, nil
 }
 
 type envelope struct {
@@ -132,42 +107,12 @@ type envelope struct {
 	ok              bool
 }
 
-func readEnvelope(cacheDir, rawPath string) envelope {
-	path, ok := message.RawFile(cacheDir, rawPath)
-	if !ok {
-		return envelope{}
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return envelope{}
-	}
-	defer func() { _ = f.Close() }()
-	msg := mime.Parse(readHeader(f))
-	env := envelope{ok: true, listUnsubscribe: msg.Header("List-Unsubscribe"), autoSubmitted: msg.Header("Auto-Submitted")}
-	env.to = lowerAddresses(msg.Addresses("To"))
-	env.cc = lowerAddresses(msg.Addresses("Cc"))
-	return env
-}
-
-func lowerAddresses(addrs []netmail.Address) []string {
+func lowerAddresses(addrs []string) []string {
 	out := make([]string, 0, len(addrs))
 	for _, a := range addrs {
-		if a.Address != "" {
-			out = append(out, strings.ToLower(a.Address))
-		}
+		out = append(out, strings.ToLower(a))
 	}
 	return out
-}
-
-func readHeader(r io.Reader) []byte {
-	data, _ := io.ReadAll(io.LimitReader(r, 256<<10))
-	if i := bytes.Index(data, []byte("\r\n\r\n")); i >= 0 {
-		return data[:i]
-	}
-	if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
-		return data[:i]
-	}
-	return data
 }
 
 func (e envelope) bulk() bool {
@@ -182,24 +127,27 @@ func (e envelope) bulk() bool {
 }
 
 type gate struct {
-	cacheDir  string
+	ctx       context.Context
+	q         db.Querier
+	feed      communications.Feed
 	selves    map[string]bool
-	envelopes map[string]envelope
+	envelopes map[int64]envelope
 }
 
-func newGate(cacheDir string, selves map[string]bool) *gate {
-	return &gate{cacheDir: cacheDir, selves: selves, envelopes: map[string]envelope{}}
+func newGate(ctx context.Context, q db.Querier, feed communications.Feed, selves map[string]bool) *gate {
+	return &gate{ctx: ctx, q: q, feed: feed, selves: selves, envelopes: map[int64]envelope{}}
 }
 
 func (g *gate) envelope(m *Message) envelope {
-	if m.RawPath == "" {
-		return envelope{}
-	}
-	if env, ok := g.envelopes[m.RawPath]; ok {
+	if env, ok := g.envelopes[m.ID]; ok {
 		return env
 	}
-	env := readEnvelope(g.cacheDir, m.RawPath)
-	g.envelopes[m.RawPath] = env
+	var env envelope
+	if found, err := g.feed.Envelope(g.ctx, g.q, m.ID); err == nil && found.Found {
+		env = envelope{ok: true, to: lowerAddresses(found.To), cc: lowerAddresses(found.Cc),
+			listUnsubscribe: found.ListUnsubscribe, autoSubmitted: found.AutoSubmitted}
+	}
+	g.envelopes[m.ID] = env
 	return env
 }
 
@@ -215,10 +163,10 @@ func (g *gate) automated(m *Message) (bool, error) {
 		return true, nil
 	}
 	local, _, _ := strings.Cut(m.FromAddr, "@")
-	if automated, err := flags.AutomatedLocal(local); err != nil || automated {
+	if automated, err := communications.AutomatedLocal(local); err != nil || automated {
 		return true, err
 	}
-	if flags.AutomatedDomain(m.FromDomain) {
+	if communications.AutomatedDomain(m.FromDomain) {
 		return true, nil
 	}
 	return g.envelope(m).bulk(), nil
@@ -246,18 +194,6 @@ func (g *gate) wanted(m *Message) (bool, error) {
 		return g.addressed(env.to) || !g.addressed(env.cc), nil
 	}
 	return true, nil
-}
-
-const messageColumns = "id, account, msgid, gm_thrid, in_reply_to, refs, date_ts, sent, subject, from_name, from_addr, from_domain, to_addrs, " +
-	"list_id, precedence, category, esp, reply_to, raw_path, labels, flags"
-
-func scanMessage(r *sql.Rows) (Message, error) {
-	var m Message
-	var gm, inReplyTo, refs, rawPath sql.NullString
-	err := r.Scan(&m.ID, &m.Account, &m.MsgID, &gm, &inReplyTo, &refs, &m.DateTS, &m.Sent, &m.Subject, &m.FromName, &m.FromAddr,
-		&m.FromDomain, &m.ToAddrs, &m.ListID, &m.Precedence, &m.Category, &m.ESP, &m.ReplyTo, &rawPath, &m.Labels, &m.Flags)
-	m.GmThrID, m.InReplyTo, m.Refs, m.RawPath = gm.String, inReplyTo.String, refs.String, rawPath.String
-	return m, err
 }
 
 type groups struct{ parent map[string]string }
@@ -334,24 +270,8 @@ func threadGroups(rows []Message, selves map[string]bool) ([][]Message, error) {
 	return found, nil
 }
 
-func pendingFlag(ctx context.Context, q db.Querier, id int64) (sql.NullInt64, error) {
-	var asking sql.NullInt64
-	err := q.QueryRowContext(ctx, "SELECT person_asking FROM flag_decisions WHERE message_id = ?", id).Scan(&asking)
-	if err == sql.ErrNoRows {
-		return sql.NullInt64{}, nil
-	}
-	return asking, err
-}
-
-func selfAddresses(ctx context.Context, q db.Querier) (map[string]bool, error) {
-	rows, err := q.QueryContext(ctx, "SELECT DISTINCT from_addr FROM messages WHERE sent = 1 AND from_addr != ''")
-	if err != nil {
-		return nil, err
-	}
-	found, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var addr string
-		return addr, r.Scan(&addr)
-	})
+func selfAddresses(ctx context.Context, q db.Querier, feed communications.Feed) (map[string]bool, error) {
+	found, err := feed.Selves(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -373,11 +293,11 @@ func classify(ctx context.Context, q db.Querier, thread []Message, g *gate, now 
 		if age > float64(t.oweMaxAge)*Day || g.selves[last.FromAddr] {
 			return "", "", false, nil
 		}
-		asking, err := pendingFlag(ctx, q, last.ID)
+		asking, err := g.feed.Asking(ctx, q, last.ID)
 		if err != nil {
 			return "", "", false, err
 		}
-		if asking.Valid && asking.Int64 == 0 {
+		if asking != nil && !*asking {
 			return "", "", false, nil
 		}
 		wanted, err := g.wanted(last)
@@ -414,48 +334,39 @@ type override struct {
 
 func SnoozeDefault(ctx context.Context, q db.Querier) (int, error) {
 	r := endpoint.Read(ctx, q)
-	days := r.Int(mail.KeyLoopsSnoozeDefaultDays)
+	days := r.Int(config.KeyLoopsSnoozeDefaultDays)
 	return days, r.Err()
 }
 
-func Compute(ctx context.Context, d *db.DB, cacheDir string, now float64) (Counts, error) {
+func Compute(ctx context.Context, d *db.DB, feed communications.Feed, now float64) (Counts, error) {
 	var counts Counts
 	r := endpoint.Read(ctx, d.Read)
-	window := mail.TuningOpenloopsWindowDays
+	window := TuningOpenloopsWindowDays
 	limits := thresholds{
-		oweMaxAge:     mail.TuningOpenloopsOweMaxAgeDays,
-		waitingAfter:  r.Int(mail.KeyLoopsWaitingAfterDays),
-		waitingMaxAge: mail.TuningOpenloopsWaitingMaxAgeDays,
+		oweMaxAge:     TuningOpenloopsOweMaxAgeDays,
+		waitingAfter:  r.Int(config.KeyLoopsWaitingAfterDays),
+		waitingMaxAge: TuningOpenloopsWaitingMaxAgeDays,
 	}
 	if err := r.Err(); err != nil {
 		return counts, err
 	}
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "SELECT "+messageColumns+" FROM messages WHERE gone_at IS NULL AND date_ts >= ? ORDER BY date_ts, id",
-			now-float64(window)*Day)
-		if err != nil {
-			return err
-		}
-		all, err := db.Collect(rows, scanMessage)
+		all, err := feed.Messages(ctx, tx, communications.Query{Present: true, Since: now - float64(window)*Day, ByDate: true})
 		if err != nil {
 			return err
 		}
 		var mail []Message
 		for _, m := range all {
-			draft, err := IsDraft(m.Labels, m.Flags)
-			if err != nil {
-				return err
-			}
-			if !draft {
-				mail = append(mail, m)
+			if !m.Flags.Draft {
+				mail = append(mail, messageOf(m))
 			}
 		}
-		selves, err := selfAddresses(ctx, tx)
+		selves, err := selfAddresses(ctx, tx, feed)
 		if err != nil {
 			return err
 		}
-		g := newGate(cacheDir, selves)
-		rows, err = tx.QueryContext(ctx, "SELECT thread_key FROM open_loops")
+		g := newGate(ctx, tx, feed, selves)
+		rows, err := tx.QueryContext(ctx, "SELECT thread_key FROM open_loops")
 		if err != nil {
 			return err
 		}

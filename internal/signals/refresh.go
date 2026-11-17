@@ -1,49 +1,43 @@
-package openloops
+package signals
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	mailclassify "github.com/jeiang/atrium/internal/mail/classify"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
-type Options struct {
-	Env        config.Env
-	Classifier *classifier.Service
-	Paid       *mailclassify.Deferral
-	Clock      func() float64
-	CacheDir   string
-}
-
 type RefreshResult struct {
-	Loops       any `json:"loops"`
-	Commitments any `json:"commitments"`
-	Reminders   any `json:"reminders"`
+	Loops       any    `json:"loops"`
+	Commitments any    `json:"commitments"`
+	Reminders   any    `json:"reminders"`
+	Skipped     string `json:"skipped,omitempty"`
 }
 
-func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (RefreshResult, error) {
+func Refresh(ctx context.Context, d *db.DB, now float64, o module.Refresh) (any, error) {
+	feed := module.Communications(ctx)
+	if feed.Provider == nil {
+		return RefreshResult{Skipped: string(scheduler.StatusSkippedModule)}, nil
+	}
 	env := o.Env
 	if env == nil {
 		env = config.OS
 	}
 	paid := o.Paid
-	if paid == nil {
-		paid = &mailclassify.Deferral{}
-	}
 	reminders := &Reminders{DB: d, Now: o.Clock, Env: env}
 	steps := []struct {
 		name string
 		run  func() (any, error)
 	}{
 		{"loops", func() (any, error) {
-			return Compute(ctx, d, o.CacheDir, now)
+			return Compute(ctx, d, feed, now)
 		}},
-		{"commitments", func() (any, error) { return ScanCommitments(ctx, d, o.CacheDir, env, now, o.Classifier, paid) }},
+		{"commitments", func() (any, error) { return ScanCommitments(ctx, d, feed, env, now, o.Classifier, paid) }},
 		{"reminders", func() (any, error) { return reminders.Propose(ctx, now, config.From(ctx).TZName(env)) }},
 	}
 	var out RefreshResult
