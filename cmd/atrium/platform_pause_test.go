@@ -36,7 +36,6 @@ func writeOldPauseFile(t *testing.T, dir string) string {
 }
 
 func TestPlatformPauseHonorsTheOldBinaryPauseFileForMailWrites(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	blocked := m.add("INBOX", "Bank statement", "statements@bank.test", "blocked", "Your statement is ready.")
 	held := m.add("INBOX", "Shop receipt", "orders@shop.test", "held", "Thanks for your order.")

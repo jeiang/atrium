@@ -82,7 +82,6 @@ func newFaultyEmbedder(t *testing.T) *faultyEmbedder {
 }
 
 func TestServeRuntimeRunsADueJobOnceBesideAConcurrentTick(t *testing.T) {
-	t.Parallel()
 	d, api, f, before := startWeeklyReview(t, asstReply("reviewed"))
 	release := asstHold(t, api)
 	_, logs := startServeLogged(t, f.dir)

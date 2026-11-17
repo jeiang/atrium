@@ -14,7 +14,6 @@ import (
 )
 
 func TestSpendOneRunCapRefusesEveryModelBeforeDispatch(t *testing.T) {
-	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)

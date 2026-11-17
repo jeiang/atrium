@@ -158,7 +158,6 @@ func TestContactsSyncSkipsOffAndUnconfiguredWithoutAuditing(t *testing.T) {
 }
 
 func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothing(t *testing.T) {
-	t.Parallel()
 	dir, srv := davFixture(t)
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {

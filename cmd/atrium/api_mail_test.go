@@ -175,7 +175,6 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 }
 
 func TestMailPassesAPI(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mailSafetyFixture(t, "live")
@@ -354,7 +353,6 @@ func TestMailPassesAPI(t *testing.T) {
 }
 
 func TestMailApplyDeletionsAPIRefusedInShadow(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mailSafetyFixture(t, "shadow")
@@ -419,7 +417,6 @@ func TestMailApplyDeletionsAPIRefusedInShadow(t *testing.T) {
 }
 
 func TestMailSyncAPIDrainsOnShutdown(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	m := mailSafetyFixture(t, "live")

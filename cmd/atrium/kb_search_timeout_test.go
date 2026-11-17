@@ -15,7 +15,6 @@ import (
 )
 
 func TestKBSearchSkipsSemanticSearchWhenEmbeddingStalls(t *testing.T) {
-	t.Parallel()
 	dir, fake, api, d := kbEmbedFixture(t)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

@@ -29,7 +29,6 @@ var retiredToConstants = []settings.RetiredKey{
 }
 
 func TestRetiredSettingsAreIgnoredAndTheirConstantsHold(t *testing.T) {
-	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))

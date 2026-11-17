@@ -252,7 +252,6 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 }
 
 func TestServeWatchPassWaitsForTheScheduledPass(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)
@@ -311,7 +310,6 @@ func TestServeWatchPassWaitsForTheScheduledPass(t *testing.T) {
 }
 
 func TestServeDrainFinishesTheCurrentWatchPass(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)

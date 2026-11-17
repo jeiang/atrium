@@ -41,7 +41,6 @@ func gaps4Events(t *testing.T, s *apiSite, token string) <-chan appFrame {
 }
 
 func TestTorrentControlUndoAndTheDownloadsTopic(t *testing.T) {
-	t.Parallel()
 	const plain = "cccccccccccccccccccccccccccccccccccccccc"
 	const other = "dddddddddddddddddddddddddddddddddddddddd"
 	s, token, qb := gaps4Site(t)

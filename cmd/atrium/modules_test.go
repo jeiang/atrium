@@ -414,7 +414,6 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 }
 
 func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
-	t.Parallel()
 	dir, _, _ := moduleFixture(t, allFlagsTrue())
 	ca := filepath.Join(dir, "grafana-ca.pem")
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigEdit(t, dir, "host-grafana-ca.toml", map[string]string{
@@ -695,7 +694,6 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 }
 
 func TestFailedAssistantStartRestartsAfterBackoff(t *testing.T) {
-	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("CREATE TRIGGER jobs_refused BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'jobs refused'); END"); err != nil {
@@ -1009,7 +1007,6 @@ func TestMailPauseUnavailableWhileMailIsOff(t *testing.T) {
 }
 
 func TestMailDisableDuringProposalApproval(t *testing.T) {
-	t.Parallel()
 	fake := mailtest.NewFakeClient()
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	fake.AddBox("Bills", mailtest.NewBox(3))
@@ -1131,7 +1128,6 @@ func (b midBatch) disableAfterWrite(t *testing.T, what string, run func()) {
 }
 
 func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
-	t.Parallel()
 	t.Run("approve", func(t *testing.T) {
 		b := midBatchFixture(t)
 		var ran appRun
@@ -1207,7 +1203,6 @@ func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
 }
 
 func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	uid := m.add("INBOX", "Bank statement", "statements@bank.test", "disable-undo", "Your statement is ready.")
 	m.run(t, "sync")

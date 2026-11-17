@@ -14,7 +14,6 @@ import (
 )
 
 func TestServeWatchStopsWithTheMailModuleAndStaysStopped(t *testing.T) {
-	t.Parallel()
 	dir, fakes := watchRig(t, map[string]string{"me@home.test": "home-pass", "me@work.test": "work-pass"},
 		mailAccount{"home", "icloud", "me@home.test", "home-pass", false}, mailAccount{"work", "icloud", "me@work.test", "work-pass", false})
 	home, work := fakes["home"], fakes["work"]

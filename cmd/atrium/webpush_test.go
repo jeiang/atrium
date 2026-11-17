@@ -226,7 +226,6 @@ func checkVAPID(t *testing.T, header http.Header, publicKey, audience string) {
 }
 
 func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *testing.T) {
-	t.Parallel()
 	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRigGenerated(t, dir)

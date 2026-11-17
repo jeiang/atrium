@@ -129,7 +129,6 @@ func TestInferenceSchedulerConditionalJobsRunTheirFreeWork(t *testing.T) {
 }
 
 func TestInferenceUsagePageShowsReservationsAndCeilings(t *testing.T) {
-	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)

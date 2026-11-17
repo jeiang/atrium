@@ -115,7 +115,6 @@ func TestServeBackupJobArchivesAndPrunes(t *testing.T) {
 }
 
 func TestBackupJobTakesItsScheduleFromTheHost(t *testing.T) {
-	t.Parallel()
 	zone, err := config.Zone(config.Timezone)
 	if err != nil {
 		t.Fatal(err)

@@ -123,7 +123,6 @@ func (m *mailSafety) embed(t *testing.T, ids ...int64) {
 }
 
 func TestMailRoutingRecordsEachStage(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 	type filedMail struct{ box, subject, from, msgid string }
 	cases := []struct {
@@ -272,7 +271,6 @@ func (m *mailSafety) copies() int {
 }
 
 func TestMailGateRefusalsWriteNothing(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 
 	t.Run("shadow", func(t *testing.T) {
@@ -385,7 +383,6 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 }
 
 func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 	prepare := func(t *testing.T) (*mailSafety, string) {
 		t.Helper()
@@ -462,7 +459,6 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 }
 
 func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	uid := m.add("INBOX", "Bank statement", "statements@bank.test", "target", "Your statement is ready.")
 	m.run(t, "sync")
@@ -549,7 +545,6 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 }
 
 func TestMailUndoneActionsDoNotRunAgain(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 
 	t.Run("flag", func(t *testing.T) {
@@ -629,7 +624,6 @@ func TestMailUndoneActionsDoNotRunAgain(t *testing.T) {
 }
 
 func TestMailInterruptedExpungeAfterCopyIsUnknown(t *testing.T) {
-	t.Parallel()
 	m := mailSafetyFixture(t, "live")
 	uid := m.add("INBOX", "Bank statement", "statements@bank.test", "target", "Your statement is ready.")
 	m.run(t, "sync")
@@ -666,7 +660,6 @@ func TestMailInterruptedExpungeAfterCopyIsUnknown(t *testing.T) {
 }
 
 func TestMailPassRenewsItsLeaseBetweenGroups(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 	m := mailSafetyFixture(t, "live")
 	m.add("INBOX", "Statement one", from, "one", "Your statement is ready.")
@@ -715,7 +708,6 @@ func TestMailPassRenewsItsLeaseBetweenGroups(t *testing.T) {
 }
 
 func TestMailGroupSettledMeanwhileSettlesTheRest(t *testing.T) {
-	t.Parallel()
 	const from = "statements@bank.test"
 	m := mailSafetyFixture(t, "live")
 	m.add("INBOX", "Statement one", from, "one", "Your statement is ready.")

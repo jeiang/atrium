@@ -54,7 +54,6 @@ func reportSchema(t *testing.T, r anthropictest.Request) map[string]any {
 }
 
 func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
-	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	const home = "Maple Street 12"
