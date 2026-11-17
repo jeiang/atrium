@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/apps/mail/live"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/live"
 	pauseapp "github.com/jeiang/atrium/internal/pause/application"
 )
 

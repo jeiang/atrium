@@ -93,6 +93,11 @@ func main() {
 		more, err = unitEdges()
 		edges = append(edges, more...)
 	}
+	if err == nil {
+		var more []string
+		more, err = mailWriteEdges()
+		edges = append(edges, more...)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "adapterboundary:", err)
 		os.Exit(1)

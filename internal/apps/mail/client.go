@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -21,7 +23,7 @@ const (
 	ActionCreate    = "IMAP CREATE"
 	ActionSubscribe = "IMAP SUBSCRIBE"
 	ActionDelete    = "IMAP DELETE"
-	ActionAppend    = safety.AppendAction
+	ActionAppend    = "IMAP APPEND"
 )
 
 type MailboxInfo struct {
@@ -210,14 +212,39 @@ func (g gate) check(ctx context.Context, action, target string) error {
 			return ErrSentOnly
 		}
 	}
-	var mode safety.ModeFunc
+	var mode ModeFunc
 	if g.q != nil {
 		mode = func(ctx context.Context) (string, error) { return Mode(ctx, g.q) }
 	}
-	if err := safety.WriteGate(ctx, mode, action, target); err != nil {
+	if err := WriteGate(ctx, mode, action, target); err != nil {
 		return err
 	}
 	return ledger.BeforeWrite(ctx)
+}
+
+type ModeFunc func(ctx context.Context) (string, error)
+
+func WriteGate(ctx context.Context, current ModeFunc, action, target string) error {
+	if pausePath, ok := safety.AutomaticWritesPause(ctx); ok && pause.Paused(pausePath) {
+		return safety.WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", strconv.Quote(action)))
+	}
+	if safety.ApprovalIsConsent(ctx) {
+		return nil
+	}
+	if sent, ok := safety.OperatorSendTarget(ctx); ok && action == ActionAppend && target == sent {
+		return nil
+	}
+	mode := ""
+	if current != nil {
+		var err error
+		if mode, err = current(ctx); err != nil {
+			return err
+		}
+	}
+	if mode != safety.Live {
+		return safety.WriteRefused(fmt.Sprintf("refusing mailbox write %s: mail_mode (ATRIUM_MAIL_MAIL_MODE) is not %s", strconv.Quote(action), safety.Live))
+	}
+	return nil
 }
 
 func (g gate) Connect(ctx context.Context) error { return g.conn.Connect(ctx) }

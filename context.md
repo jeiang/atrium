@@ -55,11 +55,17 @@ claims about the running application. Operator contracts are in
   the feed; the mail pass still calls them, passing its paid event judge.
   The drafts and packages attention sources live in
   `internal/mail/attentionsources`. The Mail app's store (the message
-  client, the write gate, queries, roles, settings and tuning), IMAP client,
-  connection opener, message and MIME parsers, search, sync, rules and router
-  live in `internal/apps/mail`; the rest of Mail stays in `internal/mail`
-  until the later P13 slices move it, and the Mail declaration claims both
-  trees as the one `mail` unit.
+  client, queries, roles, settings and tuning), IMAP client, connection
+  opener, message and MIME parsers, search, sync, rules, router, triage,
+  applier, live mode and executors live in `internal/apps/mail`. The mail
+  write gate is `WriteGate` in `internal/apps/mail/client.go`, called only
+  by the client's `gate.check`; the shared consent scopes (approved
+  proposal, operator send, automatic writes) stay in `internal/safety` and
+  the pause check in `internal/pause`. The draft card kind and the
+  live-action rows reach Review through the Mail declaration's review
+  kinds. The rest of Mail stays in `internal/mail` until the later P13
+  slices move it, and the Mail declaration claims both trees as the one
+  `mail` unit.
 - The core `signals` unit (`internal/signals` for the domain,
   `internal/signals/signalsmodule` for its service, API routes, Loops page,
   `open_loops` tool and declaration) owns open loops, commitments and
@@ -83,6 +89,10 @@ claims about the running application. Operator contracts are in
   name and the `openloops_*` setting keys are unchanged.
   `internal/communications` is a platform package, so the unit-boundary
   guard rejects any import of Mail from core outside its listed exceptions.
+  No exception covers the mail write path: `tools/adapterboundary` fails
+  when a Go file outside the Mail unit, composition roots included, imports
+  `internal/apps/mail/applier` or `internal/apps/mail/live`, and when any
+  Go file outside the `internal/apps/mail` package calls `WriteGate`.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.
