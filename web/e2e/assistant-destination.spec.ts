@@ -8,6 +8,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -246,6 +247,60 @@ test.describe('the Assistant destination offline', () => {
     await page.getByRole('button', { name: 'Save authority' }).click();
     await expect(page.getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
     expect((await requests(page)).filter((item) => item.path.endsWith('/permissions'))).toHaveLength(0);
+  });
+});
+
+test.describe('schedules with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('a new schedule whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/schedules',
+      open: '/assistant/routines',
+      press: async (page) => {
+        await page.getByRole('button', { name: 'New schedule' }).click();
+        const dialog = page.locator('dialog[open]');
+        await dialog.getByLabel('Name').fill('Seed order reminder');
+        await dialog.getByLabel('When').fill('weekly sat 08:30');
+        await dialog.getByLabel('What it does').fill('Remind me to order seeds.');
+        await dialog.getByRole('button', { name: 'Review' }).click();
+        await dialog.getByRole('button', { name: 'Set up schedule' }).click();
+      },
+    });
+  });
+
+  test('a schedule save whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PATCH',
+      path: '/schedules/4',
+      open: '/assistant/routines/4',
+      press: async (page) => {
+        await page.locator('[data-settings="schedule"]').getByLabel('What it does').fill('Check the parcels twice.');
+        await page.getByRole('button', { name: 'Save schedule' }).click();
+      },
+    });
+  });
+
+  test('turning a schedule on whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PUT',
+      path: '/schedules/4/enabled',
+      open: '/assistant/routines/4',
+      press: (page) => page.getByRole('button', { name: 'Turn on' }).click(),
+    });
+  });
+
+  test('a schedule delete whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'DELETE',
+      path: '/schedules/4',
+      open: '/assistant/routines/4',
+      press: async (page) => {
+        await page.getByRole('button', { name: 'Delete schedule' }).click();
+        await page.locator('dialog[open]').getByRole('button', { name: 'Delete schedule' }).click();
+      },
+    });
   });
 });
 

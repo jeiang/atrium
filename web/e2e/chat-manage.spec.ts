@@ -7,6 +7,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goReachable, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edgeSurfaces = ['.rail', '.tabbar', 'dialog.sheet'];
 const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
@@ -153,6 +154,73 @@ test.describe('chat header actions', () => {
       await expect(page).toHaveURL(/\/chat\/7$/);
     });
   });
+});
+
+test.describe('chat actions with a lost answer', () => {
+  test.use({ viewport: { width: desktop.width, height: desktop.height }, allowConsole: unreachableConsole });
+
+  const scenario = { chat: { speed: 20 } };
+  const commands = [
+    {
+      name: 'a regenerate',
+      method: 'POST',
+      path: '/threads/11/regenerate',
+      open: '/chat/11',
+      press: (page: Page) => page.getByRole('button', { name: 'Regenerate (new run)' }).click(),
+    },
+    {
+      name: 'a branch',
+      method: 'POST',
+      path: '/threads/9/branch',
+      open: '/chat/9',
+      press: (page: Page) => page.getByRole('button', { name: 'Branch from here' }).last().click(),
+    },
+    {
+      name: 'a pin',
+      method: 'PUT',
+      path: '/threads/9/pin',
+      open: '/chat',
+      press: (page: Page) => rowAction(page, 'Winter tyre sizes', 'Pin to the top'),
+    },
+    {
+      name: 'an archive',
+      method: 'PUT',
+      path: '/threads/9/archive',
+      open: '/chat/9',
+      press: (page: Page) => chatAction(page, 'Archive'),
+    },
+    {
+      name: 'a delete',
+      method: 'DELETE',
+      path: '/threads/11',
+      open: '/chat/11',
+      press: async (page: Page) => {
+        await chatAction(page, 'Delete chat');
+        await page
+          .getByRole('dialog', { name: 'Delete this chat?' })
+          .getByRole('button', { name: 'Delete chat' })
+          .click();
+      },
+    },
+    {
+      name: 'a move to a space',
+      method: 'PUT',
+      path: '/threads/9/project',
+      open: '/chat/9',
+      press: async (page: Page) => {
+        await chatAction(page, 'Move to a space');
+        const dialog = page.getByRole('dialog', { name: 'Move to a space' });
+        await dialog.getByRole('radio', { name: 'Shared garden' }).check();
+        await dialog.getByRole('button', { name: 'Move' }).click();
+      },
+    },
+  ];
+
+  for (const { name, ...command } of commands) {
+    test(`${name} whose answer is lost reads as unknown and is never sent again`, async ({ page }) => {
+      await expectLostAnswer(page, { ...command, scenario });
+    });
+  }
 });
 
 test.describe('the last turn', () => {

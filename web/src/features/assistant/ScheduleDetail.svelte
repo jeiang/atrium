@@ -158,7 +158,7 @@
           ? error.message
           : error instanceof ApiError
             ? `${error.message} Nothing was deleted.`
-            : 'The connection failed before atrium answered. Reload the list to see whether it was deleted.';
+            : 'The outcome is unknown. The connection failed before atrium answered, so it may or may not have been deleted. atrium did not try again.';
     } finally {
       busy = undefined;
     }
