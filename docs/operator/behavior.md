@@ -70,8 +70,9 @@ configuration, and an unknown future schema are permanent refusals.
 
 ## Access
 
-Every admitted identity is the one operator with full authority. There is no
-administrator role or remote emergency bypass.
+Every admitted proxy, OIDC or local identity is the one operator with full
+authority. There is no administrator role, no login link, and no remote
+emergency bypass.
 
 - Proxy mode requires a `Remote-Groups` header that lists `atrium_access`,
   sent by a socket peer in the trusted proxy list (`--trusted-proxy` or the
@@ -121,21 +122,27 @@ administrator role or remote emergency bypass.
 - Trusted proxy CIDRs alone permit `CF-Connecting-IP` to identify the client.
   Such a peer must send exactly one valid value; otherwise the request is 400.
   Other forwarded-address headers do not choose a rate-limit identity.
+- The guard picks the authenticator from the path prefix before it reads any
+  credential: `/api/v1` takes only a bearer token, and `/web/v1` and the pages
+  take only the web identity. No route accepts both.
 - `/web/v1` is the browser surface for the same API operations. It admits the
   same identities as the pages (proxy from a trusted peer, an OIDC session, or
   local on a loopback listener, the emergency listener included) and never a
   bearer token: a request with an `Authorization` header gets 400
-  `bearer_refused`. Requests need `Atrium-Client: web` (binary content reads
-  excepted) and a `same-origin` `Sec-Fetch-Site` when the browser sends one;
-  writes also need a same-origin `Origin` and the CSRF token from
-  `GET /web/v1/session`, or get 403 `cross_origin` or `csrf_failed`. Signed
-  out, every `/web/v1` request gets 401 with the sign-in URL; sign-in itself
-  is still `/login`. `POST /web/v1/session/logout` signs an OIDC session out
-  of the pages too.
+  `bearer_refused`. It sends no CORS headers. Requests need
+  `Atrium-Client: web` (binary content reads excepted) and a `same-origin`
+  `Sec-Fetch-Site` when the browser sends one; writes also need a same-origin
+  `Origin` and the CSRF token from `GET /web/v1/session`, or get 403
+  `cross_origin` or `csrf_failed`. Signed out, every `/web/v1` request gets
+  401 with the sign-in URL; sign-in itself is still `/login`.
+  `POST /web/v1/session/logout` signs an OIDC session out of the pages too.
 - The new web client is at `/next/` on every listener, beside the
-  server-rendered UI, and nothing links to it yet. Its page and files need no
-  sign-in, like `/static/`, because they hold no data; everything it shows
-  comes from `/web/v1`, which keeps the rules above. Host validation applies.
+  server-rendered UI, which stays the default: the pages do not link to it.
+  A push notification opens its card or page there, and a Google consent
+  started from the client returns to its Google connection page. Its page and
+  files need no sign-in, like `/static/`, because they hold no data;
+  everything it shows comes from `/web/v1`, which keeps the rules above. Host
+  validation applies.
   Responses under `/next/` carry a stricter CSP with Trusted Types; the
   server-rendered pages keep their CSP unchanged.
 - The `/next/` client keeps its shell and the last data it read for 7 days,
@@ -479,7 +486,8 @@ connection and its state, and the line clears once a check passes. A failed
 Test does not hold mail.
 
 Apps are the units with a flag the operator switches: mail, calendar, media
-and Grafana ("Server ops"). `GET /apps` (both `/api/v1` and `/web/v1`,
+("Library"), packages, torrents, weather and Grafana ("Server ops").
+`GET /apps` (both `/api/v1` and `/web/v1`,
 operator only) lists each app with its flag, module state and reason, pin
 source, the units it depends on and the unmet ones, the units that depend on
 it, its connection needs, its nav entries and the settings revision.
