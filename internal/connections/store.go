@@ -237,11 +237,9 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 		state State
 	}
 	var removed []dropped
-	var replaced []PinnedCredential
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
-		replaced = nil
 		for _, id := range sortedKeys(s.host.Connections) {
-			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id], &replaced); err != nil {
+			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id]); err != nil {
 				return err
 			}
 		}
@@ -287,11 +285,6 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 		log.Warn("a host-declared connection was removed from the host configuration and is disabled", logx.Integration, string(row.id))
 		s.announce(ctx, row.id, row.state, Disabled, reasonRemovedFromHost)
 	}
-	if s.reg != nil {
-		s.reg.pendingMu.Lock()
-		s.reg.pending = append(s.reg.pending, replaced...)
-		s.reg.pendingMu.Unlock()
-	}
 	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reload != nil {
 		return s.reg.sync.Reload(ctx, s)
 	}
@@ -335,7 +328,7 @@ func (s *Store) disableUnknownKinds(ctx context.Context, tx *sql.Tx) error {
 
 const reasonRemovedFromHost = "removed from host configuration"
 
-func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.HostConnection, replaced *[]PinnedCredential) error {
+func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.HostConnection) error {
 	def, ok := s.reg.Lookup(Kind(hc.Kind))
 	if !ok {
 		return UnknownKind(hc.Kind)
@@ -473,7 +466,6 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 			if err := audit.Record(actx, tx, audit.Entry{Key: "connection." + string(id) + "." + slot, Secret: true}); err != nil {
 				return err
 			}
-			*replaced = append(*replaced, PinnedCredential{ID: id, Slot: slot})
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot); err != nil {
 			return err
@@ -647,7 +639,6 @@ func endpointIdentity(key, value string) (string, bool) {
 }
 
 func (s *Store) List(ctx context.Context) ([]View, error) {
-	s.flushReplaced(ctx)
 	rows, err := s.q.QueryContext(ctx,
 		"SELECT id, kind, label, config_source, config_json, transport_json, revision, enabled, state, reason, checked_at, last_ok_at, expires_at, reauth_at, results_json "+
 			"FROM connections ORDER BY id")
@@ -886,7 +877,6 @@ func (s *Store) open(ctx context.Context, q db.Querier, id ID) (*Lease, error) {
 }
 
 func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisabled bool) (*Lease, error) {
-	s.flushReplaced(ctx)
 	var (
 		v          View
 		configJSON string

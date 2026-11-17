@@ -128,7 +128,7 @@ func classify(err error) *application.Error {
 	}
 	var pinned *connections.PinnedCredential
 	if errors.As(err, &pinned) {
-		return &application.Error{Code: application.Refused, Reason: PinnedCode, Message: err.Error(), Cause: err}
+		return &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}
 	}
 	code := application.Internal
 	var unknown connections.UnknownID
@@ -158,8 +158,6 @@ func classify(err error) *application.Error {
 	}
 	return &application.Error{Code: code, Message: err.Error(), Cause: err}
 }
-
-const PinnedCode = "pinned"
 
 type partialError struct{ cause error }
 

@@ -85,17 +85,15 @@ type Definition struct {
 }
 
 type Registry struct {
-	mu        sync.RWMutex
-	defs      map[Kind]Definition
-	needs     []Need
-	active    func(string) bool
-	on        func(string) bool
-	sync      *AccountSync
-	notify    Notifier
-	units     chan struct{}
-	rechecks  chan ID
-	pendingMu sync.Mutex
-	pending   []PinnedCredential
+	mu       sync.RWMutex
+	defs     map[Kind]Definition
+	needs    []Need
+	active   func(string) bool
+	on       func(string) bool
+	sync     *AccountSync
+	notify   Notifier
+	units    chan struct{}
+	rechecks chan ID
 }
 
 func Compile(defs []Definition, needs []Need, sync *AccountSync, notify Notifier) (*Registry, error) {

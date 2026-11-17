@@ -32,7 +32,7 @@ var (
 )
 
 var transportCodes = []string{
-	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "bearer_refused", "command_interrupted", "command_result_withheld", "cross_origin", "csrf_failed", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "module_disabled", "no_active_run", "no_question", "not_answered", "nothing_to_edit", "pinned", "project_archived", "read_only_thread", "reference_refused", "run_active", "stream_expired", "too_large", "unsupported_media_type",
+	"api_unavailable", "auth_unavailable", "bad_cursor", "bad_request", "bearer_refused", "command_interrupted", "command_result_withheld", "cross_origin", "csrf_failed", "idempotency_in_progress", "idempotency_mismatch", "invalid_token", "module_disabled", "no_active_run", "no_question", "not_answered", "nothing_to_edit", "project_archived", "read_only_thread", "reference_refused", "run_active", "stream_expired", "too_large", "unsupported_media_type",
 }
 
 const contractRules = "Prose fields written by the model or the operator, such as message and answer text and the `text` and `thinking` run stream events, are raw markdown: render CommonMark with tables, strikethrough and autolinks, and escape raw HTML. Within v1, responses change only additively: clients ignore unknown error codes, run stream event names and response fields."

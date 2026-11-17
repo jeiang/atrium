@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant/permission"
-	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
@@ -51,9 +50,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Tools:       ToolDefinitions(),
 		Connections: notify.Connections(),
 		ConnectionNotice: func(ctx context.Context, d *db.DB, title, body string) error {
-			if module.SetFrom(ctx) == nil {
-				return connections.ErrNoticeDeferred
-			}
 			if !audit.HasActor(ctx) {
 				ctx = audit.With(ctx, "service:connection-health", audit.Job)
 			}

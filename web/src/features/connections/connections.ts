@@ -174,12 +174,7 @@ export function fieldsBody(draft: Draft) {
 }
 
 export function stale(error: unknown): boolean {
-  return (
-    error instanceof ApiError &&
-    (error.status === 409 || error.status === 412) &&
-    error.code !== 'refused' &&
-    error.code !== 'pinned'
-  );
+  return error instanceof ApiError && (error.status === 409 || error.status === 412) && error.code !== 'refused';
 }
 
 export interface RepairHint {

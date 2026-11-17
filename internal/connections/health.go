@@ -56,48 +56,9 @@ func (s *Store) announce(ctx context.Context, id ID, previous, next State, reaso
 			body += "; affects " + strings.Join(features, ", ")
 		}
 	}
-	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil && !errors.Is(err, ErrNoticeDeferred) {
+	if err := n(context.WithoutCancel(ctx), s.d, "atrium: "+label+" "+state, body); err != nil {
 		log.Warn("connection notification failed", logx.Integration, string(id), logx.Err, err.Error())
 	}
-}
-
-var ErrNoticeDeferred = errors.New("connections: notices are not available in this context yet")
-
-func (s *Store) flushReplaced(ctx context.Context) {
-	if s.reg == nil {
-		return
-	}
-	s.reg.pendingMu.Lock()
-	pending := s.reg.pending
-	s.reg.pending = nil
-	s.reg.pendingMu.Unlock()
-	for i, p := range pending {
-		if !s.noticeReplaced(ctx, p) {
-			s.reg.pendingMu.Lock()
-			s.reg.pending = append(pending[i:], s.reg.pending...)
-			s.reg.pendingMu.Unlock()
-			return
-		}
-	}
-}
-
-func (s *Store) noticeReplaced(ctx context.Context, p PinnedCredential) bool {
-	if s.reg == nil || s.reg.notify == nil || s.d == nil {
-		return true
-	}
-	label := string(p.ID)
-	if view, err := s.Get(context.WithoutCancel(ctx), p.ID); err == nil && view.Label != "" {
-		label = view.Label
-	}
-	body := label + ": the host credential file replaced the " + p.Slot + " value saved in atrium; " + PinnedHint
-	err := s.reg.notify(context.WithoutCancel(ctx), s.d, "atrium: "+label+" credential replaced", body)
-	if errors.Is(err, ErrNoticeDeferred) {
-		return false
-	}
-	if err != nil {
-		log.Warn("connection notification failed", logx.Integration, string(p.ID), logx.Err, err.Error())
-	}
-	return true
 }
 
 const PinnedHint = "the credential is changed in host configuration"

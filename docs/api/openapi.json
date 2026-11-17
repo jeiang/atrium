@@ -4426,7 +4426,6 @@
                       "not_configured",
                       "not_found",
                       "nothing_to_edit",
-                      "pinned",
                       "precondition_failed",
                       "project_archived",
                       "rate_limited",

@@ -449,7 +449,7 @@ function editable(row: ConnectionView, body: FieldsBody, state: ConnectionsScena
     if (state.pinnedRace || held?.pinned)
       return refusal(
         409,
-        'pinned',
+        'refused',
         `connections: ${held?.owner ?? row.id} credential ${slot} is pinned by host configuration; change it there`,
       );
     if (held?.source.startsWith('host'))

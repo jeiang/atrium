@@ -79,13 +79,13 @@ func TestAPinnedCredentialIsRefusedOnEverySurfaceAndTheSharedSlotNamesItsOwner(t
 	}
 
 	body := map[string]any{"credentials": map[string]string{"mail/icloud/password": "ui-value"}}
-	expectAPI(t, s.do(http.MethodPatch, "/api/v1/connections/mail/icloud", token, body), http.StatusConflict, "pinned")
-	expectAPI(t, s.do(http.MethodPut, "/api/v1/connections/mail/icloud", token, body), http.StatusConflict, "pinned")
-	expectAPI(t, s.do(http.MethodPatch, "/api/v1/connections/icloud/icloud", token, body), http.StatusConflict, "pinned")
+	expectAPI(t, s.do(http.MethodPatch, "/api/v1/connections/mail/icloud", token, body), http.StatusConflict, "refused")
+	expectAPI(t, s.do(http.MethodPut, "/api/v1/connections/mail/icloud", token, body), http.StatusConflict, "refused")
+	expectAPI(t, s.do(http.MethodPatch, "/api/v1/connections/icloud/icloud", token, body), http.StatusConflict, "refused")
 	browser := newWebClient(t, base, nil)
 	browser.session("local")
-	expectAPI(t, browser.do(http.MethodPatch, "/web/v1/connections/mail/icloud", body), http.StatusConflict, "pinned")
-	expectAPI(t, browser.do(http.MethodPut, "/web/v1/connections/mail/icloud", body), http.StatusConflict, "pinned")
+	expectAPI(t, browser.do(http.MethodPatch, "/web/v1/connections/mail/icloud", body), http.StatusConflict, "refused")
+	expectAPI(t, browser.do(http.MethodPut, "/web/v1/connections/mail/icloud", body), http.StatusConflict, "refused")
 
 	page := newWebClient(t, base, nil)
 	page.session("local")
