@@ -577,6 +577,32 @@ test.describe('the composer with a lost answer', () => {
       },
     });
   });
+
+  test('a message whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/threads/9/messages',
+      open: '/chat/9',
+      scenario: { chat: { speed: 8 } },
+      press: async (page) => {
+        await composer(page).fill('Book the fitting for Saturday');
+        await page.getByRole('button', { name: 'Send' }).click();
+      },
+    });
+  });
+
+  test('an answer whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/threads/10/answer',
+      open: '/chat/10',
+      press: async (page) => {
+        await expect(transcript(page).getByText('Question for you')).toBeVisible();
+        await page.getByRole('textbox', { name: 'Answer' }).fill('Sage green, please');
+        await page.getByRole('button', { name: 'Send' }).click();
+      },
+    });
+  });
 });
 
 test.describe('scrolling', () => {
