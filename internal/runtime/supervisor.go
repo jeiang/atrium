@@ -112,6 +112,9 @@ func (s *Supervisor) loop(ctx context.Context, def ServiceDefinition, st *state)
 			attempt = 0
 		}
 		delay := backoffDelay(def.Backoff, attempt)
+		if hold := (*HoldError)(nil); errors.As(err, &hold) && hold.For > delay {
+			delay = hold.For
+		}
 		attempt++
 		st.fail(err, time.Now().Add(delay))
 		log.Warn(fmt.Sprintf("service %s failed; restarting in %s", def.Name, delay.Round(time.Millisecond)), logx.Err, err.Error())

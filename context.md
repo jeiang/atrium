@@ -878,7 +878,12 @@ claims about the running application. Operator contracts are in
 ### Modules, scheduling, and observability
 - `serve` runs supervised mail watches and scheduled work and is the only
   executor of declared jobs while it is up; `agent tick` is a one-shot pass
-  that refuses (75) when another process holds the serve lock. The NixOS
+  that refuses (75) when another process holds the serve lock.
+  Each account watch (`mail-watch/<account>`) restarts with a jittered 5 to
+  300 second backoff that only a completed IDLE or NOOP round trip (or a
+  10-minute session) resets; a refused login (`mail.ErrLoginRefused`) holds
+  it for 1, 3, 6, then 12 hours (`runtime.Hold`), counted in process per
+  credential revision. The NixOS
   module ships `atrium.service`, the optional `atrium-media-agent.service`
   and no atrium timers. `atrium job run <key>` (`internal/scheduler/jobcmd`)
   inserts a `job_runs` row with status `requested`; serve's scheduler polls
