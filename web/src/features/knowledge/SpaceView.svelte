@@ -59,7 +59,7 @@
       await handleUndoEffects(effects);
       toast(`Put ${title} back in ${name}.`);
     } catch (failure) {
-      toast(failureText(failure, 'Cannot reach atrium. Nothing was undone.'), { tone: 'error' });
+      toast(failureText(failure), { tone: 'error' });
     } finally {
       await refreshKnowledge(client);
     }
@@ -82,7 +82,7 @@
         toast(`${title} was already taken out. The space has been reloaded.`);
         await refreshKnowledge(client);
       } else {
-        toast(failureText(failure, 'Cannot reach atrium. Nothing changed.'), { tone: 'error' });
+        toast(failureText(failure), { tone: 'error' });
       }
     } finally {
       removing = undefined;

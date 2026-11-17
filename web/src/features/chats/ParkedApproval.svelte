@@ -10,18 +10,25 @@
     reviewUndo,
     reviewUndoable,
   } from '../../contract';
-  import { device, unreachable } from '../../shared/device.svelte';
+  import { inboxPath } from '../../shared/assistant/inboxId';
+  import { device, outcomeUnknown, unreachable } from '../../shared/device.svelte';
   import { queryClient } from '../../shared/query';
   import { toast } from '../../shared/ui/toast.svelte';
 
   const deferred = new SvelteMap<number, number>();
+
+  function failureText(error: unknown): string {
+    if (outcomeUnknown(error)) return `The outcome is unknown. ${error.message} atrium did not try again.`;
+    if (error instanceof ApiError) return error.message;
+    return 'The outcome is unknown. The connection failed before atrium answered, so this may or may not have happened. atrium did not try again.';
+  }
 
   async function handleDismissDue(id: number): Promise<void> {
     deferred.delete(id);
     try {
       ok(await reviewDismiss(id, {}));
     } catch (error) {
-      toast(error instanceof Error ? error.message : 'The ask could not be declined.', { tone: 'error' });
+      toast(failureText(error), { tone: 'error' });
     }
     await queryClient.invalidateQueries({ queryKey: ['proposal', id] });
     await queryClient.invalidateQueries({ queryKey: ['thread'] });
@@ -62,8 +69,8 @@
       : undefined,
   );
 
-  function refuse(error: unknown, fallback: string): never {
-    toast(error instanceof Error && error.message ? error.message : fallback, { tone: 'error' });
+  function refuse(error: unknown): never {
+    toast(failureText(error), { tone: 'error' });
     throw error;
   }
 
@@ -71,13 +78,14 @@
     try {
       ok(await reviewApprove(id, {}));
     } catch (error) {
-      refuse(error, 'The ask could not be approved.');
+      void queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      refuse(error);
     }
     ondecided();
   }
 
   function onDecline(): void {
-    if (!device.online) refuse(new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } }), '');
+    if (!device.online) refuse(new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } }));
     deferred.set(
       id,
       window.setTimeout(() => void handleDismissDue(id), UNDO_MS),
@@ -103,6 +111,11 @@
 {:else if proposal.isError || !approval || !proposal.data}
   <ViewState kind="error" title="The ask could not be loaded" level={4}>
     {proposal.error?.message ?? 'Open the Inbox to decide it.'}
+  </ViewState>
+{:else if proposal.data.blocked && proposal.data.status !== 'pending'}
+  <ViewState kind="blocked" title="The outcome is unknown" level={4}>
+    {proposal.data.title}. atrium could not confirm the result and did not try again.
+    <a class="link" href={inboxPath('proposal', id)}>Open it in the Inbox</a>
   </ViewState>
 {:else if proposal.data.status !== 'pending' && !deferred.has(id)}
   <ViewState kind="partial" title={proposal.data.status === 'approved' ? 'Approved' : 'Declined'} level={4}>
