@@ -588,6 +588,8 @@ and `POST /api/v1/undo/write:<effect>` reverses it. Delete removes the task at
 once, so clients confirm it first; its undo, also in Activity, restores the
 task with the same id. A task links to at most one thread, project, person,
 record or message. A link to something that no longer exists shows no title.
+While mail is off a message link shows no title and a new message link is
+refused, because messages are read only through mail.
 Moving a task's reminder time to a new moment sends the reminder again; other
 edits do not.
 

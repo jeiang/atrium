@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -83,6 +86,21 @@ func TestAHostMailAccountWithoutAPasswordFileKeepsThePasswordEnteredByTheOperato
 		t.Fatal(err)
 	}
 	s := &apiSite{t: t, base: base}
+	offered := map[string]bool{}
+	for _, c := range strictJSON[connectionsapp.ConnectionsSchema](t, "/connections/schema", s.do(http.MethodGet, "/api/v1/connections/schema", token, nil)).Connections {
+		for _, field := range c.Fields {
+			if field.Secret {
+				offered[string(c.ID)+" "+field.Name] = true
+			}
+		}
+	}
+	if !offered["mail/home mail/home/password"] || offered["icloud/home mail/home/password"] {
+		t.Fatalf("the password field is offered on %v, want it on mail/home only", offered)
+	}
+	jar, _ := cookiejar.New(nil)
+	if code, page, _ := fetch(t, &http.Client{Jar: jar}, http.MethodGet, base+"/settings/connections", nil); code != http.StatusOK || !strings.Contains(page, `name="credential.mail/home/password"`) {
+		t.Fatalf("the connections page (%d) has no password input for mail/home", code)
+	}
 	apiData(t, s.do(http.MethodPatch, "/api/v1/connections/mail/home", token, map[string]any{"credentials": map[string]string{"mail/home/password": "home-pass"}}), http.StatusOK)
 	if stored() != "1" {
 		t.Fatal("the entered password is not stored")

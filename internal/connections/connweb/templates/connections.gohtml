@@ -15,6 +15,7 @@
     </div>
     {{with $d.URL $v}}<div role="group" class="set-row"><label for="{{$v.ID}}-url">URL</label><input id="{{$v.ID}}-url" name="url" class="input" value="{{.}}" autocomplete="off" spellcheck="false"></div>{{end}}
     {{range $v.Credentials}}<div role="group" class="set-row"><label for="{{$v.ID}}-{{.Slot}}">{{replace "_" " " .Slot}}</label><input id="{{$v.ID}}-{{.Slot}}" name="credential.{{.Slot}}" type="password" class="input" autocomplete="new-password"></div>{{end}}
+    {{range $d.Unset $v}}<div role="group" class="set-row"><label for="{{$v.ID}}-{{.}}">{{replace "_" " " .}}</label><input id="{{$v.ID}}-{{.}}" name="credential.{{.}}" type="password" class="input" autocomplete="new-password"></div>{{end}}
     <footer>
       <button type="submit" class="btn" data-size="sm" data-variant="outline">Test and save</button>
       <button type="submit" class="btn text-danger" data-size="sm" data-variant="ghost" formaction="{{$.Path}}/disconnect" formnovalidate data-confirm-submit="Disconnect {{$v.Label}}? Its stored credentials are deleted.">Disconnect</button>

@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
@@ -76,6 +77,7 @@ type Declaration struct {
 	Refs              []RefKind
 	Day               DayProvider
 	HomeWeather       homecard.WeatherCard
+	Communications    communications.Provider
 	Attachments       []Attachment
 	Connections       []connections.Definition
 	AccountSync       *connections.AccountSync

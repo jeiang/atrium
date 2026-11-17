@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"io"
+	"maps"
 	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
@@ -127,6 +128,8 @@ func (m *Message) Addresses(name string) []mail.Address {
 func (m *Message) ContentType() string { return m.mediaType }
 
 func (m *Message) Param(name string) string { return m.params[strings.ToLower(name)] }
+
+func (m *Message) Params() map[string]string { return maps.Clone(m.params) }
 
 func (m *Message) IsMultipart() bool { return m.multipart }
 

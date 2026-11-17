@@ -116,7 +116,7 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		if !module.IsEnabled(ctx, unit.Calendar) {
 			return 0, 0, nil
 		}
-		return candidates.ScanAccount(ctx, d, cfg, account, p.Classify, paid, env, now)
+		return candidates.ScanAccount(ctx, d, account, eventJudge{classify: p.Classify, paid: paid}, env, now)
 	}
 	p.Extras = []Extra{
 		{"open loops", func(ctx context.Context, paid *classify.Deferral) (any, error) {
