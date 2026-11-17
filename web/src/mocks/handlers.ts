@@ -3,6 +3,7 @@ import type { ModuleStateState, Shell, State, WebSession, WebSignIn } from '../c
 import { API_BASE } from '../contract';
 import { type AppsScenario, appHandlers } from './apps';
 import { type AssistantScenario, assistantHandlers } from './assistant';
+import { type CalendarScenario, calendarHandlers } from './calendar';
 import { type ChatScenario, chatHandlers } from './chats';
 import { type ConnectionsScenario, connectionHandlers } from './connections';
 import { type HomeScenario, homeHandlers } from './home';
@@ -23,6 +24,7 @@ export interface MockScenario {
   mail?: { mode: string; paused: boolean };
   pause?: State;
   apps?: AppsScenario;
+  calendar?: CalendarScenario;
   media?: MediaScenario;
   inbox?: InboxScenario;
   chat?: ChatScenario;
@@ -189,6 +191,7 @@ export const handlers = [
   ...settingsHandlers(scenario),
   ...connectionHandlers(scenario),
   ...appHandlers(scenario),
+  ...calendarHandlers(scenario),
   ...mediaHandlers(scenario),
   ...chatHandlers,
   ...simulatorHandlers,

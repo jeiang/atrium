@@ -65,7 +65,7 @@ export function seedApps(): MockApp[] {
       pin: 'host',
       depends: [],
       needs: [need('calendar', 'google/calendar', 'calendar', true)],
-      nav: [{ label: 'Calendar', url: '/calendar', settings: false }],
+      nav: [],
     },
     {
       id: 'torrents',
