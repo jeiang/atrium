@@ -7,9 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -159,18 +157,7 @@ func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
 
 	opsBase := opsAddr(t)
 	base, _, stopServe := startServeStoppable(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
-	status, _, _ := fetch(t, client, "POST", base+"/chat", url.Values{"text": {prompt}})
-	if status != http.StatusSeeOther {
-		t.Fatalf("POST /chat = %d", status)
-	}
+	webStartG1(t, localWebG1(t, base), map[string]any{"text": prompt})
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		var state string
@@ -246,7 +233,7 @@ func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
 	}
 	httpSeen := false
 	for name := range names {
-		if strings.HasPrefix(name, "POST /chat") || name == "http.server" {
+		if strings.HasPrefix(name, "POST /web/v1/threads") || name == "http.server" {
 			httpSeen = true
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -281,7 +282,7 @@ func TestInferenceInterruptedStreamChargesTheOutputItReceived(t *testing.T) {
 
 func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
 	t.Parallel()
-	_, api, d, w := asstServe(t)
+	_, api, d, w := webServeG1(t)
 
 	pdf := make([]byte, 0, 6<<20)
 	pdf = append(pdf, "%PDF-1.7\n"...)
@@ -294,8 +295,13 @@ func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
 
 	before := len(api.Requests())
 	api.Push(asstReply("read"))
-	thread := w.startFiles(map[string]string{"text": "read this", "model": "claude-opus-5-5"},
+	started := webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": "read this", "model": "claude-opus-5-5"},
 		[]asstFile{{"big.pdf", "application/pdf", pdf}})
+	made, _ := started.json["thread"].(map[string]any)
+	if started.status != http.StatusCreated || made == nil {
+		t.Fatalf("start with a large PDF = %d: %.600s", started.status, started.body)
+	}
+	thread := number(t, made["id"])
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("large PDF run %s", state)
 	}
@@ -397,14 +403,15 @@ func TestInferenceReservationAndSettlementBumpTheUsageRevision(t *testing.T) {
 		}
 		return v
 	}
-	w := asstBrowse(t, startServeIn(t, dir))
+	w := localWebG1(t, startServeIn(t, dir))
 	usagePage := func() string {
 		t.Helper()
-		code, page, _ := w.get("/settings/usage", false)
-		if code != 200 {
-			t.Fatalf("GET /settings/usage = %d: %.500s", code, page)
+		budget, _ := webOKG1(t, w.do(http.MethodGet, "/web/v1/usage", nil))["budget"].(map[string]any)
+		reserved, ok := budget["reserved_usd"].(float64)
+		if !ok {
+			t.Fatalf("usage budget lacks reserved_usd: %v", budget)
 		}
-		return page
+		return fmt.Sprintf("$%.2f reserved", reserved)
 	}
 	before := revision()
 	usagePage()
@@ -450,8 +457,8 @@ func TestInferenceReservationAndSettlementBumpTheUsageRevision(t *testing.T) {
 	if held <= before {
 		t.Errorf("assistant revision %d while the reservation is held, want above %d", held, before)
 	}
-	if want := fmt.Sprintf("$%.2f reserved", float64(reservationN)/inference.NanoUSD); !strings.Contains(page, want) {
-		t.Errorf("usage page during the call lacks %q", want)
+	if want := fmt.Sprintf("$%.2f reserved", float64(reservationN)/inference.NanoUSD); page != want {
+		t.Errorf("usage during the call shows %q, want %q", page, want)
 	}
 
 	if err := d.Read.QueryRow("SELECT state FROM usage WHERE id = ?", id).Scan(&state); err != nil {
@@ -461,7 +468,7 @@ func TestInferenceReservationAndSettlementBumpTheUsageRevision(t *testing.T) {
 	if state != "settled" || settled <= held {
 		t.Errorf("after settlement: row %d state %q, assistant revision %d, want settled above %d", id, state, settled, held)
 	}
-	if page := usagePage(); !strings.Contains(page, "$0.00 reserved") {
+	if page := usagePage(); page != "$0.00 reserved" {
 		t.Error("usage page after settlement still shows a reservation")
 	}
 
@@ -472,14 +479,14 @@ func TestInferenceReservationAndSettlementBumpTheUsageRevision(t *testing.T) {
 	if got := revision(); got != settled+1 {
 		t.Errorf("assistant revision %d after one reservation row, want %d", got, settled+1)
 	}
-	if page := usagePage(); !strings.Contains(page, "$1.25 reserved") {
+	if page := usagePage(); page != "$1.25 reserved" {
 		t.Error("usage page lacks the $1.25 reservation")
 	}
 	asstExec(t, d, "UPDATE usage SET state = 'settled', settled_at = ?, accounted_nusd = 1000000000 WHERE attempt_key = 'reservation-probe'", now)
 	if got := revision(); got != settled+2 {
 		t.Errorf("assistant revision %d after settling the reservation row, want %d", got, settled+2)
 	}
-	if page := usagePage(); !strings.Contains(page, "$0.00 reserved") {
+	if page := usagePage(); page != "$0.00 reserved" {
 		t.Error("usage page still shows the settled reservation")
 	}
 }
