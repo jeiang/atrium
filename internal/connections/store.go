@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -89,6 +90,7 @@ type Lease struct {
 	shared       *shared
 	closed       bool
 	workedBefore bool
+	cause        func()
 }
 
 func New(d *db.DB, host config.Host, r *Registry) (*Store, error) {
@@ -937,7 +939,7 @@ func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisable
 			s.recheckSharers(ctx, id, rotated)
 		}
 	}
-	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds, workedBefore: lastOK != nil}
+	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds, workedBefore: lastOK != nil, cause: scheduler.CauseReporter(ctx)}
 	lease.defaults = s.defaultsFor(v.Kind)
 	lease.shared = s.sharedFor(id, revision)
 	return lease, nil
