@@ -59,8 +59,8 @@ claims about the running application. Operator contracts are in
   connection opener, message and MIME parsers, search, sync, rules, router,
   triage, applier, live mode, executors, drafts with the operator's draft
   send, the SMTP sender, replay, scans and deletions, the attention sources
-  (drafts and packages), accounts and Gmail sign-in, package tracking and
-  watches, the application service, the CLI (`mailcmd`), the pages
+  (drafts), accounts and Gmail sign-in, the application service, the CLI
+  (`mailcmd`), the pages
   (`pages`, `reviewpages`, `accountpages`), the agent mail tools
   (`mailtools`), the declaration (`mailmodule`) and the test fakes
   (`mailtest`). The mail write gate is `WriteGate` in
@@ -259,9 +259,10 @@ claims about the running application. Operator contracts are in
 - The attention query covers the enabled queues: proposals, drafts, open
   loops, commitments, event candidates, thread plans, packages, tasks and
   unanswered `ask_operator` questions, listed until the operator answers.
-  Packages come from shipping emails; a package the operator registers with
-  `track_package` is polled through Ship24, stores its events, and notifies
-  once when it is delivered or hits an exception.
+  Packages (when the Packages app is on) come from shipping emails; a
+  package the operator registers with `track_package` is polled through
+  Ship24, stores its events, and notifies once when it is delivered or hits
+  an exception.
   Items are grouped as overdue, due soon, needs decision, waiting on them
   and upcoming. The cron-only `attention` tool and the daily digest read it.
   Tasks are a core store with open, done and dismissed status, a
@@ -941,7 +942,7 @@ claims about the running application. Operator contracts are in
   every qBittorrent add failed with nothing added; a magnet with no v1 hash
   is recorded on its release and is not an add failure). The run error names
   the capability, the connection and the repair id. These rows do not
-  coalesce. The `packages poll` CLI and the channels poll API keep their
+  coalesce. The `atrium packages poll` CLI and the channels poll API keep their
   results.
   Nightly
   dreaming creates and associates every child thread in one transaction and
@@ -1117,6 +1118,28 @@ claims about the running application. Operator contracts are in
   the named unit's flag is on, the seed writes `<name>_enabled=true` once
   as a new row (actor `atrium`, source `migration`); a fresh database
   stays opt-in. Weather inherits from `assistant`.
+  The Packages app (`packages`, flag `packages_enabled`, depends on mail)
+  lives in `internal/apps/packages`: shipping-mail extraction (`watches`,
+  run as the `watches` message scan inside the mail pass through
+  `module.MessageScans`, reading the communications feed with a prefilter
+  equal to the old extraction SQL), Ship24 tracking (`tracking`, the
+  `service/ship24` connection kind and its soft `api` need), the `packages`
+  and `package_events` tables, the hourly job, the `packages`,
+  `track_package` and `untrack_package` tools, the `/packages` API
+  (list with `ship24_connected` and the monthly `quota`, add, track,
+  untrack, dismiss, poll), the `/watches` page, the `packages` attention
+  source and the `package:` resolver. Persisted names are unchanged: the job
+  key `mail/package-tracking` (kept through `scheduler.Definition.KeyOwner`),
+  its carried setting `agent_schedule_package_tracking`, the
+  `mail_ship24_*` and `watches_*` keys, the effect origin `tracking`, the
+  operation `track_package` and the undo `package_untrack`. A declaration's
+  `OptIn` keeps an opted-in app off at the adoption seed unless it reports
+  stored data: a database with stored packages starts with Packages on, one
+  with none (and a fresh one) leaves it off. With Packages off no package
+  tool, job or extraction runs, `POST /mail/watches/refresh` answers
+  unavailable, and the `service/ship24` row is disabled with the reason
+  "its app is off", never deleted. The old `/mail/packages*` operations are
+  retired.
   `module.Compile` fails start on an empty title, a core declaration that is
   an app or declares dependencies, an unknown dependency, a core unit that
   depends on an app, a dependency cycle (named in order), a need for a
