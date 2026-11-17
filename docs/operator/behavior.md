@@ -95,6 +95,19 @@ administrator role or remote emergency bypass.
   next sign-in. A host that has not signed in since this rule shipped shows
   `untested` until its next sign-in, unless its last recorded event before the
   upgrade was a sign-in.
+- The OIDC session cookie (`atrium_session`) and the CSRF cookie are
+  `SameSite=Strict`, so a request started by another site never carries the
+  session. Only the short sign-in binding cookie (`atrium_oidc_state`, 10
+  minutes) stays `SameSite=Lax`, because the provider's redirect back to
+  `/auth/callback` is a cross-site navigation. When a page link is opened from
+  another site (mail, a chat, the provider's return to the page you asked for)
+  and the browser marks the navigation `Sec-Fetch-Site: cross-site`, atrium
+  answers with a one-step "Continue to Atrium" page that reloads the same
+  address from atrium itself; a signed-in browser then sends its session and
+  lands on the page, and a signed-out one goes to `/login` as before. A
+  browser that sends no fetch metadata goes straight to `/login`. A session
+  cookie issued before this change keeps `SameSite=Lax` until the next sign-in
+  replaces it; nobody is signed out by the upgrade.
 - Local and emergency listeners require a numeric loopback bind address and
   loopback socket peers; a non-loopback peer gets 403. A forwarded header never
   makes a remote peer local. Without an explicit allowed Host, a local listener

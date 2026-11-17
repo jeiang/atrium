@@ -229,7 +229,7 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 		t.Fatalf("callback location %q", cb.location())
 	}
 	cookie := strings.Join(cb.header.Values("Set-Cookie"), "\n")
-	for _, want := range []string{"atrium_session=", "HttpOnly", "SameSite=Lax", "Path=/"} {
+	for _, want := range []string{"atrium_session=", "HttpOnly", "SameSite=Strict", "Path=/"} {
 		if !strings.Contains(cookie, want) {
 			t.Fatalf("session cookie lacks %q: %s", want, cookie)
 		}
