@@ -18,6 +18,12 @@ if (import.meta.env.MODE === 'mock') {
 }
 const started = loadSession();
 void preload(route.pathname as Parameters<typeof preload>[0]);
+const chat = /^\/chat\/([1-9]\d*)$/.exec(route.pathname);
+if (chat) {
+  void import('./features/chats/thread')
+    .then(({ prefetchThread }) => prefetchThread(Number(chat[1])))
+    .catch(() => undefined);
+}
 void queryClient.prefetchQuery(shellQuery);
 if (location.pathname === import.meta.env.BASE_URL) {
   void queryClient.prefetchQuery(homeQuery);

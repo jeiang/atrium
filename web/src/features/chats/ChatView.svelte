@@ -20,7 +20,6 @@
     assistantThreadBranch,
     assistantThreadOptions,
     assistantThreadStart,
-    assistantThreadTranscript,
     ok,
     type Step,
     type TranscriptItem,
@@ -45,25 +44,17 @@
   import { failureText } from './manage';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';
+  import { threadQuery } from './thread';
   import WorkPanel from './WorkPanel.svelte';
   import './chats.css';
 
   let { id }: { id: number | undefined } = $props();
 
-  const PAGE = 50;
   const FOLLOW_SLACK = 80;
   const invalid = $derived(id !== undefined && !(Number.isSafeInteger(id) && id > 0));
   const storageKey = $derived(`atrium.chat.scroll.${id ?? 'new'}`);
 
-  const transcript = createInfiniteQuery(() => ({
-    queryKey: ['thread', id],
-    queryFn: async ({ pageParam, signal }) =>
-      ok(await assistantThreadTranscript(id ?? 0, { limit: PAGE, cursor: pageParam || undefined }, { signal })),
-    initialPageParam: '',
-    getNextPageParam: (last) => last.next_cursor ?? undefined,
-    enabled: id !== undefined && !invalid,
-    meta: { topics: ['assistant'] },
-  }));
+  const transcript = createInfiniteQuery(() => ({ ...threadQuery(id), enabled: id !== undefined && !invalid }));
 
   const options = useConfiguration();
 
