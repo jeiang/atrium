@@ -302,8 +302,11 @@ func testICloud(ctx context.Context, lease *connections.Lease, caps []connection
 			results = append(results, connections.Result{Capability: cap.Name, State: connections.Failing, Reason: err.Error()})
 		default:
 			data, _ := json.Marshal(map[string]any{"collections": len(collections)})
-			results = append(results, connections.Result{Capability: cap.Name, State: connections.OK,
-				Reason: fmt.Sprintf("%d collections", len(collections)), Data: data})
+			reason := fmt.Sprintf("%d collections", len(collections))
+			if len(collections) == 1 {
+				reason = "1 collection"
+			}
+			results = append(results, connections.Result{Capability: cap.Name, State: connections.OK, Reason: reason, Data: data})
 		}
 	}
 	if len(results) == 0 {

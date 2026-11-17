@@ -381,7 +381,7 @@
         {/if}
         {#if view.reauth_at}
           <div>
-            <dt>Sign in again by</dt>
+            <dt>Sign-in needed since</dt>
             <dd>{when(view.reauth_at)}</dd>
           </div>
         {/if}
