@@ -27,7 +27,16 @@ export async function gotoShell(page: Page, path: string): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
 }
 
+async function settled(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity),
+  );
+}
+
 export async function expectNoHorizontalScroll(page: Page): Promise<void> {
+  await settled(page);
   const overflow = await page.evaluate(() => {
     const root = document.documentElement;
     return { scroll: root.scrollWidth, client: root.clientWidth };
@@ -39,6 +48,7 @@ export async function expectNoHorizontalScroll(page: Page): Promise<void> {
 }
 
 export async function expectTouchTargets(page: Page, scope = 'body'): Promise<void> {
+  await settled(page);
   const failures = await page.evaluate(
     ({ selector, size, scope }) => {
       const describe = (el: Element): string => {
@@ -111,6 +121,7 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
 const shellEdges = ['.rail', '.tabbar'];
 
 export async function expectRoundedSurfaces(page: Page, windowEdge: readonly string[] = []): Promise<void> {
+  await settled(page);
   const failures = await page.evaluate(
     (allowed) => {
       const describe = (el: Element): string => {
@@ -214,15 +225,8 @@ export async function expectRoundedSurfaces(page: Page, windowEdge: readonly str
 }
 
 export async function expectNoSeriousAxeFindings(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () =>
-      !document.querySelector('[data-arming]') &&
-      document
-        .getAnimations()
-        .every(
-          (animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity,
-        ),
-  );
+  await page.waitForFunction(() => !document.querySelector('[data-arming]'));
+  await settled(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
     .analyze();
@@ -255,6 +259,7 @@ const colorProperties = [
 ];
 
 export async function expectNoBlue(page: Page, maxChroma = 0.02): Promise<void> {
+  await settled(page);
   const failures = await page.evaluate(
     ({ properties, limit }) => {
       const canvas = document.createElement('canvas');
