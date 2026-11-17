@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -100,9 +99,8 @@ func TestCatalogMediaUndoThroughCLI(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(hash, "Catalog.Undo")}, "mode": {"media"}}, http.StatusOK)
+	web := localWebG1(t, startServeIn(t, dir))
+	webOKG1(t, web.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": mediaMagnet(hash, "Catalog.Undo")}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	id := mediaEffectID(t, d, "media_add_magnet", hash, "done")

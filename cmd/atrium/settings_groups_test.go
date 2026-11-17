@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,61 +15,32 @@ import (
 
 func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
 	t.Parallel()
-	base := startSettingsServe(t, nil)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/assistant = %d", status)
-	}
-	const action = "/settings/groups/assistant/spending"
-	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"12"}, "monthly_budget_usd": {"150"}})
-	if status != http.StatusOK {
-		t.Fatalf("POST %s = %d", action, status)
-	}
+	c := localWebG1(t, startSettingsServe(t, nil))
+	apiData(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{"thread_cost_cap_usd": "12"}}), http.StatusOK)
 	if row := runSettings(t, "get", "thread_cost_cap_usd").row(t); row.Value == nil || *row.Value != "12" || row.Source == nil || *row.Source != "db" {
 		t.Errorf("thread_cost_cap_usd = %+v, want 12 from the database", row)
 	}
 	if row := runSettings(t, "get", "monthly_budget_usd").row(t); row.Source != nil && *row.Source == "db" {
-		t.Errorf("saving the group stored an unchanged key: %+v", row)
+		t.Errorf("saving one key stored another: %+v", row)
 	}
-	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"-1"}})
-	if status != http.StatusUnprocessableEntity {
-		t.Errorf("POST an invalid value = %d", status)
-	}
+	expectAPI(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{"thread_cost_cap_usd": "-1"}}), http.StatusUnprocessableEntity, "invalid")
 	if row := runSettings(t, "get", "thread_cost_cap_usd").row(t); row.Value == nil || *row.Value != "12" {
 		t.Errorf("a refused save changed thread_cost_cap_usd to %+v", row)
 	}
-	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/nope", url.Values{}); status != http.StatusNotFound {
-		t.Errorf("POST an unknown group = %d, want 404", status)
+	if got := c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{"thread_cost_cap_usd": "13", "nope": "1"}}); got.status < http.StatusBadRequest {
+		t.Errorf("PATCH an unknown key = %d: %s", got.status, got.body)
+	}
+	if row := runSettings(t, "get", "thread_cost_cap_usd").row(t); row.Value == nil || *row.Value != "12" {
+		t.Errorf("a save naming an unknown key changed thread_cost_cap_usd to %+v", row)
 	}
 }
 
 func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 	t.Parallel()
 	unsetEnv(t, settingEnv(davmirror.AppleIDKey))
-	base := startSettingsServe(t, nil)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/calendar", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/calendar = %d", status)
-	}
-	const action = "/settings/sections/calendar"
-	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"45"}, "back": {"/settings/calendar"}})
-	if status != http.StatusOK {
-		t.Errorf("saving from the module page = %d", status)
-	}
-	status, body, _ := fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"0"}, "back": {"/settings/calendar"}})
-	if status != http.StatusUnprocessableEntity {
-		t.Errorf("a refused value = %d: %.200s", status, body)
-	}
+	c := localWebG1(t, startSettingsServe(t, nil))
+	apiData(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{"default_event_minutes": "45"}}), http.StatusOK)
+	expectAPI(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{"default_event_minutes": "0"}}), http.StatusUnprocessableEntity, "invalid")
 	if row := runSettings(t, "get", "default_event_minutes").row(t); row.Value == nil || *row.Value != "45" {
 		t.Errorf("default_event_minutes = %+v, want 45", row)
 	}
@@ -79,27 +48,14 @@ func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 
 func TestMediaLibraryGroupEditsTheLinkTTL(t *testing.T) {
 	t.Parallel()
-	base := startSettingsServe(t, nil)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/media", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/media = %d", status)
-	}
-	const action = "/settings/groups/media/library"
-	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"media_link_ttl_seconds": {"7200"}})
-	if status != http.StatusOK {
-		t.Fatalf("POST %s = %d", action, status)
-	}
+	c := localWebG1(t, startSettingsServe(t, nil))
+	apiData(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{"media_link_ttl_seconds": "7200"}}), http.StatusOK)
 	if row := runSettings(t, "get", "media_link_ttl_seconds").row(t); row.Value == nil || *row.Value != "7200" {
 		t.Errorf("media_link_ttl_seconds = %+v, want 7200", row)
 	}
-	status, _, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"media_link_ttl_seconds": {"30"}})
-	if status != http.StatusUnprocessableEntity {
-		t.Errorf("POST an invalid TTL = %d", status)
+	expectAPI(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{"media_link_ttl_seconds": "30"}}), http.StatusUnprocessableEntity, "invalid")
+	if row := runSettings(t, "get", "media_link_ttl_seconds").row(t); row.Value == nil || *row.Value != "7200" {
+		t.Errorf("a refused TTL changed media_link_ttl_seconds to %+v", row)
 	}
 	if ran := runSettings(t, "set", "media_link_ttl_seconds", "3600"); ran.code != 0 {
 		t.Fatalf("settings set media_link_ttl_seconds: %d %s", ran.code, ran.stderr)
@@ -128,20 +84,9 @@ func TestSettingsSaveSameRefusalInCLIAndUI(t *testing.T) {
 	if ran := runSettings(t, "set", pinned, "false"); ran.code != cli.ExitError || !strings.Contains(ran.stderr, pinned+" is pinned") {
 		t.Errorf("settings set %s false = exit %d, stderr %q; want exit 1 naming the pin", pinned, ran.code, ran.stderr)
 	}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil); status != http.StatusOK {
-		t.Fatalf("GET /settings/assistant = %d", status)
-	}
-	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/spending", url.Values{key: {"-1"}}); status != http.StatusUnprocessableEntity {
-		t.Errorf("POST the group with %s=-1 = %d, want 422", key, status)
-	}
-	if status, _, _ := fetch(t, client, http.MethodPost, base+"/settings/groups/assistant/spending", url.Values{pinned: {"false"}}); status >= http.StatusBadRequest {
-		t.Errorf("POST the group with the pinned %s = %d", pinned, status)
-	}
+	c := localWebG1(t, base)
+	expectAPI(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{key: "-1"}}), http.StatusUnprocessableEntity, "invalid")
+	expectAPI(t, c.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{pinned: "false"}}), http.StatusConflict, "refused")
 	d := mustConnect(t, path, keyFor(t))
 	for k, v := range map[string]string{key: "-1", pinned: "false"} {
 		var changes int
@@ -187,7 +132,7 @@ func TestSettingsSaveSameRefusalInCLIAndUI(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{`cli {"keys":["` + key + `"]}`, `ui {"keys":["` + key + `"]}`}
+	want := []string{`cli {"keys":["` + key + `"]}`, `api {"keys":["` + key + `"]}`}
 	if !slices.Equal(got, want) {
 		t.Errorf("refusal audit = %v, want %v", got, want)
 	}

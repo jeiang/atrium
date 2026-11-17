@@ -69,8 +69,8 @@ func TestMigrationTwoDropsUnreadTablesAndKeepsCarriedRows(t *testing.T) {
 	migrateSchemaFixture(t, path, schemaBaselineDump(t, freshEnv))
 
 	base, _, stop := startServeStoppable(t, dir)
-	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/activity", nil); status != http.StatusOK {
-		t.Fatalf("GET /activity after the migration = %d: %.300s", status, body)
+	if got := localWebG1(t, base).do(http.MethodGet, "/web/v1/activity", nil); got.status != http.StatusOK {
+		t.Fatalf("GET /web/v1/activity after the migration = %d: %.300s", got.status, got.body)
 	}
 	stop()
 

@@ -4,9 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -428,16 +426,9 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
-		t.Fatalf("activity page: %d", code)
-	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusSeeOther && code != http.StatusOK {
-		t.Fatalf("undo package tracker: %d %s", code, body)
+	web := localWebG1(t, base)
+	if got := web.do(http.MethodPost, fmt.Sprintf("/web/v1/effects/%d/undo", writeID), nil); got.status != http.StatusOK || got.json["undone"] != true {
+		t.Fatalf("undo package tracker: %d %s", got.status, got.body)
 	}
 	var tracker string
 	if err := d.Read.QueryRow("SELECT tracker_id FROM packages WHERE id = 1").Scan(&tracker); err != nil || tracker != "" {
@@ -509,16 +500,9 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", ""))
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
-		t.Fatalf("activity page: %d", code)
-	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusConflict {
-		t.Fatalf("undo without a key: %d %s; want 409", code, body)
+	web := localWebG1(t, base)
+	if got := web.do(http.MethodPost, fmt.Sprintf("/web/v1/effects/%d/undo", writeID), nil); got.status != http.StatusConflict {
+		t.Fatalf("undo without a key: %d %s; want 409", got.status, got.body)
 	}
 	var undone sql.NullInt64
 	var tracker string

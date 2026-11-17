@@ -3,9 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -101,19 +98,11 @@ func TestComposerThreadCostCapRefusesTheNextRequest(t *testing.T) {
 	seedSettings(t, map[string]string{assistant.KeyDefaultModel: pricing.HaikuID})
 	warm(t, api)
 	base, _, stop := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("costly")).WithUsage(anthropictest.Usage{Input: 1000, Output: 120_000}))
-	if status, body, _ := fetch(t, client, "POST", base+"/chat", url.Values{"text": {"hello"}, "cost_cap": {"0.05"}}); status != http.StatusSeeOther {
-		t.Fatalf("POST /chat = %d: %s", status, body)
+	thread := webStartG1(t, localWebG1(t, base), map[string]any{"text": "hello", "cost_cap_usd": 0.05})
+	if latest := latestThread(t, dir); latest != thread {
+		t.Fatalf("latest thread %d, want %d", latest, thread)
 	}
-	thread := latestThread(t, dir)
 	for deadline := time.Now().Add(20 * time.Second); !runDone(t, dir, thread); {
 		if time.Now().After(deadline) {
 			t.Fatal("first run did not finish")

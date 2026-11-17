@@ -154,7 +154,7 @@ const (
 func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	t.Parallel()
 	movieRel := "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
-	search := func(t *testing.T, base string) (*asstWeb, librarySearch, librarySearch, librarySearch, *mediaAgent, string) {
+	search := func(t *testing.T, base string) (string, librarySearch, librarySearch, librarySearch, *mediaAgent, string) {
 		t.Helper()
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 		vpn := heldListener(t)
@@ -175,8 +175,9 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 		setEnv(t, settingEnv(library.KeyVPNBaseURL), value)
 		asstWarm(t)
 		d := asstDB(t, dir)
-		w := asstBrowse(t, startServeIn(t, dir))
-		return w, searchThroughServe(t, api, d, w, "dune"), searchThroughServe(t, api, d, w, "lanterns"), searchThroughServe(t, api, d, w, "oddity"), agent, base
+		main := startServeIn(t, dir)
+		w := localWebG1(t, main)
+		return main, webSearchG1(t, api, d, w, "dune"), webSearchG1(t, api, d, w, "lanterns"), webSearchG1(t, api, d, w, "oddity"), agent, base
 	}
 
 	t.Run("unset", func(t *testing.T) {
@@ -189,7 +190,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	})
 
 	t.Run("set", func(t *testing.T) {
-		w, movie, show, odd, _, base := search(t, "vpn")
+		main, movie, show, odd, _, base := search(t, "vpn")
 		cases := []struct {
 			found  librarySearch
 			rel    string
@@ -212,7 +213,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 				t.Errorf("GET %s = %d %q", link, code, got)
 			}
 			path := strings.TrimPrefix(link, base)
-			if code, got, _ := w.get(path, false); code == http.StatusOK || strings.Contains(got, c.body) {
+			if code, got, _ := fetch(t, &http.Client{}, http.MethodGet, main+path, nil); code == http.StatusOK || strings.Contains(got, c.body) {
 				t.Errorf("main served the VPN path %s: %d", path, code)
 			}
 			if code, got := vpnRequest(t, http.MethodGet, link, "atrium.test", nil); code != http.StatusBadRequest || strings.Contains(got, c.body) {

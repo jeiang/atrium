@@ -30,7 +30,7 @@ func TestWimOIDCSignInAndProbeDoNotFollowAProviderRedirectToAnotherHost(t *testi
 	}
 	s.idp.MoveTo(other.URL)
 	b.get(authz.location())
-	if after := b.get("/settings/auth"); after.status != http.StatusSeeOther {
+	if after := b.get("/web/v1/session", "Atrium-Client", "web"); after.status != http.StatusUnauthorized {
 		t.Fatalf("a sign-in whose token request was redirected left a session: %d", after.status)
 	}
 	if n := elsewhere.Load(); n != 0 {
