@@ -234,6 +234,7 @@ async function click(worker: Worker, url: string): Promise<void> {
 
 test.describe('the move to the root address', () => {
   test('the classic and /next/ workers give way to one root worker', async ({ page, site }) => {
+    await page.context().addInitScript(fakePush, pushStore);
     site.moved = false;
     await page.goto(`${site.url}/old`);
     await expect.poll(() => registrations(page)).toEqual([{ scope: '/', script: '/static/sw.js' }]);
@@ -333,6 +334,7 @@ test.describe('the move to the root address', () => {
   });
 
   test('an open /next/ window moves to the same page at root when its worker updates', async ({ page, site }) => {
+    await page.context().addInitScript(fakePush, pushStore);
     site.moved = false;
     await page.goto(`${site.url}/next/inbox/draft:7`);
     await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
