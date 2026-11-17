@@ -117,20 +117,19 @@
       assert renameWarned legacy && !(renameWarned renamed);
       assert renamed.config.services.atrium.renderedHost == legacy.config.services.atrium.renderedHost;
       assert loads renamed == loads legacy && builtins.elem "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password" (loads renamed);
-      assert
-        conn renamed
-        == {
-          kind = "mail";
-          label = "icloud";
-          config = {
-            preset = "icloud";
-            login = "operator@icloud.example";
-            auth_method = "password";
-            enabled = "true";
-          };
-          capabilities = ["imap" "smtp"];
-          credential_files."mail/icloud/password" = "\${CREDENTIALS_DIRECTORY}/mail-account-icloud";
+      assert conn renamed
+      == {
+        kind = "mail";
+        label = "icloud";
+        config = {
+          preset = "icloud";
+          login = "operator@icloud.example";
+          auth_method = "password";
+          enabled = "true";
         };
+        capabilities = ["imap" "smtp"];
+        credential_files."mail/icloud/password" = "\${CREDENTIALS_DIRECTORY}/mail-account-icloud";
+      };
       assert (conn (withAccounts {accounts.icloud = icloudAccount // {capabilities = ["imap"];};})).capabilities == ["imap"];
       assert refusedWith "services.atrium.mailAccounts and services.atrium.accounts are both set" {
         accounts.icloud = icloudAccount;
