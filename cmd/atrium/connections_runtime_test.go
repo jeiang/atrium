@@ -169,6 +169,7 @@ credential_files = { "mail/icloud/password" = %q }
 	}
 
 	srv.Unavailable.Store(false)
+	endBackoff(t, dir)
 	for _, path := range []string{"/api/v1/contacts/sync", "/api/v1/calendar/sync"} {
 		if got := s.do(http.MethodPost, path, token, nil); got.status != http.StatusOK {
 			t.Fatalf("%s after the server returned: %d %s", path, got.status, got.body)

@@ -571,9 +571,18 @@ claims about the running application. Operator contracts are in
   endpoint and credential hash (home set, collections, relisted hourly,
   dropped on 401/403/404/410), a 20-minute memory of each finished sync's
   result that the iCloud `Silent` check reuses (otherwise it relists the
-  cached home set), and retries a challenge-less, empty 401
-  after the password was accepted at most twice per run (2 s and 6 s,
-  jittered).
+  cached home set; while a sync of the capability runs it reuses the stored
+  result), and retries a challenge-less, empty 401 after the password was
+  accepted once per run (about 2 s, jittered), and not when the previous run
+  ended in a refusal.
+  A run that ends in 401/403/429/503 stores `{"refusals", "backoff_until",
+  "credential"}` (a short hash of the app password) in that capability's
+  result `data`; syncs and silent checks read it from `results_json` and send
+  nothing until `backoff_until` (1 h, 3 h, 6 h, then 12 h, or a longer
+  `Retry-After`). Syncs end as `connections.Unmet` (`skipped_dependency`).
+  A working run or a different password clears it; the explicit test runs
+  anyway. The sync writes its outcome synchronously with `Lease.Settle`
+  (serve only), not through the buffered `Report`.
 - qBittorrent and the embedding endpoint have a 6-hour grace window,
   compiled into their connection kinds. A failure right after an `ok` or
   `expiring` state stores `failing` with the window end in its result;

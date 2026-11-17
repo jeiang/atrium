@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/connections"
 	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
@@ -72,6 +73,9 @@ func contactRoutes(d *web.Deps) []application.Binding {
 				change, err := svc().SyncManual(ctx, d.Cfg)
 				if errors.As(err, new(*db.LockBusy)) {
 					return change, &application.Error{Code: application.Conflict, Message: "A contacts sync is already running.", Cause: err}
+				}
+				if unmet, ok := errors.AsType[*connections.Unmet](err); ok {
+					return change, &application.Error{Code: application.Unavailable, Message: unmet.Error(), Cause: err}
 				}
 				return change, err
 			}),

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
@@ -135,6 +136,9 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[Syn
 	}
 	if err != nil {
 		outcome := state.Failed
+		if errors.As(err, new(*connections.Unmet)) {
+			outcome = state.Noop
+		}
 		if ctx.Err() != nil {
 			outcome = state.Canceled
 		}
@@ -151,6 +155,9 @@ func (s *Service) SyncManual(ctx context.Context, cfg config.Config) (applicatio
 		out, syncErr = s.Sync(ctx, SyncInput{})
 		if missing, ok := errors.AsType[config.NotConfigured](syncErr); ok {
 			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
+		}
+		if unmet, ok := errors.AsType[*connections.Unmet](syncErr); ok {
+			return scheduler.Result{Status: scheduler.StatusSkippedDependency, Error: new(unmet.Error())}, nil
 		}
 		return scheduler.Result{}, syncErr
 	})
