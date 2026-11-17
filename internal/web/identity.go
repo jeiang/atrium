@@ -3,12 +3,15 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 
 	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -81,6 +84,10 @@ func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why erro
 	}
 	setSecurityHeaders(w.Header())
 	w.Header().Set("Cache-Control", "no-store")
+	if errors.Is(why, errAnonymous) && crossSiteNavigation(r) {
+		continuePage(w, r)
+		return
+	}
 	q := url.Values{}
 	switch {
 	case errors.Is(why, errRevoked):
@@ -120,10 +127,14 @@ func cookieValue(r *http.Request, name string, secure bool) string {
 }
 
 func setCookie(w http.ResponseWriter, name, value string, maxAge int, secure bool) {
+	site := http.SameSiteStrictMode
+	if name == bindingCookie {
+		site = http.SameSiteLaxMode
+	}
 	if secure {
 		name = hostPrefix + name
 	}
-	c := &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge}
+	c := &http.Cookie{Name: name, Value: value, Path: "/", HttpOnly: true, Secure: secure, SameSite: site, MaxAge: maxAge}
 	if maxAge < 0 {
 		c.Value = ""
 	}
@@ -135,3 +146,21 @@ func expireCookie(w http.ResponseWriter, name string, secure bool) {
 }
 
 func hasSecureTransport(r *http.Request, publicSecure bool) bool { return publicSecure || isHTTPS(r) }
+
+const continueDocument = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="0;url=%[1]s"><title>Atrium</title></head>
+<body><p><a href="%[1]s">Continue to Atrium</a></p></body></html>
+`
+
+func crossSiteNavigation(r *http.Request) bool {
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && !IsPartial(r) &&
+		r.Header.Get("Sec-Fetch-Site") == "cross-site" && r.Header.Get("Sec-Fetch-Mode") == "navigate"
+}
+
+func continuePage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = fmt.Fprintf(w, continueDocument, html.EscapeString(urlx.SafeReturn(r.URL.RequestURI())))
+	}
+}
