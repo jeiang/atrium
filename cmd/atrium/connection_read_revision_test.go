@@ -115,10 +115,9 @@ func TestUsingOrTestingAConnectionWithoutAVisibleChangePublishesNoConnectionsCha
 		if state != "needs_reauth" || rev != revision {
 			t.Fatalf("calendar read %d: google/default %s at connections revision %d, want needs_reauth at %d", i+1, state, rev, revision)
 		}
-		if now <= checked {
-			t.Fatalf("calendar read %d did not record its use: checked_at %f then %f", i+1, checked, now)
+		if now != checked {
+			t.Fatalf("calendar read %d rewrote an unchanged result checked moments ago: checked_at %f then %f", i+1, checked, now)
 		}
-		checked = now
 	}
 	if got := s.do(http.MethodPost, "/api/v1/connections/google/default/test", token, nil); got.status != http.StatusOK {
 		t.Fatalf("connection test: %d %s", got.status, got.body)

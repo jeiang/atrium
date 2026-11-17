@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 )
@@ -179,6 +180,12 @@ func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfig(t, dir, srv.URL, ca, ""))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
+	started := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	waitUntil(t, 30*time.Second, "the start health check to record qBittorrent", func() bool {
+		var checked *float64
+		_ = started.Read.QueryRow("SELECT checked_at FROM connections WHERE id = 'service/qbittorrent'").Scan(&checked)
+		return checked != nil
+	})
 
 	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusOK {
 		t.Fatalf("qBittorrent Test: %d %s", code, body)
