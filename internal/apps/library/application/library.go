@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/library/agentclient"
 	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/logx"
 )
 
@@ -323,7 +324,8 @@ func (s *Service) RefreshCatalogue(ctx context.Context) error {
 	for {
 		if set, err := s.settings(ctx); err == nil {
 			if client, err := set.Agent(protocol.CapabilityFile); err == nil {
-				if err := s.d.Catalogue.Refresh(ctx, client); err != nil && ctx.Err() == nil {
+				err := s.d.Catalogue.Refresh(ctx, client)
+				if _, held := connections.HeldUntil(err); err != nil && !held && ctx.Err() == nil {
 					logx.Logger("media").Warn("media catalogue refresh failed", logx.Err, err)
 				}
 			}

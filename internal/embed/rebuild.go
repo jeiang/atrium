@@ -2,14 +2,13 @@ package embed
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 )
 
-type Probe func(ctx context.Context, url, model string) (reason string, dim int)
+type Probe func(ctx context.Context, url, model string) (dim int, err error)
 
 func Rebuild(ctx context.Context, d *db.DB, corpora []Corpus, url, model string, s endpoint.Settings, probe Probe) (bool, error) {
 	active, err := Active(ctx, d.Read)
@@ -31,9 +30,9 @@ func Rebuild(ctx context.Context, d *db.DB, corpora []Corpus, url, model string,
 		return false, nil
 	}
 	if !ok {
-		reason, dim := probe(ctx, url, model)
-		if reason != "" {
-			return false, errors.New(reason)
+		dim, err := probe(ctx, url, model)
+		if err != nil {
+			return false, err
 		}
 		if active.URL == "" && dim == active.Dimension {
 			return false, active.Adopt(ctx, d, url, model)

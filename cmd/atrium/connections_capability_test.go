@@ -197,7 +197,7 @@ func TestTwoGrafanaConnectionsBindTheFirstHealthyAndRepairsFollowTheirHealth(t *
 
 	secondStatus.Store(http.StatusInternalServerError)
 	if got := runApp(t, "connections", "test", "service/grafana-b"); got.code != cli.ExitError {
-		t.Fatalf("failing second connection test: exit %d %s", got.code, got.stderr)
+		t.Fatalf("failing second connection test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	bodies := noticeBodies(t, dir, "Grafana B")
 	if len(bodies) != 1 || !strings.Contains(bodies[0], "; affects server health, server tools") {

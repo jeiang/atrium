@@ -27,11 +27,12 @@ func (e *Error) Error() string {
 var ErrUnavailable = errors.New("the media agent is unavailable")
 
 type Client struct {
-	lease   *connections.Lease
-	base    string
-	bearer  string
-	http    *http.Client
-	Observe func(context.Context, connections.State, string)
+	lease      *connections.Lease
+	base       string
+	bearer     string
+	http       *http.Client
+	Observe    func(context.Context, connections.State, string)
+	Capability string
 }
 
 func ValidateURL(raw string) error {
@@ -74,7 +75,13 @@ func New(lease *connections.Lease) (*Client, error) {
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Authorization", "Bearer "+c.bearer)
 	req.Header.Set("Accept-Encoding", "identity")
+	if c.Capability != "" {
+		req = req.WithContext(connections.Serving(req.Context(), c.Capability))
+	}
 	resp, err := c.http.Do(req)
+	if _, held := connections.HeldUntil(err); held {
+		return nil, err
+	}
 	if err != nil {
 		if c.Observe != nil && req.Context().Err() == nil {
 			c.Observe(req.Context(), connections.Failing, "unavailable")
