@@ -6,11 +6,8 @@ import (
 	mailapp "github.com/jeiang/atrium/internal/apps/mail/application"
 	"github.com/jeiang/atrium/internal/apps/mail/run"
 	"github.com/jeiang/atrium/internal/config"
-	settingsapp "github.com/jeiang/atrium/internal/settings/application"
-	"github.com/jeiang/atrium/internal/web"
 )
 
-func mailSettingsService(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }
 func mailCLIService(env config.Env) func(*run.Pass) *mailapp.Service {
 	return func(p *run.Pass) *mailapp.Service {
 		return mailapp.New(p.DB, p.Cfg, env, mail.WallClock).WithLive(p.Live)

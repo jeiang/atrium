@@ -108,11 +108,10 @@ jobs:
             max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
             http-connections = ${{ env.HTTP_CONNECTIONS }}
 
-      - name: Build the static assets and the client stub
+      - name: Build the client stub
         run: |
           stage=$RUNNER_TEMP/go-assets
           mkdir -p "$stage/internal/web/app"
-          cp -r --no-preserve=mode "$(nix build --no-link --print-out-paths .#atrium-static)" "$stage/internal/web/static"
           cp -r --no-preserve=mode "$(nix build --no-link --print-out-paths .#atrium-web.stub)" "$stage/internal/web/app/dist"
 
       - name: Upload the staged assets

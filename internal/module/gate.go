@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 var log = logx.Logger("atrium.module")
@@ -26,7 +25,7 @@ func (s *Set) enabled(name string) bool {
 }
 
 func (s *Set) Pages() []web.Page {
-	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}, Bindings: s.cat.WebBindings()}}
+	pages := []web.Page{{Enabled: s.enabled, Bindings: s.cat.WebBindings()}}
 	for _, r := range s.decls {
 		for _, p := range r.Pages {
 			if p.Module == nil && len(p.Nav) == 0 {
@@ -186,15 +185,6 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 	if p.Module != nil {
 		mount := p.Module
 		p.Module = web.Owned(owner, func(r chi.Router, d *web.Deps) {
-			onFrame := d.OnFrame
-			d.OnFrame = func(fn web.FrameFunc) {
-				onFrame(func(ctx context.Context, f *tpl.Frame) error {
-					if !s.enabled(owner) {
-						return nil
-					}
-					return fn(ctx, f)
-				})
-			}
 			onShell := d.OnShell
 			d.OnShell = func(fn web.ShellFunc) {
 				onShell(func(ctx context.Context, state *web.ShellState) error {
@@ -204,7 +194,7 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 					return fn(ctx, state)
 				})
 			}
-			defer func() { d.OnFrame, d.OnShell = onFrame, onShell }()
+			defer func() { d.OnShell = onShell }()
 			mount(r, d)
 		}, func(d *web.Deps, next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -16,7 +16,6 @@ var exceptions = []exception{
 	{"internal/apps/mail/flags", "internal/contacts", "P13.1a"},
 	{"internal/apps/mail/mailmodule", "internal/assistant/classifier", "P13.2b"},
 	{"internal/apps/mail/mailmodule", "internal/assistant/jobworker", "P13.2b"},
-	{"internal/apps/mail/mailmodule", "internal/assistant/registry", "P13.2b"},
 	{"internal/apps/mail/mailmodule", "internal/assistant/service", "P13.2b"},
 	{"internal/apps/mail/run", "internal/assistant/classifier", "P13.1b"},
 	{"internal/apps/packages/packagesmodule", "internal/assistant/jobworker", "P13.2b"},
@@ -64,6 +63,4 @@ var exceptions = []exception{
 	{"internal/signals/signalsmodule", "internal/commitments/application", unplanned},
 	{"internal/tool", "internal/assistant", unplanned},
 	{"internal/tool", "internal/assistant/progress", unplanned},
-	{"internal/usagepages", "internal/assistant", unplanned},
-	{"internal/usagepages", "internal/assistant/application", unplanned},
 }

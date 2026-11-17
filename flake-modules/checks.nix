@@ -591,7 +591,7 @@
   in {
     checks =
       {
-        inherit (self'.packages) atrium-static atrium-docs atrium-web atrium-web-mock;
+        inherit (self'.packages) atrium-docs atrium-web atrium-web-mock;
 
         inherit (pkgs.callPackage ../nix/web.nix {}) web-lint web-size;
 

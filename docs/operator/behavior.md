@@ -139,31 +139,43 @@ emergency bypass.
   `Origin` and the CSRF token from `GET /web/v1/session`, or get 403
   `cross_origin` or `csrf_failed`. Signed out, every `/web/v1` request gets
   401 with the sign-in URL; sign-in itself is still `/login`.
-  `POST /web/v1/session/logout` signs an OIDC session out of the pages too.
-- The new web client is at `/next/` on every listener, beside the
-  server-rendered UI, which stays the default: the pages do not link to it.
-  A push notification opens its card or page there, and a Google consent
-  started from the client returns to its Google connection page. A client
+  `POST /web/v1/session/logout` also ends an OIDC session.
+- The web client is at `/` on every listener, the emergency listener
+  included. A push notification opens its card or page there, and a Google
+  consent started from the client returns to its Google connection page. A
   connection page whose kind has a section in `docs/integrations.md` links to
   it as **Setup guide** on the public repository, in a new tab. The client's
-  page and files need no sign-in, like `/static/`, because they hold no data;
-  everything it shows comes from `/web/v1`, which keeps the rules above. Host
-  validation applies.
-  Responses under `/next/` carry a stricter CSP with Trusted Types; the
-  server-rendered pages keep their CSP unchanged.
-- The `/next/` client keeps its shell and the last data it read for 7 days,
+  page and files need no sign-in because they hold no data; everything it
+  shows comes from `/web/v1`, which keeps the rules above. Host validation
+  applies. Client responses carry a stricter CSP with Trusted Types; server
+  responses such as `/healthz`, sign-in and the APIs keep the server CSP.
+- Old addresses still work: every `/next/...` path answers 301 to the same
+  path at root, and old server page paths redirect to their client page
+  through the moved table in `internal/urlx/moved.go` (for example `/about`
+  to `/settings/general`). `/static/*` answers 404. About (version and build)
+  is a block in Settings > General, and third-party notices are plain text at
+  `/third-party-notices.txt` once signed in.
+- A browser that registered notifications under `/next/` moves them to the
+  root worker on its next signed-in visit, with no prompt, and the old
+  registration removes itself. A registration from `/static/sw.js` is updated
+  in place and keeps its subscription. If push stops on a device, turn
+  notifications on again in Settings > Notifications.
+- API tokens are issued and revoked in Settings > Sign-in. A chat cannot be
+  started about an item from the item, and the Downloads app adds torrents
+  only by magnet link.
+- The client keeps its shell and the last data it read for 7 days,
   so it opens without a connection and shows that data with its age and a
   notice that nothing can be sent. It never sends or queues a change while
   offline. Signing out or a lapsed session deletes the stored data. The
   account menu item "Don't keep data on this device" deletes it at once and
   stops keeping it on that browser.
-- The `/next/` Connections screen under Settings is never kept on the
+- The Connections screen under Settings is never kept on the
   device. A stored credential is never shown or sent back; a new value
   replaces it. Disconnect asks first, then deletes the stored credentials and
   turns the connection off, and only applies to connections the operator set
   up. Fields and credentials the host owns are read-only there.
-- The `/next/` Downloads screen (`/next/apps/torrents`) and Library screens
-  (`/next/apps/media`) are not kept on the device. Removing a torrent asks
+- The Downloads screen (`/apps/torrents`) and Library screens
+  (`/apps/media`) are not kept on the device. Removing a torrent asks
   first and says whether its files are deleted. Removing it with its files
   needs a press and hold on a phone or touch screen; on a desktop the request
   is sent only after 10 seconds, and Undo in that time sends nothing. Undo
@@ -359,6 +371,8 @@ same connection do not check it. A real request that works on the failing
 capability itself (any request from a kind with one capability, or from an
 endpoint the kind maps to that capability, such as TMDB `url` for `api`)
 marks that capability ok at once and ends the backoff, with no check request.
+A request counts only when it started after the failure was recorded, so a
+success that was already in flight when the capability failed does not undo it.
 Test, `connections test`, `connections check` and a credential change still
 check it at once, and a passing check clears the backoff. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
@@ -779,7 +793,7 @@ the draft but leaves its original SMTP attempt unknown; it does not resend.
 A partial undo must be checked and resolved rather than repeatedly invoked.
 
 A push notification carries only a title, a body and the path of the page
-for its subject in the new client, such as `/next/proposals/<id>`. It has no
+for its subject in the client, such as `/proposals/<id>`. It has no
 action buttons, carries no token, and opening it writes nothing. A click
 brings forward a window already showing that page, else moves an open atrium
 window there, else opens a new one. Notifications sent before this change

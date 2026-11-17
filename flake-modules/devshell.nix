@@ -19,13 +19,11 @@
       GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
       CGO_CFLAGS = "${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
       CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
-      ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
       ATRIUM_WEB_STUB = "${self'.packages.atrium-web.stub}";
     };
     linuxTools = pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
     stageAssets = ''
       export ATRIUM_DEV_ROOT=$root
-      [ -e "$root/internal/web/static/assets.json" ] || just --justfile "$root/justfile" static-assets
       [ -e "$root/internal/web/app/dist/index.html" ] || just --justfile "$root/justfile" web-stub
     '';
   in {
@@ -54,7 +52,6 @@
           pkgs.govulncheck
           pkgs.go-licenses
           pkgs.pkg-config
-          pkgs.tailwindcss_4
           pkgs.brotli
           pkgs.nodejs_24
           pkgs.importNpmLock.linkNodeModulesHook
@@ -62,14 +59,12 @@
           pkgs.gopls
           pkgs.nixd
           pkgs.typescript-language-server
-          pkgs.tailwindcss-language-server
           pkgs.bash-language-server
         ]
         ++ linuxTools;
       env =
         goEnv
         // {
-          ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";
           npmDeps = "${webNodeModules}";
           PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
           PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";

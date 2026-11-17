@@ -154,9 +154,11 @@ func appEntries(ctx context.Context, d *web.Deps, svc *settingsapp.Service, only
 	if err != nil {
 		return nil, err
 	}
-	deps, err := conns.Dependencies(ctx, connectionsapp.DependenciesInput{})
-	if err != nil {
-		return nil, err
+	var needs []connections.Binding
+	if deps, err := conns.Dependencies(ctx, connectionsapp.DependenciesInput{}); err != nil {
+		log.Warn("app list without connection needs", logx.Err, err.Error())
+	} else {
+		needs = deps.Data.Needs
 	}
 	revision, err := svc.Revision(ctx, nil)
 	if err != nil {
@@ -167,7 +169,7 @@ func appEntries(ctx context.Context, d *web.Deps, svc *settingsapp.Service, only
 		if only != "" && app.ID != only {
 			continue
 		}
-		out = append(out, appEntry(app, deps.Data.Needs, revision))
+		out = append(out, appEntry(app, needs, revision))
 	}
 	return out, nil
 }

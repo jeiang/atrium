@@ -1,3 +1,0 @@
-{{$d := .Data}}{{$csrf := .CSRF}}
-{{range $d.Items}}{{template "chat_item" (dict "Item" . "thread" $d.View.Thread "last_seq" $d.View.LastOperatorSeq "busy" true "csrf" $csrf)}}{{end}}
-{{template "chat_run_live" (dict "thread_id" $d.ThreadID "run_id" $d.RunID "after" $d.After)}}

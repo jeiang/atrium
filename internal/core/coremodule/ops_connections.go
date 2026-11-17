@@ -85,7 +85,7 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 				}
 				continue
 			}
-			observe(connectionsapp.ObserveHealthInput{ID: outcome.ID, Recovered: outcome.OK, Capability: outcome.Capability})
+			observe(connectionsapp.ObserveHealthInput{ID: outcome.ID, Recovered: outcome.OK, Capability: outcome.Capability, At: outcome.At})
 		case <-svc.UnitsChanged():
 			syncUnits()
 			observe(connectionsapp.ObserveHealthInput{})

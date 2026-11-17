@@ -152,6 +152,31 @@
     {
       "kind": "group",
       "module": "mail",
+      "name": "filing",
+      "title": "Filing",
+      "url": "/settings/mail",
+      "fields": [
+        {
+          "key": "uncertain_dest",
+          "label": "uncertain_dest",
+          "module": "mail",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "Misc",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.mail",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "mail",
       "name": "loops",
       "title": "Open loops",
       "url": "/settings/mail",

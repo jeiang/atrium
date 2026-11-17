@@ -1,10 +1,6 @@
 package web
 
-import (
-	"context"
-
-	"github.com/jeiang/atrium/internal/web/tpl"
-)
+import "context"
 
 type ShellFrame struct {
 	Groups        []ShellGroup   `json:"groups"`
@@ -77,7 +73,7 @@ func (rd *Renderer) shellState(ctx context.Context) ShellState {
 }
 
 func (rd *Renderer) Shell(ctx context.Context) ShellFrame {
-	nav := rd.navFor("")
+	nav := rd.navFor()
 	state := rd.shellState(ctx)
 	out := ShellFrame{
 		Groups: []ShellGroup{}, Sections: []ShellSection{}, Settings: shellLinks(nav.settings), SettingsURL: nav.settingsURL,
@@ -111,7 +107,7 @@ func (v navView) isHub(page string) bool {
 	return false
 }
 
-func shellLinks(items []tpl.NavItem) []ShellLink {
+func shellLinks(items []NavItem) []ShellLink {
 	out := make([]ShellLink, len(items))
 	for i, item := range items {
 		out[i] = ShellLink{Label: item.Label, URL: item.URL, Icon: item.Icon, Page: item.Page, Module: item.Module}

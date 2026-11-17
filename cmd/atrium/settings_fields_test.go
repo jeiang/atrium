@@ -39,6 +39,7 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 		{"default_event_minutes", "30"},
 		{"work_hours", "08:00-18:00"},
 		{"work_days", "mon,tue,wed,thu,fri"},
+		{"uncertain_dest", "Later"},
 		{"openloops_remind_hour", "8"},
 		{"monthly_budget_usd", "200"},
 	}

@@ -173,6 +173,7 @@ type outcome struct {
 	Capability string
 	Held       *Hold
 	Refused    Result
+	At         time.Time
 }
 
 type RuntimeReport struct {
@@ -213,6 +214,9 @@ func Outcomes(reg *Registry) (<-chan outcome, func()) {
 }
 
 func report(reg *Registry, o outcome) {
+	if o.At.IsZero() {
+		o.At = time.Now()
+	}
 	if o.OK && o.Capability != "" {
 		succeededHold(reg, o.ID, o.Capability)
 	}
@@ -362,12 +366,13 @@ func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 	}
+	started := time.Now()
 	resp, err := r.next.RoundTrip(req)
 	switch {
 	case err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500):
 		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: capability})
 	case err == nil && resp.StatusCode < http.StatusBadRequest:
-		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: capability, OK: true})
+		report(r.reg, outcome{ID: r.id, Revision: r.revision, Capability: capability, OK: true, At: started})
 	}
 	if err == nil && capability != "" {
 		if wait := RetryAfter(resp.Header.Get("Retry-After"), time.Now()); Refuses(resp.StatusCode, wait) {
