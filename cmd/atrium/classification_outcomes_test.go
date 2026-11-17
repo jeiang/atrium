@@ -228,7 +228,7 @@ func TestMailPassStopReasonsArePerMessageOutcomes(t *testing.T) {
 					if got := r.event(t, id); got != "none" {
 						t.Errorf("the unanswered message has event status %q, want none", got)
 					}
-					if n := r.count(t, "SELECT COUNT(*) FROM event_candidates WHERE message_id = ? AND reason = 'model gave no usable answer'", id); n != 1 {
+					if n := r.count(t, "SELECT COUNT(*) FROM mail_scans WHERE kind = 'events' AND message_id = ? AND found = 0", id); n != 1 {
 						t.Errorf("the unanswered message has %d event rows with the no-answer reason, want 1", n)
 					}
 				default:
@@ -462,7 +462,8 @@ func TestMailPassIgnoresARealFolderNamedUncertain(t *testing.T) {
 func TestMailPassFinalEventOutcomesLeaveThePendingWindow(t *testing.T) {
 	t.Parallel()
 	r := newMailClassifierRig(t, nil)
-	if _, err := r.d.Write.Exec("UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL " +
+	if _, err := r.d.Write.Exec("UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL, " +
+		"first_seen = (SELECT applied_at FROM schema_migrations WHERE version = 8) + 1 " +
 		"WHERE id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 55)"); err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +490,7 @@ func TestMailPassFinalEventOutcomesLeaveThePendingWindow(t *testing.T) {
 	if got := r.event(t, lateID); got == "" {
 		t.Errorf("the later unread message has no event judgment behind %d refused ones", 54)
 	}
-	if n := r.count(t, "SELECT COUNT(*) FROM event_candidates WHERE status = 'none' AND reason = 'model gave no usable answer'"); n < 50 {
+	if n := r.count(t, "SELECT COUNT(*) FROM mail_scans WHERE kind = 'events' AND found = 0"); n < 50 {
 		t.Errorf("%d refused messages left the pending window, want at least 50", n)
 	}
 }

@@ -112,11 +112,11 @@ func TestInferenceSchedulerConditionalJobsRunTheirFreeWork(t *testing.T) {
 	schedulerSeed(t, f, d)
 	asstExec(t, d, "DELETE FROM memory_jobs")
 	asstSpend(t, d, inference.SourceLoop, 150)
-	schedulerDue(t, d, "memory-work", "calendar-candidates")
+	schedulerDue(t, d, "memory-work")
 	before := len(api.Requests())
-	schedulerRun(t, f, d, schedulerTerminal(d, "memory-work", "calendar-candidates"))
+	schedulerRun(t, f, d, schedulerTerminal(d, "memory-work"))
 
-	for _, name := range []string{"memory-work", "calendar-candidates"} {
+	for _, name := range []string{"memory-work"} {
 		if status, text := schedulerStatus(t, d, name); status == "skipped_budget" {
 			t.Errorf("the empty conditional job %s was skipped for budget: %s", name, text)
 		}
@@ -151,46 +151,5 @@ func TestInferenceUsagePageShowsReservationsAndCeilings(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("the usage page does not show %q", want)
 		}
-	}
-}
-
-func TestInferenceSchedulerDefersConditionalPaidWork(t *testing.T) {
-	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	asstWarm(t)
-	d := asstDB(t, dir)
-	schedulerSeed(t, f, d)
-	asstExec(t, d, "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")
-	res, err := d.Write.Exec("INSERT INTO mailboxes (account, name, imap_name, role, uidvalidity, highest_uid) VALUES ('icloud', 'INBOX', 'INBOX', 'inbox', 1544650202, 301)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	mailbox, _ := res.LastInsertId()
-	res, err = d.Write.Exec("INSERT INTO messages (account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, first_seen) VALUES ('icloud', ?, 1544650202, 301, 'm@x', 'd', 'Dinner on Friday', 'friend@example.com', 0)", mailbox)
-	if err != nil {
-		t.Fatal(err)
-	}
-	message, _ := res.LastInsertId()
-	asstExec(t, d, "INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (?, 'model flagged an event', 'queued', 1)", message)
-	asstSpend(t, d, inference.SourceLoop, 150)
-	schedulerDue(t, d, "calendar-candidates")
-	before := len(api.Requests())
-	schedulerRun(t, f, d, schedulerTerminal(d, "calendar-candidates"))
-
-	status, text := schedulerStatus(t, d, "calendar-candidates")
-	if status != "skipped_budget" || !strings.Contains(text, "monthly budget") {
-		t.Errorf("the queued conditional job status = %q error %q, want a monthly budget deferral", status, text)
-	}
-	if got := len(api.Requests()) - before; got != 0 {
-		t.Errorf("the deferred conditional job sent %d provider requests", got)
-	}
-	var queued int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM event_candidates WHERE message_id = ? AND status = 'queued'", message).Scan(&queued); err != nil {
-		t.Fatal(err)
-	}
-	if queued != 1 {
-		t.Errorf("the deferred candidate is no longer queued")
-	}
-	if got := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'calendar.draft-candidates' AND outcome = 'refused' AND source = 'job' AND job_run_id IS NOT NULL"); got != 1 {
-		t.Errorf("candidate failure audits = %d, want 1", got)
 	}
 }

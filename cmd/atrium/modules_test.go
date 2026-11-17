@@ -48,8 +48,7 @@ func nonEmpty(stdout, _ string, code int) bool { return code == cli.ExitOK && st
 var moduleCases = []moduleCase{
 	{module: unit.Mail, tool: "mail_search", table: "messages", method: "GET", path: "/triage", status: http.StatusOK,
 		command: []string{"rules", "export"}, output: nonEmpty},
-	{module: unit.Calendar, tool: "calendar_list", table: "agent_events",
-		command: []string{"calendar", "candidates"}, output: nonEmpty},
+	{module: unit.Calendar, tool: "calendar_list", table: "agent_events"},
 	{module: unit.Media, tool: "library_following", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
 	{module: unit.Torrents, tool: "downloads", method: "GET", path: "/apps/media/add", status: http.StatusOK},
@@ -549,11 +548,7 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	}
 	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
 	asstExec(t, d, "INSERT INTO jobs (name, kind, prompt, schedule, tz, state, next_due, created_by, created_at, module, activated_at) VALUES ('disabled-cron', 'cron', 'Say hi', 'daily 12:00', 'UTC', 'active', NULL, 'operator', ?, 'assistant', ?)", now, now)
-	asstExec(t, d, "INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')")
-	asstExec(t, d, "INSERT INTO mailboxes (id, account, name, imap_name, role, uidvalidity, highest_uid) VALUES (701, 'icloud', 'INBOX', 'INBOX', 'inbox', 1, 1)")
-	asstExec(t, d, "INSERT INTO messages (id, account, mailbox_id, uidvalidity, uid, msgid, digest, subject, from_addr, first_seen) VALUES (701, 'icloud', 701, 1, 1, 'event@x', 'event', 'Dinner on Friday', 'friend@example.com', 0)")
-	asstExec(t, d, "INSERT INTO event_candidates (message_id, reason, status, ts) VALUES (701, 'event', 'queued', 1)")
-	due := []string{"nightly", "weekly-review", "daily-nudges", "task-reminders", "memory-work", "knowledge-export", "calendar-candidates", "ops-sampler", "disabled-cron"}
+	due := []string{"nightly", "weekly-review", "daily-nudges", "task-reminders", "memory-work", "knowledge-export", "ops-sampler", "disabled-cron"}
 	schedulerDue(t, d, due...)
 	waitUntil(t, 60*time.Second, "due jobs to be skipped with the assistant off", schedulerTerminal(d, due...))
 	for _, name := range due {
@@ -562,17 +557,14 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 		}
 	}
 	if n := len(api.Requests()); n != 0 {
-		t.Fatalf("%d model requests while assistant jobs and a queued candidate were due with the assistant off", n)
-	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM event_candidates WHERE status = 'queued'"); n != 1 {
-		t.Fatalf("%d queued candidates, want 1", n)
+		t.Fatalf("%d model requests while assistant jobs were due with the assistant off", n)
 	}
 	if n := api.ModelLists(); n != 0 {
 		t.Fatalf("%d model catalog requests while the assistant is off", n)
 	}
 	schedulerDue(t, d, due...)
 	waitUntil(t, 60*time.Second, "consecutive disabled occurrences to coalesce", func() bool {
-		return asstCount(t, d, "SELECT COUNT(*) FROM jobs WHERE name IN ('weekly-review', 'calendar-candidates', 'disabled-cron') AND next_due > ?", float64(time.Now().Unix())) == 3
+		return asstCount(t, d, "SELECT COUNT(*) FROM jobs WHERE name IN ('weekly-review', 'disabled-cron') AND next_due > ?", float64(time.Now().Unix())) == 2
 	})
 	for _, name := range due {
 		if n := schedulerRuns(t, d, name); n != 1 {
@@ -937,10 +929,10 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 	})
 }
 
-func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
+func TestMailPassScansEventsOnlyWhileCalendarIsOn(t *testing.T) {
 	t.Parallel()
 	data := loadGoldenData(t)
-	candidates := func(flag string) int {
+	scanned := func(flag string) int {
 		f := newFixture(t, data, nil, "")
 		seedFlagsAt(t, f.app, filepath.Join(f.dir, "atrium.db"), map[string]string{unit.Calendar: flag})
 		seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
@@ -948,7 +940,7 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, q := range []string{
-			"DELETE FROM event_candidates",
+			"UPDATE messages SET first_seen = (SELECT applied_at FROM schema_migrations WHERE version = 8) + 1 WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
 			"UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
 		} {
 			if _, err := seed.Write.Exec(q); err != nil {
@@ -969,13 +961,13 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 		}
 		defer func() { _ = d.Close() }()
 		var n int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM event_candidates").Scan(&n); err != nil {
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'events'").Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
 	}
-	if off, on := candidates("false"), candidates("true"); off != 0 || on == 0 {
-		t.Errorf("event candidates after a mail pass: %d with calendar off (want none), %d with it on (want more)", off, on)
+	if off, on := scanned("false"), scanned("true"); off != 0 || on < 3 {
+		t.Errorf("event scans after a mail pass: %d with calendar off (want none), %d with it on (want at least 3)", off, on)
 	}
 }
 

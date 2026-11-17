@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -14,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/davmirror"
-	"github.com/jeiang/atrium/internal/unit"
 )
 
 func TestCalendarContactsAPI(t *testing.T) {
