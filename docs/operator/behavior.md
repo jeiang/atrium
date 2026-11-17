@@ -453,7 +453,9 @@ prints `no connection to check` when there are none. Each checked connection
 prints its id, state (or `away until <time UTC>`) and reason. The command
 exits 1 when a checked connection is failing, in its window or not, or needs
 reauth. `connections test <id>` keeps the explicit test, which may have
-visible side effects such as a diagnostic push. `connections test --all` runs
+visible side effects such as a diagnostic push. When the connection changed
+while its test ran, the result is not saved and the command exits 1 with
+`changed since revision`; run it again. `connections test --all` runs
 the silent check of every configured connection instead, so it sends no push;
 giving both an id and `--all`, or neither, is a usage error.
 `connections test <id> --trace <capability>` runs that capability's check

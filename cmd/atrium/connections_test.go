@@ -230,8 +230,8 @@ func TestConnectionsStaleTestCannotOverwriteARotation(t *testing.T) {
 	}
 	close(gate.hold)
 	ran := <-done
-	if ran.code != cli.ExitOK {
-		t.Fatalf("connections test: exit %d stderr %q", ran.code, ran.stderr)
+	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "changed since revision") {
+		t.Fatalf("stale connections test: exit %d stderr %q, want the conflict reported", ran.code, ran.stderr)
 	}
 	var state string
 	if err := d.Read.QueryRow("SELECT state FROM connections WHERE id = 'service/qbittorrent'").Scan(&state); err != nil {
