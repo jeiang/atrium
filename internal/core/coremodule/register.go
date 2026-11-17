@@ -57,7 +57,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
-	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/webusage"
 )
@@ -146,7 +145,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Pages: []web.Page{
 			{Module: about.Module, Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
-				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
+				{Group: "Instance", Label: "Usage", URL: usageURL, Page: "usage", Settings: true, Order: 60},
 				{Label: "Connections", URL: connections.Screen, Page: "connections", Settings: true, Order: 30},
 			}},
 			{Module: func(_ chi.Router, d *web.Deps) {
@@ -213,7 +212,7 @@ func AttentionSources() []attention.Source {
 func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
-		{Name: "budget", Title: "Monthly budget", Page: usagepages.URL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
+		{Name: "budget", Title: "Monthly budget", Page: usageURL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
 		{Name: "general", Title: "General", Keys: []string{config.KeyTZ}},
 	}
 }
@@ -225,6 +224,7 @@ const (
 	embedStepTimeout = 20 * time.Minute
 	recoverInterval  = time.Minute
 	recoveryStall    = 5 * time.Minute
+	usageURL         = "/settings/usage"
 )
 
 func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {

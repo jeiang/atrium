@@ -137,7 +137,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			commands[c.Name] = true
 		}
 		for _, p := range d.Pages {
-			if p.Module == nil && len(p.Globals) == 0 && p.Templates == nil && len(p.Nav) == 0 {
+			if p.Module == nil && len(p.Nav) == 0 {
 				return nil, &InvalidPage{Module: d.Name}
 			}
 		}
