@@ -150,7 +150,7 @@ in {
       passthru =
         (old.passthru or {})
         // {
-          engines = lib.genAttrs ["chromium" "firefox" "webkit"] (engine: e2e "atrium-web-e2e-${engine}" " --project=${engine}");
+          engines = lib.genAttrs (lib.importJSON ../web/e2e/engines.json) (engine: e2e "atrium-web-e2e-${engine}" " --project=${engine}");
         };
     });
   web-size = runCommand "atrium-web-size" {nativeBuildInputs = [nodejs_24];} ''

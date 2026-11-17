@@ -44,6 +44,14 @@
     min-inline-size: 0;
   }
 
+  .subjects__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    align-items: center;
+    justify-content: space-between;
+  }
+
   .subjects__title {
     margin: 0;
     font-size: var(--t-lg);
@@ -174,6 +182,72 @@
     display: grid;
     gap: var(--s-4);
     max-inline-size: 48rem;
+  }
+
+  .kreview {
+    display: grid;
+    gap: var(--s-5);
+    min-inline-size: 0;
+  }
+
+  .kreview__head {
+    display: grid;
+    gap: var(--s-2);
+  }
+
+  .kreview__lede,
+  .kprofile__budget {
+    margin: 0;
+    max-inline-size: 44rem;
+    color: var(--ink-2);
+  }
+
+  .kreview__filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: var(--s-3);
+    align-items: end;
+  }
+
+  .kreview__bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+    align-items: center;
+  }
+
+  .kreview__region {
+    display: grid;
+    gap: var(--s-3);
+    min-block-size: 16rem;
+    align-content: start;
+  }
+
+  .kprofile__block {
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--leaf);
+  }
+
+  .kprofile__block > summary {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--target);
+    padding-inline: var(--s-3);
+    border-radius: var(--r-md);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .kprofile__block > pre {
+    margin: 0;
+    border-radius: var(--r-md);
+    padding: var(--s-3);
+    max-block-size: 24rem;
+    overflow: auto;
+    font-size: var(--t-sm);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .kpage__body {

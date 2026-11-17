@@ -15,6 +15,7 @@
   import Knowledge from './sections/Knowledge.svelte';
   import Media from './sections/Media.svelte';
   import Overlays from './sections/Overlays.svelte';
+  import Packages from './sections/Packages.svelte';
   import Prose from './sections/Prose.svelte';
   import Settings from './sections/Settings.svelte';
   import Simulator from './sections/Simulator.svelte';
@@ -56,4 +57,5 @@
   <Knowledge />
   <Simulator />
   <Media />
+  <Packages />
 </Page>

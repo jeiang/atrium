@@ -98,18 +98,18 @@ test.describe('the apps directory', () => {
     await gotoShell(page, '/apps/directory');
     await expect(appSwitch(page, 'Calendar')).toHaveAttribute('aria-disabled', 'true');
     await expect(card(page, 'calendar').getByText('Set by the host')).toBeVisible();
-    await expect(appSwitch(page, 'Parcels')).toHaveAttribute('aria-disabled', 'true');
-    await expect(card(page, 'parcels').getByText('Turn on Mail first')).toBeVisible();
-    await card(page, 'parcels').getByRole('link', { name: 'Open Mail' }).click();
+    await expect(appSwitch(page, 'Packages')).toHaveAttribute('aria-disabled', 'true');
+    await expect(card(page, 'packages').getByText('Turn on Mail first')).toBeVisible();
+    await card(page, 'packages').getByRole('link', { name: 'Open Mail' }).click();
     await expect(page).toHaveURL(/#app-mail$/);
   });
 
   test('turning off an app another app needs is refused and the switch reverts', async ({ page }) => {
-    await useScenario(page, { apps: { on: ['parcels'] } });
+    await useScenario(page, { apps: { on: ['packages'] } });
     await gotoShell(page, '/apps/directory');
     await appSwitch(page, 'Mail').click();
     await expect(card(page, 'mail').getByText('Another app needs it')).toBeVisible();
-    await expect(card(page, 'mail').getByText('Parcels needs Mail. Turn it off first.')).toBeVisible();
+    await expect(card(page, 'mail').getByText('Packages needs Mail. Turn it off first.')).toBeVisible();
     await expect(appSwitch(page, 'Mail')).toHaveAttribute('aria-checked', 'true');
   });
 

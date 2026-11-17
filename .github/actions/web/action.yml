@@ -1,0 +1,62 @@
+name: Node, web dependencies and browsers
+description: Sets up the pinned Node release, installs web/ dependencies from the lockfile and, when asked, the Playwright browsers.
+
+inputs:
+  browsers:
+    description: Space-separated Playwright browsers to install, empty for none
+    default: ""
+
+outputs:
+  biome:
+    description: The pinned Biome release
+    value: ${{ steps.pins.outputs.biome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read the pins
+      id: pins
+      shell: bash
+      run: |
+        jq -r 'to_entries[] | "\(.key)=\(.value)"' .ci/pins.json >>"$GITHUB_OUTPUT"
+        echo "playwright=$(jq -r '.packages["node_modules/playwright-core"].version' web/package-lock.json)" >>"$GITHUB_OUTPUT"
+
+    - name: Set up Node
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+      with:
+        node-version: ${{ steps.pins.outputs.node }}
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: web
+      run: npm ci --no-audit --no-fund
+
+    - name: Restore the browsers
+      id: browsers
+      if: inputs.browsers != ''
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.playwright }}-${{ inputs.browsers }}
+
+    - name: Install the browsers
+      if: inputs.browsers != '' && steps.browsers.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: web
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        read -ra browsers <<<"$BROWSERS"
+        npx playwright install --with-deps "${browsers[@]}"
+
+    - name: Install the browser system dependencies
+      if: inputs.browsers != '' && steps.browsers.outputs.cache-hit == 'true'
+      shell: bash
+      working-directory: web
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        read -ra browsers <<<"$BROWSERS"
+        npx playwright install-deps "${browsers[@]}"

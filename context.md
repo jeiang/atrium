@@ -354,6 +354,14 @@ claims about the running application. Operator contracts are in
   an explicit immediate or deferred mode. Account creation still tests before
   saving; deployment-pinned accounts cannot be removed. Pause and resume do
   not change mail mode or grant go-live eligibility.
+- Rules and decisions link both ways, read-side only. A decision stores the
+  operator rule's id in `decisions.key` (stage `operator`); triage rows carry
+  `rule` (`id`, `title`, `state` of `current`, `changed` or `removed`), where
+  `changed` means a successful rule update, create or import was audited after
+  the decision. `GET /mail/rules` items carry `decision_count`, and
+  `GET /mail/rules/{rule_id}/decisions` pages that rule's decisions newest
+  first (`rule`, `items`, `total`, `next_cursor`; 404 only when the rule and
+  its decisions are both absent).
 
 ### Models, spending, and runs
 - The assistant uses the Anthropic API. A static catalog in
