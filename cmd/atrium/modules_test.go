@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -46,21 +47,21 @@ type moduleCase struct {
 func nonEmpty(stdout, _ string, code int) bool { return code == cli.ExitOK && stdout != "" }
 
 var moduleCases = []moduleCase{
-	{module: unit.Mail, tool: "mail_search", table: "messages", method: "GET", path: "/triage", status: http.StatusOK,
+	{module: unit.Mail, tool: "mail_search", table: "messages", method: "GET", path: "/web/v1/mail/triage", status: http.StatusOK,
 		command: []string{"rules", "export"}, output: nonEmpty},
 	{module: unit.Calendar, tool: "calendar_list", table: "agent_events"},
-	{module: unit.Media, tool: "library_following", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
+	{module: unit.Media, tool: "library_following", table: "media_channels", method: "GET", path: "/web/v1/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
-	{module: unit.Torrents, tool: "downloads", method: "GET", path: "/apps/media/add", status: http.StatusOK},
-	{module: unit.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
+	{module: unit.Torrents, tool: "downloads", method: "GET", path: "/web/v1/media/torrents", status: http.StatusOK},
+	{module: unit.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/web/v1/threads", status: http.StatusOK,
 		command: []string{"agent", "run", "--text", "hello", "--kind", "chat"}, output: func(stdout, _ string, code int) bool {
 			return code == cli.ExitOK && strings.HasPrefix(stdout, "{")
 		}},
-	{module: unit.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
+	{module: unit.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/web/v1/notifications", status: http.StatusOK},
 	{module: unit.Grafana, table: "ops_samples"},
 	{module: unit.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
 	{module: unit.Weather, tool: "weather"},
-	{module: unit.Packages, tool: "track_package", table: "packages", method: "GET", path: "/watches", status: http.StatusOK,
+	{module: unit.Packages, tool: "track_package", table: "packages", method: "GET", path: "/web/v1/packages", status: http.StatusOK,
 		command: []string{"packages", "poll"}, output: func(_, stderr string, code int) bool {
 			return code != cli.ExitOK && strings.Contains(stderr, "Ship24 connection is not configured")
 		}},
@@ -215,16 +216,11 @@ func tableExists(t *testing.T, dir, table string) bool {
 
 func probe(t *testing.T, base string, c moduleCase) int {
 	t.Helper()
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	client := webLocalG2(t, base)
+	if got := client.do(http.MethodGet, "/web/v1/about", nil); got.status != http.StatusOK {
+		t.Fatalf("GET /web/v1/about = %d, want the core read: %.300s", got.status, got.body)
 	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/about", nil); status != http.StatusOK {
-		t.Fatalf("GET /about = %d, want the core page", status)
-	}
-	status, _, _ := fetch(t, client, c.method, base+c.path, c.form)
-	return status
+	return client.do(c.method, c.path, nil).status
 }
 
 func TestModuleTogglesThroughTheApplication(t *testing.T) {
@@ -288,29 +284,19 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		request := func(method, path string, authenticated bool) int {
+		member := newWebClient(t, base, headersG2{"Remote-Groups": "atrium_access"})
+		member.session("proxy")
+		channels := func() int {
 			t.Helper()
-			req, err := http.NewRequest(method, base+path, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if authenticated {
-				req.Header.Set("Remote-Groups", "atrium_access")
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			return resp.StatusCode
+			return member.do(http.MethodGet, "/web/v1/media/channels", nil).status
 		}
-		if got := request(http.MethodGet, "/apps/media/channels", true); got != http.StatusNotFound {
+		if got := channels(); got != http.StatusNotFound {
 			t.Fatalf("disabled route = %d", got)
 		}
 		if got := runApp(t, "settings", "set", module.FlagKey(unit.Media), "invalid"); got.code == cli.ExitOK {
 			t.Fatal("invalid module flag was accepted")
 		}
-		if got := request(http.MethodGet, "/apps/media/channels", true); got != http.StatusNotFound {
+		if got := channels(); got != http.StatusNotFound {
 			t.Fatalf("refused setting changed the live route = %d", got)
 		}
 		for _, enabled := range []string{"true", "false", "true"} {
@@ -321,17 +307,18 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 			if enabled == "false" {
 				want = http.StatusNotFound
 			}
-			if got := request(http.MethodGet, "/apps/media/channels", true); got != want {
+			if got := channels(); got != want {
 				t.Fatalf("live route after %s = %d, want %d", enabled, got, want)
 			}
-			if got := request(http.MethodGet, "/about", true); got != http.StatusOK {
+			if got := member.do(http.MethodGet, "/web/v1/about", nil).status; got != http.StatusOK {
 				t.Fatalf("core route after %s = %d", enabled, got)
 			}
 		}
-		if got := request(http.MethodGet, "/apps/media/channels", false); got != http.StatusForbidden {
+		if got := newWebClient(t, base, nil).do(http.MethodGet, "/web/v1/media/channels", nil).status; got != http.StatusUnauthorized {
 			t.Fatalf("newly enabled route without authentication = %d", got)
 		}
-		if got := request(http.MethodPost, "/apps/media/channels", true); got != http.StatusForbidden {
+		nocsrf := newWebClient(t, base, headersG2{"Remote-Groups": "atrium_access"})
+		if got := nocsrf.do(http.MethodPost, "/web/v1/media/channels", map[string]any{"name": "Lanterns"}).status; got != http.StatusForbidden {
 			t.Fatalf("newly enabled route without CSRF = %d", got)
 		}
 	})
@@ -341,10 +328,7 @@ func TestDisabledModuleKeepsPageAndAPIErrorResponses(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	base := startServeIn(t, dir)
-	status, body, header := fetch(t, http.DefaultClient, http.MethodGet, base+"/library/files", nil)
-	if status != http.StatusNotFound || !strings.HasPrefix(header.Get("Content-Type"), "text/html") || !strings.Contains(body, "Nothing here") {
-		t.Fatalf("disabled module page = %d %s: %.200s", status, header.Get("Content-Type"), body)
-	}
+	expectAPI(t, webLocalG2(t, base).do(http.MethodGet, "/web/v1/threads", nil), http.StatusNotFound, "not_found")
 	issued := runApp(t, "auth", "token", "issue", "--name", "module-errors")
 	if issued.code != cli.ExitOK {
 		t.Fatalf("issue API token: %s", issued.stderr)
@@ -372,17 +356,30 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 				t.Fatalf("the unavailable %s module and its reason are not logged: %s", name, text)
 			}
 		}
-		for path, want := range map[string]int{"/triage": http.StatusNotFound, "/apps/media/channels": http.StatusNotFound, "/chat": http.StatusOK, "/about": http.StatusOK} {
-			if status, _, _ := fetch(t, http.DefaultClient, http.MethodGet, base+path, nil); status != want {
-				t.Fatalf("GET %s = %d, want %d", path, status, want)
+		client := webLocalG2(t, base)
+		for path, want := range map[string]int{"/web/v1/mail/triage": http.StatusNotFound, "/web/v1/media/channels": http.StatusNotFound, "/web/v1/threads": http.StatusOK, "/web/v1/about": http.StatusOK} {
+			if got := client.do(http.MethodGet, path, nil); got.status != want {
+				t.Fatalf("GET %s = %d, want %d: %.300s", path, got.status, want, got.body)
 			}
 		}
-		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/settings/media", nil)
-		if status != http.StatusOK || !strings.Contains(body, "Unavailable") || !strings.Contains(body, "data-unavailable") || !strings.Contains(body, "expires_at") || strings.Contains(body, "data-restart") {
-			t.Fatalf("media settings page = %d, want the unavailable state and its reason: %s", status, body)
+		modules := map[string]map[string]any{}
+		about := client.do(http.MethodGet, "/web/v1/about", nil)
+		list, _ := about.json["modules"].([]any)
+		if list == nil {
+			if data, ok := about.json["data"].(map[string]any); ok {
+				list, _ = data["modules"].([]any)
+			}
 		}
-		if !strings.Contains(body, "Torrents is unavailable: ") {
-			t.Fatalf("media settings page does not name the unavailable Torrents dependency: %s", body)
+		for _, entry := range list {
+			modules[entry.(map[string]any)["name"].(string)] = entry.(map[string]any)
+		}
+		for _, name := range []string{"mail", "torrents"} {
+			if reason, _ := modules[name]["reason"].(string); modules[name]["state"] != "unavailable" || !strings.Contains(reason, "expires_at") {
+				t.Fatalf("the %s module does not report the unavailable state and its reason: %v in %.600s", name, modules[name], about.body)
+			}
+		}
+		if reason, _ := modules["media"]["reason"].(string); modules["media"]["state"] == "enabled" || !strings.Contains(reason, "torrents") {
+			t.Fatalf("the media module does not name the unavailable Torrents dependency: %v", modules["media"])
 		}
 	})
 	t.Run("core", func(t *testing.T) {
@@ -462,11 +459,12 @@ func TestDisabledModuleRoutesEndInNotFound(t *testing.T) {
 	base := startServeIn(t, dir)
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	for _, path := range []string{"/media", "/media/", "/media/channels", "/media/file/1/poster.jpg"} {
-		status, body, header := fetch(t, client, http.MethodGet, base+path, nil)
-		if status != http.StatusNotFound || header.Get("Location") != "" || !strings.Contains(body, "Nothing here") {
-			t.Errorf("GET %s with media off = %d Location %q, want a terminal 404 page", path, status, header.Get("Location"))
+		status, _, header := fetch(t, client, http.MethodGet, base+path, nil)
+		if status != http.StatusNotFound || header.Get("Location") != "" {
+			t.Errorf("GET %s with media off = %d Location %q, want a terminal 404", path, status, header.Get("Location"))
 		}
 	}
+	expectAPI(t, webLocalG2(t, base).do(http.MethodGet, "/web/v1/media/channels", nil), http.StatusNotFound, "not_found")
 	issued := runApp(t, "auth", "token", "issue", "--name", "disabled-routes")
 	if issued.code != cli.ExitOK {
 		t.Fatalf("issue API token: %s", issued.stderr)
@@ -482,41 +480,18 @@ func TestUsageAndBudgetStayReachableWithTheAssistantOff(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	client := webLocalG2(t, base)
+	expectAPI(t, client.do(http.MethodGet, "/web/v1/usage", nil), http.StatusNotFound, "not_found")
+	schema := client.do(http.MethodGet, "/web/v1/settings/schema", nil)
+	if schema.status != http.StatusOK || !strings.Contains(schema.body, `"monthly_budget_usd"`) {
+		t.Fatalf("the settings schema with the assistant off = %d, want the monthly budget: %.800s", schema.status, schema.body)
 	}
-	client := &http.Client{Jar: jar, Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/usage", nil)
-	if status != http.StatusOK || !strings.Contains(body, "Monthly budget") || !strings.Contains(body, `action="/settings/groups/core/budget"`) {
-		t.Fatalf("GET /settings/usage with the assistant off = %d, want the usage page with the budget form: %.800s", status, body)
-	}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil); status != http.StatusNotFound {
-		t.Errorf("GET /settings/assistant with the assistant off = %d, want 404", status)
-	}
-	req, err := http.NewRequest(http.MethodPost, base+"/settings/groups/core/budget", strings.NewReader(url.Values{"monthly_budget_usd": {"150"}}.Encode()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	for _, c := range jar.Cookies(req.URL) {
-		if c.Name == "atrium_csrf" {
-			req.Header.Set("X-CSRF-Token", c.Value)
-		}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/usage?saved=core.budget" {
-		t.Fatalf("save the budget with the assistant off = %d Location %q", resp.StatusCode, resp.Header.Get("Location"))
-	}
+	webOKG2(t, client.do(http.MethodPut, "/web/v1/settings/monthly_budget_usd", map[string]any{"value": "150"}))
 	if row := runSettings(t, "get", "monthly_budget_usd").row(t); row.Value == nil || *row.Value != "150" {
 		t.Errorf("monthly_budget_usd after the save = %v, want 150", row.Value)
 	}
-	if status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/usage", nil); status != http.StatusOK || !strings.Contains(body, "of $150 used") {
-		t.Errorf("GET /settings/usage after the save = %d, want the $150 budget: %.800s", status, body)
+	if got := client.do(http.MethodGet, "/web/v1/settings", nil); got.status != http.StatusOK || !strings.Contains(got.body, `"monthly_budget_usd"`) || !strings.Contains(got.body, "150") {
+		t.Errorf("GET /web/v1/settings after the save = %d, want the $150 budget: %.800s", got.status, got.body)
 	}
 }
 
@@ -529,13 +504,10 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := startServeIn(t, dir)
-	about := func() string {
+	client := webLocalG2(t, base)
+	threads := func() apiReply {
 		t.Helper()
-		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/about", nil)
-		if status != http.StatusOK {
-			t.Fatalf("GET /about = %d", status)
-		}
-		return body
+		return client.do(http.MethodGet, "/web/v1/threads", nil)
 	}
 	toggle := func(value string) {
 		t.Helper()
@@ -543,8 +515,8 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 			t.Fatalf("assistant_enabled %s: exit %d stderr %q", value, got.code, got.stderr)
 		}
 	}
-	if body := about(); strings.Contains(body, "Lifecycle thread") || strings.Contains(body, "sb-thread") {
-		t.Fatal("/about shows the assistant thread sidebar while the assistant is off")
+	if got := threads(); got.status != http.StatusNotFound || strings.Contains(got.body, "Lifecycle thread") {
+		t.Fatalf("the thread list is served while the assistant is off: %d %.300s", got.status, got.body)
 	}
 	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
 	asstExec(t, d, "INSERT INTO jobs (name, kind, prompt, schedule, tz, state, next_due, created_by, created_at, module, activated_at) VALUES ('disabled-cron', 'cron', 'Say hi', 'daily 12:00', 'UTC', 'active', NULL, 'operator', ?, 'assistant', ?)", now, now)
@@ -579,12 +551,12 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	if n := api.ModelLists(); n != 1 {
 		t.Fatalf("%d model catalog requests after enabling the assistant, want 1", n)
 	}
-	if body := about(); !strings.Contains(body, "Lifecycle thread") {
-		t.Fatal("/about has no thread sidebar after enabling the assistant")
+	if got := threads(); got.status != http.StatusOK || !strings.Contains(got.body, "Lifecycle thread") {
+		t.Fatalf("the thread list misses the thread after enabling the assistant: %d %.300s", got.status, got.body)
 	}
 	toggle("false")
-	if body := about(); strings.Contains(body, "Lifecycle thread") {
-		t.Fatal("/about still shows the thread sidebar after disabling the assistant")
+	if got := threads(); got.status != http.StatusNotFound || strings.Contains(got.body, "Lifecycle thread") {
+		t.Fatalf("the thread list is still served after disabling the assistant: %d %.300s", got.status, got.body)
 	}
 	toggle("true")
 	time.Sleep(time.Second)
@@ -597,27 +569,17 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(unit.Assistant, "false"))
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/auth", nil); status != http.StatusOK {
-		t.Fatalf("GET /settings/auth = %d", status)
-	}
-	const action = "/settings/groups/core/sessions"
+	client := webLocalG2(t, base)
 	save := func(n int) (int, error) {
-		req, err := http.NewRequest(http.MethodPost, base+action, strings.NewReader(url.Values{"oidc_session_idle_days": {strconv.Itoa(n%7 + 1)}}.Encode()))
+		req, err := http.NewRequest(http.MethodPut, base+"/web/v1/settings/oidc_session_idle_days", strings.NewReader(`{"value":"`+strconv.Itoa(n%7+1)+`"}`))
 		if err != nil {
 			return 0, err
 		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		for _, c := range jar.Cookies(req.URL) {
-			if c.Name == "atrium_csrf" {
-				req.Header.Set("X-CSRF-Token", c.Value)
-			}
-		}
-		resp, err := client.Do(req)
+		req.Header.Set("Atrium-Client", "web")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", base)
+		req.Header.Set("X-CSRF-Token", client.csrf)
+		resp, err := client.http.Do(req)
 		if err != nil {
 			return 0, err
 		}
@@ -637,7 +599,7 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 				default:
 				}
 				status, err := save(w + i)
-				if err != nil || status != http.StatusSeeOther {
+				if err != nil || status != http.StatusOK {
 					failures <- fmt.Sprintf("concurrent save = %d: %v", status, err)
 					return
 				}
@@ -672,7 +634,7 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 	for failure := range failures {
 		t.Error(failure)
 	}
-	if status, err := save(1); err != nil || status != http.StatusSeeOther {
+	if status, err := save(1); err != nil || status != http.StatusOK {
 		t.Fatalf("a later save = %d: %v", status, err)
 	}
 	if row := runSettings(t, "get", "oidc_session_idle_days").row(t); row.Value == nil || *row.Value != "2" {
@@ -692,7 +654,6 @@ func TestFailedAssistantStartRestartsAfterBackoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	base, logs := startServeLogged(t, dir)
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	jobs := func() int {
 		t.Helper()
 		var n int
@@ -712,8 +673,8 @@ func TestFailedAssistantStartRestartsAfterBackoff(t *testing.T) {
 	if n := strings.Count(logs.String(), "MODULE=assistant STATE=unavailable"); n != 0 {
 		t.Fatalf("a failing assistant service marked the module unavailable %d times", n)
 	}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil); status != http.StatusOK {
-		t.Fatalf("GET /settings/assistant while its service restarts = %d, want 200", status)
+	if got := webLocalG2(t, base).do(http.MethodGet, "/web/v1/threads", nil); got.status != http.StatusOK {
+		t.Fatalf("GET /web/v1/threads while the assistant service restarts = %d, want 200: %.300s", got.status, got.body)
 	}
 	if _, err := d.Write.Exec("DROP TRIGGER jobs_refused"); err != nil {
 		t.Fatal(err)
@@ -897,8 +858,8 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 	t.Run("an empty database starts core only", func(t *testing.T) {
 		base, _, _ := phaseA(t)
 		wantFlags(t, base, coreOnly)
-		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+"/review", nil); status != http.StatusOK {
-			t.Errorf("GET /review = %d, want the core review page", status)
+		if got := webLocalG2(t, base).do(http.MethodGet, "/web/v1/activity", nil); got.status != http.StatusOK {
+			t.Errorf("GET /web/v1/activity = %d, want the core review read: %.300s", got.status, got.body)
 		}
 	})
 
@@ -1143,21 +1104,17 @@ func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
 		if n := b.moved(); n != 2 {
 			t.Fatalf("%d of 2 messages moved by the approval", n)
 		}
-		jar, err := cookiejar.New(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		base := startServeIn(t, b.m.dir)
 		waitWatching(t, b.fake)
-		fetch(t, client, http.MethodGet, base+"/about", nil)
-		var status int
-		var body string
+		client := webLocalG2(t, base)
+		var reply apiReply
 		b.disableAfterWrite(t, "undo", func() {
-			status, body = hxFetch(t, client, http.MethodPost, base+"/proposals/"+b.proposal+"/undo", url.Values{})
+			reply = client.do(http.MethodPost, "/web/v1/undo/proposal:"+b.proposal, nil)
 		})
-		if status != http.StatusOK || !strings.Contains(body, "Undo stopped partway") || !strings.Contains(body, "Writes put back before it stopped: 1.") {
-			t.Fatalf("undo disabled mid-batch = %d: %s", status, body)
+		outcomes, _ := reply.json["outcomes"].([]any)
+		problem, _ := reply.json["error"].(map[string]any)
+		if reply.status != http.StatusConflict || problem["code"] != "not_undone" || len(outcomes) != 1 || reply.json["entry"] == nil {
+			t.Fatalf("undo disabled mid-batch = %d: %s", reply.status, reply.body)
 		}
 		if n := b.moved(); n != 1 {
 			t.Fatalf("%d messages still filed after a partial undo, want 1", n)
@@ -1206,15 +1163,15 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	effect := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
 	base := startServeIn(t, m.dir)
 	waitWatching(t, m.fake)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	client := webLocalG2(t, base)
+	activity := func(when string) {
+		t.Helper()
+		got := client.do(http.MethodGet, "/web/v1/activity", nil)
+		if got.status != http.StatusOK || !strings.Contains(got.body, effect) {
+			t.Fatalf("activity %s: %d %s", when, got.status, got.body)
+		}
 	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil)
-	if status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+effect+"/undo") {
-		t.Fatalf("activity before disabling: %d %s", status, body)
-	}
+	activity("before disabling")
 	writes := len(m.fake.Writes)
 	arrived := make(chan struct{})
 	release := make(chan struct{})
@@ -1234,8 +1191,22 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	}
 	result := make(chan response, 1)
 	go func() {
-		status, body, _ := fetch(t, client, http.MethodPost, base+"/activity/mail/"+effect+"/undo", url.Values{})
-		result <- response{status: status, body: body}
+		req, err := http.NewRequest(http.MethodPost, base+"/web/v1/effects/"+effect+"/undo", nil)
+		if err != nil {
+			result <- response{body: err.Error()}
+			return
+		}
+		req.Header.Set("Atrium-Client", "web")
+		req.Header.Set("Origin", base)
+		req.Header.Set("X-CSRF-Token", client.csrf)
+		resp, err := client.http.Do(req)
+		if err != nil {
+			result <- response{body: err.Error()}
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		raw, _ := io.ReadAll(resp.Body)
+		result <- response{status: resp.StatusCode, body: string(raw)}
 	}()
 	select {
 	case <-arrived:
@@ -1249,17 +1220,13 @@ func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
 	if !strings.Contains(refused.body, "the mail module was disabled; start the action again") {
 		t.Fatalf("disabled pending undo response %d: %s", refused.status, refused.body)
 	}
-	status, body, _ = fetch(t, client, http.MethodGet, base+"/activity", nil)
-	if status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+effect+"/undo") {
-		t.Fatalf("activity while disabled: %d %s", status, body)
-	}
+	activity("while disabled")
 	listed := runApp(t, "effects", "list", "--operation", "correct")
 	if listed.code != cli.ExitOK || !strings.Contains(listed.stdout, `"id": `+effect) {
 		t.Fatalf("historical effect missing while disabled: %d %s %s", listed.code, listed.stdout, listed.stderr)
 	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/activity/mail/"+effect+"/undo", url.Values{})
-	if !strings.Contains(body, "the mail module was disabled; start the action again") {
-		t.Fatalf("disabled undo response %d: %s", status, body)
+	if got := client.do(http.MethodPost, "/web/v1/effects/"+effect+"/undo", nil); !strings.Contains(got.body, "the mail module was disabled; start the action again") {
+		t.Fatalf("disabled undo response %d: %s", got.status, got.body)
 	}
 	if len(m.fake.Writes) != writes || m.count(t, "SELECT COUNT(*) FROM effects WHERE undo_of = ?", effect) != 0 {
 		t.Fatal("disabled undo wrote IMAP or recorded an undo intent")

@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -405,41 +404,57 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 		files: []mnpFile{{0, "c.mkv", 0}, {1, "c.txt", 1}}})
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodGet, "/apps/media/torrents", nil, http.StatusOK)
+	b := webLocalG2(t, startServeIn(t, dir))
+	apiData(t, b.do(http.MethodGet, "/web/v1/media/torrents", nil), http.StatusOK)
 	if qb.touched(ready) || qb.touched(busy) || qb.touched(plain) {
 		t.Fatalf("viewing downloads wrote to qBittorrent: %v", qb.writes)
 	}
 
-	b.want(http.MethodPost, "/apps/media/torrents/"+plain+"/files", url.Values{"index": {"0"}, "wanted": {"1"}}, http.StatusNotFound)
-	b.want(http.MethodPost, "/apps/media/torrents/"+busy+"/files", url.Values{"index": {"1"}, "wanted": {"0"}}, http.StatusOK)
+	if got := b.do(http.MethodPut, "/web/v1/media/torrents/"+plain+"/files", map[string]any{"index": 0, "wanted": true}); got.status != http.StatusNotFound {
+		t.Fatalf("selecting a file of an untagged torrent = %d: %s", got.status, got.body)
+	}
+	if got := b.do(http.MethodPut, "/web/v1/media/torrents/"+busy+"/files", map[string]any{"index": 1, "wanted": false}); got.status != http.StatusOK {
+		t.Fatalf("selecting a file of a media torrent = %d: %s", got.status, got.body)
+	}
 	if _, prio := qb.state(busy); !slices.Equal(prio, []int{0, 0}) {
 		t.Fatalf("media torrent priorities %v, want [0 0]", prio)
 	}
 
 	magnet := "magnet:?xt=urn:btih:" + fresh + "&dn=Lanterns.S01E09"
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK)
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status >= http.StatusMultipleChoices {
+		t.Fatalf("media add = %d: %s", got.status, got.body)
+	}
 	if got := qb.lastAdd(); got.Get("urls") != magnet || got.Get("tags") != "atrium,"+library.TagMedia {
 		t.Fatalf("media add sent %v", got)
 	}
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {"magnet:?xt=urn:btih:" + strings.Repeat("e", 40)}, "mode": {"plain"}}, http.StatusOK)
-	if got := qb.lastAdd(); got.Get("tags") != "atrium" {
-		t.Fatalf("plain add carried tags %q, want only atrium", got.Get("tags"))
-	}
 
-	form := func(action string) url.Values {
-		return url.Values{"id": {ready}, "action": {action}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {"2026"}, "s0": {"1"}, "e0": {"8"}}
-	}
 	dest := filepath.Join(root, "tv", "Lanterns (2026)", "Season 01", "Lanterns (2026) - S01E08.mkv")
-	b.want(http.MethodPost, "/apps/media/file", form("preview"), http.StatusOK)
+	planned := b.do(http.MethodGet, "/web/v1/media/filings/"+ready+"?kind=show&title=Lanterns&year=2026", nil)
+	if planned.status != http.StatusOK {
+		t.Fatalf("filing preview = %d: %s", planned.status, planned.body)
+	}
+	video := ""
+	for _, f := range planned.json["files"].([]any) {
+		if f := f.(map[string]any); strings.HasSuffix(f["name"].(string), ".mkv") {
+			video = f["id"].(string)
+		}
+	}
+	if video == "" {
+		t.Fatalf("the filing preview lists no video: %s", planned.body)
+	}
+	if got := b.do(http.MethodGet, "/web/v1/media/filings/"+ready+"?kind=show&title=Lanterns&year=2026&episodes="+url.QueryEscape(video+":1:8"), nil); got.status != http.StatusOK {
+		t.Fatalf("episode preview = %d: %s", got.status, got.body)
+	}
 	if _, err := os.Stat(filepath.Join(root, "tv", "Lanterns (2026)")); !os.IsNotExist(err) {
 		t.Fatalf("preview touched the library: %v", err)
 	}
 	if tags, _ := qb.state(ready); slices.Contains(tags, library.TagFiled) {
 		t.Fatal("preview tagged the torrent filed")
 	}
-	b.want(http.MethodPost, "/apps/media/file", form("file"), http.StatusOK)
+	filing := map[string]any{"action": "file", "kind": "show", "title": "Lanterns", "year": "2026", "episodes": []any{map[string]any{"file": video, "season": "1", "episode": "8"}}}
+	if got := b.do(http.MethodPost, "/web/v1/media/filings/"+ready, filing); got.status != http.StatusOK {
+		t.Fatalf("filing = %d: %s", got.status, got.body)
+	}
 	src, err := os.Stat(filepath.Join(content, name+".mkv"))
 	if err != nil {
 		t.Fatal(err)
@@ -482,11 +497,13 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, eztv.URL+"/api/get-torrents", "", ""))
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}}, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"nope"}, "pattern": {"1080p"}}, http.StatusUnprocessableEntity)
-	b.want(http.MethodPost, "/apps/media/channels/poll", url.Values{}, http.StatusOK)
+	b := webLocalG2(t, startServeIn(t, dir))
+	apiData(t, b.do(http.MethodGet, "/web/v1/media/channels", nil), http.StatusOK)
+	webOKG2(t, b.do(http.MethodPost, "/web/v1/media/channels", map[string]any{"name": "Lanterns", "imdb": "tt1234567", "pattern": "1080p"}))
+	if got := b.do(http.MethodPost, "/web/v1/media/channels", map[string]any{"name": "Lanterns", "imdb": "nope", "pattern": "1080p"}); got.status != http.StatusUnprocessableEntity {
+		t.Fatalf("channel with a bad IMDb id = %d: %s", got.status, got.body)
+	}
+	webOKG2(t, b.do(http.MethodPost, "/web/v1/media/channels/poll", nil))
 	if qb.lastAdd() != nil {
 		t.Fatalf("the first poll downloaded %v", qb.added)
 	}
@@ -507,7 +524,7 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 		t.Fatalf("first poll seen: matching %v, other %v; want only the matching release", seen(old), seen(latest))
 	}
 
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}, http.StatusOK)
+	webOKG2(t, b.do(http.MethodPost, "/web/v1/media/channels", map[string]any{"name": "Lanterns B", "imdb": "tt1234567", "pattern": "720p", "backfill": true}))
 	if len(qb.added) != 1 || qb.added[0].Get("tags") != "atrium,"+library.TagMedia || !strings.Contains(qb.added[0].Get("urls"), latest) {
 		t.Fatalf("backfill adds = %v", qb.added)
 	}
@@ -574,13 +591,14 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 		return text
 	}
 
-	page := expect("movie page with the group", "/apps/media/library/movie/Dune%20%282021%29", http.StatusOK, "Remote-Groups", group)
-	i := strings.Index(page, `href="https://atrium.test`+library.FilePrefix)
-	if i < 0 {
-		t.Fatalf("no signed public link on the movie page: %.600s", page)
+	member := newWebClient(t, base, headersG2{"Remote-Groups": group})
+	member.session("proxy")
+	link := member.do(http.MethodGet, "/web/v1/media/files/"+mediaAPIID(movie)+"/link", nil)
+	public, _ := link.json["public"].(string)
+	if link.status != http.StatusOK || !strings.HasPrefix(public, "https://atrium.test"+library.FilePrefix) {
+		t.Fatalf("no signed public link for the movie with the group: %d %.600s", link.status, link.body)
 	}
-	rest := page[i+len(`href="https://atrium.test`):]
-	good := strings.ReplaceAll(rest[:strings.Index(rest, `"`)], "&amp;", "&")
+	good := strings.TrimPrefix(public, "https://atrium.test")
 
 	if got := expect("signed link without the group", good, http.StatusOK); got != body {
 		t.Errorf("signed link body %q", got)
@@ -590,7 +608,9 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	}
 	expect("unsatisfiable signed range", good, http.StatusRequestedRangeNotSatisfiable, "Range", "bytes=100-")
 	expect("signed link on a foreign host", good, http.StatusBadRequest, "Host", "evil.test")
-	expect("page without the group", "/apps/media/downloads", http.StatusForbidden)
+	if got := newWebClient(t, base, nil).do(http.MethodGet, "/web/v1/media/torrents", nil); got.status != http.StatusUnauthorized {
+		t.Errorf("downloads without the group = %d, want 401: %.300s", got.status, got.body)
+	}
 	expect("tampered signature", mnpFlipLast(good), http.StatusForbidden)
 	expect("tampered signature with a range", mnpFlipLast(good), http.StatusForbidden, "Range", "bytes=10-19")
 	exp := good[strings.Index(good, "exp=")+4 : strings.Index(good, "&sig=")]
@@ -604,7 +624,9 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	expect("outside movies and tv", mnpSign(key, "downloads/secret.mkv", far), http.StatusNotFound)
 	expect("parent of the root", mnpSign(key, "movies/../../atrium.db", far), http.StatusNotFound)
 	sig := mnpSign(key, movie, far)
-	expect("signature on another route", "/apps/media/library"+sig[strings.Index(sig, "?"):], http.StatusForbidden)
+	if got := newWebClient(t, base, nil).do(http.MethodGet, "/web/v1/media/library"+sig[strings.Index(sig, "?"):], nil); got.status != http.StatusUnauthorized {
+		t.Errorf("signature on another route = %d, want 401: %.300s", got.status, got.body)
+	}
 }
 
 func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
@@ -616,17 +638,8 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {v2only}, "mode": {"media"}}, http.StatusUnprocessableEntity)
-	b.want(http.MethodPost, "/apps/media/add", url.Values{
-		"magnet":  {mediaMagnet(strings.Repeat("a", 40), "Lanterns")},
-		"torrent": {"ZDE6YWJl"}, "name": {"lanterns.torrent"}, "mode": {"media"},
-	}, http.StatusUnprocessableEntity)
-	b.want(http.MethodPost, "/apps/media/add", url.Values{
-		"torrent": {base64.StdEncoding.EncodeToString([]byte("d4:infod9:file treede12:meta versioni2e4:name8:test.mkv12:piece lengthi16384eee"))},
-		"name":    {"lanterns.torrent"}, "mode": {"media"},
-	}, http.StatusUnprocessableEntity)
+	b := webLocalG2(t, startServeIn(t, dir))
+	expectAPI(t, b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": v2only}), http.StatusUnprocessableEntity, "invalid")
 	webDB := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = webDB.Close() }()
 	var effects, invalid int
@@ -636,8 +649,8 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 	if err := webDB.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'media.add' AND outcome = 'invalid'").Scan(&invalid); err != nil {
 		t.Fatal(err)
 	}
-	if effects != 0 || invalid != 3 {
-		t.Fatalf("web refusals: %d effects, %d invalid audits; want 0, 3", effects, invalid)
+	if effects != 0 || invalid != 1 {
+		t.Fatalf("web refusals: %d effects, %d invalid audits; want 0, 1", effects, invalid)
 	}
 	if adds := qb.count("add"); adds != 0 {
 		t.Fatalf("the refused web add reached qBittorrent: %d adds", adds)

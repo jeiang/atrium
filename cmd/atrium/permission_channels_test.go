@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -70,31 +68,20 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	client := webLocalG2(t, base)
 	start := len(api.Requests())
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("denied")))
 	text := "read " + srv.URL + "/a then " + srv.URL + "/b"
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", thread), map[string]any{"text": text}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); len(hits) != 1 || hits[0] != "/a" {
 		t.Fatalf("page fetches before the decision = %v, want /a only", hits)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/dismiss", proposal), url.Values{}); code != http.StatusOK {
-		t.Fatalf("dismiss = %d\n%s", code, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/approvals/%d/deny", proposal), nil))
 	waitRunState(t, d, thread, "done")
 	if hits := pages.seen(); len(hits) != 1 || hits[0] != "/a" {
 		t.Fatalf("page fetches after the denial = %v, want /a only", hits)
@@ -113,20 +100,11 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, stop := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	client := webLocalG2(t, base)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("denied")))
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"read " + srv.URL + "/a then " + srv.URL + "/b"}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", thread), map[string]any{"text": "read " + srv.URL + "/a then " + srv.URL + "/b"}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	proposal := waitParkedPermission(t, d, thread)
@@ -138,16 +116,12 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 	stop()
 	asstSet(t, "assistant_enabled", "false")
 	base, _, stop = startServeApp(t, freshApp(f), &lockedBuffer{})
-	if status, _, _ := fetch(t, client, "GET", base+"/review", nil); status != http.StatusOK {
-		t.Fatalf("GET /review = %d", status)
-	}
+	client = webLocalG2(t, base)
 	start := len(api.Requests())
-	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{}); code != http.StatusOK || !strings.Contains(body, "the assistant module was disabled; start the action again") {
-		t.Fatalf("disabled approval = %d: %s", code, body)
+	if got := client.do(http.MethodPost, fmt.Sprintf("/web/v1/approvals/%d/approve", proposal), nil); !strings.Contains(got.body, "the assistant module was disabled; start the action again") {
+		t.Fatalf("disabled approval = %d: %s", got.status, got.body)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/dismiss", proposal), url.Values{}); code != http.StatusOK {
-		t.Fatalf("disabled dismissal = %d: %s", code, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/approvals/%d/deny", proposal), nil))
 	var state, afterOwner, status string
 	if err := d.Read.QueryRow("SELECT state, COALESCE(owner, '') FROM runs WHERE id = ?", runID).Scan(&state, &afterOwner); err != nil {
 		t.Fatal(err)
@@ -167,12 +141,8 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 	stop()
 	asstSet(t, "assistant_enabled", "true")
 	base, _, _ = startServeApp(t, freshApp(f), &lockedBuffer{})
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat after enabling = %d", status)
-	}
-	if code, body := hxFetch(t, client, http.MethodPost, fmt.Sprintf("%s/chat/%d/runs/%d/resume", base, thread, runID), url.Values{}); code != http.StatusOK {
-		t.Fatalf("resume after enabling = %d: %s", code, body)
-	}
+	client = webLocalG2(t, base)
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/runs/%d/resume", thread, runID), nil))
 	waitRunState(t, d, thread, "done")
 	requests := api.Requests()
 	if len(requests) <= start {

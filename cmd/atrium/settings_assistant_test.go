@@ -2,7 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -65,9 +64,13 @@ func TestOwnerScheduleEditOnTheScheduledPageWritesOnlyTheJobRow(t *testing.T) {
 		t.Fatalf("set the schedule floor: exit %d stderr %q", r.code, r.stderr)
 	}
 
-	w := asstBrowse(t, startServeIn(t, dir))
-	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "package-tracking", "0 * * * *", "ops-sampler")
+	w := webLocalG2(t, startServeIn(t, dir))
+	listed := w.do(http.MethodGet, "/web/v1/schedules", nil)
+	for _, want := range []string{"package-tracking", "0 * * * *", "ops-sampler"} {
+		if listed.status != http.StatusOK || !strings.Contains(listed.body, want) {
+			t.Fatalf("GET /web/v1/schedules = %d misses %q: %.600s", listed.status, want, listed.body)
+		}
+	}
 
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var id, n int64
@@ -77,8 +80,10 @@ func TestOwnerScheduleEditOnTheScheduledPageWritesOnlyTheJobRow(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs WHERE kind IN ('builtin', 'nightly')").Scan(&n); err != nil || n != int64(len(builtinJobNames)) {
 		t.Fatalf("%d built-in jobs (%v), want %d", n, err, len(builtinJobNames))
 	}
-	code, body, _ := w.post("/scheduled/"+strconv.FormatInt(id, 10)+"/schedule", url.Values{"schedule": {"*/50 * * * *"}}, true)
-	w.want(code, http.StatusOK, body, "*/50 * * * *")
+	edited := webOKG2(t, w.do(http.MethodPatch, "/web/v1/schedules/"+strconv.FormatInt(id, 10), map[string]any{"schedule": "*/50 * * * *"}))
+	if !strings.Contains(edited.body, "*/50 * * * *") {
+		t.Errorf("the schedule edit reply misses the new schedule: %.400s", edited.body)
+	}
 	var schedule string
 	if err := d.Read.QueryRow("SELECT schedule FROM jobs WHERE id = ?", id).Scan(&schedule); err != nil || schedule != "*/50 * * * *" {
 		t.Errorf("package-tracking schedule = %q (%v), want the schedule edited on the page", schedule, err)

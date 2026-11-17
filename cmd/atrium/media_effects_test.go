@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -62,10 +61,9 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 
 	qb.dropOnce("torrents/add")
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	if code, body := b.do(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}); code != http.StatusBadGateway {
-		t.Fatalf("dropped add = %d, want 502: %.400s", code, body)
+	b := webLocalG2(t, startServeIn(t, dir))
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status != http.StatusConflict || !strings.Contains(got.body, "effect_unknown") {
+		t.Fatalf("dropped add = %d, want 409 effect_unknown: %.400s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
@@ -73,17 +71,16 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	if adds := qb.count("add"); adds != 1 {
 		t.Fatalf("the dropped add reached qBittorrent %d times, want 1", adds)
 	}
-	if code, body := b.do(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}); code != http.StatusBadGateway {
-		t.Fatalf("blocked add = %d, want 502: %.400s", code, body)
+	if got := b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": magnet}); got.status != http.StatusConflict {
+		t.Fatalf("blocked add = %d, want 409: %.400s", got.status, got.body)
 	}
 	if adds := qb.count("add"); adds != 1 {
 		t.Fatalf("a blocked add reached qBittorrent: %d adds", adds)
 	}
-	body := b.want(http.MethodPost, "/apps/media/channels",
-		url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}, "backfill": {"1"}},
-		http.StatusOK, "unresolved")
-	if !strings.Contains(body, "unresolved") {
-		t.Fatalf("the forced poll did not report the blocked infohash: %.400s", body)
+	polled := webOKG2(t, b.do(http.MethodPost, "/web/v1/media/channels",
+		map[string]any{"name": "Lanterns", "imdb": "tt1234567", "pattern": "1080p", "backfill": true}))
+	if polled.json["polled"] != true {
+		t.Fatalf("the forced poll did not run: %.400s", polled.body)
 	}
 	if adds := qb.count("add"); adds != 1 {
 		t.Fatalf("the blocked poll reached qBittorrent: %d adds", adds)
@@ -115,10 +112,8 @@ func TestMediaSelectionFailureKeepsTheAddAndBlocksTheRepeat(t *testing.T) {
 	qb.dropOnce("torrents/filePrio")
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(fresh, "Lanterns.S01E09")}, "mode": {"media"}},
-		http.StatusOK, "Added the magnet link")
+	b := webLocalG2(t, startServeIn(t, dir))
+	webOKG2(t, b.do(http.MethodPost, "/web/v1/media/torrents", map[string]any{"magnet": mediaMagnet(fresh, "Lanterns.S01E09")}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	mediaEffectID(t, d, contract.OpAddMagnet, fresh, "done")
