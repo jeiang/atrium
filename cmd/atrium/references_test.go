@@ -184,7 +184,7 @@ func TestAPISendReferenceStoresTheHTMLContext(t *testing.T) {
 	s := startAPISite(t, dir, api)
 	text := fmt.Sprintf("see @thread/%d", source)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
-	webOKG2(t, webLocalG2(t, s.base).do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", readers[0]), map[string]any{"text": text}))
+	webOKG2(t, webProxyOwnerG2(t, s.base).do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", readers[0]), map[string]any{"text": text}))
 	waitIdle(t, dir, readers[0])
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
 	if sent := s.do(http.MethodPost, fmt.Sprintf("/api/v1/threads/%d/messages", readers[1]), s.token("owner"), map[string]any{"text": text}); sent.status != http.StatusAccepted {
@@ -200,6 +200,6 @@ func TestAPISendReferenceStoresTheHTMLContext(t *testing.T) {
 		}
 	}
 	if !strings.Contains(stored[0], `"type":"reference"`) || stored[0] != stored[1] {
-		t.Fatalf("API send stored %s, HTML send stored %s", stored[1], stored[0])
+		t.Fatalf("API send stored %s, web send stored %s", stored[1], stored[0])
 	}
 }
