@@ -7,30 +7,27 @@ export interface Destination {
   path: DestinationPath;
   label: string;
   icon: IconName;
-  legacy: string;
   module?: string;
 }
 
-export const home: Destination = { path: '/', label: 'Home', icon: 'home', legacy: '/' };
-export const inbox: Destination = { path: '/inbox', label: 'Inbox', icon: 'inbox', legacy: '/review' };
-export const plan: Destination = { path: '/plan', label: 'Plan', icon: 'plan', legacy: '/loops', module: 'assistant' };
+export const home: Destination = { path: '/', label: 'Home', icon: 'home' };
+export const inbox: Destination = { path: '/inbox', label: 'Inbox', icon: 'inbox' };
+export const plan: Destination = { path: '/plan', label: 'Plan', icon: 'plan', module: 'assistant' };
 export const knowledge: Destination = {
   path: '/knowledge',
   label: 'Knowledge',
   icon: 'knowledge',
-  legacy: '/library/knowledge',
   module: 'assistant',
 };
-export const appsDestination: Destination = { path: '/apps', label: 'Apps', icon: 'apps', legacy: '/apps/media' };
+export const appsDestination: Destination = { path: '/apps', label: 'Apps', icon: 'apps' };
 export const assistant: Destination = {
   path: '/assistant',
   label: 'Assistant',
   icon: 'assistant',
-  legacy: '/settings/assistant',
   module: 'assistant',
 };
-export const chats: Destination = { path: '/chat', label: 'Chats', icon: 'chats', legacy: '/chat' };
-export const settings: Destination = { path: '/settings', label: 'Settings', icon: 'settings', legacy: '/settings' };
+export const chats: Destination = { path: '/chat', label: 'Chats', icon: 'chats' };
+export const settings: Destination = { path: '/settings', label: 'Settings', icon: 'settings' };
 
 export const destinations: readonly Destination[] = [home, plan, knowledge, appsDestination, assistant];
 

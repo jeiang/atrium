@@ -103,7 +103,7 @@
     if (hit.type === 'thread') return p('/chat/:id', { params: { id } });
     if (hit.type === 'record') return p('/knowledge/:id', { params: { id } });
     if (hit.type === 'task') return p('/plan/tasks/:id', { params: { id } });
-    if (hit.type === 'message') return `/messages/${id}`;
+    if (hit.type === 'message') return p('/apps/mail/message/:id', { params: { id } });
     return `${API_BASE}${hit.path}/content`;
   }
 
@@ -126,7 +126,6 @@
     const parts = [SINGULAR[hit.type] ?? hit.type];
     if (hit.detail) parts.push(hit.detail);
     if (hit.when > 0) parts.push(formatDay(hit.when));
-    if (hit.type === 'message') parts.push('opens in the current interface');
     if (hit.type === 'file') parts.push('download');
     return parts.join(' · ');
   }

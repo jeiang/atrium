@@ -22,7 +22,10 @@ test.describe('search', () => {
     await expect(page.locator('[data-hit][data-type="thread"]').first()).toHaveAttribute('href', /\/chat\/401$/);
     await expect(page.locator('[data-hit][data-type="record"]').first()).toHaveAttribute('href', /\/knowledge\/21$/);
     await expect(page.locator('[data-hit][data-type="task"]').first()).toHaveAttribute('href', /\/tasks\/7$/);
-    await expect(page.locator('[data-hit][data-type="message"]').first()).toHaveAttribute('href', /\/messages\/501$/);
+    await expect(page.locator('[data-hit][data-type="message"]').first()).toHaveAttribute(
+      'href',
+      /\/apps\/mail\/message\/501$/,
+    );
     await expect(page.locator('[data-hit][data-type="file"]').first()).toHaveAttribute(
       'href',
       /\/web\/v1\/threads\/401\/files\/601\/content$/,
