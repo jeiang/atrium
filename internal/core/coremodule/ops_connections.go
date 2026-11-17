@@ -64,6 +64,12 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 	}
 	reports, stop := connections.Reports(d)
 	defer stop()
+	reg, err := connections.From(ctx)
+	if err != nil {
+		return err
+	}
+	seen, unseen := connections.Outcomes(reg)
+	defer unseen()
 	syncUnits()
 	observe(connectionsapp.ObserveHealthInput{Start: true})
 	ticker := time.NewTicker(time.Hour)
@@ -74,8 +80,8 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 			return ctx.Err()
 		case <-ticker.C:
 			observe(connectionsapp.ObserveHealthInput{})
-		case seen := <-connections.Outcomes():
-			observe(connectionsapp.ObserveHealthInput{ID: seen.ID, Recovered: seen.OK})
+		case outcome := <-seen:
+			observe(connectionsapp.ObserveHealthInput{ID: outcome.ID, Recovered: outcome.OK})
 		case <-svc.UnitsChanged():
 			syncUnits()
 			observe(connectionsapp.ObserveHealthInput{})

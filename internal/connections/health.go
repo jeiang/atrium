@@ -190,25 +190,42 @@ type observation struct {
 	at    int64
 }
 
+type succeededKey struct {
+	reg *Registry
+	id  ID
+}
+
 var (
-	outcomes  = make(chan outcome, 64)
+	outcomes  sync.Map
 	succeeded sync.Map
 	observed  sync.Map
 	reporters sync.Map
 )
 
-func Outcomes() <-chan outcome { return outcomes }
+// Outcomes receives the request outcomes of leases opened under reg, the
+// connection registry of one running app. Each serving app registers its own
+// channel, so outcomes never cross to another app in the same process.
+func Outcomes(reg *Registry) (<-chan outcome, func()) {
+	ch := make(chan outcome, 64)
+	outcomes.Store(reg, ch)
+	return ch, func() { outcomes.CompareAndDelete(reg, ch) }
+}
 
-func report(id ID, revision int64, ok bool) {
+func report(reg *Registry, id ID, revision int64, ok bool) {
+	ch, registered := outcomes.Load(reg)
+	if !registered {
+		return
+	}
 	if ok {
+		key := succeededKey{reg: reg, id: id}
 		now := time.Now().UnixNano()
-		if last, seen := succeeded.Load(id); seen && now-last.(int64) < int64(time.Minute) {
+		if last, seen := succeeded.Load(key); seen && now-last.(int64) < int64(time.Minute) {
 			return
 		}
-		succeeded.Store(id, now)
+		succeeded.Store(key, now)
 	}
 	select {
-	case outcomes <- outcome{ID: id, Revision: revision, OK: ok}:
+	case ch.(chan outcome) <- outcome{ID: id, Revision: revision, OK: ok}:
 	default:
 	}
 }
@@ -312,6 +329,7 @@ func same(a, b State) bool {
 }
 
 type reporter struct {
+	reg      *Registry
 	id       ID
 	revision int64
 	next     http.RoundTripper
@@ -321,9 +339,9 @@ func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := r.next.RoundTrip(req)
 	switch {
 	case err != nil && req.Context().Err() == nil || err == nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500):
-		report(r.id, r.revision, false)
+		report(r.reg, r.id, r.revision, false)
 	case err == nil && resp.StatusCode < http.StatusBadRequest:
-		report(r.id, r.revision, true)
+		report(r.reg, r.id, r.revision, true)
 	}
 	return resp, err
 }
@@ -337,10 +355,10 @@ func (r reporter) CloseIdleConnections() {
 }
 
 func (l *Lease) reporting(client *http.Client) *http.Client {
-	if client.Transport == nil {
+	if client.Transport == nil || l.store == nil || l.store.reg == nil {
 		return client
 	}
-	client.Transport = reporter{id: l.id, revision: l.revision, next: client.Transport}
+	client.Transport = reporter{reg: l.store.reg, id: l.id, revision: l.revision, next: client.Transport}
 	return client
 }
 

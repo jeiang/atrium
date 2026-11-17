@@ -210,6 +210,10 @@ capabilities = ["embeddings"]
 	if n := titledNotices(t, d, "atrium: qBittorrent disabled"); n != 1 {
 		t.Fatalf("%d notices for a connection dropped from the host file, want 1", n)
 	}
+	s.stop()
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 3700 WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
 	checked = checkedAt("service/embedding")
 	s.start()
 	defer s.stop()
@@ -302,10 +306,14 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 	}
 
 	embed.setStatus(http.StatusInternalServerError)
-	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 600 WHERE id = 'service/embedding'"); err != nil {
+	s.stop()
+	// Request outcomes reach only the serving app's health watch, so the
+	// automatic failure comes from the start sweep of a row last checked a day
+	// ago, still inside the grace window of its last success.
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 90000 WHERE id = 'service/embedding'"); err != nil {
 		t.Fatal(err)
 	}
-	runApp(t, "reindex")
+	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
 	if n := connectionNotices(t, dir, "Embedding"); n != 0 {
 		t.Fatalf("%d notices after an automatic failure inside the grace window, want 0", n)

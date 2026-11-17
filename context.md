@@ -526,10 +526,16 @@ claims about the running application. Operator contracts are in
 - The health watch checks, at start and then hourly, every enabled
   connection that was never checked (new or host-changed rows first) or
   was last checked more than 24 hours ago by wall clock, so restarts do
-  not reset the schedule; at start it also rechecks failing and
-  needs-reauth rows. Runtime request failures trigger a check (at most
-  one per 5 minutes) in every state except disabled; a success while
-  failing triggers a recovery check. A first failing result notifies once,
+  not reset the schedule. Runtime request failures trigger a check (at most
+  one per 5 minutes) of a healthy row. A failing or needs-reauth row is
+  checked automatically only after its failure backoff (1, 3, 6, then 12
+  hours by how long it has been failing, from `checked_at` and
+  `last_ok_at`/`reauth_at`; `backingOff` in
+  `internal/connections/application/connections.go`), so neither a start,
+  a runtime failure nor a success on a sibling capability rechecks it
+  sooner; Test, `connections check` and credential changes still do.
+  Request outcomes reach only the health watch of the app whose
+  connection registry opened the lease (`Outcomes`). A first failing result notifies once,
   also after a host change. Notices are damped per connection in process
   (`flapWindow` 6 hours, `lastingAfter` 30 minutes in
   `internal/connections/health.go`): at most one failing and one recovery

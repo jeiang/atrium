@@ -342,11 +342,16 @@ the field named.
 
 At start and then hourly, the health watch checks every enabled connection
 that was never checked (new and host-changed rows first) or was last checked
-more than 24 hours ago, so restarts do not reset that clock; at start it also
-rechecks failing and needs-reauth connections. A failed
-request to a connection triggers a check at most once every 5 minutes in any
-state except disabled, and a successful request to a failing connection
-triggers a check within a minute. A connection's first failing result
+more than 24 hours ago, so restarts do not reset that clock. A failed request
+to a healthy connection triggers a check at most once every 5 minutes.
+A failing or needs-reauth connection is checked again automatically only after
+its failure backoff: 1 hour after its last check while it has been failing for
+less than an hour, then 3, 6 and 12 hours as it keeps failing, counted from its
+last success (or from when it first needed reauthorization). Until then, a
+start, a failed request and a successful request to the same connection (for
+example to a sibling capability that still works) do not check it. Test,
+`connections test`, `connections check` and a credential change still check it
+at once, and a passing check clears the backoff. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,
