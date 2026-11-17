@@ -375,13 +375,10 @@ func TestAsstUsageLedgerPricesFallbacksFlagsUnpricedModelsAndKeepsPartialRows(t 
 		t.Errorf("partial row %q %d %d %d %v", requestID, input, output, partial, cost)
 	}
 
-	base := startServeIn(t, dir)
-	w := asstBrowse(t, base)
-	_, page, _ := w.get("/settings/usage", false)
-	for _, want := range []string{"1 unpriced", "1 partial"} {
-		if !strings.Contains(page, want) {
-			t.Errorf("usage page lacks %q", want)
-		}
+	usage := localWebG5(t, startServeIn(t, dir)).do(http.MethodGet, "/web/v1/usage", nil)
+	summary, _ := usage.json["summary"].(map[string]any)
+	if usage.status != http.StatusOK || summary["unpriced"] != float64(1) || summary["partial"] != float64(1) {
+		t.Errorf("usage summary lacks 1 unpriced and 1 partial: %d %s", usage.status, usage.body)
 	}
 }
 
@@ -441,16 +438,16 @@ func TestAsstWebFetchRefusesUntypedAndNonPublicURLs(t *testing.T) {
 		_, _ = w.Write([]byte("<html><body><p>private page</p></body></html>"))
 	}))
 	t.Cleanup(site.Close)
-	_, api, d, w := asstServe(t)
+	_, api, d, w := asstServeG5(t)
 
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "web_fetch", map[string]any{"url": site.URL + "/page"})), asstReply("blocked"))
-	local := w.start(map[string]string{"text": "fetch " + site.URL + "/page"})
+	local, _ := startG5(w, "fetch "+site.URL+"/page")
 	asstSettleThread(t, d, local)
 	if result := asstToolResult(t, d, local); !strings.Contains(result, "non-public address") || strings.Contains(result, "private page") {
 		t.Errorf("loopback fetch result %s", result)
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w2", "web_fetch", map[string]any{"url": site.URL + "/page"})), asstReply("blocked"))
-	untyped := w.start(map[string]string{"text": "fetch the page I mentioned"})
+	untyped, _ := startG5(w, "fetch the page I mentioned")
 	asstSettleThread(t, d, untyped)
 	if result := asstToolResult(t, d, untyped); !strings.Contains(result, "url is not allowed") {
 		t.Errorf("untyped fetch result %s", result)

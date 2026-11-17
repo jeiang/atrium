@@ -80,7 +80,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			if err != nil {
 				return err
 			}
-			return mediaapp.New(mediaapp.Deps{DB: d, Env: mc.Env, Now: clock(m.Now), Torrents: m.Torrents}).RefreshCatalogue(ctx)
+			return mediaapp.New(mediaapp.Deps{DB: d, Env: mc.Env, Now: clock(m.Now), Torrents: m.Torrents}).RefreshCatalogue(runtime.Unattended(ctx))
 		}}},
 		Settings: library.SettingsDefs(),
 		Host:     library.HostSettings(),

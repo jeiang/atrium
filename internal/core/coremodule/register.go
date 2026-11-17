@@ -319,8 +319,13 @@ func drainBackground(ctx context.Context, d *db.DB, corpora []embed.Corpus) erro
 }
 
 func embedIndex(ctx context.Context, d *db.DB, corpora []embed.Corpus) error {
+	ctx = runtime.Unattended(ctx)
 	for {
 		more, err := embedStep(ctx, d, corpora)
+		if until, held := connections.HeldUntil(err); held {
+			log.Info("embedding index paused after a refusal", "until", until.UTC().Format(time.RFC3339))
+			return runtime.Hold(err, time.Until(until))
+		}
 		if err != nil {
 			return err
 		}

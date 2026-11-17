@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,13 +21,13 @@ import (
 )
 
 func approveRequest(ctx context.Context, client *http.Client, base string, proposal int64) (*http.Response, error) {
-	target := fmt.Sprintf("%s/proposals/%d/approve", base, proposal)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(url.Values{"all": {"1"}}.Encode()))
+	target := fmt.Sprintf("%s/web/v1/approvals/%d/approve", base, proposal)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Atrium-Client", "web")
+	req.Header.Set("Origin", base)
 	for _, c := range client.Jar.Cookies(req.URL) {
 		if c.Name == "atrium_csrf" {
 			req.Header.Set("X-CSRF-Token", c.Value)
@@ -93,14 +91,8 @@ func TestHeldTrackerWriteSettlesOnceAcrossServeShutdown(t *testing.T) {
 	logs := &lockedBuffer{}
 	logx.Setup(logs)
 	base, _, stop := startServeApp(t, freshApp(f), logs)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	client := localWebG5(t, base).http
+	client.Timeout = 0
 
 	answered := make(chan int, 1)
 	go func() {

@@ -15,6 +15,7 @@ func finalBindings() []application.Binding {
 		{Kind: application.ProtocolOnly, Target: "embedding-index", Reason: "lifecycle"},
 		{Kind: application.ProtocolOnly, Target: "module-flags", Reason: "lifecycle"},
 		{Kind: application.ProtocolOnly, Target: "GET " + about.NoticesPath, Reason: "static"},
+		{Kind: application.ProtocolOnly, Target: "HEAD " + about.NoticesPath, Reason: "static"},
 	}
 	return out
 }

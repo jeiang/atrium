@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -221,13 +220,8 @@ func TestOpsSamplerClassifiesAChangeInOneFixedHaikuRequest(t *testing.T) {
 	}
 
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, Timeout: time.Minute}
-	if status, page, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); status != http.StatusOK || strings.Contains(page, "Classification") {
-		t.Errorf("GET /chat = %d, classification thread listed: %v", status, strings.Contains(page, "Classification"))
+	if listed := webG3(t, base).do(http.MethodGet, "/web/v1/threads", nil); listed.status != http.StatusOK || strings.Contains(listed.body, "Classification") {
+		t.Errorf("GET /web/v1/threads = %d, classification thread listed: %v", listed.status, strings.Contains(listed.body, "Classification"))
 	}
 	if ran := runSettings(t, "set", inference.ThreadCapKey, "10"); ran.code != cli.ExitOK {
 		t.Fatalf("raise the thread cap: %d %s", ran.code, ran.stderr)
@@ -323,13 +317,9 @@ func TestOpsMonthlyBudgetRefusalDefersAndRaisesAttention(t *testing.T) {
 		t.Errorf("the pending retry reached the provider %d times while refused", got)
 	}
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, Timeout: time.Minute}
-	if status, page, _ := fetch(t, client, http.MethodGet, base+"/settings/usage", nil); status != http.StatusOK || !strings.Contains(page, "Monthly budget") {
-		t.Errorf("GET /settings/usage = %d", status)
+	usage := dataG3(t, "usage", webG3(t, base).do(http.MethodGet, "/web/v1/usage", nil))
+	if budget, _ := usage["budget"].(map[string]any); budget == nil || budget["budget_usd"] != 0.00102 {
+		t.Errorf("usage budget = %v, want the monthly budget", usage["budget"])
 	}
 	if ran := runSettings(t, "set", inference.BudgetKey, "150"); ran.code != cli.ExitOK {
 		t.Fatalf("raise the budget: %d %s", ran.code, ran.stderr)

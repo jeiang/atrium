@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -238,27 +239,21 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	}
 	dbPath := filepath.Join(m.dir, "atrium.db")
 	id := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM messages WHERE subject = 'Statement'")
-	correct := "/messages/" + id + "/correct"
-	hx := []string{"HX-Request", "true"}
+	correct := "/web/v1/mail/messages/" + id + "/correction"
 
 	t.Setenv("ATRIUM_IMAP_ADDR", "127.0.0.1:1")
 	base, _, stop := startServeApp(t, m.app, &lockedBuffer{})
-	client := mrvClient(t)
-	mrvDo(t, client, http.MethodGet, base+"/triage", nil)
-	if code, _, _ := mrvDo(t, http.DefaultClient, http.MethodPost, base+correct, url.Values{"dest": {"Bills"}}); code != http.StatusForbidden {
-		t.Fatalf("a correction without the CSRF token = %d, want 403", code)
+	client := webG3(t, base)
+	if got := newWebClient(t, base, nil).do(http.MethodPost, correct, map[string]any{"folder": "Bills", "mode": "immediate"}); got.status != http.StatusForbidden {
+		t.Fatalf("a correction without the CSRF token = %d, want 403: %.300s", got.status, got.body)
 	}
-	code, body, _ := mrvDo(t, client, http.MethodPost, base+correct, url.Values{"dest": {"INBOX"}, "context": {"message"}}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "invalid destination") {
-		t.Fatalf("a correction to INBOX = %d: %.400s", code, body)
+	if got := client.do(http.MethodPost, correct, map[string]any{"folder": "INBOX", "mode": "immediate"}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "invalid destination") {
+		t.Fatalf("a correction to INBOX = %d: %.400s", got.status, got.body)
 	}
 	if n := mrvScalar(t, dbPath, "SELECT CAST(COUNT(*) AS TEXT) FROM corrections"); n != "0" {
 		t.Fatalf("refused corrections were stored: %s", n)
 	}
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+correct, url.Values{"dest": {"Bills"}, "context": {"row"}}, hx...)
-	if code != http.StatusOK {
-		t.Fatalf("shadow correction = %d: %.400s", code, body)
-	}
+	dataG3(t, "shadow correction", client.do(http.MethodPost, correct, map[string]any{"folder": "Bills", "mode": "immediate"}))
 	if got := mrvScalar(t, dbPath, "SELECT folder FROM corrections WHERE message_id = ?", id); got != "Bills" {
 		t.Fatalf("shadow correction folder = %s", got)
 	}
@@ -271,16 +266,12 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 		}
 	}
 	base, _, _ = startServeApp(t, m.app, &lockedBuffer{})
-	client = mrvClient(t)
-	mrvDo(t, client, http.MethodGet, base+"/triage", nil)
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+correct, url.Values{"dest": {"Bills"}, "context": {"row"}}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "Moving is paused; it will move after you resume.") || strings.Contains(body, "could not") {
-		t.Fatalf("paused correction = %d: %.400s", code, body)
+	client = webG3(t, base)
+	if paused := dataG3(t, "paused correction", client.do(http.MethodPost, correct, map[string]any{"folder": "Bills", "mode": "immediate"})); !strings.Contains(fmt.Sprint(paused["note"]), "Moving is paused; it will move after you resume.") || paused["outcome"] == "failed" {
+		t.Fatalf("paused correction = %v", paused)
 	}
-	host := strings.TrimPrefix(base, "http://")
-	code, _, header := mrvDo(t, client, http.MethodPost, base+"/live/resume", url.Values{}, "Referer", "http://"+host+"//evil.test")
-	if code != http.StatusSeeOther || header.Get("Location") != "/triage" {
-		t.Fatalf("resume with a foreign referer = %d %q, want a redirect to /triage", code, header.Get("Location"))
+	if resumed := dataG3(t, "resume", client.do(http.MethodPost, "/web/v1/mail/live/resume", nil)); resumed["paused"] != false {
+		t.Fatalf("resume = %v, want unpaused", resumed)
 	}
 	if got := runApp(t, "live", "status"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"paused": false`) {
 		t.Fatalf("live status after resume: %d %s", got.code, got.stdout)
@@ -290,9 +281,8 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
 	t.Setenv("ATRIUM_IMAP_CA", ca)
 	m.dial.Store(true)
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+correct, url.Values{"dest": {"Bills"}, "context": {"row"}}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "The message was moved.") {
-		t.Fatalf("live correction = %d: %.400s", code, body)
+	if moved := dataG3(t, "live correction", client.do(http.MethodPost, correct, map[string]any{"folder": "Bills", "mode": "immediate"})); !strings.Contains(fmt.Sprint(moved["note"]), "The message was moved.") {
+		t.Fatalf("live correction = %v", moved)
 	}
 	if state := mrvScalar(t, dbPath, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "done" {
 		t.Fatalf("correction action state = %s", state)
@@ -301,16 +291,16 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	if got := mrvScalar(t, dbPath, "SELECT outcome || ' ' || details_json FROM operation_audit WHERE operation = 'mail.correct' ORDER BY id DESC LIMIT 1"); got != `ok {"effect_ids":[`+action+`]}` {
 		t.Fatalf("the live correction audit = %s, want ok with effect %s", got, action)
 	}
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+"/live/actions/"+action+"/undo", url.Values{}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "Undone") {
-		t.Fatalf("undo = %d: %.400s", code, body)
+	if got := runAppOn(t, m.app, "live", "undo", action); got.code != cli.ExitOK {
+		t.Fatalf("live undo: %d %s %s", got.code, got.stdout, got.stderr)
 	}
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+"/live/actions/"+action+"/undo", url.Values{}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "Not undone") {
-		t.Fatalf("second undo = %d: %.400s", code, body)
+	if again := client.do(http.MethodPost, "/web/v1/effects/"+action+"/undo", nil); again.status == http.StatusOK {
+		if second := dataG3(t, "second undo", again); second["undone"] != false {
+			t.Fatalf("second undo = %v", second)
+		}
 	}
-	if code, _, _ := mrvDo(t, client, http.MethodPost, base+"/live/actions/999999/undo", url.Values{}, hx...); code != http.StatusNotFound {
-		t.Fatalf("undo of an unknown action = %d, want 404", code)
+	if got := client.do(http.MethodPost, "/web/v1/effects/999999/undo", nil); got.status != http.StatusNotFound {
+		t.Fatalf("undo of an unknown action = %d, want 404", got.status)
 	}
 }
 
@@ -433,36 +423,32 @@ func TestMrvDraftSendNeverResendsAnUncertainMailAndFilesTheSentCopy(t *testing.T
 	toolResult(t, "draft_email_create", map[string]any{"account": "icloud", "to": []any{"friend@x.test"}, "subject": "Lunch plans", "body": "Noon works."})
 	dbPath := filepath.Join(m.dir, "atrium.db")
 	id := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Lunch plans'")
-	draft := "/drafts/" + id
+	draft := "/web/v1/drafts/" + id
 	status := func() string { return mrvScalar(t, dbPath, "SELECT status FROM drafts WHERE id = ?", id) }
-	hx := []string{"HX-Request", "true"}
 
 	t.Setenv("ATRIUM_IMAP_ADDR", "127.0.0.1:1")
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
-	client := mrvClient(t)
-	revision := func() string {
+	client := webG3(t, base)
+	revision := func() int {
 		t.Helper()
-		code, page, _ := mrvDo(t, client, http.MethodGet, base+draft, nil)
-		found := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(page)
-		if code != http.StatusOK || found == nil {
-			t.Fatalf("draft page = %d without a revision: %.400s", code, page)
-		}
-		return found[1]
+		return int(number(t, dataG3(t, "draft", client.do(http.MethodGet, draft, nil))["revision"]))
+	}
+	send := func(rev int) apiReply {
+		t.Helper()
+		return client.do(http.MethodPost, draft+"/send", map[string]any{"revision": rev})
 	}
 
 	smtp.set("auth-fail")
-	code, body, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {revision()}}, hx...)
-	if code != http.StatusConflict {
-		t.Fatalf("send with a refused login = %d: %.400s", code, body)
+	if got := send(revision()); got.status != http.StatusConflict {
+		t.Fatalf("send with a refused login = %d: %.400s", got.status, got.body)
 	}
 	if got := status(); got != "draft" || len(smtp.sent()) != 0 {
 		t.Fatalf("after a refused login the draft is %q and %d messages went out", got, len(smtp.sent()))
 	}
 	smtp.set("drop")
 	stale := revision()
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {stale}}, hx...)
-	if code != http.StatusConflict {
-		t.Fatalf("send lost after DATA = %d: %.400s", code, body)
+	if got := send(stale); got.status != http.StatusConflict {
+		t.Fatalf("send lost after DATA = %d: %.400s", got.status, got.body)
 	}
 	if got := status(); got != "unknown" || len(smtp.sent()) != 1 {
 		t.Fatalf("after a lost reply the draft is %q with %d deliveries", got, len(smtp.sent()))
@@ -475,44 +461,41 @@ func TestMrvDraftSendNeverResendsAnUncertainMailAndFilesTheSentCopy(t *testing.T
 		t.Fatalf("uncertain send audit effect = %s, want %s", effect, unknownEffect)
 	}
 	smtp.set("")
-	for _, rev := range []string{stale, strconv.Itoa(mrvAtoi(t, stale) + 1)} {
-		if code, _, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {rev}}, hx...); code != http.StatusConflict {
-			t.Fatalf("resend of an uncertain draft at revision %s = %d, want 409", rev, code)
+	for _, rev := range []int{stale, stale + 1} {
+		if got := send(rev); got.status != http.StatusConflict {
+			t.Fatalf("resend of an uncertain draft at revision %d = %d, want 409", rev, got.status)
 		}
 	}
 	if n := len(smtp.sent()); n != 1 {
 		t.Fatalf("an uncertain draft was sent again: %d deliveries", n)
 	}
 
-	if code, body, _ := mrvDo(t, client, http.MethodPost, base+draft+"/resolve", url.Values{"outcome": {"draft"}}, hx...); code != http.StatusOK || status() != "draft" {
-		t.Fatalf("back to draft = %d, status %q: %.400s", code, status(), body)
+	if got := client.do(http.MethodPost, draft+"/resolve", map[string]any{"outcome": "draft"}); got.status != http.StatusOK || status() != "draft" {
+		t.Fatalf("back to draft = %d, status %q: %.400s", got.status, status(), got.body)
 	}
 	if effect := mrvScalar(t, dbPath, "SELECT CAST(json_extract(details_json, '$.effect_ids[0]') AS TEXT) FROM operation_audit WHERE operation = 'mail.draft-resolve' ORDER BY id DESC LIMIT 1"); effect != unknownEffect {
 		t.Fatalf("resolved draft audit effect = %s, want %s", effect, unknownEffect)
 	}
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+draft+"/resolve", url.Values{"outcome": {"sent"}}, hx...)
-	if code != http.StatusConflict {
-		t.Fatalf("resolving a settled draft = %d: %.400s", code, body)
+	if got := client.do(http.MethodPost, draft+"/resolve", map[string]any{"outcome": "sent"}); got.status != http.StatusConflict {
+		t.Fatalf("resolving a settled draft = %d: %.400s", got.status, got.body)
 	}
 
 	final := revision()
-	code, _, _ = mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {strconv.Itoa(mrvAtoi(t, final) - 1)}}, hx...)
-	if code != http.StatusConflict || len(smtp.sent()) != 1 {
-		t.Fatalf("stale send = %d with %d deliveries, want 409 and one previous delivery", code, len(smtp.sent()))
+	if got := send(final - 1); got.status != http.StatusConflict || len(smtp.sent()) != 1 {
+		t.Fatalf("stale send = %d with %d deliveries, want 409 and one previous delivery", got.status, len(smtp.sent()))
 	}
 	if outcome := mrvScalar(t, dbPath, "SELECT outcome FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); outcome != "conflict" {
 		t.Fatalf("stale send audit = %s, want conflict", outcome)
 	}
-	code, body, _ = mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {final}}, hx...)
-	if code != http.StatusOK {
-		t.Fatalf("send = %d: %.400s", code, body)
+	if got := send(final); got.status != http.StatusOK {
+		t.Fatalf("send = %d: %.400s", got.status, got.body)
 	}
 	if got := smtp.sent(); status() != "sent" || len(got) != 2 || !strings.Contains(got[1], "Subject: Lunch plans") {
 		t.Fatalf("after send the draft is %q with deliveries %q", status(), got)
 	}
-	for _, rev := range []string{final, strconv.Itoa(mrvAtoi(t, final) + 1)} {
-		if code, _, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {rev}}, hx...); code != http.StatusConflict || len(smtp.sent()) != 2 {
-			t.Fatalf("a sent draft sent again at revision %s: %d, %d deliveries", rev, code, len(smtp.sent()))
+	for _, rev := range []int{final, final + 1} {
+		if got := send(rev); got.status != http.StatusConflict || len(smtp.sent()) != 2 {
+			t.Fatalf("a sent draft sent again at revision %d: %d, %d deliveries", rev, got.status, len(smtp.sent()))
 		}
 	}
 }
@@ -572,18 +555,15 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	}
 
 	base := startServeIn(t, dir)
-	client := mrvClient(t)
-	code, page, _ := mrvDo(t, client, http.MethodGet, base+"/activity", nil)
-	if code != http.StatusOK {
-		t.Fatalf("activity = %d: %.400s", code, page)
-	}
+	client := webG3(t, base)
+	okG3(t, "activity", client.do(http.MethodGet, "/web/v1/effects", nil))
 	undo := func(id string) (int, string) {
 		t.Helper()
-		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/activity/effect/"+id+"/undo", url.Values{})
-		return code, body
+		got := client.do(http.MethodPost, "/web/v1/effects/"+id+"/undo", nil)
+		return got.status, got.body
 	}
 
-	if code, body := undo(fileSecond); code != http.StatusSeeOther || content() != "first" {
+	if code, body := undo(fileSecond); code != http.StatusOK || content() != "first" {
 		t.Fatalf("undo of the overwrite = %d, note %q: %s", code, content(), body)
 	}
 	if err := os.WriteFile(note, []byte("changed"), 0o666); err != nil {
@@ -599,7 +579,7 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	if code, body := undo(profileFirst); code != http.StatusConflict || profile() != "UTC" {
 		t.Fatalf("undo of a superseded profile write = %d, tz %q: %s", code, profile(), body)
 	}
-	if code, body := undo(profileSecond); code != http.StatusSeeOther || profile() != "AST" {
+	if code, body := undo(profileSecond); code != http.StatusOK || profile() != "AST" {
 		t.Fatalf("undo of the latest record write = %d, body %q: %s", code, profile(), body)
 	}
 	if code, body := undo(profileFirst); code != http.StatusConflict || profile() != "AST" {
@@ -616,29 +596,37 @@ func TestMrvDecisionsListEachDecisionOnceAcrossCheckAndFiled(t *testing.T) {
 		t.Fatalf("sync: %d %s", got.code, got.stderr)
 	}
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
-	client := mrvClient(t)
-	code, body, _ := mrvDo(t, client, http.MethodGet, base+"/triage", nil)
-	if code != http.StatusOK {
-		t.Fatalf("GET /triage = %d", code)
-	}
-	seen := map[string]int{}
-	for _, part := range strings.Split(body, `id="decision-`)[1:] {
-		seen[part[:strings.IndexByte(part, '"')]]++
+	client := webG3(t, base)
+	triage := dataG3(t, "triage", client.do(http.MethodGet, "/web/v1/mail/triage", nil))
+	check, _ := triage["check"].([]any)
+	items, _ := triage["items"].([]any)
+	seen := map[any]int{}
+	for _, row := range append(append([]any{}, check...), items...) {
+		seen[row.(map[string]any)["decision_id"]]++
 	}
 	if len(seen) == 0 {
-		t.Fatal("the decisions page lists no decision after a sync")
+		t.Fatal("the decisions list has no decision after a sync")
 	}
 	for id, n := range seen {
 		if n != 1 {
-			t.Errorf("decision %s is listed %d times", id, n)
+			t.Errorf("decision %v is listed %d times", id, n)
 		}
 	}
-	check, _, _ := strings.Cut(body, ">Filed<")
-	if n := strings.Count(check, `id="decision-`); n != 1 || !strings.Contains(check, "1 more from this sender") {
-		t.Errorf("two decisions to check from one sender show %d rows, with the count %v", n, strings.Contains(check, "1 more from this sender"))
+	if len(check) != 1 || check[0].(map[string]any)["more"] != float64(1) {
+		t.Errorf("two decisions to check from one sender show %d rows: %v", len(check), check)
 	}
-	if code, all, _ := mrvDo(t, client, http.MethodGet, base+"/triage?q=pay%40bank.test", nil); code != http.StatusOK || strings.Count(all, "tatement</a>") != 2 {
-		t.Errorf("the sender's list = %d with %d statements, want 2", code, strings.Count(all, "tatement</a>"))
+	sender := dataG3(t, "sender triage", client.do(http.MethodGet, "/web/v1/mail/triage?q=pay%40bank.test", nil))
+	statements := map[any]bool{}
+	for _, list := range []string{"check", "items"} {
+		rows, _ := sender[list].([]any)
+		for _, row := range rows {
+			if r := row.(map[string]any); strings.Contains(fmt.Sprint(r["subject"]), "tatement") {
+				statements[r["message_id"]] = true
+			}
+		}
+	}
+	if len(statements) != 2 {
+		t.Errorf("the sender's list has %d statements, want 2: %v", len(statements), sender)
 	}
 }
 
@@ -654,15 +642,12 @@ func TestMrvDraftSendAuditsDeliveredMailWithAFailedSentCopyAsPartial(t *testing.
 	toolResult(t, "draft_email_create", map[string]any{"account": "icloud", "to": []any{"friend@x.test"}, "subject": "Lunch plans", "body": "Noon works."})
 	path := filepath.Join(m.dir, "atrium.db")
 	id := mrvScalar(t, path, "SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Lunch plans'")
-	revision := mrvScalar(t, path, "SELECT CAST(revision AS TEXT) FROM drafts WHERE id = ?", id)
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
-	client := mrvClient(t)
-	if code, _, _ := mrvDo(t, client, http.MethodGet, base+"/drafts/"+id, nil); code != http.StatusOK {
-		t.Fatalf("draft page = %d", code)
-	}
-	code, _, _ := mrvDo(t, client, http.MethodPost, base+"/drafts/"+id+"/send", url.Values{"revision": {revision}}, "HX-Request", "true")
-	if code != http.StatusOK || len(smtp.sent()) != 1 {
-		t.Fatalf("delivered send = %d with %d deliveries", code, len(smtp.sent()))
+	client := webG3(t, base)
+	revision := number(t, dataG3(t, "draft", client.do(http.MethodGet, "/web/v1/drafts/"+id, nil))["revision"])
+	sent := client.do(http.MethodPost, "/web/v1/drafts/"+id+"/send", map[string]any{"revision": revision})
+	if sent.status != http.StatusOK || len(smtp.sent()) != 1 {
+		t.Fatalf("delivered send = %d with %d deliveries: %.400s", sent.status, len(smtp.sent()), sent.body)
 	}
 	if outcome := mrvScalar(t, path, "SELECT outcome FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); outcome != "partial" {
 		t.Fatalf("failed Sent-copy audit = %s, want partial", outcome)

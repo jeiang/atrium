@@ -6,13 +6,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -131,18 +130,39 @@ func hashedVector(text string, dim int) []float64 {
 	return v
 }
 
-var progressRE = regexp.MustCompile(`data-progress>(\d+) of (\d+)<`)
-
-func embedProgress(t *testing.T, base string) (done, total int, page string) {
+func embedProgress(t *testing.T, path string) (done, total int, page string) {
 	t.Helper()
-	_, page, _ = fetch(t, http.DefaultClient, http.MethodGet, base+"/settings/mail", nil)
-	m := progressRE.FindStringSubmatch(page)
-	if m == nil {
-		return -1, -1, page
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	done, _ = strconv.Atoi(m[1])
-	total, _ = strconv.Atoi(m[2])
-	return done, total, page
+	defer func() { _ = d.Close() }()
+	rows, err := d.Read.Query("SELECT state, model, dimension, done, total FROM embed_index ORDER BY generation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	done, total = -1, -1
+	var b strings.Builder
+	for rows.Next() {
+		var state, model string
+		var dimension, built, size int
+		if err := rows.Scan(&state, &model, &dimension, &built, &size); err != nil {
+			t.Fatal(err)
+		}
+		if state == "building" {
+			done, total = built, size
+			b.WriteString("Re-embedding ")
+		}
+		if model != "" {
+			b.WriteString(model + " · ")
+		}
+		fmt.Fprintf(&b, "%d dimensions\n", dimension)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return done, total, b.String()
 }
 
 func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, path string) {
@@ -234,7 +254,7 @@ func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *test
 	fake.release(1000)
 	base, _, stop := startServeStoppable(t, dir)
 	waitFor(t, func() bool {
-		_, _, page := embedProgress(t, base)
+		_, _, page := embedProgress(t, path)
 		return strings.Contains(page, bigModel+" · 1024 dimensions") && !strings.Contains(page, "Re-embedding")
 	})
 	if got := gmailSearch(t, base, token); got == "" || fake.lastQueryModel() != bigModel {
@@ -260,7 +280,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 
 	base, _, stop := startServeStoppable(t, dir)
 	waitFor(t, func() bool {
-		_, _, page := embedProgress(t, base)
+		_, _, page := embedProgress(t, path)
 		return strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
 	before := gmailSearch(t, base, token)
@@ -275,7 +295,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	var first, total int
 	waitFor(t, func() bool {
 		var page string
-		first, total, page = embedProgress(t, base)
+		first, total, page = embedProgress(t, path)
 		return first > 0 && first < total && strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
 	if during := gmailSearch(t, base, token); during != before || fake.lastQueryModel() != "embeddinggemma" {
@@ -283,7 +303,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	}
 	fake.release(1)
 	waitFor(t, func() bool {
-		done, _, _ := embedProgress(t, base)
+		done, _, _ := embedProgress(t, path)
 		return done > first
 	})
 	stop()
@@ -291,7 +311,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	fake.release(1000)
 	base, _, stop = startServeStoppable(t, dir)
 	waitFor(t, func() bool {
-		_, _, page := embedProgress(t, base)
+		_, _, page := embedProgress(t, path)
 		return strings.Contains(page, bigModel+" · 1024 dimensions") && !strings.Contains(page, "Re-embedding")
 	})
 	stop()

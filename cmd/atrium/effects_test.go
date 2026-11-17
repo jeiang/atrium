@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -58,11 +57,13 @@ func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil)
-	if code != http.StatusOK || !strings.Contains(body, "/activity/effect/"+strconv.FormatInt(effectID, 10)+"/undo") {
-		t.Fatalf("activity page = %d, want one effect undo: %.400s", code, body)
+	browser := webG3(t, base)
+	effectPath := "/web/v1/effects/" + strconv.FormatInt(effectID, 10)
+	if listedEffect := activityG3(t, browser, "", "effect", effectID); len(listedEffect) != 1 || listedEffect[0]["operation"] != "task_add" {
+		t.Fatalf("activity before undo = %v, want the task effect once", listedEffect)
+	}
+	if view := dataG3(t, "effect read", browser.do(http.MethodGet, effectPath, nil)); view["undoable"] != true {
+		t.Fatalf("effect before undo = %v, want undoable", view)
 	}
 
 	undone := runApp(t, "effects", "undo", strconv.FormatInt(effectID, 10))
@@ -99,15 +100,11 @@ func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
 		t.Fatalf("second undo refusal = %q", refused.stderr)
 	}
 
-	code, body, _ = fetch(t, client, http.MethodGet, base+"/activity", nil)
-	if code != http.StatusOK {
-		t.Fatalf("activity page after undo = %d", code)
+	if listedEffect := activityG3(t, browser, "", "effect", effectID); len(listedEffect) != 1 {
+		t.Fatalf("activity after undo shows the task effect %d times, want once", len(listedEffect))
 	}
-	if strings.Count(body, "id=\"activity-effect-"+strconv.FormatInt(effectID, 10)+"\"") != 1 {
-		t.Fatalf("activity page shows the task effect more than once: %.800s", body)
-	}
-	if !strings.Contains(body, "Undone") {
-		t.Fatalf("activity page does not mark the effect undone: %.800s", body)
+	if view := dataG3(t, "effect read after undo", browser.do(http.MethodGet, effectPath, nil)); view["undoable"] != false || view["undone_by"] != float64(undo.ID) {
+		t.Fatalf("effect after undo = %v, want undone by %d", view, undo.ID)
 	}
 
 	after := runApp(t, "effects", "list", "--operation", "task_add")

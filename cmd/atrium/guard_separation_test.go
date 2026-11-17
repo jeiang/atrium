@@ -37,28 +37,30 @@ func TestGuardOIDCSessionCookieIsStrictWhileTheSignInBindingStaysLax(t *testing.
 
 	b := s.browser()
 	s.idp.Approve("admin")
-	start := b.post("/login", url.Values{"next": {"/settings/auth"}})
+	start := b.post("/login", url.Values{"next": {"/inbox"}})
 	wimExpect(t, start, http.StatusSeeOther)
 	expectCookieAttributes(t, setCookieLine(t, start.header, "atrium_oidc_state"), "HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=600")
 	authz := b.get(start.location())
 	wimExpect(t, authz, http.StatusFound)
 	cb := b.get(authz.location())
 	wimExpect(t, cb, http.StatusSeeOther)
-	if cb.location() != "/settings/auth" {
-		t.Fatalf("callback returns to %q, want /settings/auth", cb.location())
+	if cb.location() != "/inbox" {
+		t.Fatalf("callback returns to %q, want /inbox", cb.location())
 	}
 	expectCookieAttributes(t, setCookieLine(t, cb.header, "atrium_session"), "HttpOnly", "SameSite=Strict", "Path=/")
-	wimExpect(t, b.get("/settings/auth"), http.StatusOK, "Sign-in")
+	if email := wimEmailG5(t, b.meG5()); email != "boss@example.com" {
+		t.Fatalf("session is %q", email)
+	}
 }
 
 func TestGuardOIDCCrossSiteArrivalGetsOneSameSiteContinue(t *testing.T) {
 	t.Parallel()
 	s := wimOIDCSite(t)
 	anon := s.browser()
-	const target = "/settings/auth?tab=a&view=b"
+	const target = "/third-party-notices.txt?tab=a&view=b"
 
 	arrival := anon.get(target, crossSiteNavigation...)
-	wimExpect(t, arrival, http.StatusOK, `content="0;url=/settings/auth?tab=a&amp;view=b"`, `<a href="/settings/auth?tab=a&amp;view=b">Continue to Atrium</a>`)
+	wimExpect(t, arrival, http.StatusOK, `content="0;url=/third-party-notices.txt?tab=a&amp;view=b"`, `<a href="/third-party-notices.txt?tab=a&amp;view=b">Continue to Atrium</a>`)
 	if got := arrival.header.Values("Set-Cookie"); len(got) != 0 {
 		t.Fatalf("the continue page sets cookies: %q", got)
 	}
@@ -71,7 +73,7 @@ func TestGuardOIDCCrossSiteArrivalGetsOneSameSiteContinue(t *testing.T) {
 
 	followed := anon.get(target, "Sec-Fetch-Site", "same-origin", "Sec-Fetch-Mode", "navigate", "Sec-Fetch-Dest", "document")
 	wimExpect(t, followed, http.StatusSeeOther)
-	if followed.location() != "/login?next=%2Fsettings%2Fauth%3Ftab%3Da%26view%3Db" {
+	if followed.location() != "/login?next=%2Fthird-party-notices.txt%3Ftab%3Da%26view%3Db" {
 		t.Fatalf("a same-origin arrival without a session goes to %q", followed.location())
 	}
 	if unmarked := anon.get(target); unmarked.status != http.StatusSeeOther || !strings.HasPrefix(unmarked.location(), "/login?next=") {
@@ -84,7 +86,11 @@ func TestGuardOIDCCrossSiteArrivalGetsOneSameSiteContinue(t *testing.T) {
 
 	signedIn := s.browser()
 	signedIn.mustSignIn("admin")
-	wimExpect(t, signedIn.get("/settings/auth", crossSiteNavigation...), http.StatusOK, "Sign-in")
+	notices := signedIn.get(target, crossSiteNavigation...)
+	wimExpect(t, notices, http.StatusOK)
+	if !strings.HasPrefix(notices.header.Get("Content-Type"), "text/plain") || strings.Contains(notices.body, "Continue to Atrium") {
+		t.Fatalf("a signed-in cross-site arrival: %v %.200q", notices.header, notices.body)
+	}
 }
 
 func TestGuardSurfacesTakeOnlyTheirOwnCredentials(t *testing.T) {
@@ -143,8 +149,8 @@ func TestGuardProxyHeadersNeedATrustedPeer(t *testing.T) {
 	t.Parallel()
 	base, _ := wimServeIn(t, t.TempDir(), "--auth", "proxy", "--allowed-host", "127.0.0.1", "--trusted-proxy", "192.0.2.0/24")
 	headers := []string{"Remote-Groups", "atrium_access, atrium_admin", "Remote-User", "owner", "X-Forwarded-For", "192.0.2.7"}
-	if status, _, _ := wimGet(t, base+"/settings/mail", headers...); status != http.StatusForbidden {
-		t.Fatalf("an untrusted peer with proxy headers opened a page: %d", status)
+	if status, _, _ := wimGet(t, base+"/third-party-notices.txt", headers...); status != http.StatusForbidden {
+		t.Fatalf("an untrusted peer with proxy headers opened an authenticated page: %d", status)
 	}
 	if status, body, _ := wimGet(t, base+"/web/v1/me", append(headers, "Atrium-Client", "web")...); status != http.StatusUnauthorized {
 		t.Fatalf("an untrusted peer with proxy headers on /web/v1: %d %s", status, body)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -112,11 +113,26 @@ func TestServeMirrorsCalDAVAndCardDAVOnSchedule(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id, schedule FROM jobs WHERE declaration_key = ?", davJobKeys[0]).Scan(&jobID, &schedule); err != nil {
 		t.Fatal(err)
 	}
-	b := mnpNewBrowser(t, base)
-	if page := b.want(http.MethodGet, "/scheduled", nil, http.StatusOK, passrun.CalDAV); strings.Contains(page, fmt.Sprintf(`id="job-schedule-%d"`, jobID)) {
-		t.Fatalf("the Scheduled page offers to edit the fixed CalDAV schedule")
+	b := localWebG5(t, base)
+	list := b.do(http.MethodGet, "/web/v1/schedules", nil)
+	var jobs struct {
+		Items []struct {
+			ID int64 `json:"id"`
+		} `json:"items"`
 	}
-	b.want(http.MethodPost, fmt.Sprintf("/scheduled/%d/schedule", jobID), url.Values{"schedule": {"*/5 * * * *"}}, http.StatusUnprocessableEntity, "fixed by its module")
+	if list.status != http.StatusOK || !strings.Contains(list.body, string(passrun.CalDAV)) || json.Unmarshal([]byte(list.body), &jobs) != nil {
+		t.Fatalf("schedules: %d %.300s", list.status, list.body)
+	}
+	listed := false
+	for _, job := range jobs.Items {
+		listed = listed || job.ID == jobID
+	}
+	if !listed {
+		t.Fatalf("schedules list lacks job %d: %.300s", jobID, list.body)
+	}
+	if edit := b.do(http.MethodPatch, fmt.Sprintf("/web/v1/schedules/%d", jobID), map[string]any{"schedule": "*/5 * * * *"}); edit.status != http.StatusConflict || !strings.Contains(edit.body, "fixed by its module") {
+		t.Fatalf("fixed schedule edit = %d %.300s", edit.status, edit.body)
+	}
 	var after string
 	if err := d.Read.QueryRow("SELECT schedule FROM jobs WHERE id = ?", jobID).Scan(&after); err != nil || after != schedule {
 		t.Fatalf("CalDAV schedule %q after a refused edit (%v), want %q", after, err, schedule)

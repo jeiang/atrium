@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -82,9 +83,9 @@ func TestClientServesAtRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker, err := fs.ReadFile(app.FS, "sw.js")
-	if err != nil {
-		t.Fatal(err)
+	worker, workerErr := fs.ReadFile(app.FS, "sw.js")
+	if workerErr != nil && !errors.Is(workerErr, fs.ErrNotExist) {
+		t.Fatal(workerErr)
 	}
 	asset, gzipped := nextAsset(t)
 	plain, err := fs.ReadFile(app.FS, asset)
@@ -149,6 +150,12 @@ func TestClientServesAtRoot(t *testing.T) {
 		}
 		for _, target := range []string{"/sw.js", "/next/sw.js"} {
 			script := nextGet(t, base, target, "Accept", "*/*", "Accept-Encoding", "identity")
+			if workerErr != nil {
+				if script.status != http.StatusNotFound || string(script.body) == string(shell) {
+					t.Fatalf("%s%s without a staged worker: %d %q", base, target, script.status, script.body)
+				}
+				continue
+			}
 			if script.status != http.StatusOK || string(script.body) != string(worker) || script.header.Get("Cache-Control") != "no-cache" || script.header.Get("Content-Security-Policy") != clientPolicy {
 				t.Fatalf("%s%s: %d %v", base, target, script.status, script.header)
 			}
@@ -177,8 +184,8 @@ func TestClientServesAtRoot(t *testing.T) {
 				t.Fatalf("%s%s still served: %d", base, gone, old.status)
 			}
 		}
-		if post := nextPost(t, base, "/inbox"); post.status == http.StatusOK {
-			t.Fatalf("%s POST to a client path reached the shell", base)
+		if status, body, _ := noFollowG5(t, http.MethodPost, base+"/inbox"); status == http.StatusOK || strings.Contains(body, "<title>atrium</title>") {
+			t.Fatalf("%s POST to a client path reached the shell: %d", base, status)
 		}
 	}
 	if healthz := nextGet(t, s.base, "/healthz"); healthz.status != http.StatusOK || healthz.header.Get("Content-Security-Policy") != serverPolicy {

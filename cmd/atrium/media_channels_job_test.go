@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -53,9 +52,9 @@ func TestMediaChannelsJobSkipsUntilAShowIsFollowed(t *testing.T) {
 	}
 
 	base, _, stop := startServeStoppable(t, dir)
-	b := mnpNewBrowser(t, base)
-	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}}, http.StatusOK)
+	b := webG3(t, base)
+	okG3(t, "channels", b.do(http.MethodGet, "/web/v1/media/channels", nil))
+	okG3(t, "follow a show", b.do(http.MethodPost, "/web/v1/media/channels", map[string]any{"name": "Lanterns", "imdb": "tt1234567", "pattern": "1080p"}))
 	stop()
 	if n := fetched.Load(); n != 0 {
 		t.Fatalf("following a show without backfill made %d EZTV requests", n)

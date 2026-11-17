@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/logx"
 )
 
@@ -350,7 +351,7 @@ func (c *Client) send(ctx context.Context, step, method string, target *url.URL,
 	}
 	if resp.StatusCode != http.StatusMultiStatus {
 		status := &StatusError{Method: method, URL: maskedURL(target), Status: resp.StatusCode, Step: step,
-			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != "", RetryAfter: retryAfter(resp.Header.Get("Retry-After"), time.Now()), empty: len(bytes.TrimSpace(raw)) == 0}
+			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != "", RetryAfter: connections.RetryAfter(resp.Header.Get("Retry-After"), time.Now()), empty: len(bytes.TrimSpace(raw)) == 0}
 		log.Warn("dav request failed", "step", step, "method", method, "status", resp.StatusCode, "host", status.Host, "challenge", status.Challenge)
 		if location := resp.Header.Get("Location"); location != "" {
 			status.location, _ = resolve(target, location)

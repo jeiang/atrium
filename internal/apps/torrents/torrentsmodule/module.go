@@ -87,7 +87,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			if err != nil {
 				return err
 			}
-			return m.App.Watch(ctx, contract.Deps{DB: d, Env: mc.Env})
+			return m.App.Watch(runtime.Unattended(ctx), contract.Deps{DB: d, Env: mc.Env})
 		}}},
 		Pages: []web.Page{{
 			Module: func(_ chi.Router, d *web.Deps) { routes(d, m.pageService(d)) },

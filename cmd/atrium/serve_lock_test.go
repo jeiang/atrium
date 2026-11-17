@@ -1,7 +1,7 @@
 package main
 
 import (
-	"net/url"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -41,14 +41,11 @@ func TestWebCorrectionWaitsForTheServeSyncPass(t *testing.T) {
 		t.Fatal("the scheduled pass never reached its COPY")
 	}
 
-	client := mrvClient(t)
-	if code, _, _ := mrvDo(t, client, "GET", base+"/triage", nil); code != 200 {
-		t.Fatalf("GET /triage = %d", code)
-	}
-	code, body, _ := mrvDo(t, client, "POST", base+"/messages/"+m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE id = ?", id)+"/correct",
-		url.Values{"dest": {"Bills"}, "context": {"row"}}, "HX-Request", "true")
-	if code != 200 || !strings.Contains(body, "It could not be moved yet") {
-		t.Fatalf("the web correction during the pass = %d: %.400s, want it told the message could not be moved yet", code, body)
+	client := webG3(t, base)
+	okG3(t, "mail triage", client.do(http.MethodGet, "/web/v1/mail/triage", nil))
+	corrected := client.do(http.MethodPost, "/web/v1/mail/messages/"+m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE id = ?", id)+"/correction", map[string]any{"folder": "Bills", "mode": "immediate"})
+	if !strings.Contains(corrected.body, "It could not be moved yet") {
+		t.Fatalf("the web correction during the pass = %d: %.400s, want it told the message could not be moved yet", corrected.status, corrected.body)
 	}
 	if n := m.copies(); n != 0 {
 		t.Fatalf("%d COPY commands completed while the pass held its COPY, want none from the web correction", n)

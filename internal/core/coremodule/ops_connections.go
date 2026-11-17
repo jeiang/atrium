@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/db"
@@ -61,6 +62,10 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 	if err != nil {
 		return err
 	}
+	holds, err := connections.New(d, config.From(ctx).Host(), reg)
+	if err != nil {
+		return err
+	}
 	seen, unseen := connections.Outcomes(reg)
 	defer unseen()
 	syncUnits()
@@ -74,6 +79,12 @@ func watchConnections(ctx context.Context, d *db.DB) error {
 		case <-ticker.C:
 			observe(connectionsapp.ObserveHealthInput{})
 		case outcome := <-seen:
+			if outcome.Held != nil {
+				if err := holds.RecordHold(ctx, outcome); err != nil && ctx.Err() == nil {
+					log.Warn("connection refusal hold not recorded", logx.Integration, string(outcome.ID), logx.Err, err.Error())
+				}
+				continue
+			}
 			observe(connectionsapp.ObserveHealthInput{ID: outcome.ID, Recovered: outcome.OK, Capability: outcome.Capability})
 		case <-svc.UnitsChanged():
 			syncUnits()

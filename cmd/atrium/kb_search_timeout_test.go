@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -29,10 +28,7 @@ func TestKBSearchSkipsSemanticSearchWhenEmbeddingStalls(t *testing.T) {
 	})
 
 	base, _, stop := startServeStoppable(t, dir)
-	w := asstBrowse(t, base)
-	id := knowledgeCreate(t, w, url.Values{
-		"title": {"Codes"}, "body": {"the ledger code is 7712"}, "scope": {"work"},
-	})
+	id := knowledgeCreateG3(t, webG3(t, base), "Codes", "the ledger code is 7712", "work")
 	stop()
 
 	_, _, stop = startServeStoppable(t, dir)

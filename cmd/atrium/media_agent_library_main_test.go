@@ -1,9 +1,9 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,28 +88,37 @@ func searchThroughServe(t *testing.T, api *modelLog, d *db.DB, w *asstWeb, query
 	return lastToolResult(t, d, thread)
 }
 
+func searchThroughServeG3(t *testing.T, api *modelLog, d *db.DB, w *webClient, query string) librarySearch {
+	t.Helper()
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("lib", "library_search", map[string]any{"query": query})), asstReply("done"))
+	thread := startThreadG3(t, w, "find "+query)
+	if state := asstSettleThread(t, d, thread); state != "done" {
+		t.Fatalf("library search run %s", state)
+	}
+	return lastToolResult(t, d, thread)
+}
+
 func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	agent := libraryAgent(t, dir)
 	asstWarm(t)
 	d := asstDB(t, dir)
-	w := asstBrowse(t, startServeIn(t, dir))
+	w := webG3(t, startServeIn(t, dir))
 
-	movie := "/apps/media/library/movie/" + url.PathEscape(libraryMovie)
-	for _, target := range []string{"/apps/media/library", movie, "/apps/media/library/tv/" + libraryShow} {
-		if code, body, _ := w.get(target, false); code != http.StatusOK {
-			t.Fatalf("GET %s = %d: %.300s", target, code, body)
+	movie := "/web/v1/media/library/movie/" + base64.RawURLEncoding.EncodeToString([]byte(libraryMovie))
+	show := "/web/v1/media/library/" + library.KindShow + "/" + base64.RawURLEncoding.EncodeToString([]byte(libraryShow))
+	for _, target := range []string{"/web/v1/media/library", movie, show} {
+		if view := dataG3(t, "GET "+target, w.do(http.MethodGet, target, nil)); view["catalogue"].(map[string]any)["stale"] != false {
+			t.Fatalf("GET %s from a current catalogue = %v", target, view)
 		}
 	}
-	if code, _, _ := w.get("/apps/media/library/movie/Missing", false); code != http.StatusNotFound {
-		t.Fatalf("missing movie = %d", code)
-	}
-	found := searchThroughServe(t, api, d, w, "lanterns")
+	expectAPI(t, w.do(http.MethodGet, "/web/v1/media/library/movie/"+base64.RawURLEncoding.EncodeToString([]byte("Missing")), nil), http.StatusNotFound, "not_found")
+	found := searchThroughServeG3(t, api, d, w, "lanterns")
 	if found.Catalogue != "current" || len(found.Results) != 1 || found.Results[0].Title != libraryShow || len(found.Results[0].Files) != 1 || found.Results[0].Files[0] != libraryEpisode {
 		t.Fatalf("library search %+v", found)
 	}
-	found = searchThroughServe(t, api, d, w, "dune")
+	found = searchThroughServeG3(t, api, d, w, "dune")
 	if len(found.Results) != 1 || found.Results[0].Kind != library.KindMovie || len(found.Results[0].Files) != 1 || found.Results[0].Files[0] != "movies/"+libraryMovie+"/"+libraryMovie+".mkv" {
 		t.Fatalf("movie search %+v", found)
 	}
@@ -119,10 +128,8 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 	}
 	var stale librarySearch
 	waitUntil(t, 60*time.Second, "the serve catalogue to turn stale", func() bool {
-		if code, body, _ := w.get("/apps/media/library", false); code != http.StatusOK {
-			t.Fatalf("library while the agent fails = %d: %.300s", code, body)
-		}
-		stale = searchThroughServe(t, api, d, w, "dune")
+		dataG3(t, "library while the agent fails", w.do(http.MethodGet, "/web/v1/media/library", nil))
+		stale = searchThroughServeG3(t, api, d, w, "dune")
 		if stale.Catalogue != "stale" {
 			time.Sleep(time.Second)
 			return false
@@ -132,9 +139,9 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 	if len(stale.Results) != 1 || stale.Results[0].Title != "Dune" {
 		t.Fatalf("a failed scan dropped catalogue entries: %+v", stale)
 	}
-	for _, target := range []string{movie, "/apps/media/library/tv/" + libraryShow} {
-		if code, body, _ := w.get(target, false); code != http.StatusOK || !strings.Contains(body, "Showing the library as of") {
-			t.Fatalf("detail page %s from the stale catalogue = %d without the stale notice: %.300s", target, code, body)
+	for _, target := range []string{movie, show} {
+		if view := dataG3(t, "GET "+target, w.do(http.MethodGet, target, nil)); view["catalogue"].(map[string]any)["stale"] != true {
+			t.Fatalf("detail %s from the stale catalogue is not marked stale: %v", target, view)
 		}
 	}
 
@@ -143,10 +150,8 @@ func TestLibraryReadsComeFromTheAgent(t *testing.T) {
 	}
 
 	agent.terminate(t)
-	for _, target := range []string{"/apps/media/library", movie} {
-		if code, body, _ := w.get(target, false); code != http.StatusOK {
-			t.Fatalf("GET %s with the agent stopped = %d: %.300s", target, code, body)
-		}
+	for _, target := range []string{"/web/v1/media/library", movie} {
+		dataG3(t, "GET "+target+" with the agent stopped", w.do(http.MethodGet, target, nil))
 	}
 }
 
@@ -155,11 +160,11 @@ func TestLibraryWithoutAnyCatalogueIsUnavailable(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	agent := libraryAgent(t, dir)
 	agent.terminate(t)
-	w := asstBrowse(t, startServeIn(t, dir))
-	if code, body, _ := w.get("/apps/media/library", false); code != http.StatusServiceUnavailable {
-		t.Fatalf("library with an unreachable agent = %d, want 503: %.300s", code, body)
+	w := webG3(t, startServeIn(t, dir))
+	if got := w.do(http.MethodGet, "/web/v1/media/library", nil); got.status != http.StatusServiceUnavailable {
+		t.Fatalf("library with an unreachable agent = %d, want 503: %.300s", got.status, got.body)
 	}
-	if code, body, _ := w.get("/apps/media/library/movie/"+url.PathEscape(libraryMovie), false); code != http.StatusServiceUnavailable {
-		t.Fatalf("movie with an unreachable agent = %d, want 503: %.300s", code, body)
+	if got := w.do(http.MethodGet, "/web/v1/media/library/movie/"+base64.RawURLEncoding.EncodeToString([]byte(libraryMovie)), nil); got.status != http.StatusServiceUnavailable {
+		t.Fatalf("movie with an unreachable agent = %d, want 503: %.300s", got.status, got.body)
 	}
 }

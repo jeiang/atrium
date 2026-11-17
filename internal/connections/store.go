@@ -1353,10 +1353,19 @@ func (s *Store) Test(ctx context.Context, id ID, commits ...Commit) (View, error
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
+	view, updated, err := s.write(ctx, id, lease.revision, def.Grace, def.Interactive, results, commits...)
+	if err == nil && !updated {
+		return View{}, &Conflict{ID: id, Revision: lease.revision}
+	}
+	return view, err
 }
 
 func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Duration, interactive []string, results []Result, commits ...Commit) (View, error) {
+	view, _, err := s.write(ctx, id, revision, grace, interactive, results, commits...)
+	return view, err
+}
+
+func (s *Store) write(ctx context.Context, id ID, revision int64, grace time.Duration, interactive []string, results []Result, commits ...Commit) (View, bool, error) {
 	at := s.now()
 	now := float64(at.UnixNano()) / 1e9
 	var previous, next, state State
@@ -1377,6 +1386,7 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 		}
 		_ = json.Unmarshal([]byte(priorJSON), &priorResult)
 		keepInteractive(results, priorResult, interactive)
+		carryHolds(results, priorResult)
 		state, reason = aggregate(results, nil)
 		var lastOK, reauthAt any
 		if state == OK {
@@ -1406,13 +1416,13 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 		updated = n > 0
 		return committed(ctx, tx, updated, commits)
 	}); err != nil {
-		return View{}, err
+		return View{}, false, err
 	}
-	if !updated {
-		return s.afterWrite(ctx, id)
+	if updated {
+		s.announce(ctx, id, previous, next, reason)
 	}
-	s.announce(ctx, id, previous, next, reason)
-	return s.afterWrite(ctx, id)
+	view, err := s.afterWrite(ctx, id)
+	return view, updated, err
 }
 
 func (s *Store) refusePinned(current View, cand Candidate) error {
@@ -1631,8 +1641,6 @@ func (s *Store) Disconnect(ctx context.Context, id ID, commits ...Commit) error 
 
 const observeRefresh = time.Minute
 
-// Recover records capability as ok after a real request to it succeeded,
-// without a check request. A row changed since v was read is left alone.
 func (s *Store) Recover(ctx context.Context, v View, capability string) error {
 	err := s.Observe(ctx, v.ID, v.revision, Result{Capability: capability, State: OK})
 	if errors.As(err, new(*Conflict)) {
@@ -1642,6 +1650,10 @@ func (s *Store) Recover(ctx context.Context, v View, capability string) error {
 }
 
 func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Result) error {
+	return s.observe(ctx, id, revision, func([]Result) Result { return result }, true)
+}
+
+func (s *Store) observe(ctx context.Context, id ID, revision int64, derive func(prior []Result) Result, checked bool) error {
 	var (
 		previous State
 		state    State
@@ -1673,6 +1685,7 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		if resultsJSON != "" {
 			_ = json.Unmarshal([]byte(resultsJSON), &prior)
 		}
+		result := derive(prior)
 		results := slices.Clone(prior)
 		replaced := false
 		for i := range results {
@@ -1693,6 +1706,7 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		at := s.now()
 		priorStored := previous
 		carryGrace(results, prior, previous, grace, at)
+		carryHolds(results, prior)
 		var stored State
 		stored, reason = aggregate(results, nil)
 		previous, state = effective(previous, prior, timeOr(fromUnix(priorAt), at)), effective(stored, results, at)
@@ -1705,8 +1719,8 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 			return nil
 		}
 		res, err := tx.ExecContext(ctx,
-			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = CASE WHEN ? = 'ok' THEN ? ELSE last_ok_at END, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
-			stored, reason, now, stored, now, string(raw), now, id, revision)
+			"UPDATE connections SET state = ?, reason = ?, checked_at = CASE WHEN ? THEN ? ELSE checked_at END, last_ok_at = CASE WHEN ? = 'ok' THEN ? ELSE last_ok_at END, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
+			stored, reason, checked, now, stored, now, string(raw), now, id, revision)
 		if err != nil {
 			return err
 		}
