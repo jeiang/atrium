@@ -10,7 +10,8 @@
   import { navigate, p, route } from '../../shell/router';
   import { session } from '../../shell/session.svelte';
   import Backups from './Backups.svelte';
-  import { BACKUPS, GROUPS } from './placement';
+  import Notifications from './Notifications.svelte';
+  import { BACKUPS, GROUPS, NOTIFICATIONS } from './placement';
   import './settings.css';
 
   let phone = $state(false);
@@ -25,7 +26,7 @@
   const shell = useShell();
   const slug = $derived(route.params.group);
   const key = $derived(String(route.search.key ?? '') || undefined);
-  const pages = [...GROUPS, BACKUPS];
+  const pages = [...GROUPS, NOTIFICATIONS, BACKUPS];
   const open = $derived(pages.find((group) => group.slug === (slug ?? 'general')));
   const locked = $derived(
     session.view.status === 'signed-in' && session.view.session.identity.agent
@@ -61,6 +62,16 @@
         <ViewState kind="empty" title="No such settings page" level={2}>
           <a class="link" href={p('/settings')}>All settings</a>
         </ViewState>
+      {:else if open.id === NOTIFICATIONS.id}
+        <section class="settings-form" aria-labelledby="notifications-title">
+          <div class="settings-form__head">
+            {#if phone}
+              <a class="link settings__back" href={p('/settings')}>All settings</a>
+            {/if}
+            <h2 class="settings-form__title" id="notifications-title">{NOTIFICATIONS.title}</h2>
+          </div>
+          <Notifications {locked} {phone} />
+        </section>
       {:else if open.id === BACKUPS.id}
         <section class="settings-form" aria-labelledby="backups-title">
           <div class="settings-form__head">
