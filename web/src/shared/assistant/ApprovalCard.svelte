@@ -1,7 +1,6 @@
 <script lang="ts" module>
   export const ARM_MS = 900;
   const steps = Array.from({ length: 101 }, (_, index) => index / 100);
-  const seenSlack = 1.5;
   const touchQuery = '(width < 861px), ((pointer: coarse) and (not (any-pointer: fine)))';
 </script>
 
@@ -93,7 +92,7 @@
   const gated = $derived(approval.irreversible && !endSeen);
   const margin = $derived(`0px 0px ${-chromeEnd}px 0px`);
   const seenAt = $derived(
-    cardHeight > 0 ? Math.min(1, Math.max(0, (0.5 * Math.min(cardHeight, rootHeight) - seenSlack) / cardHeight)) : 0,
+    cardHeight > 0 ? Math.min(1, Math.max(0, (0.5 * Math.min(cardHeight, rootHeight) - 1) / cardHeight)) : 0,
   );
 
   $effect(() => {
@@ -133,7 +132,7 @@
         for (const entry of entries) {
           const root = entry.rootBounds?.height ?? window.innerHeight;
           const need = 0.5 * Math.min(entry.boundingClientRect.height, root);
-          cardSeen = entry.isIntersecting && entry.intersectionRect.height >= need - seenSlack;
+          cardSeen = entry.isIntersecting && entry.intersectionRect.height >= need - 1;
         }
       },
       { rootMargin: margin, threshold: [...steps, seenAt] },
