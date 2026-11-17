@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -43,12 +42,7 @@ type wimBrowser struct {
 
 func wimOIDCSite(t *testing.T) *wimSite {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, port, _ := net.SplitHostPort(l.Addr().String())
-	_ = l.Close()
+	fd, port := handOver(t)
 	base := "http://127.0.0.1:" + port
 	idp := oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test"})
 	idp.AddUser(oidctest.User{Name: "admin", Email: "boss@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
@@ -63,7 +57,7 @@ func wimOIDCSite(t *testing.T) *wimSite {
 		Secret:      "s3cret-for-the-test",
 		GroupsClaim: "groups",
 	}))
-	got, _ := wimServeIn(t, dir, "--port", port, "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
+	got, _ := wimServeIn(t, dir, "--listen-fd", fd, "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
 	if got != base {
 		t.Fatalf("serve listens on %s, want %s", got, base)
 	}

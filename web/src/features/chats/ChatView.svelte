@@ -11,10 +11,13 @@
   import { SvelteMap } from 'svelte/reactivity';
   import {
     ApiError,
+    assistantMessageEdit,
     assistantMessageSend,
+    assistantReplyRegenerate,
     assistantRunAnswer,
     assistantRunResume,
     assistantRunStop,
+    assistantThreadBranch,
     assistantThreadOptions,
     assistantThreadStart,
     assistantThreadTranscript,
@@ -32,13 +35,17 @@
   import Button from '../../shared/ui/Button.svelte';
   import Icon from '../../shared/ui/Icon.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
+  import TextArea from '../../shared/ui/TextArea.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
   import { useConfiguration } from '../assistant/assistant';
+  import ChatActions from './ChatActions.svelte';
+  import { failureText } from './manage';
   import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';
+  import WorkPanel from './WorkPanel.svelte';
   import './chats.css';
 
   let { id }: { id: number | undefined } = $props();
@@ -72,6 +79,14 @@
   let restored = false;
   let sentCount = 0;
   let scrollFrame = 0;
+  let phone = $state(false);
+  let working = $state(false);
+  let editing = $state(false);
+  let editText = $state('');
+  let editPending = $state(false);
+  let editError = $state('');
+  let regenerating = $state(false);
+  let branching = $state<number>();
 
   const first = $derived(transcript.data?.pages[0]);
   const items = $derived(
@@ -127,6 +142,109 @@
   const effort = $derived(staged?.effort ?? thread?.effort ?? options.data?.defaults.effort ?? '');
   const title = $derived(id === undefined ? 'New chat' : thread?.title || (thread ? 'Untitled chat' : 'Chat'));
   const ready = $derived(id === undefined || first !== undefined);
+  const lastUser = $derived(visible.findLast((entry) => entry.kind === 'user'));
+  const lastReply = $derived(
+    visible.findLast((entry) => entry.kind === 'assistant' && entry.text && entry.seq > (lastUser?.seq ?? 0)),
+  );
+  const settledTurn = $derived(
+    id !== undefined &&
+      !running &&
+      activeRun === undefined &&
+      !question &&
+      waiting.length === 0 &&
+      queued.length === 0 &&
+      !shown.some((stream) => stream.active),
+  );
+  const latestRun = $derived(activeRun?.id ?? items.findLast((entry) => entry.run_id != null)?.run_id ?? undefined);
+
+  $effect(() => {
+    const query = matchMedia('(width < 861px)');
+    phone = query.matches;
+    const onChange = (event: MediaQueryListEvent): void => {
+      phone = event.matches;
+    };
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  });
+
+  function refresh(): void {
+    void queryClient.invalidateQueries({ queryKey: ['thread', id] });
+    void queryClient.invalidateQueries({ queryKey: ['threads'] });
+  }
+
+  function onEditStart(text: string): void {
+    editText = text;
+    editError = '';
+    editing = true;
+  }
+
+  function onEditCancel(): void {
+    editing = false;
+    editError = '';
+  }
+
+  async function onEditSubmit(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (id === undefined || editPending) return;
+    const text = editText.trim();
+    if (!text) {
+      editError = 'Write a message first.';
+      return;
+    }
+    editPending = true;
+    editError = '';
+    try {
+      const started = ok(await assistantMessageEdit(id, { text }));
+      editing = false;
+      following = true;
+      follow(started.run_id, true);
+      refresh();
+    } catch (error) {
+      editError = refusedOffline(error)
+        ? 'Cannot reach atrium. Nothing was sent. The edit was kept.'
+        : failureText(error);
+    } finally {
+      editPending = false;
+    }
+  }
+
+  async function onRegenerate(): Promise<void> {
+    if (id === undefined || regenerating) return;
+    regenerating = true;
+    try {
+      const started = ok(await assistantReplyRegenerate(id));
+      following = true;
+      if (started.run_id) follow(started.run_id, true);
+      refresh();
+    } catch (error) {
+      toast(refusedOffline(error) ? 'Cannot reach atrium. No new run was started.' : failureText(error), {
+        tone: 'error',
+      });
+    } finally {
+      regenerating = false;
+    }
+  }
+
+  async function onBranch(seq: number): Promise<void> {
+    if (id === undefined || branching !== undefined) return;
+    branching = seq;
+    try {
+      const made = ok(await assistantThreadBranch(id, { seq }));
+      void queryClient.invalidateQueries({ queryKey: ['threads'] });
+      toast(`Branched “${title}” into a new chat.`);
+      await navigate('/chat/:id', { params: { id: String(made.thread_id) } });
+    } catch (error) {
+      toast(refusedOffline(error) ? 'Cannot reach atrium. No branch was made.' : failureText(error), {
+        tone: 'error',
+      });
+    } finally {
+      branching = undefined;
+    }
+  }
+
+  function onWork(): void {
+    working = true;
+  }
 
   function atBottom(): boolean {
     const element = document.documentElement;
@@ -459,6 +577,7 @@
 {#snippet bubble(
     text: string,
     note?: string,
+    editable?: boolean,
   )}
   <li class="turn turn--you">
     <div class="bubble">
@@ -467,6 +586,11 @@
         <span class="bubble__note">{note}</span>
       {/if}
     </div>
+    {#if editable}
+      <div class="turn__actions">
+        <Button size="sm" variant="quiet" onclick={() => onEditStart(text)}>Edit</Button>
+      </div>
+    {/if}
   </li>
 {/snippet}
 
@@ -491,7 +615,24 @@
 <div class="chat" bind:this={root}>
   <header class="chat__head">
     <a class="chat__back link" href={p('/chat')}><Icon name="chevron" />All chats</a>
-    <h1 class="chat__title" tabindex="-1">{title}</h1>
+    <div class="chat__heading">
+      <h1 class="chat__title" tabindex="-1">{title}</h1>
+      {#if thread && id !== undefined}
+        <ChatActions {thread} {running} {phone} onwork={onWork} />
+      {/if}
+    </div>
+    {#if thread?.archived || thread?.branched_from_thread_id}
+      <p class="chat__origin">
+        {#if thread.archived}
+          <span>Archived</span>
+        {/if}
+        {#if thread.branched_from_thread_id}
+          <a class="link" href={p('/chat/:id', { params: { id: String(thread.branched_from_thread_id) } })}
+            >Branched from an earlier chat</a
+          >
+        {/if}
+      </p>
+    {/if}
   </header>
 
   {#if invalid}
@@ -529,8 +670,21 @@
     {/if}
     <ol class="transcript" aria-label="Messages">
       {#each visible as entry (keys.get(entry))}
-        {#if entry.kind === 'user'}
-          {@render bubble(entry.text)}
+        {#if entry.kind === 'user' && entry === lastUser && settledTurn && editing}
+          <li class="turn turn--you">
+            <form class="chat-edit" onsubmit={onEditSubmit}>
+              <TextArea label="Edit your last message" rows={3} bind:value={editText} disabled={editPending} />
+              {#if editError}
+                <Notice tone="error" variant="inline">{editError}</Notice>
+              {/if}
+              <div class="turn__actions">
+                <Button size="sm" disabled={editPending} onclick={onEditCancel}>Cancel</Button>
+                <Button size="sm" variant="primary" type="submit" pending={editPending}>Send edit (new run)</Button>
+              </div>
+            </form>
+          </li>
+        {:else if entry.kind === 'user'}
+          {@render bubble(entry.text, undefined, entry === lastUser && settledTurn)}
         {:else if entry.kind === 'activity'}
           {const calls = $derived(toolCalls(entry.steps))}
           {#if calls.length > 0}
@@ -548,6 +702,18 @@
               <span class="eyebrow">Draft</span>
             {/if}
             <Markdown text={entry.text} />
+            {#if entry.kind === 'assistant' && settledTurn}
+              <div class="turn__actions">
+                {#if entry === lastReply}
+                  <Button size="sm" variant="quiet" pending={regenerating} onclick={onRegenerate}>
+                    Regenerate (new run)
+                  </Button>
+                {/if}
+                <Button size="sm" variant="quiet" pending={branching === entry.seq} onclick={() => onBranch(entry.seq)}>
+                  Branch from here
+                </Button>
+              </div>
+            {/if}
           </li>
         {/if}
       {/each}
@@ -621,4 +787,7 @@
       </Composer>
     {/if}
   </div>
+  {#if id !== undefined && !invalid}
+    <WorkPanel bind:open={working} thread={id} run={latestRun} />
+  {/if}
 </div>

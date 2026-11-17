@@ -30,13 +30,15 @@ import (
 const mediaAgentHost = "media-agent.test"
 
 type mediaAgentOpts struct {
-	main    bool
-	group   string
-	tv      string
-	control string
-	extra   string
-	env     []string
-	dir     string
+	main     bool
+	group    string
+	tv       string
+	control  string
+	extra    string
+	env      []string
+	dir      string
+	listener net.Listener
+	vpn      net.Listener
 }
 
 type mediaAgent struct {
@@ -113,13 +115,8 @@ import = "` + roots["import"] + `"
 	if opts.group != "" {
 		cfg = "group = " + strconv.Quote(opts.group) + "\n" + cfg
 	}
-	if opts.main {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		addr := listener.Addr().String()
-		_ = listener.Close()
+	if opts.listener != nil {
+		addr := opts.listener.Addr().String()
 		cfg = strings.Replace(cfg, `listen = "127.0.0.1:0"`, "listen = "+strconv.Quote(addr), 1)
 		cfg = strings.Replace(cfg, `allowed_hosts = ["`+mediaAgentHost+`"]`, `allowed_hosts = ["`+mediaAgentHost+`", "`+addr+`"]`, 1)
 	}
@@ -142,9 +139,26 @@ func startMediaAgent(t *testing.T, opts mediaAgentOpts) *mediaAgent {
 	if dir == "" {
 		dir = t.TempDir()
 	}
+	if opts.main {
+		opts.listener = heldListener(t)
+	}
 	config, roots, token := writeMediaAgentConfig(t, dir, opts)
 	a := &mediaAgent{dir: dir, token: token, roots: roots, config: config, logs: &lockedBuffer{}, done: make(chan struct{})}
 	a.cmd = mediaAgentCmd(config, opts.env...)
+	for _, l := range []struct {
+		key string
+		ln  net.Listener
+	}{{"--listen-fd", opts.listener}, {"--vpn-listen-fd", opts.vpn}} {
+		if l.ln == nil {
+			continue
+		}
+		f, err := l.ln.(*net.TCPListener).File()
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.cmd.ExtraFiles = append(a.cmd.ExtraFiles, f)
+		a.cmd.Args = append(a.cmd.Args, l.key, strconv.Itoa(2+len(a.cmd.ExtraFiles)))
+	}
 	a.cmd.Stderr = a.logs
 	out, err := a.cmd.StdoutPipe()
 	if err != nil {
@@ -152,6 +166,14 @@ func startMediaAgent(t *testing.T, opts mediaAgentOpts) *mediaAgent {
 	}
 	if err := a.cmd.Start(); err != nil {
 		t.Fatal(err)
+	}
+	for _, f := range a.cmd.ExtraFiles {
+		_ = f.Close()
+	}
+	for _, ln := range []net.Listener{opts.listener, opts.vpn} {
+		if ln != nil {
+			_ = ln.Close()
+		}
 	}
 	lines := make(chan string, 1)
 	go func() {

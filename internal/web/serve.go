@@ -53,13 +53,15 @@ type Resource struct {
 }
 
 type ServeFlags struct {
-	Host          string
-	Port          int
-	Auth          []string
-	Hosts         []string
-	Trusted       []string
-	EmergencyHost string
-	EmergencyPort int
+	Host              string
+	Port              int
+	Auth              []string
+	Hosts             []string
+	Trusted           []string
+	EmergencyHost     string
+	EmergencyPort     int
+	ListenFD          string
+	EmergencyListenFD string
 }
 
 func DefineServeFlags(args *cli.Args) func() ServeFlags {
@@ -70,13 +72,16 @@ func DefineServeFlags(args *cli.Args) func() ServeFlags {
 	trusted := args.Repeated("trusted-proxy", cli.Opt{Help: "socket peer CIDR allowed to set CF-Connecting-IP and the proxy identity headers; repeatable (proxy mode requires one, or host web.trusted_proxy_cidrs)"})
 	emergencyHost := args.String("emergency-host", defaultHost, cli.Opt{Help: "numeric loopback address (127.0.0.0/8 or ::1) of the emergency listener"})
 	emergencyPort := args.Int("emergency-port", noEmergency, cli.Opt{Help: "port of the emergency listener, which trusts every loopback request like --auth local; omitted runs none"})
+	listenFD := args.String("listen-fd", "", cli.Opt{Metavar: "FD", Help: "inherited, already-bound socket to serve the public listener on instead of binding --host and --port"})
+	emergencyListenFD := args.String("emergency-listen-fd", "", cli.Opt{Metavar: "FD", Help: "inherited, already-bound loopback socket for the emergency listener; needs --emergency-port"})
 	return func() ServeFlags {
-		return ServeFlags{Host: *host, Port: *port, Auth: *modes, Hosts: *hosts, Trusted: *trusted, EmergencyHost: *emergencyHost, EmergencyPort: *emergencyPort}
+		return ServeFlags{Host: *host, Port: *port, Auth: *modes, Hosts: *hosts, Trusted: *trusted, EmergencyHost: *emergencyHost, EmergencyPort: *emergencyPort, ListenFD: *listenFD, EmergencyListenFD: *emergencyListenFD}
 	}
 }
 
 type Endpoint struct {
 	Addr   string
+	FD     string
 	policy Policy
 	hosts  []string
 }
@@ -93,7 +98,7 @@ func (f ServeFlags) Resolve(stderr io.Writer, env config.Env) (Plan, bool) {
 	if !ok {
 		return Plan{}, false
 	}
-	p := Plan{Public: Endpoint{Addr: net.JoinHostPort(f.Host, strconv.Itoa(f.Port)), policy: policy, hosts: hosts}, trusted: f.Trusted}
+	p := Plan{Public: Endpoint{Addr: net.JoinHostPort(f.Host, strconv.Itoa(f.Port)), FD: f.ListenFD, policy: policy, hosts: hosts}, trusted: f.Trusted}
 	if f.EmergencyPort == noEmergency {
 		return p, true
 	}
@@ -105,7 +110,7 @@ func (f ServeFlags) Resolve(stderr io.Writer, env config.Env) (Plan, bool) {
 		_, _ = fmt.Fprintf(stderr, "error: the emergency listener needs a numeric loopback --emergency-host in 127.0.0.0/8 or ::1; %q is not one\n", f.EmergencyHost)
 		return Plan{}, false
 	}
-	p.Emergency = &Endpoint{Addr: net.JoinHostPort(strings.Trim(f.EmergencyHost, "[]"), strconv.Itoa(f.EmergencyPort)), policy: Policy{Mode: ModeLocal}}
+	p.Emergency = &Endpoint{Addr: net.JoinHostPort(strings.Trim(f.EmergencyHost, "[]"), strconv.Itoa(f.EmergencyPort)), FD: f.EmergencyListenFD, policy: Policy{Mode: ModeLocal}}
 	return p, true
 }
 
