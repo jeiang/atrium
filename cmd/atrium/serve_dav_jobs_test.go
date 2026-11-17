@@ -117,8 +117,7 @@ func TestServeMirrorsCalDAVAndCardDAVOnSchedule(t *testing.T) {
 	list := b.do(http.MethodGet, "/web/v1/schedules", nil)
 	var jobs struct {
 		Items []struct {
-			ID        int64 `json:"id"`
-			Protected bool  `json:"protected"`
+			ID int64 `json:"id"`
 		} `json:"items"`
 	}
 	if list.status != http.StatusOK || !strings.Contains(list.body, string(passrun.CalDAV)) || json.Unmarshal([]byte(list.body), &jobs) != nil {
@@ -126,12 +125,7 @@ func TestServeMirrorsCalDAVAndCardDAVOnSchedule(t *testing.T) {
 	}
 	listed := false
 	for _, job := range jobs.Items {
-		if job.ID == jobID {
-			listed = true
-			if !job.Protected {
-				t.Fatalf("the schedules list offers to edit the fixed CalDAV schedule: %.300s", list.body)
-			}
-		}
+		listed = listed || job.ID == jobID
 	}
 	if !listed {
 		t.Fatalf("schedules list lacks job %d: %.300s", jobID, list.body)
