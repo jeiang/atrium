@@ -12,7 +12,7 @@
     reviewUndo,
     reviewUndoable,
   } from '../../contract';
-  import { resolutionOf, stuckChoices, stuckOf } from '../../shared/assistant/stuck';
+  import { stuckChoices, stuckOf } from '../../shared/assistant/stuck';
   import { device, outcomeUnknown, unreachable } from '../../shared/device.svelte';
   import { queryClient } from '../../shared/query';
   import { toast } from '../../shared/ui/toast.svelte';
@@ -40,9 +40,15 @@
 <script lang="ts">
   import { createQuery } from '@tanstack/svelte-query';
   import ApprovalCard from '../../shared/assistant/ApprovalCard.svelte';
-  import { proposalToApproval } from '../../shared/assistant/proposalApproval';
+  import {
+    handleUndoProposal,
+    proposalCanUndo,
+    proposalOutcome,
+    proposalToApproval,
+  } from '../../shared/assistant/proposalApproval';
   import { UNDO_MS } from '../../shared/assistant/ReceiptLine.svelte';
   import type { Decision } from '../../shared/assistant/types';
+  import Button from '../../shared/ui/Button.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
 
   interface Props {
@@ -85,7 +91,22 @@
   const blocked = $derived(
     settled && proposal.data?.blocked && effects.data ? stuckChoices[stuckOf(effects.data)] : undefined,
   );
-  const resolved = $derived(effects.data ? resolutionOf(effects.data) : undefined);
+  const settledTitle = $derived(proposal.data ? proposalOutcome(proposal.data, effects.data) : '');
+  const canUndo = $derived(proposal.data ? proposalCanUndo(proposal.data) : false);
+  let undoing = $state(false);
+
+  async function onUndoApplied(): Promise<void> {
+    undoing = true;
+    try {
+      await handleUndoProposal(id);
+    } catch (error) {
+      toast(failureText(error), { tone: 'error' });
+    } finally {
+      undoing = false;
+      await queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      void queryClient.invalidateQueries({ queryKey: ['thread'] });
+    }
+  }
 
   async function onResolve(outcome: string): Promise<void> {
     try {
@@ -161,13 +182,13 @@
     <ViewState kind="loading" title="Loading the ask" />
   {/if}
 {:else if proposal.data.status !== 'pending' && !deferred.has(id)}
-  <ViewState
-    kind="partial"
-    title={resolved?.outcome ?? (proposal.data.status === 'approved' ? 'Approved' : 'Declined')}
-    level={4}
-  >
+  <ViewState kind="partial" title={settledTitle} level={4} action={canUndo ? undoAction : undefined}>
     {proposal.data.title}
   </ViewState>
 {:else}
   <ApprovalCard {approval} level={4} onapprove={onApprove} ondecline={onDecline} onundo={onUndo} />
 {/if}
+
+{#snippet undoAction()}
+  <Button variant="secondary" pending={undoing} onclick={onUndoApplied}>Undo</Button>
+{/snippet}
