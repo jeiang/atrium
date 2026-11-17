@@ -133,11 +133,7 @@ func HostAccounts(host config.Host) ([]config.AccountSpec, map[string]string, er
 			return nil, nil, fmt.Errorf("config: connection %q: XOAUTH2 is Gmail-only", id)
 		}
 		spec.Pinned = true
-		if spec.AuthMethod == config.AuthPassword {
-			file, ok := c.CredentialFiles[PasswordSlot(account)]
-			if !ok {
-				return nil, nil, fmt.Errorf("config: connection %q: credential_files needs %s", id, PasswordSlot(account))
-			}
+		if file, ok := c.CredentialFiles[PasswordSlot(account)]; ok && spec.AuthMethod == config.AuthPassword {
 			raw, err := os.ReadFile(file)
 			if err != nil {
 				return nil, nil, fmt.Errorf("config: connection %q: %w", id, err)

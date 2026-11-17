@@ -3,6 +3,7 @@ package mediamodule
 import (
 	"context"
 
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -14,16 +15,16 @@ import (
 	"github.com/jeiang/atrium/internal/unit"
 )
 
-func mediaCommand(cfgEnv config.Env, clock func() float64) *cli.Command {
+func mediaCommand(cfgEnv config.Env, clock func() float64, torrents contract.Provider) *cli.Command {
 	return mediacmd.Command(mediacmd.Options{
-		Run:      mediaRun(cfgEnv, clock),
-		Inspect:  mediaInspect(cfgEnv, clock),
+		Run:      mediaRun(cfgEnv, clock, torrents),
+		Inspect:  mediaInspect(cfgEnv, clock, torrents),
 		PollJob:  media.JobChannels,
 		SweepJob: media.JobSweep,
 	})
 }
 
-func mediaRun(cfgEnv config.Env, clock func() float64) mediacmd.Runner {
+func mediaRun(cfgEnv config.Env, clock func() float64, torrents contract.Provider) mediacmd.Runner {
 	return func(ctx context.Context, name string, run mediacmd.Job) (any, error) {
 		cfg, err := config.Load(cfgEnv)
 		if err != nil {
@@ -39,7 +40,7 @@ func mediaRun(cfgEnv config.Env, clock func() float64) mediacmd.Runner {
 		}
 		var out any
 		_, err = module.Invoke(ctx, d, cfg, unit.Media+"/"+name, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
-			svc, err := openService(ctx, d, cfgEnv, cfg, clock)
+			svc, err := openService(ctx, d, cfgEnv, cfg, clock, torrents)
 			if err == nil {
 				out, err = run(ctx, svc)
 			}
@@ -53,7 +54,7 @@ func mediaRun(cfgEnv config.Env, clock func() float64) mediacmd.Runner {
 	}
 }
 
-func mediaInspect(cfgEnv config.Env, clock func() float64) func(context.Context, int64) (any, error) {
+func mediaInspect(cfgEnv config.Env, clock func() float64, torrents contract.Provider) func(context.Context, int64) (any, error) {
 	return func(ctx context.Context, id int64) (any, error) {
 		cfg, err := config.Load(cfgEnv)
 		if err != nil {
@@ -67,7 +68,7 @@ func mediaInspect(cfgEnv config.Env, clock func() float64) func(context.Context,
 		if err := config.Boot(ctx, cfgEnv, d, cfg); err != nil {
 			return nil, err
 		}
-		svc, err := openService(ctx, d, cfgEnv, cfg, clock)
+		svc, err := openService(ctx, d, cfgEnv, cfg, clock, torrents)
 		if err != nil {
 			return nil, err
 		}

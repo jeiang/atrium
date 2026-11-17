@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -24,4 +25,19 @@ func ExistsAny(ctx context.Context, q db.Querier) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+func Existing(ctx context.Context, q db.Querier) ([]config.AccountSpec, error) {
+	var out []config.AccountSpec
+	for _, spec := range config.From(ctx).Accounts() {
+		found, err := Exists(ctx, q, spec.Name)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			continue
+		}
+		out = append(out, spec)
+	}
+	return out, nil
 }

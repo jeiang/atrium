@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/api"
@@ -45,6 +46,7 @@ type KnowledgeEditRequest struct {
 	Private *bool     `json:"private,omitempty"`
 	Marks   *[]string `json:"marks,omitempty"`
 	Pinned  *bool     `json:"pinned,omitempty"`
+	IfMatch string    `header:"If-Match" json:"-"`
 }
 
 type KnowledgeSelectedRequest struct {
@@ -153,6 +155,8 @@ type KnowledgeBatch struct {
 
 type knowledgeCursor struct {
 	UpdatedAt float64 `json:"u"`
+	CreatedAt float64 `json:"c,omitempty"`
+	Title     string  `json:"t,omitempty"`
 	ID        int64   `json:"id"`
 }
 
@@ -160,6 +164,7 @@ type KnowledgeSubjectsRequest struct {
 	Query  string     `query:"q" json:"-"`
 	Kind   string     `query:"kind" json:"-" api:"enum=fact|lesson|wiki"`
 	Scope  string     `query:"scope" json:"-" api:"enum=work|personal"`
+	Sort   string     `query:"sort" json:"-" api:"enum=changed|title|created"`
 	Cursor api.Cursor `query:"cursor" json:"-"`
 	Limit  api.Limit  `query:"limit" json:"-"`
 }
@@ -355,13 +360,13 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Query(d, kbapp.DescribeSubjects(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid}},
 			"GET /knowledge/subjects", func(ctx context.Context, in KnowledgeSubjectsRequest) (application.Read[KnowledgeSubjects], error) {
-				list := kbapp.SubjectsInput{Query: in.Query, Kind: in.Kind, Scope: in.Scope, Limit: int(in.Limit) + 1}
+				list := kbapp.SubjectsInput{Query: in.Query, Kind: in.Kind, Scope: in.Scope, Sort: in.Sort, Limit: int(in.Limit) + 1}
 				if in.Cursor.Set() {
 					var last knowledgeCursor
 					if err := in.Cursor.Last(&last); err != nil {
 						return application.Read[KnowledgeSubjects]{}, err
 					}
-					list.After = &kb.ListKey{UpdatedAt: last.UpdatedAt, ID: last.ID}
+					list.After = &kb.ListKey{UpdatedAt: last.UpdatedAt, CreatedAt: last.CreatedAt, Title: last.Title, ID: last.ID}
 				}
 				read, err := svc().Subjects(ctx, list)
 				if err != nil {
@@ -372,7 +377,7 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 				if len(rows) > int(in.Limit) {
 					rows = rows[:in.Limit]
 					last := rows[len(rows)-1]
-					page.NextCursor = in.Cursor.Next(knowledgeCursor{UpdatedAt: last.Updated, ID: last.ID})
+					page.NextCursor = in.Cursor.Next(knowledgeCursor{UpdatedAt: last.Updated, CreatedAt: last.Created, Title: last.Title, ID: last.ID})
 				}
 				for _, r := range rows {
 					page.Items = append(page.Items, KnowledgeSubjectRow{ID: r.ID, Title: r.Title, Kind: r.Kind, Scope: r.Scope, Private: r.Private,
@@ -433,7 +438,7 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 				}
 				return knowledgeChange(svc().Create(ctx, record))
 			}),
-		api.Command(d, kbapp.DescribeEdit(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid, application.NotFound, application.Refused}},
+		api.Command(d, kbapp.DescribeEdit(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid, application.NotFound, application.Refused, application.Conflict}},
 			"PATCH /knowledge/{record_id}", func(ctx context.Context, in KnowledgeEditRequest) (application.Change[KnowledgeChanged], error) {
 				stored, err := svc().Detail(ctx, kbapp.DetailInput{ID: in.ID})
 				if err != nil {
@@ -569,6 +574,17 @@ func (f KnowledgeFields) input() (kbapp.RecordInput, error) {
 }
 
 func (in KnowledgeEditRequest) merge(rec kbapp.Record) (kbapp.RecordInput, error) {
+	if in.IfMatch != "" {
+		tag := strings.Trim(strings.TrimPrefix(in.IfMatch, "W/"), "\"")
+		at, err := time.Parse(time.RFC3339Nano, tag)
+		if err != nil {
+			return kbapp.RecordInput{}, &application.Error{Code: application.Invalid, Message: "If-Match must be the record's updated_at",
+				Fields: []application.Field{{Name: "If-Match", Code: "invalid", Message: "If-Match must be the record's updated_at"}}}
+		}
+		if !at.Equal(seconds(rec.UpdatedAt)) {
+			return kbapp.RecordInput{}, &application.Error{Code: application.Conflict, Reason: "stale", Message: "The record changed since it was read."}
+		}
+	}
 	out := kbapp.RecordInput{Title: rec.Title, Body: rec.Body, Aliases: rec.Aliases, Scope: rec.Scope, Private: rec.Private, Marks: rec.Marks, Pinned: rec.Pinned}
 	if in.Title != nil {
 		out.Title = *in.Title

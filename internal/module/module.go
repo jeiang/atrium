@@ -118,6 +118,7 @@ func FlagKey(name string) string { return name + "_enabled" }
 func FlagDef(name string) settings.Def {
 	return settings.Value(settings.UI, settings.Def{
 		Key:     FlagKey(name),
+		Label:   strings.ToUpper(name[:1]) + name[1:] + " app is on",
 		Module:  Core,
 		Type:    settings.Bool,
 		Default: "false"})
@@ -140,6 +141,7 @@ type Unmet struct {
 type Status struct {
 	Name  string
 	State State
+	On    bool
 
 	Unmet []Unmet
 	Err   string
@@ -182,7 +184,7 @@ func (e *UnknownLeaf) Error() string {
 type DependencyCycle struct{ Modules []string }
 
 func (e *DependencyCycle) Error() string {
-	return "module: dependency cycle among " + strings.Join(e.Modules, ", ")
+	return "module: dependency cycle " + strings.Join(e.Modules, " depends on ")
 }
 
 type InvalidLeaf struct{ Module, Path string }
@@ -210,7 +212,7 @@ func (e *InvalidCore) Error() string {
 		return "module: " + e.Reason
 	}
 	if e.Reason == "" {
-		return "module: core module " + e.Module + " cannot declare needs or requirements"
+		return "module: core module " + e.Module + " cannot be an app or declare dependencies, needs or requirements"
 	}
 	return "module: core module " + e.Module + " " + e.Reason
 }

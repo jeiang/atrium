@@ -132,7 +132,8 @@ var receiptVerbs = map[string]string{
 	"mail_move": "Moved mail", "mail_folder_create": "Created a mail folder",
 	"draft_email_create": "Drafted an email", "draft_email_update": "Changed a draft",
 	"calendar_delete":  "Deleted a calendar event",
-	"media_add_magnet": "Added a download", "media_channel_add": "Started watching a show", "media_channel_remove": "Stopped watching a show",
+	"media_add_magnet": "Added a download", "download_add": "Added a download", "download_control": "Changed a download",
+	"media_channel_add": "Started watching a show", "media_channel_remove": "Stopped watching a show",
 	"schedule_create": "Created a schedule", "schedule_update": "Changed a schedule", "schedule_cancel": "Cancelled a schedule",
 	"track_package": "Started tracking a package", "ops_finding": "Filed a server finding",
 }

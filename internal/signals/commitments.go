@@ -70,7 +70,7 @@ func JudgeCommitments(ctx context.Context, env config.Env, c *classifier.Service
 	}
 	user := fmt.Sprintf("The mailbox owner is: %s\nThis message was %s on %s.\nFrom: %s <%s>\nRecipients: %s\nSubject: %s\nBody:\n%s",
 		owners, direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, textx.Clip(body, endpoint.TuningLlmBodyChars))
-	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Commitments, Item: classifier.MessageItem(m.Account, m.ID),
+	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Commitments, Item: classifier.Item{Key: m.Account + ":" + strconv.FormatInt(m.ID, 10)},
 		System: CommitmentSystem, User: user, Schema: commitmentSchema})
 	if err != nil {
 		return nil, err

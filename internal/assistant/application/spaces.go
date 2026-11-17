@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/tasks"
@@ -96,7 +97,8 @@ type SpaceFields struct {
 }
 
 type SpaceEditInput struct {
-	ID int64
+	ID      int64
+	IfMatch *float64
 	SpaceFields
 }
 
@@ -285,6 +287,18 @@ func (s *Service) spaceCommand(ctx context.Context, name application.Name, id in
 func (s *Service) SpaceCreate(ctx context.Context, in SpaceFields) (application.Change[SpaceChanged], error) {
 	now := s.now()
 	return s.spaceCommand(ctx, SpaceCreateName, 0, func(tx *sql.Tx) (int64, error) {
+		if in.Effort == "" || in.ContextLimit == "" {
+			defaults, err := threads.Defaults(ctx, tx)
+			if err != nil {
+				return 0, err
+			}
+			if in.Effort == "" {
+				in.Effort = defaults.Effort
+			}
+			if in.ContextLimit == "" {
+				in.ContextLimit = strconv.FormatInt(int64(defaults.ContextLimit), 10)
+			}
+		}
 		return projects.Create(ctx, tx, now, in.fields())
 	})
 }
@@ -298,6 +312,9 @@ func (s *Service) SpaceEdit(ctx context.Context, in SpaceEditInput) (application
 		}
 		if found == nil {
 			return 0, notFound(unknownSpace)
+		}
+		if in.IfMatch != nil && found.UpdatedAt != *in.IfMatch {
+			return 0, &application.Error{Code: application.Conflict, Reason: "stale", Message: "The space changed since it was read."}
 		}
 		_, err = projects.Update(ctx, tx, in.ID, now, in.fields())
 		return in.ID, err

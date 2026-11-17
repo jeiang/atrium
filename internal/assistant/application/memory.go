@@ -264,15 +264,7 @@ func (s *Service) memoryPass(ctx context.Context, name application.Name, tgt str
 		if err != nil {
 			return MemoryWorked{}, err
 		}
-		model, err := memory.Model(ctx, s.db.Read)
-		if err != nil {
-			return MemoryWorked{}, err
-		}
-		effort, err := memory.Effort(ctx, s.db.Read)
-		if err != nil {
-			return MemoryWorked{}, err
-		}
-		return pass(client, s.memoryInference(), model, effort)
+		return pass(client, s.memoryInference(), memory.TuningMemoryModel, memory.TuningMemoryEffort)
 	}()
 	if err != nil {
 		var notConfigured config.NotConfigured

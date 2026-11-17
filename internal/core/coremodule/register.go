@@ -30,6 +30,7 @@ import (
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/connections/connectionscmd"
 	"github.com/jeiang/atrium/internal/connections/connweb"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
@@ -97,6 +98,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, eventOps...), append(bindings, eventBindings...)
 	searchOps, searchBindings := searchOperations(m.Now)
 	operations, bindings = append(operations, searchOps...), append(bindings, searchBindings...)
+	pauseOps, pauseBindings := pauseOperations()
+	operations, bindings = append(operations, pauseOps...), append(bindings, pauseBindings...)
+	appsOps, appsBindings := m.appsOperations()
+	operations, bindings = append(operations, appsOps...), append(bindings, appsBindings...)
 	bindings = append(bindings, finalBindings()...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
@@ -125,6 +130,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	}
 	return module.Declaration{
 		Name:     module.Core,
+		Title:    "Core",
 		Core:     true,
 		Settings: slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
 		Host:     slices.Concat(config.HostSettings(), backup.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
@@ -132,11 +138,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			_, err := maintenance.Backup(ctx, maintenanceapp.BackupInput{Dest: dest, Forget: forget})
 			return err
 		})},
-		Attention:         AttentionSources(),
-		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
-		Queues:            collectors.Queues(),
-		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
-		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
+		Attention: AttentionSources(),
+		Metrics:   slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics(), []ops.Metric{webusage.Metric()}),
+		Queues:    collectors.Queues(),
+		Checks: slices.Concat(ops.Checks(), passrun.Checks(), []ops.Check{{Name: "connection owners", Run: func(ctx context.Context, d *db.DB) error {
+			return connections.CheckOwners(ctx, d.Read, config.From(ctx).Host())
+		}}}),
+		Connections:       slices.Concat(connections.Connections(), davmirror.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
@@ -164,6 +172,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				authRoutes(d)
 				commandRoutes(d)
 				eventRoutes(d)
+				pauseRoutes(d)
+				m.appsRoutes(d)
 				m.settingsRoutes(d)
 				connectionRoutes(d)
 				m.maintenanceRoutes(d)
@@ -202,6 +212,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
 		{Name: "budget", Title: "Monthly budget", Page: usagepages.URL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
+		{Name: "general", Title: "General", Keys: []string{config.KeyTZ}},
 	}
 }
 
@@ -247,6 +258,13 @@ func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
 				return err
 			}
 			return watchConnections(ctx, d)
+		}},
+		{Name: "module-flags", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return followFlags(ctx, d, mc.Follow)
 		}},
 	}
 }

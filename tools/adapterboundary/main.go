@@ -38,7 +38,8 @@ var adapters = []adapter{
 	{pattern: "internal/mail/mailcmd/*"},
 	{pattern: "internal/mail/run/command.go"},
 	{pattern: "internal/proposals/proposalscmd/*"},
-	{pattern: "internal/calendar/calendarcmd/*"},
+	{pattern: "internal/apps/calendar/calendarcmd/*"},
+	{pattern: "internal/apps/calendar/calendartools/*"},
 	{pattern: "internal/contacts/contactsmodule/adapters.go"},
 	{pattern: "internal/media/pages/*"},
 	{pattern: "internal/media/mediacmd/*"},
@@ -83,51 +84,18 @@ var allowed = map[string]bool{
 	"internal/review/hub":         true,
 }
 
-var platform = map[string]bool{
-	"internal/communications":         true,
-	"internal/module":                 true,
-	"internal/unit":                   true,
-	"internal/tool":                   true,
-	"internal/ledger":                 true,
-	"internal/proposals":              true,
-	"internal/proposals/proposalscmd": true,
-	"internal/embed":                  true,
-	"internal/ops":                    true,
-	"internal/ops/collectors":         true,
-	"internal/scheduler":              true,
-	"internal/review":                 true,
-	"internal/review/application":     true,
-	"internal/review/hub":             true,
-	"internal/notify":                 true,
-	"internal/web":                    true,
-	"internal/web/tpl":                true,
-}
-
-const (
-	dayContract  = "internal/day"
-	calendarUnit = module + "/internal/calendar"
-	mailUnit     = "internal/mail"
-	signalsUnit  = "internal/signals"
-)
-
-var mailImporters = map[string]string{
-	"cmd/atrium":                    "composition root",
-	"internal/app":                  "composition root",
-	"internal/assistant/tools/mail": "P13.2b moves the mail tools into the Mail app",
-	"internal/config":               "P13.3 moves account rows into the Mail app",
-}
-
-var units = []string{
-	"internal/mail", "internal/media", "internal/calendar", "internal/contacts", "internal/kb", "internal/tasks",
-	"internal/weather", "internal/grafana", "internal/serverops", "internal/assistant/tools",
-}
-
 func main() {
 	edges, err := scan()
+	if err == nil {
+		var more []string
+		more, err = unitEdges()
+		edges = append(edges, more...)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "adapterboundary:", err)
 		os.Exit(1)
 	}
+	slices.Sort(edges)
 	for _, e := range edges {
 		fmt.Fprintln(os.Stderr, e)
 	}
@@ -138,9 +106,8 @@ func main() {
 
 func scan() ([]string, error) {
 	var edges []string
-	importing := map[string]bool{}
 	fset := token.NewFileSet()
-	walk := func(file string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir("internal", func(file string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}
@@ -152,10 +119,9 @@ func scan() ([]string, error) {
 		if err != nil {
 			return err
 		}
-		platformFile := platform[path.Dir(file)] || strings.HasPrefix(file, dayContract+"/")
-		adapterFile := isAdapter(file, src)
-		dayReader := strings.HasPrefix(file, "internal/assistant/") && !strings.HasPrefix(file, "internal/assistant/tools/")
-		outsideMail := !strings.HasPrefix(file, mailUnit+"/")
+		if !isAdapter(file, src) {
+			return nil
+		}
 		f, err := parser.ParseFile(fset, file, src, parser.ImportsOnly)
 		if err != nil {
 			return err
@@ -165,40 +131,14 @@ func scan() ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if adapterFile && forbidden(imp) {
+			if forbidden(imp) {
 				edges = append(edges, "adapter imports a forbidden package: "+file+"\t"+imp)
-			}
-			if platformFile && unitImport(imp) {
-				edges = append(edges, "platform package imports a unit: "+file+"\t"+imp)
-			}
-			if dayReader && (imp == calendarUnit || strings.HasPrefix(imp, calendarUnit+"/")) {
-				edges = append(edges, "core assistant package imports calendar instead of reading the day contract: "+file+"\t"+imp)
-			}
-			if !outsideMail && (imp == module+"/"+signalsUnit || strings.HasPrefix(imp, module+"/"+signalsUnit+"/")) {
-				edges = append(edges, "mail package imports signals instead of calling the platform hook: "+file+"\t"+imp)
-			}
-			if outsideMail && (imp == module+"/"+mailUnit || strings.HasPrefix(imp, module+"/"+mailUnit+"/")) {
-				if _, ok := mailImporters[path.Dir(file)]; ok {
-					importing[path.Dir(file)] = true
-				} else {
-					edges = append(edges, "package outside Mail imports a mail package instead of reading internal/communications: "+file+"\t"+imp)
-				}
 			}
 		}
 		return nil
-	}
-	for _, root := range []string{"internal", "cmd"} {
-		if err := filepath.WalkDir(root, walk); err != nil {
-			return nil, err
-		}
-	}
-	for dir, reason := range mailImporters {
-		if !importing[dir] {
-			edges = append(edges, "mail import exception no longer needed, remove it: "+dir+" ("+reason+")")
-		}
-	}
+	})
 	slices.Sort(edges)
-	return slices.Compact(edges), nil
+	return slices.Compact(edges), err
 }
 
 func isAdapter(file string, src []byte) bool {
@@ -209,19 +149,6 @@ func isAdapter(file string, src []byte) bool {
 	}
 	for _, a := range adapters {
 		if matches(a.pattern, file) && (a.marker == "" || bytes.Contains(src, []byte(a.marker))) {
-			return true
-		}
-	}
-	return false
-}
-
-func unitImport(imp string) bool {
-	rel, ok := strings.CutPrefix(imp, module+"/")
-	if !ok {
-		return false
-	}
-	for _, unit := range units {
-		if rel == unit || strings.HasPrefix(rel, unit+"/") {
 			return true
 		}
 	}

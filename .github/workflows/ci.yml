@@ -21,11 +21,17 @@ env:
   MAX_SUBSTITUTION_JOBS: "32"
   HTTP_CONNECTIONS: "64"
 
+  GO_CACHE_PATHS: |
+    ~/.cache/go-build
+    ~/.cache/golangci-lint
+    ~/go/pkg/mod
+
 jobs:
   discover:
     runs-on: ubuntu-latest
     outputs:
-      targets: ${{ steps.discover.outputs.targets }}
+      nix: ${{ steps.discover.outputs.nix }}
+      go-test-shards: ${{ steps.discover.outputs.go-test-shards }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -43,34 +49,134 @@ jobs:
 
       - name: Discover checks
         id: discover
+        env:
+          MAIN: ${{ github.event_name != 'pull_request' }}
         run: |
-          targets=$(nix eval --json '.#checks' --apply '
-            checks: let
-              runners = {
-                x86_64-linux = "ubuntu-latest";
-                aarch64-linux = "ubuntu-24.04-arm";
-              };
-            in
-              builtins.concatMap
-                (system: map (check: {inherit system check; runner = runners.${system};}) (builtins.attrNames checks.${system}))
-                (builtins.attrNames runners)')
-          if [ -z "$targets" ] || [ "$targets" = "[]" ]; then
+          targets=$(nix eval --impure --json '.#checks' --apply "checks: import ./.ci/targets.nix {inherit checks; main = $MAIN;}")
+          nix=$(jq -c .nix <<<"$targets")
+          shards=$(jq -c .goTestShards <<<"$targets")
+          if [ "$nix" = "[]" ] || [ "$shards" = "[]" ]; then
             echo "::error::no checks discovered for the configured runners"
             exit 1
           fi
-          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "nix=$nix" >> "$GITHUB_OUTPUT"
+          echo "go-test-shards=$shards" >> "$GITHUB_OUTPUT"
 
-  build:
+  go-test:
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.discover.outputs.go-test-shards) }}
+    name: go-test (${{ matrix.target.shard }} of ${{ matrix.target.total }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          extra_nix_config: |
+            extra-substituters = ${{ env.GARRET_SUBSTITUTER }}
+            extra-trusted-public-keys = ${{ env.GARRET_PUBLIC_KEY }}
+            max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
+            http-connections = ${{ env.HTTP_CONNECTIONS }}
+
+      - name: Restore the Go caches
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ env.GO_CACHE_PATHS }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-
+            go-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Allow the loopback test namespace
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Run the shard
+        env:
+          SHARD: ${{ matrix.target.shard }}
+          TOTAL: ${{ matrix.target.total }}
+        run: nix develop .#ci -c bash tools/go-test-shard "$SHARD" "$TOTAL"
+
+  go-static:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          extra_nix_config: |
+            extra-substituters = ${{ env.GARRET_SUBSTITUTER }}
+            extra-trusted-public-keys = ${{ env.GARRET_PUBLIC_KEY }}
+            max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
+            http-connections = ${{ env.HTTP_CONNECTIONS }}
+
+      - name: Restore the Go caches
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ env.GO_CACHE_PATHS }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-
+            go-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Vet, build, generated documents and ownership
+        run: nix develop .#ci -c bash -c 'just verify && go run ./tools/tableownership && just settingsgen-check'
+
+      - name: Lint
+        run: nix develop .#ci -c just lint --build-tags libsqlite3,sqlite_fts5 ./...
+
+  go-cache:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          extra_nix_config: |
+            extra-substituters = ${{ env.GARRET_SUBSTITUTER }}
+            extra-trusted-public-keys = ${{ env.GARRET_PUBLIC_KEY }}
+            max-substitution-jobs = ${{ env.MAX_SUBSTITUTION_JOBS }}
+            http-connections = ${{ env.HTTP_CONNECTIONS }}
+
+      - name: Build from an empty cache
+        run: |
+          nix develop .#ci -c bash -c '
+            go build ./... &&
+            go vet ./... &&
+            go test -race -count=1 -exec true ./... >/dev/null &&
+            just lint --build-tags libsqlite3,sqlite_fts5 ./...'
+
+      - name: Save the Go caches
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ env.GO_CACHE_PATHS }}
+          key: go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}-${{ github.sha }}
+
+  nix:
     needs: discover
     permissions:
       contents: read
       id-token: write
     strategy:
       fail-fast: false
-      max-parallel: 10
       matrix:
-        target: ${{ fromJson(needs.discover.outputs.targets) }}
-    name: build (${{ matrix.target.system }}.${{ matrix.target.check }})
+        target: ${{ fromJson(needs.discover.outputs.nix) }}
+    name: nix (${{ matrix.target.system }}.${{ matrix.target.name }})
     runs-on: ${{ matrix.target.runner }}
     steps:
       - name: Checkout
@@ -92,7 +198,7 @@ jobs:
             post-build-hook = ${{ runner.temp }}/garret-hook
 
       - name: Start pushing to garret as paths are built
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.target.check != 'statix' && matrix.target.check != 'treefmt'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
         run: ./.ci/garret.sh watch
 
@@ -100,31 +206,34 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Build check
+      - name: Build checks
         env:
-          SYSTEM: ${{ matrix.target.system }}
-          CHECK: ${{ matrix.target.check }}
+          INSTALLABLES: ${{ matrix.target.installables }}
         run: |
+          read -ra installables <<<"$INSTALLABLES"
           nix build --keep-going --show-trace --no-link --print-out-paths -L \
-            ".#checks.${SYSTEM}.${CHECK}" >"$RUNNER_TEMP/garret-outputs"
+            "${installables[@]}" >"$RUNNER_TEMP/garret-outputs"
 
       - name: Push to garret what the watcher has not
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.target.check != 'statix' && matrix.target.check != 'treefmt'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
         timeout-minutes: 30
         run: ./.ci/garret.sh drain
 
   check:
-    needs: [discover, build]
+    needs: [discover, go-test, go-static, nix]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Verify discovery and all matrix checks passed
+      - name: Verify discovery and all checks passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          echo "discover: ${{ needs.discover.result }}"
-          echo "build:    ${{ needs.build.result }}"
-          if [[ "${{ needs.discover.result }}" != "success" || "${{ needs.build.result }}" != "success" ]]; then
-            echo "::error::One or more required checks did not succeed."
-            exit 1
-          fi
+          echo "discover go-test go-static nix: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::One or more required checks did not succeed."
+              exit 1
+            fi
+          done
           echo "All checks passed."

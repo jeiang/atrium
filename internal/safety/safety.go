@@ -2,15 +2,11 @@ package safety
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"strconv"
-	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/pause"
 )
 
 const (
@@ -57,36 +53,10 @@ func ApprovalIsConsent(ctx context.Context) bool {
 	return ok
 }
 
-func IsPaused(pausePath string) bool {
-	_, err := os.Stat(pausePath)
-	return err == nil
-}
-
-func SetPaused(pausePath string, paused bool) error {
-	if !paused {
-		if err := os.Remove(pausePath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(pausePath), 0o777); err != nil {
-		return err
-	}
-	now := time.Now()
-	if os.Chtimes(pausePath, now, now) == nil {
-		return nil
-	}
-	f, err := os.OpenFile(pausePath, os.O_CREATE|os.O_WRONLY, 0o666)
-	if err != nil {
-		return err
-	}
-	return f.Close()
-}
-
 type ModeFunc func(ctx context.Context) (string, error)
 
 func WriteGate(ctx context.Context, current ModeFunc, action, target string) error {
-	if pausePath, ok := ctx.Value(automaticKey{}).(string); ok && IsPaused(pausePath) {
+	if pausePath, ok := ctx.Value(automaticKey{}).(string); ok && pause.Paused(pausePath) {
 		return WriteRefused(fmt.Sprintf("refusing automatic mailbox write %s: atrium is paused", strconv.Quote(action)))
 	}
 	if ApprovalIsConsent(ctx) {

@@ -25,7 +25,7 @@ no default; a `null` default is not a usable credential or listener value.
 | `port` | port | `8480` | Public listener port. |
 | `host` | TOML-compatible attribute set | `{}` | Read-only host requirements rendered to `ATRIUM_HOST_CONFIG`. Unknown, retired, operator-only, or compiled tuning keys fail evaluation with their destination. Module flags are host-declarable exceptions among operator settings. |
 | `connections` | attribute set of connection submodules | `{}` | Host-owned connections keyed by id; fields are below. |
-| `mailAccounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections and password credentials; fields are below. |
+| `mailAccounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections and, for an account with `passwordFile`, its password credential; fields are below. |
 | `secretFiles` | attribute set of strings | `{}` | App signing key file paths, delivered through `LoadCredential`. Only `action_links.action_link_key` and `media.link_key` are accepted. |
 | `database.keyFile` | null or string | `null` | Absolute host key-file path, delivered as the `db-key` credential. |
 | `initialTimezone` | null or string | `config.time.timeZone` | Seeds `tz` only when no operator value exists. |
@@ -35,10 +35,12 @@ no default; a `null` default is not a usable credential or listener value.
 The module derives mirror paths, backup inputs, tracing destination, knowledge
 export path, proxy CIDRs, and generated connections in the host file. The
 application does not read host-owned values from database setting rows. A
-host-declared module flag wins over a stored flag and is read-only. A flag the
-host file does not declare is a stored operator setting: the first start seeds
-it, and `atrium settings set` changes it. A flag change requires restarting
-serve; there is no runtime module-toggle UI or API.
+host-declared module flag wins over a stored flag and is read-only; the Apps
+manifest shows it as pinned and refuses to switch it. A flag the host file does
+not declare is a stored operator setting: the first start seeds it, and the
+Apps switch (`PUT /apps/{id}/enabled`, operator only) or `atrium settings set`
+changes it. A running serve applies a change within a few seconds, including
+one written by a separate `atrium settings set` process; no restart is needed.
 
 ### Connection fields
 
@@ -71,7 +73,7 @@ contacting a changed endpoint.
 | `label` | null or string | `null` | Display name, falling back to the account id. |
 | `preset` | `"icloud"` or `"gmail"` | Required | Supplies provider hosts and folder behavior. |
 | `login` | string | Required | IMAP/SMTP login. |
-| `passwordFile` | string | Required | App-password file delivered as `mail-account-<id>`. |
+| `passwordFile` | null or string | `null` | App-password file delivered as `mail-account-<id>`; the file then owns the password and replaces a value entered in the UI at every start. When null, the operator enters the password in Settings, Connections and it is stored in the database. |
 | `enabled` | boolean | `true` | Whether the account is opened and synced. |
 
 Generated accounts use password authentication and `imap`/`smtp` capabilities.

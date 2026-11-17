@@ -1,0 +1,961 @@
+{
+  "pages": [
+    {
+      "kind": "group",
+      "module": "core",
+      "name": "sessions",
+      "title": "Sessions",
+      "url": "/settings/auth",
+      "fields": [
+        {
+          "key": "oidc_session_idle_days",
+          "label": "Sign out after idle (days)",
+          "module": "auth",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "7",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "settings.sign_in",
+          "restart": false
+        },
+        {
+          "key": "oidc_session_max_days",
+          "label": "Sign out after (days)",
+          "module": "auth",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "30",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "settings.sign_in",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "core",
+      "name": "budget",
+      "title": "Monthly budget",
+      "url": "/settings/usage",
+      "fields": [
+        {
+          "key": "monthly_budget_usd",
+          "label": "Monthly budget (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "150",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.spend",
+          "restart": false
+        },
+        {
+          "key": "budget_chat_share",
+          "label": "Chat stops at this share of the budget",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "1",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.spend",
+          "restart": false
+        },
+        {
+          "key": "budget_unattended_share",
+          "label": "Scheduled runs stop at this share of the budget",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "0.8",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.spend",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "core",
+      "name": "general",
+      "title": "General",
+      "url": "/settings/usage",
+      "fields": [
+        {
+          "key": "tz",
+          "label": "Time zone",
+          "module": "core",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "America/Port_of_Spain",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "settings.general",
+          "restart": true,
+          "help": "Sets the day and month boundaries for schedules, calendar days and work hours, open loop reminders, package and mail reports, notifications, the Obsidian export and the attention view. Those read the zone once at start, so restart atrium to apply a change; budget months and classification counts read it live."
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "mail",
+      "name": "safety",
+      "title": "Safety",
+      "url": "/settings/mail",
+      "fields": [
+        {
+          "key": "write_cap",
+          "label": "Automatic write cap",
+          "module": "mail",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "100",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.mail",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "mail",
+      "name": "loops",
+      "title": "Open loops",
+      "url": "/settings/mail",
+      "fields": [
+        {
+          "key": "openloops_waiting_after_days",
+          "label": "Waiting on them after (days)",
+          "module": "mail",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "3",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "plan.options",
+          "restart": false
+        },
+        {
+          "key": "openloops_remind_ahead_days",
+          "label": "Remind ahead of a due date (days)",
+          "module": "mail",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "1",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "plan.options",
+          "restart": false
+        },
+        {
+          "key": "openloops_remind_hour",
+          "label": "Reminder hour (0 to 23)",
+          "module": "mail",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "9",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "plan.options",
+          "restart": false
+        },
+        {
+          "key": "openloops_snooze_default_days",
+          "label": "Default snooze (days)",
+          "module": "mail",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "3",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "plan.options",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "mail",
+      "name": "packages",
+      "title": "Packages",
+      "url": "/settings/mail",
+      "fields": [
+        {
+          "key": "mail_ship24_destination_country",
+          "label": "Destination country",
+          "module": "mail",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "connections",
+          "restart": false
+        },
+        {
+          "key": "mail_ship24_destination_postcode",
+          "label": "Destination postcode",
+          "module": "mail",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "connections",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "media",
+      "name": "library",
+      "title": "Library",
+      "url": "/settings/media",
+      "fields": [
+        {
+          "key": "media_link_ttl_seconds",
+          "label": "Media link lifetime (seconds)",
+          "module": "media",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "43200",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.library",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "assistant",
+      "name": "spending",
+      "title": "Spending",
+      "url": "/settings/assistant",
+      "fields": [
+        {
+          "key": "thread_cost_cap_usd",
+          "label": "Thread cost cap (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "10",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.spend",
+          "restart": false
+        },
+        {
+          "key": "max_run_cost_usd",
+          "label": "Run cost cap (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "10",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.spend",
+          "restart": false
+        },
+        {
+          "key": "agent_subagent_max_cost_usd",
+          "label": "Research run cost cap (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "0.25",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.spend",
+          "restart": false
+        },
+        {
+          "key": "search_web_max_cost_usd",
+          "label": "Web search run cost cap (USD)",
+          "module": "web_search",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "0.15",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.spend",
+          "restart": false
+        },
+        {
+          "key": "dreaming_max_cost_usd",
+          "label": "Nightly run cost cap (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "0.30",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false
+        },
+        {
+          "key": "dreaming_monthly_usd",
+          "label": "Nightly monthly cap (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "3",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false
+        },
+        {
+          "key": "ops_worker_max_run_usd",
+          "label": "Server-ops run cost cap (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "0.10",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false
+        },
+        {
+          "key": "ops_worker_monthly_usd",
+          "label": "Server-ops monthly cap (USD)",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "5",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "assistant",
+      "name": "background",
+      "title": "Background work",
+      "url": "/settings/assistant",
+      "fields": [
+        {
+          "key": "agent_effort_cron",
+          "label": "Scheduled run effort",
+          "module": "assistant",
+          "type": "enum",
+          "multi": false,
+          "choices": [
+            {
+              "value": "low",
+              "label": "low"
+            },
+            {
+              "value": "medium",
+              "label": "medium"
+            },
+            {
+              "value": "high",
+              "label": "high"
+            },
+            {
+              "value": "xhigh",
+              "label": "xhigh"
+            },
+            {
+              "value": "max",
+              "label": "max"
+            }
+          ],
+          "default": "high",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false
+        },
+        {
+          "key": "agent_effort_nightly",
+          "label": "Nightly run effort",
+          "module": "assistant",
+          "type": "enum",
+          "multi": false,
+          "choices": [
+            {
+              "value": "low",
+              "label": "low"
+            },
+            {
+              "value": "medium",
+              "label": "medium"
+            },
+            {
+              "value": "high",
+              "label": "high"
+            },
+            {
+              "value": "xhigh",
+              "label": "xhigh"
+            },
+            {
+              "value": "max",
+              "label": "max"
+            }
+          ],
+          "default": "high",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false
+        },
+        {
+          "key": "agent_effort_subagent",
+          "label": "Research effort",
+          "module": "assistant",
+          "type": "enum",
+          "multi": false,
+          "choices": [
+            {
+              "value": "low",
+              "label": "low"
+            },
+            {
+              "value": "medium",
+              "label": "medium"
+            },
+            {
+              "value": "high",
+              "label": "high"
+            },
+            {
+              "value": "xhigh",
+              "label": "xhigh"
+            },
+            {
+              "value": "max",
+              "label": "max"
+            }
+          ],
+          "default": "medium",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.helpers",
+          "restart": false
+        },
+        {
+          "key": "search_web_model",
+          "label": "Web search model",
+          "module": "web_search",
+          "type": "enum",
+          "multi": false,
+          "choices": [
+            {
+              "value": "claude-haiku-5-5",
+              "label": "claude-haiku-5-5"
+            },
+            {
+              "value": "claude-sonnet-5-5",
+              "label": "claude-sonnet-5-5"
+            },
+            {
+              "value": "claude-opus-5-5",
+              "label": "claude-opus-5-5"
+            }
+          ],
+          "default": "claude-haiku-5-5",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.helpers",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "assistant",
+      "name": "schedules",
+      "title": "Schedules",
+      "url": "/settings/assistant",
+      "fields": [
+        {
+          "key": "digest_notify",
+          "label": "Notify me when the morning brief is ready",
+          "module": "assistant",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "true",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false
+        },
+        {
+          "key": "agent_schedule_min_interval_seconds",
+          "label": "Shortest schedule interval (seconds)",
+          "module": "assistant",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "3600",
+          "value": null,
+          "source": null,
+          "class": "advanced",
+          "editable": true,
+          "secret": false,
+          "group": "assistant.routines",
+          "restart": false,
+          "help": "Applies when a schedule is created or changed; existing schedules keep running as they are."
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "module": "assistant",
+      "name": "weather",
+      "title": "Weather",
+      "url": "/settings/assistant",
+      "fields": [
+        {
+          "key": "weather_location_name",
+          "label": "Place name",
+          "module": "assistant",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "connections.weather",
+          "restart": false
+        },
+        {
+          "key": "weather_latitude",
+          "label": "Latitude",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "connections.weather",
+          "restart": false
+        },
+        {
+          "key": "weather_longitude",
+          "label": "Longitude",
+          "module": "assistant",
+          "type": "float",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "connections.weather",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "section",
+      "module": "calendar",
+      "name": "calendar",
+      "title": "Calendar",
+      "url": "/settings/calendar",
+      "fields": [
+        {
+          "key": "calendar_account",
+          "label": "Account",
+          "module": "calendar",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.calendar",
+          "restart": false
+        },
+        {
+          "key": "icloud_apple_id",
+          "label": "Apple ID",
+          "module": "calendar",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "connections",
+          "restart": false
+        },
+        {
+          "key": "icloud_calendar",
+          "label": "Calendar",
+          "module": "calendar",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.calendar",
+          "restart": false
+        },
+        {
+          "key": "default_event_minutes",
+          "label": "Event minutes",
+          "module": "calendar",
+          "type": "int",
+          "multi": false,
+          "choices": [],
+          "default": "60",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.calendar",
+          "restart": false
+        },
+        {
+          "key": "work_hours",
+          "label": "Work hours",
+          "module": "calendar",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "09:00-17:00",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.calendar",
+          "restart": false
+        },
+        {
+          "key": "work_days",
+          "label": "Work days",
+          "module": "calendar",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "mon,tue,wed,thu,fri",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps.calendar",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "section",
+      "module": "export",
+      "name": "export_obsidian",
+      "title": "Markdown export",
+      "url": "/settings/export",
+      "fields": [
+        {
+          "key": "export_obsidian_kinds",
+          "label": "Include",
+          "module": "export",
+          "type": "string",
+          "multi": true,
+          "choices": [
+            {
+              "value": "pii",
+              "label": "Contact details"
+            },
+            {
+              "value": "messages",
+              "label": "Mail and messages"
+            },
+            {
+              "value": "personal",
+              "label": "Personal"
+            }
+          ],
+          "default": "pii,messages,personal",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "knowledge.export",
+          "restart": false
+        },
+        {
+          "key": "export_obsidian_private_to",
+          "label": "Include private records",
+          "module": "export",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "knowledge.export",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "module": "mail",
+      "name": "mail",
+      "title": "mail",
+      "url": "/settings/mail",
+      "fields": [
+        {
+          "key": "mail_enabled",
+          "label": "Mail app is on",
+          "module": "core",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "false",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "module": "calendar",
+      "name": "calendar",
+      "title": "calendar",
+      "url": "/settings/calendar",
+      "fields": [
+        {
+          "key": "calendar_enabled",
+          "label": "Calendar app is on",
+          "module": "core",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "false",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "module": "media",
+      "name": "media",
+      "title": "media",
+      "url": "/settings/media",
+      "fields": [
+        {
+          "key": "media_enabled",
+          "label": "Media app is on",
+          "module": "core",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "false",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "module": "assistant",
+      "name": "assistant",
+      "title": "assistant",
+      "url": "/settings/assistant",
+      "fields": [
+        {
+          "key": "assistant_enabled",
+          "label": "Assistant app is on",
+          "module": "core",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "false",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "module": "notifications",
+      "name": "notifications",
+      "title": "notifications",
+      "url": "/settings/notifications",
+      "fields": [
+        {
+          "key": "notifications_enabled",
+          "label": "Notifications app is on",
+          "module": "core",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "false",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps",
+          "restart": false
+        }
+      ]
+    }
+  ]
+}

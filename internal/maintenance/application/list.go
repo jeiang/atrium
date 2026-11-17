@@ -14,13 +14,13 @@ import (
 const ListBackupsName application.Name = "maintenance.backup.list"
 
 const (
-	ListBackupsMax = 100
+	ListBackupsMax        = 100
+	ListBackupsExamineMax = backup.ExamineMax
 
 	LocationReady        = "ready"
 	LocationUnconfigured = "unconfigured"
 	LocationMissing      = "missing"
 
-	ProblemNotArchive  = "not_archive"
 	ProblemOldFormat   = "old_format"
 	ProblemNewerFormat = "newer_format"
 )
@@ -30,9 +30,10 @@ type ListBackupsInput struct {
 }
 
 type BackupList struct {
-	Location BackupLocation `json:"location"`
-	Items    []BackupEntry  `json:"items"`
-	Total    int            `json:"total"`
+	Location   BackupLocation `json:"location"`
+	Items      []BackupEntry  `json:"items"`
+	Total      int            `json:"total"`
+	Unexamined int            `json:"unexamined"`
 }
 
 type BackupLocation struct {
@@ -45,6 +46,7 @@ type BackupEntry struct {
 	Name       string        `json:"name"`
 	SizeBytes  int64         `json:"size_bytes"`
 	ModifiedAt string        `json:"modified_at"`
+	Prunable   bool          `json:"prunable"`
 	Format     int           `json:"format"`
 	Problem    string        `json:"problem,omitempty"`
 	Header     *BackupHeader `json:"header"`
@@ -71,7 +73,7 @@ func (s *Service) ListBackups(ctx context.Context, in ListBackupsInput) (applica
 		out.Location.State = LocationUnconfigured
 		return application.Read[BackupList]{Data: out}, nil
 	}
-	listed, total, err := backup.List(dir, min(max(in.Limit, 1), ListBackupsMax))
+	listing, err := backup.List(dir, min(max(in.Limit, 1), ListBackupsMax))
 	if errors.Is(err, fs.ErrNotExist) {
 		out.Location.State = LocationMissing
 		return application.Read[BackupList]{Data: out}, nil
@@ -79,9 +81,9 @@ func (s *Service) ListBackups(ctx context.Context, in ListBackupsInput) (applica
 	if err != nil {
 		return application.Read[BackupList]{}, err
 	}
-	out.Total = total
-	for _, l := range listed {
-		e := BackupEntry{Name: l.Name, SizeBytes: l.Size, ModifiedAt: l.Modified.UTC().Format(time.RFC3339), Format: l.Header.Format}
+	out.Total, out.Unexamined = listing.Total, listing.Unexamined
+	for _, l := range listing.Archives {
+		e := BackupEntry{Name: l.Name, SizeBytes: l.Size, ModifiedAt: l.Modified.UTC().Format(time.RFC3339), Prunable: l.Prunable, Format: l.Header.Format}
 		switch {
 		case l.Problem == nil:
 			h := &BackupHeader{CreatedAt: l.Header.CreatedAt, Schema: l.Header.Schema, Files: l.Header.Files}
@@ -91,10 +93,8 @@ func (s *Service) ListBackups(ctx context.Context, in ListBackupsInput) (applica
 			e.Header = h
 		case errors.Is(l.Problem, backup.ErrOldFormat):
 			e.Problem = ProblemOldFormat
-		case errors.Is(l.Problem, backup.ErrNewerFormat):
-			e.Problem = ProblemNewerFormat
 		default:
-			e.Problem = ProblemNotArchive
+			e.Problem = ProblemNewerFormat
 		}
 		out.Items = append(out.Items, e)
 	}

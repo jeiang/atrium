@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -33,6 +34,7 @@ const (
 	DismissName application.Name = "commitments.dismiss"
 	UpdateName  application.Name = "commitments.update"
 	DeleteName  application.Name = "commitments.delete"
+	SnoozeName  application.Name = "commitments.snooze"
 )
 
 const (
@@ -50,6 +52,7 @@ const (
 	ActionDismiss = "dismiss"
 	ActionEdit    = "edit"
 	ActionDelete  = "delete"
+	ActionSnooze  = "snooze"
 
 	ReasonReadOnly = "read_only"
 
@@ -63,23 +66,24 @@ var Statuses = [...]string{tasks.StatusOpen, tasks.StatusDone, tasks.StatusDismi
 var ErrNoModuleSet = errors.New("commitments: no module set")
 
 type CommitmentItem struct {
-	Ref         string       `json:"ref"`
-	Source      string       `json:"source" api:"enum=task|commitment"`
-	ID          int64        `json:"id"`
-	Side        string       `json:"side" api:"enum=todo|waiting"`
-	Title       string       `json:"title"`
-	Notes       string       `json:"notes"`
-	Due         *string      `json:"due" api:"nullable"`
-	Status      string       `json:"status" api:"enum=open|done|dismissed"`
-	Owner       string       `json:"owner" api:"enum=me|them"`
-	Counterpart *string      `json:"counterpart" api:"nullable"`
-	Priority    *string      `json:"priority" api:"nullable"`
-	RemindAt    *float64     `json:"remind_at" api:"nullable"`
-	CreatedTS   float64      `json:"created_ts"`
-	UpdatedTS   *float64     `json:"updated_ts" api:"nullable"`
-	DoneTS      *float64     `json:"done_ts" api:"nullable"`
-	Links       []tasks.Link `json:"links"`
-	Actions     []string     `json:"actions"`
+	Ref          string       `json:"ref"`
+	Source       string       `json:"source" api:"enum=task|commitment"`
+	ID           int64        `json:"id"`
+	Side         string       `json:"side" api:"enum=todo|waiting"`
+	Title        string       `json:"title"`
+	Notes        string       `json:"notes"`
+	Due          *string      `json:"due" api:"nullable"`
+	Status       string       `json:"status" api:"enum=open|done|dismissed"`
+	Owner        string       `json:"owner" api:"enum=me|them"`
+	Counterpart  *string      `json:"counterpart" api:"nullable"`
+	Priority     *string      `json:"priority" api:"nullable"`
+	RemindAt     *float64     `json:"remind_at" api:"nullable"`
+	CreatedTS    float64      `json:"created_ts"`
+	UpdatedTS    *float64     `json:"updated_ts" api:"nullable"`
+	DoneTS       *float64     `json:"done_ts" api:"nullable"`
+	Links        []tasks.Link `json:"links"`
+	SnoozedUntil *float64     `json:"snoozed_until,omitempty"`
+	Actions      []string     `json:"actions"`
 }
 
 type Key struct {
@@ -152,6 +156,12 @@ type RefInput struct {
 	Ref    string
 }
 
+type SnoozeInput struct {
+	Source tasksapp.Source
+	Ref    string
+	Until  float64
+}
+
 type UpdateInput struct {
 	Source    tasksapp.Source
 	Ref       string
@@ -176,10 +186,11 @@ type Service struct {
 	state  *state.Store
 	ledger *ledger.Store
 	tasks  *tasksapp.Service
+	now    func() float64
 }
 
 func New(d *db.DB, store *ledger.Store, now func() float64) *Service {
-	return &Service{db: d, state: state.New(d), ledger: store, tasks: tasksapp.New(d, store, now)}
+	return &Service{db: d, state: state.New(d), ledger: store, tasks: tasksapp.New(d, store, now), now: now}
 }
 
 func describeRead[I, O any](name application.Name, authority ...application.Authority) application.Definition {
@@ -199,10 +210,11 @@ func Describe() []application.Definition {
 		describeCommand[RefInput](DismissName),
 		describeCommand[UpdateInput](UpdateName),
 		describeCommand[RefInput](DeleteName),
+		describeCommand[SnoozeInput](SnoozeName),
 	}
 }
 
-var readScopes = []string{state.Tasks, state.Mail, state.Assistant, state.Knowledge, state.Review}
+var readScopes = []string{state.Tasks, state.Mail, state.Assistant, state.Knowledge, state.Review, state.Attention}
 
 type shown struct {
 	tasks, commitments bool
@@ -232,7 +244,7 @@ func fromTask(t tasks.Task, links []tasks.Link) CommitmentItem {
 	}
 	switch t.Status {
 	case tasks.StatusOpen:
-		item.Actions = []string{ActionDone, ActionDismiss, ActionEdit, ActionDelete}
+		item.Actions = []string{ActionDone, ActionDismiss, ActionSnooze, ActionEdit, ActionDelete}
 	default:
 		item.Actions = []string{ActionReopen, ActionEdit, ActionDelete}
 	}
@@ -259,7 +271,7 @@ func fromCommitment(ctx context.Context, q db.Querier, c signals.CommitmentRow) 
 	}
 	switch c.Status {
 	case signals.Open:
-		item.Actions = []string{ActionDone, ActionDismiss}
+		item.Actions = []string{ActionDone, ActionDismiss, ActionSnooze}
 	case signals.Done, signals.Dismissed:
 		item.Actions = []string{ActionReopen}
 	default:
@@ -295,7 +307,7 @@ func commitmentMatches(c signals.CommitmentRow, f tasks.Filter) bool {
 	return true
 }
 
-func items(ctx context.Context, q db.Querier, show shown, f tasks.Filter) ([]CommitmentItem, error) {
+func items(ctx context.Context, q db.Querier, show shown, f tasks.Filter, now float64) ([]CommitmentItem, error) {
 	var out []CommitmentItem
 	if show.tasks {
 		found, err := tasks.Page(ctx, q, f, "", -1, nil)
@@ -324,6 +336,15 @@ func items(ctx context.Context, q db.Querier, show shown, f tasks.Filter) ([]Com
 				return nil, err
 			}
 			out = append(out, item)
+		}
+	}
+	snoozes, err := attention.ActiveSnoozes(ctx, q, now)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if until, ok := snoozes[out[i].Source+"\x00"+strconv.FormatInt(out[i].ID, 10)]; ok {
+			out[i].SnoozedUntil = &until
 		}
 	}
 	slices.SortFunc(out, func(a, b CommitmentItem) int { return a.Key().compare(b.Key()) })
@@ -361,7 +382,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 	if err != nil {
 		return application.Read[List]{}, err
 	}
-	all, err := items(ctx, tx, show, in.Filter)
+	all, err := items(ctx, tx, show, in.Filter, s.now())
 	if err != nil {
 		return application.Read[List]{}, err
 	}
@@ -445,7 +466,7 @@ func (s *Service) item(ctx context.Context, q db.Querier, source string, id int6
 		if err != nil {
 			return nil, err
 		}
-		return new(fromTask(*t, links)), nil
+		return s.withSnooze(ctx, q, new(fromTask(*t, links)))
 	case source == SourceCommitment && show.commitments:
 		c, err := signals.GetCommitment(ctx, q, id)
 		if err != nil || c == nil {
@@ -455,7 +476,7 @@ func (s *Service) item(ctx context.Context, q db.Querier, source string, id int6
 		if err != nil {
 			return nil, err
 		}
-		return &item, nil
+		return s.withSnooze(ctx, q, &item)
 	}
 	return nil, nil
 }
@@ -673,6 +694,65 @@ func (s *Service) commitmentStatus(ctx context.Context, name application.Name, i
 	})
 	if err != nil {
 		return s.refused(ctx, name, in.Ref, err)
+	}
+	return s.settle(ctx, in.Ref, []int64{effectID}, auditID)
+}
+
+func (s *Service) withSnooze(ctx context.Context, q db.Querier, item *CommitmentItem) (*CommitmentItem, error) {
+	until, err := attention.SnoozedUntil(ctx, q, item.Source, strconv.FormatInt(item.ID, 10))
+	if err != nil {
+		return nil, err
+	}
+	if until != nil && *until > s.now() {
+		item.SnoozedUntil = until
+	}
+	return item, nil
+}
+
+func (s *Service) Snooze(ctx context.Context, in SnoozeInput) (application.Change[Changed], error) {
+	item, err := s.resolve(ctx, in.Ref)
+	if err != nil {
+		return s.refused(ctx, SnoozeName, in.Ref, err)
+	}
+	if item.Status != tasks.StatusOpen {
+		return s.refused(ctx, SnoozeName, in.Ref, wrongStatus(item.Status, "snoozed"))
+	}
+	now := s.now()
+	if in.Until <= now {
+		return s.refused(ctx, SnoozeName, in.Ref, &application.Error{Code: application.Invalid, Message: "until must be in the future",
+			Fields: []application.Field{{Name: "until", Code: "invalid", Message: "until must be in the future"}}})
+	}
+	op := attention.UndoTaskSnooze
+	if item.Source == SourceCommitment {
+		op = attention.UndoCommitmentSnooze
+	}
+	sourceID := strconv.FormatInt(item.ID, 10)
+	change := ledger.New{Origin: "local", Operation: op, OperationKey: op + ":" + ledger.NewKey(), Target: in.Ref}
+	if in.Source.ThreadID != 0 {
+		change.Origin, change.ThreadID, change.RunID, change.ProposalID = "agent", &in.Source.ThreadID, &in.Source.RunID, in.Source.ProposalID
+	}
+	var effectID, auditID int64
+	err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		effect, err := s.ledger.ApplyLocalTx(ctx, tx, change, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+			previous, err := attention.SnoozedUntil(ctx, tx, item.Source, sourceID)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			if err := attention.Snooze(ctx, tx, item.Source, sourceID, in.Until, now); err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, Before: encode(map[string]any{"snoozed_until": previous}), After: encode(map[string]any{"snoozed_until": in.Until}),
+				Undo: encode(attention.SnoozeUndo{Op: op, Kind: item.Source, SourceID: sourceID, Until: previous})}, nil
+		})
+		if err != nil {
+			return err
+		}
+		effectID = effect.ID
+		auditID, err = s.audit(ctx, tx, SnoozeName, in.Ref, state.OK, effectID)
+		return err
+	})
+	if err != nil {
+		return s.refused(ctx, SnoozeName, in.Ref, err)
 	}
 	return s.settle(ctx, in.Ref, []int64{effectID}, auditID)
 }

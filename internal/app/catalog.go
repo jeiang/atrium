@@ -5,10 +5,12 @@ import (
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 
+	"github.com/jeiang/atrium/internal/apps/calendar/calendarmodule"
+	"github.com/jeiang/atrium/internal/apps/torrents"
+	"github.com/jeiang/atrium/internal/apps/torrents/torrentsmodule"
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
-	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"
@@ -34,13 +36,15 @@ type Dependencies struct {
 
 func Builtins(d Dependencies) []module.Builder {
 	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Classifier: classifierFor, Now: d.Now, Start: asstapp.ScheduledStart}
+	app := torrents.New(mediamodule.Consumer())
 	return []module.Builder{
 		coremodule.Module{Version: d.Version, Guard: d.Guard, Now: d.Now, Resources: d.Bindings.Resources, Jobs: jobs},
 		signalsmodule.Module{},
 		contactsmodule.Module{Jobs: jobs},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
 		calendarmodule.Module{Jobs: jobs},
-		mediamodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
+		torrentsmodule.Module{App: app, Now: d.Now},
+		mediamodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources, Torrents: app},
 		assistantmodule.Module{Now: d.Now, Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
 		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},
 		grafanamodule.Module{Jobs: jobs},

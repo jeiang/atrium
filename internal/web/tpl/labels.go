@@ -76,6 +76,7 @@ var labelSets = map[string][]pair{
 		{"skipped_unconfigured_partial", "A connection this job needs is not configured; part of this run finished before it stopped."},
 		{"skipped_pause", "Live mode was paused, so this run did not start."},
 		{"skipped_module", "The module that owns this job is disabled, so this run did not start."},
+		{"skipped_dependency", "A connection this job needs is unavailable, so this run did no work; the run error names the repair."},
 		{"missed_coalesced", "The run was due while atrium was down; missed runs were merged into one."},
 	},
 	"job_source": {
@@ -129,6 +130,7 @@ var badgeSets = map[string]map[string]Badge{
 		"skipped_unconfigured": {"outline", "Skipped (not configured)"},
 		"skipped_pause":        {"outline", "Skipped (paused)"},
 		"skipped_module":       {"outline", "Skipped (module off)"},
+		"skipped_dependency":   {"outline", "Skipped (connection unavailable)"},
 		"missed_coalesced":     {"secondary", "Ran late"},
 	},
 	"subagent_status": {
