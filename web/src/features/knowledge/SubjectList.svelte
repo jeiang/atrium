@@ -9,16 +9,19 @@
   import SelectField from '../../shared/ui/SelectField.svelte';
   import TextField from '../../shared/ui/TextField.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { p } from '../../shell/router';
+  import { isActive, p } from '../../shell/router';
+  import FactDialog from './FactDialog.svelte';
   import { KINDS, type SubjectFilter, useInstructions, useSubjects } from './knowledge';
 
   interface Props {
     selected?: number;
     standing?: boolean;
     level?: 2 | 3;
+    phone?: boolean;
   }
 
-  let { selected, standing = false, level = 2 }: Props = $props();
+  let { selected, standing = false, level = 2, phone = false }: Props = $props();
+  let creating = $state(false);
 
   const kindOptions = [
     { value: '', label: 'All kinds' },
@@ -69,7 +72,10 @@
 </script>
 
 <div class="subjects">
-  <svelte:element this={`h${level}`} class="subjects__title">Subjects</svelte:element>
+  <div class="subjects__head">
+    <svelte:element this={`h${level}`} class="subjects__title">Subjects</svelte:element>
+    <Button size="sm" icon="plus" onclick={() => (creating = true)}>New fact</Button>
+  </div>
   <div class="subjects__filters">
     <TextField label="Find a subject" type="search" bind:value={text} autocomplete="off" />
     <div class="subjects__selects">
@@ -89,6 +95,18 @@
           <Badge tone="accent">Pinned</Badge>
         {/snippet}
       </ListRow>
+      <ListRow
+        title="Review"
+        meta="Writes waiting for you to confirm"
+        href={p('/knowledge/review')}
+        selected={isActive('/knowledge/review')}
+      />
+      <ListRow
+        title="About me"
+        meta="Pinned facts read on every run"
+        href={p('/knowledge/me')}
+        selected={isActive('/knowledge/me')}
+      />
       <ListRow title="Spaces" meta="Subjects, chats and files by project" href={p('/knowledge/spaces')} />
       <ListRow title="Files" meta="Every file in chats and spaces" href={p('/knowledge/files')} />
     </List>
@@ -144,4 +162,5 @@
       {/if}
     {/if}
   </div>
+  <FactDialog bind:open={creating} {phone} />
 </div>
