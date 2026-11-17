@@ -386,9 +386,8 @@ failing notice and one recovery notice in 6 hours. A failure within 6 hours of
 the last failing notice is held: its state shows on the Connections page at
 once, but it notifies only if it is still failing on a check 30 minutes or more
 after it began. A recovery notifies only when its failure was notified. The
-service keeps this memory in process: after a restart the first change notifies
-as before, and `atrium connections test` run as its own process notifies each
-change as before.
+memory is stored with the connection, so it holds across a restart, and
+`atrium connections test` run as its own process is damped the same way.
 
 A built-in connection that atrium creates itself (Open-Meteo, Web fetch, TMDB,
 EZTV, Embedding) follows the apps that need it while it is still

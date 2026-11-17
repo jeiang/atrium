@@ -543,12 +543,13 @@ claims about the running application. Operator contracts are in
   sooner; Test, `connections check` and credential changes still do.
   Request outcomes reach only the health watch of the app whose
   connection registry opened the lease (`Outcomes`). A first failing result notifies once,
-  also after a host change. Notices are damped per connection in process
+  also after a host change. Notices are damped per connection
   (`flapWindow` 6 hours, `lastingAfter` 30 minutes in
   `internal/connections/health.go`): at most one failing and one recovery
   notice per 6 hours; a held failure notifies once it lasts 30 minutes; a
-  recovery notifies only after a notified failure. A CLI process keeps its
-  own memory, so `connections test` notifies each change. A scheduled run whose
+  recovery notifies only after a notified failure. The memory is stored in
+  `connections.notice_json` (migration 9), so it holds across restarts and
+  CLI processes, and `connections test` is damped the same way. A scheduled run whose
   connection lease reported a failing or needs-reauth result
   (`scheduler.CauseReporter`) sends no job-failed notice and no stale
   notice for that run (that memory is in process, so after a restart the
@@ -827,6 +828,9 @@ claims about the running application. Operator contracts are in
   triggers on the `knowledge` scope, with no row rewrite.
   Migration 5 drops the `ops_findings` table with its indexes and
   triggers; server-ops findings live in `kb_records`.
+  Migration 9 adds `connections.notice_json` (default `{}`), the stored
+  notice damping memory, with no row rewrite; the connections read
+  revision ignores it.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database

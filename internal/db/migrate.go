@@ -25,6 +25,7 @@ var migrations = []migration{
 	{6, addLibraryRequests},
 	{7, narrowConnectionReadTrigger},
 	{EventCandidatesDropped, dropEventCandidates},
+	{9, addConnectionNotices},
 }
 
 const EventCandidatesDropped = 8
@@ -74,6 +75,9 @@ CREATE TRIGGER connections_read_update AFTER UPDATE ON connections WHEN old.id I
 	eventCandidatesDDL = `
 DROP TABLE event_candidates;
 `
+	connectionNoticesDDL = `
+ALTER TABLE connections ADD COLUMN notice_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(notice_json));
+`
 )
 
 func addLibraryRequests(ctx context.Context, tx *sql.Tx) error {
@@ -95,6 +99,11 @@ func dropEventCandidates(ctx context.Context, tx *sql.Tx) error {
 		return fmt.Errorf("%d event candidates are still queued for drafting; draft them with the previous atrium before upgrading", queued)
 	}
 	_, err := tx.ExecContext(ctx, eventCandidatesDDL)
+	return err
+}
+
+func addConnectionNotices(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, connectionNoticesDDL)
 	return err
 }
 

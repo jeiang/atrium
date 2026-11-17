@@ -56,7 +56,7 @@ func connectionNotices(t *testing.T, dir, label string) int {
 	return n
 }
 
-func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *testing.T) {
+func TestConnectionHealthDampsAFlapAcrossProcessesAndDisconnectKeepsData(t *testing.T) {
 	t.Parallel()
 	requireCipher(t)
 	srv, status := grafanaHealthServer(t)
@@ -87,32 +87,33 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	if state := connectionState(t, dir, "service/grafana"); state != "failing" {
 		t.Fatalf("state after a failing test = %q", state)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 3 {
-		t.Fatalf("%d notices after one transition, want 3", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
+		t.Fatalf("%d notices after a CLI failure inside the flap window, want 2", n)
 	}
 	if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitError {
 		t.Fatalf("second failing test: exit %d", got.code)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 3 {
-		t.Fatalf("%d notices after an unchanged failing check, want 3", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
+		t.Fatalf("%d notices after an unchanged failing check, want 2", n)
 	}
 
 	status.Store(http.StatusUnauthorized)
-	if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitError {
-		t.Fatalf("refused token: exit %d", got.code)
+	refused := runApp(t, "connections", "test", "service/grafana")
+	if refused.code != cli.ExitError {
+		t.Fatalf("refused token: exit %d", refused.code)
 	}
 	if state := connectionState(t, dir, "service/grafana"); state != "needs_reauth" {
-		t.Fatalf("state after a refused token = %q", state)
+		t.Fatalf("state after a refused token = %q: stdout %q stderr %q", state, refused.stdout, refused.stderr)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 4 {
-		t.Fatalf("%d notices after a second transition, want 4", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
+		t.Fatalf("%d notices after a second transition inside the flap window, want 2", n)
 	}
 
 	s.stop()
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/grafana") == "needs_reauth" })
-	if n := connectionNotices(t, dir, "Grafana"); n != 4 {
-		t.Fatalf("%d notices after a restart in the same state, want 4", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
+		t.Fatalf("%d notices after a restart in the same state, want 2", n)
 	}
 
 	before := connectionNotices(t, dir, "Grafana")

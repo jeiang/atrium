@@ -78,7 +78,7 @@ func (s *Store) notice(ctx context.Context, id ID, previous, next State, reason,
 			hint = RepairHint(view)
 		}
 	}
-	if !s.damp(id, previous, next) {
+	if !s.damp(context.WithoutCancel(ctx), id, previous, next) {
 		return
 	}
 	state := strings.ReplaceAll(string(next), "_", " ")
@@ -423,37 +423,45 @@ const (
 	lastingAfter = 30 * time.Minute
 )
 
-type noticeKey struct {
-	d  *db.DB
-	id ID
-}
-
 type noticeMemory struct {
-	toldAt time.Time
-	open   bool
-	heldAt time.Time
+	ToldAt time.Time `json:"told_at,omitzero"`
+	Open   bool      `json:"open"`
+	HeldAt time.Time `json:"held_at,omitzero"`
 }
 
-var (
-	noticesMu sync.Mutex
-	notices   = map[noticeKey]noticeMemory{}
-)
+var noticesMu sync.Mutex
 
 func unhealthy(s State) bool { return s == Failing || s == NeedsReauth }
 
-func (s *Store) damp(id ID, previous, next State) bool {
-	key := noticeKey{d: s.d, id: id}
+func (s *Store) damp(ctx context.Context, id ID, previous, next State) bool {
 	noticesMu.Lock()
 	defer noticesMu.Unlock()
-	m, seen := notices[key]
-	if !seen {
-		m = noticeMemory{open: unhealthy(previous)}
-	}
-	send, m := dampNotice(m, previous, next, s.now())
-	if unhealthy(next) || next == OK || next == Expiring {
-		notices[key] = m
-	} else {
-		delete(notices, key)
+	send := true
+	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		var raw string
+		if err := tx.QueryRowContext(ctx, "SELECT notice_json FROM connections WHERE id = ?", id).Scan(&raw); err != nil {
+			return err
+		}
+		m := noticeMemory{Open: unhealthy(previous)}
+		if raw != "{}" {
+			if err := json.Unmarshal([]byte(raw), &m); err != nil {
+				return err
+			}
+		}
+		send, m = dampNotice(m, previous, next, s.now())
+		stored := []byte("{}")
+		if unhealthy(next) || next == OK || next == Expiring {
+			var err error
+			if stored, err = json.Marshal(m); err != nil {
+				return err
+			}
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE connections SET notice_json = ? WHERE id = ?", string(stored), id)
+		return err
+	})
+	if err != nil {
+		log.Warn("connection notice memory failed", logx.Integration, string(id), logx.Err, err.Error())
+		return true
 	}
 	return send
 }
@@ -461,24 +469,24 @@ func (s *Store) damp(id ID, previous, next State) bool {
 func dampNotice(m noticeMemory, previous, next State, now time.Time) (bool, noticeMemory) {
 	switch {
 	case unhealthy(next) && previous == next:
-		if m.open || m.heldAt.IsZero() || now.Sub(m.heldAt) < lastingAfter {
+		if m.Open || m.HeldAt.IsZero() || now.Sub(m.HeldAt) < lastingAfter {
 			return false, m
 		}
-		return true, noticeMemory{toldAt: now, open: true}
+		return true, noticeMemory{ToldAt: now, Open: true}
 	case unhealthy(next):
-		if !m.toldAt.IsZero() && now.Sub(m.toldAt) < flapWindow {
-			if !m.open && m.heldAt.IsZero() {
-				m.heldAt = now
+		if !m.ToldAt.IsZero() && now.Sub(m.ToldAt) < flapWindow {
+			if !m.Open && m.HeldAt.IsZero() {
+				m.HeldAt = now
 			}
 			return false, m
 		}
-		return true, noticeMemory{toldAt: now, open: true}
+		return true, noticeMemory{ToldAt: now, Open: true}
 	case unhealthy(previous) && (next == OK || next == Expiring):
-		m.heldAt = time.Time{}
-		if !m.open {
+		m.HeldAt = time.Time{}
+		if !m.Open {
 			return false, m
 		}
-		m.open = false
+		m.Open = false
 		return true, m
 	}
 	return true, m
