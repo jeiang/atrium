@@ -128,7 +128,10 @@ in {
   web-lint = check {
     pname = "atrium-web-lint";
     nativeBuildInputs = [biome];
-    command = "npm run lint && npm run check";
+    command = ''
+      npm run lint
+      npm run check
+    '';
   };
   web-e2e = let
     e2e = pname: args:

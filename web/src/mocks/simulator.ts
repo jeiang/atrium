@@ -51,6 +51,7 @@ export function simulateRun(request: Request, thread: number, run: number): Resp
   const url = new URL(request.url);
   const fault = url.searchParams.get('fault') ?? '';
   if (fault === 'busy') return problem(429, 'rate_limited', 'Too many open streams.');
+  if (fault === 'error') return HttpResponse.error();
   if (fault === 'expired') {
     return problem(410, 'stream_expired', 'This stream is no longer kept.', { run_id: script.run });
   }
@@ -79,7 +80,9 @@ export function simulateRun(request: Request, thread: number, run: number): Resp
         }
         const event = pending[sent];
         if (!event) {
-          controller.enqueue(encoder.encode(sseFrame({ event: 'done', data: { state: terminalState(script) } })));
+          if (fault !== 'nodone') {
+            controller.enqueue(encoder.encode(sseFrame({ event: 'done', data: { state: terminalState(script) } })));
+          }
           controller.close();
           return;
         }

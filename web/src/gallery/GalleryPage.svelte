@@ -7,6 +7,7 @@
   import Apps from './sections/Apps.svelte';
   import Assistant from './sections/Assistant.svelte';
   import AssistantSettings from './sections/AssistantSettings.svelte';
+  import Calendar from './sections/Calendar.svelte';
   import Collections from './sections/Collections.svelte';
   import Connections from './sections/Connections.svelte';
   import Forms from './sections/Forms.svelte';
@@ -45,6 +46,7 @@
   <Overlays />
   <Connections />
   <Apps />
+  <Calendar />
   <Widgets />
   <Approvals />
   <Tools />

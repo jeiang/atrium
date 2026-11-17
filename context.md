@@ -539,7 +539,11 @@ claims about the running application. Operator contracts are in
   consent starts); the refresh token is stored as a
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
   Test exchanges it, and a 400 or 401
-  marks the integration needs-reauth.
+  marks the integration needs-reauth. A setup that has never reached `ok`
+  and still lacks its client ID or any consented grant checks as
+  `unconfigured` (no notice, so no unhealthy alert); a capability with no
+  stored grant is not tested. Once Google has worked, losing the client ID
+  or every grant checks as `failing` and notifies.
 - Capability model (`internal/connections/needs.go`): each kind declares
   `Offers`, the capability names its test reports; each module declares
   `Needs` (kind, capability, soft, features), checked at compile. Bindings,

@@ -150,7 +150,6 @@ func TestSavingAnUnpinnedMailPasswordRechecksTheICloudConnectionThatSharesIt(t *
 	if resp := s.do(http.MethodPost, "/api/v1/calendar/sync", token, nil); resp.status == http.StatusOK {
 		t.Fatal("a calendar sync without a password succeeded")
 	}
-	// An app password pasted in groups with spaces behaves the same on the DAV path as on IMAP and SMTP.
 	spaced := davPassword[:6] + " " + davPassword[6:13] + " " + davPassword[13:]
 	apiData(t, s.do(http.MethodPatch, "/api/v1/connections/mail/icloud", token, map[string]any{"credentials": map[string]string{"mail/icloud/password": spaced}}), http.StatusOK)
 	waitFor(t, func() bool { return connectionState(t, dir, "icloud/icloud") == "ok" })

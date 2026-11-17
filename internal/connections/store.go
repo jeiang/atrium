@@ -77,17 +77,18 @@ type transportOptions struct {
 }
 
 type Lease struct {
-	store    *Store
-	id       ID
-	kind     Kind
-	revision int64
-	config   json.RawMessage
-	options  transportOptions
-	caps     []Capability
-	creds    map[string]credential
-	defaults map[string]string
-	shared   *shared
-	closed   bool
+	store        *Store
+	id           ID
+	kind         Kind
+	revision     int64
+	config       json.RawMessage
+	options      transportOptions
+	caps         []Capability
+	creds        map[string]credential
+	defaults     map[string]string
+	shared       *shared
+	closed       bool
+	workedBefore bool
 }
 
 func New(d *db.DB, host config.Host, r *Registry) (*Store, error) {
@@ -936,7 +937,7 @@ func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisable
 			s.recheckSharers(ctx, id, rotated)
 		}
 	}
-	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds}
+	lease := &Lease{store: s, id: id, kind: v.Kind, revision: revision, config: json.RawMessage(configJSON), options: opts, caps: enabledCaps, creds: creds, workedBefore: lastOK != nil}
 	lease.defaults = s.defaultsFor(v.Kind)
 	lease.shared = s.sharedFor(id, revision)
 	return lease, nil
@@ -1718,7 +1719,7 @@ func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate
 	if current.ConfigSource == SourceHost {
 		config = current.Config
 	}
-	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
+	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds, workedBefore: current.LastOKAt != nil}
 	lease.defaults = s.defaultsFor(current.Kind)
 	lease.shared = &shared{clients: map[string]*http.Client{}, tokens: map[string]string{}}
 	return lease, nil
