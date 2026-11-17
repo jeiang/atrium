@@ -17,7 +17,7 @@ import {
 } from '../../contract';
 import { refusedOffline } from '../../shared/device.svelte';
 
-const CALENDAR_TOPICS = ['calendar', 'connections', 'settings'] as const;
+const CALENDAR_TOPICS = ['calendar', 'settings'] as const;
 const CANDIDATE_TOPICS = ['review', 'calendar'] as const;
 const QUEUE_PAGE = 100;
 

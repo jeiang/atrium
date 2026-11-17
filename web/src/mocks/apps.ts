@@ -11,6 +11,8 @@ export interface AppsScenario {
   delay?: number;
 }
 
+const log = globalThis as typeof globalThis & { atriumAppsReads?: number };
+
 interface MockApp {
   id: string;
   name: string;
@@ -179,6 +181,7 @@ export function appHandlers(read: () => { apps?: AppsScenario }) {
   return [
     http.get(`*${API_BASE}/apps`, () => {
       const apps = current();
+      log.atriumAppsReads = (log.atriumAppsReads ?? 0) + 1;
       if (read().apps?.error) return refused('unavailable', 'The app states are not evaluated yet.', 503);
       return HttpResponse.json({ data: { apps: entries(apps, String(revision)) }, revision: String(revision) });
     }),

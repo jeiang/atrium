@@ -15,6 +15,14 @@ function writes(page: Page): Promise<CalendarRequest[]> {
   return page.evaluate(() => Reflect.get(globalThis, 'atriumCalendarRequests') ?? []);
 }
 
+function reads(page: Page): Promise<{ events: number; apps: number; streams: number }> {
+  return page.evaluate(() => ({
+    events: Reflect.get(globalThis, 'atriumCalendarReads') ?? 0,
+    apps: Reflect.get(globalThis, 'atriumAppsReads') ?? 0,
+    streams: Reflect.get(globalThis, 'atriumMockStreams') ?? 0,
+  }));
+}
+
 function toasts(page: Page) {
   return page.getByRole('list', { name: 'Notifications' });
 }
@@ -69,6 +77,18 @@ test.describe('calendar on a desktop', () => {
     await thisWeek.click();
     await expect(heading).toHaveText(first ?? '');
     await expect(thisWeek).toBeDisabled();
+  });
+
+  test('a read that moves a topic it listens to is sent once and the week loads', async ({ page }) => {
+    await openAgenda(page);
+    await expect.poll(() => reads(page).then((count) => count.streams)).toBeGreaterThan(0);
+    const before = await reads(page);
+    await page.getByRole('button', { name: 'Next week' }).click();
+    await expect(row(page, /Dentist check-up/)).toBeVisible();
+    await page.waitForTimeout(5_000);
+    const after = await reads(page);
+    expect(after.events - before.events, 'calendar reads for the new week').toBe(1);
+    expect(after.apps - before.apps, 'app list reads after that').toBeLessThanOrEqual(1);
   });
 
   test('a new event is added with one key and can be undone', async ({ page }) => {
