@@ -1,5 +1,6 @@
 import { delay, HttpResponse, http } from 'msw';
 import type {
+  MediaAddInput,
   MediaCatalogue,
   MediaChannel,
   MediaChannelInput,
@@ -7,8 +8,10 @@ import type {
   MediaLibraryEntry,
   MediaLibraryFile,
   MediaQueueItem,
+  MediaSelectInput,
   MediaTorrent,
   TorrentControlInput,
+  TorrentFile,
 } from '../contract';
 import { API_BASE } from '../contract';
 import type { AppsScenario } from './apps';
@@ -24,8 +27,64 @@ export interface MediaScenario {
 
 interface Store {
   torrents: MediaTorrent[];
+  files: Record<string, TorrentFile[]>;
   channels: MediaChannel[];
   queue: MediaQueueItem[];
+}
+
+const UPLOAD_BYTES = 786_432;
+
+function file(index: number, name: string, size: number, progress: number, priority = 1): TorrentFile {
+  return { index, name, size, progress, priority };
+}
+
+function seedFiles(scenario: MediaScenario): Record<string, TorrentFile[]> {
+  const files: Record<string, TorrentFile[]> = {
+    a1: [
+      file(0, 'Harbour.Lights.S02E07.1080p.WEB.mkv', 2_350_000_000, 0.42),
+      file(1, 'Harbour.Lights.S02E07.1080p.WEB.en.srt', 48_000, 1),
+      file(2, 'Sample/harbour.lights.s02e07.sample.mkv', 52_000_000, 0, 0),
+    ],
+    b2: [
+      file(0, 'The.Quiet.Orchard.2024.1080p.mkv', 8_000_000_000, 0.18),
+      file(1, 'The.Quiet.Orchard.2024.1080p.nfo', 4_000, 1),
+    ],
+    c3: [file(0, 'Lantern.Street.S01E03.720p.mkv', 950_000_000, 1)],
+    d4: [
+      file(0, 'Paper.Boats.1998.Remastered.mkv', 4_200_000_000, 0.63),
+      file(1, 'Extras/Paper.Boats.Commentary.mkv', 100_000_000, 0.63),
+    ],
+    e5: [
+      file(0, 'Garden.Club.Lectures.Vol2.Part1.mp4', 400_000_000, 1),
+      file(1, 'Garden.Club.Lectures.Vol2.Part2.mp4', 410_000_000, 1),
+    ],
+  };
+  if (scenario.torrents === 'empty' || scenario.torrents === 'unavailable') return {};
+  return files;
+}
+
+function magnetHash(uri: string): string | undefined {
+  const match = /[?&]xt=urn:btih:([0-9a-f]{40}|[a-z2-7]{32})(?:&|$)/i.exec(uri);
+  return match?.[1]?.toLowerCase();
+}
+
+function magnetName(uri: string): string | undefined {
+  const raw = new URLSearchParams(uri.slice('magnet:?'.length)).get('dn');
+  return raw?.trim() || undefined;
+}
+
+async function torrentHash(data: ArrayBuffer): Promise<string | undefined> {
+  if (new Uint8Array(data)[0] !== 0x64) return undefined;
+  const sum = new Uint8Array(await crypto.subtle.digest('SHA-1', data));
+  const digits = '0123456789abcdef';
+  return Array.from(sum, (byte) => `${digits[byte >> 4]}${digits[byte & 15]}`).join('');
+}
+
+function ownedByAtrium(torrent: MediaTorrent): boolean {
+  return torrent.tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .some((tag) => tag === 'atrium' || tag === 'media');
 }
 
 const observed = '2026-11-14T09:30:00Z';
@@ -161,7 +220,7 @@ function error(code: string, message: string, status: number): Response {
 }
 
 export function mediaHandlers(read: () => { media?: MediaScenario; apps?: AppsScenario }) {
-  let store: Store = { torrents: [], channels: [], queue: [] };
+  let store: Store = { torrents: [], files: {}, channels: [], queue: [] };
   let seededFrom: string | undefined;
   let nextChannel = 10;
 
@@ -170,7 +229,12 @@ export function mediaHandlers(read: () => { media?: MediaScenario; apps?: AppsSc
     const key = JSON.stringify(scenario);
     if (key !== seededFrom) {
       seededFrom = key;
-      store = { torrents: seedTorrents(scenario), channels: seedChannels(scenario), queue: seedQueue(scenario) };
+      store = {
+        torrents: seedTorrents(scenario),
+        files: seedFiles(scenario),
+        channels: seedChannels(scenario),
+        queue: seedQueue(scenario),
+      };
     }
     return store;
   };
@@ -203,6 +267,85 @@ export function mediaHandlers(read: () => { media?: MediaScenario; apps?: AppsSc
         unavailable: scenario().torrents === 'unavailable',
         ...(next ? { next } : {}),
       });
+    }),
+    http.post(`*${API_BASE}/media/torrents`, async ({ request }) => {
+      await wait();
+      if (off('torrents')) return error('not_found', 'This app is off.', 404);
+      const refused = refusal();
+      if (refused) return refused;
+      let magnet: string | undefined;
+      let upload: File | undefined;
+      if ((request.headers.get('Content-Type') ?? '').startsWith('multipart/form-data')) {
+        const form = await request.formData();
+        const names = [...form.keys()];
+        if (names.some((name) => name !== 'magnet' && name !== 'torrent') || new Set(names).size !== names.length) {
+          return error('invalid', 'Give one magnet or torrent file.', 422);
+        }
+        const part = form.get('torrent');
+        if (part !== null && typeof part === 'string') return error('invalid', 'torrent must be a file.', 422);
+        upload = part ?? undefined;
+        const text = form.get('magnet');
+        if (text !== null && typeof text !== 'string') return error('invalid', 'magnet must be a text field.', 422);
+        magnet = text ?? undefined;
+        if (upload && upload.size > UPLOAD_BYTES) return error('invalid', 'The torrent input is too large.', 422);
+      } else {
+        const body = (await request.json()) as MediaAddInput;
+        magnet = body.magnet;
+      }
+      if (magnet !== undefined && magnet !== '' && upload) {
+        return error('invalid', 'Give a magnet link or a .torrent file, not both.', 422);
+      }
+      const store = current();
+      let added: MediaTorrent;
+      if (upload) {
+        const hash = await torrentHash(await upload.arrayBuffer());
+        if (!hash) return error('invalid', 'not a torrent file', 422);
+        const name = upload.name.replace(/\.torrent$/i, '') || 'upload';
+        added = { hash, name, state: 'downloading', tags: 'media', progress: 0, size: upload.size * 1000 };
+        store.files[hash] = [
+          file(0, `${name}/${name}.mkv`, upload.size * 900, 0),
+          file(1, `${name}/${name}.nfo`, 2_000, 0),
+        ];
+      } else {
+        const uri = (magnet ?? '').trim();
+        if (uri === '') return error('invalid', 'Paste a magnet link or choose a .torrent file.', 422);
+        if (!uri.startsWith('magnet:?')) return error('invalid', 'That is not a magnet link.', 422);
+        const hash = magnetHash(uri);
+        if (!hash) return error('invalid', 'The magnet link has no v1 info hash (xt=urn:btih:...).', 422);
+        added = { hash, name: magnetName(uri) ?? hash, state: 'metaDL', tags: 'media', progress: 0, size: null };
+        store.files[hash] = [];
+      }
+      if (!store.torrents.some((item) => item.hash === added.hash)) store.torrents.push(added);
+      return HttpResponse.json({ hash: added.hash });
+    }),
+    http.get(`*${API_BASE}/media/torrents/:hash/files`, async ({ params, request }) => {
+      await wait();
+      if (off('torrents')) return error('not_found', 'This app is off.', 404);
+      const hash = String(params.hash);
+      const store = current();
+      if (!store.torrents.some((item) => item.hash === hash)) return error('not_found', 'unknown torrent', 404);
+      const url = new URL(request.url);
+      const limit = Number(url.searchParams.get('limit') ?? '50');
+      const after = Number(url.searchParams.get('cursor') ?? '-1');
+      const all = (store.files[hash] ?? []).filter((item) => item.index > after);
+      const items = all.slice(0, limit);
+      const last = items.at(-1);
+      const next = all.length > limit && last ? String(last.index) : undefined;
+      return HttpResponse.json({ items, ...(next ? { next } : {}) });
+    }),
+    http.put(`*${API_BASE}/media/torrents/:hash/files`, async ({ params, request }) => {
+      await wait();
+      if (off('torrents')) return error('not_found', 'This app is off.', 404);
+      const refused = refusal();
+      if (refused) return refused;
+      const hash = String(params.hash);
+      const store = current();
+      const torrent = store.torrents.find((item) => item.hash === hash);
+      if (!torrent || !ownedByAtrium(torrent)) return error('not_found', 'unknown torrent', 404);
+      const body = (await request.json()) as MediaSelectInput;
+      const target = store.files[hash]?.find((item) => item.index === body.index);
+      if (target) target.priority = body.wanted ? 1 : 0;
+      return HttpResponse.json({ hash });
     }),
     http.post(`*${API_BASE}/media/torrents/:hash/control`, async ({ params, request }) => {
       await wait();

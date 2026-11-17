@@ -4,6 +4,7 @@ export type { ApiErrorBody } from './fetcher';
 export {
   API_BASE,
   ApiError,
+  atriumFetch,
   OFFLINE_MESSAGE,
   ok,
   onReachability,

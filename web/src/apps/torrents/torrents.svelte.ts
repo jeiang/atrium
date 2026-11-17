@@ -1,5 +1,18 @@
 import { createQuery, type QueryClient } from '@tanstack/svelte-query';
-import { ApiError, type MediaTorrent, mediaDownloads, ok, torrentsControl } from '../../contract';
+import {
+  ApiError,
+  atriumFetch,
+  getMediaAddUrl,
+  type MediaTorrent,
+  mediaAdd,
+  type mediaAddResponse,
+  mediaDownloads,
+  mediaSelectFiles,
+  mediaTorrentFiles,
+  ok,
+  type TorrentFile,
+  torrentsControl,
+} from '../../contract';
 import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import type { Tone } from '../../shared/ui/Badge.svelte';
 import { dismissToast, TOAST_MS, toast } from '../../shared/ui/toast.svelte';
@@ -114,6 +127,52 @@ export type Action = 'pause' | 'resume' | 'remove';
 
 export async function handleControl(hash: string, action: Action, deleteFiles = false): Promise<void> {
   ok(await torrentsControl(hash, action === 'remove' ? { action, delete_files: deleteFiles } : { action }));
+}
+
+export type AddSource = { magnet: string } | { file: File };
+
+export async function handleAdd(source: AddSource): Promise<string> {
+  if ('magnet' in source) return ok(await mediaAdd({ magnet: source.magnet })).hash;
+  const form = new FormData();
+  form.append('torrent', source.file, source.file.name);
+  return ok(await atriumFetch<mediaAddResponse>(getMediaAddUrl(), { method: 'POST', body: form })).hash;
+}
+
+export async function readFiles(hash: string, signal: AbortSignal): Promise<TorrentFile[]> {
+  const items: TorrentFile[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = ok(await mediaTorrentFiles(hash, { limit: PAGE, ...(cursor ? { cursor } : {}) }, { signal }));
+    items.push(...data.items);
+    if (!data.next) break;
+    cursor = data.next;
+  }
+  return items;
+}
+
+export function useFiles(hash: () => string | undefined) {
+  return createQuery(() => ({
+    queryKey: ['torrents', hash(), 'files'],
+    queryFn: ({ signal }: { signal: AbortSignal }) => readFiles(hash() ?? '', signal),
+    enabled: hash() !== undefined,
+    meta: { topics: TORRENT_TOPICS },
+  }));
+}
+
+export function wanted(file: TorrentFile): boolean {
+  return file.priority > 0;
+}
+
+export async function handleSelect(hash: string, index: number, want: boolean): Promise<void> {
+  ok(await mediaSelectFiles(hash, { index, wanted: want }));
+}
+
+export function addProblem(error: unknown): Problem {
+  if (refusedOffline(error) || outcomeUnknown(error)) return problemOf(error);
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+    return { tone: 'error', title: 'atrium did not add it', text: `${error.message} Nothing was added.` };
+  }
+  return problemOf(error);
 }
 
 export interface Problem {
