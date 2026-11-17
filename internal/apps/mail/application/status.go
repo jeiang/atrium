@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -66,7 +66,7 @@ type StatusShadow struct {
 }
 
 type StatusDeletions struct {
-	PendingProposals int64 `json:"pending_proposals"`
+	PendingProposals int `json:"pending_proposals"`
 }
 
 type StatusWatch struct {
@@ -161,7 +161,7 @@ func (s *Service) status(ctx context.Context, q db.Querier) (MailStatus, error) 
 	if out.Replay, err = lastReplay(ctx, q); err != nil {
 		return MailStatus{}, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE kind = ? AND status = 'pending'", deletions.Kind).Scan(&out.Deletions.PendingProposals); err != nil {
+	if out.Deletions.PendingProposals, err = proposals.CountPendingKind(ctx, q, deletions.Kind); err != nil {
 		return MailStatus{}, err
 	}
 	out.WatchClosely, err = watch(ctx, q, s.now())
@@ -180,9 +180,8 @@ func (s *Service) eligibility(ctx context.Context, q db.Querier, mode string) ([
 	if len(accounts) == 0 {
 		unmet = append(unmet, "no_accounts")
 	}
-	var held int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM effects WHERE origin IN (?, ?, ?) AND state IN ('intent', 'unknown', 'partial')",
-		ledger.AutoOrigin, "operator_send", OperatorOrigin).Scan(&held); err != nil {
+	held, err := ledger.CountUnresolved(ctx, q, ledger.AutoOrigin, "operator_send", OperatorOrigin)
+	if err != nil {
 		return nil, nil, err
 	}
 	if held > 0 {
@@ -192,13 +191,8 @@ func (s *Service) eligibility(ctx context.Context, q db.Querier, mode string) ([
 }
 
 func watch(ctx context.Context, q db.Querier, now float64) (StatusWatch, error) {
-	var ts float64
-	var mode sql.NullString
-	err := q.QueryRowContext(ctx, "SELECT ts, new_value FROM settings_audit WHERE key = ? AND old_value IS NOT new_value ORDER BY ts DESC, id DESC LIMIT 1", mail.KeyMode).Scan(&ts, &mode)
-	if errors.Is(err, sql.ErrNoRows) {
-		return StatusWatch{}, nil
-	}
-	if err != nil {
+	ts, mode, ok, err := audit.LastChange(ctx, q, mail.KeyMode)
+	if err != nil || !ok {
 		return StatusWatch{}, err
 	}
 	until := ts + WatchDays*86400

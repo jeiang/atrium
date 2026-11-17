@@ -15884,7 +15884,6 @@
       "StatusDeletions": {
         "properties": {
           "pending_proposals": {
-            "format": "int64",
             "maximum": 9007199254740991,
             "type": "integer"
           }
