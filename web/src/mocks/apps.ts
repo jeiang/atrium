@@ -67,7 +67,7 @@ export function seedApps(): MockApp[] {
       switchable: false,
       pin: 'host',
       depends: [],
-      needs: [need('calendar', 'google/calendar', 'calendar', true)],
+      needs: [need('calendar', 'google/default', 'calendar', true)],
       nav: [],
     },
     {

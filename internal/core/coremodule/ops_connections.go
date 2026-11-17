@@ -208,7 +208,9 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 				if err != nil {
 					return application.Read[connectionsapp.OAuthSetup]{}, err
 				}
-				return s.OAuthSetup(ctx, connectionsapp.OAuthSetupInput{})
+				read, err := s.OAuthSetup(ctx, connectionsapp.OAuthSetupInput{})
+				read.Data.RedirectURI = connweb.GoogleRedirect(web.RequestOrigin(ctx))
+				return read, err
 			}),
 		api.Command(d, connectionsapp.DescribeOAuthConfigure(), application.APIShape{Area: area, Errors: refusable},
 			"PUT /connections/google/oauth", func(ctx context.Context, in GoogleClient) (application.Change[connectionsapp.View], error) {
@@ -224,7 +226,7 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}
-				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: connweb.GoogleRedirect(web.RequestOrigin(ctx))})
+				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: connweb.GoogleRedirect(web.RequestOrigin(ctx)), Handoff: true})
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}

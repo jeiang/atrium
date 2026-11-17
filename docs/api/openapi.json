@@ -9900,11 +9900,15 @@
           },
           "reason": {
             "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string"
           }
         },
         "required": [
           "client_id",
           "client_secret_set",
+          "redirect_uri",
           "capabilities",
           "health",
           "reason"
