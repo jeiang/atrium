@@ -242,6 +242,32 @@ func Audited(ctx context.Context, q db.Querier, operation, target string) (bool,
 	return done, err
 }
 
+func LastSucceeded(ctx context.Context, q db.Querier, operations ...string) (map[string]float64, error) {
+	out := map[string]float64{}
+	if len(operations) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(operations)+1)
+	args = append(args, string(OK))
+	for _, op := range operations {
+		args = append(args, op)
+	}
+	rows, err := q.QueryContext(ctx, "SELECT target, MAX(ts) FROM operation_audit WHERE outcome = ? AND operation IN (?"+strings.Repeat(", ?", len(operations)-1)+") GROUP BY target", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var target string
+		var ts float64
+		if err := rows.Scan(&target, &ts); err != nil {
+			return nil, err
+		}
+		out[target] = ts
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) AuditBefore(ctx context.Context, beforeTS float64, beforeID int64, limit int) ([]AuditRow, error) {
 	where, args := "", []any{}
 	if beforeID > 0 {

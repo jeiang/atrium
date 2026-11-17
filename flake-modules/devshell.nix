@@ -89,15 +89,5 @@
         ${stageAssets}
       '';
     };
-
-    devShells.ci = pkgs.mkShell {
-      packages = [go pkgs.git pkgs.jq pkgs.just pkgs.golangci-lint pkgs.pkg-config pkgs.diffutils] ++ linuxTools;
-      env = goEnv;
-      shellHook = ''
-        unset GOROOT GOPATH
-        root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
-        ${stageAssets}
-      '';
-    };
   };
 }
