@@ -23,6 +23,7 @@ var migrations = []migration{
 	{4, addRecordLinks},
 	{5, dropOpsFindings},
 	{6, addLibraryRequests},
+	{7, narrowConnectionReadTrigger},
 }
 
 const (
@@ -63,10 +64,19 @@ CREATE TRIGGER IF NOT EXISTS library_requests_read_insert AFTER INSERT ON librar
 CREATE TRIGGER IF NOT EXISTS library_requests_read_update AFTER UPDATE ON library_requests BEGIN INSERT INTO read_revisions(scope,value) VALUES('media',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
 CREATE TRIGGER IF NOT EXISTS library_requests_read_delete AFTER DELETE ON library_requests BEGIN INSERT INTO read_revisions(scope,value) VALUES('media',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
 `
+	connectionReadTriggerDDL = `
+DROP TRIGGER connections_read_update;
+CREATE TRIGGER connections_read_update AFTER UPDATE ON connections WHEN old.id IS NOT new.id OR old.kind IS NOT new.kind OR old.label IS NOT new.label OR old.config_source IS NOT new.config_source OR old.config_json IS NOT new.config_json OR old.transport_json IS NOT new.transport_json OR old.revision IS NOT new.revision OR old.enabled IS NOT new.enabled OR old.state IS NOT new.state OR old.reason IS NOT new.reason OR old.expires_at IS NOT new.expires_at OR old.reauth_at IS NOT new.reauth_at OR old.failed_test_revision IS NOT new.failed_test_revision OR old.results_json IS NOT new.results_json OR old.created_at IS NOT new.created_at BEGIN INSERT INTO read_revisions(scope,value) VALUES('connections',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+`
 )
 
 func addLibraryRequests(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, libraryRequestsDDL)
+	return err
+}
+
+func narrowConnectionReadTrigger(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, connectionReadTriggerDDL)
 	return err
 }
 

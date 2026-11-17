@@ -789,7 +789,11 @@ claims about the running application. Operator contracts are in
   approval selection is invalid input (`atrium proposals approve` exits 2,
   the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
-  streamed run event writes do not); the append-only
+  streamed run event writes do not). Since migration 7 the `connections`
+  update trigger skips updates that change only the bookkeeping columns
+  `checked_at`, `last_ok_at` and `updated_at`; they move without a
+  revision, so using or checking a connection with an unchanged result
+  publishes no `connections` change. The append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`. Notification inbox, channel and device controls,
   and delivery commands use `notifications.*` operations. The
