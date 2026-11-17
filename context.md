@@ -482,7 +482,8 @@ claims about the running application. Operator contracts are in
   (`flapWindow` 6 hours, `lastingAfter` 30 minutes in
   `internal/connections/health.go`): at most one failing and one recovery
   notice per 6 hours; a held failure notifies once it lasts 30 minutes; a
-  recovery notifies only after a notified failure. A scheduled run whose
+  recovery notifies only after a notified failure. A CLI process keeps its
+  own memory, so `connections test` notifies each change. A scheduled run whose
   connection lease reported a failing or needs-reauth result
   (`scheduler.CauseReporter`) sends no job-failed notice and no stale
   notice for that run (that memory is in process, so after a restart the

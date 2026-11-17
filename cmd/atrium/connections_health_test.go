@@ -56,7 +56,7 @@ func connectionNotices(t *testing.T, dir, label string) int {
 	return n
 }
 
-func TestConnectionHealthDampsRepeatedFailureNoticesAndDisconnectKeepsData(t *testing.T) {
+func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *testing.T) {
 	t.Parallel()
 	requireCipher(t)
 	srv, status := grafanaHealthServer(t)
@@ -87,14 +87,14 @@ func TestConnectionHealthDampsRepeatedFailureNoticesAndDisconnectKeepsData(t *te
 	if state := connectionState(t, dir, "service/grafana"); state != "failing" {
 		t.Fatalf("state after a failing test = %q", state)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
-		t.Fatalf("%d notices after a failure within the damping window, want 2", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 3 {
+		t.Fatalf("%d notices after one transition, want 3", n)
 	}
 	if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitError {
 		t.Fatalf("second failing test: exit %d", got.code)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
-		t.Fatalf("%d notices after an unchanged failing check, want 2", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 3 {
+		t.Fatalf("%d notices after an unchanged failing check, want 3", n)
 	}
 
 	status.Store(http.StatusUnauthorized)
@@ -104,15 +104,15 @@ func TestConnectionHealthDampsRepeatedFailureNoticesAndDisconnectKeepsData(t *te
 	if state := connectionState(t, dir, "service/grafana"); state != "needs_reauth" {
 		t.Fatalf("state after a refused token = %q", state)
 	}
-	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
-		t.Fatalf("%d notices after a second transition within the damping window, want 2", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 4 {
+		t.Fatalf("%d notices after a second transition, want 4", n)
 	}
 
 	s.stop()
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/grafana") == "needs_reauth" })
-	if n := connectionNotices(t, dir, "Grafana"); n != 2 {
-		t.Fatalf("%d notices after a restart in the same state, want 2", n)
+	if n := connectionNotices(t, dir, "Grafana"); n != 4 {
+		t.Fatalf("%d notices after a restart in the same state, want 4", n)
 	}
 
 	before := connectionNotices(t, dir, "Grafana")
