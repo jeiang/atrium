@@ -5209,6 +5209,22 @@
         ],
         "type": "object"
       },
+      "Folder": {
+        "properties": {
+          "count": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "folder": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "folder",
+          "count"
+        ],
+        "type": "object"
+      },
       "FreeSlots": {
         "properties": {
           "notes": {
@@ -8250,6 +8266,12 @@
           "folder": {
             "type": "string"
           },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/Folder"
+            },
+            "type": "array"
+          },
           "from_addr": {
             "type": "string"
           },
@@ -8724,6 +8746,12 @@
       },
       "MailSearchPage": {
         "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/Folder"
+            },
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/MailSearchHit"
@@ -37289,6 +37317,13 @@
             }
           },
           {
+            "in": "query",
+            "name": "folders",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "If-None-Match",
             "schema": {
@@ -37428,6 +37463,13 @@
               "format": "int64",
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folders",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
