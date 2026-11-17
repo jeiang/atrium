@@ -10,7 +10,6 @@
   }: {
     packages = {
       inherit go;
-      atrium-static = pkgs.callPackage ../nix/static.nix {};
       atrium-docs = pkgs.callPackage ../nix/docs.nix {};
       inherit (pkgs.callPackage ../nix/web.nix {}) atrium-web atrium-web-mock;
     };

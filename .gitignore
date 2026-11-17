@@ -8,8 +8,6 @@ result
 
 .pre-commit-config.yaml
 
-/internal/web/static/
-/internal/web/static.next/
 /internal/web/app/dist/
 node_modules/
 
@@ -19,5 +17,4 @@ testdata/golden/world.db-wal
 testdata/v2/atrium.db-shm
 testdata/v2/atrium.db-wal
 
-/internal/web/assets/tokens.generated.css
 .DS_Store
