@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/library/librarymodule"
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/mailmodule"
+	"github.com/jeiang/atrium/internal/apps/packages/packagesmodule"
 	"github.com/jeiang/atrium/internal/apps/serverops/serveropsmodule"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/apps/torrents/torrentsmodule"
@@ -43,6 +44,7 @@ func Builtins(d Dependencies) []module.Builder {
 		signalsmodule.Module{},
 		contactsmodule.Module{Jobs: jobs},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources},
+		packagesmodule.Module{Now: d.Now, Jobs: jobs},
 		calendarmodule.Module{Jobs: jobs},
 		torrentsmodule.Module{App: app, Now: d.Now, Resources: d.Bindings.Resources},
 		librarymodule.Module{Now: d.Now, Jobs: jobs, Resources: d.Bindings.Resources, Torrents: app},

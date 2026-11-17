@@ -1,16 +1,34 @@
-package mailtools
+package packagestools
 
 import (
 	"context"
 	"encoding/json"
 
-	mailapp "github.com/jeiang/atrium/internal/apps/mail/application"
+	pkgapp "github.com/jeiang/atrium/internal/apps/packages/application"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
+type Service func(*tool.Context) *pkgapp.Service
+
+func Definitions(svc Service) []module.ToolDefinition {
+	tools := Tools(svc)
+	defs := make([]module.ToolDefinition, len(tools))
+	for i, t := range tools {
+		defs[i] = module.ToolDefinition{Tool: t}
+	}
+	return defs
+}
+
+func Tools(svc Service) []tool.Tool {
+	return append(listTools(svc), trackingTools(svc)...)
+}
+
 var packagesSchema = json.RawMessage(`{"type":"object","properties":{"active_only":{"type":"boolean"}},"additionalProperties":false}`)
 
-func watchTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
+var loopKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
+
+func listTools(svc Service) []tool.Tool {
 	return []tool.Tool{
 		{
 			Name: "packages",
@@ -28,7 +46,7 @@ func watchTools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	}
 }
 
-func packages(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*tool.Context) *mailapp.Service) (any, error) {
+func packages(ctx context.Context, tc *tool.Context, args tool.Args, svc Service) (any, error) {
 	active, ok := args.Get("active_only")
 	if !ok {
 		active = true
@@ -37,7 +55,7 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args, svc func(*t
 	if !isBool {
 		return nil, tool.Error("active_only must be true or false")
 	}
-	read, err := svc(tc).Packages(ctx, mailapp.PackagesInput{ActiveOnly: activeOnly})
+	read, err := svc(tc).Packages(ctx, pkgapp.PackagesInput{ActiveOnly: activeOnly})
 	if err != nil {
 		return nil, err
 	}
