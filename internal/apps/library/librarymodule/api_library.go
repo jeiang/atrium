@@ -120,7 +120,12 @@ type MediaFiled struct {
 type MediaSwept struct {
 	Selected int `json:"selected"`
 	Removed  int `json:"removed"`
+	Filed    int `json:"filed"`
 	Errors   int `json:"errors"`
+}
+type MediaRequests struct {
+	Items []library.Request `json:"items"`
+	Next  *string           `json:"next,omitempty"`
 }
 
 func mediaID(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
@@ -394,7 +399,31 @@ func mediaFilingRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 			if swept != nil {
 				err = swept
 			}
-			return mediaChange(r, MediaSwept{Selected: len(r.Data.Selected), Removed: len(r.Data.Removed), Errors: len(r.Data.Errors)}), err
+			return mediaChange(r, MediaSwept{Selected: len(r.Data.Selected), Removed: len(r.Data.Removed), Filed: len(r.Data.Filed), Errors: len(r.Data.Errors)}), err
+		}),
+		api.Query(d, mediaapp.DescribeRequests(), mediaShape[MediaRequests](), "GET /media/requests", func(ctx context.Context, in MediaPageInput) (application.Read[MediaRequests], error) {
+			r, e := s.Requests(ctx, mediaapp.RequestsInput{})
+			if e != nil {
+				return application.Read[MediaRequests]{}, e
+			}
+			var last int64
+			if in.Cursor.Set() {
+				if e := in.Cursor.Last(&last); e != nil {
+					return application.Read[MediaRequests]{}, mediaCursorError()
+				}
+			}
+			out := MediaRequests{Items: []library.Request{}}
+			for _, q := range r.Data.Requests {
+				if q.ID <= last {
+					continue
+				}
+				if len(out.Items) == int(in.Limit) {
+					out.Next = in.Cursor.Next(out.Items[len(out.Items)-1].ID)
+					break
+				}
+				out.Items = append(out.Items, q)
+			}
+			return mediaRead(r, out), nil
 		}),
 	}
 }

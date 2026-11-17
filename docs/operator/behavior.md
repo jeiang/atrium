@@ -854,6 +854,21 @@ are refused inputs.
 - qBittorrent content paths must fit `media_download_path_prefix`. Only a
   confirmed successful filing tags the torrent filed. A lost agent answer
   leaves an unknown effect, blocks repetition, and requires inspection.
+- The media sweep (every 10 minutes, or `atrium media sweep`) also files
+  approved downloads on its own when the plan is exact. Approved means added
+  on the Downloads screen or the API, added by an approved download proposal,
+  or added by a followed show that is still followed. Exact means the default
+  Intake plan has no error, a known title and year, one video file for a
+  movie, an episode for every TV video file, no shared destination, and the
+  agent accepts it. Anything else waits on the Intake list as before, and the
+  request shows why. An item is filed automatically at most once: a failed or
+  unknown attempt is not retried, and an undone filing is not filed again.
+  Each automatic filing sends one Library notification (linked to the chat
+  that requested it) and is undone like a manual one: `atrium effects undo
+  ID` or the Activity page removes the placed links and keeps the download.
+  The first sweep after upgrading files completed, unfiled downloads that a
+  still-followed show added, when their plan is exact. `GET /media/requests`
+  lists requests and their states.
 - Sources must already belong to the configured library group and be
   group-readable, with directories group-writable; otherwise the agent refuses
   them and does not change download inodes.

@@ -19,15 +19,18 @@ func Consumer() contract.Consumer {
 	}
 }
 
-func selectAdded(ctx context.Context, d contract.Deps, in contract.Intake, scope contract.Scope) error {
+func selectAdded(ctx context.Context, d contract.Deps, in contract.Intake, a contract.Addition) error {
 	if !module.IsEnabled(ctx, unit.Media) {
 		return nil
+	}
+	if err := library.RecordRequest(ctx, d.DB.Write, a.Hash, a.Scope, library.Now()); err != nil {
+		return err
 	}
 	set, err := library.Load(ctx, d.DB.Read, d.Env)
 	if err != nil {
 		return err
 	}
 	set.Intake = in
-	_, err = set.SelectFiles(ctx, set, scope, nil)
+	_, err = set.SelectFiles(ctx, set, a.Scope, nil)
 	return err
 }

@@ -22,6 +22,7 @@ var migrations = []migration{
 	{3, addUsageCounters},
 	{4, addRecordLinks},
 	{5, dropOpsFindings},
+	{6, addLibraryRequests},
 }
 
 const (
@@ -56,7 +57,18 @@ CREATE TRIGGER IF NOT EXISTS record_links_read_delete AFTER DELETE ON record_lin
 	opsFindingsDDL = `
 DROP TABLE ops_findings;
 `
+	libraryRequestsDDL = `
+CREATE TABLE library_requests (id INTEGER PRIMARY KEY, hash TEXT NOT NULL UNIQUE, thread_id INTEGER, proposal_id INTEGER, approved_by TEXT NOT NULL CHECK (approved_by IN ('operator', 'proposal')), approved_at REAL NOT NULL, download TEXT, effect_id INTEGER, filed_by TEXT CHECK (filed_by IN ('job', 'operator')), state TEXT NOT NULL CHECK (state IN ('requested', 'waiting', 'filed', 'failed')), reason TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL);
+CREATE TRIGGER IF NOT EXISTS library_requests_read_insert AFTER INSERT ON library_requests BEGIN INSERT INTO read_revisions(scope,value) VALUES('media',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+CREATE TRIGGER IF NOT EXISTS library_requests_read_update AFTER UPDATE ON library_requests BEGIN INSERT INTO read_revisions(scope,value) VALUES('media',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+CREATE TRIGGER IF NOT EXISTS library_requests_read_delete AFTER DELETE ON library_requests BEGIN INSERT INTO read_revisions(scope,value) VALUES('media',1) ON CONFLICT(scope) DO UPDATE SET value=value+1; END;
+`
 )
+
+func addLibraryRequests(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, libraryRequestsDDL)
+	return err
+}
 
 func addUsageCounters(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, usageCountersDDL)

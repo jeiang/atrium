@@ -68,7 +68,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Kind: library.KindEZTV, Soft: true, Capability: "indexer", Features: []string{"media channels"}},
 		},
 		Packages:         []string{"internal/apps/library"},
-		Tables:           []string{"media_channels", "media_seen", "media_state"},
+		Tables:           []string{"library_requests", "media_channels", "media_seen", "media_state"},
 		EffectOrigins:    []module.EffectOrigin{{Name: "media", Direct: true}},
 		Channels:         []string{library.NotifyChannel},
 		EffectCategories: []review.Category{{Name: "library", Operations: []string{"media"}}},

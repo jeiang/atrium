@@ -120,8 +120,9 @@ func prepareError(err error) *application.Error {
 }
 
 type Filed struct {
-	Item  library.Item
-	Dests []string
+	Item     library.Item
+	Dests    []string
+	EffectID int64
 }
 
 func DescribeFileItem() application.Definition {
@@ -150,6 +151,38 @@ func (s *Service) fileItem(ctx context.Context, in FilingInput) (Filed, error) {
 	if plan.Error != "" {
 		return Filed{}, invalid("plan", plan.Error)
 	}
+	return s.file(ctx, at, plan.Ops, contract.Operator)
+}
+
+func (at located) exact(ctx context.Context) (FilingPreview, string) {
+	plan := at.set.Plan(at.set.Defaults(at.item, at.shows))
+	out := FilingPreview{Item: at.item, View: plan.View, Ops: plan.Ops, Error: plan.Error}
+	switch {
+	case plan.Error != "":
+		return out, plan.Error
+	case plan.View.Title == "" || plan.View.Year == "":
+		return out, "the title or year is unknown"
+	case plan.View.Kind == library.KindMovie && len(at.item.Files) != 1:
+		return out, "a movie with more than one video file"
+	}
+	for _, f := range plan.View.Files {
+		if plan.View.Kind == library.KindTV && f.Dest == library.Skipped {
+			return out, f.Rel + " has no episode"
+		}
+	}
+	if _, err := at.prepare(ctx, plan.Ops); err != nil {
+		return out, prepareError(err).Error()
+	}
+	return out, ""
+}
+
+func (s *Service) file(ctx context.Context, at located, ops []library.Op, actor contract.Actor) (Filed, error) {
+	out, err := s.place(ctx, at, ops, actor)
+	s.noteRequest(ctx, at, out.EffectID, actor, err)
+	return out, err
+}
+
+func (s *Service) place(ctx context.Context, at located, ops []library.Op, actor contract.Actor) (Filed, error) {
 	if at.item.Torrent {
 		current, err := at.set.Intake.Get(ctx, at.item.ID)
 		if err != nil {
@@ -162,36 +195,43 @@ func (s *Service) fileItem(ctx context.Context, in FilingInput) (Filed, error) {
 			return Filed{}, invalid("id", "the torrent moved since it was listed")
 		}
 	}
-	prep, err := at.prepare(ctx, plan.Ops)
+	prep, err := at.prepare(ctx, ops)
 	if err != nil {
 		return Filed{}, prepareError(err)
 	}
-	state, result, err := s.runAgentFiling(ctx, at, library.OpFile, "media:file:", prep, library.AgentUndo)
+	prefix := library.FilePrefixKey
+	if actor == contract.Job {
+		prefix = library.AutoFilePrefix
+	}
+	id, state, result, err := s.runAgentFiling(ctx, at, library.OpFile, prefix, prep, library.AgentUndo)
 	if err != nil {
-		return Filed{}, err
+		return Filed{EffectID: id}, err
 	}
 	dests := placed(prep.Plan, result)
 	switch state {
 	case ledger.Done:
 	case ledger.Partial:
-		return Filed{Item: at.item, Dests: dests}, classify(&library.PartialError{Cause: errors.New("the media agent completed only part of the filing"), Placed: dests})
+		return Filed{Item: at.item, Dests: dests, EffectID: id}, classify(&library.PartialError{Cause: errors.New("the media agent completed only part of the filing"), Placed: dests})
 	case ledger.Failed:
-		return Filed{}, &application.Error{Code: application.Refused, Message: "the media agent could not file this item; nothing was placed"}
+		return Filed{EffectID: id}, &application.Error{Code: application.Refused, Message: "the media agent could not file this item; nothing was placed"}
 	default:
-		return Filed{}, &application.Error{Code: application.Unknown, Message: "the media agent did not confirm the filing; inspect it and resolve the effect"}
+		return Filed{EffectID: id}, &application.Error{Code: application.Unknown, Message: "the media agent did not confirm the filing; inspect it and resolve the effect"}
 	}
+	done := Filed{Item: at.item, Dests: dests, EffectID: id}
 	if at.item.Torrent {
-		scope := contract.Scope{Actor: contract.Operator}
-		if err := at.set.Intake.Mark(ctx, scope, at.item.ID, library.TagMedia, library.TagIgnored, false); err != nil {
-			return Filed{Item: at.item, Dests: dests}, classifyFiling(&library.PartialError{Cause: err, Placed: dests})
+		scope := contract.Scope{Actor: actor}
+		if actor == contract.Operator {
+			if err := at.set.Intake.Mark(ctx, scope, at.item.ID, library.TagMedia, library.TagIgnored, false); err != nil {
+				return done, classifyFiling(&library.PartialError{Cause: err, Placed: dests})
+			}
 		}
 		if err := at.set.Intake.Mark(ctx, scope, at.item.ID, library.TagMedia, library.TagFiled, true); err != nil {
-			return Filed{Item: at.item, Dests: dests}, classifyFiling(&library.PartialError{Cause: err, Placed: dests})
+			return done, classifyFiling(&library.PartialError{Cause: err, Placed: dests})
 		}
 	} else {
 		s.cleanupImport(ctx, at)
 	}
-	return Filed{Item: at.item, Dests: dests}, nil
+	return done, nil
 }
 
 func placed(plan protocol.FilingPlan, result protocol.FilingResult) []string {
@@ -231,7 +271,7 @@ func agentResources(agentID string, plan protocol.FilingPlan) []ledger.Resource 
 	return out
 }
 
-func (s *Service) runAgentFiling(ctx context.Context, at located, operation, prefix string, prep protocol.PrepareResponse, undo func(string, string) json.RawMessage) (ledger.State, protocol.FilingResult, error) {
+func (s *Service) runAgentFiling(ctx context.Context, at located, operation, prefix string, prep protocol.PrepareResponse, undo func(string, string) json.RawMessage) (int64, ledger.State, protocol.FilingResult, error) {
 	opKey := prefix + at.item.ID + ":" + ledger.NewKey()
 	sum := sha256.Sum256([]byte("atrium-media-v1\n" + opKey + "\n" + prep.PlanDigest))
 	key := hex.EncodeToString(sum[:])
@@ -246,7 +286,7 @@ func (s *Service) runAgentFiling(ctx context.Context, at located, operation, pre
 	}
 	ticket, err := s.d.Ledger.Begin(ctx, n, nil)
 	if err != nil {
-		return "", protocol.FilingResult{}, classifyWrite(err)
+		return 0, "", protocol.FilingResult{}, classifyWrite(err)
 	}
 	result, ferr := s.execute(ctx, at.agent, ticket, protocol.FilingRequest{Key: key, PlanDigest: prep.PlanDigest, Plan: prep.Plan})
 	s.d.Catalogue.Nudge()
@@ -258,9 +298,9 @@ func (s *Service) runAgentFiling(ctx context.Context, at located, operation, pre
 		res.After = mustJSON(result)
 	}
 	if err := s.d.Ledger.Settle(settle, ticket, res, nil); err != nil {
-		return "", result, err
+		return ticket.ID, "", result, err
 	}
-	return state, result, nil
+	return ticket.ID, state, result, nil
 }
 
 func (s *Service) execute(ctx context.Context, agent *agentclient.Client, ticket ledger.Ticket, req protocol.FilingRequest) (protocol.FilingResult, error) {
@@ -308,7 +348,7 @@ func (s *Service) cleanupImport(ctx context.Context, at located) {
 	if err != nil {
 		return
 	}
-	_, _, _ = s.runAgentFiling(ctx, at, library.OpImportCleanup, "media:import-cleanup:", prep, nil)
+	_, _, _, _ = s.runAgentFiling(ctx, at, library.OpImportCleanup, "media:import-cleanup:", prep, nil)
 }
 
 func mustJSON(v any) json.RawMessage {

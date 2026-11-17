@@ -59,6 +59,7 @@ func filingOperations() ([]application.Definition, []application.Binding) {
 			mediaapp.DescribeFileItem(),
 			mediaapp.DescribeIgnore(),
 			mediaapp.DescribeSweep(),
+			mediaapp.DescribeRequests(),
 			mediaapp.DescribeFilingInspect(),
 		}, []application.Binding{
 			{Kind: application.HTML, Target: "POST /apps/media/file", Uses: []application.Name{mediaapp.FilingPreviewName, mediaapp.FileItemName, mediaapp.QueueName}},

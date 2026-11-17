@@ -120,20 +120,10 @@ func (t Tuning) Items(ctx context.Context, in contract.Intake, agent *agentclien
 		torrents, problems = nil, append(problems, err.Error())
 	}
 	for _, torrent := range torrents {
-		if !torrent.HasTag(TagMedia) || torrent.HasTag(TagFiled) || torrent.HasTag(TagIgnored) {
+		if !Waiting(torrent) {
 			continue
 		}
-		item := Item{ID: torrent.Hash, Name: torrent.Name, Torrent: true}
-		rel, ok := DownloadRel(prefix, torrent.ContentPath)
-		if !ok {
-			item.Error = "the download is outside " + KeyDownloadPrefix
-		} else {
-			item.Source = protocol.Path{Root: protocol.RootDownloads, Rel: rel}
-			if err := t.fill(ctx, agent, &item); err != nil {
-				item.Error = agentText(err)
-			}
-		}
-		found = append(found, item)
+		found = append(found, t.TorrentItem(ctx, agent, prefix, torrent))
 	}
 	imports, err := agent.Imports(ctx)
 	if err != nil {
@@ -149,6 +139,24 @@ func (t Tuning) Items(ctx context.Context, in contract.Intake, agent *agentclien
 		}
 	}
 	return found, strings.Join(problems, "; "), nil
+}
+
+func Waiting(torrent contract.Torrent) bool {
+	return torrent.HasTag(TagMedia) && !torrent.HasTag(TagFiled) && !torrent.HasTag(TagIgnored)
+}
+
+func (t Tuning) TorrentItem(ctx context.Context, agent *agentclient.Client, prefix string, torrent contract.Torrent) Item {
+	item := Item{ID: torrent.Hash, Name: torrent.Name, Torrent: true}
+	rel, ok := DownloadRel(prefix, torrent.ContentPath)
+	if !ok {
+		item.Error = "the download is outside " + KeyDownloadPrefix
+		return item
+	}
+	item.Source = protocol.Path{Root: protocol.RootDownloads, Rel: rel}
+	if err := t.fill(ctx, agent, &item); err != nil {
+		item.Error = agentText(err)
+	}
+	return item
 }
 
 func (t Tuning) Find(ctx context.Context, in contract.Intake, agent *agentclient.Client, prefix, itemID string) (Item, error) {
