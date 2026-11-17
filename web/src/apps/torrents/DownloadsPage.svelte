@@ -20,6 +20,8 @@
   import { appGone, useApps } from '../../shell/manifest';
   import NotFound from '../../shell/NotFound.svelte';
   import { p } from '../../shell/router';
+  import AddTorrent from './AddTorrent.svelte';
+  import FilesDialog from './FilesDialog.svelte';
   import TorrentCard from './TorrentCard.svelte';
   import {
     controlToast,
@@ -50,6 +52,10 @@
   let sending = $state(false);
   let dialogProblem = $state<Problem>();
   let touch = $state(false);
+  let filesOpen = $state(false);
+  let filesHash = $state<string>();
+  let filesFallback = $state<MediaTorrent>();
+  const filesTorrent = $derived(torrents.find((item) => item.hash === filesHash) ?? filesFallback);
 
   const lede = $derived.by(() => {
     if (!list.data) return undefined;
@@ -131,6 +137,22 @@
     holdRemoval(torrent, client, (problem) => (problems[torrent.hash] = problem));
   }
 
+  function onFiles(torrent: MediaTorrent): void {
+    filesHash = torrent.hash;
+    filesFallback = torrent;
+    filesOpen = true;
+  }
+
+  async function onAdded(hash: string, shown: string): Promise<void> {
+    await client.refetchQueries({ queryKey: ['torrents'], exact: true });
+    const added = list.data?.items.find((item) => item.hash === hash);
+    if (!added) {
+      toast(`Added ${shown}. It shows here once qBittorrent lists it.`);
+      return;
+    }
+    toast(`Added ${added.name}.`, { action: { label: 'Choose files', run: () => onFiles(added) } });
+  }
+
   function onRetry(): void {
     void list.refetch();
   }
@@ -141,6 +163,9 @@
 {:else}
   <Page title="Downloads" eyebrow="Torrents" {lede}>
     <a class="link dl-back" href={p('/apps')}>Apps</a>
+    {#if !list.isError || list.data}
+      <AddTorrent {offline} onadded={(hash, shown) => void onAdded(hash, shown)} />
+    {/if}
     {#if unreachable(list) || (offline && !list.data)}
       <ViewState kind="offline" title="Cannot reach atrium">
         Downloads load when atrium answers again. Nothing is sent while offline.
@@ -171,7 +196,7 @@
       {/if}
       {#if torrents.length === 0}
         <ViewState kind="empty" title="No downloads"
-          >Torrents added from Library or by the assistant show up here.</ViewState
+          >Torrents you add here, from Library or through the assistant show up in this list.</ViewState
         >
       {:else}
         <ul class="dl-list" aria-label="Downloads">
@@ -186,6 +211,7 @@
                 oncontrol={(action) => void onControl(torrent, action)}
                 onremove={() => onRemove(torrent)}
                 onundo={() => undoRemoval(torrent)}
+                onfiles={() => onFiles(torrent)}
               />
             </li>
           {/each}
@@ -235,3 +261,5 @@
     {/if}
   {/snippet}
 </Dialog>
+
+<FilesDialog bind:open={filesOpen} torrent={filesTorrent} sheet={touch} {offline} />

@@ -151,9 +151,9 @@ func (s *Server) propfind(w http.ResponseWriter, r *http.Request, body string) {
 	case strings.Contains(body, "current-user-principal"):
 		out.WriteString(response(r.URL.Path, `<D:current-user-principal><D:href>/principal/</D:href></D:current-user-principal>`))
 	case strings.Contains(body, "calendar-home-set"):
-		out.WriteString(response(r.URL.Path, `<C:calendar-home-set><D:href>`+s.URL+`/calendars/</D:href></C:calendar-home-set>`))
+		out.WriteString(response(r.URL.Path, `<C:calendar-home-set><D:href>/calendars/</D:href></C:calendar-home-set>`))
 	case strings.Contains(body, "addressbook-home-set"):
-		out.WriteString(response(r.URL.Path, `<CR:addressbook-home-set><D:href>`+s.URL+`/addressbooks/</D:href></CR:addressbook-home-set>`))
+		out.WriteString(response(r.URL.Path, `<CR:addressbook-home-set><D:href>/addressbooks/</D:href></CR:addressbook-home-set>`))
 	case strings.HasPrefix(r.URL.Path, "/addressbooks/"):
 		out.WriteString(response("/addressbooks/", `<D:resourcetype><D:collection/></D:resourcetype>`))
 		out.WriteString(response(BookPath, `<D:resourcetype><D:collection/><CR:addressbook/></D:resourcetype>`))
