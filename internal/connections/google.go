@@ -233,8 +233,6 @@ func (l *Lease) observeGoogle(ctx context.Context, capability string, err error)
 
 var errGoogleClientID = errors.New("google client ID is not set")
 
-// googleFailure classifies a token failure. A setup that never worked and still lacks its client ID,
-// client secret or grant is unconfigured: nothing broke, so it neither fails nor notifies.
 func (l *Lease) googleFailure(err error) State {
 	var rejected *googleRejected
 	if errors.As(err, &rejected) {
@@ -343,7 +341,6 @@ func testGoogle(ctx context.Context, lease *Lease, caps []Capability) ([]Result,
 			results = append(results, Result{Capability: cap.Name, State: Failing, Reason: "unknown Google capability"})
 			continue
 		}
-		// A capability without a stored grant was never consented: there is nothing to test yet.
 		if _, err := lease.Credential(grant.Slot); err != nil {
 			continue
 		}

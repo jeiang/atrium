@@ -77,18 +77,17 @@ type transportOptions struct {
 }
 
 type Lease struct {
-	store    *Store
-	id       ID
-	kind     Kind
-	revision int64
-	config   json.RawMessage
-	options  transportOptions
-	caps     []Capability
-	creds    map[string]credential
-	defaults map[string]string
-	shared   *shared
-	closed   bool
-	// workedBefore is true once the connection has reached ok; an unfinished setup is unconfigured, not failing.
+	store        *Store
+	id           ID
+	kind         Kind
+	revision     int64
+	config       json.RawMessage
+	options      transportOptions
+	caps         []Capability
+	creds        map[string]credential
+	defaults     map[string]string
+	shared       *shared
+	closed       bool
 	workedBefore bool
 }
 

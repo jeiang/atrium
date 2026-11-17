@@ -38,7 +38,6 @@ func TestAnAbandonedGoogleWizardIsUnconfiguredWhileAWorkingGoogleThatLosesItsCli
 		}
 		return body
 	}
-	// The ops endpoint caches a scrape for 15 seconds; a second read in one serve process may see the cached body.
 	unconfigured := func(when string) {
 		t.Helper()
 		if got := googleHealth(t, d); got != "unconfigured" {
@@ -54,7 +53,6 @@ func TestAnAbandonedGoogleWizardIsUnconfiguredWhileAWorkingGoogleThatLosesItsCli
 		}
 	}
 
-	// The operator opens the wizard and leaves before saving a client ID; the next check runs.
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/connections/google", nil); code != http.StatusOK {
 		t.Fatalf("google page: %d %s", code, logs.String())
 	}
@@ -64,7 +62,6 @@ func TestAnAbandonedGoogleWizardIsUnconfiguredWhileAWorkingGoogleThatLosesItsCli
 		t.Fatalf("abandoned wizard reason = %q", got)
 	}
 
-	// A row an earlier release left failing becomes unconfigured on the next start check, without a notice.
 	stop()
 	if _, err := d.Write.Exec("UPDATE connections SET state = 'failing', reason = 'google client ID is not set', checked_at = ? WHERE id = 'google/default'",
 		float64(time.Now().Add(-time.Hour).Unix())); err != nil {
@@ -75,7 +72,6 @@ func TestAnAbandonedGoogleWizardIsUnconfiguredWhileAWorkingGoogleThatLosesItsCli
 	settleBootChecks(t, dir, keyFor(t))
 	unconfigured("a failing row from an earlier release after a restart")
 
-	// A client ID saved without consent is still unfinished.
 	if code, _, _ := fetch(t, noRedirect, http.MethodPost, base+"/settings/connections/google",
 		url.Values{"client_id": {"client-id"}, "client_secret": {"secret"}}); code != http.StatusSeeOther {
 		t.Fatalf("save client: %d %s", code, logs.String())
@@ -83,7 +79,6 @@ func TestAnAbandonedGoogleWizardIsUnconfiguredWhileAWorkingGoogleThatLosesItsCli
 	_, _, _ = fetch(t, client, http.MethodPost, base+"/settings/connections/google/test", url.Values{})
 	unconfigured("a client ID without consent")
 
-	// Consent for one capability makes it work; the capability never consented is not a failure.
 	code, _, hdr := fetch(t, noRedirect, http.MethodPost, base+"/settings/connections/google/start", url.Values{"capability": {"calendar"}})
 	if code != http.StatusSeeOther {
 		t.Fatalf("start calendar: %d", code)
@@ -103,7 +98,6 @@ func TestAnAbandonedGoogleWizardIsUnconfiguredWhileAWorkingGoogleThatLosesItsCli
 		t.Fatalf("google/default after calendar consent = %q (%s), want ok", got, reason())
 	}
 
-	// The working connection loses its client ID: that broke something, so it fails and notifies once.
 	if _, err := d.Write.Exec(`UPDATE connections SET config_json = json_remove(config_json, '$.client_id') WHERE id = 'google/default'`); err != nil {
 		t.Fatal(err)
 	}
