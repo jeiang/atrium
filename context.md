@@ -1113,7 +1113,12 @@ claims about the running application. Operator contracts are in
   (`media/media-channels`, `media/media-sweep`), ledger origin and operation
   names (`media_*`), the notification channel key `media` and the
   `atrium-media-agent.service` unit are stored or host-facing and keep their
-  names; the Activity category is `library` (operation prefix `media`) and the
+  names; the Activity category is `library` (operation prefix `media`), except
+  the torrent operations of the Torrents app (`media_add_magnet`,
+  `media_add_file`, `media_file_priority`, `media_tag_add`, `media_tag_remove`,
+  `media_start`, `media_stop`, `media_delete`, undo kind
+  `media_torrent_delete`), which list under its category `downloads` (the
+  longest claimed operation prefix wins), and the
   notification channel shows the title "Library". Tools: `library_search`,
   `library_following`, `library_follow`, `library_unfollow`. The channel poll
   job records `skipped_unconfigured` ("no show is followed") and makes no
