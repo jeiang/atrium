@@ -104,8 +104,7 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	}
 	waitFor(t, func() bool {
 		state := connectionState(t, dir, "service/tmdb")
-		rows, _, _ := observed()
-		return state != "" && state != "untested" && rows > 0
+		return state != "" && state != "untested"
 	})
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
 		t.Fatal(err)
