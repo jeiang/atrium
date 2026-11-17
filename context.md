@@ -1274,7 +1274,10 @@ claims about the running application. Operator contracts are in
   videos) gets a non-undoable `media_import_cleanup` effect. `atrium media
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
-  agent are refused.
+  agent are refused. The agent refuses (`only_copy`, nothing changed) an
+  inverse that would unlink a placed file with a link count below
+  2, both when it derives the inverse and again before each unlink, so an
+  undo after the sweep deleted the download keeps the library copy.
 - Torrent and library undo: every operator or agent pause or resume that
   changes the torrent's state records the opposite action as undo kind
   `media_torrent_state`, and every operator tag change that changes the tags

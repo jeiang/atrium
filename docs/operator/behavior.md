@@ -928,7 +928,10 @@ are refused inputs.
   depends on it. Every write goes through one gate. The operator may change any
   torrent. Agents and jobs change only torrents tagged `atrium` (stamped on
   every new add) or `media`, and never remove a tag. A job removes only a
-  torrent Library has tagged `filed` and qBittorrent has stopped. Undo of an
+  torrent Library has tagged `filed` and qBittorrent has stopped. Undo of a
+  filing whose placed file has no other link (the sweep removed the download
+  with its files) is refused with "undoing this filing would delete the only
+  copy", and the library copy is kept. Undo of an
   add is refused once the torrent is filed. The first start of this release
   turns Torrents on when Library is on and Torrents has no stored choice and
   no pin; otherwise Torrents stays off until enabled.
