@@ -120,8 +120,8 @@ func TestAssistantWithoutTheAnthropicKeyRefusesPaidRunsAndKeepsModelFreeWork(t *
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused'"); n != 1 {
 		t.Errorf("%d refused start audits, want 1", n)
 	}
-	for _, path := range []string{"/web/v1/threads/999999/messages", "/web/v1/threads/999999/regenerate"} {
-		if got := c.do(http.MethodPost, path, map[string]any{"text": "hello"}); got.status != http.StatusNotFound {
+	for path, body := range map[string]any{"/web/v1/threads/999999/messages": map[string]any{"text": "hello"}, "/web/v1/threads/999999/regenerate": nil} {
+		if got := c.do(http.MethodPost, path, body); got.status != http.StatusNotFound {
 			t.Errorf("POST %s without an Anthropic key = %d, want 404 before the connection check: %s", path, got.status, got.body)
 		}
 	}

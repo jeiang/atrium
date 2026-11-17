@@ -522,7 +522,7 @@ func TestDisabledFileCapabilityStopsFiling(t *testing.T) {
 	if queue := queueG4(c); !strings.Contains(fmt.Sprint(queue.json["error"]), "the media library is unavailable") {
 		t.Fatalf("the queue does not show the unavailable agent: %s", queue.body)
 	}
-	if got := fileG4(c, library.Import+"/Movie.2020", "movie", "Movie", "2020"); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "the media library is unavailable") {
+	if got := fileG4(c, library.Import+"/Movie.2020", "movie", "Movie", "2020"); got.status != http.StatusServiceUnavailable || !strings.Contains(got.body, "the media library is unavailable") {
 		t.Fatalf("filing with file disabled = %d %s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})

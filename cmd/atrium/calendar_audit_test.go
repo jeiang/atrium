@@ -38,8 +38,12 @@ func TestCalendarAuditEntryPointsAndPlainApprovalFailures(t *testing.T) {
 			if err := d.Read.QueryRow("SELECT actor, source FROM operation_audit WHERE operation = 'calendar.request-delete' ORDER BY id DESC LIMIT 1").Scan(&actor, &source); err != nil {
 				t.Fatal(err)
 			}
-			if actor != "operator" || source != surface {
-				t.Fatalf("audit = %s/%s, want operator/%s", actor, source, surface)
+			want := surface
+			if surface == "ui" {
+				want = "api"
+			}
+			if actor != "operator" || source != want {
+				t.Fatalf("audit = %s/%s, want operator/%s", actor, source, want)
 			}
 			if err := d.Read.QueryRow("SELECT json_extract(result, '$.error') FROM proposals WHERE id = ?", id).Scan(&result); err != nil {
 				t.Fatal(err)

@@ -163,7 +163,7 @@ func TestMediaCredentialsTestThroughConnectionsAndAuthenticateEveryRequest(t *te
 	if state := connectionState(t, dir, "service/tmdb"); state != "ok" {
 		t.Errorf("a refused TMDB token replaced the working connection: state %s", state)
 	}
-	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
-		t.Errorf("the stored TMDB token stopped working after a refused candidate: %d %.300s", code, body)
+	if got := c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Lanterns") {
+		t.Errorf("the stored TMDB token stopped working after a refused candidate: %d %.300s", got.status, got.body)
 	}
 }
