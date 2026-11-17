@@ -17,9 +17,26 @@ function allowWorkerUrl(input: string): string {
 export async function startMocks(): Promise<ServiceWorkerRegistration | undefined> {
   const factory: TrustedTypePolicyFactory | undefined = Reflect.get(globalThis, 'trustedTypes');
   if (factory && !factory.defaultPolicy) factory.createPolicy('default', { createScriptURL: allowWorkerUrl });
-  return setupWorker(...handlers).start({
-    serviceWorker: { url: WORKER_PATH },
-    onUnhandledFrame: 'bypass',
-    quiet: true,
-  });
+  const proto = globalThis.ServiceWorkerRegistration?.prototype;
+  const update = proto && Object.getOwnPropertyDescriptor(proto, 'update');
+  if (proto && update) {
+    const schedule = proto.update;
+    Object.defineProperty(proto, 'update', {
+      ...update,
+      value(this: ServiceWorkerRegistration) {
+        const pending = schedule.call(this);
+        pending.catch(() => undefined);
+        return pending;
+      },
+    });
+  }
+  try {
+    return await setupWorker(...handlers).start({
+      serviceWorker: { url: WORKER_PATH },
+      onUnhandledFrame: 'bypass',
+      quiet: true,
+    });
+  } finally {
+    if (proto && update) Object.defineProperty(proto, 'update', update);
+  }
 }

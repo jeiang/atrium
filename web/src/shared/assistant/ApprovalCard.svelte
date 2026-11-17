@@ -76,7 +76,8 @@
   let receipt = $state<{ decision: Decision; title: string; at: Date; note?: string; undoUntil?: number }>();
   let armTimer: number | undefined;
   let countTimer: number | undefined;
-  let confirmedAt = 0;
+  let cardHeight = $state(0);
+  let rootHeight = $state(0);
 
   const mode = $derived<Presentation>(presentation === 'auto' ? (touch ? 'hold' : 'click') : presentation);
   const holding = $derived(confirming || asking);
@@ -90,6 +91,9 @@
   );
   const gated = $derived(approval.irreversible && !endSeen);
   const margin = $derived(`0px 0px ${-chromeEnd}px 0px`);
+  const seenAt = $derived(
+    cardHeight > 0 ? Math.min(1, Math.max(0, (0.5 * Math.min(cardHeight, rootHeight) - 1) / cardHeight)) : 0,
+  );
 
   $effect(() => {
     const query = matchMedia(touchQuery);
@@ -98,18 +102,22 @@
   });
 
   $effect(() => {
-    if (!row) return;
+    if (!row || !article) return;
     const target = row;
+    const card = article;
     let frame = 0;
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         rowHeight = target.offsetHeight;
         chromeEnd = Number.parseFloat(getComputedStyle(target).insetBlockEnd) || 0;
+        cardHeight = card.offsetHeight;
+        rootHeight = document.documentElement.clientHeight - chromeEnd;
         measured = true;
       });
     });
     observer.observe(target);
+    observer.observe(card);
     observer.observe(document.documentElement);
     return () => {
       cancelAnimationFrame(frame);
@@ -127,18 +135,15 @@
           cardSeen = entry.isIntersecting && entry.intersectionRect.height >= need - 1;
         }
       },
-      { rootMargin: margin, threshold: steps },
+      { rootMargin: margin, threshold: [...steps, seenAt] },
     );
     observer.observe(article);
     return () => observer.disconnect();
   });
 
   $effect(() => {
-    if (!holding) confirmedAt = performance.now();
-  });
-
-  $effect(() => {
-    if (!row) return;
+    if (!row || holding) return;
+    const target = row;
     const tracked = 'isVisible' in IntersectionObserverEntry.prototype;
     const options = {
       rootMargin: margin,
@@ -146,14 +151,13 @@
       ...(tracked ? { trackVisibility: true, delay: 100 } : {}),
     };
     const observer = new IntersectionObserver((entries) => {
-      if (holding || row?.querySelector(':popover-open')) return;
+      if (target.querySelector(':popover-open')) return;
       for (const entry of entries) {
-        if (entry.time < confirmedAt) continue;
         const visible = (entry as IntersectionObserverEntry & { isVisible?: boolean }).isVisible;
         rowClear = entry.isIntersecting && (!tracked || visible !== false);
       }
     }, options);
-    observer.observe(row);
+    observer.observe(target);
     return () => observer.disconnect();
   });
 
