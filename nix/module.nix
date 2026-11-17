@@ -44,6 +44,39 @@
   };
 
   accountCredential = id: "mail-account-${id}";
+  accounts = cfg.accounts // cfg.mailAccounts;
+  accountType = types.submodule {
+    options = {
+      label = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Display name; the id when null.";
+      };
+      preset = mkOption {
+        type = types.enum ["icloud" "gmail"];
+        description = "Provider preset that supplies the IMAP and SMTP hosts.";
+      };
+      login = mkOption {
+        type = types.str;
+        description = "IMAP and SMTP login.";
+      };
+      passwordFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Host file holding the app password, delivered through LoadCredential. When null the operator enters the password in Settings, Connections and it is stored in the database.";
+      };
+      enabled = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Whether the account is opened and synced.";
+      };
+      capabilities = mkOption {
+        type = types.listOf (types.enum ["imap" "smtp"]);
+        default = ["imap" "smtp"];
+        description = "Capabilities of the account's mail/<id> connection: imap (reading and filing) and smtp (sending).";
+      };
+    };
+  };
   connectionCredential = id: slot: "connection-${lib.replaceStrings ["/" "."] ["-" "-"] id}-${lib.replaceStrings ["/" "."] ["-" "-"] slot}";
   hostCredential = module: key: "host-${module}-${key}";
 
@@ -59,10 +92,10 @@
         auth_method = "password";
         enabled = lib.boolToString account.enabled;
       };
-      capabilities = ["imap" "smtp"];
+      inherit (account) capabilities;
       credential_files = lib.optionalAttrs (account.passwordFile != null) {"mail/${id}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";};
     })
-  cfg.mailAccounts;
+  accounts;
 
   agent = cfg.mediaAgent;
   agentUnit = "atrium-media-agent.service";
@@ -272,7 +305,7 @@
     // lib.optionalAttrs (coreHost != {}) {core = coreHost;}
     // lib.optionalAttrs (cfg.web.trustedProxyCidrs != []) {web.trusted_proxy_cidrs = lib.concatStringsSep "," cfg.web.trustedProxyCidrs;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
-    // lib.optionalAttrs (allConnections != {} || cfg.mailAccounts != {}) {connections = renderedConnections;}
+    // lib.optionalAttrs (allConnections != {} || accounts != {}) {connections = renderedConnections;}
     // lib.optionalAttrs vpnOn {media.media_vpn_base_url = agent.vpn.baseUrl;}
     // appKeyHost
   );
@@ -287,7 +320,7 @@
     ++ lib.concatLists (lib.mapAttrsToList (id: c:
       lib.mapAttrsToList (slot: path: "${connectionCredential id slot}:${path}") c.credentialFiles)
     allConnections)
-    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") (lib.filterAttrs (_: account: account.passwordFile != null) cfg.mailAccounts)
+    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") (lib.filterAttrs (_: account: account.passwordFile != null) accounts)
     ++ lib.optional (cfg.database.keyFile != null) "db-key:${cfg.database.keyFile}";
 
   obsidianDir = cfg.knowledgeExport.obsidianDirectory;
@@ -630,34 +663,8 @@ in {
       description = "Host-owned connections. Each declaration generates a [connections.<id>] table and its LoadCredential bindings; secret values never enter the store. A connection kind must be one the application registers.";
     };
 
-    mailAccounts = mkOption {
-      type = types.attrsOf (types.submodule {
-        options = {
-          label = mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Display name; the id when null.";
-          };
-          preset = mkOption {
-            type = types.enum ["icloud" "gmail"];
-            description = "Provider preset that supplies the IMAP and SMTP hosts.";
-          };
-          login = mkOption {
-            type = types.str;
-            description = "IMAP and SMTP login.";
-          };
-          passwordFile = mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Host file holding the app password, delivered through LoadCredential. When null the operator enters the password in Settings, Connections and it is stored in the database.";
-          };
-          enabled = mkOption {
-            type = types.bool;
-            default = true;
-            description = "Whether the account is opened and synced.";
-          };
-        };
-      });
+    accounts = mkOption {
+      type = types.attrsOf accountType;
       default = {};
       example = {
         icloud = {
@@ -666,7 +673,14 @@ in {
           passwordFile = "/run/secrets/icloud-app-password";
         };
       };
-      description = "Mail accounts by id, rendered as mail/<id> connections with their IMAP and SMTP capabilities and, when passwordFile is set, a host-file password credential. The id keys the account's cached mail; keep it stable.";
+      description = "Mail accounts by id, rendered as mail/<id> connections with their capabilities and, when passwordFile is set, a host-file password credential. The id keys the account's cached mail; keep it stable.";
+    };
+
+    mailAccounts = mkOption {
+      type = types.attrsOf accountType;
+      default = {};
+      visible = false;
+      description = "Old name of services.atrium.accounts, kept for one release with an evaluation warning; setting both is an error.";
     };
 
     secretFiles = mkOption {
@@ -959,7 +973,12 @@ in {
   };
 
   config = mkIf cfg.enable {
+    warnings = lib.optional (cfg.mailAccounts != {}) "services.atrium.mailAccounts is renamed to services.atrium.accounts and will be removed in the next release; move the same account entries to services.atrium.accounts.";
     assertions = [
+      {
+        assertion = cfg.mailAccounts == {} || cfg.accounts == {};
+        message = "services.atrium.mailAccounts and services.atrium.accounts are both set; mailAccounts is the old name of accounts, so move every entry to services.atrium.accounts and remove mailAccounts.";
+      }
       {
         assertion = hostErrors == [];
         message = lib.concatStringsSep "; " hostErrors;

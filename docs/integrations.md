@@ -133,7 +133,7 @@ SMTP, CalDAV and CardDAV is an app-specific password:
 - It is revoked when the Apple Account password changes.
 - Atrium can accept, test and store it, but cannot create it.
 
-Mail accounts come from `mailAccounts`; calendar and contacts reuse an iCloud
+Mail accounts come from `accounts`; calendar and contacts reuse an iCloud
 mail account for their CalDAV and CardDAV login through one shared `icloud`
 connection that neither module owns: turning calendar or contacts off leaves it
 enabled for the other, and a rejected password marks both capabilities for one
