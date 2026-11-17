@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/smtp"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
 const Kind connections.Kind = "mail"

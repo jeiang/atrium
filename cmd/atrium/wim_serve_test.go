@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail/drafts"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 	"github.com/jeiang/atrium/internal/settings"
 )

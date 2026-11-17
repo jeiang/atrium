@@ -8,9 +8,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/apps/mail/drafts"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )

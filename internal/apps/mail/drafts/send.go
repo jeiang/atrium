@@ -12,10 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
 	"github.com/jeiang/atrium/internal/apps/mail/mime"
+	"github.com/jeiang/atrium/internal/apps/mail/smtp"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/gmailauth"
-	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/safety"
 )
 

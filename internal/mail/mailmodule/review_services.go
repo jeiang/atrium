@@ -3,10 +3,10 @@ package mailmodule
 import (
 	"context"
 
+	"github.com/jeiang/atrium/internal/apps/mail/drafts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/web"
