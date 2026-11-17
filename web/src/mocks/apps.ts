@@ -9,6 +9,7 @@ export interface AppsScenario {
   stale?: boolean;
   error?: boolean;
   delay?: number;
+  readDelay?: number;
 }
 
 const log = globalThis as typeof globalThis & { atriumAppsReads?: number };
@@ -179,10 +180,12 @@ export function appHandlers(read: () => { apps?: AppsScenario }) {
   };
 
   return [
-    http.get(`*${API_BASE}/apps`, () => {
+    http.get(`*${API_BASE}/apps`, async () => {
       const apps = current();
       log.atriumAppsReads = (log.atriumAppsReads ?? 0) + 1;
-      if (read().apps?.error) return refused('unavailable', 'The app states are not evaluated yet.', 503);
+      const scenario = read().apps ?? {};
+      if (scenario.readDelay) await delay(scenario.readDelay);
+      if (scenario.error) return refused('unavailable', 'The app states are not evaluated yet.', 503);
       return HttpResponse.json({ data: { apps: entries(apps, String(revision)) }, revision: String(revision) });
     }),
     http.put(`*${API_BASE}/apps/:id/enabled`, async ({ request, params }) => {
