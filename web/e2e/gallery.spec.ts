@@ -106,6 +106,7 @@ test.describe('keyboard focus', () => {
     'simulator',
     'settings',
     'apps',
+    'media',
   ]) {
     test(`every stop in ${section} shows the focus ring`, async ({ page }) => {
       await gotoGallery(page);

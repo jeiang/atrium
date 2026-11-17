@@ -126,6 +126,14 @@ administrator role or remote emergency bypass.
   replaces it. Disconnect asks first, then deletes the stored credentials and
   turns the connection off, and only applies to connections the operator set
   up. Fields and credentials the host owns are read-only there.
+- The `/next/` Downloads screen (`/next/apps/torrents`) and Library screens
+  (`/next/apps/media`) are not kept on the device. Removing a torrent asks
+  first and says whether its files are deleted. Removing it with its files
+  needs a press and hold on a phone or touch screen; on a desktop the request
+  is sent only after 10 seconds, and Undo in that time sends nothing. Undo
+  after a pause, resume, follow or unfollow sends the opposite request, because
+  atrium keeps no undo record for these operator changes. While Torrents is
+  off, Library shows that it is unavailable and links to the apps directory.
 
 Public requests are limited in process by token buckets owned by each listener:
 10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`
