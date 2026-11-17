@@ -126,6 +126,7 @@ type StatusError struct {
 	Step        string
 	Host        string
 	Challenge   bool
+	RetryAfter  time.Duration
 	Also        []*StatusError
 	location    *url.URL
 	empty       bool
@@ -211,14 +212,16 @@ type ObjectRef struct {
 }
 
 type Client struct {
-	http      *http.Client
-	base      *url.URL
-	partition string
-	refused   []*StatusError
-	cache     string
-	verify    bool
-	accepted  bool
-	retries   int
+	http       *http.Client
+	base       *url.URL
+	partition  string
+	refused    []*StatusError
+	cache      string
+	verify     bool
+	accepted   bool
+	retries    int
+	retryCap   int
+	credential string
 }
 
 func (c *Client) reset() {
@@ -237,7 +240,7 @@ func New(httpClient *http.Client, endpoint string) (*Client, error) {
 	}
 	guarded.Transport = guard{base: base, next: next}
 	guarded.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &Client{http: &guarded, base: base}, nil
+	return &Client{http: &guarded, base: base, retryCap: 1}, nil
 }
 
 func (c *Client) partitionHost() string {
@@ -307,10 +310,10 @@ func (c *Client) do(ctx context.Context, step, method string, target *url.URL, d
 	for {
 		found, err := c.send(ctx, step, method, target, depth, body)
 		status, ok := errors.AsType[*StatusError](err)
-		if !ok || !status.transient() || !c.accepted || c.retries >= len(transientWaits) {
+		if !ok || !status.transient() || !c.accepted || c.retries >= c.retryCap {
 			return found, err
 		}
-		wait := jittered(transientWaits[c.retries])
+		wait := jittered(transientWait)
 		c.retries++
 		log.Warn("dav request refused without a challenge after the password was accepted; retrying", "step", step, "method", method, "host", status.Host, "attempt", c.retries, "wait", wait.Round(time.Millisecond).String())
 		timer := time.NewTimer(wait)
@@ -347,7 +350,7 @@ func (c *Client) send(ctx context.Context, step, method string, target *url.URL,
 	}
 	if resp.StatusCode != http.StatusMultiStatus {
 		status := &StatusError{Method: method, URL: maskedURL(target), Status: resp.StatusCode, Step: step,
-			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != "", empty: len(bytes.TrimSpace(raw)) == 0}
+			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != "", RetryAfter: retryAfter(resp.Header.Get("Retry-After"), time.Now()), empty: len(bytes.TrimSpace(raw)) == 0}
 		log.Warn("dav request failed", "step", step, "method", method, "status", resp.StatusCode, "host", status.Host, "challenge", status.Challenge)
 		if location := resp.Header.Get("Location"); location != "" {
 			status.location, _ = resolve(target, location)

@@ -35,7 +35,6 @@ var platformOwners = map[string]string{
 	"job_run_threads":                    "scheduler",
 	"job_runs":                           "scheduler",
 	"jobs":                               "scheduler",
-	"mail_accounts":                      "config",
 	"notification_devices":               "notify",
 	"notifications":                      "notify",
 	"ntfy_channels":                      "notify",

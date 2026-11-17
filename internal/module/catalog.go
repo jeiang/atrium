@@ -137,6 +137,15 @@ func (c *Catalog) HostAccounts() config.HostAccountsFunc {
 	return nil
 }
 
+func (c *Catalog) AccountRows() config.AccountRowsFunc {
+	for _, d := range c.decls {
+		if d.AccountSync != nil {
+			return d.AccountSync.Rows
+		}
+	}
+	return nil
+}
+
 func (c *Catalog) ToolDocs() []tool.Tool {
 	var out []tool.Tool
 	for _, d := range c.decls {

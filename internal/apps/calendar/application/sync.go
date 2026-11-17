@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/apps/calendar"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
@@ -40,7 +41,7 @@ func (s *Service) Sync(ctx context.Context, _ SyncInput) (application.Change[dav
 			return davmirror.SyncCalendars(ctx, s.env, set.Login, set.CalendarDir)
 		}, nil
 	})
-	if errors.As(err, new(config.NotConfigured)) || err == nil && stats.Written == 0 && stats.Removed == 0 {
+	if errors.As(err, new(config.NotConfigured)) || errors.As(err, new(*connections.Unmet)) || err == nil && stats.Written == 0 && stats.Removed == 0 {
 		return application.Change[davmirror.Stats]{Data: stats}, err
 	}
 	outcome := state.OK
@@ -58,6 +59,9 @@ func (s *Service) SyncManual(ctx context.Context, cfg config.Config) (applicatio
 		out, syncErr = s.Sync(ctx, SyncInput{})
 		if missing, ok := errors.AsType[config.NotConfigured](syncErr); ok {
 			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
+		}
+		if unmet, ok := errors.AsType[*connections.Unmet](syncErr); ok {
+			return scheduler.Result{Status: scheduler.StatusSkippedDependency, Error: new(unmet.Error())}, nil
 		}
 		return scheduler.Result{}, syncErr
 	})

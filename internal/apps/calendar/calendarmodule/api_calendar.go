@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/apps/calendar"
 	calapp "github.com/jeiang/atrium/internal/apps/calendar/application"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
@@ -98,6 +99,9 @@ func (m Module) calendarRoutes(d *web.Deps) []application.Binding {
 		api.Command(d, calapp.DescribePasses()[0], application.APIShape{Area: "integrations", Errors: []application.Code{application.NotConfigured, application.Unavailable, application.Conflict}},
 			"POST /calendar/sync", func(ctx context.Context, in calapp.SyncInput) (application.Change[davmirror.Stats], error) {
 				change, err := reads().SyncManual(ctx, d.Cfg)
+				if unmet, ok := errors.AsType[*connections.Unmet](err); ok {
+					return change, &application.Error{Code: application.Unavailable, Message: unmet.Error(), Cause: err}
+				}
 				return change, syncBusy(err, "A calendar sync is already running.")
 			}),
 	}, eventRoutes(d)...)

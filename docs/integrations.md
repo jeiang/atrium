@@ -133,7 +133,7 @@ SMTP, CalDAV and CardDAV is an app-specific password:
 - It is revoked when the Apple Account password changes.
 - Atrium can accept, test and store it, but cannot create it.
 
-Mail accounts come from `mailAccounts`; calendar and contacts reuse an iCloud
+Mail accounts come from `accounts`; calendar and contacts reuse an iCloud
 mail account for their CalDAV and CardDAV login through one shared `icloud`
 connection that neither module owns: turning calendar or contacts off leaves it
 enabled for the other, and a rejected password marks both capabilities for one
@@ -163,9 +163,12 @@ It discovers again from the root only when a remembered address answers 401,
 everything. A contacts sync is therefore one `REPORT` per address book, with
 one extra `PROPFIND` an hour. The silent health check of the iCloud
 connection reuses the result of a sync of the same capability from the last 20
-minutes and sends nothing; without one, or while a sync of that capability is
-running, it lists the remembered home set again (one `PROPFIND`). The
-explicit `connections test` and `--trace` always discover from the root.
+minutes and sends nothing; while a sync of that capability is running it keeps
+the stored result, and otherwise it lists the remembered home set again (one
+`PROPFIND`). The explicit `connections test` and `--trace` always discover
+from the root. A refusal, HTTP 429 or HTTP 503 pauses every request for that
+capability for 1, 3, 6 and then 12 hours, as described in
+[behavior](operator/behavior.md).
 
 ## Knowledge export
 

@@ -2,15 +2,7 @@ package config
 
 import (
 	"context"
-	"database/sql"
-	"errors"
-	"fmt"
-	"net"
-	"os"
-	"regexp"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 )
@@ -27,34 +19,6 @@ type AccountSpec struct {
 	CapabilityPrefix string
 }
 
-func (a AccountSpec) Host() string { return presets[a.Preset].host }
-
-// IMAPEndpoint returns the dial address and TLS server name for host. The
-// ATRIUM_IMAP_ADDR and ATRIUM_IMAP_CA overrides exist for the test entry
-// point, which points the binary at a local TLS fake.
-func IMAPEndpoint(host string) (addr, serverName string) {
-	if v, ok := OS("ATRIUM_IMAP_ADDR"); ok && v != "" {
-		if h, _, err := net.SplitHostPort(v); err == nil {
-			return v, h
-		}
-		return v, host
-	}
-	return net.JoinHostPort(host, strconv.Itoa(IMAPPort)), host
-}
-
-func (a AccountSpec) SMTPHost() string { return presets[a.Preset].smtpHost }
-
-func (a AccountSpec) UncertainDest() string { return presets[a.Preset].uncertainDest }
-
-type preset struct{ host, smtpHost, uncertainDest string }
-
-var presets = map[string]preset{
-	ICloud: {"imap.mail.me.com", "smtp.mail.me.com", "Misc"},
-	Gmail:  {"imap.gmail.com", "smtp.gmail.com", ""},
-}
-
-var accountID = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
-
 // HostAccountsFunc derives the accounts declared by host mail connections.
 // The mail owner declares it; a process without the mail owner has no host
 // accounts.
@@ -63,6 +27,14 @@ type HostAccountsFunc = func(Host) ([]AccountSpec, map[string]string, error)
 func (s *State) SetHostAccounts(f HostAccountsFunc) {
 	s.mu.Lock()
 	s.hostAccounts = f
+	s.mu.Unlock()
+}
+
+type AccountRowsFunc = func(context.Context, db.Querier, map[string]string, AccountCredentialFunc) ([]AccountSpec, map[string]string, error)
+
+func (s *State) SetAccountRows(f AccountRowsFunc) {
+	s.mu.Lock()
+	s.accountRows = f
 	s.mu.Unlock()
 }
 
@@ -132,7 +104,7 @@ func (s *State) LoadStoredAccounts(ctx context.Context, q db.Querier) error {
 	s.mu.RLock()
 	previous := s.passwords
 	s.mu.RUnlock()
-	accounts, passwords, err := s.loadAccountsFromDB(ctx, q, previous)
+	accounts, passwords, err := s.loadAccountRows(ctx, q, previous)
 	if err != nil {
 		return err
 	}
@@ -170,116 +142,12 @@ func (s *State) accountsChanged() {
 	}
 }
 
-func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswords map[string]string) ([]AccountSpec, map[string]string, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT id, label, preset, login, enabled, pinned, auth_method, connection_id, capability_prefix FROM mail_accounts ORDER BY created_at, id")
-	if err != nil {
-		return nil, nil, err
-	}
-	type row struct {
-		id, label, preset, login string
-		enabled, pinned          bool
-		method                   string
-		connection, prefix       sql.NullString
-	}
-	stored, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
-		var x row
-		err := r.Scan(&x.id, &x.label, &x.preset, &x.login, &x.enabled, &x.pinned, &x.method, &x.connection, &x.prefix)
-		return x, err
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	accounts := make([]AccountSpec, 0, len(stored))
-	passwords := make(map[string]string, len(stored))
+func (s *State) loadAccountRows(ctx context.Context, q db.Querier, filePasswords map[string]string) ([]AccountSpec, map[string]string, error) {
 	s.mu.RLock()
-	credential := s.credential
+	rows, credential := s.accountRows, s.credential
 	s.mu.RUnlock()
-	for _, x := range stored {
-		connection := x.connection.String
-		if connection == "" {
-			connection = "mail/" + x.id
-		}
-		prefix := x.prefix.String
-		if prefix == "" {
-			prefix = "mail/" + x.id
-		}
-		password := filePasswords[x.id]
-		if credential != nil {
-			c, err := credential(ctx, q, connection, prefix+"/password")
-			if err != nil {
-				return nil, nil, fmt.Errorf("config: mail account %q credential: %w", x.id, err)
-			}
-			switch c.Source {
-			case "database":
-				if c.Value != "" {
-					password = c.Value
-				}
-			case "host_file":
-				raw, err := os.ReadFile(c.FileRef)
-				if err != nil {
-					return nil, nil, fmt.Errorf("config: mail account %q credential: %w", x.id, err)
-				}
-				if value := NormalizePassword(string(raw)); value != "" {
-					password = value
-				}
-			}
-		}
-		if password != "" {
-			passwords[x.id] = password
-		}
-		a, err := NewAccount(x.id, x.label, x.preset, x.login, x.enabled)
-		if err != nil {
-			return nil, nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
-		}
-		if a.AuthMethod, err = ParseAuthMethod(x.method); err != nil {
-			return nil, nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
-		}
-		a.Pinned = x.pinned
-		a.ConnectionID = connection
-		a.CapabilityPrefix = prefix
-		accounts = append(accounts, a)
+	if rows == nil {
+		return []AccountSpec{}, map[string]string{}, nil
 	}
-	return accounts, passwords, nil
+	return rows(ctx, q, filePasswords, credential)
 }
-
-func reconcileAccounts(ctx context.Context, d *db.DB, files []AccountSpec) error {
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		keep := make(map[string]bool, len(files))
-		for _, a := range files {
-			keep[a.Name] = true
-			if err := SavePinnedAccount(ctx, tx, a, "", stamp()); err != nil {
-				return err
-			}
-		}
-		pinned, err := PinnedAccounts(ctx, tx)
-		if err != nil {
-			return err
-		}
-		for _, id := range pinned {
-			if keep[id] {
-				continue
-			}
-			if err := DeleteStoredAccount(ctx, tx, id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func NewAccount(name, label, presetName, login string, enabled bool) (AccountSpec, error) {
-	_, ok := presets[presetName]
-	if !ok {
-		return AccountSpec{}, fmt.Errorf("preset must be %s or %s", ICloud, Gmail)
-	}
-	if len(name) > 32 || !accountID.MatchString(name) {
-		return AccountSpec{}, errors.New("id must be up to 32 lowercase letters, digits and single underscores, starting with a letter")
-	}
-	if label == "" {
-		label = name
-	}
-	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: strings.TrimSpace(login), Enabled: enabled, AuthMethod: AuthPassword}, nil
-}
-
-func stamp() float64 { return float64(time.Now().UnixNano()) / 1e9 }

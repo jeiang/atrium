@@ -9,7 +9,7 @@ import (
 
 func Listen(fd, addr string) (net.Listener, error) {
 	if fd == "" {
-		return net.Listen("tcp", addr)
+		return listenTCP(addr)
 	}
 	n, err := strconv.Atoi(fd)
 	if err != nil || n < 3 {
@@ -28,4 +28,22 @@ func Listen(fd, addr string) (net.Listener, error) {
 		return nil, fmt.Errorf("listener descriptor %d is bound to %s, not the configured host %s", n, got, want)
 	}
 	return l, nil
+}
+
+func Assigned(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	ip := net.ParseIP(host)
+	if err != nil || ip == nil || ip.IsUnspecified() {
+		return true
+	}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return true
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }
