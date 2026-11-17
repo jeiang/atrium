@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,15 +16,8 @@ func TestEmbeddingConnectionFormKeepsTheStoredModel(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embed.URL+"/v1", "custom-model", ""))
 
 	base := startServeIn(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/connections", nil); code != http.StatusOK {
-		t.Fatalf("connections page: %d", code)
-	}
-	form := url.Values{"id": {"service/embedding"}, "url": {embed.URL + "/v1"}}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/connections/test", form); code != http.StatusOK {
-		t.Fatalf("submitting the embedding form = %d: %.300s", code, body)
-	}
+	browser := webG3(t, base)
+	okG3(t, "testing and saving the embedding connection", browser.do(http.MethodPut, "/web/v1/connections/service/embedding", map[string]any{"url": embed.URL + "/v1"}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var configJSON string
 	if err := d.Read.QueryRow("SELECT config_json FROM connections WHERE id = 'service/embedding'").Scan(&configJSON); err != nil {

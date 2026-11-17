@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -195,66 +194,47 @@ func TestAuthTokensPersistFarFutureExpiry(t *testing.T) {
 func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
 	t.Parallel()
 	s := newAPISite(t)
-	browser := oidcBrowser(t, s.base, s.idp, "owner")
+	browser := newWebClient(t, s.base, nil)
+	browser.http = oidcBrowser(t, s.base, s.idp, "owner")
+	browser.session("oidc")
 
-	code, body, _ := fetch(t, browser, http.MethodGet, s.base+"/settings/auth", nil)
-	if code != http.StatusOK || !strings.Contains(body, "API tokens") || !strings.Contains(body, "No tokens.") {
-		t.Fatalf("settings page: %d %.400s", code, body)
-	}
-
-	code, body, header := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {"laptop"}})
-	if code != http.StatusOK || header.Get("Cache-Control") != "no-store" {
-		t.Fatalf("issue: %d %v %.400s", code, header, body)
-	}
-	secret := regexp.MustCompile(`atr_[A-Za-z0-9_-]{43}`).FindString(body)
-	if secret == "" {
-		t.Fatalf("the issue response does not show the secret once: %.400s", body)
+	if listed := okG3(t, "token list", browser.do(http.MethodGet, "/web/v1/auth/tokens", nil)); fmt.Sprint(listed["data"]) != "map[tokens:[]]" {
+		t.Fatalf("token list before any issue: %v", listed)
 	}
 
-	code, body, _ = fetch(t, browser, http.MethodGet, s.base+"/settings/auth", nil)
-	if code != http.StatusOK || !strings.Contains(body, "laptop") {
-		t.Fatalf("the list does not show the issued token: %d %.400s", code, body)
+	issued := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "laptop"})
+	if issued.status != http.StatusCreated || issued.header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("issue: %d %v %.400s", issued.status, issued.header, issued.body)
 	}
-	if strings.Contains(body, secret) {
+	data, _ := issued.json["data"].(map[string]any)
+	secret, _ := data["secret"].(string)
+	if !regexp.MustCompile(`^atr_[A-Za-z0-9_-]{43}$`).MatchString(secret) {
+		t.Fatalf("the issue response does not show the secret once: %.400s", issued.body)
+	}
+	token, _ := data["token"].(map[string]any)
+	id := fmt.Sprint(number(t, token["id"]))
+
+	listed := browser.do(http.MethodGet, "/web/v1/auth/tokens", nil)
+	if listed.status != http.StatusOK || !strings.Contains(listed.body, `"laptop"`) {
+		t.Fatalf("the list does not show the issued token: %d %.400s", listed.status, listed.body)
+	}
+	if strings.Contains(listed.body, secret) {
 		t.Fatalf("the list exposes the secret")
 	}
-	match := regexp.MustCompile(`/settings/auth/tokens/(\d+)/revoke`).FindStringSubmatch(body)
-	if match == nil {
-		t.Fatalf("the list has no revoke form: %.400s", body)
-	}
-	id := match[1]
 
 	if me := s.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK {
 		t.Fatalf("a token issued in the UI cannot read the API: %d %s", me.status, me.body)
 	}
 
-	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {" "}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "name") {
-		t.Fatalf("a blank name was not refused: %d %.300s", code, body)
+	if got := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": " "}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "name") {
+		t.Fatalf("a blank name was not refused: %d %.300s", got.status, got.body)
 	}
-	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {"x"}, "expires_at": {"tomorrow"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "RFC 3339") {
-		t.Fatalf("a bad expiry was not refused: %d %.300s", code, body)
+	if got := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "x", "expires_at": "tomorrow"}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "RFC 3339") {
+		t.Fatalf("a bad expiry was not refused: %d %.300s", got.status, got.body)
 	}
+	expectAPI(t, browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "csrf"}, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
 
-	req, err := http.NewRequest(http.MethodPost, s.base+"/settings/auth/tokens", strings.NewReader("name=csrf"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	for _, c := range browser.Jar.Cookies(req.URL) {
-		req.AddCookie(c)
-	}
-	resp, err := browser.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("a token POST without a CSRF token: %d", resp.StatusCode)
-	}
-
-	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens/"+id+"/revoke", url.Values{}); code != http.StatusOK {
-		t.Fatalf("revoke: %d %.300s", code, body)
-	}
+	okG3(t, "revoke", browser.do(http.MethodDelete, "/web/v1/auth/tokens/"+id, nil))
 	if refused := s.do(http.MethodGet, "/api/v1/me", secret, nil); refused.status != http.StatusUnauthorized || refused.code() != "invalid_token" {
 		t.Fatalf("a token revoked in the UI was admitted: %d %s", refused.status, refused.body)
 	}
@@ -271,16 +251,21 @@ func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(new_value, ''), 'atr_') > 0 OR instr(COALESCE(old_value, ''), 'atr_') > 0").Scan(&leaked); err != nil || leaked != 0 {
 		t.Fatalf("settings history holds token material: %d, %v", leaked, err)
 	}
-	code, body, _ = fetch(t, browser, http.MethodGet, s.base+"/activity?category=settings", nil)
-	if code != http.StatusOK {
-		t.Fatalf("activity: %d", code)
-	}
+	activity := browser.do(http.MethodGet, "/web/v1/activity?category=settings", nil)
+	items, _ := okG3(t, "activity", activity)["data"].(map[string]any)["items"].([]any)
 	for _, row := range []int64{issuedRow, revokedRow} {
-		if !strings.Contains(body, fmt.Sprintf(`id="activity-settings-%d"`, row)) {
-			t.Errorf("activity does not list settings history row %d", row)
+		found := false
+		for _, raw := range items {
+			item, _ := raw.(map[string]any)
+			if item["source"] == "settings" && item["id"] == float64(row) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("activity does not list settings history row %d: %.600s", row, activity.body)
 		}
 	}
-	if strings.Contains(body, secret) || strings.Contains(body, "atr_") {
+	if strings.Contains(activity.body, secret) || strings.Contains(activity.body, "atr_") {
 		t.Errorf("activity shows token material")
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,45 +70,40 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 		}
 		return n == 1
 	}
-	try := func(id string, form url.Values, code int, state, reason, secret string) {
+	try := func(id, apiKey string, code int, state, reason string) {
 		t.Helper()
-		got, body := s.conn("/test", form)
-		if got != code || !strings.Contains(body, reason) {
-			t.Errorf("%s Test with %v: %d %s, want %d %s", id, form, got, body, code, reason)
+		got := connTestG3(t, s, id, "", map[string]string{"api_key": apiKey})
+		if got.status != code || !strings.Contains(got.body, reason) {
+			t.Errorf("%s Test with %s: %d %s, want %d %s", id, apiKey, got.status, got.body, code, reason)
 		}
 		if state != "" && connectionState(t, dir, id) != state {
 			t.Errorf("%s state = %q, want %q", id, connectionState(t, dir, id), state)
 		}
-		if secret != "" && strings.Contains(body, secret) {
-			t.Errorf("%s page rendered the submitted credential", id)
+		if strings.Contains(got.body, apiKey) {
+			t.Errorf("%s response carried the submitted credential", id)
 		}
 	}
 
-	try("service/grafana", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_bad"}},
-		http.StatusUnprocessableEntity, "", "Grafana refused the token", "glsa_bad")
+	try("service/grafana", "glsa_bad", http.StatusConflict, "", "Grafana refused the token")
 	if stored("service/grafana", "api_key") {
 		t.Error("a Grafana token that failed Test was stored")
 	}
-	try("service/grafana", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_none"}},
-		http.StatusUnprocessableEntity, "", "may not search dashboards", "glsa_none")
+	try("service/grafana", "glsa_none", http.StatusConflict, "", "may not search dashboards")
 	if stored("service/grafana", "api_key") {
 		t.Error("a Grafana token that failed Test was stored")
 	}
-	try("service/grafana", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}},
-		http.StatusOK, "ok", "signed in as sa-atrium", "")
+	try("service/grafana", "glsa_good", http.StatusOK, "ok", "signed in as sa-atrium")
 
-	try("service/anthropic", url.Values{"id": {"service/anthropic"}, "api_key": {"sk-ant-bad"}},
-		http.StatusUnprocessableEntity, "", "Anthropic refused the key", "sk-ant-bad")
+	try("service/anthropic", "sk-ant-bad", http.StatusConflict, "", "Anthropic refused the key")
 	if stored("service/anthropic", "api_key") {
 		t.Error("a refused Anthropic key was stored")
 	}
-	try("service/anthropic", url.Values{"id": {"service/anthropic"}, "api_key": {"sk-ant-good"}},
-		http.StatusOK, "ok", "models available", "")
+	try("service/anthropic", "sk-ant-good", http.StatusOK, "ok", "models available")
 	if !stored("service/anthropic", "api_key") {
 		t.Error("the working Anthropic key was not stored")
 	}
-	if page := s.page(); strings.Contains(page, "sk-ant-good") || strings.Contains(page, "glsa_good") {
-		t.Error("the settings page rendered a stored credential")
+	if listed := webG3(t, s.base).do(http.MethodGet, "/web/v1/connections", nil); listed.status != http.StatusOK || strings.Contains(listed.body, "sk-ant-good") || strings.Contains(listed.body, "glsa_good") {
+		t.Errorf("the connections read rendered a stored credential: %d", listed.status)
 	}
 
 	if got := runApp(t, "settings", "get", "anthropic_api_key"); got.code != cli.ExitError ||
