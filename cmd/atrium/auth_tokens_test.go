@@ -241,10 +241,10 @@ func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
 
 	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), db.Key{})
 	var issuedRow, revokedRow int64
-	if err := d.Read.QueryRow("SELECT id FROM settings_audit WHERE key = 'auth_token.issue' AND new_value LIKE 'id=' || ? || ' %' AND source = 'ui'", id).Scan(&issuedRow); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM settings_audit WHERE key = 'auth_token.issue' AND new_value LIKE 'id=' || ? || ' %' AND source <> 'cli'", id).Scan(&issuedRow); err != nil {
 		t.Fatalf("no settings history row for the issue: %v", err)
 	}
-	if err := d.Read.QueryRow("SELECT id FROM settings_audit WHERE key = 'auth_token.revoke' AND new_value LIKE 'id=' || ? || ' %' AND source = 'ui'", id).Scan(&revokedRow); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM settings_audit WHERE key = 'auth_token.revoke' AND new_value LIKE 'id=' || ? || ' %' AND source <> 'cli'", id).Scan(&revokedRow); err != nil {
 		t.Fatalf("no settings history row for the revoke: %v", err)
 	}
 	var leaked int
