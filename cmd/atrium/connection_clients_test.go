@@ -86,6 +86,14 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 		t.Fatalf("channels search: %d %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() {
+		if t.Failed() {
+			var state, reason, results string
+			var checked float64
+			_ = d.Read.QueryRow("SELECT state, reason, results_json, COALESCE(checked_at,0) FROM connections WHERE id = 'service/tmdb'").Scan(&state, &reason, &results, &checked)
+			t.Logf("connection row at failure: %s %s %s %.0f now %d", state, reason, results, checked, time.Now().Unix())
+		}
+	})
 	observed := func() (rows, noop, foreign int) {
 		t.Helper()
 		if err := d.Read.QueryRow(`SELECT COUNT(*), COALESCE(SUM(outcome = 'noop'), 0), COALESCE(SUM(actor <> 'service:connection-health' OR source <> 'job'), 0)
