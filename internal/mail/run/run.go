@@ -20,7 +20,6 @@ import (
 	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/router"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/mail/watches"
@@ -120,7 +119,7 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 	}
 	p.Extras = []Extra{
 		{"open loops", func(ctx context.Context, paid *classify.Deferral) (any, error) {
-			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Classifier: p.Classifier, Paid: paid, Clock: now, CacheDir: cfg.CacheDir})
+			return module.RefreshCommunications(ctx, d, now(), module.Refresh{Env: env, Classifier: p.Classifier, Paid: paid, Clock: now})
 		}},
 		{"watches", func(ctx context.Context, paid *classify.Deferral) (any, error) {
 			return watches.Refresh(ctx, d, now(), watches.Options{Classifier: p.Classifier, Paid: paid, Clock: now, Env: env})

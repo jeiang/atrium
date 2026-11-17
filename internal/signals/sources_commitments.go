@@ -1,4 +1,4 @@
-package attentionsources
+package signals
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 )
 
 type commitments struct{}
@@ -17,7 +16,7 @@ func Commitments() attention.Source { return commitments{} }
 func (commitments) Name() string { return "commitments" }
 
 func (commitments) Items(ctx context.Context, q db.Querier, now float64) ([]attention.Item, error) {
-	found, err := openloops.AttentionCommitments(ctx, q)
+	found, err := AttentionCommitments(ctx, q)
 	if err != nil {
 		return nil, err
 	}

@@ -8,14 +8,13 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/openloops"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/ops"
 	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 )
 
 func Queues() []ops.Queue {
-	return []ops.Queue{{Name: "drafts", Count: drafts.CountDraft}, {Name: "open_loops", Count: openloops.CountOpen}}
+	return []ops.Queue{{Name: "drafts", Count: drafts.CountDraft}}
 }
 
 func Metrics() []ops.Metric {

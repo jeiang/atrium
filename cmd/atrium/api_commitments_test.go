@@ -240,14 +240,15 @@ func TestCommitmentResourceJoinsTasksAndMail(t *testing.T) {
 		t.Fatalf("/tasks changed: %v", legacy)
 	}
 	apiData(t, s.do(http.MethodGet, "/api/v1/mail/commitments", s.token, nil), http.StatusOK)
+	mailOn, _ := list("")
 
 	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "false"})
 	s.restart()
-	if got, counts := list(""); fmt.Sprint(got) != "[Buy seeds Fix the fence]" || counts["waiting"].(map[string]any)["open"] != float64(0) {
-		t.Fatalf("mail off = %v %v", got, counts)
+	if got, _ := list(""); fmt.Sprint(got) != fmt.Sprint(mailOn) {
+		t.Fatalf("mail off = %v, want the stored commitments still listed: %v", got, mailOn)
 	}
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/commitments/commitment:1", s.token, nil), http.StatusNotFound, "not_found")
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/commitments/commitment:1/done", s.token, nil), http.StatusNotFound, "not_found")
+	apiData(t, s.do(http.MethodGet, "/api/v1/commitments/commitment:1", s.token, nil), http.StatusOK)
+	apiData(t, s.do(http.MethodGet, "/api/v1/mail/commitments", s.token, nil), http.StatusOK)
 	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "true", module.FlagKey(unit.Assistant): "false"})
 	s.restart()
 	if got, _ := list(""); fmt.Sprint(got) != "[Send the garden sketch Water the plants Sam sends the invoice]" {

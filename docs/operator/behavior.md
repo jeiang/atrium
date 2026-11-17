@@ -607,8 +607,10 @@ edits do not.
 To do and Waiting come from one list, `GET /api/v1/commitments`: your tasks and
 the commitments from mail that you owe (To do), and the commitments other
 people owe you (Waiting). An item's `ref` is `task:<id>` or `commitment:<id>`,
-the same id the one inbox uses. Tasks disappear while the assistant is off and
-commitments while mail is off. Done, dismiss and reopen work on both and can be
+the same id the one inbox uses. Tasks disappear while the assistant is off.
+Commitments, open loops and the Loops page stay available while mail is off,
+showing what was found before; they show no message subject or sender then,
+and refreshing them waits for mail to be on. Done, dismiss and reopen work on both and can be
 undone; a reopened commitment is not proposed as a reminder again. Only an open
 item can be completed or dismissed; the request is refused otherwise. The Done
 and Dismiss buttons on the open loops page and `/api/v1/mail/commitments` use

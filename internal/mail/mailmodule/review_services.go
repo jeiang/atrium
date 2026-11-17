@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	commitmentsapp "github.com/jeiang/atrium/internal/commitments/application"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -23,7 +22,7 @@ func (m Module) reviewServices(tools registry.Source) func(*web.Deps) reviewpage
 		rt := hub.Compose(hub.ComposeOptions{Tools: tools})(d)
 		draftStore := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: rt.Ledger, Open: m.opener(d.Cfg), Now: rt.Now}
 		return reviewpages.Services{
-			Mail:   mailPageService(d).WithSender(draftStore).WithCommitments(commitmentsapp.New(d.DB, rt.Ledger, rt.Now)),
+			Mail:   mailPageService(d).WithSender(draftStore),
 			Review: rt.Review,
 		}
 	}
