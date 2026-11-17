@@ -63,6 +63,7 @@ type Provider struct {
 	Expired     bool
 	RefreshCall int
 	Redirect    string
+	movedTo     string
 	jwksCalls   int
 	keyN        int
 }
@@ -145,6 +146,12 @@ func (p *Provider) Approve(name string) {
 	p.approve = name
 }
 
+func (p *Provider) MoveTo(target string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.movedTo = target
+}
+
 func (p *Provider) Authorizations() []url.Values {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -182,10 +189,14 @@ func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 func (p *Provider) serve(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
-	down := p.Down
+	down, moved := p.Down, p.movedTo
 	p.mu.Unlock()
 	if down {
 		http.Error(w, "down", http.StatusServiceUnavailable)
+		return
+	}
+	if moved != "" {
+		http.Redirect(w, r, moved+r.URL.Path, http.StatusFound)
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(p.opts.IssuerPath, "/"))
