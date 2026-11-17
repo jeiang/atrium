@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/unit"
 )
@@ -26,7 +26,7 @@ func TestTorrentsIntakeKeysAgentWritesToItsOwnTags(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	qb.put(mnpTorrent{hash: legacy, name: "Legacy.Show", tags: []string{media.TagMedia}, state: "downloading"})
+	qb.put(mnpTorrent{hash: legacy, name: "Legacy.Show", tags: []string{library.TagMedia}, state: "downloading"})
 	qb.put(mnpTorrent{hash: stamped, name: "Stamped.Thing", tags: []string{contract.TagAtrium}, state: "downloading"})
 	qb.put(mnpTorrent{hash: plain, name: "Plain.Thing", state: contract.StoppedUP, progress: 1})
 
@@ -67,7 +67,7 @@ func TestTorrentsIntakeKeysAgentWritesToItsOwnTags(t *testing.T) {
 	if got := runApp(t, "proposals", "approve", add); got.code != cli.ExitOK {
 		t.Fatalf("approve add: %d %q %q", got.code, got.stdout, got.stderr)
 	}
-	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium+","+media.TagMedia {
+	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium+","+library.TagMedia {
 		t.Fatalf("agent add sent tags %q, want atrium and the Library label", got.Get("tags"))
 	}
 
@@ -120,7 +120,7 @@ func TestTorrentsShimAddLandsOnDownloadsWhileLibraryIsOn(t *testing.T) {
 	}
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}, http.StatusOK,
 		"Added the magnet link", "Ready to file")
-	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium+","+media.TagMedia {
+	if got := qb.lastAdd(); got.Get("tags") != contract.TagAtrium+","+library.TagMedia {
 		t.Fatalf("shim add sent tags %q", got.Get("tags"))
 	}
 }

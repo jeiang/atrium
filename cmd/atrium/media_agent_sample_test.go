@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
+	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 func sparseVideo(t *testing.T, path string, size int64) {
@@ -56,10 +56,10 @@ func TestCleanupNeverDeletesRealVideosNamedLikeSamples(t *testing.T) {
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {media.Import + "/Show.S02"}, "action": {"file"}, "kind": {"tv"}, "title": {"Show"}, "year": {"2020"},
+	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Show.S02"}, "action": {"file"}, "kind": {"tv"}, "title": {"Show"}, "year": {"2020"},
 		"s0": {"2"}, "e0": {"1"}, "s1": {"2"}, "e1": {"5"}}, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {media.Import + "/Other.1999"}, "action": {"file"}, "kind": {"movie"}, "title": {"Other"}, "year": {"1999"}}, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {media.Import + "/Small.2021"}, "action": {"file"}, "kind": {"movie"}, "title": {"Small"}, "year": {"2021"}}, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Other.1999"}, "action": {"file"}, "kind": {"movie"}, "title": {"Other"}, "year": {"1999"}}, http.StatusOK)
+	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Small.2021"}, "action": {"file"}, "kind": {"movie"}, "title": {"Small"}, "year": {"2021"}}, http.StatusOK)
 
 	if got := sizedFiles(t, filepath.Join(root, "tv"), episode); len(got) != 1 || !strings.Contains(filepath.Base(got[0]), "E05") {
 		t.Fatalf("the episode named like a sample was not filed: %v", got)
@@ -75,10 +75,10 @@ func TestCleanupNeverDeletesRealVideosNamedLikeSamples(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	if n := mediaEffectCount(t, d, media.OpImportCleanup, media.Import+"/Other.1999"); n != 0 {
+	if n := mediaEffectCount(t, d, library.OpImportCleanup, library.Import+"/Other.1999"); n != 0 {
 		t.Fatalf("main asked to clean up a folder that holds a film: %d", n)
 	}
-	mediaEffectID(t, d, media.OpImportCleanup, media.Import+"/Small.2021", "done")
+	mediaEffectID(t, d, library.OpImportCleanup, library.Import+"/Small.2021", "done")
 
 	item := protocol.Path{Root: protocol.RootImport, Rel: "Other.1999"}
 	cleanup := protocol.PrepareRequest{SourceKind: protocol.SourceImportCleanup, Source: item, Cleanup: true}

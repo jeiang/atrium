@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func TestMediaLibraryAPIRange(t *testing.T) {
@@ -88,7 +88,7 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 		t.Fatalf("bearer-only: %+v", got)
 	}
 	for _, suffix := range []string{"", "?exp=1&sig=invalid"} {
-		public := media.FilePrefix + mnpQuote(rel) + suffix
+		public := library.FilePrefix + mnpQuote(rel) + suffix
 		for _, bearer := range []string{"", token} {
 			got := request("GET", public, bearer, nil, "", "Remote-User", "operator", "Remote-Groups", "atrium_access")
 			if got.status != 403 {

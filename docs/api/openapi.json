@@ -9563,10 +9563,14 @@
           },
           "name": {
             "type": "string"
+          },
+          "title": {
+            "type": "string"
           }
         },
         "required": [
           "name",
+          "title",
           "content",
           "full_text"
         ],

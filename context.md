@@ -1067,7 +1067,22 @@ claims about the running application. Operator contracts are in
   owns qBittorrent: one intake gates every write by actor (operator any
   torrent; agent and job only `atrium` or `media` tagged; no tag removal; a
   job removes only `filed`, stopped torrents) and stamps `atrium` on every
-  add. Library consumes it through `internal/apps/torrents/contract`.
+  add. Library (`internal/apps/library`, unit id `media`, title "Library")
+  consumes it only through `internal/apps/torrents/contract`; Torrents never
+  imports Library, and `tools/adapterboundary` enforces both directions.
+  Library owns followed shows (EZTV channels), intake, filing, sweep, the
+  catalogue, signed and VPN links, TMDB, EZTV and the media agent
+  (`internal/apps/library/mediaagent`). The unit id, setting keys, job keys
+  (`media/media-channels`, `media/media-sweep`), ledger origin and operation
+  names (`media_*`), the notification channel key `media` and the
+  `atrium-media-agent.service` unit are stored or host-facing and keep their
+  names; the Activity category is `library` (operation prefix `media`) and the
+  notification channel shows the title "Library". Tools: `library_search`,
+  `library_following`, `library_follow`, `library_unfollow`. The channel poll
+  job records `skipped_unconfigured` ("no show is followed") and makes no
+  request while no show is followed. With Torrents off or unavailable,
+  Library is held (`needs torrents` or "Torrents is unavailable:") on
+  `/api/v1/apps` and `/settings/media`.
   The downloads queue maps each tagged
   torrent's qBittorrent content path to the agent `downloads` root by the
   `media_download_path_prefix` string prefix (no main-side stat). Filing
@@ -1081,7 +1096,7 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
-- The library catalogue, `media_library_search` and library pages read from
+- The library catalogue, `library_search` and library pages read from
   the agent. The host key
   `media_root` is refused at startup (exit 78) and at Nix evaluation, naming
   `services.atrium.mediaAgent.roots`. The media module requires the

@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/unit"
 )
@@ -99,7 +99,7 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 		t.Fatalf("the web manifest differs: %v", appIDs(web))
 	}
 	mediaApp := appEntryOf(t, listed, "media")
-	if mediaApp["enabled"] != true || mediaApp["state"] != "enabled" || mediaApp["switchable"] != true || mediaApp["name"] != "Media" {
+	if mediaApp["enabled"] != true || mediaApp["state"] != "enabled" || mediaApp["switchable"] != true || mediaApp["name"] != "Library" {
 		t.Fatalf("media entry: %v", mediaApp)
 	}
 	if nav, _ := json.Marshal(mediaApp["nav"]); !strings.Contains(string(nav), "/apps/media/channels") {
@@ -174,16 +174,16 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	})
 	model.Push(asstReply("ok"))
 	ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
-	if slices.Contains(offeredTools(t, model, ran), "media_channels") {
-		t.Fatal("media_channels is offered with media off")
+	if slices.Contains(offeredTools(t, model, ran), "library_following") {
+		t.Fatal("library_following is offered with media off")
 	}
-	if system := systemText(t, model.Requests()[len(model.Requests())-1]); !strings.Contains(system, "Media (media)") || strings.Contains(system, "Mail (mail)") {
+	if system := systemText(t, model.Requests()[len(model.Requests())-1]); !strings.Contains(system, "Library (media)") || strings.Contains(system, "Mail (mail)") {
 		t.Fatalf("the system prompt does not name only the off apps: %.400s", system)
 	}
-	sweep, _, _ := schedulerJob(t, d, media.JobSweep)
+	sweep, _, _ := schedulerJob(t, d, library.JobSweep)
 	if got := api.do(http.MethodPost, "/api/v1/schedules/"+strconv.FormatInt(sweep, 10)+"/run", token, nil); got.status < 300 {
 		waitFor(t, func() bool {
-			status, _ := schedulerStatus(t, d, media.JobSweep)
+			status, _ := schedulerStatus(t, d, library.JobSweep)
 			return status == "skipped_module"
 		})
 	} else if got.status != http.StatusConflict {
@@ -209,8 +209,8 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	})
 	model.Push(asstReply("ok"))
 	ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
-	if !slices.Contains(offeredTools(t, model, ran), "media_channels") {
-		t.Fatal("media_channels is missing with media back on")
+	if !slices.Contains(offeredTools(t, model, ran), "library_following") {
+		t.Fatal("library_following is missing with media back on")
 	}
 	if system := systemText(t, model.Requests()[len(model.Requests())-1]); strings.Contains(system, "These apps are turned off") {
 		t.Fatalf("the prompt names off apps while all are on: %.400s", system)
