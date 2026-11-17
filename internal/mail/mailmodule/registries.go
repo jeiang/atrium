@@ -4,11 +4,11 @@ import (
 	"context"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/apps/mail/drafts"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/ops"
 	proposalsapp "github.com/jeiang/atrium/internal/proposals/application"
 )

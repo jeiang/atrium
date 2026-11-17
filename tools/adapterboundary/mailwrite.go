@@ -20,7 +20,7 @@ const (
 	mailGateCall = "WriteGate("
 )
 
-var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live"}
+var mailWritePath = []string{"internal/apps/mail/applier", "internal/apps/mail/live", "internal/apps/mail/drafts", "internal/apps/mail/smtp"}
 
 func mailWriteEdges() ([]string, error) {
 	set, err := units.Load()

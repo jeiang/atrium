@@ -57,7 +57,8 @@ claims about the running application. Operator contracts are in
   `internal/mail/attentionsources`. The Mail app's store (the message
   client, queries, roles, settings and tuning), IMAP client, connection
   opener, message and MIME parsers, search, sync, rules, router, triage,
-  applier, live mode and executors live in `internal/apps/mail`. The mail
+  applier, live mode, executors, drafts with the operator's draft send,
+  the SMTP sender and replay live in `internal/apps/mail`. The mail
   write gate is `WriteGate` in `internal/apps/mail/client.go`, called only
   by the client's `gate.check`; the shared consent scopes (approved
   proposal, operator send, automatic writes) stay in `internal/safety` and
@@ -91,7 +92,9 @@ claims about the running application. Operator contracts are in
   guard rejects any import of Mail from core outside its listed exceptions.
   No exception covers the mail write path: `tools/adapterboundary` fails
   when a Go file outside the Mail unit, composition roots included, imports
-  `internal/apps/mail/applier` or `internal/apps/mail/live`, and when any
+  `internal/apps/mail/applier`, `internal/apps/mail/live`,
+  `internal/apps/mail/drafts` (draft send) or `internal/apps/mail/smtp`,
+  and when any
   Go file outside the `internal/apps/mail` package calls `WriteGate`.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the

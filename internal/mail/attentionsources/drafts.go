@@ -4,9 +4,9 @@ import (
 	"context"
 	"strconv"
 
+	draftq "github.com/jeiang/atrium/internal/apps/mail/drafts"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/db"
-	draftq "github.com/jeiang/atrium/internal/mail/drafts"
 )
 
 type drafts struct{}

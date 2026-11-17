@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/apps/mail/replay"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/mail/classify"
-	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/settings"
 )
