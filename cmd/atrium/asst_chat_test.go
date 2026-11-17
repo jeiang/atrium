@@ -548,7 +548,8 @@ func TestAsstSpacesGiveDefaultsAndArchivedSpacesRefuseNewContent(t *testing.T) {
 	files := "/web/v1/knowledge/spaces/" + id + "/files"
 	note := asstFile{"note.md", "text/markdown", []byte("# Note\nhello")}
 	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{note}), http.StatusCreated)
-	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{{"", "text/plain", []byte("nameless")}, {"empty.txt", "text/plain", nil}}), http.StatusUnprocessableEntity, "Choose at least one file.")
+	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{{"", "text/plain", []byte("nameless")}}), http.StatusUnprocessableEntity, "invalid")
+	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{{"empty.txt", "text/plain", nil}}), http.StatusUnprocessableEntity, "Choose at least one file.")
 	var fileID int64
 	if err := d.Read.QueryRow("SELECT id FROM thread_files WHERE project_id = ?", id).Scan(&fileID); err != nil {
 		t.Fatal(err)
