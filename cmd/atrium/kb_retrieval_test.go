@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -63,30 +61,13 @@ func TestChatRunCarriesRetrievedKnowledgeWithCitations(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
+	w := webG3(t, base)
 
-	dentist := knowledgeCreate(t, w, url.Values{
-		"title": {"Dentist"}, "body": {"Dr Ng at the Main St clinic; prefers mornings."}, "scope": {"personal"},
-	})
-	if code, body, _ := w.post(fmt.Sprintf("/library/knowledge/%d/confirm", dentist), url.Values{}, false); code != http.StatusSeeOther {
-		t.Fatalf("confirm = %d: %s", code, body)
-	}
-	knowledgeCreate(t, w, url.Values{
-		"title": {"Rumour"}, "body": {"The clinic moved to Elm St."}, "scope": {"personal"}, "untrusted": {"1"},
-	})
-	code, body, header := w.post("/projects", url.Values{
-		"name": {"Household"}, "effort": {"medium"}, "context_limit": {"90000"}, "private": {"1"},
-	}, false)
-	if code != http.StatusSeeOther {
-		t.Fatalf("create project = %d: %s", code, body)
-	}
-	projectID, err := strconv.ParseInt(strings.TrimSuffix(strings.TrimPrefix(header.Get("Location"), "/projects/"), "/edit"), 10, 64)
-	if err != nil {
-		t.Fatalf("project redirect %q: %v", header.Get("Location"), err)
-	}
-	boiler := knowledgeCreate(t, w, url.Values{
-		"title": {"Boiler code"}, "body": {"The boiler code is 4417."}, "scope": {"work"},
-	})
+	dentist := knowledgeCreateG3(t, w, "Dentist", "Dr Ng at the Main St clinic; prefers mornings.", "personal")
+	okG3(t, "confirm", w.do(http.MethodPost, fmt.Sprintf("/web/v1/knowledge/%d/confirm", dentist), nil))
+	knowledgeCreateG3(t, w, "Rumour", "The clinic moved to Elm St.", "personal", "untrusted")
+	projectID := number(t, dataG3(t, "create project", w.do(http.MethodPost, "/web/v1/knowledge/spaces", map[string]any{"name": "Household", "effort": "medium", "context_limit": 90000, "private": true}))["id"])
+	boiler := knowledgeCreateG3(t, w, "Boiler code", "The boiler code is 4417.", "work")
 	if _, err := d.Write.Exec("UPDATE kb_records SET project_id = ? WHERE id = ?", projectID, boiler); err != nil {
 		t.Fatal(err)
 	}
@@ -145,14 +126,8 @@ func TestChatRunCarriesRetrievedKnowledgeWithCitations(t *testing.T) {
 	if marks := kbMarks(t, d, thread); marks != 0 {
 		t.Errorf("thread marks after retrieval = %d, want none", marks)
 	}
-	code, page, _ := w.get(fmt.Sprintf("/chat/%d", thread), false)
-	if code != http.StatusOK {
-		t.Fatalf("thread page = %d", code)
-	}
-	if !strings.Contains(page, fmt.Sprintf(`href="/library/knowledge/%d"`, dentist)) {
-		t.Errorf("transcript lacks the knowledge chip link: %.600s", page)
-	}
-	if !strings.Contains(page, fmt.Sprintf(`href="/library/knowledge/%d">[K%d]</a>`, dentist, dentist)) {
-		t.Errorf("assistant prose does not link [K%d]: %.600s", dentist, page)
+	transcript := dataG3(t, "thread read", w.do(http.MethodGet, fmt.Sprintf("/web/v1/threads/%d", thread), nil))
+	if !strings.Contains(fmt.Sprint(transcript["items"]), fmt.Sprintf("See [K%d].", dentist)) {
+		t.Errorf("transcript lacks the [K%d] citation: %v", dentist, transcript["items"])
 	}
 }

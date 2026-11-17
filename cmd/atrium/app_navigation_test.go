@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/cookiejar"
 	"strings"
 	"testing"
 
@@ -24,11 +23,7 @@ func TestAppSubNavigationFollowsTheModuleFlag(t *testing.T) {
 	}
 	site := &apiSite{t: t, base: base}
 	secret := strings.TrimSpace(issued.stdout)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
+	browser := webG3(t, base)
 	mailSection := func() *web.ShellSection {
 		t.Helper()
 		got := site.do(http.MethodGet, "/api/v1/shell", secret, nil)
@@ -53,10 +48,10 @@ func TestAppSubNavigationFollowsTheModuleFlag(t *testing.T) {
 		sec.Tabs[2].Label != "Status" || sec.Tabs[2].URL != "/live" {
 		t.Fatalf("Mail section = %+v, want one Mail entry with Decisions, Rules and Status", sec)
 	}
-	for _, path := range []string{"/triage", "/rules", "/live"} {
-		status, body, _ := fetch(t, client, http.MethodGet, base+path, nil)
-		if status != http.StatusOK || !strings.Contains(body, `aria-label="Sections"`) || !strings.Contains(body, `href="/triage" class="hub-tab"`) || !strings.Contains(body, `href="/rules" class="hub-tab"`) {
-			t.Fatalf("GET %s = %d without the Mail sub-navigation: %.400s", path, status, body)
+	mailReads := []string{"/web/v1/mail/triage", "/web/v1/mail/rules", "/web/v1/mail/live"}
+	for _, path := range mailReads {
+		if got := browser.do(http.MethodGet, path, nil); got.status != http.StatusOK {
+			t.Fatalf("GET %s with Mail on = %d: %.400s", path, got.status, got.body)
 		}
 	}
 
@@ -64,12 +59,7 @@ func TestAppSubNavigationFollowsTheModuleFlag(t *testing.T) {
 		t.Fatalf("turn Mail off: %s", got.stderr)
 	}
 	waitFor(t, func() bool { return mailSection() == nil })
-	if status, body, _ := fetch(t, client, http.MethodGet, base+"/about", nil); status != http.StatusOK || strings.Contains(body, `href="/triage"`) || strings.Contains(body, `href="/rules"`) {
-		t.Fatalf("GET /about with Mail off = %d and still links Mail pages: %.400s", status, body)
-	}
-	for _, path := range []string{"/triage", "/rules"} {
-		if status, _, _ := fetch(t, client, http.MethodGet, base+path, nil); status != http.StatusNotFound {
-			t.Fatalf("GET %s with Mail off = %d, want 404", path, status)
-		}
+	for _, path := range mailReads {
+		expectAPI(t, browser.do(http.MethodGet, path, nil), http.StatusNotFound, "not_found")
 	}
 }

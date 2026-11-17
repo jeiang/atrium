@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -96,14 +94,9 @@ func TestSentCopyIsFiledWhileAPassHoldsMailPass(t *testing.T) {
 	toolResult(t, "draft_email_create", map[string]any{"account": "icloud", "to": []any{"friend@x.test"}, "subject": "Lunch plans", "body": "Noon works."})
 	dbPath := filepath.Join(m.dir, "atrium.db")
 	id := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Lunch plans'")
-	draft := "/drafts/" + id
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
-	client := mrvClient(t)
-	code, page, _ := mrvDo(t, client, http.MethodGet, base+draft, nil)
-	found := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(page)
-	if code != http.StatusOK || found == nil {
-		t.Fatalf("draft page = %d without a revision: %.400s", code, page)
-	}
+	w := webG3(t, base)
+	revision := number(t, dataG3(t, "draft", w.do(http.MethodGet, "/web/v1/drafts/"+id, nil))["revision"])
 
 	held, err := db.ResourceLocks(context.Background(), dbPath, []string{mail.PassResource}, time.Minute)
 	if err != nil {
@@ -111,9 +104,9 @@ func TestSentCopyIsFiledWhileAPassHoldsMailPass(t *testing.T) {
 	}
 	defer func() { _ = held.Close() }()
 	started := time.Now()
-	code, body, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {found[1]}}, "HX-Request", "true")
-	if code != http.StatusOK || strings.Contains(body, "Sent copy failed") {
-		t.Fatalf("send while a pass holds mail-pass = %d: %.400s", code, body)
+	sent := dataG3(t, "send while a pass holds mail-pass", w.do(http.MethodPost, "/web/v1/drafts/"+id+"/send", map[string]any{"revision": revision}))
+	if sent["filed_error"] != nil && sent["filed_error"] != "" {
+		t.Fatalf("send while a pass holds mail-pass reported a Sent copy failure: %v", sent)
 	}
 	if waited := time.Since(started); waited >= db.ShortLockWait {
 		t.Fatalf("the send took %s, want the Sent copy not to wait for mail-pass", waited)

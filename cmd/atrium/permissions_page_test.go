@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,26 +17,16 @@ func TestPermissionsPageSavesWithinBounds(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	browser := webG3(t, base)
+	okG3(t, "GET permissions", browser.do(http.MethodGet, "/web/v1/permissions", nil))
+	saved := okG3(t, "save", browser.do(http.MethodPut, "/web/v1/permissions", map[string]any{"changes": []map[string]string{{"key": "permission_internet_kinds", "value": "allow"}}}))
+	if keys, _ := saved["data"].(map[string]any)["keys"].([]any); len(keys) != 1 || keys[0] != "permission_internet_kinds" {
+		t.Fatalf("save = %v", saved)
 	}
-	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/permissions", nil); status != http.StatusOK {
-		t.Fatalf("GET /settings/permissions = %d", status)
+	if activity := okG3(t, "activity", browser.do(http.MethodGet, "/web/v1/activity", nil)); !strings.Contains(fmt.Sprint(activity), "permission_internet_kinds") {
+		t.Fatalf("the activity does not show the change: %v", activity)
 	}
-	noFollow := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	status, body, header := fetch(t, noFollow, http.MethodPost, base+"/settings/permissions", url.Values{"permission_internet_kinds": {"allow"}})
-	if status != http.StatusSeeOther || header.Get("Location") != "/settings/assistant?saved=permissions" {
-		t.Fatalf("save = %d %q: %s", status, header.Get("Location"), body)
-	}
-	if status, activity, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); status != http.StatusOK || !strings.Contains(activity, "permission_internet_kinds") {
-		t.Fatalf("the activity does not show the change: %d", status)
-	}
-	status, body, _ = fetch(t, noFollow, http.MethodPost, base+"/settings/permissions", url.Values{"permission_internet_untrusted_kinds": {"allow"}})
-	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "<title>Assistant · Settings") {
-		t.Fatalf("bounded save = %d: %s", status, body)
-	}
+	expectAPI(t, browser.do(http.MethodPut, "/web/v1/permissions", map[string]any{"changes": []map[string]string{{"key": "permission_internet_untrusted_kinds", "value": "allow"}}}), http.StatusUnprocessableEntity, "invalid")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var stored int
@@ -59,9 +47,7 @@ func TestPermissionsPageSavesWithinBounds(t *testing.T) {
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 		anthropictest.Reply("end_turn", anthropictest.Text("fetched")),
 	)
-	if status, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"read " + srv.URL + "/a"}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	okG3(t, "POST message", browser.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", thread), map[string]any{"text": "read " + srv.URL + "/a"}))
 	for deadline := time.Now().Add(20 * time.Second); len(api.Requests()) < start+3; {
 		if time.Now().After(deadline) {
 			t.Fatalf("%d model requests, want 3", len(api.Requests())-start)

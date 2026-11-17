@@ -1,8 +1,6 @@
 package main
 
 import (
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,10 +24,7 @@ func operatorEmbedding(t *testing.T, dir, endpoint, token string) {
 	t.Helper()
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	form := url.Values{"id": {"service/embedding"}, "url": {endpoint}, "credential.bearer": {token}}
-	if code, body := s.conn("/test", form); code != http.StatusOK && code != http.StatusSeeOther {
-		t.Fatalf("saving the operator embedding: %d %s", code, body)
-	}
+	okG3(t, "saving the operator embedding", connTestG3(t, s, "service/embedding", endpoint, map[string]string{"bearer": token}))
 	s.stop()
 }
 
