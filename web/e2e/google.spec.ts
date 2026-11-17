@@ -135,6 +135,62 @@ test.describe('Google setup', () => {
   });
 });
 
+test.describe('Google setup by a pasted address', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowStatus: [422] });
+
+  function pasteBox(page: Page) {
+    return page.locator('#google-setup').getByRole('textbox', { name: 'Address Google sent you to' });
+  }
+
+  async function finishFrom(page: Page, address: string): Promise<void> {
+    await pasteBox(page).fill(address);
+    await page.locator('#google-setup').getByRole('button', { name: 'Finish from the address' }).click();
+  }
+
+  test('the address Google sent you to finishes the consent with one request', async ({ page }) => {
+    await openGoogle(page);
+    await consent(page, 'Gmail');
+    const answer = new URL(page.url()).search;
+    const setup = page.locator('#google-setup');
+    await setup.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(page).toHaveURL(/\/settings\/connections\/google\/default$/);
+    await finishFrom(page, `https://atrium.example.test/settings/connections/google/callback${answer}`);
+    await expect(setup.getByText('Connected Gmail')).toBeVisible();
+    await expect(pasteBox(page)).toHaveValue('');
+    await expect(setup.getByRole('radio', { name: 'Gmail' })).toHaveAccessibleDescription(/^Connected /);
+    const sent = await completions(page);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.key).toMatch(uuid);
+    expect(sent[0]?.body).toEqual({ state: expect.stringMatching(/^web\./), code: 'fictional-code-gmail' });
+  });
+
+  test('an address without an answer is refused here and sends nothing', async ({ page }) => {
+    await openGoogle(page);
+    const setup = page.locator('#google-setup');
+    await setup.getByRole('button', { name: 'Finish from the address' }).click();
+    await expect(pasteBox(page)).toHaveAccessibleDescription(/Paste the full address from the address bar/);
+    await finishFrom(page, 'code=fictional-code');
+    await expect(pasteBox(page)).toHaveAccessibleDescription(/That is not a web address/);
+    await finishFrom(
+      page,
+      'https://atrium.example.test/settings/connections/google/callback?state=web.x&error=access_denied',
+    );
+    await expect(pasteBox(page)).toHaveAccessibleDescription(/Google answered access_denied\. Nothing was connected\./);
+    await finishFrom(page, 'https://atrium.example.test/settings/connections/google/callback?state=web.x');
+    await expect(pasteBox(page)).toHaveAccessibleDescription(/This address has no answer from Google/);
+    expect(await completions(page)).toHaveLength(0);
+  });
+
+  test('an unknown or used consent is refused by atrium', async ({ page }) => {
+    await openGoogle(page);
+    await finishFrom(page, `https://atrium.example.test${unknownReturn}`);
+    const setup = page.locator('#google-setup');
+    await expect(setup.getByText('atrium refused to finish connecting Google')).toBeVisible();
+    await expect(setup.getByText('this consent link is unknown or already used; start again')).toBeVisible();
+    expect(await completions(page)).toHaveLength(1);
+  });
+});
+
 test.describe('Google setup without atrium', () => {
   test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
 
@@ -218,6 +274,15 @@ test.describe('Google setup design checks', () => {
         await checked(page);
         await setup.getByRole('button', { name: 'Finish connecting' }).click();
         await expect(setup.getByText('Connected Gmail')).toBeVisible();
+        await checked(page);
+      });
+
+      test('a refused pasted address fits, rounds, stays off blue and passes axe', async ({ page }) => {
+        await openGoogle(page);
+        const setup = page.locator('#google-setup');
+        await setup.getByRole('textbox', { name: 'Address Google sent you to' }).fill('not an address');
+        await setup.getByRole('button', { name: 'Finish from the address' }).click();
+        await expect(setup.getByText(/That is not a web address/)).toBeVisible();
         await checked(page);
       });
 

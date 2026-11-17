@@ -29,7 +29,7 @@ const test = base.extend<{ site: Site }>({
   site: async ({ browserName: _ }, use) => {
     const state: ServeState = {};
     const api: Api = signedInApi();
-    const { url, server } = await serve(dist, { base: '/next/', state, handle: fakeApi(api) });
+    const { url, server } = await serve(dist, { state, handle: fakeApi(api) });
     await use({
       url,
       state,
@@ -74,7 +74,7 @@ function facesLoaded(page: Page): Promise<boolean> {
 }
 
 function shellCaches(page: Page): Promise<string[]> {
-  return page.evaluate(async () => (await caches.keys()).filter((key) => key.startsWith('next-shell-')));
+  return page.evaluate(async () => (await caches.keys()).filter((key) => key.startsWith('shell-')));
 }
 
 function readStored(page: Page): Promise<Stored> {
@@ -127,7 +127,7 @@ async function buildUpdate(): Promise<{ root: string; entry: string }> {
   await cp(dist, root, { recursive: true });
   execFileSync('chmod', ['-R', 'u+w', root]);
   const html = await readFile(join(root, 'index.html'), 'utf8');
-  const old = /\/next\/assets\/(index-[\w-]+)\.js/.exec(html)?.[1];
+  const old = /\/assets\/(index-[\w-]+)\.js/.exec(html)?.[1];
   if (!old) throw new Error('no entry script in index.html');
   const entry = `${old}u`;
   await cp(join(root, 'assets', `${old}.js`), join(root, 'assets', `${entry}.js`));
@@ -143,7 +143,7 @@ async function buildUpdate(): Promise<{ root: string; entry: string }> {
 
 test.describe('the cached shell', () => {
   test('a second visit opens the frame and deep routes with the server down', async ({ page, site }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
     site.down(true);
@@ -151,15 +151,15 @@ test.describe('the cached shell', () => {
     await expect(page.getByRole('button', { name: 'Account: Ada Operator' })).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toBeVisible();
     await expect(inboxCount(page)).toContainText('3');
-    await page.goto(`${site.url}/next/apps`);
+    await page.goto(`${site.url}/apps`);
     await expect(page.getByRole('heading', { level: 1, name: 'Apps' })).toBeVisible();
   });
 
   test('a page missing from the device shows that it is not available', async ({ page, site }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     const removed = await page.evaluate(async () => {
-      const [name] = (await caches.keys()).filter((key) => key.startsWith('next-shell-'));
+      const [name] = (await caches.keys()).filter((key) => key.startsWith('shell-'));
       const cache = await caches.open(name ?? '');
       const gone: string[] = [];
       for (const request of await cache.keys()) {
@@ -180,7 +180,7 @@ test.describe('the cached shell', () => {
     await page.addInitScript(() => {
       Object.defineProperty(Navigator.prototype, 'onLine', { get: () => false });
     });
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await expect(inboxCount(page)).toContainText('3');
     const probes = site.api.calls.length;
     await page.evaluate(() => dispatchEvent(new Event('offline')));
@@ -195,27 +195,27 @@ test.describe('the cached shell', () => {
     const fromWorker: string[] = [];
     page.on('response', (response) => {
       const path = new URL(response.url()).pathname;
-      if (!path.startsWith('/next/') && response.fromServiceWorker()) fromWorker.push(path);
+      if (/^\/(?:web|login|auth|healthz)(?:\/|$)/.test(path) && response.fromServiceWorker()) fromWorker.push(path);
     });
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await page.reload();
     await expect(page.getByRole('button', { name: 'Account: Ada Operator' })).toBeVisible();
     expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
     await expect.poll(() => site.api.calls.filter((call) => call === 'GET /session').length).toBeGreaterThan(1);
     await expect.poll(() => site.api.calls.includes('GET /events')).toBe(true);
-    await page.goto(`${site.url}/login?next=/next/`);
+    await page.goto(`${site.url}/login?next=/`);
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
     await page.goto(`${site.url}/auth/callback?state=fictional`);
     await expect(page.getByRole('heading', { level: 1, name: 'Callback' })).toBeVisible();
     expect(fromWorker).toEqual([]);
     site.down(true);
-    const outside = await page.goto(`${site.url}/settings`).catch(() => undefined);
+    const outside = await page.goto(`${site.url}/healthz`).catch(() => undefined);
     expect(outside?.ok() ?? false).toBe(false);
   });
 
   test('an update waits for the next navigation and removes the old cache', async ({ page, site }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await page.reload();
     await expect(page.getByRole('button', { name: 'Account: Ada Operator' })).toBeVisible();
@@ -235,14 +235,14 @@ test.describe('the cached shell', () => {
           page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.waiting?.state ?? 'none'),
         )
         .toBe('installed');
-      expect(await shellCaches(page)).toEqual(expect.arrayContaining([first, 'next-shell-update']));
+      expect(await shellCaches(page)).toEqual(expect.arrayContaining([first, 'shell-update']));
       expect(await page.evaluate(() => Reflect.get(window, 'atriumMarker'))).toBe('same page');
       await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Apps', exact: true }).click();
-      await expect(page).toHaveURL(/\/next\/apps$/);
+      await expect(page).toHaveURL(/\/apps$/);
       await expect(page.getByRole('heading', { level: 1, name: 'Apps' })).toBeVisible();
       await expect.poll(() => page.evaluate(() => Reflect.get(window, 'atriumMarker') ?? 'reloaded')).toBe('reloaded');
       expect(await page.locator(`script[src*="${update.entry}"]`).count()).toBe(1);
-      await expect.poll(() => shellCaches(page)).toEqual(['next-shell-update']);
+      await expect.poll(() => shellCaches(page)).toEqual(['shell-update']);
     } finally {
       await rm(update.root, { recursive: true, force: true });
     }
@@ -252,7 +252,7 @@ test.describe('the cached shell', () => {
 test.describe('the read cache', () => {
   test('cached data shows its age offline and refreshes on reconnect', async ({ page, site, context }) => {
     await page.clock.setFixedTime(T0);
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
     site.down(true);
@@ -275,7 +275,7 @@ test.describe('the read cache', () => {
   });
 
   test('try again reloads the data once the server is back', async ({ page, site }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
     site.down(true);
@@ -290,7 +290,7 @@ test.describe('the read cache', () => {
 
   test('the page finds atrium again by itself without a browser event', async ({ page, site }) => {
     await page.clock.install();
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
     site.down(true);
@@ -305,7 +305,7 @@ test.describe('the read cache', () => {
 
   test('data older than seven days is dropped', async ({ page, site }) => {
     await page.clock.setFixedTime(T0);
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
     await page.clock.setFixedTime(T0 + 6 * DAY);
@@ -320,7 +320,7 @@ test.describe('the read cache', () => {
   });
 
   test('signing out, a 401 and a different identity clear the cache', async ({ page, site }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await expect.poll(() => storedShell(page)).toBe(3);
     site.api.subject = 'op-2';
     site.api.needsYou = 7;
@@ -335,7 +335,7 @@ test.describe('the read cache', () => {
     await expect.poll(async () => (await readStored(page)).entries).toEqual([]);
     expect((await readStored(page)).meta).toEqual({});
     site.api.signedIn = true;
-    await signedIn(page, `${site.url}/next/`, 'Grace Operator');
+    await signedIn(page, `${site.url}/`, 'Grace Operator');
     await expect.poll(() => storedShell(page)).toBe(7);
     site.api.signedIn = false;
     await page.reload();
@@ -344,7 +344,7 @@ test.describe('the read cache', () => {
   });
 
   test('the device switch deletes data at once and stops keeping it', async ({ page, site }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
     await openAccount(page);
@@ -371,7 +371,7 @@ test.describe('the read cache', () => {
   });
 
   test('an offline sign-out is refused and never sent later', async ({ page, site, context }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await context.setOffline(true);
     await expect(page.getByRole('status').filter({ hasText: 'Cannot reach atrium.' })).toBeVisible();
     await openAccount(page);
@@ -386,7 +386,7 @@ test.describe('the read cache', () => {
   });
 
   test('the device keeps no session token or credential', async ({ page, site }) => {
-    await signedIn(page, `${site.url}/next/`);
+    await signedIn(page, `${site.url}/`);
     await workerReady(page);
     await expect.poll(() => storedShell(page)).toBe(3);
     await expect
@@ -420,7 +420,7 @@ test.describe('the offline status layout', () => {
   for (const layout of layouts) {
     test(`fits the ${layout.name} layout`, async ({ page, site }) => {
       await page.setViewportSize({ width: layout.width, height: layout.height });
-      await signedIn(page, `${site.url}/next/`);
+      await signedIn(page, `${site.url}/`);
       await workerReady(page);
       await expect.poll(() => storedShell(page)).toBe(3);
       site.down(true);

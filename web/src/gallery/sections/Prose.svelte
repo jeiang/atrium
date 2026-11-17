@@ -35,7 +35,7 @@ Setext heading
 
     indented code block
 
-Inline \`code\`, a [same-app link](/next/inbox "Inbox"), an external https://example.com/quotes/winter-tyres-2026-with-a-long-path-that-wraps-on-a-phone, mail to <sam@example.test>, a reference [link][garage] and an image ![Map of the garage](https://example.com/map.png).
+Inline \`code\`, a [same-app link](/inbox "Inbox"), an external https://example.com/quotes/winter-tyres-2026-with-a-long-path-that-wraps-on-a-phone, mail to <sam@example.test>, a reference [link][garage] and an image ![Map of the garage](https://example.com/map.png).
 
 Entities: &copy; &amp; &#169; &#x1F697; and a hard  
 break, then raw <b>HTML</b> shown as typed.

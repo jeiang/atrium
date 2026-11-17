@@ -9,6 +9,7 @@ export interface InboxScenario {
   fail?: boolean;
   mix?: boolean;
   stuck?: boolean;
+  unconfigured?: boolean;
 }
 
 interface MockResolution {
@@ -172,7 +173,7 @@ function seed(state: InboxScenario = {}): {
       {
         id: 7,
         account: 'sam@example.test',
-        account_configured: true,
+        account_configured: state.unconfigured !== true,
         to: 'Ilse de Wit <ilse@example.test>',
         cc: '',
         subject: 'Shared garden plans',

@@ -2,7 +2,6 @@
   import type { AppEntry, Binding } from '../../contract';
   import Badge from '../../shared/ui/Badge.svelte';
   import Card from '../../shared/ui/Card.svelte';
-  import Icon from '../../shared/ui/Icon.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
   import StatusMark from '../../shared/ui/StatusMark.svelte';
   import Switch from '../../shared/ui/Switch.svelte';
@@ -99,12 +98,7 @@
     <ul class="app-links" aria-label="{app.name} pages">
       {#each pages as page (page.href)}
         <li>
-          <a class="link app-link" href={page.href}
-            >{page.label}
-            {#if page.leaves}
-              <Icon name="external" /><span class="visually-hidden">, opens the current interface</span>
-            {/if}</a
-          >
+          <a class="link app-link" href={page.href}>{page.label}</a>
         </li>
       {/each}
     </ul>

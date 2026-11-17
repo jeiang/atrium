@@ -13,6 +13,7 @@ export interface SettingsScenario {
   refuse?: Record<string, string>;
   plant?: boolean;
   backups?: 'none' | 'unconfigured' | 'fail' | 'verify-fail' | 'capped';
+  about?: 'fail';
 }
 
 export interface SettingsRequest {
@@ -267,6 +268,17 @@ export function settingsHandlers(read: () => { settings?: SettingsScenario }) {
       return HttpResponse.json({
         data: { keys: changes.map((change) => change.key), revision: String(store.revision) },
         audit_id: 900 + store.revision,
+      });
+    }),
+    http.get(`*${API_BASE}/about`, async () => {
+      if (scenario(read).about === 'fail') return refusal(500, 'internal', 'The version could not be read.');
+      return HttpResponse.json({
+        version: '1.18.0',
+        build: 'fictional-build-2219',
+        go_version: 'go1.26.1',
+        api_version: 1,
+        schema_version: 9,
+        modules: [],
       });
     }),
     http.get(`*${API_BASE}/maintenance/backups`, async () => {

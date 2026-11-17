@@ -686,6 +686,30 @@ test.describe('a stuck change with a lost answer', () => {
   });
 });
 
+test.describe('a draft whose mail account is not set up', () => {
+  for (const layout of layouts) {
+    test(`says why it cannot send and opens Connections at ${layout.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await useScenario(page, { inbox: { unconfigured: true } });
+      await gotoShell(page, '/inbox/draft:7');
+      const draft = card(page, 'draft:7');
+      await expect(draft).toHaveAttribute('data-state', 'blocked');
+      await expect(draft).toContainText('The mail account for this draft is not set up');
+      await expect(draft.getByRole('button', { name: /Send email/ })).toHaveCount(0);
+      await expect(draft.getByRole('button', { name: 'Decline' })).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectRoundedSurfaces(page, edges);
+      if (layout.touch) await expectTouchTargets(page);
+      await expectNoBlue(page);
+      await expectNoSeriousAxeFindings(page);
+      await draft.getByRole('button', { name: 'Open Connections' }).click();
+      await expect(page).toHaveURL(/\/settings\/connections$/);
+      await expect(page.getByRole('heading', { level: 1, name: 'Connections' })).toBeVisible();
+      expect(await requests(page)).toEqual([]);
+    });
+  }
+});
+
 test.describe('an unconfirmed approval in the inbox', () => {
   test.use({ allowStatus: [409] });
 

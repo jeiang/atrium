@@ -203,6 +203,16 @@ function seed(): Map<number, MockThread> {
     queued: [],
     cost: 0.04,
   });
+  add({
+    thread: thread(13, 'Fetch the Debian install image', 150),
+    items: [
+      item(1, 'user', 'Download the Debian netinstall image.', { run_id: 107 }),
+      item(3, 'proposal', 'Add the Debian netinstall torrent', { run_id: 107, proposal_id: 502 }),
+    ],
+    active: null,
+    queued: [],
+    cost: 0.02,
+  });
   add({ thread: thread(9, 'Winter tyre sizes', 90), items: history(40), active: null, queued: [], cost: 0.31 });
   add({
     thread: thread(10, 'Pick the shed paint', 45),
@@ -282,6 +292,30 @@ const proposals = new Map<number, ProposalDetail>([
           tool: 'mail.send',
           args: { to: 'book-club@example.test', subject: 'Book club on Thursday' },
         },
+      },
+    },
+  ],
+  [
+    502,
+    {
+      id: 502,
+      kind: 'download_add',
+      title: 'Add the Debian netinstall torrent',
+      status: 'pending',
+      actions: ['approve', 'deny'],
+      blocked: false,
+      undoable: false,
+      created_at: BASE - 300,
+      link_thread_id: 13,
+      payload: {
+        kind: 'action',
+        proposal_kind: 'download_add',
+        module: 'torrents',
+        label: 'Add torrent',
+        args: [{ label: 'Name', value: 'debian-13-netinst.iso' }],
+        preview: null,
+        result: null,
+        change: { kind: 'tool_call', tool: 'download_add', args: { name: 'debian-13-netinst.iso' } },
       },
     },
   ],
@@ -539,6 +573,21 @@ function startReply(value: MockThread, text: string): number {
 
 const resolutions = new Map<number, { outcome: string; effective: string; ts: number }>();
 
+function undoEffect(id: number): Response | undefined {
+  const proposal = proposals.get(id - 700);
+  if (!proposal) return undefined;
+  if (!proposal.undoable || proposal.undone_at) return problem(409, 'not_undoable', 'Nothing is left to undo.');
+  Object.assign(proposal, { undone_at: Math.floor(Date.now() / 1000), undoable: false, actions: [] });
+  publishReview();
+  return HttpResponse.json({ undone: true });
+}
+
+function publishReview(): void {
+  const channel = new BroadcastChannel('atrium-mock-events');
+  channel.postMessage({ topic: 'review' });
+  channel.close();
+}
+
 function ledger(proposal: ProposalDetail): object {
   const resolution = resolutions.get(proposal.id);
   return {
@@ -548,8 +597,8 @@ function ledger(proposal: ProposalDetail): object {
     state: proposal.blocked ? 'unknown' : (resolution?.effective ?? 'done'),
     blocked: proposal.blocked,
     undo_blocked: false,
-    undoable: false,
-    undone_at: null,
+    undoable: proposal.undoable,
+    undone_at: proposal.undone_at ?? null,
     resolution: resolution && {
       id: 800 + proposal.id,
       outcome: resolution.outcome,
@@ -582,20 +631,28 @@ function decide(id: number, status: string, reply: string): Response | undefined
     Object.assign(proposal, { status: 'failed', blocked: true, decided_at: BASE });
     return problem(409, 'effect_unknown', 'The mail server did not confirm the send.');
   }
-  proposal.status = status;
-  proposal.decided_at = BASE;
+  const applied = status === 'approved';
+  const undoable = applied && proposal.kind === 'download_add';
+  Object.assign(proposal, {
+    status: applied ? 'applied' : status,
+    decided_at: BASE,
+    applied_at: applied ? BASE : null,
+    undoable,
+    actions: undoable ? ['undo'] : [],
+  });
   const value = proposal.link_thread_id ? threads.get(proposal.link_thread_id) : undefined;
   if (value?.active) {
     value.items.push(item(nextSeq(value), 'assistant', reply, { run_id: value.active.id }));
     value.active = null;
   }
+  publishReview();
   return HttpResponse.json({
     approval: {
       id,
       kind: proposal.kind,
       kind_label: 'Send email',
       module: 'mail',
-      status,
+      status: proposal.status,
       approval: true,
       args: [],
       blocked: false,
@@ -606,7 +663,7 @@ function decide(id: number, status: string, reply: string): Response | undefined
       preview: null,
       result: null,
     },
-    outcome: status === 'approved' ? 'applied' : 'dismissed',
+    outcome: applied ? 'applied' : 'dismissed',
   });
 }
 
@@ -867,6 +924,7 @@ export const chatHandlers = [
     const proposal = proposals.get(Number(new URL(request.url).searchParams.get('proposal_id')));
     return proposal ? HttpResponse.json({ items: [ledger(proposal)] }) : undefined;
   }),
+  http.post(`*${API_BASE}/effects/:id/undo`, ({ params }) => undoEffect(Number(params.id))),
   http.get(`*${API_BASE}/threads/:thread/runs/:run/events`, async ({ request, params }) => {
     const url = new URL(request.url);
     if (url.searchParams.has('speed')) return undefined;
