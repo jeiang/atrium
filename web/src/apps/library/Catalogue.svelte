@@ -9,6 +9,7 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { p } from '../../shell/router';
   import { useCatalogue } from './library';
+  import Poster from './Poster.svelte';
 
   let { ready }: { ready: boolean } = $props();
 
@@ -74,6 +75,7 @@
     <ul class="lib-grid" aria-label="Catalogue">
       {#each items as item (`${item.kind}/${item.id}`)}
         <li class="lib-tile">
+          <Poster kind={item.kind === 'show' ? 'show' : 'movie'} id={item.id} title={item.title} />
           <a
             class="lib-tile__link"
             href={p('/apps/media/item/:kind/:id', { params: { kind: item.kind, id: item.id } })}
