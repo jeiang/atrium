@@ -139,6 +139,53 @@ func (c *webClient) events(threadID, runID int64) string {
 	return all.String()
 }
 
+// TestWebChatPageReads covers the reads the new client's chat page makes:
+// the model options it shows, and a transcript where a reply with thinking and
+// no tool call gives an activity and an assistant item on one seq.
+func TestWebChatPageReads(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	s := startAPISite(t, dir, api)
+	c := newWebClient(t, s.base, nil)
+	c.http = oidcBrowser(t, s.base, s.idp, "owner")
+	c.session("oidc")
+
+	cfg := c.do(http.MethodGet, "/web/v1/assistant/configuration", nil)
+	defaults, _ := cfg.json["defaults"].(map[string]any)
+	models, _ := cfg.json["models"].([]any)
+	if cfg.status != http.StatusOK || defaults["model"] == "" || defaults["effort"] == "" || len(models) == 0 || cfg.json["composer"] == nil {
+		t.Fatalf("configuration on /web/v1: %d %s", cfg.status, cfg.body)
+	}
+	// The composer options describe a chosen model, so they need one.
+	expectAPI(t, c.do(http.MethodGet, "/web/v1/composer-options", nil), http.StatusUnprocessableEntity, "invalid")
+
+	// The fixture's first scripted reply is a plain "hi"; the second thinks first.
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Thinking("weighing it", "sig"), anthropictest.Text("thought it through")))
+	if stream := c.events(c.run("plain reply")); !strings.Contains(stream, `"hi"`) {
+		t.Fatalf("plain run stream:\n%s", stream)
+	}
+	thread, run := c.run("think first")
+	if stream := c.events(thread, run); !strings.Contains(stream, "event: run_done") {
+		t.Fatalf("thinking run stream:\n%s", stream)
+	}
+	view := c.do(http.MethodGet, "/web/v1/threads/"+strconv.FormatInt(thread, 10), nil)
+	items := transcriptItems(view)
+	if view.status != http.StatusOK || len(items) != 3 {
+		t.Fatalf("thinking transcript: %d %s", view.status, view.body)
+	}
+	user, activity, reply := items[0], items[1], items[2]
+	steps, _ := activity["steps"].([]any)
+	if len(steps) != 1 {
+		t.Fatalf("thinking activity steps: %s", view.body)
+	}
+	step, _ := steps[0].(map[string]any)
+	results, isList := step["results"].([]any)
+	if user["kind"] != "user" || activity["kind"] != "activity" || reply["kind"] != "assistant" || reply["text"] != "thought it through" ||
+		step["kind"] != "thinking" || step["id"] != nil || !isList || len(results) != 0 ||
+		number(t, activity["seq"]) != number(t, reply["seq"]) || number(t, user["seq"]) >= number(t, reply["seq"]) {
+		t.Fatalf("a thinking-only reply is not an activity and an assistant item on one seq: %s", view.body)
+	}
+}
+
 func TestWebSurfaceAdmitsOnlyTheWebSession(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	port := freeLocalPort(t)

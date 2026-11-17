@@ -58,7 +58,7 @@ const rates = (input: number, output: number) => ({
   cache_write_1h: input * 2,
 });
 
-const models: Model[] = [
+export const models: Model[] = [
   {
     id: 'claude-sonnet-5-5',
     name: 'Sonnet 5.5',
@@ -473,6 +473,31 @@ function bump(item: ScheduleJob): void {
   item.revision = String(Number(item.revision) + 1);
 }
 
+// What GET /assistant/configuration answers: the models, the stored defaults
+// and the composer for those defaults.
+export function configuration(): ModelConfiguration {
+  const defaults = { ...store.defaults, thinking: 'adaptive', web_search: true };
+  return {
+    models,
+    defaults,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    context_limits: [200_000, 1_000_000],
+    composer: {
+      ...defaults,
+      cliff: false,
+      coding: false,
+      context: 0,
+      context_limits: [200_000, 1_000_000],
+      effort_fixed: false,
+      efforts: ['low', 'medium', 'high'].map((value) => ({ Value: value, Disabled: false })),
+      known: true,
+      live: 0,
+      models,
+      thinking_options: [],
+    },
+  };
+}
+
 export function assistantHandlers(read: () => { assistant?: AssistantScenario }) {
   return [
     http.get(`*${API_BASE}/assistant/configuration`, async () => {
@@ -480,27 +505,7 @@ export function assistantHandlers(read: () => { assistant?: AssistantScenario })
       await delay(150);
       const fail = failed(state, 'configuration');
       if (fail) return fail;
-      const defaults = { ...store.defaults, thinking: 'adaptive', web_search: true };
-      const body: ModelConfiguration = {
-        models,
-        defaults,
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-        context_limits: [200_000, 1_000_000],
-        composer: {
-          ...defaults,
-          cliff: false,
-          coding: false,
-          context: 0,
-          context_limits: [200_000, 1_000_000],
-          effort_fixed: false,
-          efforts: ['low', 'medium', 'high'].map((value) => ({ Value: value, Disabled: false })),
-          known: true,
-          live: 0,
-          models,
-          thinking_options: [],
-        },
-      };
-      return HttpResponse.json(body);
+      return HttpResponse.json(configuration());
     }),
     http.put(`*${API_BASE}/assistant/defaults`, async ({ request }) => {
       scenario(read);

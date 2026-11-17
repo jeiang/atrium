@@ -6,12 +6,11 @@
 </script>
 
 <script lang="ts">
-  import { createInfiniteQuery, createQuery } from '@tanstack/svelte-query';
+  import { createInfiniteQuery } from '@tanstack/svelte-query';
   import { tick, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import {
     ApiError,
-    assistantComposerOptions,
     assistantMessageSend,
     assistantRunAnswer,
     assistantRunStop,
@@ -34,6 +33,7 @@
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
+  import { useConfiguration } from '../assistant/assistant';
   import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
   import { RunStream, type StreamStatus } from './stream.svelte';
@@ -56,11 +56,7 @@
     meta: { topics: ['assistant'] },
   }));
 
-  const options = createQuery(() => ({
-    queryKey: ['composer-options'],
-    queryFn: async ({ signal }) => ok(await assistantComposerOptions(undefined, { signal })),
-    staleTime: 300_000,
-  }));
+  const options = useConfiguration();
 
   const streams = new SvelteMap<number, RunStream>();
   let root = $state<HTMLElement>();
@@ -83,6 +79,19 @@
       .flatMap((page) => page.items) ?? [],
   );
   const lastSeq = $derived(items.at(-1)?.seq ?? 0);
+  // One stored message can give several items that share its seq (a
+  // thinking-only activity and the reply, or a digest and the user text), so
+  // the list key also counts the items within each seq.
+  const keys = $derived.by(() => {
+    const seen = new Map<number, number>();
+    return new Map(
+      items.map((entry) => {
+        const n = seen.get(entry.seq) ?? 0;
+        seen.set(entry.seq, n + 1);
+        return [entry, `${entry.seq}:${n}`];
+      }),
+    );
+  });
   const activeRun = $derived(first?.active_run ?? undefined);
   const shown = $derived(
     [...streams.values()]
@@ -434,7 +443,7 @@
     run?: number,
   )}
   <div class="tools">
-    {#each calls as call (call.id)}
+    {#each calls as call, index (`${index}:${call.id}`)}
       <ToolCard {call}>
         {#snippet approval()}
           {const ask = $derived(run === undefined ? undefined : proposalFor(run))}
@@ -487,7 +496,7 @@
       </ViewState>
     {/if}
     <ol class="transcript" aria-label="Messages">
-      {#each visible as entry (entry.seq)}
+      {#each visible as entry (keys.get(entry))}
         {#if entry.kind === 'user'}
           {@render bubble(entry.text)}
         {:else if entry.kind === 'activity'}
