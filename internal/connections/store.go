@@ -1641,8 +1641,8 @@ func (s *Store) Disconnect(ctx context.Context, id ID, commits ...Commit) error 
 
 const observeRefresh = time.Minute
 
-func (s *Store) Recover(ctx context.Context, v View, capability string) error {
-	err := s.Observe(ctx, v.ID, v.revision, Result{Capability: capability, State: OK})
+func (s *Store) Recover(ctx context.Context, v View, capability string, evidence time.Time) error {
+	err := s.observe(ctx, v.ID, v.revision, func([]Result) Result { return Result{Capability: capability, State: OK} }, true, evidence)
 	if errors.As(err, new(*Conflict)) {
 		return nil
 	}
@@ -1650,10 +1650,10 @@ func (s *Store) Recover(ctx context.Context, v View, capability string) error {
 }
 
 func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Result) error {
-	return s.observe(ctx, id, revision, func([]Result) Result { return result }, true)
+	return s.observe(ctx, id, revision, func([]Result) Result { return result }, true, time.Time{})
 }
 
-func (s *Store) observe(ctx context.Context, id ID, revision int64, derive func(prior []Result) Result, checked bool) error {
+func (s *Store) observe(ctx context.Context, id ID, revision int64, derive func(prior []Result) Result, checked bool, evidence time.Time) error {
 	var (
 		previous State
 		state    State
@@ -1679,6 +1679,9 @@ func (s *Store) observe(ctx context.Context, id ID, revision int64, derive func(
 			return &Conflict{ID: id, Revision: revision}
 		}
 		if previous == Disabled {
+			return nil
+		}
+		if !evidence.IsZero() && priorAt != nil && *priorAt >= float64(evidence.UnixNano())/1e9 {
 			return nil
 		}
 		var prior []Result

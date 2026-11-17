@@ -58,6 +58,7 @@ type ObserveHealthInput struct {
 	Recovered  bool
 	Capability string
 	Start      bool
+	At         time.Time
 }
 type CheckInput struct {
 	Changed bool
@@ -210,8 +211,8 @@ func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (app
 	}
 	var ids, checked []ID
 	for _, v := range views {
-		if in.ID != "" && in.Recovered && v.ID == in.ID && v.Idle == "" && capabilityFailed(v, in.Capability) {
-			return application.Change[struct{}]{}, s.store.Recover(ctx, v, in.Capability)
+		if in.ID != "" && in.Recovered && v.ID == in.ID && v.Idle == "" && capabilityFailed(v, in.Capability) && (v.CheckedAt == nil || in.At.After(*v.CheckedAt)) {
+			return application.Change[struct{}]{}, s.store.Recover(ctx, v, in.Capability, in.At)
 		}
 		if !checkable(v) || v.Idle != "" || in.ID != "" && !wanted(v, in) || in.ID == "" && !due(v, in.Start) {
 			continue

@@ -371,6 +371,8 @@ same connection do not check it. A real request that works on the failing
 capability itself (any request from a kind with one capability, or from an
 endpoint the kind maps to that capability, such as TMDB `url` for `api`)
 marks that capability ok at once and ends the backoff, with no check request.
+A request counts only when it started after the failure was recorded, so a
+success that was already in flight when the capability failed does not undo it.
 Test, `connections test`, `connections check` and a credential change still
 check it at once, and a passing check clears the backoff. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
