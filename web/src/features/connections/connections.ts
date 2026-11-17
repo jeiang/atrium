@@ -2,6 +2,7 @@ import { createQuery, type QueryClient } from '@tanstack/svelte-query';
 import {
   ApiError,
   type ConnectionField,
+  type ConnectionKindSchema,
   type ConnectionSchema,
   type ConnectionView,
   connectionsList,
@@ -18,6 +19,7 @@ const SETTINGS_TOPICS = ['settings'] as const;
 
 export const WEATHER_ID = 'service/weather';
 export const GOOGLE_ID = 'google/default';
+export const INTEGRATIONS_DOC = 'https://github.com/jeiang/atrium/blob/main/docs/integrations.md';
 export const WEATHER_KEYS = {
   name: 'weather_location_name',
   latitude: 'weather_latitude',
@@ -162,6 +164,11 @@ export function useWeatherSettings(enabled: () => boolean) {
 
 export function fieldsFor(schema: { connections: ConnectionSchema[] } | undefined, id: string): ConnectionField[] {
   return schema?.connections.find((item) => item.id === id)?.fields ?? [];
+}
+
+export function guideFor(schema: { kinds: ConnectionKindSchema[] } | undefined, kind: string): string | undefined {
+  const anchor = schema?.kinds.find((item) => item.kind === kind)?.docs;
+  return anchor ? `${INTEGRATIONS_DOC}#${anchor}` : undefined;
 }
 
 export function gesture(): RequestInit {

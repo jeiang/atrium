@@ -70,6 +70,27 @@ test.describe('the connections list', () => {
     await gotoShell(page, '/settings/connections/service/nowhere');
     await expect(page.getByRole('heading', { name: 'No such connection' })).toBeVisible();
   });
+
+  test('a connection with a setup guide links to its section, in a new tab', async ({ page }) => {
+    const guide = (name: string) => `https://github.com/jeiang/atrium/blob/main/docs/integrations.md#${name}`;
+    await openConnection(page, 'service/anthropic', 'Anthropic');
+    const link = page.getByRole('link', { name: /^Setup guide\s*, opens in a new tab$/ });
+    await expect(link).toHaveAttribute('href', guide('anthropic'));
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+
+    await openConnection(page, 'google/default', 'Google');
+    await expect(link).toHaveAttribute('href', guide('google'));
+
+    await useScenario(page, { connections: { google: 'absent' } });
+    await gotoShell(page, '/settings/connections/google/default');
+    await expect(page.getByRole('heading', { name: 'Client details' })).toBeVisible();
+    await expect(link).toHaveAttribute('href', guide('google'));
+
+    await openConnection(page, 'service/weather', 'Open-Meteo');
+    await expect(page.locator('#connection-status')).toBeVisible();
+    await expect(link).toHaveCount(0);
+  });
 });
 
 test.describe('a connection page', () => {

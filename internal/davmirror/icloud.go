@@ -253,7 +253,7 @@ func failure(capability string, err error) (connections.Result, bool) {
 }
 
 func Connections() []connections.Definition {
-	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Shares: sharedPassword, Validate: validateICloud, Test: testICloud, Silent: silentICloud, Trace: traceICloud}}
+	return []connections.Definition{{Kind: KindICloud, Offers: []string{CapabilityCalDAV, CapabilityCardDAV}, CredentialSlots: []string{"mail/*/password"}, Docs: "icloud", Shares: sharedPassword, Validate: validateICloud, Test: testICloud, Silent: silentICloud, Trace: traceICloud}}
 }
 
 func sharedPassword(id connections.ID) (connections.ID, string) {

@@ -20,6 +20,7 @@ func Connections() []connections.Definition {
 		Kind:            contract.Kind,
 		Offers:          []string{"api"},
 		CredentialSlots: []string{"api_key"},
+		Docs:            "qbittorrent",
 		Validate:        validateQbitConnection,
 		Grace:           connections.UnreachableGrace,
 		Test:            testQbitConnection,

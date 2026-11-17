@@ -1,8 +1,10 @@
 # Integrations
 
 Every connection is configured and tested on the Connections page
-(`/settings/connections`) or declared under `connections` in the host
-configuration. A provider
+(`/settings/connections`, or `/next/settings/connections` in the new client)
+or declared under `connections` in the host configuration. In the new
+client, a connection page links to the part of this document that covers its
+kind as **Setup guide**. A provider
 credential is stored write-only in an encrypted database or supplied by the
 connection's `credential_files` entry in the host configuration; there is no
 environment pin for a secret. The only environment secret inputs left are the
@@ -88,8 +90,10 @@ refresh token as a write-only secret in the database.
 | Advanced Protection | XOAUTH2 | OAuth | App passwords are refused |
 
 The Gmail consent in the wizard stores a refresh token for the XOAUTH2 mail
-transport. Add the Gmail account on the Mail settings page and choose
-XOAUTH2; a personal account may use an app password instead.
+transport. Add the Gmail account on the Mail settings page (`/settings/mail`)
+and choose **Google OAuth (XOAUTH2)**; a personal account may use an app
+password instead. An account declared in `services.atrium.accounts` uses
+password authentication.
 
 ### Setup
 
@@ -102,11 +106,18 @@ XOAUTH2; a personal account may use an app password instead.
   needs no Gmail API.
 4. Create credentials of type **Web application** and add the redirect URI
   `https://<atrium-host>/settings/connections/google/callback`.
-5. Paste the client ID and secret into the Google wizard, then connect
-  Calendar and Gmail separately.
+5. Enter the client ID and secret under **Client details** and save, then
+  connect Calendar and Gmail with separate consents.
 
-If Google rejects the redirect URI, register the same path on a host you
-control, or use the paste-back box with any registered URI.
+atrium builds the redirect URI from the address the browser uses to reach it,
+and the Google setup page shows the result. If Google rejects it, open atrium
+through an address Google accepts and register that one. A consent link
+expires after 10 minutes. When the browser cannot load the redirect, paste the
+full URL from its address bar into the paste-back box on the classic Google
+page (`/settings/connections/google`); the new client has no paste-back box.
+`atrium calendar google-auth --port <port>` runs the Calendar consent on the
+host with the redirect URI `http://127.0.0.1:<port>`, which must also be
+registered on the client.
 
 ### Testing mode
 
@@ -199,11 +210,16 @@ monthly spend limit, so a leaked key cannot spend beyond it. A key can be a
 personal, service-account or legacy workspace key; it is workspace-bound and
 may carry an expiry.
 
-- Rotate the key in the Console and paste the new one on the Anthropic
-  connection on the Connections page; the old key stops working.
-- The key is stored encrypted in the `service/anthropic` connection, or the
-  host supplies it through `credential_files.api_key`; a key from the host
-  file cannot be changed from the UI.
+- atrium always declares the `service/anthropic` connection, addressed at
+  `https://api.anthropic.com`. Paste the key on it on the Connections page,
+  which stores it encrypted, or let the host supply it through
+  `credential_files.api_key`; a key from the host file cannot be changed from
+  the UI.
+- Test lists the models the key can reach. A refused key marks the connection
+  as needing sign-in ("Anthropic refused the key"); a key that may not list
+  models leaves it failing.
+- To rotate, create a new key in the Console, paste it on the connection and
+  test it, then delete the old key in the Console.
 - An Admin API key can list members, workspaces and usage cost, but cannot
   mint keys. Atrium does not use one yet.
 - Subscription OAuth is not allowed for third-party products; only the

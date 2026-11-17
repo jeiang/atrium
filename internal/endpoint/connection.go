@@ -45,6 +45,7 @@ func Connections() []connections.Definition {
 		Kind:            connections.Kind(KindEmbedding),
 		Offers:          []string{"embeddings"},
 		CredentialSlots: []string{"bearer"},
+		Docs:            "mail-endpoints",
 		Validate:        validateEmbedding,
 		Grace:           connections.UnreachableGrace,
 		Test:            testEmbedding,

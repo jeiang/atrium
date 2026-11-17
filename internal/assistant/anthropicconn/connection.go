@@ -25,6 +25,7 @@ func Connections() []connections.Definition {
 		Kind:            Kind,
 		Offers:          []string{"models"},
 		CredentialSlots: []string{"api_key"},
+		Docs:            "anthropic",
 		Validate:        validate,
 		Test:            test,
 	}}

@@ -218,8 +218,8 @@
       <li class="stack">
         <h3 class="conn-step">Create the Google client</h3>
         <p>
-          In Google Cloud, enable the Calendar and Gmail APIs, then create an OAuth client of type Web application with
-          this redirect address.
+          In Google Cloud, enable the Calendar API, then create an OAuth client of type Web application with this
+          redirect address.
         </p>
         <TextField label="Authorised redirect address" value={data.redirect_uri} readonly spellcheck="false" />
       </li>
